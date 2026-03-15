@@ -1,58 +1,88 @@
-# Statusline Configuration for Claude Code
-# Location: ~/.config/the-agentic-startup/statusline.toml
+# The Custom Startup — Statusline Configuration
+#
+# Shared config for all statusline variants.
+#
+# Global:   ~/.config/the-agentic-startup/statusline.toml
+# Per-repo: <repo>/.claude/statusline.toml  (overrides global, partial is fine)
+#
+# Which script reads which settings:
+#   statusline.sh (standard)  → format, plan, thresholds.context, thresholds.budget
+#   statusline-enhanced.sh    → plan, budget_mode, show_*, thresholds.*, cache ttls
+#   All variants              → plan (determines token limit + cost thresholds)
 
 # ==============================================================================
-# Format
+# Plan
 # ==============================================================================
-# Available placeholders:
-#   <path>    - Directory path (abbreviated)
-#   <branch>  - Git branch with icon (* if dirty)
-#   <model>   - Model name and output style
-#   <context> - Context usage bar and percentage
-#   <session> - Session duration and cost
-#   <lines>   - Lines added/removed
-#   <spec>    - Active specification ID
-#   <help>    - Help text
+# Your Claude subscription — sets token limit and cost thresholds automatically.
+#
+# Options: auto | pro | max5x | max20x | api
+#   auto    — tries to detect from Claude settings, falls back to fallback_plan
+#   pro     — $20/mo  → 44,000 tokens/5h  | cost warn $1.50 / danger $5.00
+#   max5x   — $100/mo → 88,000 tokens/5h  | cost warn $5.00 / danger $15.00
+#   max20x  — $200/mo → 220,000 tokens/5h | cost warn $10.00 / danger $30.00
+#   api     — pay-as-you-go               | cost warn $2.00  / danger $10.00
+
+plan          = "auto"
+fallback_plan = "pro"
+
+# Manual token limit override — overrides plan default when set.
+# Useful if your plan has a non-standard limit.
+# token_limit = 44000
+
+# ==============================================================================
+# Budget bar display mode
+# ==============================================================================
+# Controls what the budget bar shows when both scripts are used:
+#   "cost"  — USD per session  (default for standard statusline)
+#   "token" — tokens vs limit  (default for enhanced statusline)
+#
+# Each script has its own default; this key lets you override globally.
+# budget_mode = "cost"
+
+# ==============================================================================
+# Format string (standard statusline only)
+# ==============================================================================
+# Placeholders: <path> <branch> <model> <context> <session> <lines> <spec> <help>
 
 format = "<path> <branch>  <model>  <context>  <session>  <help>"
 
 # ==============================================================================
-# Plan Configuration
+# Cache TTLs
 # ==============================================================================
-# Determines default cost thresholds based on your Claude subscription.
-#
-# Options:
-#   "auto"  - Attempt to detect from Claude config (falls back to fallback_plan)
-#   "pro"   - Claude Pro ($20/mo)
-#   "max5x" - Claude Max 5x ($100/mo)
-#   "max20x"- Claude Max 20x ($200/mo)
-#   "api"   - Direct API usage (pay-as-you-go)
-#
-# Plan defaults (cost per session):
-#   pro:    warn=$1.50,  danger=$5.00
-#   max5x:  warn=$5.00,  danger=$15.00
-#   max20x: warn=$10.00, danger=$30.00
-#   api:    warn=$2.00,  danger=$10.00
 
-plan = "auto"
-fallback_plan = "pro"
+ccusage_cache_ttl = 60   # seconds — ccusage billing block data
+git_cache_ttl     = 15   # seconds — git branch / dirty state
 
 # ==============================================================================
-# Context Thresholds (percentage-based)
+# Display toggles (enhanced statusline)
 # ==============================================================================
-# Colors change when context window usage exceeds these percentages.
-# Includes ~45k token buffer for compaction overhead.
+
+show_budget_bar  = true   # budget bar (cost or token, per budget_mode)
+show_context_bar = true   # context window usage bar
+show_duration    = true   # session duration
+show_git         = true   # git branch + dirty indicator
+show_remote_url  = true   # clickable OSC 8 hyperlink to remote repo
+
+# ==============================================================================
+# Thresholds
+# ==============================================================================
 
 [thresholds.context]
-warn = 70    # Amber warning
-danger = 90  # Red danger
+warn   = 70   # % context used — switches to yellow
+danger = 90   # % context used — switches to red
+
+[thresholds.budget]
+# Applies to both cost bar (%) and token bar (%).
+# For cost: percentage is calculated as (session_cost / plan_cost_danger) * 100
+# For token: percentage is (tokens_used / plan_token_limit) * 100
+warn   = 70   # % — yellow
+danger = 90   # % — red
 
 # ==============================================================================
-# Cost Thresholds (absolute USD values)
+# Cost threshold overrides (optional)
 # ==============================================================================
-# Per-session cost thresholds. Set explicit values to override plan defaults.
-# Leave commented to use plan-based defaults.
+# Uncomment to override the plan-based defaults.
 
 [thresholds.cost]
-# warn = 2.00
-# danger = 5.00
+# warn   = 2.00   # USD
+# danger = 5.00   # USD
