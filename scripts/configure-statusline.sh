@@ -208,30 +208,45 @@ check_dependencies() {
 
 check_ccusage() {
   if ! command_exists bun; then
-    warn "bun is not installed — ccusage token budget bar will be unavailable"
+    warn "bun not found — token budget bar will be unavailable"
     echo "  Install: curl -fsSL https://bun.sh/install | bash"
-    return 1
+    CCUSAGE_OK=false; return 1
   fi
-
   if ! bun x ccusage --version > /dev/null 2>&1; then
     warn "ccusage not found — token budget bar will be unavailable"
     echo "  Install: bun x ccusage"
-    return 1
+    CCUSAGE_OK=false; return 1
   fi
-
   success "ccusage available"
-  return 0
+  CCUSAGE_OK=true; return 0
 }
 
 check_starship() {
   if command_exists starship; then
     success "Starship detected: $(starship --version 2>/dev/null | head -1)"
-    return 0
+    STARSHIP_OK=true; return 0
   else
-    warn "Starship is not installed"
+    warn "Starship not installed — Starship variant will be unavailable"
     echo "  Install: curl -sS https://starship.rs/install.sh | sh"
-    return 1
+    STARSHIP_OK=false; return 1
   fi
+}
+
+# Run ALL requirement checks upfront and populate *_OK variables.
+# Must be called before any user questions.
+check_all_requirements() {
+  tcs_header "Checking requirements"
+
+  check_dependencies    # jq, git — hard requirements
+  check_ccusage         # optional, sets CCUSAGE_OK
+  check_starship        # optional, sets STARSHIP_OK
+
+  echo ""
+  echo "  Available variants:"
+  echo "  Enhanced : $(  [[ "$CCUSAGE_OK"  == "true" ]] && echo "✓ ready" || echo "⚠ ready (token bar disabled — ccusage missing)")"
+  echo "  Starship : $(  [[ "$STARSHIP_OK" == "true" ]] && echo "✓ ready" || echo "✗ unavailable (starship not installed)")"
+  echo "  Standard : ✓ ready"
+  echo ""
 }
 
 # ==============================================================================
@@ -239,16 +254,17 @@ check_starship() {
 # ==============================================================================
 
 select_variant() {
-  header "Choose statusline variant"
+  tcs_header "Choose statusline variant"
 
-  echo "  ${CYAN}1)${RESET} Enhanced  — Two-line statusline with git info, context + token budget bars,"
-  echo "             OSC 8 hyperlinks, ccusage integration. Requires: jq, ccusage."
+  local ccusage_note="" starship_note=""
+  [[ "$CCUSAGE_OK"  != "true" ]] && ccusage_note=" ${YELLOW}(token bar disabled)${RESET}"
+  [[ "$STARSHIP_OK" != "true" ]] && starship_note=" ${RED}(unavailable — starship not installed)${RESET}"
+
+  echo -e "  ${CYAN}1)${RESET} Enhanced  — Two-line: git info, context + token budget bars, OSC 8 links${ccusage_note}"
   echo ""
-  echo "  ${CYAN}2)${RESET} Starship  — Your existing Starship prompt extended with Claude data."
-  echo "             Requires: starship (already installed)."
+  echo -e "  ${CYAN}2)${RESET} Starship  — Your existing Starship prompt extended with Claude data${starship_note}"
   echo ""
-  echo "  ${CYAN}3)${RESET} Standard  — Original repo statusline. Lightweight, TOML-configured."
-  echo "             Requires: jq."
+  echo    "  ${CYAN}3)${RESET} Standard  — Single-line, placeholder-based, lightweight"
   echo ""
 
   ask "Select variant [1-3]:"
@@ -257,7 +273,13 @@ select_variant() {
 
   case "$choice" in
     1) VARIANT="enhanced" ;;
-    2) VARIANT="starship" ;;
+    2)
+      if [[ "$STARSHIP_OK" != "true" ]]; then
+        tcs_error "Starship is not installed. Install it first, then re-run this configurator."
+        exit 1
+      fi
+      VARIANT="starship"
+      ;;
     3) VARIANT="standard" ;;
     *)
       warn "Invalid choice, defaulting to Enhanced"
@@ -345,14 +367,10 @@ select_plan() {
 # ==============================================================================
 
 install_enhanced() {
-  header "Installing Enhanced Statusline"
+  tcs_header "Installing Enhanced Statusline"
 
-  local ccusage_ok=true
-  check_ccusage || ccusage_ok=false
-
-  if [[ "$ccusage_ok" == "false" ]]; then
-    warn "Token budget bar will be disabled until ccusage is available"
-  fi
+  [[ "$CCUSAGE_OK" != "true" ]] && \
+    tcs_warn "Token budget bar disabled until ccusage is available"
 
   select_plan
 
@@ -399,12 +417,8 @@ install_enhanced() {
 }
 
 install_starship() {
-  header "Installing Starship Statusline Bridge"
-
-  if ! check_starship; then
-    error "Starship must be installed before using this variant"
-    exit 1
-  fi
+  tcs_header "Installing Starship Statusline Bridge"
+  # Starship availability already confirmed in check_all_requirements + select_variant
 
   local script_src="$VARIANTS_DIR/the-custom-startup-statusline-starship.sh"
   local settings_file
@@ -436,7 +450,7 @@ install_starship() {
 }
 
 install_standard() {
-  header "Installing Standard Statusline"
+  tcs_header "Installing Standard Statusline"
 
   local script_src="$VARIANTS_DIR/statusline.sh"
   local settings_file
@@ -482,6 +496,8 @@ VARIANT=""
 PLAN="pro"
 PLAN_CUSTOM_LIMIT=""
 BUDGET_MODE="token"
+CCUSAGE_OK=false
+STARSHIP_OK=false
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
@@ -523,7 +539,8 @@ main() {
   printf "${RESET}"
   echo ""
 
-  check_dependencies
+  # ALL requirement checks before any user questions
+  check_all_requirements
 
   [[ -z "$SCOPE" ]]   && select_location
   [[ -z "$VARIANT" ]] && select_variant
