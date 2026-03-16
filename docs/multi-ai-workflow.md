@@ -24,13 +24,13 @@ The spec-driven workflow has five phases. Here is which tool to use for each:
 
 | Phase | Slash Command | Best External Tool | Notes |
 |---|---|---|---|
+| Constitution (optional) | `/start:constitution` | Claude.ai | Use `constitution-prompt.md`; run once per project |
 | Research | `/start:analyze` | Perplexity | Use `research-prompt.md` |
 | Brainstorm | `/start:brainstorm` | Claude.ai | Use `brainstorm-prompt.md` |
 | Requirements (PRD) | `/start:specify` | Claude.ai | Use `prd-prompt.md` |
-| Constitution (optional) | `/start:constitution` | Claude.ai | Use `constitution-prompt.md`; run once per project |
 | Solution + Plan + Implement | `/start:implement` | Claude Code only | Requires codebase access |
 
-The last three phases (SDD, PLAN, implementation) require reading and writing code. Use Claude Code for those.
+The final phase (SDD, PLAN, implementation) requires reading and writing code. Use Claude Code for that.
 
 ---
 
@@ -66,10 +66,10 @@ The Claude project or Perplexity space provides only minimal framework context. 
 
 | Template | Use For | Mirrors Skill |
 |---|---|---|
+| `constitution-prompt.md` | Project governance rules | `start:constitution` |
+| `research-prompt.md` | Market, technology, and problem research | `start:analyze` |
 | `brainstorm-prompt.md` | Idea exploration and design | `start:brainstorm` |
 | `prd-prompt.md` | Product requirements document | `start:specify-requirements` |
-| `research-prompt.md` | Market, technology, and problem research | `start:analyze` |
-| `constitution-prompt.md` | Project governance rules | `start:constitution` |
 | `setup-claude-project.md` | One-time Claude.ai project setup | — |
 | `setup-perplexity-space.md` | One-time Perplexity space setup | — |
 
@@ -84,6 +84,12 @@ The export/import scripts (`export-spec.sh`, `import-spec.sh`) currently hardcod
 ## Typical Session Flow
 
 ```
+0. Constitution (Claude.ai, optional, once per project)
+   → new conversation in your Claude project
+   → paste constitution-prompt.md with your project description
+   → iterate through discovery questions
+   → copy the final CONSTITUTION.md content into your repo
+
 1. Research (Perplexity or Claude.ai)
    → paste research-prompt.md with your question
    → copy findings to clipboard or a scratch file
@@ -99,13 +105,7 @@ The export/import scripts (`export-spec.sh`, `import-spec.sh`) currently hardcod
    → iterate section by section until complete
    → copy the final Markdown output
 
-4. Constitution (Claude.ai, optional, once per project)
-   → new conversation in your Claude project
-   → paste constitution-prompt.md with your project description
-   → iterate through discovery questions
-   → copy the final CONSTITUTION.md content
-
-5. SDD + PLAN + Implement (Claude Code)
+4. SDD + PLAN + Implement (Claude Code)
    → open your project in Claude Code
    → paste or import the PRD
    → run /start:specify to generate SDD and PLAN
