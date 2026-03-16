@@ -13,7 +13,8 @@ set -euo pipefail
 # ==============================================================================
 
 MARKETPLACE="MMoMM-org/the-custom-startup"
-SOURCE_URL="${SOURCE_URL:-https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/scripts}"
+REPO_RAW_URL="${REPO_RAW_URL:-https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main}"
+SOURCE_URL="${SOURCE_URL:-$REPO_RAW_URL/scripts}"
 STATUSLINE_DIR=""  # set dynamically in choose_statusline() based on TARGET
 
 # ==============================================================================
@@ -83,6 +84,8 @@ SETTINGS_FILE=""   # resolved settings.json path
 PLUGINS=""         # space-separated list: start@the-custom-startup team@the-custom-startup
 OUTPUT_STYLE=""    # e.g. "start:The Startup" or ""
 SPECS_DIR_NAME=""  # e.g. "the-custom-startup"
+PROMPTS=""         # yes | skip
+PROMPTS_BASE_DIR="" # absolute path, e.g. ~/.claude/the-custom-startup
 AGENT_TEAMS=""     # yes | no
 STATUSLINE=""      # yes | skip
 STATUSLINE_REPLACE="" # yes | keep | skip  (when existing found)
@@ -231,7 +234,126 @@ choose_specs_dir() {
 }
 
 # ==============================================================================
-# Step 6: choose_agent_teams
+# Step 6: choose_prompts
+# ==============================================================================
+
+choose_prompts() {
+  printf "\n${BRIGHT_GREEN}── Multi-AI Templates${RESET}\n\n"
+
+  # Compute default base dir — same parent as specs
+  local toml_dir
+  if [[ "$TARGET" == "global" ]]; then
+    toml_dir="$HOME/.claude"
+  else
+    toml_dir="$INSTALL_DIR/.claude"
+  fi
+  local default_base="$toml_dir/$SPECS_DIR_NAME"
+
+  printf "  Prompt templates and utility scripts for working with Claude.ai,\n"
+  printf "  Perplexity, and the spec export/import workflow.\n"
+  printf "\n"
+  printf "  Default: ${DIM}%s/${RESET}\n" "$default_base"
+  printf "    ${DIM}templates/${RESET}   brainstorm, PRD, research, constitution prompts\n"
+  printf "    ${DIM}docs/${RESET}        multi-ai-workflow guide\n"
+  printf "    ${DIM}bin/${RESET}         export-spec.sh, import-spec.sh\n"
+  printf "\n"
+  printf "  ${CYAN}1)${RESET} Yes — install to default path\n"
+  printf "  ${CYAN}2)${RESET} Yes — specify different path\n"
+  printf "  ${CYAN}3)${RESET} Skip\n"
+  printf "\n"
+  ask "Select [1-3, default: 1]:"
+  local choice
+  read -r choice </dev/tty
+  case "$choice" in
+    2)
+      ask "Enter base directory:"
+      read -r PROMPTS_BASE_DIR </dev/tty
+      PROMPTS_BASE_DIR="${PROMPTS_BASE_DIR/#\~/$HOME}"
+      PROMPTS="yes"
+      ;;
+    3)
+      PROMPTS="skip"
+      ;;
+    *)
+      PROMPTS_BASE_DIR="$default_base"
+      PROMPTS="yes"
+      ;;
+  esac
+
+  if [[ "$PROMPTS" == "yes" ]]; then
+    success "Multi-AI templates: will install → $PROMPTS_BASE_DIR/"
+  else
+    info "Multi-AI templates: skipped"
+  fi
+}
+
+# Download prompt templates, docs, and utility scripts into PROMPTS_BASE_DIR.
+# Uses local files when running from a clone, remote download otherwise.
+_download_prompts() {
+  local base="$PROMPTS_BASE_DIR"
+  local templates_dir="$base/templates"
+  local docs_dir="$base/docs"
+  local bin_dir="$base/bin"
+
+  mkdir -p "$templates_dir" "$docs_dir" "$bin_dir"
+
+  # Detect local clone
+  local this_script="${BASH_SOURCE[0]:-}"
+  local this_dir=""
+  if [[ -n "$this_script" && "$this_script" != "-" ]]; then
+    this_dir="$(cd "$(dirname "$this_script")" 2>/dev/null && pwd)"
+  fi
+
+  local use_local=false
+  if [[ -n "$this_dir" && -d "$this_dir/docs/templates" ]]; then
+    use_local=true
+  fi
+
+  # Prompt templates
+  local tmpl
+  for tmpl in brainstorm-prompt constitution-prompt prd-prompt research-prompt setup-claude-project setup-perplexity-space; do
+    if $use_local; then
+      cp "$this_dir/docs/templates/${tmpl}.md" "$templates_dir/${tmpl}.md" 2>/dev/null \
+        && info "Copied: templates/${tmpl}.md" \
+        || warn "Could not copy templates/${tmpl}.md"
+    else
+      curl -fsSL "$REPO_RAW_URL/docs/templates/${tmpl}.md" -o "$templates_dir/${tmpl}.md" 2>/dev/null \
+        && info "Downloaded: templates/${tmpl}.md" \
+        || warn "Could not download templates/${tmpl}.md"
+    fi
+  done
+
+  # Multi-AI workflow guide
+  if $use_local; then
+    cp "$this_dir/docs/multi-ai-workflow.md" "$docs_dir/multi-ai-workflow.md" 2>/dev/null \
+      && info "Copied: docs/multi-ai-workflow.md" \
+      || warn "Could not copy docs/multi-ai-workflow.md"
+  else
+    curl -fsSL "$REPO_RAW_URL/docs/multi-ai-workflow.md" -o "$docs_dir/multi-ai-workflow.md" 2>/dev/null \
+      && info "Downloaded: docs/multi-ai-workflow.md" \
+      || warn "Could not download docs/multi-ai-workflow.md"
+  fi
+
+  # Utility scripts
+  local scr
+  for scr in export-spec import-spec; do
+    if $use_local; then
+      cp "$this_dir/scripts/${scr}.sh" "$bin_dir/${scr}.sh" 2>/dev/null \
+        && info "Copied: bin/${scr}.sh" \
+        || warn "Could not copy bin/${scr}.sh"
+    else
+      curl -fsSL "$REPO_RAW_URL/scripts/${scr}.sh" -o "$bin_dir/${scr}.sh" 2>/dev/null \
+        && info "Downloaded: bin/${scr}.sh" \
+        || warn "Could not download bin/${scr}.sh"
+    fi
+    chmod +x "$bin_dir/${scr}.sh" 2>/dev/null || true
+  done
+
+  success "Multi-AI templates installed: $base/"
+}
+
+# ==============================================================================
+# Step 7: choose_agent_teams
 # ==============================================================================
 
 choose_agent_teams() {
@@ -258,7 +380,7 @@ choose_agent_teams() {
 }
 
 # ==============================================================================
-# Step 7: choose_statusline
+# Step 8: choose_statusline
 # ==============================================================================
 
 choose_statusline() {
@@ -307,7 +429,7 @@ choose_statusline() {
 }
 
 # ==============================================================================
-# Step 8: confirm_summary
+# Step 9: confirm_summary
 # ==============================================================================
 
 # Return plugin display string (space separated → comma separated)
@@ -335,6 +457,12 @@ confirm_summary() {
     toml_dir="$INSTALL_DIR/.claude/startup.toml"
   fi
   printf "  %-22s %s  (written to %s)\n" "Specs directory:" "${SPECS_DIR_NAME}/specs" "$toml_dir"
+
+  if [[ "$PROMPTS" == "yes" ]]; then
+    printf "  %-22s %s\n" "Multi-AI templates:" "$PROMPTS_BASE_DIR/"
+  else
+    printf "  %-22s %s\n" "Multi-AI templates:" "(skipped)"
+  fi
 
   if [[ "$AGENT_TEAMS" == "yes" ]]; then
     printf "  %-22s %s\n" "Agent Teams:" "enabled"
@@ -368,7 +496,7 @@ confirm_summary() {
 }
 
 # ==============================================================================
-# Step 9: do_install
+# Step 10: do_install
 # ==============================================================================
 
 do_install() {
@@ -449,15 +577,40 @@ do_install() {
 
   local toml_file="$toml_dir/startup.toml"
   info "Writing startup.toml..."
-  cat > "$toml_file" << EOF
-# The Custom Startup — Configuration
-# Generated by install.sh — edit freely.
 
-[paths]
-specs_dir = "${SPECS_DIR_NAME}/specs"
-ideas_dir = "${SPECS_DIR_NAME}/ideas"
-EOF
+  # Compute relative paths for prompts/bin (relative to toml_dir when possible)
+  local prompts_rel=""
+  local bin_rel=""
+  if [[ "$PROMPTS" == "yes" ]]; then
+    local rel="${PROMPTS_BASE_DIR#$toml_dir/}"
+    if [[ "$rel" != "$PROMPTS_BASE_DIR" ]]; then
+      prompts_rel="${rel}/templates"
+      bin_rel="${rel}/bin"
+    else
+      prompts_rel="$PROMPTS_BASE_DIR/templates"
+      bin_rel="$PROMPTS_BASE_DIR/bin"
+    fi
+  fi
+
+  {
+    printf '# The Custom Startup — Configuration\n'
+    printf '# Generated by install.sh — edit freely.\n\n'
+    printf '[paths]\n'
+    printf 'specs_dir   = "%s/specs"\n' "$SPECS_DIR_NAME"
+    printf 'ideas_dir   = "%s/ideas"\n' "$SPECS_DIR_NAME"
+    if [[ "$PROMPTS" == "yes" ]]; then
+      printf 'prompts_dir = "%s"\n' "$prompts_rel"
+      printf 'bin_dir     = "%s"\n' "$bin_rel"
+    fi
+  } > "$toml_file"
+
   success "startup.toml written: $toml_file"
+
+  # --- Multi-AI Templates -----------------------------------------------------
+  if [[ "$PROMPTS" == "yes" ]]; then
+    info "Installing Multi-AI templates..."
+    _download_prompts
+  fi
 
   # --- Statusline -------------------------------------------------------------
   if [[ "$STATUSLINE" == "yes" && "$STATUSLINE_REPLACE" != "keep" ]]; then
@@ -565,6 +718,7 @@ main() {
   choose_plugins
   choose_output_style
   choose_specs_dir
+  choose_prompts
   choose_agent_teams
   choose_statusline
   confirm_summary

@@ -4,44 +4,53 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-**The Agentic Startup** is a spec-driven development framework for Claude Code, distributed as marketplace plugins. It provides workflow commands, autonomous skills, specialized agents, and output styles to transform how you build software.
+**The Custom Agentic Startup** is a spec-driven development framework for Claude Code, distributed as marketplace plugins. It provides workflow commands, autonomous skills, specialized agents, and output styles to transform how you build software.
 
 ## Repository Structure
 
 ```
-the-startup/
+the-custom-startup/
 ├── plugins/
 │   ├── start/                    # Core workflow orchestration plugin
 │   │   ├── .claude-plugin/       # Plugin manifest (plugin.json)
-│   │   ├── skills/               # 14 skills (9 user-invocable + 5 autonomous)
+│   │   ├── skills/               # 16 skills (12 user-invocable + 4 autonomous)
 │   │   ├── output-styles/        # The Startup, The ScaleUp output styles
 │   │   └── README.md             # Detailed plugin documentation
 │   │
-│   ├── team/                     # Specialized agent library plugin
-│   │   ├── agents/               # 8 roles with 15 consolidated activity agents
-│   │   │   ├── the-chief.md      # Complexity assessment, routing
-│   │   │   ├── the-analyst/      # research-product
-│   │   │   ├── the-architect/    # design-system, review-security, review-robustness, review-compatibility
-│   │   │   ├── the-developer/    # build-feature, optimize-performance, etc.
-│   │   │   ├── the-devops/       # build-platform, monitor-production
-│   │   │   ├── the-designer/     # research-user, design-interaction, design-visual
-│   │   │   ├── the-tester/       # test-strategy
-│   │   │   └── the-meta-agent.md # Agent design and generation
-│   │   └── skills/               # 16 consolidated cross-cutting and domain skills
-│   │
-│   └── constitution/             # Project governance rules plugin (optional)
+│   └── team/                     # Specialized agent library plugin
+│       ├── agents/               # 8 roles with 16 consolidated activity agents
+│       │   ├── the-chief.md      # Complexity assessment, routing
+│       │   ├── the-analyst/      # research-product
+│       │   ├── the-architect/    # design-system, review-security, review-robustness, review-compatibility
+│       │   ├── the-developer/    # build-feature, optimize-performance
+│       │   ├── the-devops/       # build-platform, monitor-production
+│       │   ├── the-designer/     # research-user, design-interaction, design-visual
+│       │   ├── the-tester/       # test-strategy
+│       │   └── the-meta-agent.md # Agent design and generation
+│       └── skills/               # Domain skills (cross-cutting, design, development, infrastructure, quality)
 │
 ├── scripts/
-│   ├── the-custom-startup-statusline-standard.sh  # Standard (single-line) statusline
-│   └── statusline.toml           # Statusline configuration template
+│   ├── the-custom-startup-statusline-standard.sh   # Standard (single-line) statusline
+│   ├── the-custom-startup-statusline-enhanced.sh   # Enhanced statusline with budget bar
+│   ├── the-custom-startup-statusline-lib.sh        # Shared statusline library
+│   ├── the-custom-startup-statusline-starship.sh   # Starship-compatible statusline
+│   ├── the-custom-startup-configure-statusline.sh  # Statusline installer/configurator
+│   ├── export-spec.sh                              # Export spec to clipboard/file
+│   ├── import-spec.sh                              # Import spec from file
+│   └── statusline.toml                             # Statusline configuration template
 │
 ├── docs/
 │   ├── PHILOSOPHY.md             # Activity-based architecture rationale
 │   ├── PRINCIPLES.md             # Core development principles
-│   ├── patterns/                 # Technical patterns documentation
-│   └── specs/                    # Feature specifications (PRD/SDD/PLAN)
+│   ├── multi-ai-workflow.md      # Using Claude.ai + Perplexity alongside Claude Code
+│   ├── workflow.md               # Full spec-driven workflow reference
+│   ├── skills.md                 # Skills reference
+│   ├── agents.md                 # Agents reference
+│   ├── plugins.md                # Plugins reference
+│   ├── statusline.md             # Statusline setup guide
+│   └── templates/                # Multi-AI prompt templates (PRD, brainstorm, research, etc.)
 │
-├── install.sh                    # One-line installer script
+├── install.sh                    # Interactive install wizard
 └── README.md                     # User-facing documentation
 ```
 
@@ -99,8 +108,8 @@ claude plugin install ./plugins/team
 ./install.sh
 
 # Uninstall to reset
-claude plugin uninstall start@the-startup
-claude plugin uninstall team@the-startup
+claude plugin uninstall start@the-custom-startup
+claude plugin uninstall team@the-custom-startup
 ```
 
 ### Editing Skills
@@ -175,4 +184,4 @@ Optional `CONSTITUTION.md` at project root defines checkable rules:
 The repository is a Claude Code marketplace. Publishing happens via:
 1. Push to `main` branch
 2. GitHub Actions workflow creates release
-3. Users install via `/plugin marketplace add rsmdt/the-startup`
+3. Users install via `./install.sh` or `/plugin marketplace add MMoMM-org/the-custom-startup`
