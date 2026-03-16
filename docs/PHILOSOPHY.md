@@ -1,130 +1,110 @@
-# The Agentic Startup - Philosophy & Research
+# Philosophy & Design
+
+Why The Agentic Startup works the way it does.
+
+---
 
 ## Core Philosophy
 
 **Think twice, ship once.** Proper planning accelerates delivery more than jumping straight into code.
 
-The Agentic Startup transforms Claude Code into your **technical co-founder** that gathers context first, consults specialists, generates reviewable documentation, then implements with confidence.
+The framework transforms Claude Code into a technical co-founder that gathers context first, consults specialists, generates reviewable documentation, then implements with confidence.
 
-### Foundational Principles
+**Foundational principles:**
+- **Humans decide, AI executes** — Critical decisions stay with you; AI handles implementation details
+- **Specialist delegation** — Pull in the right expert for each task
+- **Documentation drives clarity** — Specs prevent miscommunication and scope creep
+- **Parallel execution** — Multiple experts work simultaneously when possible
+- **Review everything** — No AI decision goes unreviewed; you stay in control
 
-- **Humans decide, AI executes** - Critical decisions stay with you; AI handles implementation details
-- **Specialist delegation** - Pull in the right expert for each task
-- **Documentation drives clarity** - Specs prevent miscommunication and scope creep
-- **Parallel execution** - Multiple experts work simultaneously when possible
-- **Review everything** - No AI decision goes unreviewed; you stay in control
+---
+
+## Activity-Based Architecture
+
+The team plugin uses **activity-based agents** that focus on WHAT they do, not WHO they are. Traditional engineering boundaries (backend/frontend/QA) are artificial constraints that reduce LLM performance.
+
+**Why activities over roles:**
+
+1. **LLMs do not have job titles** — They have capabilities that map to activities
+2. **Reduced context switching** — Each agent receives only relevant context for its specific expertise
+3. **Better parallelization** — Activities naturally decompose into parallel workflows
+4. **Stack agnostic** — Activities adapt to any technology stack
+
+**Example:**
+```
+Traditional role-based:
+├── the-backend-engineer   (too broad)
+└── the-qa-engineer        (multiple responsibilities)
+
+Activity-based:
+├── the-developer/build-feature    (specific activity)
+└── the-tester/test-strategy       (specific activity)
+```
+
+**Naming convention**: `the-[human-role]/[activity]`
+
+The human role part (`the-architect`, `the-developer`) provides navigability. The activity part (`review-security`, `build-feature`) defines what the agent actually does.
+
+---
 
 ## Research Foundation
 
 Task specialization consistently outperforms role-based organization for LLM agents:
 
-### Performance Impact
-Studies show 2.86% to 21.88% accuracy improvement with specialized agents vs single broad agents ([Multi-Agent Collaboration, 2025](https://arxiv.org/html/2501.06322v1))
+- **2.86%–21.88% accuracy improvement** with specialized agents vs single broad agents ([Multi-Agent Collaboration, 2025](https://arxiv.org/html/2501.06322v1))
+- **40% reduction** in communication overhead with properly decomposed multi-agent systems
+- **60% time savings** in QA processes from agent specialization (JM Family/Azure, 2024)
 
-### Industry Consensus
-Leading frameworks (CrewAI, Microsoft AutoGen, LangGraph) organize agents by **capability** rather than traditional job titles
+Leading frameworks (CrewAI, Microsoft AutoGen, LangGraph) all organize agents by **capability** rather than traditional job titles.
 
-### Domain Specialization
-Effective LLM specialization customizes agents according to specific task contextual data ([Agentic LLM Systems, 2024](https://arxiv.org/html/2412.04093v1))
+---
 
-## Activity-Based Architecture
+## Agent Design Principles
 
-The Agentic Startup uses **activity-based agents** that focus on WHAT they do, not WHO they are. Traditional engineering boundaries (backend/frontend) are artificial constraints that reduce LLM performance.
+### Single Responsibility
 
-### Why Activities Over Roles?
+Each agent has exactly one area of expertise. This reduces context pollution, creates clearer error boundaries, and enables better parallel execution.
 
-1. **LLMs don't have job titles** - They have capabilities that map to activities
-2. **Reduced context switching** - Each agent receives only relevant context for their specific expertise
-3. **Better parallelization** - Activities naturally decompose into parallel workflows
-4. **Stack agnostic** - Activities adapt to any technology stack
+### Framework-Agnostic by Default
 
-### Design Principles
+Agents specialize in activities, not frameworks. `the-developer/build-feature` builds features regardless of whether the stack is React, Vue, or plain HTML. Framework-specific patterns are applied when detected — they are secondary, not primary.
 
-- **Focus on activities** - Agents specialize in `api-design` or `component-architecture`, not arbitrary roles
-- **Adapt to your stack** - Automatically detect and apply React/Vue/Angular patterns, REST/GraphQL APIs, PostgreSQL/MongoDB optimizations
-- **Execute in parallel** - Multiple specialists work simultaneously on related activities
-- **Preserve real expertise** - Keep domain specialization (mobile, security, UX) where it genuinely adds value
+### Context Isolation
 
-## The Startup Mindset
+Each agent receives only the context relevant to its specialization. Focused context means better outputs and less noise.
 
-When you activate The Agentic Startup, every interaction embodies the energy and pragmatism of a high-performing startup team:
+### Composability
 
-### Speed Over Perfection
-- Ship MVPs that work, iterate based on feedback
-- Pragmatic solutions over academic perfection
-- Fast validation cycles with built-in quality gates
-
-### Parallel Everything
-- No blocking operations unless dependencies require it
-- Multiple specialists attack problems simultaneously
-- Async coordination with clear handoffs
-
-### Obsessive Tracking
-- TodoWrite for every task and subtask
-- Real-time progress visibility
-- Clear success metrics for every activity
-
-### Celebrate Shipping
-- Every deployed feature is a victory
-- Focus on user value, not technical elegance
-- Momentum builds momentum
-
-## Evolution of Development
-
-The Agentic Startup represents a fundamental shift in how we build software:
-
-### Traditional Development
+Agents are building blocks. A complex task like "build authentication" decomposes naturally:
 ```
-Developer → Writes Code → Tests → Deploys
-         ↓
-    Single Thread
-    Context Switching
-    Expertise Gaps
+1. the-analyst/research-product    → Research auth patterns
+2. the-architect/design-system     → Design auth architecture
+3. the-architect/review-security   → Security requirements
+4. the-developer/build-feature     → Implementation
+5. the-tester/test-strategy        → Validate
+6. the-architect/review-robustness → Robustness review
 ```
 
-### Agentic Development
-```
-Human → Defines Intent → Specialists Execute → Human Reviews
-      ↓                ↓                    ↓
-   Clear Vision    Parallel Execution    Quality Control
-   Strategic       Expert Knowledge      Maintains Standards
-   Decisions       No Context Switch     Catches Issues Early
-```
+---
 
-### The Multiplier Effect
+## Spec-Driven Development
 
-By combining specialized agents with structured workflows, The Agentic Startup creates a multiplier effect:
+The primary workflow enforces spec-first development because:
 
-- **10x faster planning** through parallel research
-- **5x better architecture** through specialist review
-- **3x fewer bugs** through mandatory quality gates
-- **100% documentation** through specification-first approach
+1. **Prevents scope creep** — Requirements are locked before implementation starts
+2. **Reduces rework** — Design decisions made before code is written
+3. **Enables parallel work** — Multiple specialists can work from the same spec
+4. **Provides a quality gate** — `/validate` checks completeness, consistency, and correctness before implementation investment
 
-## Future Vision
+The PRD → SDD → PLAN sequence mirrors how effective engineering teams work: understand the problem, design the solution, plan the execution.
 
-The Agentic Startup is continuously evolving based on real-world usage and research:
+---
 
-### Near Term
-- Smarter agent selection based on project context
-- Learning from past decisions within projects
-- Enhanced parallel coordination strategies
+## Further Reading
 
-### Medium Term
-- Project-specific agent customization
-- Cross-project pattern recognition
-- Automated performance optimization
+These upstream files contain the full academic references and detailed guidelines:
 
-### Long Term
-- Self-organizing agent teams
-- Predictive issue prevention
-- Full-stack autonomous delivery
-
-## Contributing to the Philosophy
-
-The Agentic Startup's philosophy evolves through community usage and feedback. We believe in:
-
-- **Evidence over theory** - Real results shape our approach
-- **Pragmatism over purity** - What ships wins
-- **Community wisdom** - Best practices emerge from collective experience
-
-Share your experiences, patterns, and improvements at [github.com/rsmdt/the-startup](https://github.com/rsmdt/the-startup).
+- [`plugins/start/README.md`](../plugins/start/README.md) — start plugin internals
+- [`plugins/team/README.md`](../plugins/team/README.md) — team plugin and agent roster
+- [`docs/PHILOSOPHY.md`](PHILOSOPHY.md) — original philosophy document (upstream)
+- [`docs/PRINCIPLES.md`](PRINCIPLES.md) — full agent design principles with validation criteria (upstream)
