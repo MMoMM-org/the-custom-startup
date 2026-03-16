@@ -60,8 +60,8 @@ Feature branches are created per item so each can be PR'd independently upstream
 ### Open
 
 - [x] Verify `ccusage` blocks parsed correctly (`inputTokens + outputTokens`, not `totalTokens`)
-- [ ] Audit `cache_creation_input_tokens` / `cache_read_input_tokens` handling in lib
-- [ ] Add cleanup for /tmp files which are older then 14 days
+- [x] Audit `cache_creation_input_tokens` / `cache_read_input_tokens` handling in lib (confirmed: exclude both, I+O only matches /usage)
+- [x] Add cleanup for /tmp files which are older then 14 days
 
 ---
 

@@ -241,6 +241,9 @@ tcs_load_config() {
   # Resolve cost thresholds: explicit → plan default
   [[ -z "$tcs_cfg_cost_warn" ]]   && tcs_cfg_cost_warn="$(_tcs_plan_cost_warn "$effective_plan")"
   [[ -z "$tcs_cfg_cost_danger" ]] && tcs_cfg_cost_danger="$(_tcs_plan_cost_danger "$effective_plan")"
+
+  # Housekeeping: remove stale /tmp cache files (throttled to once per day)
+  tcs_cleanup_tmp_cache
 }
 
 _tcs_detect_plan() {
@@ -271,6 +274,14 @@ tcs_cache_is_stale() {
 
 tcs_cache_key() {
   echo "$1" | cksum | cut -d' ' -f1
+}
+
+# Remove /tmp cache files older than 14 days — throttled to once per day.
+tcs_cleanup_tmp_cache() {
+  local stamp="/tmp/tcs-statusline-cleanup-stamp"
+  tcs_cache_is_stale "$stamp" 86400 || return 0
+  find /tmp -maxdepth 1 -name "tcs-statusline-*" -mtime +14 -delete 2>/dev/null || true
+  touch "$stamp"
 }
 
 # ==============================================================================

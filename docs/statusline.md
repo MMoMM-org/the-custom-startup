@@ -85,9 +85,17 @@ Token limits per 5-hour window (configurable):
 
 | Plan | Limit |
 |---|---|
-| Pro ($20/mo) | ~44,000 tokens |
-| Max 5x ($100/mo) | ~88,000 tokens |
-| Max 20x ($200/mo) | ~220,000 tokens |
+| Pro ($20/mo) | ~28,450 tokens |
+| Max 5x ($100/mo) | ~57,000 tokens |
+| Max 20x ($200/mo) | ~142,500 tokens |
+
+These values are estimates. The Pro limit was measured (`inputTokens + outputTokens` vs `/usage`); Max 5x and Max 20x are extrapolated proportionally and have not been independently verified. If the bar seems off, override the limit in `statusline.toml`:
+
+```toml
+# Calibrate: take your raw token count from ccusage and divide by the /usage percentage.
+# Example: 9,388 tokens at 33% → token_limit = 28450
+token_limit = 28450
+```
 
 Set your plan in `statusline.toml`:
 
@@ -95,13 +103,7 @@ Set your plan in `statusline.toml`:
 plan = "pro"   # pro | max5x | max20x | api | auto
 ```
 
-Or override the limit directly:
-
-```toml
-token_limit = 44000
-```
-
-The bar can also show session cost instead of tokens — set `budget_mode = "cost"` in `statusline.toml`.
+The bar can also show session cost instead of tokens — set `budget_mode = "cost"` in `statusline.toml`. Cost thresholds are also estimates and vary by usage pattern.
 
 ---
 
@@ -121,7 +123,7 @@ All variants share a single config file: `statusline.toml`.
 
 **Global** (applies to all sessions):
 ```
-~/.config/the-agentic-startup/statusline.toml
+~/.config/the-custom-startup/statusline.toml
 ```
 
 **Per-repo** (overrides global for a specific project):
@@ -140,7 +142,9 @@ plan          = "auto"
 fallback_plan = "pro"
 
 # Manual token limit override (skips plan lookup)
-# token_limit = 44000
+# All plan limits are estimates — override here if the bar seems off.
+# Calibrate: raw_tokens / (/usage percent / 100)  e.g. 9388 / 0.33 = 28450
+# token_limit = 28450
 
 # Budget bar mode
 # "token" — tokens used vs plan limit  (enhanced default)

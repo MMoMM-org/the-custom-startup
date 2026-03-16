@@ -393,10 +393,11 @@ select_variant() {
 select_plan() {
   header "Claude subscription plan"
   echo "  Sets the token budget limit for the budget bar."
+  echo "  All limits are estimates — override via token_limit in statusline.toml if needed."
   echo ""
-  echo -e "  ${CYAN}1)${RESET} Pro     (\$20/mo)  — ~28,450 tokens / 5h window"
-  echo -e "  ${CYAN}2)${RESET} Max 5x  (\$100/mo) — ~57,000 tokens / 5h window"
-  echo -e "  ${CYAN}3)${RESET} Max 20x (\$200/mo) — ~142,500 tokens / 5h window"
+  echo -e "  ${CYAN}1)${RESET} Pro     (\$20/mo)  — ~28,450 tokens / 5h window  (measured)"
+  echo -e "  ${CYAN}2)${RESET} Max 5x  (\$100/mo) — ~57,000 tokens / 5h window  (estimated)"
+  echo -e "  ${CYAN}3)${RESET} Max 20x (\$200/mo) — ~142,500 tokens / 5h window (estimated)"
   echo -e "  ${CYAN}4)${RESET} Custom  — enter limit manually"
   echo ""
 
