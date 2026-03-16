@@ -59,6 +59,7 @@ SOFTWARE.
 
 ---
 
-Starship (https://starship.rs/) is used by the Starship statusline integration
-and is licensed under the ISC License. See https://github.com/starship/starship/blob/master/LICENSE
-for the full license text.
+The Starship statusline integration (scripts/the-custom-startup-statusline-starship.sh) is based on
+an idea published on Reddit by the original author:
+https://www.reddit.com/r/ClaudeCode/comments/1r81675/use_your_starship_prompt_as_the_claude_code/
+No copyright is claimed on that concept.
