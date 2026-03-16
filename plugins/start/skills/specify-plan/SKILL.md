@@ -1,6 +1,6 @@
 ---
 name: specify-plan
-description: Create and validate implementation plans (PLAN). Use when planning implementation phases, defining tasks, sequencing work, analyzing dependencies, or working on plan files in .start/specs/. Generates per-phase files (plan/README.md + plan/phase-N.md) for progressive disclosure. Includes TDD phase structure and specification compliance gates.
+description: Create and validate implementation plans (PLAN). Use when planning implementation phases, defining tasks, sequencing work, analyzing dependencies, or working on plan files in the-custom-startup/specs/. Generates per-phase files (plan/README.md + plan/phase-N.md) for progressive disclosure. Includes TDD phase structure and specification compliance gates.
 allowed-tools: Read, Write, Edit, Task, TodoWrite, Grep, Glob
 ---
 
@@ -65,8 +65,8 @@ Every plan must answer four questions:
 
 ## Reference Materials
 
-- [Template](template.md) — Plan manifest template (plan/README.md), write to `.start/specs/[NNN]-[name]/plan/README.md`
-- [Phase Template](templates/phase.md) — Per-phase template, write to `.start/specs/[NNN]-[name]/plan/phase-N.md`
+- [Template](template.md) — Plan manifest template (plan/README.md), write to `the-custom-startup/specs/[NNN]-[name]/plan/README.md`
+- [Phase Template](templates/phase.md) — Per-phase template, write to `the-custom-startup/specs/[NNN]-[name]/plan/phase-N.md`
 - [Validation](validation.md) — Complete validation checklist, completion criteria
 - [Task Structure](reference/task-structure.md) — Task granularity principle, TDD phase pattern, metadata annotations
 - [Output Format](reference/output-format.md) — Status report guidelines, next-step options

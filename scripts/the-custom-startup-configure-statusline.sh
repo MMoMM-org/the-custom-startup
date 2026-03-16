@@ -6,10 +6,10 @@
 # Works both from a local clone and when piped directly from the web:
 #
 #   # From a local clone
-#   ./scripts/configure-statusline.sh
+#   ./scripts/the-custom-startup-configure-statusline.sh
 #
 #   # From the web (no clone needed)
-#   curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/scripts/configure-statusline.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/scripts/the-custom-startup-configure-statusline.sh | bash
 #
 # Options:
 #   --global              Install globally (~/.config/the-agentic-startup/)
@@ -46,7 +46,7 @@ _script_path="${BASH_SOURCE[0]:-}"
 # Running via `curl | bash` sets BASH_SOURCE[0] to "" or "-", and the
 # directory won't contain our files.
 if [[ -n "$_script_path" && "$_script_path" != "-" \
-    && -f "$(cd "$(dirname "$_script_path")" 2>/dev/null && pwd)/statusline-lib.sh" ]]; then
+    && -f "$(cd "$(dirname "$_script_path")" 2>/dev/null && pwd)/the-custom-startup-statusline-lib.sh" ]]; then
   SCRIPT_DIR="$(cd "$(dirname "$_script_path")" && pwd)"
   SOURCE_MODE="local"
 else
@@ -63,14 +63,14 @@ else
     exit 1
   fi
 
-  if ! curl -fsSL "$SOURCE_URL/statusline-lib.sh" -o "$SCRIPT_DIR/statusline-lib.sh" 2>/dev/null; then
-    echo "ERROR: Failed to download statusline-lib.sh from $SOURCE_URL" >&2
+  if ! curl -fsSL "$SOURCE_URL/the-custom-startup-statusline-lib.sh" -o "$SCRIPT_DIR/the-custom-startup-statusline-lib.sh" 2>/dev/null; then
+    echo "ERROR: Failed to download the-custom-startup-statusline-lib.sh from $SOURCE_URL" >&2
     exit 1
   fi
 fi
 
-# shellcheck source=statusline-lib.sh
-source "$SCRIPT_DIR/statusline-lib.sh"
+# shellcheck source=the-custom-startup-statusline-lib.sh
+source "$SCRIPT_DIR/the-custom-startup-statusline-lib.sh"
 
 # Convenience aliases — keep call sites readable
 BRIGHT_GREEN="$TCS_COLOR_BRIGHT_GREEN"
@@ -134,13 +134,13 @@ fetch_file() {
 # Fetch the shared lib (not executable) to a directory.
 fetch_lib() {
   local dest_dir="$1"
-  local dest="$dest_dir/statusline-lib.sh"
+  local dest="$dest_dir/the-custom-startup-statusline-lib.sh"
 
   if [[ "$SOURCE_MODE" == "local" ]]; then
-    cp "$SCRIPT_DIR/statusline-lib.sh" "$dest"
+    cp "$SCRIPT_DIR/the-custom-startup-statusline-lib.sh" "$dest"
   else
-    if ! curl -fsSL "$SOURCE_URL/statusline-lib.sh" -o "$dest" 2>/dev/null; then
-      error "Failed to download statusline-lib.sh from $SOURCE_URL"
+    if ! curl -fsSL "$SOURCE_URL/the-custom-startup-statusline-lib.sh" -o "$dest" 2>/dev/null; then
+      error "Failed to download the-custom-startup-statusline-lib.sh from $SOURCE_URL"
       return 1
     fi
   fi
@@ -475,9 +475,9 @@ _install_variant() {
   fetch_file "$variant_filename" "$SCRIPT_DEST"
   success "Script installed: $SCRIPT_DEST"
 
-  info "Fetching statusline-lib.sh..."
+  info "Fetching the-custom-startup-statusline-lib.sh..."
   fetch_lib "$DEST_DIR"
-  success "Library installed: $DEST_DIR/statusline-lib.sh"
+  success "Library installed: $DEST_DIR/the-custom-startup-statusline-lib.sh"
 
   if [[ "$needs_toml" == "true" ]]; then
     if [[ -f "$TOML_DEST" ]]; then
@@ -553,7 +553,7 @@ Usage:
   configure-statusline.sh [OPTIONS]
 
   # From the web (no clone needed):
-  curl -fsSL ${SOURCE_URL}/configure-statusline.sh | bash
+  curl -fsSL ${SOURCE_URL}/the-custom-startup-configure-statusline.sh | bash
 
 Options:
   --global              Install for all sessions

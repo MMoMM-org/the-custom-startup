@@ -3,7 +3,7 @@
 ## Plan Discovery
 
 Spec: 003-notification-system
-Plan: `.start/specs/003-notification-system/plan/`
+Plan: `the-custom-startup/specs/003-notification-system/plan/`
 
 Phases:
 1. Core Foundation — `phase-1.md` — completed (skipping)

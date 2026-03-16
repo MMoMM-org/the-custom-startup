@@ -1,6 +1,6 @@
 ---
 name: specify-solution
-description: Create and validate solution design documents (SDD). Use when designing architecture, defining interfaces, documenting technical decisions, analyzing system components, or working on solution.md files in .start/specs/. Includes validation checklist, consistency verification, and overlap detection.
+description: Create and validate solution design documents (SDD). Use when designing architecture, defining interfaces, documenting technical decisions, analyzing system components, or working on solution.md files in the-custom-startup/specs/. Includes validation checklist, consistency verification, and overlap detection.
 allowed-tools: Read, Write, Edit, Task, TodoWrite, Grep, Glob, Skill
 ---
 
@@ -25,7 +25,7 @@ ArchitectureDecision {
 }
 
 State {
-  specDirectory = ""       // .start/specs/[NNN]-[name]/ (or legacy docs/specs/)
+  specDirectory = ""       // the-custom-startup/specs/[NNN]-[name]/ (or legacy docs/specs/)
   prd = ""                 // path to requirements.md (or product-requirements.md)
   sdd = ""                 // path to solution.md (or solution-design.md)
   sections: SddSection[]
@@ -61,7 +61,7 @@ When designing, address four dimensions:
 
 ## Reference Materials
 
-- [Template](template.md) — SDD template structure, write to `.start/specs/[NNN]-[name]/solution.md`
+- [Template](template.md) — SDD template structure, write to `the-custom-startup/specs/[NNN]-[name]/solution.md`
 - [Validation](validation.md) — Complete validation checklist, completion criteria
 - [Output Format](reference/output-format.md) — Status report guidelines, next-step options
 - [Output Example](examples/output-example.md) — Concrete example of expected output format

@@ -6,7 +6,7 @@ Guidelines for specification output. See `examples/output-example.md` for concre
 
 ## Documentation Structure
 
-Specifications live in `.start/specs/[NNN]-[name]/`:
+Specifications live in `the-custom-startup/specs/[NNN]-[name]/`:
 - `README.md` — Decisions and progress tracking
 - `requirements.md` — What and why
 - `solution.md` — How

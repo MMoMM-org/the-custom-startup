@@ -41,10 +41,36 @@ resolve_project_root() {
   fi
 }
 
-# Find the specs directory (.start/specs/ preferred, docs/specs/ legacy fallback)
+# Read a key from .claude/startup.toml, return default if missing.
+# Usage: read_startup_conf <root> <key> <default>
+read_startup_conf() {
+  local root="$1" key="$2" default="$3"
+  local conf="$root/.claude/startup.toml"
+  if [[ -f "$conf" ]]; then
+    local val
+    val=$(grep "^${key}[[:space:]]*=" "$conf" \
+      | sed 's/[^=]*=[[:space:]]*"\?\([^"]*\)"\?.*/\1/' \
+      | head -1)
+    echo "${val:-$default}"
+  else
+    echo "$default"
+  fi
+}
+
+# Find the specs directory.
+# Priority: startup.toml → the-custom-startup/specs → .start/specs → docs/specs
 resolve_specs_dir() {
   local root="$1"
-  if [[ -d "$root/.start/specs" ]]; then
+  local conf_dir
+  conf_dir=$(read_startup_conf "$root" "specs_dir" "")
+  if [[ -n "$conf_dir" ]]; then
+    # conf_dir may be relative (e.g. "the-custom-startup/specs")
+    local abs_dir="$root/$conf_dir"
+    [[ -d "$abs_dir" ]] && echo "$abs_dir" && return
+  fi
+  if [[ -d "$root/the-custom-startup/specs" ]]; then
+    echo "$root/the-custom-startup/specs"
+  elif [[ -d "$root/.start/specs" ]]; then
     echo "$root/.start/specs"
   elif [[ -d "$root/docs/specs" ]]; then
     echo "$root/docs/specs"

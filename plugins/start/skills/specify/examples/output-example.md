@@ -29,7 +29,7 @@ Next Steps:
 
 ## Documentation Structure
 
-.start/specs/003-notification-system/
+the-custom-startup/specs/003-notification-system/
 ├── README.md                 # Decisions and progress
 ├── requirements.md           # What and why
 ├── solution.md               # How

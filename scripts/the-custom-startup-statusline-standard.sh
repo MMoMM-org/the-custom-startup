@@ -28,7 +28,7 @@
 # Shared library
 # ==============================================================================
 
-source "$(dirname "${BASH_SOURCE[0]}")/statusline-lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/the-custom-startup-statusline-lib.sh"
 
 # ==============================================================================
 # Script-specific constants

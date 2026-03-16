@@ -7,10 +7,21 @@
 - **Directory naming**: `[NNN]-[sanitized-feature-name]`
 - **Sanitization**: Lowercase, special chars → hyphens, trim leading/trailing hyphens
 
+## Path Resolution
+
+Before any file operation, resolve the specs directory using this priority chain:
+
+1. Read `specs_dir` from `.claude/startup.toml` (written by install.sh)
+2. Fall back to `the-custom-startup/specs/`
+3. Fall back to `.start/specs/` (migration compatibility)
+4. Fall back to `docs/specs/` (legacy compatibility)
+
+Same chain applies for `ideas_dir` / `the-custom-startup/ideas/` / `.start/ideas/`.
+
 ## Directory Structure
 
 ```
-.start/specs/
+the-custom-startup/specs/          # default location (configurable via startup.toml)
 ├── 001-user-authentication/
 │   ├── README.md                 # Managed by specify-meta skill
 │   ├── requirements.md           # Created by specify-requirements skill
@@ -28,10 +39,10 @@
 
 ## Legacy Fallback
 
-The script supports backward compatibility with `docs/specs/`:
+The script supports backward compatibility:
 
-- **Read**: Checks `.start/specs/` first, falls back to `docs/specs/`
-- **ID scanning**: Scans both directories, takes max ID across both
+- **Read**: Checks `startup.toml` → `the-custom-startup/specs/` → `.start/specs/` → `docs/specs/`
+- **ID scanning**: Scans the resolved directory, takes max ID
 - **File names**: Supports both new (`requirements.md`, `solution.md`) and legacy (`product-requirements.md`, `solution-design.md`)
 - **Plan**: Supports both `plan/` directory and legacy `implementation-plan.md`
 
@@ -43,7 +54,7 @@ spec.py "feature name here"
 ```
 **Output:**
 ```
-Created spec directory: .start/specs/005-feature-name-here
+Created spec directory: the-custom-startup/specs/005-feature-name-here
 Spec ID: 005
 Specification directory created successfully
 ```
@@ -58,14 +69,14 @@ spec.py 005 --read
 ```toml
 id = "005"
 name = "feature-name-here"
-dir = ".start/specs/005-feature-name-here"
+dir = "the-custom-startup/specs/005-feature-name-here"
 
 [spec]
-prd = ".start/specs/005-feature-name-here/requirements.md"
-sdd = ".start/specs/005-feature-name-here/solution.md"
-plan_dir = ".start/specs/005-feature-name-here/plan"
-plan = ".start/specs/005-feature-name-here/plan/README.md"
-phases = [".start/specs/005-feature-name-here/plan/phase-1.md"]
+prd = "the-custom-startup/specs/005-feature-name-here/requirements.md"
+sdd = "the-custom-startup/specs/005-feature-name-here/solution.md"
+plan_dir = "the-custom-startup/specs/005-feature-name-here/plan"
+plan = "the-custom-startup/specs/005-feature-name-here/plan/README.md"
+phases = ["the-custom-startup/specs/005-feature-name-here/plan/phase-1.md"]
 
 files = [
   "README.md",

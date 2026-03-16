@@ -126,7 +126,7 @@ If the user introduces new requirements during revision, acknowledge them and ad
 Present complete design summary.
 
 AskUserQuestion:
-  Save design to file — write to .start/ideas/YYYY-MM-DD-<topic>.md
+  Save design to file — check `.claude/startup.toml` for `ideas_dir`, default `the-custom-startup/ideas/YYYY-MM-DD-<topic>.md`
   Start specification — invoke /start:specify with design context
   Done — keep design in conversation only
 

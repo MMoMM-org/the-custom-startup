@@ -13,7 +13,7 @@ Act as a specification workflow orchestrator that manages specification director
 SpecStatus {
   id: string               // 3-digit zero-padded (001, 002, ...)
   name: string
-  directory: string         // .start/specs/[NNN]-[name]/ (legacy: docs/specs/)
+  directory: string         // resolved via Path Resolution priority chain
   phase: Initialization | PRD | SDD | PLAN | Ready
   documents: {
     name: string
@@ -29,6 +29,12 @@ State {
 }
 
 ## Constraints
+
+**Path Resolution (before any file operation):**
+1. Check `.claude/startup.toml` for `specs_dir` setting → use that path.
+2. Fall back to `the-custom-startup/specs/`.
+3. Fall back to `.start/specs/`.
+4. Fall back to `docs/specs/` (legacy).
 
 **Always:**
 - Use spec.py (co-located with this SKILL.md) for all directory operations.
