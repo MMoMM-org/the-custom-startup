@@ -51,6 +51,7 @@ the-custom-startup/
 │   └── templates/                # Multi-AI prompt templates (PRD, brainstorm, research, etc.)
 │
 ├── install.sh                    # Interactive install wizard
+├── uninstall.sh                  # Interactive uninstall wizard
 └── README.md                     # User-facing documentation
 ```
 
@@ -107,9 +108,8 @@ claude plugin install ./plugins/team
 # Or use the main installer to test full installation
 ./install.sh
 
-# Uninstall to reset
-claude plugin uninstall start@the-custom-startup
-claude plugin uninstall team@the-custom-startup
+# Uninstall to reset (interactive wizard)
+./uninstall.sh
 ```
 
 ### Editing Skills
