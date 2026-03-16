@@ -53,27 +53,34 @@ tcs_ask()     { printf "${TCS_COLOR_CYAN}?${TCS_STYLE_RESET} %s " "$*"; }
 # ==============================================================================
 
 # Token limits per 5h billing window (inputTokens + outputTokens, no cache reads)
-declare -A TCS_PLAN_TOKEN_LIMITS=(
-  [pro]=44000
-  [max5x]=88000
-  [max20x]=220000
-  [api]=44000     # API: no fixed limit, use Pro as conservative default
-)
+# Using case functions instead of declare -A for bash 3.2 compatibility.
+_tcs_plan_token_limit() {
+  case "${1:-pro}" in
+    max20x) echo 220000 ;;
+    max5x)  echo 88000  ;;
+    api)    echo 44000  ;;
+    *)      echo 44000  ;;  # pro + unknown → conservative default
+  esac
+}
 
 # Cost thresholds per session (warn / danger in USD)
-declare -A TCS_PLAN_COST_WARN=(
-  [pro]=1.50
-  [max5x]=5.00
-  [max20x]=10.00
-  [api]=2.00
-)
+_tcs_plan_cost_warn() {
+  case "${1:-pro}" in
+    max20x) echo 10.00 ;;
+    max5x)  echo 5.00  ;;
+    api)    echo 2.00  ;;
+    *)      echo 1.50  ;;  # pro
+  esac
+}
 
-declare -A TCS_PLAN_COST_DANGER=(
-  [pro]=5.00
-  [max5x]=15.00
-  [max20x]=30.00
-  [api]=10.00
-)
+_tcs_plan_cost_danger() {
+  case "${1:-pro}" in
+    max20x) echo 30.00 ;;
+    max5x)  echo 15.00 ;;
+    api)    echo 10.00 ;;
+    *)      echo 5.00  ;;  # pro
+  esac
+}
 
 # ==============================================================================
 # TOML parser
@@ -226,12 +233,12 @@ tcs_load_config() {
   if [[ -n "$tcs_cfg_token_limit_manual" ]]; then
     tcs_cfg_token_limit="$tcs_cfg_token_limit_manual"
   else
-    tcs_cfg_token_limit="${TCS_PLAN_TOKEN_LIMITS[$effective_plan]:-${TCS_PLAN_TOKEN_LIMITS[pro]}}"
+    tcs_cfg_token_limit="$(_tcs_plan_token_limit "$effective_plan")"
   fi
 
   # Resolve cost thresholds: explicit → plan default
-  [[ -z "$tcs_cfg_cost_warn" ]]   && tcs_cfg_cost_warn="${TCS_PLAN_COST_WARN[$effective_plan]:-${TCS_PLAN_COST_WARN[pro]}}"
-  [[ -z "$tcs_cfg_cost_danger" ]] && tcs_cfg_cost_danger="${TCS_PLAN_COST_DANGER[$effective_plan]:-${TCS_PLAN_COST_DANGER[pro]}}"
+  [[ -z "$tcs_cfg_cost_warn" ]]   && tcs_cfg_cost_warn="$(_tcs_plan_cost_warn "$effective_plan")"
+  [[ -z "$tcs_cfg_cost_danger" ]] && tcs_cfg_cost_danger="$(_tcs_plan_cost_danger "$effective_plan")"
 }
 
 _tcs_detect_plan() {

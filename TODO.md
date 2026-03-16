@@ -21,7 +21,7 @@ Feature branches are created per item so each can be PR'd independently upstream
 - [ ] **Re-run support**: calling the script again lets you change specific things (statusline, agent config, output style) without full reinstall
 - [ ] **Idempotency**: re-running is safe, no destructive overwrites
 - [ ] **Statusline conflict detection**: check if `statusLine` is already set in settings.json, offer options (keep / replace / skip)
-- [ ] **Rename statusline file**: from generic `statusline.sh` → `the-custom-startup-statusline.sh`
+- [x] **Rename statusline file**: from generic `statusline.sh` → `the-custom-startup-statusline-standard.sh`
 - [ ] **Granular exit codes** per step, better error messages
 - [ ] Optional `--dry-run` flag: show what would happen without doing it
 

@@ -224,7 +224,7 @@ show_help() {
   cat << EOF
 The Custom Startup — Standard Statusline
 
-Usage: statusline.sh [--help]
+Usage: the-custom-startup-statusline-standard.sh [--help]
 
 Config: ~/.config/the-agentic-startup/statusline.toml
         <repo>/.claude/statusline.toml  (per-repo override)

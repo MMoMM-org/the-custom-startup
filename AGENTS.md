@@ -32,7 +32,7 @@ the-startup/
 │   └── constitution/             # Project governance rules plugin (optional)
 │
 ├── scripts/
-│   ├── statusline.sh             # Custom statusline for Claude Code terminal
+│   ├── the-custom-startup-statusline-standard.sh  # Standard (single-line) statusline
 │   └── statusline.toml           # Statusline configuration template
 │
 ├── docs/

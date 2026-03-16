@@ -6,8 +6,8 @@
 # Per-repo: <repo>/.claude/statusline.toml  (overrides global, partial is fine)
 #
 # Which script reads which settings:
-#   statusline.sh (standard)  → format, plan, thresholds.context, thresholds.budget
-#   statusline-enhanced.sh    → plan, budget_mode, show_*, thresholds.*, cache ttls
+#   the-custom-startup-statusline-standard.sh → format, plan, thresholds.context, thresholds.budget
+#   the-custom-startup-statusline-enhanced.sh → plan, budget_mode, show_*, thresholds.*, cache ttls
 #   All variants              → plan (determines token limit + cost thresholds)
 
 # ==============================================================================
