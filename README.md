@@ -82,4 +82,4 @@ Original work © [Rudolf Schmidt](https://github.com/rsmdt) — MIT License. See
 
 New parts added in this fork (install wizard, statusline scripts, multi-AI workflow, export/import scripts) © Marcus Breiden — MIT License.
 
-Starship integration script uses the [Starship](https://starship.rs/) prompt, which is licensed under the ISC License.
+Starship statusline integration based on an idea from [Reddit r/ClaudeCode](https://www.reddit.com/r/ClaudeCode/comments/1r81675/use_your_starship_prompt_as_the_claude_code/).
