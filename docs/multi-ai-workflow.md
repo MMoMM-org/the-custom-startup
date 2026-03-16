@@ -1,0 +1,113 @@
+# Multi-AI Workflow
+
+This guide explains how to use external AI tools (Claude.ai, Perplexity, ChatGPT) alongside Claude Code to complete the full spec-driven development workflow when you are not inside a Claude Code session.
+
+---
+
+## Why Multiple Tools?
+
+Claude Code has codebase access, tool execution, and the full plugin suite. External tools don't. But external tools are available anywhere — mobile, browser, a colleague's machine — and each has different strengths.
+
+| | Perplexity | Claude.ai | Claude Code |
+|---|---|---|---|
+| **Web search** | Native, always on | Available (Pro/Team plans) | Via agents (WebSearch) |
+| **Best for** | Research, current data, citations | Brainstorm, PRD, constitution design | SDD, PLAN, implement, review |
+| **Codebase access** | No | No | Yes |
+| **Cost** | Separate subscription | Claude subscription | Claude subscription |
+| **Persistent context** | Spaces (shared prompt) | Projects (shared prompt) | Working directory + CLAUDE.md |
+
+---
+
+## Phase Mapping
+
+The spec-driven workflow has five phases. Here is which tool to use for each:
+
+| Phase | Slash Command | Best External Tool | Notes |
+|---|---|---|---|
+| Research | `/start:analyze` | Perplexity | Use `research-prompt.md` |
+| Brainstorm | `/start:brainstorm` | Claude.ai | Use `brainstorm-prompt.md` |
+| Requirements (PRD) | `/start:specify` | Claude.ai | Use `prd-prompt.md` |
+| Constitution (optional) | `/start:constitution` | Claude.ai | Use `constitution-prompt.md`; run once per project |
+| Solution + Plan + Implement | `/start:implement` | Claude Code only | Requires codebase access |
+
+The last three phases (SDD, PLAN, implementation) require reading and writing code. Use Claude Code for those.
+
+---
+
+## Claude Only (No Perplexity)
+
+If you do not have Perplexity, you have two options for research:
+
+**Option A — Claude.ai with web search:** The same `research-prompt.md` templates work. Enable web search in Claude.ai (requires Pro or Team plan). Results are slightly less reliable for current data but reasoning quality is higher.
+
+**Option B — Claude Code analyze:** Run `/start:analyze` directly in Claude Code. The analyze skill launches parallel specialist agents with WebSearch access. Best option when the research target is your own codebase or technology stack.
+
+Trade-off: Perplexity is optimized for citation-heavy retrieval. Claude (all versions) is better at reasoning about what the findings mean. Use whichever fits your need.
+
+---
+
+## The Project and Space Architecture
+
+The key insight: **template = skill, adapted for external use.**
+
+The Claude project or Perplexity space provides only minimal framework context. When you want to invoke a "skill" externally, you paste the corresponding template as your first message. The template carries the full persona, constraints, and workflow — identical quality to running the slash command in Claude Code.
+
+**Two usage modes for every template:**
+
+1. **With project/space** — The project system prompt is pre-loaded. Paste the template as the first message of a new conversation. The project remembers the framework; the template activates the skill.
+
+2. **Standalone** — Paste the template into any Claude.ai conversation (or ChatGPT, or any LLM). It is fully self-contained. No project needed.
+
+**One project, one space.** Do not create a separate Claude project for brainstorm and another for PRD. Use a single project for all Claude.ai workflow phases. Reuse the same Perplexity space for all research queries. See `setup-claude-project.md` and `setup-perplexity-space.md` for setup instructions.
+
+---
+
+## Template Files
+
+| Template | Use For | Mirrors Skill |
+|---|---|---|
+| `brainstorm-prompt.md` | Idea exploration and design | `start:brainstorm` |
+| `prd-prompt.md` | Product requirements document | `start:specify-requirements` |
+| `research-prompt.md` | Market, technology, and problem research | `start:analyze` |
+| `constitution-prompt.md` | Project governance rules | `start:constitution` |
+| `setup-claude-project.md` | One-time Claude.ai project setup | — |
+| `setup-perplexity-space.md` | One-time Perplexity space setup | — |
+
+---
+
+## Spec Paths Note
+
+The export/import scripts (`export-spec.sh`, `import-spec.sh`) currently hardcode `.start/specs/` as the spec directory. If your project uses a different path, edit the scripts directly. A configurable `SPECS_DIR` variable will be added in a future installer update.
+
+---
+
+## Typical Session Flow
+
+```
+1. Research (Perplexity or Claude.ai)
+   → paste research-prompt.md with your question
+   → copy findings to clipboard or a scratch file
+
+2. Brainstorm (Claude.ai)
+   → new conversation in your Claude project
+   → paste brainstorm-prompt.md with your idea
+   → iterate until design is approved
+
+3. PRD (Claude.ai)
+   → new conversation in your Claude project
+   → paste prd-prompt.md with your feature description
+   → iterate section by section until complete
+   → copy the final Markdown output
+
+4. Constitution (Claude.ai, optional, once per project)
+   → new conversation in your Claude project
+   → paste constitution-prompt.md with your project description
+   → iterate through discovery questions
+   → copy the final CONSTITUTION.md content
+
+5. SDD + PLAN + Implement (Claude Code)
+   → open your project in Claude Code
+   → paste or import the PRD
+   → run /start:specify to generate SDD and PLAN
+   → run /start:implement to execute the plan
+```
