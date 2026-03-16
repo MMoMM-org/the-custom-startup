@@ -45,7 +45,13 @@ This fork adds an interactive install wizard, three statusline variants with a l
 curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/install.sh | bash
 ```
 
-The interactive wizard guides you through: install target · plugins · output style · statusline.
+The interactive wizard guides you through: install target · plugins · output style · multi-AI templates · statusline.
+
+To uninstall:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/uninstall.sh | bash
+```
 
 After installation:
 
@@ -62,7 +68,7 @@ After installation:
 
 This fork extends the original with:
 
-- **Interactive install wizard** — global / repo / other path, plugin selection, output style, statusline with conflict detection, confirm before writing anything
+- **Interactive install/uninstall wizards** — global / repo / other path, plugin selection, output style, multi-AI templates, statusline with conflict detection, confirm before writing anything
 - **3 statusline variants** — standard, enhanced (token budget bar via ccusage), Starship bridge — each configurable via `statusline.toml`
 - **Configurable specs directory** — `.claude/startup.toml` tells skills and scripts where your specs live; fallback chain keeps backward compatibility
 - **Multi-AI workflow** — export specs as prompts for Claude.ai or Perplexity, import results back as PRD/SDD
