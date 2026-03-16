@@ -53,13 +53,15 @@ tcs_ask()     { printf "${TCS_COLOR_CYAN}?${TCS_STYLE_RESET} %s " "$*"; }
 # ==============================================================================
 
 # Token limits per 5h billing window (inputTokens + outputTokens, no cache reads)
+# Pro limit calibrated from measurement: 9388 tokens = 33% → 28,450 limit.
+# Max 5x / Max 20x extrapolated proportionally (unverified).
 # Using case functions instead of declare -A for bash 3.2 compatibility.
 _tcs_plan_token_limit() {
   case "${1:-pro}" in
-    max20x) echo 220000 ;;
-    max5x)  echo 88000  ;;
-    api)    echo 44000  ;;
-    *)      echo 44000  ;;  # pro + unknown → conservative default
+    max20x) echo 142500 ;;
+    max5x)  echo 57000  ;;
+    api)    echo 28450  ;;
+    *)      echo 28450  ;;  # pro + unknown → calibrated default
   esac
 }
 

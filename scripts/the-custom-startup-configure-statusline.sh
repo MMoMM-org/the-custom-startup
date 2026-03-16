@@ -394,9 +394,9 @@ select_plan() {
   header "Claude subscription plan"
   echo "  Sets the token budget limit for the budget bar."
   echo ""
-  echo -e "  ${CYAN}1)${RESET} Pro     (\$20/mo)  — ~44,000 tokens / 5h window"
-  echo -e "  ${CYAN}2)${RESET} Max 5x  (\$100/mo) — ~88,000 tokens / 5h window"
-  echo -e "  ${CYAN}3)${RESET} Max 20x (\$200/mo) — ~220,000 tokens / 5h window"
+  echo -e "  ${CYAN}1)${RESET} Pro     (\$20/mo)  — ~28,450 tokens / 5h window"
+  echo -e "  ${CYAN}2)${RESET} Max 5x  (\$100/mo) — ~57,000 tokens / 5h window"
+  echo -e "  ${CYAN}3)${RESET} Max 20x (\$200/mo) — ~142,500 tokens / 5h window"
   echo -e "  ${CYAN}4)${RESET} Custom  — enter limit manually"
   echo ""
 
