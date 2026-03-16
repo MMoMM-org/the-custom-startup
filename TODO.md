@@ -25,6 +25,14 @@ Feature branches are created per item so each can be PR'd independently upstream
 - [x] **Confirmation summary** before doing anything
 - [x] stdin via `/dev/tty` (works with `curl | bash`)
 
+### Open
+
+- [x] Logo needs to be changed to custom startup, should we have The Custom Agentic Startup as logo.. I would say yes.. needs to be changed in the Readme Too.
+- [x] Script mentions that it will install the statusline to the users home directory config if I select repo, it should go to the repo
+- [x] Error while trying to download the statusline: Could not download configure-statusline.sh — skipping statusline (SOURCE_URL now points to correct repo)
+- [x] the installing lines have red text if there is an error (added `plugin update` fallback)
+- [x] uses the wrong marketplace.. the startup, needs to use our own
+
 ### Deferred (out of scope)
 
 - [ ] `--marketplace <org/repo>` CLI flag
@@ -53,6 +61,7 @@ Feature branches are created per item so each can be PR'd independently upstream
 
 - [ ] Verify `ccusage` blocks parsed correctly (`inputTokens + outputTokens`, not `totalTokens`)
 - [ ] Audit `cache_creation_input_tokens` / `cache_read_input_tokens` handling in lib
+- [ ] Add cleanup for /tmp files which are older then 14 days
 
 ---
 
@@ -70,6 +79,47 @@ Feature branches are created per item so each can be PR'd independently upstream
 - [x] `docs/plugins.md` — start plugin, team plugin, output styles, install-from-fork instructions
 - [x] `docs/output-styles.md` — The Startup vs The ScaleUp comparison with voice samples and behavior descriptions
 - [x] `docs/PHILOSOPHY.md` — condensed into curated guide: core philosophy, activity-based architecture, research foundation, agent design principles
+
+### Open
+
+- [ ] `docs/the-custom-philosophy.md` — why the change? 
+- [ ] `docs/agents.md` — bundle the agent information here 
+
+### Notes:
+
+- workflow.md
+	- before step by step we need the optional setup via /constitution
+	- and before that the multi-ai Extension part
+- multi-ai-workflow.md
+	- the phase mapping doesn't relate to anything else in the documentation, the core loop is different
+	- if it makes sense to have those phases we should explain them or reference them
+	- but we also need to map them to the core loop.. or change the core loop to reference the phases
+	- so which is the better approach?
+	- we should link to the template files from the documentation and to the skills directly
+	- same goes for the scripts.
+	- the import-spec.sh part references .start is that only a documentation issue or a general issue (also code)?
+	- typical session flow / step by step.. we should reference the files, also same issue with .start
+- output-styles.md
+	- customizing, we should probably add where they are saved after installation. People will probably not fork the repo to make changes to them
+- plugin.md
+	- we need to change the text to the-custom-startup etc.
+	- the full reference should state that this is the original description and we should mention that some things where changed
+		- eg. location of specs etc.. so that we don't need to update the original description
+	- the tables should have a brief description what the agents / commands are used for
+		- I need to figure out if we need more documentation later on to make it clearer how this is all used
+- skills.md
+	- again we need to change the naming to the-custom-startup
+	- we should probably create an agents.md file and more the agents stuff to there
+- statusline.md
+	- also add the curl way to quick setup
+	- link the files directly or say where they are located (e.g. statusline.toml) don't let the user guess or figure it out by himself
+	- add a quick overview at the top.. standard, enhanced, starship with links to the headers
+	- we need a visible representation how the token budget bar works if we use token not dollar
+		- /usage in claude code displays all the necessary information correctly, question is just how to get this
+- general readme or better license
+	- we should state that the parts are also the mit license c Marcus Breiden, except the Starship Code.
+	
+	
 
 ---
 
