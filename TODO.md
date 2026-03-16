@@ -59,22 +59,17 @@ Feature branches are created per item so each can be PR'd independently upstream
 ## #3 — README: Split & Restructure
 
 **Branch:** `feat/docs-restructure`
-**Status:** ⚪ pending (README still 639 lines)
+**Status:** ✅ done (merged to `customizing` 2026-03-16)
 
-### Goals
+### Delivered
 
-**README.md** becomes a lean entry point (~100 lines):
-- [ ] What is it (2–3 sentences)
-- [ ] Quick install (one-liner + manual option)
-- [ ] Quick start (2 commands)
-- [ ] Links to docs/
-
-**Extract to `docs/`:**
-- [ ] `docs/workflow.md` — complete workflow, step-by-step walkthrough, resume pattern
-- [ ] `docs/skills.md` — skill reference table, capability matrix
-- [ ] `docs/output-styles.md` — The Startup vs The ScaleUp comparison
-- [ ] `docs/philosophy.md` — merge existing PHILOSOPHY.md / PRINCIPLES.md
-- Already done: `docs/statusline.md`, `docs/statusline-starship.md`, `docs/multi-ai-workflow.md`
+- [x] `README.md` — lean entry point with THE CUSTOM STARTUP ASCII logo, fork attribution, Quick Start, links to docs/
+- [x] `docs/index.md` — documentation index (one-liner per doc, organized by category)
+- [x] `docs/workflow.md` — complete workflow, step-by-step walkthrough, startup.toml config, fallback chain, multi-AI reference
+- [x] `docs/skills.md` — decision tree, full command reference table, skill details, team agent roster
+- [x] `docs/plugins.md` — start plugin, team plugin, output styles, install-from-fork instructions
+- [x] `docs/output-styles.md` — The Startup vs The ScaleUp comparison with voice samples and behavior descriptions
+- [x] `docs/PHILOSOPHY.md` — condensed into curated guide: core philosophy, activity-based architecture, research foundation, agent design principles
 
 ---
 
