@@ -580,12 +580,9 @@ EOF
 main() {
   parse_args "$@"
 
-  printf "${BRIGHT_GREEN}"
-  echo "┌────────────────────────────────────────┐"
-  echo "│  The Custom Startup — Statusline Setup │"
-  echo "└────────────────────────────────────────┘"
-  printf "${RESET}"
-  echo ""
+  printf "${BRIGHT_GREEN}┌────────────────────────────────────────┐\n"
+  printf "${BRIGHT_GREEN}│  The Custom Startup — Statusline Setup │\n"
+  printf "${BRIGHT_GREEN}└────────────────────────────────────────┘${RESET}\n\n"
 
   check_all_requirements
 

@@ -20,13 +20,13 @@ STATUSLINE_DIR=""  # set dynamically in choose_statusline() based on TARGET
 # Colors
 # ==============================================================================
 
-GREEN='\033[0;32m'
-BRIGHT_GREEN='\033[1;32m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
-DIM='\033[2m'
-RESET='\033[0m'
+GREEN=$'\033[0;32m'
+BRIGHT_GREEN=$'\033[1;32m'
+YELLOW=$'\033[0;33m'
+RED=$'\033[0;31m'
+CYAN=$'\033[0;36m'
+DIM=$'\033[2m'
+RESET=$'\033[0m'
 
 # ==============================================================================
 # Logging
@@ -43,9 +43,8 @@ ask()     { printf "${CYAN}  ?${RESET} %s " "$*"; }
 # ==============================================================================
 
 banner() {
-  printf "${BRIGHT_GREEN}"
-  cat << 'EOF'
-
+  cat << EOF
+${BRIGHT_GREEN}
 ████████ ██   ██ ███████
    ██    ██   ██ ██
    ██    ███████ █████
@@ -69,9 +68,8 @@ banner() {
 ███████    ██    ███████ ██████     ██    ██   ██ ██████
      ██    ██    ██   ██ ██   ██    ██    ██   ██ ██
 ███████    ██    ██   ██ ██   ██    ██     █████  ██
-
+${RESET}
 EOF
-  printf "${RESET}"
   printf "The Custom Agentic Startup — spec-driven development for Claude Code\n\n"
 }
 
