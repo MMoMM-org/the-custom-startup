@@ -129,7 +129,7 @@ tcs_toml_get() {
 # Config paths
 # ==============================================================================
 
-readonly TCS_GLOBAL_CONFIG_DIR="$HOME/.config/the-agentic-startup"
+readonly TCS_GLOBAL_CONFIG_DIR="$HOME/.config/the-custom-startup"
 readonly TCS_GLOBAL_CONFIG_FILE="$TCS_GLOBAL_CONFIG_DIR/statusline.toml"
 readonly TCS_CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 
