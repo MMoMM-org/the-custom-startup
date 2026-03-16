@@ -111,3 +111,48 @@ The export/import scripts (`export-spec.sh`, `import-spec.sh`) currently hardcod
    → run /start:specify to generate SDD and PLAN
    → run /start:implement to execute the plan
 ```
+
+### Step-by-step: using the output from each phase
+
+**Step 0 — Constitution**
+
+1. Open `docs/templates/constitution-prompt.md` and copy the full contents.
+2. Fill in `{{PROJECT_DESCRIPTION}}`, `{{TECH_STACK}}`, and `{{FOCUS_AREAS_OR_LEAVE_BLANK}}`.
+3. Start a new conversation in your Claude project and paste the filled-in template.
+4. Answer the discovery questions one by one. Claude will propose rules after each area.
+5. When all rules are approved, Claude outputs a complete `CONSTITUTION.md`. Copy it.
+6. Save it as `CONSTITUTION.md` in your project root. No script needed — it is a plain file.
+
+**Step 1 — Research**
+
+1. Open `docs/templates/research-prompt.md` and pick the query that fits your need (market, tech evaluation, best practices, or problem validation).
+2. Copy that query block and fill in the `{{PLACEHOLDER}}` values.
+3. Paste into a new Perplexity thread (or Claude.ai conversation) and send.
+4. When the response is complete, copy the Markdown output and save it as a local file, for example `research-notes.md`. This file is for your own reference only — it does not go into the spec.
+5. Keep the file open while you brainstorm. Paste the Summary and Recommendations sections into the brainstorm or PRD template as additional context.
+
+**Step 2 — Brainstorm**
+
+1. Open `docs/templates/brainstorm-prompt.md` and copy the full contents.
+2. Fill in `{{IDEA_DESCRIPTION}}`. Optionally paste relevant research findings below it as extra context.
+3. Start a new conversation in your Claude project and paste the filled-in template.
+4. Work through the dialogue — probe, approaches, design sections — until you reach the Conclude step.
+5. When Claude presents the final design summary, copy it and save it as a local file, for example `brainstorm-notes.md`.
+6. You do not need to import this file with a script. Paste the design summary into the PRD template in the next step as the `{{OPTIONAL_CONTEXT}}` input.
+
+**Step 3 — PRD**
+
+1. Open `docs/templates/prd-prompt.md` and copy the full contents.
+2. Fill in `{{FEATURE_DESCRIPTION}}`. Paste your brainstorm design summary (and any research notes) into `{{OPTIONAL_CONTEXT}}`.
+3. Start a new conversation in your Claude project and paste the filled-in template.
+4. Work through the eight sections one by one, approving each before moving on.
+5. When validation passes, Claude outputs the complete PRD as a Markdown code block. Copy it and save it as a local file, for example `prd-output.md`.
+6. Import it into your project with the import script:
+
+```bash
+./scripts/import-spec.sh --type prd --input prd-output.md
+# or, to create a new spec directory at the same time:
+./scripts/import-spec.sh --type prd --new my-feature --input prd-output.md
+```
+
+The script places the PRD at `.start/specs/NNN-my-feature/requirements.md`, ready for `/start:specify` in Claude Code.
