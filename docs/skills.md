@@ -91,19 +91,4 @@ Exploratory skill — use before specifying to validate ideas and design approac
 
 ---
 
-## Team Plugin Agents
-
-The `team` plugin provides 15 specialized agents across 8 roles, invoked via the Agent tool by the output style or by you directly:
-
-| Role | Agents |
-|------|--------|
-| the-chief | Complexity assessment, routing |
-| the-analyst | research-product |
-| the-architect | design-system, review-security, review-robustness, review-compatibility |
-| the-developer | build-feature, optimize-performance |
-| the-devops | build-platform, monitor-production |
-| the-designer | research-user, design-interaction, design-visual |
-| the-tester | test-strategy |
-| the-meta-agent | Agent design and generation |
-
-→ Full agent reference: [`plugins/team/README.md`](../plugins/team/README.md)
+→ Full agent reference with per-agent descriptions: [agents.md](agents.md)

@@ -1,16 +1,16 @@
 # Plugins
 
-The Agentic Startup is distributed as two Claude Code marketplace plugins.
+The Custom Agentic Startup is distributed as two Claude Code marketplace plugins.
 
 ---
 
-## start plugin (`start@the-startup`)
+## start plugin (`start@the-custom-startup`)
 
 Core workflow orchestration. Provides the 10 user-invocable slash commands, 5 autonomous skills, and 2 output styles.
 
 **Install:**
 ```bash
-/plugin install start@the-startup
+/plugin install start@the-custom-startup
 ```
 
 ### Skills
@@ -36,17 +36,17 @@ Two output styles ship with the start plugin:
 
 Switch anytime: `/output-style start:The Startup`
 
-→ See [output-styles.md](output-styles.md) for comparison.
+→ See [output-styles.md](output-styles.md) for comparison and post-install customization.
 
 ---
 
-## team plugin (`team@the-startup`) — optional
+## team plugin (`team@the-custom-startup`) — optional
 
 Specialized agent library. 8 roles, 15 activity-based agents. Used by the output styles (via Agent tool) and directly by you for complex multi-domain work.
 
 **Install:**
 ```bash
-/plugin install team@the-startup
+/plugin install team@the-custom-startup
 ```
 
 Enable experimental multi-agent collaboration (Agent Teams):
@@ -73,9 +73,13 @@ The installer can configure this for you.
 
 Each agent is scoped to a specific activity — not a broad role. This follows the activity-based architecture pattern: agents specialize in *what they do*, not *who they are*.
 
+The agent list above mirrors the upstream team plugin. No agents have been added or removed in this fork. The install commands and marketplace identifier differ — see "Installing from this fork" below.
+
+→ Full agent reference with per-agent descriptions: [agents.md](agents.md)
+
 → Full reference: [`plugins/team/README.md`](../plugins/team/README.md)
 
-→ Design principles: [philosophy.md](philosophy.md)
+→ Design principles: [PHILOSOPHY.md](PHILOSOPHY.md)
 
 ---
 

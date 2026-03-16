@@ -29,11 +29,13 @@
 
 ---
 
-## What is The Agentic Startup?
+## What is The Custom Agentic Startup?
 
-**The Agentic Startup** is a multi-agent AI framework that makes Claude Code work like a startup team. Create comprehensive specifications before coding, then execute with parallel specialist agents — expert developers, architects, and engineers working together to turn your ideas into shipped code.
+**The Custom Agentic Startup** is a fork of [the-startup](https://github.com/rsmdt/the-startup) — a multi-agent AI framework that makes Claude Code work like a startup team. Create comprehensive specifications before coding, then execute with parallel specialist agents — expert developers, architects, and engineers working together to turn your ideas into shipped code.
 
 10 slash commands across 3 phases. Specify first, then build with confidence.
+
+This fork adds an interactive install wizard, three statusline variants with a live token budget bar, multi-AI workflow support, and configurable spec paths. See [What's different](#whats-different) for details.
 
 ---
 
@@ -71,3 +73,13 @@ This fork extends the original with:
 ## Documentation
 
 → [docs/index.md](docs/index.md) — full documentation index
+
+---
+
+## License
+
+Original work © [Rudolf Schmidt](https://github.com/rsmdt) — MIT License. See [LICENSE](LICENSE) for the full original license text.
+
+New parts added in this fork (install wizard, statusline scripts, multi-AI workflow, export/import scripts) © Marcus Breiden — MIT License.
+
+Starship integration script uses the [Starship](https://starship.rs/) prompt, which is licensed under the ISC License.

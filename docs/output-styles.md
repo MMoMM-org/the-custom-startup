@@ -67,7 +67,15 @@ Calm confidence with educational depth.
 
 ## Customizing
 
-Output styles are markdown files in `plugins/start/output-styles/`. You can fork and modify them — the files define persona, voice patterns, constraints, and behavioral rules.
+Output styles are markdown files in `plugins/start/output-styles/`. The files define persona, voice patterns, constraints, and behavioral rules.
 
 - `plugins/start/output-styles/The Startup.md`
 - `plugins/start/output-styles/The ScaleUp.md`
+
+After installation, Claude Code caches the plugin files locally. To customize without forking the repository, locate the cached files and edit them directly:
+
+**Global install:** `~/.claude/plugins/cache/the-custom-startup/start/`
+
+**Repo install:** `<repo>/.claude/plugins/cache/the-custom-startup/start/`
+
+Inside that directory, output styles are in `output-styles/`. Note that the path includes a version segment — local edits will be overwritten when you update the plugin. To make persistent changes, fork the repository, edit the style files there, and install from your fork instead.

@@ -23,15 +23,15 @@ Your normal shell prompt is unaffected — the `env_var` modules are invisible w
 Run the configurator and choose **Starship**:
 
 ```bash
-./scripts/configure-statusline.sh
+./scripts/the-custom-startup-configure-statusline.sh
 ```
 
 Or install manually — copy `scripts/the-custom-startup-statusline-starship.sh` to a permanent location and make it executable:
 
 ```bash
 cp scripts/the-custom-startup-statusline-starship.sh \
-   ~/.config/the-agentic-startup/the-custom-startup-statusline-starship.sh
-chmod +x ~/.config/the-agentic-startup/the-custom-startup-statusline-starship.sh
+   ~/.config/the-custom-startup/the-custom-startup-statusline-starship.sh
+chmod +x ~/.config/the-custom-startup/the-custom-startup-statusline-starship.sh
 ```
 
 ### Step 2 — Point Claude Code at the script
@@ -42,7 +42,7 @@ Add to `~/.claude/settings.json`:
 {
   "statusLine": {
     "type": "command",
-    "command": "~/.config/the-agentic-startup/the-custom-startup-statusline-starship.sh"
+    "command": "~/.config/the-custom-startup/the-custom-startup-statusline-starship.sh"
   }
 }
 ```
@@ -140,5 +140,5 @@ Pipe mock JSON to verify output:
 
 ```bash
 echo '{"model":{"display_name":"Opus 4.6"},"session_name":"test","context_window":{"used_percentage":42},"cost":{"total_cost_usd":1.23,"total_duration_ms":870000}}' \
-  | ~/.config/the-agentic-startup/the-custom-startup-statusline-starship.sh
+  | ~/.config/the-custom-startup/the-custom-startup-statusline-starship.sh
 ```

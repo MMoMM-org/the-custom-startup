@@ -2,13 +2,23 @@
 
 Claude Code supports a custom status line — a bar at the bottom of the terminal that updates after each assistant message. This project ships three variants and an interactive configurator.
 
+Jump to: [Standard](#standard) · [Enhanced](#enhanced) · [Starship](#starship) · [Configuration](#configuration)
+
 ## Quick setup
 
+**Interactive wizard (recommended):**
+
 ```bash
-./scripts/configure-statusline.sh
+./scripts/the-custom-startup-configure-statusline.sh
 ```
 
 The wizard checks your environment, lets you pick a variant and installation scope (global or per-repo), and writes the config.
+
+**Or install directly from GitHub:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/scripts/the-custom-startup-configure-statusline.sh | bash
+```
 
 ---
 
@@ -81,6 +91,12 @@ Two-line statusline with richer git context, a token budget bar (via [ccusage](h
 
 The budget bar tracks how much of your plan's token allowance has been used in the current 5-hour billing window. It uses `inputTokens + outputTokens` from the active [ccusage](https://github.com/ryoppippi/ccusage) block — cache read tokens are excluded because they don't represent new content generation and would distort the percentage.
 
+```
+💰 ██░░░░░░░░  9% $0.42    ← green: below warn threshold (70%)
+💰 ███████░░░ 74% $1.91    ← yellow: at or above warn
+💰 ██████████ 95% $2.55    ← red: at or above danger threshold (90%)
+```
+
 Token limits per 5-hour window (configurable):
 
 | Plan | Limit |
@@ -132,6 +148,13 @@ All variants share a single config file: `statusline.toml`.
 ```
 
 The per-repo file only needs the keys you want to override — everything else falls through to the global config.
+
+**Script locations** (after installation):
+
+| Install scope | Scripts | Config |
+|---|---|---|
+| Global | `~/.config/the-custom-startup/` | `~/.config/the-custom-startup/statusline.toml` |
+| Per-repo | `<repo>/.claude/` | `<repo>/.claude/statusline.toml` |
 
 ### Full reference
 
@@ -199,7 +222,7 @@ Run the configurator from inside the repo and choose **Repo** scope:
 
 ```bash
 cd /path/to/your-repo
-./scripts/configure-statusline.sh --repo
+./scripts/the-custom-startup-configure-statusline.sh --repo
 ```
 
 This installs the script and config to `<repo>/.claude/` and updates `<repo>/.claude/settings.json`. The global config is unaffected.
@@ -211,7 +234,7 @@ This installs the script and config to `<repo>/.claude/` and updates `<repo>/.cl
 Re-run the configurator at any time:
 
 ```bash
-./scripts/configure-statusline.sh
+./scripts/the-custom-startup-configure-statusline.sh
 ```
 
 It detects the existing configuration and asks before overwriting.

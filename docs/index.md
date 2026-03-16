@@ -10,6 +10,7 @@ Welcome to The Custom Agentic Startup documentation.
 |----------|---------------|
 | [workflow.md](workflow.md) | Core spec-driven workflow: specify → validate → implement → review. The primary loop for building features. |
 | [skills.md](skills.md) | All 10 slash commands — what each does, when to use it, decision tree. |
+| [agents.md](agents.md) | Full agent reference: 8 roles, 15 activity agents, when to use each. |
 | [plugins.md](plugins.md) | The `start` and `team` plugins: skills overview, agent roster, output styles. |
 | [output-styles.md](output-styles.md) | The Startup vs The ScaleUp — tone, voice, when to switch. |
 
@@ -32,6 +33,7 @@ Welcome to The Custom Agentic Startup documentation.
 | Document | What it covers |
 |----------|---------------|
 | [PHILOSOPHY.md](PHILOSOPHY.md) | Why spec-driven development, activity-based agents, research foundation, design principles. |
+| [the-custom-philosophy.md](the-custom-philosophy.md) | Why this fork exists: install experience, statusline feedback loop, multi-AI workflow, configurable paths. |
 
 ---
 

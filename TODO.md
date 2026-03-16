@@ -117,7 +117,7 @@ Feature branches are created per item so each can be PR'd independently upstream
 	- we need a visible representation how the token budget bar works if we use token not dollar
 		- /usage in claude code displays all the necessary information correctly, question is just how to get this
 - general readme or better license
-	- we should state that the parts are also the mit license c Marcus Breiden, except the Starship Code.
+	- we should state that the parts added are also the mit license c Marcus Breiden, except the Starship Code.
 	
 	
 
