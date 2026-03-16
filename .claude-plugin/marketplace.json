@@ -1,12 +1,12 @@
 {
-  "name": "the-startup",
+  "name": "the-custom-startup",
   "owner": {
-    "name": "Rudolf S."
+    "name": "MMoMM-org"
   },
   "metadata": {
     "description": "Comprehensive agentic framework for Claude Code",
     "version": "3.2.1",
-    "homepage": "https://github.com/rsmdt/the-startup"
+    "homepage": "https://github.com/MMoMM-org/the-custom-startup"
   },
   "plugins": [
     {
