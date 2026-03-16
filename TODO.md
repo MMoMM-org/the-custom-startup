@@ -80,44 +80,20 @@ Feature branches are created per item so each can be PR'd independently upstream
 - [x] `docs/output-styles.md` — The Startup vs The ScaleUp comparison with voice samples and behavior descriptions
 - [x] `docs/PHILOSOPHY.md` — condensed into curated guide: core philosophy, activity-based architecture, research foundation, agent design principles
 
-### Open
+### Delivered (follow-on, 2026-03-16)
 
-- [ ] `docs/the-custom-philosophy.md` — why the change? 
-- [ ] `docs/agents.md` — bundle the agent information here 
-
-### Notes:
-
-- workflow.md
-	- before step by step we need the optional setup via /constitution
-	- and before that the multi-ai Extension part
-- multi-ai-workflow.md
-	- the phase mapping doesn't relate to anything else in the documentation, the core loop is different
-	- if it makes sense to have those phases we should explain them or reference them
-	- but we also need to map them to the core loop.. or change the core loop to reference the phases
-	- so which is the better approach?
-	- we should link to the template files from the documentation and to the skills directly
-	- same goes for the scripts.
-	- the import-spec.sh part references .start is that only a documentation issue or a general issue (also code)?
-	- typical session flow / step by step.. we should reference the files, also same issue with .start
-- output-styles.md
-	- customizing, we should probably add where they are saved after installation. People will probably not fork the repo to make changes to them
-- plugin.md
-	- we need to change the text to the-custom-startup etc.
-	- the full reference should state that this is the original description and we should mention that some things where changed
-		- eg. location of specs etc.. so that we don't need to update the original description
-	- the tables should have a brief description what the agents / commands are used for
-		- I need to figure out if we need more documentation later on to make it clearer how this is all used
-- skills.md
-	- again we need to change the naming to the-custom-startup
-	- we should probably create an agents.md file and more the agents stuff to there
-- statusline.md
-	- also add the curl way to quick setup
-	- link the files directly or say where they are located (e.g. statusline.toml) don't let the user guess or figure it out by himself
-	- add a quick overview at the top.. standard, enhanced, starship with links to the headers
-	- we need a visible representation how the token budget bar works if we use token not dollar
-		- /usage in claude code displays all the necessary information correctly, question is just how to get this
-- general readme or better license
-	- we should state that the parts added are also the mit license c Marcus Breiden, except the Starship Code.
+- [x] `docs/agents.md` — full reference for all 8 roles and 15 activity agents
+- [x] `docs/the-custom-philosophy.md` — why the fork exists
+- [x] `docs/workflow.md` — added Step 0 (/constitution + multi-AI front-load), moved Multi-AI section before Step by Step
+- [x] `docs/multi-ai-workflow.md` — fixed skill names, spec paths, template/script links, phase mapping explanation
+- [x] `docs/output-styles.md` — added post-install cache location and customization note
+- [x] `docs/plugins.md` — updated plugin IDs, added agents.md link, fixed philosophy link
+- [x] `docs/skills.md` — replaced inline agent roster with agents.md link
+- [x] `docs/statusline.md` — fixed script names, added nav anchors, curl quickstart, file location table, token bar ASCII viz
+- [x] `docs/statusline-starship.md` — updated script and directory names
+- [x] `docs/index.md` — added agents.md and the-custom-philosophy.md entries
+- [x] `README.md` — updated product description, added License section
+- [x] `LICENSE` — appended Marcus Breiden MIT block for new files, Reddit attribution for Starship integration
 	
 	
 
