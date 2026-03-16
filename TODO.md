@@ -8,63 +8,58 @@ Feature branches are created per item so each can be PR'd independently upstream
 ## #1 — install.sh: Modular & Flexible
 
 **Branch:** `feat/install-modular`
-**Status:** pending
+**Status:** ✅ done (merged to `customizing` 2026-03-16)
 
-### Goals
+### Delivered
 
-- [ ] Ask **where** to install: Global (`~/.claude`) or repo-local (`.claude/` in current dir)
-- [ ] Ask **which plugins**: `start` only, `team` only, or both
-- [ ] Ask **which output style**: The Startup / The ScaleUp / skip
-- [ ] Ask **whether to install statusline** (yes / no / already have one)
-- [ ] Make **marketplace URL configurable** via CLI flag (`--marketplace <org/repo>`), default to `MMoMM-org/the-custom-startup`
-- [ ] All **dependency checks upfront** together, with OS-specific install instructions (macOS/Ubuntu/Windows)
-- [ ] **Re-run support**: calling the script again lets you change specific things (statusline, agent config, output style) without full reinstall
-- [ ] **Idempotency**: re-running is safe, no destructive overwrites
-- [ ] **Statusline conflict detection**: check if `statusLine` is already set in settings.json, offer options (keep / replace / skip)
-- [x] **Rename statusline file**: from generic `statusline.sh` → `the-custom-startup-statusline-standard.sh`
-- [ ] **Granular exit codes** per step, better error messages
-- [ ] Optional `--dry-run` flag: show what would happen without doing it
+- [x] Ask **where** to install: global / current repo / other repo path
+- [x] Ask **which plugins**: start / team / both
+- [x] Ask **which output style**: The Startup / The ScaleUp / skip
+- [x] Ask **whether to install statusline** — with conflict detection (keep / replace / skip)
+- [x] All **dependency checks upfront** (claude, jq, curl) with OS-specific hints
+- [x] **Idempotency**: re-running is safe
+- [x] **Statusline conflict detection**: checks existing `statusLine` in settings.json
+- [x] **Rename scripts**: `statusline-lib.sh` → `the-custom-startup-statusline-lib.sh`, `configure-statusline.sh` → `the-custom-startup-configure-statusline.sh`
+- [x] **Configurable specs directory**: prompts for name, writes `.claude/startup.toml`
+- [x] **Path resolution chain**: startup.toml → the-custom-startup/specs → .start/specs → docs/specs
+- [x] **Confirmation summary** before doing anything
+- [x] stdin via `/dev/tty` (works with `curl | bash`)
+
+### Deferred (out of scope)
+
+- [ ] `--marketplace <org/repo>` CLI flag
+- [ ] `--dry-run` flag
+- [ ] Granular exit codes per step
 
 ---
 
 ## #2 — Statusline: Configurator + Alternatives
 
 **Branch:** `feat/statusline-configurator`
-**Status:** pending
+**Status:** ✅ done (merged to `customizing`)
 
-### Goals
+### Delivered
 
-**Standalone configurator script** (`scripts/configure-statusline.sh`):
-- [ ] Interactive wizard: choose statusline variant, set plan, toggle components, custom format
-- [ ] Works globally and **per-repo** (each repo can have its own statusline config)
-- [ ] Generates `statusline.toml` from wizard answers
-- [ ] Re-runnable without re-downloading anything
+- [x] `the-custom-startup-configure-statusline.sh` — interactive wizard, variant selection, TOML generation, remote install, `--repo-path` support
+- [x] `the-custom-startup-statusline-lib.sh` — shared library (TOML parser, config, plan data, cache, formatters)
+- [x] `the-custom-startup-statusline-standard.sh` — single-line, placeholder-based
+- [x] `the-custom-startup-statusline-enhanced.sh` — two-line, token budget bar, OSC 8, ccusage
+- [x] `the-custom-startup-statusline-starship.sh` — Starship bridge
+- [x] `statusline.toml` — unified config template
+- [x] `docs/statusline.md` — full reference
+- [x] `docs/statusline-starship.md` — Starship setup guide
 
-**Three statusline variants** (user picks one during install/configure):
+### Open
 
-1. **`the-custom-startup-statusline.sh`** — current script from this repo (renamed), TOML-configured
-2. **`the-custom-startup-statusline-simple.sh`** — lightweight, no `jq` dependency
-3. **`the-custom-startup-statusline-starship.sh`** — Starship-based (requires Starship already installed)
-
-**Starship integration:**
-- [ ] Document the approach from Reddit (r/ClaudeCode) in `docs/statusline-starship.md` with attribution link
-- [ ] Implement the simple Starship config described in that post
-- [ ] Add Starship detection to install.sh (skip option if not installed)
-- [ ] All three variants share the same TOML config format where possible
-
-**Fix in existing statusline.sh:**
-- [ ] Verify `ccusage` blocks are parsed correctly from Claude Code JSON input
-- [ ] Audit `cache_creation_input_tokens` and `cache_read_input_tokens` handling
-
-**Starship source (save in docs):**
-> https://www.reddit.com/r/ClaudeCode/comments/1r81675/use_your_starship_prompt_as_the_claude_code/
+- [ ] Verify `ccusage` blocks parsed correctly (`inputTokens + outputTokens`, not `totalTokens`)
+- [ ] Audit `cache_creation_input_tokens` / `cache_read_input_tokens` handling in lib
 
 ---
 
 ## #3 — README: Split & Restructure
 
 **Branch:** `feat/docs-restructure`
-**Status:** pending
+**Status:** ⚪ pending (README still 639 lines)
 
 ### Goals
 
@@ -75,39 +70,37 @@ Feature branches are created per item so each can be PR'd independently upstream
 - [ ] Links to docs/
 
 **Extract to `docs/`:**
-- [ ] `docs/workflow.md` — Complete workflow, step-by-step walkthrough, resume pattern
-- [ ] `docs/skills.md` — Skill reference table, capability matrix, when-skills-overlap
-- [ ] `docs/statusline.md` — Config, placeholders, color thresholds, plan defaults
+- [ ] `docs/workflow.md` — complete workflow, step-by-step walkthrough, resume pattern
+- [ ] `docs/skills.md` — skill reference table, capability matrix
 - [ ] `docs/output-styles.md` — The Startup vs The ScaleUp comparison
-- [ ] `docs/philosophy.md` — Why, principles, research references (merge with existing PHILOSOPHY.md / PRINCIPLES.md)
-- [ ] `docs/statusline-starship.md` — Starship integration guide (see #2)
+- [ ] `docs/philosophy.md` — merge existing PHILOSOPHY.md / PRINCIPLES.md
+- Already done: `docs/statusline.md`, `docs/statusline-starship.md`, `docs/multi-ai-workflow.md`
 
 ---
 
 ## #4 — Multi-AI Workflow
 
 **Branch:** `feat/multi-ai-workflow`
-**Status:** pending
+**Status:** ✅ done
 
-### Goals
+### Delivered
 
-**Documentation** (`docs/multi-ai-workflow.md`):
-- [ ] Which phases work best in which tool:
-  - `/specify` PRD → Claude.ai chat (conversational, no file access needed)
-  - `/brainstorm` → Claude.ai or Perplexity
-  - `/analyze` → Perplexity (research-heavy)
-  - `/implement` → stays in Claude Code (needs file access)
-- [ ] Clear decision guide: when to leave Claude Code
+- [x] `docs/multi-ai-workflow.md` — which phases work best in which tool
+- [x] `scripts/export-spec.sh` — exports spec as prompt for external AI tools
+- [x] `scripts/import-spec.sh` — imports AI-generated output as PRD/SDD
+- [x] `docs/templates/prd-prompt.md`, `brainstorm-prompt.md`, `research-prompt.md`, `constitution-prompt.md`
+- [x] `docs/templates/setup-claude-project.md`, `setup-perplexity-space.md`
 
-**Export/Import tooling:**
-- [ ] `scripts/export-spec.sh` — exports spec context as a self-contained prompt for paste into any chat AI
-- [ ] `scripts/import-spec.sh` — imports AI-generated output (e.g. architecture doc) as SDD into `.start/specs/`
+---
 
-**Prompt templates** (`docs/templates/`):
-- [ ] `docs/templates/prd-prompt.md` — template for Claude.ai to create a PRD
-- [ ] `docs/templates/brainstorm-prompt.md` — template for ideation sessions
-- [ ] `docs/templates/perplexity-research.md` — template for Perplexity research queries
-- [ ] Each template includes: context setup, the-startup framing, expected output format
+## #5 — Configurable Specs Directory
+
+**Status:** ✅ done (delivered as part of #1, 2026-03-16)
+
+- [x] `.claude/startup.toml` written by install.sh with `specs_dir` + `ideas_dir`
+- [x] `export-spec.sh` + `import-spec.sh` use full priority chain
+- [x] `specify-meta` SKILL.md updated with path resolution instructions
+- [x] All skill example paths updated: `.start/specs/` → `the-custom-startup/specs/`
 
 ---
 
@@ -115,4 +108,3 @@ Feature branches are created per item so each can be PR'd independently upstream
 
 - [ ] All new files in **English**
 - [ ] Each feature gets its own branch → PR-able upstream
-- [ ] `customizing` branch = integration + planning only, no direct implementation commits
