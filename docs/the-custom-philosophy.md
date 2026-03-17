@@ -8,7 +8,7 @@ This fork exists to close those gaps.
 
 ## The install experience
 
-The original installation was: either clone the repo, run `claude plugin install ./plugins/start` or install via curl command, done. Functional, but it assumed familiarity with Claude Code's plugin systme or didn't account for existing installation or configuration changes. In general it lacked flexibility and safety measures.
+The original installation was: either clone the repo, run `claude plugin install ./plugins/start` or install via curl command, done. Functional, but it assumed familiarity with Claude Code's plugin system, didn't account for existing installation or configuration changes. In general it lacked flexibility and safety measures.
 
 A tool that claims to reduce friction should not require you to take it or leave it. The install wizard asks where to install, which plugins to include, which output style to activate, where your specs should live, and whether you want a statusline — and then writes everything in one pass. Running it a second time is safe.
 
@@ -18,7 +18,7 @@ A tool that claims to reduce friction should not require you to take it or leave
 
 A statusline might seem cosmetic. It is not. When you can see the context window filling up at a glance, you context-reset before it becomes a problem. When you see the session cost in real time, you make different decisions about how much you parallelize. When you see the model name and output style, you know immediately whether Claude is in the mode you expect.
 
-The three variants cover different setups: Standard for anyone who wants something lightweight with no dependencies (and whcih was included in the original), Enhanced for power users who want token budget bars and git context, and the Starship bridge for people who have already invested in a custom prompt and do not want two separate status displays.
+The three variants cover different setups: Standard for anyone who wants something lightweight with no dependencies (and whcih was included in the original), Enhanced for power users who want token budget bars and git context (which was "developed" by me), and the Starship bridge for people who have already invested in a custom prompt and do not want two separate status displays (which I found on Reddit and found intrigung).
 
 The `statusline.toml` config and the calibrated plan limits (Pro: ~28,450 tokens per 5h window, measured rather than assumed) came from iterating on actual usage. 
 
