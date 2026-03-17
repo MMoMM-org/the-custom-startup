@@ -8,9 +8,9 @@ This fork exists to close those gaps.
 
 ## The install experience
 
-The original installation was: clone the repo, run `claude plugin install ./plugins/start`, done. Functional, but it assumed familiarity with Claude Code's plugin system, left the statusline unconfigured, and made no effort to understand what you actually wanted to install.
+The original installation was: either clone the repo, run `claude plugin install ./plugins/start` or install via curl command, done. Functional, but it assumed familiarity with Claude Code's plugin systme or didn't account for existing installation or configuration changes. In general it lacked flexibility and safety measures.
 
-A tool that claims to reduce friction should not require you to manually edit JSON files to get started. The install wizard asks where to install, which plugins to include, which output style to activate, where your specs should live, and whether you want a statusline — and then writes everything in one pass. Running it a second time is safe.
+A tool that claims to reduce friction should not require you to take it or leave it. The install wizard asks where to install, which plugins to include, which output style to activate, where your specs should live, and whether you want a statusline — and then writes everything in one pass. Running it a second time is safe.
 
 ---
 
@@ -18,9 +18,9 @@ A tool that claims to reduce friction should not require you to manually edit JS
 
 A statusline might seem cosmetic. It is not. When you can see the context window filling up at a glance, you context-reset before it becomes a problem. When you see the session cost in real time, you make different decisions about how much you parallelize. When you see the model name and output style, you know immediately whether Claude is in the mode you expect.
 
-The three variants cover different setups: Standard for anyone who wants something lightweight with no dependencies, Enhanced for power users who want token budget bars and git context, and the Starship bridge for people who have already invested in a custom prompt and do not want two separate status displays.
+The three variants cover different setups: Standard for anyone who wants something lightweight with no dependencies (and whcih was included in the original), Enhanced for power users who want token budget bars and git context, and the Starship bridge for people who have already invested in a custom prompt and do not want two separate status displays.
 
-The `statusline.toml` config and the calibrated plan limits (Pro: ~28,450 tokens per 5h window, measured rather than assumed) came from iterating on actual usage. The original framework had no statusline support at all.
+The `statusline.toml` config and the calibrated plan limits (Pro: ~28,450 tokens per 5h window, measured rather than assumed) came from iterating on actual usage. 
 
 ---
 
@@ -47,3 +47,5 @@ The `.claude/startup.toml` config file solves this once. Set `specs_dir` once an
 Everything that works. The activity-based agent architecture is sound — task specialization consistently outperforms role-based organization for LLM agents, and the team plugin's decomposition reflects that. The spec-driven workflow is correct. The output styles are genuinely useful. The slash commands cover the right lifecycle phases.
 
 This fork adds infrastructure around a solid core. The original framework, unchanged, is at [`plugins/start/README.md`](../plugins/start/README.md) and [`plugins/team/README.md`](../plugins/team/README.md). Any behavioral changes from upstream are noted in the [What's different](../README.md#whats-different) section of the main README.
+
+Thanks to Rudolf for creating this great toolset.
