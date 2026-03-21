@@ -2,9 +2,10 @@
   "name": "team",
   "version": "3.2.2",
   "description": "Engineering team consisting of specialized agents for software development",
-  "author": {
-    "name": "Rudolf S."
-  },
+  "authors": [
+    { "name": "Rudolf S." },
+    { "name": "Marcus Breiden" }
+  ],
   "homepage": "https://github.com/MMoMM-org/the-custom-startup",
   "repository": "https://github.com/MMoMM-org/the-custom-startup",
   "license": "MIT",
