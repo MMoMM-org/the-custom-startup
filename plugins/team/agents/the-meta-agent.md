@@ -4,6 +4,7 @@ description: PROACTIVELY design new agents when specialized automation is needed
 skills: project-discovery, pattern-detection
 tools: Read, Write, Glob, Grep
 model: sonnet
+color: cyan
 ---
 
 ## Identity
