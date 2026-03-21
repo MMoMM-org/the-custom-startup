@@ -2,10 +2,9 @@
   "name": "start",
   "version": "3.2.2",
   "description": "Workflow orchestration commands for agentic software development",
-  "authors": [
-    { "name": "Rudolf S." },
-    { "name": "Marcus Breiden" }
-  ],
+  "author": {
+    "name": "Rudolf S., Marcus Breiden"
+  },
   "homepage": "https://github.com/MMoMM-org/the-custom-startup",
   "repository": "https://github.com/MMoMM-org/the-custom-startup",
   "license": "MIT",
