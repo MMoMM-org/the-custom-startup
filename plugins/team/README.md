@@ -2,7 +2,7 @@
 
 **Specialized agent library for Claude Code with consolidated, high-signal activities for software delivery.**
 
-The `team` plugin provides **8 specialized roles**, **15 activity-based agents**, and **14 reusable skills**. This consolidation keeps specialist depth while reducing overlap and context bloat.
+The `team` plugin provides **8 specialized roles**, **15 agents** (13 activity-based + the-chief + the-meta-agent), and **16 reusable skills**. This consolidation keeps specialist depth while reducing overlap and context bloat.
 
 ---
 
@@ -96,7 +96,7 @@ skills: project-discovery, pattern-detection, api-contract-design
 ---
 ```
 
-### Available Skills (14)
+### Available Skills (16)
 
 | Category | Skill | Description |
 |----------|-------|-------------|
@@ -105,9 +105,11 @@ skills: project-discovery, pattern-detection, api-contract-design
 | | `feature-prioritization` | RICE/MoSCoW/Kano/value-effort prioritization |
 | | `requirements-elicitation` | Requirement gathering, conflict resolution, acceptance criteria |
 | **Design** | `user-research` | Research planning, evidence synthesis, personas, journey mapping |
-| **Development** | `api-contract-design` | REST/GraphQL contract design and versioning |
+| **Development** | `agentic-patterns` | Multi-agent orchestration and agentic design patterns |
+| | `api-contract-design` | REST/GraphQL contract design and versioning |
 | | `architecture-selection` | Pattern selection for monolith/microservices/serverless/event-driven |
 | | `domain-modeling` | Domain + data modeling, invariants, schema evolution |
+| | `frontend-patterns` | Frontend component patterns and UI architecture |
 | | `technical-writing` | ADRs, system docs, runbooks, API docs |
 | | `testing` | Layered testing strategy and execution patterns |
 | **Infrastructure** | `platform-operations` | Pipeline design + observability + release reliability controls |

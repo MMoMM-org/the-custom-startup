@@ -18,7 +18,7 @@ the-custom-startup/
 │   │   └── README.md             # Detailed plugin documentation
 │   │
 │   └── team/                     # Specialized agent library plugin
-│       ├── agents/               # 8 roles with 16 consolidated activity agents
+│       ├── agents/               # 8 roles with 15 agents (13 activity + the-chief + the-meta-agent)
 │       │   ├── the-chief.md      # Complexity assessment, routing
 │       │   ├── the-analyst/      # research-product
 │       │   ├── the-architect/    # design-system, review-security, review-robustness, review-compatibility
@@ -61,10 +61,13 @@ the-custom-startup/
 
 Each plugin lives in `plugins/[name]/` with:
 - `.claude-plugin/plugin.json` - Plugin manifest defining name, version, components
-- `commands/` - Slash command definitions (markdown files)
-- `skills/` - Autonomous skills (SKILL.md files with trigger terms)
+- `skills/` - User-invocable and autonomous skills (SKILL.md files with trigger terms)
 - `output-styles/` - Output style definitions
 - `agents/` - Agent definitions (team plugin only)
+
+**Skill namespacing**: Claude Code automatically prefixes skills with the plugin name from
+`plugin.json`. A skill named `brainstorm` in the `start` plugin is invocable as `start:brainstorm`.
+The team plugin's domain skills are agent-internal and not user-invocable directly.
 
 ### Skill Structure
 
@@ -119,11 +122,13 @@ claude plugin install ./plugins/team
 3. Keep `SKILL.md` under ~25 KB for context efficiency
 4. Move advanced content to `reference/` directory (loaded on demand)
 
-### Editing Commands
+### Invoking Skills as Commands
 
-1. Commands are markdown files in `plugins/[plugin]/commands/`
-2. Command name matches filename (e.g., `specify.md` → `/start:specify`)
-3. Commands orchestrate skills - they define workflow, skills provide implementation
+The `start` plugin has no separate `commands/` directory — skills serve as the user-invocable
+entry points. Each skill in `plugins/start/skills/[name]/SKILL.md` is accessible as
+`/start:[name]` (e.g. `/start:specify`, `/start:implement`).
+
+To add a new workflow entry point, add a skill directory under `plugins/start/skills/`.
 
 ### Editing Agents
 
@@ -173,10 +178,9 @@ Optional `CONSTITUTION.md` at project root defines checkable rules:
 
 | Type | Location | Naming |
 |------|----------|--------|
-| Commands | `plugins/*/commands/*.md` | lowercase-kebab (e.g., `specify.md`) |
 | Skills | `plugins/*/skills/*/SKILL.md` | directory is skill name |
 | Agents | `plugins/team/agents/the-*/` | `the-[role]/[activity].md` |
-| Output Styles | `plugins/*/output-styles/*.md` | Title Case (e.g., `The Startup.md`) |
+| Output Styles | `plugins/*/output-styles/*.md` | lowercase-kebab (e.g., `the-startup.md`) |
 | Specs | `.start/specs/[NNN]-*/` | 3-digit ID prefix |
 
 ## Publishing
