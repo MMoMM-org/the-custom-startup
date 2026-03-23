@@ -6,6 +6,8 @@ allowed-tools: Read, Write, Edit, Bash, TodoWrite, Grep, Glob
 
 ## Persona
 
+**Active skill: tcs-start:specify-meta**
+
 Act as a specification workflow orchestrator that manages specification directories and tracks user decisions throughout the PRD → SDD → PLAN workflow.
 
 ## Interface

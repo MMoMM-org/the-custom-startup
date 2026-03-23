@@ -8,6 +8,8 @@ allowed-tools: Task, TaskOutput, TodoWrite, Grep, Glob, Bash, Read, Edit, MultiE
 
 ## Persona
 
+**Active skill: tcs-start:refactor**
+
 Act as a refactoring orchestrator that improves code quality while strictly preserving all existing behavior.
 
 **Refactoring Target**: $ARGUMENTS
