@@ -81,8 +81,8 @@ EOF
 TARGET=""          # global | current | other
 INSTALL_DIR=""     # ~ | $PWD | <path>
 SETTINGS_FILE=""   # resolved settings.json path
-PLUGINS=""         # space-separated list: start@the-custom-startup team@the-custom-startup
-OUTPUT_STYLE=""    # e.g. "start:The Startup" or ""
+PLUGINS=""         # space-separated list: tcs-start@the-custom-startup tcs-team@the-custom-startup
+OUTPUT_STYLE=""    # e.g. "tcs-start:The Startup" or ""
 SPECS_DIR_NAME=""  # e.g. "the-custom-startup"
 PROMPTS=""         # yes | skip
 PROMPTS_BASE_DIR="" # absolute path, e.g. ~/.claude/the-custom-startup
@@ -177,17 +177,19 @@ choose_target() {
 
 choose_plugins() {
   printf "\n${BRIGHT_GREEN}── Plugins${RESET}\n\n"
-  printf "  ${CYAN}1)${RESET} Both           — start + team  (recommended)\n"
-  printf "  ${CYAN}2)${RESET} start only     — workflow skills\n"
-  printf "  ${CYAN}3)${RESET} team only      — specialist agents\n"
+  printf "  ${CYAN}1)${RESET} Both           — tcs-start + tcs-team  (recommended)\n"
+  printf "  ${CYAN}2)${RESET} tcs-start only — workflow skills\n"
+  printf "  ${CYAN}3)${RESET} tcs-team only  — specialist agents\n"
+  printf "  ${CYAN}4)${RESET} All three      — tcs-start + tcs-team + tcs-helper (skill authoring tools)\n"
   printf "\n"
-  ask "Select plugins [1-3, default: 1]:"
+  ask "Select plugins [1-4, default: 1]:"
   local choice
   read -r choice </dev/tty
   case "$choice" in
-    2) PLUGINS="start@the-custom-startup" ;;
-    3) PLUGINS="team@the-custom-startup" ;;
-    *)  PLUGINS="start@the-custom-startup team@the-custom-startup" ;;
+    2) PLUGINS="tcs-start@the-custom-startup" ;;
+    3) PLUGINS="tcs-team@the-custom-startup" ;;
+    4) PLUGINS="tcs-start@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup" ;;
+    *)  PLUGINS="tcs-start@the-custom-startup tcs-team@the-custom-startup" ;;
   esac
   success "Plugins: $PLUGINS"
 }
@@ -206,9 +208,9 @@ choose_output_style() {
   local choice
   read -r choice </dev/tty
   case "$choice" in
-    2) OUTPUT_STYLE="start:The ScaleUp" ;;
+    2) OUTPUT_STYLE="tcs-start:The ScaleUp" ;;
     3) OUTPUT_STYLE="" ;;
-    *) OUTPUT_STYLE="start:The Startup" ;;
+    *) OUTPUT_STYLE="tcs-start:The Startup" ;;
   esac
   if [[ -n "$OUTPUT_STYLE" ]]; then
     success "Output style: $OUTPUT_STYLE"
@@ -502,25 +504,82 @@ confirm_summary() {
 do_install() {
   printf "\n${BRIGHT_GREEN}── Installing${RESET}\n\n"
 
-  # --- Marketplace + plugins (always global) ----------------------------------
-  info "Configuring marketplace..."
-  if claude plugin marketplace add "$MARKETPLACE" >/dev/null 2>&1; then
-    success "Marketplace added"
-  elif claude plugin marketplace update "$MARKETPLACE" >/dev/null 2>&1; then
-    success "Marketplace updated"
-  else
-    success "Marketplace configured"
+  # --- Detect local clone ------------------------------------------------------
+  local this_script="${BASH_SOURCE[0]:-}"
+  local this_dir=""
+  if [[ -n "$this_script" && "$this_script" != "-" ]]; then
+    this_dir="$(cd "$(dirname "$this_script")" 2>/dev/null && pwd)"
+  fi
+  local use_local_plugins=false
+  if [[ -n "$this_dir" && -d "$this_dir/plugins" ]]; then
+    use_local_plugins=true
   fi
 
-  for plugin in $PLUGINS; do
-    info "Installing $plugin..."
-    if claude plugin install "$plugin" >/dev/null 2>&1; then
-      success "Plugin: $plugin"
-    elif claude plugin update "$plugin" >/dev/null 2>&1; then
-      success "Plugin: $plugin (updated)"
+  # --- Marketplace + plugins (always global) ----------------------------------
+  if $use_local_plugins; then
+    info "Local clone detected — installing plugins from local cache"
+  else
+    info "Configuring marketplace..."
+    if claude plugin marketplace add "$MARKETPLACE" >/dev/null 2>&1; then
+      success "Marketplace added"
+    elif claude plugin marketplace update "$MARKETPLACE" >/dev/null 2>&1; then
+      success "Marketplace updated"
     else
-      error "Failed to install $plugin"
-      exit 2
+      success "Marketplace configured"
+    fi
+  fi
+
+  # CLAUDE_HOME: where Claude stores settings and plugins
+  local claude_home="$HOME/.claude"
+  local plugins_cache="$claude_home/plugins/cache"
+  local installed_json="$claude_home/plugins/installed_plugins.json"
+
+  for plugin in $PLUGINS; do
+    # Strip @marketplace suffix to get plugin name (e.g. tcs-start)
+    local plugin_name="${plugin%@*}"
+    local marketplace_name="${plugin#*@}"
+    info "Installing $plugin_name..."
+    if $use_local_plugins && [[ -d "$this_dir/plugins/$plugin_name" ]]; then
+      # Read version from plugin.json
+      local plugin_src="$this_dir/plugins/$plugin_name"
+      local version
+      version=$(jq -r '.version // "local"' "$plugin_src/.claude-plugin/plugin.json" 2>/dev/null || echo "local")
+
+      # Copy into cache: ~/.claude/plugins/cache/<marketplace>/<name>/<version>/
+      local cache_dest="$plugins_cache/$marketplace_name/$plugin_name/$version"
+      mkdir -p "$cache_dest"
+      cp -r "$plugin_src/." "$cache_dest/"
+      rm -f "$cache_dest/.orphaned_at"
+
+      # Register in installed_plugins.json
+      if [[ ! -f "$installed_json" ]]; then
+        echo '{"version":2,"plugins":{}}' > "$installed_json"
+      fi
+      local now; now=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+      local tmp; tmp=$(mktemp)
+      jq --arg key "${plugin_name}@${marketplace_name}" \
+         --arg path "$cache_dest" \
+         --arg ver "$version" \
+         --arg ts "$now" \
+         '.plugins[$key] = [{"scope":"user","installPath":$path,"version":$ver,"installedAt":$ts,"lastUpdated":$ts}]' \
+         "$installed_json" > "$tmp" && mv "$tmp" "$installed_json"
+
+      # Add to enabledPlugins in settings.json
+      local stmp; stmp=$(mktemp)
+      jq --arg key "${plugin_name}@${marketplace_name}" \
+         '.enabledPlugins = (.enabledPlugins // {}) + {($key): true}' \
+         "$SETTINGS_FILE" > "$stmp" && mv "$stmp" "$SETTINGS_FILE"
+
+      success "Plugin: $plugin_name (local, v$version)"
+    else
+      if claude plugin install "$plugin" >/dev/null 2>&1; then
+        success "Plugin: $plugin"
+      elif claude plugin update "$plugin" >/dev/null 2>&1; then
+        success "Plugin: $plugin (updated)"
+      else
+        error "Failed to install $plugin"
+        exit 2
+      fi
     fi
   done
 

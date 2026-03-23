@@ -66,7 +66,7 @@ Each plugin lives in `plugins/[name]/` with:
 - `agents/` - Agent definitions (team plugin only)
 
 **Skill namespacing**: Claude Code automatically prefixes skills with the plugin name from
-`plugin.json`. A skill named `brainstorm` in the `start` plugin is invocable as `start:brainstorm`.
+`plugin.json`. A skill named `brainstorm` in the `tcs-start` plugin is invocable as `tcs-start:brainstorm`.
 The team plugin's domain skills are agent-internal and not user-invocable directly.
 
 ### Skill Structure
@@ -81,7 +81,7 @@ skills/[skill-name]/
 └── validation.md      # Quality checklists
 ```
 
-For full skill conventions, PICS structure, and transformation checklist, see the `writing-skills` skill (`plugins/start/skills/writing-skills/reference/conventions.md`).
+For full skill conventions, PICS structure, and transformation checklist, see the `writing-skills` skill (`plugins/tcs-start/skills/writing-skills/reference/conventions.md`).
 
 ### Agent Structure (Team Plugin)
 
@@ -124,15 +124,15 @@ claude plugin install ./plugins/team
 
 ### Invoking Skills as Commands
 
-The `start` plugin has no separate `commands/` directory — skills serve as the user-invocable
-entry points. Each skill in `plugins/start/skills/[name]/SKILL.md` is accessible as
-`/start:[name]` (e.g. `/start:specify`, `/start:implement`).
+The `tcs-start` plugin has no separate `commands/` directory — skills serve as the user-invocable
+entry points. Each skill in `plugins/tcs-start/skills/[name]/SKILL.md` is accessible as
+`/[name]` (e.g. `/specify`, `/implement`).
 
-To add a new workflow entry point, add a skill directory under `plugins/start/skills/`.
+To add a new workflow entry point, add a skill directory under `plugins/tcs-start/skills/`.
 
 ### Editing Agents
 
-1. Agents are markdown files in `plugins/team/agents/[role]/`
+1. Agents are markdown files in `plugins/tcs-team/agents/[role]/`
 2. Agent name matches `[role]:[activity]` pattern
 3. Agents define specialized Task tool prompts for subagent delegation
 
@@ -153,7 +153,7 @@ Skills load minimal context initially, then progressively load:
 
 ### Spec-Driven Development
 
-The primary workflow: `/start:specify` → `/start:validate` → `/start:implement` → `/start:review`
+The primary workflow: `/specify` → `/validate` → `/implement` → `/review`
 
 Specifications live in `.start/specs/[NNN]-[name]/` (legacy: `docs/specs/`):
 - `requirements.md` - What to build
@@ -179,7 +179,7 @@ Optional `CONSTITUTION.md` at project root defines checkable rules:
 | Type | Location | Naming |
 |------|----------|--------|
 | Skills | `plugins/*/skills/*/SKILL.md` | directory is skill name |
-| Agents | `plugins/team/agents/the-*/` | `the-[role]/[activity].md` |
+| Agents | `plugins/tcs-team/agents/the-*/` | `the-[role]/[activity].md` |
 | Output Styles | `plugins/*/output-styles/*.md` | lowercase-kebab (e.g., `the-startup.md`) |
 | Specs | `.start/specs/[NNN]-*/` | 3-digit ID prefix |
 

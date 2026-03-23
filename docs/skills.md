@@ -32,16 +32,17 @@ What do you need to do?
 
 | Command | Plugin | Purpose | When to use |
 |---------|--------|---------|-------------|
-| `/constitution` | start | Create project governance rules | Establish guardrails before building |
-| `/specify` | start | Create specs (PRD + SDD + PLAN) | Any new feature or significant change |
-| `/validate` | start | Check spec quality (3 Cs) | Before starting implementation |
-| `/implement` | start | Execute plan phase-by-phase | After spec is validated |
-| `/test` | start | Run tests, enforce code ownership | After implementation, when fixing bugs |
-| `/review` | start | Multi-agent code review | Before merging |
-| `/document` | start | Generate/sync documentation | After implementation |
-| `/analyze` | start | Discover patterns & business rules | Understanding existing code |
-| `/refactor` | start | Improve code quality | Cleanup without behavior change |
-| `/debug` | start | Root cause analysis & fix | When something is broken |
+| `/constitution` | tcs-start | Create project governance rules | Establish guardrails before building |
+| `/specify` | tcs-start | Create specs (PRD + SDD + PLAN) | Any new feature or significant change |
+| `/validate` | tcs-start | Check spec quality (3 Cs) | Before starting implementation |
+| `/implement` | tcs-start | Execute plan phase-by-phase | After spec is validated |
+| `/test` | tcs-start | Run tests, enforce code ownership | After implementation, when fixing bugs |
+| `/review` | tcs-start | Multi-agent code review | Before merging |
+| `/document` | tcs-start | Generate/sync documentation | After implementation |
+| `/analyze` | tcs-start | Discover patterns & business rules | Understanding existing code |
+| `/refactor` | tcs-start | Improve code quality | Cleanup without behavior change |
+| `/debug` | tcs-start | Root cause analysis & fix | When something is broken |
+| `/skill-author` | tcs-helper | Create, audit, or convert skills | Authoring Claude Code skills or agents |
 
 ---
 

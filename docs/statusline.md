@@ -267,6 +267,6 @@ echo '{
                       "cache_creation_input_tokens": 0}},
   "cost": {"total_cost_usd": 1.23, "total_duration_ms": 870000,
            "total_lines_added": 156, "total_lines_removed": 23},
-  "output_style": {"name": "start:The Startup"}
+  "output_style": {"name": "tcs-start:The Startup"}
 }' | ./scripts/the-custom-startup-statusline-enhanced.sh
 ```
