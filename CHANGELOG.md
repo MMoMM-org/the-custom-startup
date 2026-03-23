@@ -1,9 +1,70 @@
 # Changelog
 
-All notable changes to The Agentic Startup will be documented in this file.
+All notable changes to The Custom Agentic Startup will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [3.2.3] - 2026-03-23
+
+### Changed
+- `find-agents.sh` moved from `scripts/` into `skills/skill-author/` — co-located with the skill that uses it
+- Cache directory path format corrected to `marketplace/plugin/version/` throughout all docs and references
+- `AGENTS.md` repo structure updated with correct `tcs-start`/`tcs-team`/`tcs-helper` plugin names
+
+### Fixed
+- Removed incorrect `get-specs-dir.sh` reference from `tcs-helper` README and `docs/plugins.md` — that script belongs to `tcs-start`/`tcs-team`, not the helper plugin
+- `find-agents.sh` header comment updated to reflect 3-segment cache path (`marketplace/plugin/version/`)
+
+### Docs
+- `tcs-helper` plugin added to root README plugins section and `docs/installation.md`
+- `docs/output-styles.md` cache path examples now include version segment
+
+---
+
+## [3.2.2] - 2026-03-23
+
+> **Note:** This is the initial release of the MMoMM-org fork of [rsmdt/the-startup](https://github.com/rsmdt/the-startup). All entries below are additions on top of the upstream 3.2.x baseline.
+
+### Added
+- **Plugin rename** — `start` → `tcs-start`, `team` → `tcs-team` for marketplace namespacing
+- **`tcs-helper` plugin** (optional) — skill authoring tools for plugin developers
+  - `skill-author` skill: create, audit, and convert Claude Code skills with PICS structure, duplicate detection, model selection, agent discovery, and deployment verification
+  - `find-agents.sh`: discovers all installed agents across `~/.claude/agents/` and plugin caches
+- **Self-announcement** — all skills and agents now identify themselves at activation (`Active skill: …` / `Active agent: …`)
+- **Configurable specs directory** — `get-specs-dir.sh` reads `.claude/startup.toml` (local or global) and falls back through standard path chain
+- **Local clone install** — `install.sh` can install directly from a local repo clone without requiring a published marketplace release
+- **Docs expansion** — `docs/concepts.md`, `docs/installation.md`, `docs/plugins.md` added; README restructured
+
+### Changed
+- All hardcoded `.start/specs` paths replaced with configurable references via `startup.toml`
+
+---
+
+## [3.2.1] - 2026-03-16
+
+> Initial fork from [rsmdt/the-startup](https://github.com/rsmdt/the-startup) as MMoMM-org/the-custom-startup.
+
+### Added
+- **Interactive install wizard** (`install.sh`) — guided setup for install target (global / repo / custom), plugin selection, output style, statusline, multi-AI templates, and startup config; confirmation summary before writing anything
+- **Interactive uninstall wizard** (`uninstall.sh`) — mirrors install choices, removes only what was installed
+- **3 statusline variants**:
+  - Standard — single-line git branch + token usage
+  - Enhanced — adds live token budget bar (requires `ccusage`)
+  - Starship bridge — integrates with Starship prompt
+  - All configured via `statusline.toml`
+- **Multi-AI workflow** — `export-spec.sh` and `import-spec.sh` scripts; prompt templates for Claude.ai and Perplexity; `docs/multi-ai-workflow.md` guide
+- **Startup configuration** — `.claude/startup.toml` for specs directory and other project settings
+- **Script naming convention** — all statusline scripts share `the-custom-startup-*` prefix
+- **Bash 3.2 compatibility** — `case`-based lookup functions replace `declare -A` associative arrays (macOS default shell)
+
+### Changed
+- Branding updated to `the-custom-startup` / `MMoMM-org`
+- README restructured with docs/ directory and full workflow documentation
+
+---
 
 ## [2.0.0] - 2025-10-12
 
@@ -104,5 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[3.2.3]: https://github.com/MMoMM-org/the-custom-startup/compare/v3.2.2...v3.2.3
+[3.2.2]: https://github.com/MMoMM-org/the-custom-startup/compare/v3.2.1...v3.2.2
+[3.2.1]: https://github.com/MMoMM-org/the-custom-startup/releases/tag/v3.2.1
 [2.0.0]: https://github.com/irudiperera/the-startup/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/irudiperera/the-startup/releases/tag/v1.0.0
