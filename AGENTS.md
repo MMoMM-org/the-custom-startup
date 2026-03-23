@@ -126,7 +126,7 @@ claude plugin install ./plugins/team
 
 The `tcs-start` plugin has no separate `commands/` directory — skills serve as the user-invocable
 entry points. Each skill in `plugins/tcs-start/skills/[name]/SKILL.md` is accessible as
-`/tcs-start:[name]` (e.g. `/tcs-start:specify`, `/tcs-start:implement`).
+`/[name]` (e.g. `/specify`, `/implement`).
 
 To add a new workflow entry point, add a skill directory under `plugins/tcs-start/skills/`.
 
@@ -153,7 +153,7 @@ Skills load minimal context initially, then progressively load:
 
 ### Spec-Driven Development
 
-The primary workflow: `/tcs-start:specify` → `/tcs-start:validate` → `/tcs-start:implement` → `/tcs-start:review`
+The primary workflow: `/specify` → `/validate` → `/implement` → `/review`
 
 Specifications live in `.start/specs/[NNN]-[name]/` (legacy: `docs/specs/`):
 - `requirements.md` - What to build

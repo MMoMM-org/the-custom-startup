@@ -288,7 +288,7 @@ message: No console.log except in CLI package.
 Check all rules against entire codebase:
 
 ```
-/tcs-start:validate constitution
+/validate constitution
 ```
 
 ### Targeted Validation
@@ -296,12 +296,12 @@ Check all rules against entire codebase:
 Check against specific files or directories:
 
 ```
-/tcs-start:validate constitution src/services/
+/validate constitution src/services/
 ```
 
 ### Implementation Validation
 
-Called automatically during `/tcs-start:implement` phases.
+Called automatically during `/implement` phases.
 
 ## Performance Considerations
 

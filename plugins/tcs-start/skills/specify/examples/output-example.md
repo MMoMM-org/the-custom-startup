@@ -11,8 +11,8 @@ Readiness: HIGH
 Confidence: 92%
 
 Next Steps:
-1. /tcs-start:validate 003 - Validate specification quality
-2. /tcs-start:implement 003 - Begin implementation
+1. /validate 003 - Validate specification quality
+2. /implement 003 - Begin implementation
 
 ---
 

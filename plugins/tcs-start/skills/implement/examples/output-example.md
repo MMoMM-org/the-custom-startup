@@ -74,5 +74,5 @@ Spec: 003-notification-system
 Phases Completed: 2/3
 Current Phase: 3 (Integration & Validation) — pending
 
-Resume with: `/tcs-start:implement 003`
+Resume with: `/implement 003`
 The plan will pick up from Phase 3 automatically.

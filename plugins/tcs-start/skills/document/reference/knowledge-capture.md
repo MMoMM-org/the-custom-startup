@@ -334,18 +334,18 @@ Quick overview: We use Redis for session and API response caching.
 
 ## Integration with Specifications
 
-### During Analysis (`/tcs-start:analyze`)
+### During Analysis (`/analyze`)
 Documentation skill captures discovered patterns:
 - Code analysis reveals patterns → Document in `docs/patterns/`
 - Business rules discovered → Document in `docs/domain/`
 - External APIs found → Document in `docs/interfaces/`
 
-### During Specification (`/tcs-start:specify`)
+### During Specification (`/specify`)
 - PRD/SDD references existing documentation
 - New patterns discovered → Document them
 - Specifications live in `the-custom-startup/specs/`, reference shared docs
 
-### During Implementation (`/tcs-start:implement`)
+### During Implementation (`/implement`)
 - Implementation follows documented patterns
 - Deviations discovered → Update documentation
 - New patterns emerge → Document for reuse

@@ -87,4 +87,4 @@ These should NOT appear in a PLAN:
 - Every SDD component is covered by phases
 - All phase files exist and are linked from plan/README.md
 - A developer can start implementation immediately
-- Ready for `/tcs-start:implement` execution
+- Ready for `/implement` execution

@@ -136,9 +136,9 @@ Read reference/output-format.md and present final report accordingly.
 ## Integration with Other Skills
 
 Called by other workflow skills:
-- After `/tcs-start:implement` — verify implementation didn't break tests
-- After `/tcs-start:refactor` — verify refactoring preserved behavior
-- After `/tcs-start:debug` — verify fix resolved the issue without regressions
-- Before `/tcs-start:review` — ensure clean test suite before review
+- After `/implement` — verify implementation didn't break tests
+- After `/refactor` — verify refactoring preserved behavior
+- After `/debug` — verify fix resolved the issue without regressions
+- Before `/review` — ensure clean test suite before review
 
 When called by another skill, skip step 1 if test infrastructure was already identified.

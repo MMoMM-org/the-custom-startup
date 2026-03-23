@@ -130,5 +130,5 @@ match (validationMode) {
 ## Integration with Other Skills
 
 Called by other workflow skills:
-- `/tcs-start:implement` — drift check at phase boundaries, constitution check at checkpoints
-- `/tcs-start:specify` — architecture alignment during SDD phase
+- `/implement` — drift check at phase boundaries, constitution check at checkpoints
+- `/specify` — architecture alignment during SDD phase

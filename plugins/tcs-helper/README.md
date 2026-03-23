@@ -10,7 +10,7 @@ This plugin is **optional**. Install it if you want to create or maintain skills
 
 Guided workflow for creating, auditing, and converting Claude Code skills. Covers the full lifecycle: duplicate detection, PICS structure, model selection, agent discovery, verification, and deployment.
 
-→ Invocable as `/tcs-helper:skill-author`
+→ Invocable as `/skill-author`
 
 ## Scripts
 

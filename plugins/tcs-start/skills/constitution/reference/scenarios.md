@@ -7,7 +7,7 @@ Example scenarios showing the constitution skill in action.
 ## Create New Constitution
 
 ```
-User: /tcs-start:constitution
+User: /constitution
 
 Claude: 📜 Constitution Setup
 
@@ -36,7 +36,7 @@ Would you like to:
 ## Create with Focus Areas
 
 ```
-User: /tcs-start:constitution "Focus on security and API patterns"
+User: /constitution "Focus on security and API patterns"
 
 Claude: 📜 Constitution Setup (Focused)
 
@@ -64,7 +64,7 @@ API Patterns (3 rules):
 ## Update Existing Constitution
 
 ```
-User: /tcs-start:constitution "Add testing rules"
+User: /constitution "Add testing rules"
 
 Claude: 📜 Constitution Update
 

@@ -43,7 +43,7 @@ Level Distribution:
 - L3 (May, Advisory): 3
 
 Integration Points:
-- /tcs-start:validate constitution - Check compliance
-- /tcs-start:implement - Active enforcement
-- /tcs-start:review - Code review checks
-- /tcs-start:specify - SDD alignment
+- /validate constitution - Check compliance
+- /implement - Active enforcement
+- /review - Code review checks
+- /specify - SDD alignment
