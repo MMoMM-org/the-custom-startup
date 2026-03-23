@@ -54,7 +54,7 @@
 curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/install.sh | bash
 ```
 
-The interactive wizard guides you through: install target (global / repo / custom path) · which plugins (start / team / both) · output style · multi-AI templates · statusline variant.
+The interactive wizard guides you through: install target (global / repo / custom path) · which plugins (start / team / helper) · output style · multi-AI templates · statusline variant.
 
 To uninstall:
 
@@ -125,6 +125,14 @@ Then start building:
 | **The Designer** | User research, interaction design, accessibility |
 | **The DevOps** | Infrastructure, CI/CD, monitoring |
 | **The Meta Agent** | Agent design and generation |
+
+### Helper Plugin (`helper`) — Skill Authoring Tools *(optional)*
+
+**1 user-invocable skill** for creating, auditing, and maintaining Claude Code skills and plugins. Install if you want to build on top of or contribute to The Custom Agentic Startup.
+
+| Skill | Purpose |
+|-------|---------|
+| `/skill-author` | Create, audit, and convert Claude Code skills — duplicate detection, PICS structure, agent discovery, verification |
 
 ---
 

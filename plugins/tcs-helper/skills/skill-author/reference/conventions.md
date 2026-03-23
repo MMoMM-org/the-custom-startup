@@ -59,7 +59,7 @@ agent: Explore       # Subagent type: Explore, general-purpose, or any registere
 
 Use `context: fork` when the skill's work is genuinely independent and benefits from a clean context. Use `agent:` to specify which subagent type handles the forked execution.
 
-For skills that need to delegate to a domain specialist, use the `find-agents.sh` script (see `scripts/find-agents.sh`) to discover available agents rather than hardcoding agent names.
+For skills that need to delegate to a domain specialist, use the `find-agents.sh` script (see `skills/skill-author/find-agents.sh`) to discover available agents rather than hardcoding agent names.
 
 ### Description Guidelines
 

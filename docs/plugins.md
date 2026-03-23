@@ -66,8 +66,7 @@ Helper tools for creating and maintaining Claude Code skills and agents. Install
 | Tool | What it does |
 |------|-------------|
 | `/skill-author` | Create, audit, or convert Claude Code skills — covers PICS structure, model selection, agent discovery, TDD Iron Law, and deployment verification |
-| `scripts/find-agents.sh` | Discovers all installed agents across plugin caches — used by `/skill-author` during skill creation |
-| `scripts/get-specs-dir.sh` | Returns the configured specs directory for the current project |
+| `skills/skill-author/find-agents.sh` | Discovers all installed agents across plugin caches — used by `/skill-author` during skill creation |
 
 → Full reference: [`plugins/tcs-helper/README.md`](../plugins/tcs-helper/README.md)
 

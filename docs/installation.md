@@ -8,7 +8,7 @@ The easiest way to install is via the interactive install script — it sets up 
 curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/install.sh | bash
 ```
 
-The wizard guides you through: install target (global / repo / custom path) · which plugins (start / team / both) · output style · multi-AI templates · statusline variant.
+The wizard guides you through: install target (global / repo / custom path) · which plugins (start / team / helper) · output style · multi-AI templates · statusline variant.
 
 To uninstall:
 
@@ -24,8 +24,9 @@ If you prefer to install via the Claude Code plugin marketplace, start `claude` 
 
 ```bash
 /plugin marketplace add MMoMM-org/the-custom-startup
-/plugin install start@the-custom-startup   # core workflow
-/plugin install team@the-custom-startup    # specialist agents (optional)
+/plugin install start@the-custom-startup    # core workflow
+/plugin install team@the-custom-startup     # specialist agents (optional)
+/plugin install helper@the-custom-startup   # skill authoring tools (optional)
 ```
 
 Marketplace installation only installs the plugins. The following extras are **not** set up automatically and need to be configured manually.

@@ -90,7 +90,7 @@ Review the skill's task complexity:
 
 If the skill delegates work to a specialist agent, run:
 ```bash
-~/.claude/plugins/cache/the-custom-startup/tcs-helper/scripts/find-agents.sh
+find ~/.claude/plugins/cache -path "*/tcs-helper/skills/skill-author/find-agents.sh" -type f 2>/dev/null | head -1 | xargs bash
 ```
 Present the agent list to the user. If a suitable agent exists, add `context: fork` and `agent: <type>` to frontmatter. If unsure: use NONE (no forking).
 
