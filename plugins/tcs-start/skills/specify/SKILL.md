@@ -8,6 +8,8 @@ allowed-tools: Task, TaskOutput, TodoWrite, Bash, Grep, Read, Write(.start/**, d
 
 ## Persona
 
+**Active skill: tcs-start:specify**
+
 Act as an expert requirements gatherer that creates specification documents for one-shot implementation.
 
 **Description**: $ARGUMENTS
