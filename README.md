@@ -29,23 +29,32 @@
 
 ---
 
-## What is The Custom Agentic Startup?
+## What is The Agentic Startup?
 
-**The Custom Agentic Startup** is a fork of [the-startup](https://github.com/rsmdt/the-startup) — a multi-agent AI framework that makes Claude Code work like a startup team. Create comprehensive specifications before coding, then execute with parallel specialist agents — expert developers, architects, and engineers working together to turn your ideas into shipped code.
+**The Agentic Startup** is a multi-agent AI framework that makes Claude Code work like a startup team. Instead of asking Claude to "just build it", you specify what you want first — creating a clear plan with requirements, a technical design, and an implementation roadmap. Then you execute that plan with parallel specialist agents that work together to turn your ideas into shipped code.
 
-10 slash commands across 3 phases. Specify first, then build with confidence.
+**10 slash commands across 3 phases. Specify first, then build with confidence.**
 
-This fork adds an interactive install wizard, three statusline variants with a live token budget bar, multi-AI workflow support, and configurable spec paths. See [What's different](#whats-different) for details.
+### Key Features
+
+- **[Spec-Driven Development](docs/concepts.md)** — PRD → SDD → Implementation Plan → Code. Write the plan before writing code.
+- **[Parallel Agent Execution](docs/agents.md)** — Multiple specialist agents work simultaneously within each implementation phase.
+- **[Quality Gates](docs/workflow.md#step-3-validate-before-implementation)** — Built-in validation at every stage: before you build, while you build, and before you ship.
+- **Resume Across Sessions** — Specs live on disk. Hit a context limit? Start a fresh session and pick up exactly where you left off.
+- **[Interactive Install Wizard](#installation)** — Choose install target, plugins, output style, statusline, and multi-AI templates — with a confirmation summary before anything is written.
+- **[3 Statusline Variants](docs/statusline.md)** — Standard, enhanced with live token budget bar (via ccusage), and Starship bridge — all configurable via `statusline.toml`.
+- **[Multi-AI Workflow](docs/multi-ai-workflow.md)** — Export specs as prompts for Claude.ai or Perplexity, import the results back as PRD or SDD.
+- **Configurable Spec Paths** — `.claude/startup.toml` tells all skills and scripts where your specs live.
 
 ---
 
-## Quick Start
+## Installation
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/install.sh | bash
 ```
 
-The interactive wizard guides you through: install target · plugins · output style · multi-AI templates · statusline.
+The interactive wizard guides you through: install target (global / repo / custom path) · which plugins (start / team / both) · output style · multi-AI templates · statusline variant.
 
 To uninstall:
 
@@ -53,25 +62,80 @@ To uninstall:
 curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/uninstall.sh | bash
 ```
 
-After installation:
-
-```bash
-/specify Add user authentication with OAuth support
-/implement 001
-```
-
-→ Full workflow: [docs/workflow.md](docs/workflow.md)
+→ Prefer the marketplace? See [docs/installation.md](docs/installation.md) for manual setup steps.
 
 ---
 
-## What's different
+## Quick Start
+
+After installation, optionally set up project governance rules that Claude enforces throughout the workflow:
+
+```bash
+/constitution
+```
+
+Switch [output style](docs/output-styles.md) anytime — The Startup is high-energy and fast, The ScaleUp is calm and educational:
+
+```bash
+/output-style "start:The Startup"
+/output-style "start:The ScaleUp"
+```
+
+Then start building:
+
+```bash
+# Step 1: Create a specification (requirements + technical design + implementation plan)
+/specify Add user authentication with OAuth support
+
+# Step 2: Optionally validate the spec before building
+/validate 001
+
+# Step 3: Execute the plan
+/implement 001
+```
+
+→ Full workflow: [docs/workflow.md](docs/workflow.md) · Core concepts: [docs/concepts.md](docs/concepts.md)
+
+---
+
+## Plugins
+
+### Start Plugin (`start`) — Core Workflow
+
+**10 user-invocable skills** covering the full development lifecycle. → [Full skill reference](docs/skills.md)
+
+| Category | Skills |
+|----------|--------|
+| **Setup** | `/constitution` — project governance rules, auto-enforced during the build workflow |
+| **Build** | `/specify` → `/validate` → `/implement` — spec-driven development pipeline |
+| **Quality** | `/test` — code ownership enforcement · `/review` — multi-agent parallel code review |
+| **Maintain** | `/analyze` · `/refactor` · `/debug` · `/document` |
+
+### Team Plugin (`team`) — Specialist Agents
+
+**15 activity-based agents across 8 roles.** These activate automatically when the workflow needs specialist expertise — you don't invoke them directly. → [Full agent reference](docs/agents.md)
+
+| Role | Focus |
+|------|-------|
+| **The Chief** | Complexity assessment, routing, parallel coordination |
+| **The Analyst** | Requirements, prioritization, product research |
+| **The Architect** | System design, security, robustness, compatibility review |
+| **The Developer** | Feature implementation, performance optimization |
+| **The Tester** | Test strategy, load testing, coverage |
+| **The Designer** | User research, interaction design, accessibility |
+| **The DevOps** | Infrastructure, CI/CD, monitoring |
+| **The Meta Agent** | Agent design and generation |
+
+---
+
+## What's Different
 
 This fork extends the original with:
 
-- **Interactive install/uninstall wizards** — global / repo / other path, plugin selection, output style, multi-AI templates, statusline with conflict detection, confirm before writing anything
-- **3 statusline variants** — standard, enhanced (token budget bar via ccusage), Starship bridge — each configurable via `statusline.toml`
+- **[Interactive install/uninstall wizards](docs/workflow.md)** — global / repo / other path, plugin selection, output style, multi-AI templates, statusline with conflict detection, confirm before writing anything
+- **[3 statusline variants](docs/statusline.md)** — standard, enhanced (token budget bar via ccusage), Starship bridge — each configurable via `statusline.toml`
 - **Configurable specs directory** — `.claude/startup.toml` tells skills and scripts where your specs live; fallback chain keeps backward compatibility
-- **Multi-AI workflow** — export specs as prompts for Claude.ai or Perplexity, import results back as PRD/SDD
+- **[Multi-AI workflow](docs/multi-ai-workflow.md)** — export specs as prompts for Claude.ai or Perplexity, import results back as PRD/SDD
 - **Script naming consistency** — all statusline scripts share the `the-custom-startup-*` prefix
 
 ---

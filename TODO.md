@@ -129,3 +129,9 @@ Feature branches are created per item so each can be PR'd independently upstream
 
 - [ ] All new files in **English**
 - [ ] Each feature gets its own branch → PR-able upstream
+
+## New Todo
+
+- [x] Adapt the documentation of https://github.com/Fission-AI/OpenSpec/blob/main/docs/concepts.md and other files for the documentation of this plugin → `docs/concepts.md`
+- [x] Update the readme to explain better what the custom startup does.. not the customazation but what the plugins / skills etc do
+- [x] If possible ask for the base directory of the specs etc. atm it is hardcoded to the-custom-startup, we should make that userconfigurable (or do we have that already?) → already done via startup.toml in #5
