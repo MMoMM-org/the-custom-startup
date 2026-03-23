@@ -130,8 +130,27 @@ Feature branches are created per item so each can be PR'd independently upstream
 - [ ] All new files in **English**
 - [ ] Each feature gets its own branch → PR-able upstream
 
-## New Todo
+## #6 — Plugin Rename + tcs-helper + skill-author
 
-- [x] Adapt the documentation of https://github.com/Fission-AI/OpenSpec/blob/main/docs/concepts.md and other files for the documentation of this plugin → `docs/concepts.md`
-- [x] Update the readme to explain better what the custom startup does.. not the customazation but what the plugins / skills etc do
-- [x] If possible ask for the base directory of the specs etc. atm it is hardcoded to the-custom-startup, we should make that userconfigurable (or do we have that already?) → already done via startup.toml in #5
+**Branch:** multiple feature branches, merged to `customizing` 2026-03-23
+**Status:** ✅ done
+
+### Delivered
+
+- [x] Rename plugins: `start` → `tcs-start`, `team` → `tcs-team`
+- [x] New `tcs-helper` plugin — optional, for skill/agent development utilities
+- [x] Rename `writing-skills` → `skill-author`, moved to `tcs-helper`
+- [x] `skill-author` enriched with CSO, model selection, agent forking, TDD Iron Law (from obra/superpowers)
+- [x] `find-agents.sh` — discovers installed agents across `~/.claude/agents/` and plugin caches
+- [x] `get-specs-dir.sh` — reads startup.toml, falls back through standard chain; copied to all three plugins
+- [x] Self-announcement lines added to all skills and agents
+- [x] Hardcoded `.start/specs` paths replaced with configurable references in all skills/agents
+- [x] `docs/concepts.md` — framework entry-point page (adapted from OpenSpec)
+- [x] `docs/installation.md` — standalone install guide (curl wizard + manual marketplace steps)
+- [x] `README.md` updated — better plugin/feature explanation, links to docs
+- [x] `docs/index.md` updated — three-plugin architecture, concepts.md + installation.md added
+- [x] `docs/plugins.md` rewritten — tcs-start / tcs-team / tcs-helper sections
+- [x] All docs updated for tcs-start/tcs-team/tcs-helper naming
+- [x] Slash command refs fixed: `/tcs-start:X` → `/X` (skills don't use plugin namespace in / menu)
+- [x] `install.sh` / `uninstall.sh` updated for three plugins including tcs-helper
+- [x] `~/.claude/CLAUDE.md` updated to reference `/skill-author` (tcs-helper)
