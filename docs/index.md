@@ -2,31 +2,41 @@
 
 Welcome to The Custom Agentic Startup documentation.
 
+**New here?** Start with [concepts.md](concepts.md) — it explains how everything fits together in one page.
+
 ---
 
-## Core
+## Getting Started
 
 | Document | What it covers |
 |----------|---------------|
-| [workflow.md](workflow.md) | Core spec-driven workflow: specify → validate → implement → review. The primary loop for building features. |
-| [skills.md](skills.md) | All 10 tcs-start slash commands — what each does, when to use it, decision tree. |
-| [agents.md](agents.md) | Full agent reference: 8 roles, 15 activity agents, when to use each. |
-| [plugins.md](plugins.md) | The `tcs-start`, `tcs-team`, and `tcs-helper` plugins: skills overview, agent roster, output styles. |
+| [concepts.md](concepts.md) | **Start here.** How the framework works, what the plugins do, what a spec is, and how the workflow fits together — with examples. |
+| [workflow.md](workflow.md) | The full spec-driven workflow step by step: specify → validate → implement → review. Includes resume patterns and pro tips. |
+| [installation.md](installation.md) | Install via script (recommended) or manually via the Claude Code marketplace — with step-by-step setup for statusline, startup config, output style, and multi-AI templates. |
+| [multi-ai-workflow.md](multi-ai-workflow.md) | Which phases work best in Claude.ai vs Perplexity vs Claude Code. Export/import scripts, when to use each tool. |
+| [templates/](templates/) | Prompt templates for Claude.ai and Perplexity: PRD, brainstorm, research, constitution. |
+
+---
+
+## Core Reference
+
+| Document | What it covers |
+|----------|---------------|
+| [skills.md](skills.md) | All tcs-start slash commands — what each does, when to use it, decision tree, and capability matrix. |
+| [agents.md](agents.md) | Full agent reference: 8 roles, 15 activity agents, when each activates, and how they collaborate. |
+| [plugins.md](plugins.md) | The `tcs-start`, `tcs-team`, and `tcs-helper` plugins: what's included, how to install, how to configure. |
 | [output-styles.md](output-styles.md) | The Startup vs The ScaleUp — tone, voice, when to switch. |
+
+---
 
 ## Statusline
 
 | Document | What it covers |
 |----------|---------------|
-| [statusline.md](statusline.md) | All three variants, `statusline.toml` config reference, placeholders, thresholds. |
+| [statusline.md](statusline.md) | All three variants (standard, enhanced, Starship), `statusline.toml` config reference, placeholders, color thresholds. |
 | [statusline-starship.md](statusline-starship.md) | Starship bridge setup: env_var modules, `starship.toml` config. |
 
-## Multi-AI Workflow
-
-| Document | What it covers |
-|----------|---------------|
-| [multi-ai-workflow.md](multi-ai-workflow.md) | Which phases work best in Claude.ai vs Perplexity vs Claude Code. Export/import scripts. |
-| [templates/](templates/) | Prompt templates for Claude.ai and Perplexity (PRD, brainstorm, research, constitution). |
+---
 
 ## Philosophy & Design
 
