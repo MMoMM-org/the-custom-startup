@@ -1,10 +1,12 @@
 ---
-name: writing-skills
-description: Use when creating new skills, editing existing skills, auditing skill quality, converting skills to markdown conventions, or verifying skills before deployment. Triggers include skill authoring requests, skill review needs, or "the skill doesn't work" complaints.
+name: skill-author
+description: Use when creating new skills, editing existing skills, auditing skill quality, converting skills to markdown conventions, or verifying skills before deployment. Triggers include skill authoring requests, skill review needs, or "the skill doesn't work" complaints. For both plugin skills and general-purpose personal skills.
 allowed-tools: Task, Read, Write, Glob, Grep, Bash, AskUserQuestion
 ---
 
 ## Persona
+
+**Active skill: tcs-helper:skill-author**
 
 Act as a skill authoring specialist that creates, audits, converts, and maintains Claude Code skills following the conventions in reference/conventions.md.
 
@@ -79,13 +81,27 @@ Search existing skills:
 3. If >50% functionality overlap: propose updating existing skill instead.
 4. If <50%: proceed with new skill, explain justification.
 
+### 2b. Determine Model and Fork Strategy
+
+Review the skill's task complexity:
+- Simple lookup/formatting → suggest `model: haiku`
+- Complex reasoning or multi-agent orchestration → suggest `model: opus`
+- Default → omit `model` field
+
+If the skill delegates work to a specialist agent, run:
+```bash
+~/.claude/plugins/cache/the-custom-startup/tcs-helper/scripts/find-agents.sh
+```
+Present the agent list to the user. If a suitable agent exists, add `context: fork` and `agent: <type>` to frontmatter. If unsure: use NONE (no forking).
+
 ### 3. Create Skill
 
 1. Run step 2 (Check Duplicates).
-2. Determine skill type (Technique, Pattern, Reference, Coordination).
-3. Read reference/conventions.md for current conventions.
-4. Write SKILL.md following PICS + Workflow structure.
-5. Run step 6 (Verify Skill).
+2. Run step 2b (Determine Model and Fork Strategy).
+3. Determine skill type (Technique, Pattern, Reference, Coordination).
+4. Read reference/conventions.md for current conventions.
+5. Write SKILL.md following PICS + Workflow structure.
+6. Run step 6 (Verify Skill).
 
 ### 4. Audit Skill
 

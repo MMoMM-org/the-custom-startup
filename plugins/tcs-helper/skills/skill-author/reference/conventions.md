@@ -32,6 +32,34 @@ argument-hint: "description of arguments"    // Shown in / menu
 disable-model-invocation: false              // true = only user can invoke
 context: fork                                // Run in subagent
 agent: Explore                               // Subagent type when context: fork
+model: haiku | sonnet | opus                 // Pin to specific model (omit for default)
+
+### Model Selection
+
+```yaml
+model: haiku | sonnet | opus
+```
+
+Use to pin a skill to a specific Claude model:
+
+| Model | When to use |
+|-------|-------------|
+| `haiku` | Fast, cheap tasks: lookup, formatting, simple transforms |
+| `sonnet` | Default for most skills — balanced speed and quality |
+| `opus` | Complex reasoning, multi-step analysis, judgment calls |
+
+Most skills should not set `model` — let the user's configured model handle it. Only set it when the skill's task has a clear cost/quality tradeoff that benefits from pinning.
+
+### Agent Forking
+
+```yaml
+context: fork        # Run this skill in a subagent context
+agent: Explore       # Subagent type: Explore, general-purpose, or any registered agent type
+```
+
+Use `context: fork` when the skill's work is genuinely independent and benefits from a clean context. Use `agent:` to specify which subagent type handles the forked execution.
+
+For skills that need to delegate to a domain specialist, use the `find-agents.sh` script (see `scripts/find-agents.sh`) to discover available agents rather than hardcoding agent names.
 
 ### Description Guidelines
 
@@ -50,6 +78,50 @@ ${CLAUDE_SESSION_ID}    // Current session ID
 
 ### Security Note
 Never combine `!`shell command`` preprocessing with `$ARGUMENTS` — this executes user input as a shell command at skill load time. Use `Bash()` in the Workflow section instead, where the AI mediates the execution.
+
+---
+
+## Claude Search Optimization (CSO)
+
+Skills are discovered by Claude reading their description. The description field is the primary discovery mechanism — get it wrong and the skill never loads.
+
+### Description: When to Use, NOT What the Skill Does
+
+**Critical rule:** Description must describe triggering conditions only. Never summarize the skill's workflow.
+
+**Why this matters:** When a description summarizes the workflow, Claude may follow the description as a shortcut and skip reading the full skill body. A description saying "dispatches subagent per task with code review between tasks" caused Claude to do ONE review even though the skill's flowchart showed TWO. Changing the description to just triggering conditions fixed the behavior.
+
+```yaml
+# ❌ BAD: summarizes workflow — Claude skips the body
+description: Use when creating skills — search for duplicates, write SKILL.md, test with subagents
+
+# ✅ GOOD: triggering conditions only
+description: Use when creating new skills, editing existing skills, or verifying skills work before deployment
+```
+
+### Keyword Coverage
+
+Use words Claude would search for:
+- Error messages verbatim: `"Hook timed out"`, `"ENOTEMPTY"`
+- Symptoms: `"flaky"`, `"hanging"`, `"not working"`
+- Synonyms: timeout/hang/freeze, cleanup/teardown
+- Tool names and library names
+
+### Token Efficiency Targets
+
+Skills are loaded into context on every invocation. Every token costs money and attention.
+
+| Skill type | SKILL.md target |
+|------------|----------------|
+| Frequently loaded (orchestrators) | < 200 lines |
+| Standard skills | < 500 lines |
+| Reference files | No hard limit — only loaded on demand |
+
+**Techniques:**
+- Move educational content, examples, and verbose checklists to `reference/` files
+- Reference `--help` instead of documenting all flags inline
+- Cross-reference other skills instead of repeating their content
+- One excellent example beats five mediocre ones
 
 ---
 
@@ -163,6 +235,27 @@ Examples of non-linear entry points:
 | **Pattern** | Mental model or approach | Principles + when to apply |
 | **Reference** | API/syntax documentation | Tables + code samples |
 | **Coordination** | Orchestrate multiple agents | Perspectives + synthesis |
+
+---
+
+## The Iron Law: Test Before You Ship
+
+**No skill ships without a failing test first.** This applies to new skills AND edits to existing skills.
+
+The process:
+1. **RED** — Run a pressure scenario WITHOUT the skill. Document what the agent does wrong (exact rationalizations verbatim).
+2. **GREEN** — Write the skill addressing those specific failures. Run the same scenario WITH the skill.
+3. **REFACTOR** — Find new rationalizations, add counters, re-test until bulletproof.
+
+See `reference/testing-with-subagents.md` for pressure scenario methodology.
+
+### Discipline-Enforcing Skills Need Extra Work
+
+Skills that enforce rules (TDD, verification-before-completion) need rationalization-proofing:
+- Use strong language: "YOU MUST", "No exceptions"
+- Add a **Red Flags** section listing thoughts that signal the agent is about to rationalize
+- Build an excuse → reality table from actual baseline test output
+- See `reference/persuasion-principles.md` for language patterns backed by research
 
 ---
 
