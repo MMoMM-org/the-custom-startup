@@ -14,17 +14,15 @@ Guided workflow for creating, auditing, and converting Claude Code skills. Cover
 
 ## Scripts
 
-### `scripts/get-specs-dir.sh`
-
-Returns the configured specs directory for the current project. Reads `.claude/startup.toml` (project-local, then global) and falls back through the standard chain.
-
-```bash
-SPECS_DIR=$(~/.claude/plugins/cache/the-custom-startup/tcs-helper/scripts/get-specs-dir.sh)
-```
-
-### `scripts/find-agents.sh`
+### `skills/skill-author/find-agents.sh`
 
 Discovers all installed Claude Code agents across `~/.claude/agents/` and plugin caches. Returns agent names and descriptions for use by `skill-author` when determining whether a skill should delegate to an agent.
+
+```bash
+find ~/.claude/plugins/cache -path "*/tcs-helper/skills/skill-author/find-agents.sh" -type f 2>/dev/null | head -1 | xargs bash
+# or directly if version is known:
+~/.claude/plugins/cache/the-custom-startup/tcs-helper/x.y.z/skills/skill-author/find-agents.sh
+```
 
 ## Attribution
 
@@ -35,5 +33,6 @@ The `skill-author` skill incorporates patterns and techniques from [obra/superpo
 The install wizard (`install.sh`) offers `tcs-helper` as an optional third plugin. To install manually:
 
 ```bash
-/plugin install tcs-helper@the-custom-startup
+/plugin marketplace add MMoMM-org/the-custom-startup
+/plugin install helper@the-custom-startup
 ```

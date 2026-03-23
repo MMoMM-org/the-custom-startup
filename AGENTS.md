@@ -11,23 +11,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 the-custom-startup/
 ├── plugins/
-│   ├── start/                    # Core workflow orchestration plugin
+│   ├── tcs-start/                # Core workflow orchestration plugin
 │   │   ├── .claude-plugin/       # Plugin manifest (plugin.json)
 │   │   ├── skills/               # 16 skills (12 user-invocable + 4 autonomous)
 │   │   ├── output-styles/        # The Startup, The ScaleUp output styles
 │   │   └── README.md             # Detailed plugin documentation
 │   │
-│   └── team/                     # Specialized agent library plugin
-│       ├── agents/               # 8 roles with 15 agents (13 activity + the-chief + the-meta-agent)
-│       │   ├── the-chief.md      # Complexity assessment, routing
-│       │   ├── the-analyst/      # research-product
-│       │   ├── the-architect/    # design-system, review-security, review-robustness, review-compatibility
-│       │   ├── the-developer/    # build-feature, optimize-performance
-│       │   ├── the-devops/       # build-platform, monitor-production
-│       │   ├── the-designer/     # research-user, design-interaction, design-visual
-│       │   ├── the-tester/       # test-strategy
-│       │   └── the-meta-agent.md # Agent design and generation
-│       └── skills/               # Domain skills (cross-cutting, design, development, infrastructure, quality)
+│   ├── tcs-team/                 # Specialized agent library plugin
+│   │   ├── agents/               # 8 roles with 15 agents (13 activity + the-chief + the-meta-agent)
+│   │   │   ├── the-chief.md      # Complexity assessment, routing
+│   │   │   ├── the-analyst/      # research-product
+│   │   │   ├── the-architect/    # design-system, review-security, review-robustness, review-compatibility
+│   │   │   ├── the-developer/    # build-feature, optimize-performance
+│   │   │   ├── the-devops/       # build-platform, monitor-production
+│   │   │   ├── the-designer/     # research-user, design-interaction, design-visual
+│   │   │   ├── the-tester/       # test-strategy
+│   │   │   └── the-meta-agent.md # Agent design and generation
+│   │   └── skills/               # Domain skills (cross-cutting, design, development, infrastructure, quality)
+│   │
+│   └── tcs-helper/               # Skill authoring tools plugin (optional)
+│       ├── .claude-plugin/       # Plugin manifest (plugin.json)
+│       └── skills/skill-author/  # Skill creation, auditing, and conversion
 │
 ├── scripts/
 │   ├── the-custom-startup-statusline-standard.sh   # Standard (single-line) statusline

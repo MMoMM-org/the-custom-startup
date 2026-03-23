@@ -3,7 +3,7 @@
 #
 # Searches:
 #   1. ~/.claude/agents/           (personal agents, flat .md files)
-#   2. ~/.claude/plugins/cache/*/*/agents/**/*.md  (plugin agents)
+#   2. ~/.claude/plugins/cache/*/*/*/agents/**/*.md  (plugin agents: marketplace/name/version/)
 #
 # Output: one line per agent, tab-separated: name<TAB>description
 # Exit 0 always.

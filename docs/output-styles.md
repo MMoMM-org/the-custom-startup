@@ -74,8 +74,8 @@ Output styles are markdown files in `plugins/tcs-start/output-styles/`. The file
 
 After installation, Claude Code caches the plugin files locally. To customize without forking the repository, locate the cached files and edit them directly:
 
-**Global install:** `~/.claude/plugins/cache/the-custom-startup/tcs-start/`
+**Global install:** `~/.claude/plugins/cache/the-custom-startup/tcs-start/x.y.z/`
 
-**Repo install:** `<repo>/.claude/plugins/cache/the-custom-startup/tcs-start/`
+**Repo install:** `<repo>/.claude/plugins/cache/the-custom-startup/tcs-start/x.y.z/`
 
-Inside that directory, output styles are in `output-styles/`. Note that the path includes a version segment — local edits will be overwritten when you update the plugin. To make persistent changes, fork the repository, edit the style files there, and install from your fork instead.
+Inside that directory, output styles are in `output-styles/`. The path includes a version segment — local edits will be overwritten when you update the plugin. To make persistent changes, fork the repository, edit the style files there, and install from your fork instead.
