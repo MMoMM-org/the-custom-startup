@@ -9,9 +9,9 @@ Welcome to The Custom Agentic Startup documentation.
 | Document | What it covers |
 |----------|---------------|
 | [workflow.md](workflow.md) | Core spec-driven workflow: specify → validate → implement → review. The primary loop for building features. |
-| [skills.md](skills.md) | All 10 slash commands — what each does, when to use it, decision tree. |
+| [skills.md](skills.md) | All 10 tcs-start slash commands — what each does, when to use it, decision tree. |
 | [agents.md](agents.md) | Full agent reference: 8 roles, 15 activity agents, when to use each. |
-| [plugins.md](plugins.md) | The `start` and `team` plugins: skills overview, agent roster, output styles. |
+| [plugins.md](plugins.md) | The `tcs-start`, `tcs-team`, and `tcs-helper` plugins: skills overview, agent roster, output styles. |
 | [output-styles.md](output-styles.md) | The Startup vs The ScaleUp — tone, voice, when to switch. |
 
 ## Statusline
@@ -41,8 +41,9 @@ Welcome to The Custom Agentic Startup documentation.
 
 The original plugin documentation lives alongside the code:
 
-- [`plugins/start/README.md`](../plugins/start/README.md) — full `start` plugin reference
-- [`plugins/team/README.md`](../plugins/team/README.md) — full `team` plugin reference
-- [`plugins/team/skills/README.md`](../plugins/team/skills/README.md) — team skills overview
+- [`plugins/tcs-start/README.md`](../plugins/tcs-start/README.md) — full `tcs-start` plugin reference
+- [`plugins/tcs-team/README.md`](../plugins/tcs-team/README.md) — full `tcs-team` plugin reference
+- [`plugins/tcs-team/skills/README.md`](../plugins/tcs-team/skills/README.md) — tcs-team skills overview
+- [`plugins/tcs-helper/README.md`](../plugins/tcs-helper/README.md) — tcs-helper plugin reference
 
 These files are upstream originals and are not modified in this fork.

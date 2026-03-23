@@ -1,100 +1,88 @@
 # Plugins
 
-The Custom Agentic Startup is distributed as two Claude Code marketplace plugins.
+The Custom Agentic Startup is distributed as three Claude Code marketplace plugins. Install via the [interactive install script](installation.md) or manually — see [installation.md](installation.md) for both methods.
 
 ---
 
-## start plugin (`start@the-custom-startup`)
+## tcs-start — Core Workflow (`tcs-start@the-custom-startup`)
 
-Core workflow orchestration. Provides the 10 user-invocable slash commands, 5 autonomous skills, and 2 output styles.
+The primary plugin. Gives you 10 slash commands covering the full development lifecycle.
 
-**Install:**
 ```bash
-/plugin install start@the-custom-startup
+/plugin install tcs-start@the-custom-startup
 ```
-
-### Skills
 
 | Category | Skills |
 |----------|--------|
-| Build | `/specify`, `/validate`, `/implement` |
-| Quality | `/test`, `/review` |
-| Maintain | `/document`, `/analyze`, `/refactor`, `/debug` |
-| Setup | `/constitution` |
+| **Setup** | `/constitution` — project governance rules |
+| **Build** | `/specify` → `/validate` → `/implement` |
+| **Quality** | `/test` · `/review` |
+| **Maintain** | `/analyze` · `/refactor` · `/debug` · `/document` |
 
-**User-invocable:** the 10 above — you trigger them directly.
-**Autonomous:** `specify-requirements`, `specify-solution`, `specify-plan`, `specify-meta`, `brainstorm` — loaded by orchestrator skills behind the scenes.
+Two output styles ship with the tcs-start plugin:
 
-→ Full reference: [`plugins/start/README.md`](../plugins/start/README.md)
-
-### Output Styles
-
-Two output styles ship with the start plugin:
-
-- **The Startup** — high energy, delivery-focused, demo day mentality
-- **The ScaleUp** — calm confidence, educational insights, engineering depth
+| Style | Voice | Best for |
+|-------|-------|----------|
+| **The Startup** | High-energy, fast | Sprints, execution |
+| **The ScaleUp** | Calm, educational | Learning, onboarding |
 
 Switch anytime: `/output-style tcs-start:The Startup`
 
-→ See [output-styles.md](output-styles.md) for comparison and post-install customization.
+→ Full reference: [`plugins/tcs-start/README.md`](../plugins/tcs-start/README.md)
 
 ---
 
-## team plugin (`team@the-custom-startup`) — optional
+## tcs-team — Specialist Agents (`tcs-team@the-custom-startup`) — optional
 
-Specialized agent library. 8 roles, 15 activity-based agents. Used by the output styles (via Agent tool) and directly by you for complex multi-domain work.
+Adds 15 activity-based agents across 8 roles. They activate automatically when tcs-start skills delegate specialist work — you don't invoke them directly.
 
-**Install:**
 ```bash
-/plugin install team@the-custom-startup
+/plugin install tcs-team@the-custom-startup
 ```
 
-Enable experimental multi-agent collaboration (Agent Teams):
-```json
-// ~/.claude/settings.json or .claude/settings.json
-{
-  "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" }
-}
+| Role | Agents | Focus |
+|------|--------|-------|
+| **The Chief** | 1 | Complexity assessment, routing, parallel coordination |
+| **The Analyst** | 1 | Requirements, prioritization, product research |
+| **The Architect** | 4 | System design, security, robustness, compatibility |
+| **The Developer** | 2 | Feature implementation, performance optimization |
+| **The Tester** | 1 | Test strategy, load testing, coverage |
+| **The Designer** | 3 | User research, interaction design, accessibility |
+| **The DevOps** | 2 | Infrastructure, CI/CD, monitoring |
+| **The Meta Agent** | 1 | Agent design and generation |
+
+→ Full reference: [`plugins/tcs-team/README.md`](../plugins/tcs-team/README.md) · [docs/agents.md](agents.md)
+
+---
+
+## tcs-helper — Skill Authoring Tools (`tcs-helper@the-custom-startup`) — optional
+
+Helper tools for creating and maintaining Claude Code skills and agents. Install this if you want to contribute skills to the framework or build your own.
+
+```bash
+/plugin install tcs-helper@the-custom-startup
 ```
-The installer can configure this for you.
 
-### Agent Roster
+| Tool | What it does |
+|------|-------------|
+| `/skill-author` | Create, audit, or convert Claude Code skills — covers PICS structure, model selection, agent discovery, TDD Iron Law, and deployment verification |
+| `scripts/find-agents.sh` | Discovers all installed agents across plugin caches — used by `/skill-author` during skill creation |
+| `scripts/get-specs-dir.sh` | Returns the configured specs directory for the current project |
 
-| Role | Activity Agents |
-|------|----------------|
-| **the-chief** | Complexity assessment, routing, parallel orchestration |
-| **the-analyst** | `research-product` — market analysis, requirements, prioritization |
-| **the-architect** | `design-system`, `review-security`, `review-robustness`, `review-compatibility` |
-| **the-developer** | `build-feature`, `optimize-performance` |
-| **the-devops** | `build-platform`, `monitor-production` |
-| **the-designer** | `research-user`, `design-interaction`, `design-visual` |
-| **the-tester** | `test-strategy` |
-| **the-meta-agent** | Agent design, validation, generation |
-
-Each agent is scoped to a specific activity — not a broad role. This follows the activity-based architecture pattern: agents specialize in *what they do*, not *who they are*.
-
-The agent list above mirrors the upstream team plugin. No agents have been added or removed in this fork. The install commands and marketplace identifier differ — see "Installing from this fork" below.
-
-→ Full agent reference with per-agent descriptions: [agents.md](agents.md)
-
-→ Full reference: [`plugins/team/README.md`](../plugins/team/README.md)
-
-→ Design principles: [PHILOSOPHY.md](PHILOSOPHY.md)
+→ Full reference: [`plugins/tcs-helper/README.md`](../plugins/tcs-helper/README.md)
 
 ---
 
 ## Installing from this fork
 
+Manual marketplace installation:
+
 ```bash
-# Add the marketplace for this fork
 /plugin marketplace add MMoMM-org/the-custom-startup
 
-# Then install
-/plugin install start@the-custom-startup
-/plugin install team@the-custom-startup
+/plugin install tcs-start@the-custom-startup    # core workflow
+/plugin install tcs-team@the-custom-startup     # specialist agents (optional)
+/plugin install tcs-helper@the-custom-startup   # skill authoring tools (optional)
 ```
 
-Or use the interactive installer:
-```bash
-curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/install.sh | bash
-```
+See [installation.md](installation.md) for what the install script sets up that marketplace install does not (statusline, startup.toml, output styles, multi-AI templates).
