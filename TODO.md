@@ -25,6 +25,14 @@ Feature branches are created per item so each can be PR'd independently upstream
 - [x] **Confirmation summary** before doing anything
 - [x] stdin via `/dev/tty` (works with `curl | bash`)
 
+### Open
+
+- [x] Logo needs to be changed to custom startup, should we have The Custom Agentic Startup as logo.. I would say yes.. needs to be changed in the Readme Too.
+- [x] Script mentions that it will install the statusline to the users home directory config if I select repo, it should go to the repo
+- [x] Error while trying to download the statusline: Could not download configure-statusline.sh — skipping statusline (SOURCE_URL now points to correct repo)
+- [x] the installing lines have red text if there is an error (added `plugin update` fallback)
+- [x] uses the wrong marketplace.. the startup, needs to use our own
+
 ### Deferred (out of scope)
 
 - [ ] `--marketplace <org/repo>` CLI flag
@@ -51,8 +59,9 @@ Feature branches are created per item so each can be PR'd independently upstream
 
 ### Open
 
-- [ ] Verify `ccusage` blocks parsed correctly (`inputTokens + outputTokens`, not `totalTokens`)
-- [ ] Audit `cache_creation_input_tokens` / `cache_read_input_tokens` handling in lib
+- [x] Verify `ccusage` blocks parsed correctly (`inputTokens + outputTokens`, not `totalTokens`)
+- [x] Audit `cache_creation_input_tokens` / `cache_read_input_tokens` handling in lib (confirmed: exclude both, I+O only matches /usage)
+- [x] Add cleanup for /tmp files which are older then 14 days
 
 ---
 
@@ -70,6 +79,23 @@ Feature branches are created per item so each can be PR'd independently upstream
 - [x] `docs/plugins.md` — start plugin, team plugin, output styles, install-from-fork instructions
 - [x] `docs/output-styles.md` — The Startup vs The ScaleUp comparison with voice samples and behavior descriptions
 - [x] `docs/PHILOSOPHY.md` — condensed into curated guide: core philosophy, activity-based architecture, research foundation, agent design principles
+
+### Delivered (follow-on, 2026-03-16)
+
+- [x] `docs/agents.md` — full reference for all 8 roles and 15 activity agents
+- [x] `docs/the-custom-philosophy.md` — why the fork exists
+- [x] `docs/workflow.md` — added Step 0 (/constitution + multi-AI front-load), moved Multi-AI section before Step by Step
+- [x] `docs/multi-ai-workflow.md` — fixed skill names, spec paths, template/script links, phase mapping explanation
+- [x] `docs/output-styles.md` — added post-install cache location and customization note
+- [x] `docs/plugins.md` — updated plugin IDs, added agents.md link, fixed philosophy link
+- [x] `docs/skills.md` — replaced inline agent roster with agents.md link
+- [x] `docs/statusline.md` — fixed script names, added nav anchors, curl quickstart, file location table, token bar ASCII viz
+- [x] `docs/statusline-starship.md` — updated script and directory names
+- [x] `docs/index.md` — added agents.md and the-custom-philosophy.md entries
+- [x] `README.md` — updated product description, added License section
+- [x] `LICENSE` — appended Marcus Breiden MIT block for new files, Reddit attribution for Starship integration
+	
+	
 
 ---
 

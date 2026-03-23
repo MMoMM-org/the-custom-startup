@@ -142,7 +142,7 @@ Key options:
   [thresholds.budget]   warn / danger
 
 Token limits per 5h window (inputTokens + outputTokens):
-  pro:    ~44,000   max5x: ~88,000   max20x: ~220,000
+  pro:    ~28,450   max5x: ~57,000   max20x: ~142,500
 EOF
   exit 0
 }

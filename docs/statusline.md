@@ -2,13 +2,23 @@
 
 Claude Code supports a custom status line — a bar at the bottom of the terminal that updates after each assistant message. This project ships three variants and an interactive configurator.
 
+Jump to: [Standard](#standard) · [Enhanced](#enhanced) · [Starship](#starship) · [Configuration](#configuration)
+
 ## Quick setup
 
+**Interactive wizard (recommended):**
+
 ```bash
-./scripts/configure-statusline.sh
+./scripts/the-custom-startup-configure-statusline.sh
 ```
 
 The wizard checks your environment, lets you pick a variant and installation scope (global or per-repo), and writes the config.
+
+**Or install directly from GitHub:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/scripts/the-custom-startup-configure-statusline.sh | bash
+```
 
 ---
 
@@ -81,13 +91,27 @@ Two-line statusline with richer git context, a token budget bar (via [ccusage](h
 
 The budget bar tracks how much of your plan's token allowance has been used in the current 5-hour billing window. It uses `inputTokens + outputTokens` from the active [ccusage](https://github.com/ryoppippi/ccusage) block — cache read tokens are excluded because they don't represent new content generation and would distort the percentage.
 
+```
+💰 ██░░░░░░░░  9% $0.42    ← green: below warn threshold (70%)
+💰 ███████░░░ 74% $1.91    ← yellow: at or above warn
+💰 ██████████ 95% $2.55    ← red: at or above danger threshold (90%)
+```
+
 Token limits per 5-hour window (configurable):
 
 | Plan | Limit |
 |---|---|
-| Pro ($20/mo) | ~44,000 tokens |
-| Max 5x ($100/mo) | ~88,000 tokens |
-| Max 20x ($200/mo) | ~220,000 tokens |
+| Pro ($20/mo) | ~28,450 tokens |
+| Max 5x ($100/mo) | ~57,000 tokens |
+| Max 20x ($200/mo) | ~142,500 tokens |
+
+These values are estimates. The Pro limit was measured (`inputTokens + outputTokens` vs `/usage`); Max 5x and Max 20x are extrapolated proportionally and have not been independently verified. If the bar seems off, override the limit in `statusline.toml`:
+
+```toml
+# Calibrate: take your raw token count from ccusage and divide by the /usage percentage.
+# Example: 9,388 tokens at 33% → token_limit = 28450
+token_limit = 28450
+```
 
 Set your plan in `statusline.toml`:
 
@@ -95,13 +119,7 @@ Set your plan in `statusline.toml`:
 plan = "pro"   # pro | max5x | max20x | api | auto
 ```
 
-Or override the limit directly:
-
-```toml
-token_limit = 44000
-```
-
-The bar can also show session cost instead of tokens — set `budget_mode = "cost"` in `statusline.toml`.
+The bar can also show session cost instead of tokens — set `budget_mode = "cost"` in `statusline.toml`. Cost thresholds are also estimates and vary by usage pattern.
 
 ---
 
@@ -121,7 +139,7 @@ All variants share a single config file: `statusline.toml`.
 
 **Global** (applies to all sessions):
 ```
-~/.config/the-agentic-startup/statusline.toml
+~/.config/the-custom-startup/statusline.toml
 ```
 
 **Per-repo** (overrides global for a specific project):
@@ -130,6 +148,13 @@ All variants share a single config file: `statusline.toml`.
 ```
 
 The per-repo file only needs the keys you want to override — everything else falls through to the global config.
+
+**Script locations** (after installation):
+
+| Install scope | Scripts | Config |
+|---|---|---|
+| Global | `~/.config/the-custom-startup/` | `~/.config/the-custom-startup/statusline.toml` |
+| Per-repo | `<repo>/.claude/` | `<repo>/.claude/statusline.toml` |
 
 ### Full reference
 
@@ -140,7 +165,9 @@ plan          = "auto"
 fallback_plan = "pro"
 
 # Manual token limit override (skips plan lookup)
-# token_limit = 44000
+# All plan limits are estimates — override here if the bar seems off.
+# Calibrate: raw_tokens / (/usage percent / 100)  e.g. 9388 / 0.33 = 28450
+# token_limit = 28450
 
 # Budget bar mode
 # "token" — tokens used vs plan limit  (enhanced default)
@@ -195,7 +222,7 @@ Run the configurator from inside the repo and choose **Repo** scope:
 
 ```bash
 cd /path/to/your-repo
-./scripts/configure-statusline.sh --repo
+./scripts/the-custom-startup-configure-statusline.sh --repo
 ```
 
 This installs the script and config to `<repo>/.claude/` and updates `<repo>/.claude/settings.json`. The global config is unaffected.
@@ -207,7 +234,7 @@ This installs the script and config to `<repo>/.claude/` and updates `<repo>/.cl
 Re-run the configurator at any time:
 
 ```bash
-./scripts/configure-statusline.sh
+./scripts/the-custom-startup-configure-statusline.sh
 ```
 
 It detects the existing configuration and asks before overwriting.
@@ -240,6 +267,6 @@ echo '{
                       "cache_creation_input_tokens": 0}},
   "cost": {"total_cost_usd": 1.23, "total_duration_ms": 870000,
            "total_lines_added": 156, "total_lines_removed": 23},
-  "output_style": {"name": "start:The Startup"}
+  "output_style": {"name": "tcs-start:The Startup"}
 }' | ./scripts/the-custom-startup-statusline-enhanced.sh
 ```

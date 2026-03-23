@@ -53,13 +53,15 @@ tcs_ask()     { printf "${TCS_COLOR_CYAN}?${TCS_STYLE_RESET} %s " "$*"; }
 # ==============================================================================
 
 # Token limits per 5h billing window (inputTokens + outputTokens, no cache reads)
+# Pro limit calibrated from measurement: 9388 tokens = 33% → 28,450 limit.
+# Max 5x / Max 20x extrapolated proportionally (unverified).
 # Using case functions instead of declare -A for bash 3.2 compatibility.
 _tcs_plan_token_limit() {
   case "${1:-pro}" in
-    max20x) echo 220000 ;;
-    max5x)  echo 88000  ;;
-    api)    echo 44000  ;;
-    *)      echo 44000  ;;  # pro + unknown → conservative default
+    max20x) echo 142500 ;;
+    max5x)  echo 57000  ;;
+    api)    echo 28450  ;;
+    *)      echo 28450  ;;  # pro + unknown → calibrated default
   esac
 }
 
@@ -129,7 +131,7 @@ tcs_toml_get() {
 # Config paths
 # ==============================================================================
 
-readonly TCS_GLOBAL_CONFIG_DIR="$HOME/.config/the-agentic-startup"
+readonly TCS_GLOBAL_CONFIG_DIR="$HOME/.config/the-custom-startup"
 readonly TCS_GLOBAL_CONFIG_FILE="$TCS_GLOBAL_CONFIG_DIR/statusline.toml"
 readonly TCS_CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 
@@ -239,6 +241,9 @@ tcs_load_config() {
   # Resolve cost thresholds: explicit → plan default
   [[ -z "$tcs_cfg_cost_warn" ]]   && tcs_cfg_cost_warn="$(_tcs_plan_cost_warn "$effective_plan")"
   [[ -z "$tcs_cfg_cost_danger" ]] && tcs_cfg_cost_danger="$(_tcs_plan_cost_danger "$effective_plan")"
+
+  # Housekeeping: remove stale /tmp cache files (throttled to once per day)
+  tcs_cleanup_tmp_cache
 }
 
 _tcs_detect_plan() {
@@ -269,6 +274,14 @@ tcs_cache_is_stale() {
 
 tcs_cache_key() {
   echo "$1" | cksum | cut -d' ' -f1
+}
+
+# Remove /tmp cache files older than 14 days — throttled to once per day.
+tcs_cleanup_tmp_cache() {
+  local stamp="/tmp/tcs-statusline-cleanup-stamp"
+  tcs_cache_is_stale "$stamp" 86400 || return 0
+  find /tmp -maxdepth 1 -name "tcs-statusline-*" -mtime +14 -delete 2>/dev/null || true
+  touch "$stamp"
 }
 
 # ==============================================================================

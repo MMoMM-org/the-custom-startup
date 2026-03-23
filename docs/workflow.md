@@ -43,7 +43,27 @@ The Agentic Startup follows **spec-driven development**: write a specification f
 
 ---
 
+## Multi-AI Extension
+
+Some phases work better outside Claude Code. Use Claude.ai for conversational spec writing, Perplexity for research, then bring the results back with the import script.
+
+→ See [multi-ai-workflow.md](multi-ai-workflow.md) for the full guide, export/import scripts, and prompt templates.
+
+---
+
 ## Step by Step
+
+### Step 0 (optional): Set up project context
+
+Two optional steps run once per project, before the BUILD loop begins.
+
+**Governance rules** — run `/constitution` to create a `CONSTITUTION.md` at the project root. This defines enforceable coding, architecture, and process rules (L1 blocking with autofix, L2 blocking manual, L3 advisory). Once created, it is auto-checked during implementation.
+
+**Multi-AI front-load** — if you want to use Claude.ai or Perplexity for brainstorming, research, or PRD writing before opening Claude Code, set that up now. See [multi-ai-workflow.md](multi-ai-workflow.md) for the template files and session flow.
+
+Neither step is required. Skip both and go straight to `/specify`.
+
+---
 
 ### 1. Specify
 
@@ -120,14 +140,6 @@ ideas_dir = "the-custom-startup/ideas"
 2. `the-custom-startup/specs/`
 3. `.start/specs/` (migration compat)
 4. `docs/specs/` (legacy)
-
----
-
-## Multi-AI Extension
-
-Some phases work better outside Claude Code. Use Claude.ai for conversational spec writing, Perplexity for research, then bring the results back with the import script.
-
-→ See [multi-ai-workflow.md](multi-ai-workflow.md) for the full guide, export/import scripts, and prompt templates.
 
 ---
 
