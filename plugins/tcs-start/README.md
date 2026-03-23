@@ -49,7 +49,7 @@ Create comprehensive specifications from brief descriptions through deep researc
 <details>
 <summary><strong>View Details</strong></summary>
 
-**What you get:** Three comprehensive documents in `.start/specs/[NNN]-[name]/`:
+**What you get:** Three comprehensive documents in your configured specs directory (see `.claude/startup.toml`) under `[NNN]-[name]/`:
 
 - **requirements.md** - User stories, feature specifications, success criteria, non-functional requirements
 - **solution.md** - Technical architecture, system components, data models, technology stack, security and performance considerations
@@ -120,7 +120,7 @@ Validate specifications, implementations, or understanding through intelligent c
 **Usage:**
 ```bash
 /validate 001                                          # Validate spec by ID
-/validate .start/specs/001/solution.md                  # Validate specific file
+/validate <specs-dir>/001/solution.md                   # Validate specific file  # path configured via .claude/startup.toml — run scripts/get-specs-dir.sh
 /validate Check the auth implementation against SDD    # Compare implementation to spec
 /validate drift                                        # Check for spec-implementation drift
 /validate constitution                                 # Validate constitution compliance
@@ -745,7 +745,7 @@ Optional: /document after implementation for documentation sync
 ```
 
 **What happens:**
-- Creates `.start/specs/001-notification-system/`
+- Creates `<specs-dir>/001-notification-system/`  # path configured via .claude/startup.toml — run scripts/get-specs-dir.sh
 - Generates requirements.md, solution.md, plan/ (with per-phase files)
 - Documents discovered patterns/interfaces
 - Optional: Creates `spec/001-notification-system` git branch
