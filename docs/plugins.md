@@ -34,7 +34,7 @@ Two output styles ship with the start plugin:
 - **The Startup** — high energy, delivery-focused, demo day mentality
 - **The ScaleUp** — calm confidence, educational insights, engineering depth
 
-Switch anytime: `/output-style start:The Startup`
+Switch anytime: `/output-style tcs-start:The Startup`
 
 → See [output-styles.md](output-styles.md) for comparison and post-install customization.
 

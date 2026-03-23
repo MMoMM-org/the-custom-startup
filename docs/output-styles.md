@@ -3,8 +3,8 @@
 The `start` plugin ships with two output styles that change how Claude communicates while working. Switch anytime — quality and tool usage stay identical, only the voice changes.
 
 ```bash
-/output-style start:The Startup
-/output-style start:The ScaleUp
+/output-style tcs-start:The Startup
+/output-style tcs-start:The ScaleUp
 ```
 
 ---

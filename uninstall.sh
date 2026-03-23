@@ -12,7 +12,7 @@ set -euo pipefail
 # Configuration
 # ==============================================================================
 
-PLUGINS="start@the-custom-startup team@the-custom-startup"
+PLUGINS="tcs-start@the-custom-startup tcs-team@the-custom-startup"
 
 # ==============================================================================
 # Colors
@@ -56,7 +56,7 @@ SETTINGS_FILE=""
 
 # Detected items (non-empty = found)
 FOUND_PLUGINS=""       # space-separated list
-FOUND_OUTPUT_STYLE=""  # e.g. "start:The Startup"
+FOUND_OUTPUT_STYLE=""  # e.g. "tcs-tcs-start:The Startup"
 FOUND_AGENT_TEAMS=""   # "yes" if set
 FOUND_STATUSLINE=""    # command string
 FOUND_SL_SCRIPTS_DIR="" # directory containing statusline scripts
@@ -148,7 +148,7 @@ detect_installation() {
     local style
     style=$(jq -r '.outputStyle // ""' "$SETTINGS_FILE" 2>/dev/null)
     case "$style" in
-      "start:The Startup"|"start:The ScaleUp")
+      "tcs-tcs-start:The Startup"|"tcs-tcs-start:The ScaleUp")
         FOUND_OUTPUT_STYLE="$style"
         info "Output style: $style"
         ;;

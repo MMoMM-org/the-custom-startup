@@ -81,8 +81,8 @@ EOF
 TARGET=""          # global | current | other
 INSTALL_DIR=""     # ~ | $PWD | <path>
 SETTINGS_FILE=""   # resolved settings.json path
-PLUGINS=""         # space-separated list: start@the-custom-startup team@the-custom-startup
-OUTPUT_STYLE=""    # e.g. "start:The Startup" or ""
+PLUGINS=""         # space-separated list: tcs-start@the-custom-startup tcs-team@the-custom-startup
+OUTPUT_STYLE=""    # e.g. "tcs-start:The Startup" or ""
 SPECS_DIR_NAME=""  # e.g. "the-custom-startup"
 PROMPTS=""         # yes | skip
 PROMPTS_BASE_DIR="" # absolute path, e.g. ~/.claude/the-custom-startup
@@ -185,9 +185,9 @@ choose_plugins() {
   local choice
   read -r choice </dev/tty
   case "$choice" in
-    2) PLUGINS="start@the-custom-startup" ;;
-    3) PLUGINS="team@the-custom-startup" ;;
-    *)  PLUGINS="start@the-custom-startup team@the-custom-startup" ;;
+    2) PLUGINS="tcs-start@the-custom-startup" ;;
+    3) PLUGINS="tcs-team@the-custom-startup" ;;
+    *)  PLUGINS="tcs-start@the-custom-startup tcs-team@the-custom-startup" ;;
   esac
   success "Plugins: $PLUGINS"
 }
@@ -206,9 +206,9 @@ choose_output_style() {
   local choice
   read -r choice </dev/tty
   case "$choice" in
-    2) OUTPUT_STYLE="start:The ScaleUp" ;;
+    2) OUTPUT_STYLE="tcs-start:The ScaleUp" ;;
     3) OUTPUT_STYLE="" ;;
-    *) OUTPUT_STYLE="start:The Startup" ;;
+    *) OUTPUT_STYLE="tcs-start:The Startup" ;;
   esac
   if [[ -n "$OUTPUT_STYLE" ]]; then
     success "Output style: $OUTPUT_STYLE"
