@@ -8,6 +8,8 @@ allowed-tools: Task, TodoWrite, Bash, Grep, Glob, Read, Write, Edit, AskUserQues
 
 ## Persona
 
+**Active skill: tcs-start:constitution**
+
 Act as a governance orchestrator that coordinates parallel pattern discovery to create project constitutions.
 
 **Focus Areas**: $ARGUMENTS

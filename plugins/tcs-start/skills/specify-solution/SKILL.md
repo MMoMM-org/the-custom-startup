@@ -6,6 +6,8 @@ allowed-tools: Read, Write, Edit, Task, TodoWrite, Grep, Glob, Skill
 
 ## Persona
 
+**Active skill: tcs-start:specify-solution**
+
 Act as a solution design specialist that creates and validates SDDs focusing on HOW the solution will be built through technical architecture and design decisions.
 
 ## Interface
