@@ -177,16 +177,18 @@ choose_target() {
 
 choose_plugins() {
   printf "\n${BRIGHT_GREEN}── Plugins${RESET}\n\n"
-  printf "  ${CYAN}1)${RESET} Both           — start + team  (recommended)\n"
-  printf "  ${CYAN}2)${RESET} start only     — workflow skills\n"
-  printf "  ${CYAN}3)${RESET} team only      — specialist agents\n"
+  printf "  ${CYAN}1)${RESET} Both           — tcs-start + tcs-team  (recommended)\n"
+  printf "  ${CYAN}2)${RESET} tcs-start only — workflow skills\n"
+  printf "  ${CYAN}3)${RESET} tcs-team only  — specialist agents\n"
+  printf "  ${CYAN}4)${RESET} All three      — tcs-start + tcs-team + tcs-helper (skill authoring tools)\n"
   printf "\n"
-  ask "Select plugins [1-3, default: 1]:"
+  ask "Select plugins [1-4, default: 1]:"
   local choice
   read -r choice </dev/tty
   case "$choice" in
     2) PLUGINS="tcs-start@the-custom-startup" ;;
     3) PLUGINS="tcs-team@the-custom-startup" ;;
+    4) PLUGINS="tcs-start@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup" ;;
     *)  PLUGINS="tcs-start@the-custom-startup tcs-team@the-custom-startup" ;;
   esac
   success "Plugins: $PLUGINS"
