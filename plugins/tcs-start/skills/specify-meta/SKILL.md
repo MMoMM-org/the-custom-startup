@@ -1,6 +1,6 @@
 ---
 name: specify-meta
-description: Scaffold, status-check, and manage specification directories. Handles auto-incrementing IDs, README tracking, phase transitions, and decision logging in .start/specs/. Falls back to docs/specs/ for legacy specs. Used by both specify and implement workflows.
+description: Scaffold, status-check, and manage specification directories. Handles auto-incrementing IDs, README tracking, phase transitions, and decision logging in the configured specs directory (see .claude/startup.toml). Falls back to docs/specs/ for legacy specs. Used by both specify and implement workflows.
 allowed-tools: Read, Write, Edit, Bash, TodoWrite, Grep, Glob
 ---
 
@@ -35,7 +35,7 @@ State {
 **Path Resolution (before any file operation):**
 1. Check `.claude/startup.toml` for `specs_dir` setting → use that path.
 2. Fall back to `the-custom-startup/specs/`.
-3. Fall back to `.start/specs/`.
+3. Fall back to `.start/specs/` (migration compatibility).
 4. Fall back to `docs/specs/` (legacy).
 
 **Always:**
