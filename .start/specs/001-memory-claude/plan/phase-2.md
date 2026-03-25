@@ -1,11 +1,11 @@
 ---
 phase: 2
-title: memory Skill (capture + routing)
+title: memory-add Skill + Python Infrastructure
 status: pending
 spec: 001-memory-claude
 ---
 
-# Phase 2 — memory Skill
+# Phase 2 — memory-add Skill + Python Infrastructure
 
 ## Gate
 
@@ -13,45 +13,67 @@ Phase 1 complete (templates define target structure).
 
 ## Context
 
-Ref: SDD §3.1 (memory), §5 (claude-reflect migration).
+Ref: SDD §3.1 (memory-add), §5 (claude-reflect relationship).
 
-`/memory` is the TCS learning-capture command. It replaces `/reflect` (claude-reflect) for TCS repos, handling all three scopes (global/project/repo) and routing each learning to the correct category file.
+`/memory-add` is the TCS learning-capture command. It is built on claude-reflect's Python infrastructure (hooks, queue format, session scanning) — extended with repo-level category routing to `docs/ai/memory/`. The Python scripts handle passive capture (hooks) and queue I/O; the SKILL.md handles only AI reasoning (classification, scope disambiguation).
 
 ## Tasks
 
-- [ ] Verify `learnings-queue.json` schema against claude-reflect source before implementing queue reader (see SDD §3.1 for expected schema; confirm field names match actual implementation)
-- [ ] Verify exact env var for `--dangerously-skip-permissions` detection before implementing YOLO mode
-- [ ] Create `plugins/tcs-helper/skills/memory/` directory
+### Python Scripts + Hooks
+
+- [ ] Study `scripts/lib/reflect_utils.py` from claude-reflect — reuse queue I/O, path utilities, pattern detection
+- [ ] Write `plugins/tcs-helper/scripts/lib/reflect_utils.py` — extended version with TCS additions:
+  - Queue I/O: same as claude-reflect (JSON array format)
+  - Queue item additions: `tcs_category` and `tcs_target` fields
+  - Queue location: `~/.claude/projects/<encoded>/learnings-queue.json`
+- [ ] Write `plugins/tcs-helper/scripts/capture_learning.py` — UserPromptSubmit hook (based on claude-reflect's version):
+  - Reads `{"prompt": "..."}` from stdin
+  - Regex detection for corrections, guardrails, explicit "remember:" prefix
+  - Appends to queue on match; `sys.exit(0)` always
+- [ ] Write `plugins/tcs-helper/scripts/session_start_reminder.py` — SessionStart hook:
+  - Reads queue, outputs pending count
+  - Checks for `docs/ai/memory/yolo-review.md` existence → adds YOLO reminder
+  - Reads `CLAUDE_REFLECT_REMINDER=false` env var to suppress
+- [ ] Write `plugins/tcs-helper/scripts/check_learnings.py` — PreCompact hook:
+  - Backs up queue to `~/.claude/learnings-backups/pre-compact-<timestamp>.json`
+- [ ] Write `plugins/tcs-helper/scripts/post_commit_reminder.py` — PostToolUse(Bash) hook:
+  - Detects `git commit` (not `--amend`) in stdin command
+  - Outputs reminder to run `/memory-add`
+- [ ] Write `plugins/tcs-helper/scripts/merge_hooks.py` — standalone utility:
+  - Merges tcs-helper's hook definitions into `~/.claude/settings.json`
+  - Additive: existing hooks preserved, duplicates skipped
+  - Used by setup skill (Phase 6)
+- [ ] Write `plugins/tcs-helper/hooks/hooks.json`:
+  - UserPromptSubmit, SessionStart, PreCompact, PostToolUse(Bash)
+  - References scripts via `${CLAUDE_PLUGIN_ROOT}`
+
+### Skill (SKILL.md — AI layer only)
+
+- [ ] Create `plugins/tcs-helper/skills/memory-add/` directory
 - [ ] Write `SKILL.md` with:
   - YAML frontmatter: name, description, user-invocable: true, argument-hint, allowed-tools
   - Auto-trigger keywords: reflect, remember, learned, note this, add to memory, route this
-  - Persona: classifies and routes learnings to correct scope + category
   - Interface: State with learnings[], routed[], skipped[], unclassified[], yolo: bool
-  - Constraints (Always/Never)
-  - Workflow: classify → determine scope → deduplicate → write (or stage if YOLO)
-- [ ] Implement classification + scope logic in SKILL.md:
-  - Keyword/pattern rules for each category (see SDD §3.1)
-  - Scope detection: personal/global vs project vs repo
+  - Workflow: read queue → classify → determine scope → deduplicate (code) → write or stage
+- [ ] Implement classification logic in SKILL.md (AI reasoning):
+  - Category keywords for each of the 6 categories (see SDD §3.1)
+  - Scope detection: personal/workflow correction → global; project fact → project; default → repo
   - Fallback: AskUserQuestion when unclassified
-- [ ] Write `reference/routing-rules.md` — detailed classification guide with examples for all 3 scopes
-- [ ] Write `reference/category-formats.md` — entry format for each category file
-  - Date prefix, context note, what NOT to include
-- [ ] Write `examples/output-example.md` — example routing session (repo-scope and global-scope learnings)
-- [ ] Implement deduplication check before appending:
-  - Check if semantically identical entry already exists in target file
-  - Skip duplicates silently; include in report as "skipped (duplicate)"
-  - Cross-scope duplicates NOT checked here (handled by memory-cleanup)
-- [ ] Implement YOLO/bypass mode:
-  - Detect `--dangerously-skip-permissions` via env var (TBD — verify first)
-  - Do NOT write to normal memory files in this mode
-  - Write staged entries to `docs/ai/memory/yolo-review.md` in checkbox format
-  - Implement `--review-yolo` sub-command: present entries, write accepted ones to target files
-- [ ] Implement SessionStart hook that checks for `yolo-review.md` and reminds user
+- [ ] Implement YOLO/bypass mode in SKILL.md:
+  - Detect `YOLO=true` environment variable
+  - When active: write to `docs/ai/memory/yolo-review.md` only (checkbox format, see SDD §3.1.4)
+  - Implement `--review-yolo` sub-command
+- [ ] Write `reference/routing-rules.md` — classification guide with examples for all 3 scopes
+- [ ] Write `reference/category-formats.md` — entry format (date prefix, context note, what NOT to include)
+- [ ] Write `examples/output-example.md` — example session routing (repo + global scope learnings)
 - [ ] Register skill in `plugins/tcs-helper/.claude-plugin/plugin.json`
 
 ## Verification
 
-- [ ] SKILL.md loads without errors
+- [ ] `capture_learning.py` writes to queue on correction prompt ("no, use X not Y")
+- [ ] `session_start_reminder.py` outputs queue count on session start
+- [ ] `session_start_reminder.py` outputs YOLO reminder when `yolo-review.md` exists
+- [ ] Queue format matches SDD §3.1.2 (JSON array with required fields)
 - [ ] Given a sample learning "always use `fd` not `find`", routes to `tools.md`
 - [ ] Given a sample learning "UserRepository must return null for unknown emails", routes to `domain.md`
 - [ ] Given a sample learning "decided to use hexagonal architecture", routes to `decisions.md`
@@ -60,7 +82,6 @@ Ref: SDD §3.1 (memory), §5 (claude-reflect migration).
 - [ ] Appended entries have date + context note
 - [ ] `memory.md` index last-updated date is updated after routing (repo-scope only)
 - [ ] Running with the same learning twice does not create a duplicate entry
-- [ ] In YOLO/bypass mode: no writes to category files; entries appear in `yolo-review.md` with checkboxes
-- [ ] `--review-yolo`: accepted entries written to target files, reviewed entries removed from yolo-review.md
-- [ ] SessionStart hook warns when `yolo-review.md` exists
-- [ ] Running with direct argument routes correctly (no queue file needed)
+- [ ] With `YOLO=true`: no writes to category files; entries in `yolo-review.md` with checkboxes
+- [ ] `--review-yolo`: accepted entries written to target files; yolo-review.md cleared
+- [ ] `merge_hooks.py` adds hooks to settings.json without overwriting existing ones

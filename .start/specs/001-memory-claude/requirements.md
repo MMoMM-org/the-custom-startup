@@ -39,8 +39,8 @@ A file-based memory system that:
 - As a developer, I want routing rules in CLAUDE.md (not in MEMORY.md) so the index budget isn't wasted on instructions.
 
 ### Learning Capture
-- As a developer, I want corrections and learnings from a session to be routed to the correct scope and category file automatically (via `/memory`), so I don't have to manually decide where each learning goes.
-- As a developer, I want `/memory` to handle all three scopes (global, project, repo) so I have a single command for all learning capture rather than separate tools per scope.
+- As a developer, I want corrections and learnings from a session to be routed to the correct scope and category file automatically (via `/memory-add`), so I don't have to manually decide where each learning goes.
+- As a developer, I want `/memory-add` to handle all three scopes (global, project, repo) so I have a single command for all learning capture rather than separate tools per scope.
 - As a developer, I want the memory index (memory.md) to stay under 200 lines so it loads within context budget on every session start.
 
 ### Maintenance
@@ -55,7 +55,7 @@ A file-based memory system that:
 **In scope (M2):**
 - `docs/ai/memory/` directory structure with 6 category files
 - Root CLAUDE.md template + per-directory CLAUDE.md templates (src/, test/, docs/, docs/ai/)
-- `tcs-helper:memory` skill (absorbs claude-reflect: queue capture, g/p/r routing, session reflection)
+- `tcs-helper:memory-add` skill + Python hook infrastructure (based on claude-reflect; queue capture, g/p/r routing)
 - `tcs-helper:memory-sync` skill
 - `tcs-helper:memory-cleanup` skill
 - `tcs-helper:memory-promote` skill
@@ -75,9 +75,9 @@ A file-based memory system that:
 
 - [ ] Root CLAUDE.md for a new repo is < 100 lines after setup
 - [ ] `docs/ai/memory/memory.md` index stays ≤ 200 lines
-- [ ] Running `/memory` correctly routes learnings to the right scope (global/project/repo) and category file with no manual intervention
-- [ ] Running `/memory` twice on the same learnings does not create duplicate entries (idempotent)
-- [ ] `/memory` can be invoked standalone with learning text as a direct argument
+- [ ] Running `/memory-add` correctly routes learnings to the right scope (global/project/repo) and category file with no manual intervention
+- [ ] Running `/memory-add` twice on the same learnings does not create duplicate entries (idempotent)
+- [ ] `/memory-add` can be invoked standalone with learning text as a direct argument
 - [ ] `memory-sync` detects and reports: missing @import in CLAUDE.md, orphaned memory files, routing rules in wrong file, and index approaching 200-line budget
 - [ ] `memory-promote` surfaces a domain pattern as a skill candidate, generates it in user-chosen global or repo location, and replaces the domain.md entry with a pointer after approval
 - [ ] `memory-promote` behaves gracefully when session history is absent (analyses domain.md alone, confidence = Low)

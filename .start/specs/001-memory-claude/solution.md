@@ -16,8 +16,8 @@ Layer 1: Structure
   CLAUDE.md (root + dirs)  ← lean, minimal @imports, routing rules inline
 
 Layer 2: Skills Pipeline
-  memory       ← capture: classify → route to g/p/r scope + category
-  memory-sync  ← maintenance: keep @imports + index in sync
+  memory-add     ← capture: classify → route to g/p/r scope + category
+  memory-sync    ← maintenance: keep @imports + index in sync
   memory-cleanup ← maintenance: prune, archive
   memory-promote ← growth: domain → reusable skills
 
@@ -166,90 +166,129 @@ Loaded only when working in that directory (Claude Code recursive discovery).
 
 ## 3. Skills Pipeline
 
-### 3.1 `tcs-helper:memory`
+**Implementation principle:** All skills that can be implemented as code (Python scripts, hooks) MUST be. AI instruction text is only used where AI reasoning is genuinely required (classification, semantic analysis, pattern detection). Minimize token and context usage.
 
-**Invocation:** `/memory` (or `/tcs-helper:memory`)
+### 3.1 `tcs-helper:memory-add`
+
+**Invocation:** `/memory-add` (or `/tcs-helper:memory-add`)
 
 **Auto-trigger keywords:** `reflect`, `remember`, `learned`, `note this`, `add to memory`, `route this` — when the user uses these phrases at end of session, the skill activates.
 
-**Purpose:** The TCS learning-capture and routing command. Replaces `/reflect` (claude-reflect) for TCS repos. Handles all three scopes (global, project, repo) in one command.
+**Purpose:** TCS learning-capture and routing command. Builds on [claude-reflect](https://github.com/BayramAnnakov/claude-reflect)'s Python infrastructure (hooks, queue format, session scanning). Adds repo-level category routing to `docs/ai/memory/` on top of the existing global/project routing.
+
+#### 3.1.1 Python Infrastructure (hooks + scripts)
+
+tcs-helper bundles Python scripts modelled on claude-reflect's `scripts/` directory. These are registered via `hooks/hooks.json` and installed when the plugin is enabled:
+
+| Script | Hook Event | What it does |
+|--------|-----------|--------------|
+| `capture_learning.py` | UserPromptSubmit | Reads prompt from stdin, runs regex detection, appends to queue if matched |
+| `session_start_reminder.py` | SessionStart | Reads queue + checks for `yolo-review.md`; outputs count + reminder text |
+| `check_learnings.py` | PreCompact | Backs up queue before context compaction |
+| `post_commit_reminder.py` | PostToolUse(Bash) | After git commit: reminds user to run `/memory-add` |
+
+```json
+// hooks/hooks.json (tcs-helper plugin)
+{
+  "hooks": {
+    "UserPromptSubmit": [{"matcher": "", "hooks": [{"type": "command",
+      "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/capture_learning.py\""}]}],
+    "SessionStart": [{"matcher": "", "hooks": [{"type": "command",
+      "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start_reminder.py\""}]}],
+    "PreCompact": [{"matcher": "", "hooks": [{"type": "command",
+      "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/check_learnings.py\""}]}],
+    "PostToolUse": [{"matcher": "Bash", "hooks": [{"type": "command",
+      "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/post_commit_reminder.py\""}]}]
+  }
+}
+```
+
+All hook scripts: `sys.exit(0)` on any error — never block Claude.
+
+#### 3.1.2 Queue Format
+
+**Location:** `~/.claude/projects/<url-encoded-project-path>/learnings-queue.json`
+
+**Format:** JSON array (compatible with claude-reflect):
+```json
+[
+  {
+    "type": "explicit",
+    "message": "always use fd not find",
+    "timestamp": "2026-03-25T10:00:00+00:00",
+    "project": "/absolute/path/to/repo",
+    "patterns": "explicit",
+    "confidence": 1.0,
+    "sentiment": "correction",
+    "decay_days": 120,
+    "tcs_category": "tools",
+    "tcs_target": "docs/ai/memory/tools.md"
+  }
+]
+```
+
+`tcs_category` and `tcs_target` are TCS-specific extensions — ignored by claude-reflect if present.
+
+#### 3.1.3 Skill Logic (AI instruction layer — minimal)
+
+The SKILL.md handles only what code cannot: classification, scope disambiguation, and user interaction.
 
 **Input sources (in priority order):**
-1. **From queue file** — reads `~/.claude/learnings-queue.json` (populated automatically during session by hook). Verify this schema against the actual claude-reflect source before implementing (Phase 2 research task).
-2. **From `$ARGUMENTS`** — inline text: `/memory "always use fd not find"` or multi-line input
-3. **Manual prompt** — invoked without arguments: skill asks the user to describe what was learned
-
-**`learnings-queue.json` schema:**
-```
-{
-  "learnings": [
-    {
-      "text": string,           // learning content
-      "scope": string | null,   // absolute path (global=null, project=proj path, repo=repo path)
-      "timestamp": string,      // ISO 8601
-      "confidence": "high" | "medium"
-    }
-  ]
-}
-```
-
-**Learning type:**
-```
-Learning {
-  text: string          // the learning content
-  source: string        // "queue" | "argument" | "manual"
-  scope?: string        // path if known
-  confidence: "high" | "medium"
-}
-```
+1. Queue file — already populated by `capture_learning.py` hook during session
+2. `$ARGUMENTS` — inline text: `/memory-add "always use fd not find"`
+3. No arguments — skill prompts user to describe what was learned
 
 **Logic:**
 ```
 For each learning:
-  1. Classify → category first (determines target file + scope):
+  1. Classify → category (AI semantic classification):
        conventions, naming, style        → general.md
        CI, build, deploy, scripts, tools → tools.md
        domain, entity, rule, model       → domain.md
        decision, chose, tradeoff, why    → decisions.md
        current, focus, working on        → context.md
        bug, error, fix, workaround       → troubleshooting.md
-       personal/workflow correction      → global (auto-memory)
-       project-level fact                → project memory file
+       personal/workflow correction      → global scope
+       project-level fact                → project scope
 
-  2. Determine scope:
-       scope = null or "personal"   → ~/.claude/includes/memory-*.md  (global)
-       scope = project path         → ~/Kouzou/projects/<proj>/memory.md (project)
-       scope = repo path or default → docs/ai/memory/{category}.md (repo)
+  2. Determine scope + target file:
+       personal/workflow   → ~/.claude/includes/memory-*.md  (global)
+       project fact        → project memory file (if configured)
+       default             → docs/ai/memory/{category}.md (repo)
 
-  3. Deduplication check in target file:
-       - Same fact, different wording = duplicate → skip silently, note in report
-       - Cross-scope duplicates are not checked here — handled by memory-cleanup
+  3. Deduplication (code: string comparison + semantic similarity):
+       Duplicate → skip silently, include in report
 
-  4. Append to target file with date prefix
-  5. Update memory.md index last-updated date (repo-scope only)
+  4. Write to target file (code: direct file append with date prefix)
+  5. Update memory.md index last-updated date (code, repo-scope only)
+  6. Clear processed items from queue
 ```
 
-**Override:** If a learning doesn't fit any category, invoke AskUserQuestion to select target file.
+**Override:** If unclassified → `AskUserQuestion` to select target file.
 
-**Bypass/YOLO mode:** When Claude Code is running with `--dangerously-skip-permissions` (detect via environment variable — exact var name TBD, verify before implementation):
+#### 3.1.4 YOLO / Bypass Mode
+
+Detected via environment variable `YOLO=true` (set externally when running in bypass mode, since `--dangerously-skip-permissions` is not detectable from inside the Claude context).
+
+When `YOLO=true`:
 - **Do NOT write to normal memory files**
-- Create `docs/ai/memory/yolo-review.md` (or append to it if it exists) with entries in this format:
+- Append entries to `docs/ai/memory/yolo-review.md` in checkbox format:
   ```markdown
   - [ ] **Target:** `docs/ai/memory/tools.md`
     Use `fd` instead of `find` — faster, respects .gitignore
-    *(2026-03-25 session)*
+    *(2026-03-25)*
 
   - [ ] **Target:** `~/.claude/includes/memory-general.md`
     Prefer explicit return types in TypeScript
-    *(2026-03-25 session)*
+    *(2026-03-25)*
   ```
-- Session start hook checks for `yolo-review.md` existence and reminds user: "⚠ Unreviewed memory entries in docs/ai/memory/yolo-review.md — run /memory --review-yolo"
-- `/memory --review-yolo` presents each entry; user checks the box or deletes the entry; accepted entries are written to their target files
+- `session_start_reminder.py` detects `yolo-review.md` existence and adds: `⚠ Unreviewed memory entries — run /memory-add --review-yolo`
+- `/memory-add --review-yolo`: present each entry, write accepted ones to target files, clear the reviewed file
 
 **Interface:**
 ```
 State {
-  learnings: Learning[]       // from queue or manual input
+  learnings: Learning[]       // from queue or argument or manual
   routed: RoutedLearning[]    // scope + category + file + content
   skipped: Learning[]         // duplicates detected
   unclassified: Learning[]    // needs user decision
@@ -259,19 +298,19 @@ State {
 
 ### 3.2 `tcs-helper:memory-sync`
 
-**`@` import philosophy:** Root CLAUDE.md should have at most ONE `@` import: `@docs/ai/memory/memory.md`. All other memory files are referenced in memory.md with a short description of when to read them — Claude loads them on demand, not at session start. Routing rules stay inline in CLAUDE.md (short, always needed, no extra file load).
+**`@` import philosophy:** Use `@` imports sparingly. For each `@` in CLAUDE.md ask: "Does Claude need this on EVERY prompt, or only when working in this area?" Files needed only sometimes should be described in `memory.md` with a note on when to load them — Claude will read them on demand. Routing rules stay inline in CLAUDE.md (7 lines, always needed, no file load). Skills encode classification logic in code and don't depend on CLAUDE.md routing rules at runtime.
 
-**On routing rules location:** Routing rules are inline in CLAUDE.md so Claude always has them without an additional file read. They do NOT need to be in a separate file. Skills already encode classification logic internally and don't rely on CLAUDE.md routing rules at runtime.
+**Typical root CLAUDE.md imports:** `@docs/ai/memory/memory.md` is the baseline. Additional `@` imports (e.g. project memory, architecture overview) are acceptable if genuinely needed every session — but each one must be justified.
 
 **Purpose:** Keep `@` imports and index entries synchronized. Enforce 200-line index budget.
 
 **Trigger:** Run periodically, or when new memory files are added/renamed.
 
-**Logic:**
+**Logic (implement as code where possible):**
 1. Scan `docs/ai/memory/` for all .md files
-2. Verify root CLAUDE.md has exactly `@docs/ai/memory/memory.md` and no other `@` memory imports
+2. Audit each `@` import in CLAUDE.md — flag any that could be lazy-loaded instead
 3. Verify `memory.md` index lists all category files (no orphans, no stale entries)
-4. Check memory.md line count — warn if approaching 200
+4. Check memory.md line count — warn at 160, error at 200
 5. Verify routing rules are in CLAUDE.md (not duplicated in memory.md)
 
 ### 3.3 `tcs-helper:memory-cleanup`
@@ -300,86 +339,87 @@ State {
 
 **Trigger:** Run periodically, or when `domain.md` grows large.
 
-**Approach (analogous to [reflect-skills](https://github.com/BayramAnnakov/claude-reflect/blob/main/commands/reflect-skills.md)):** Work primarily with condensed material (`domain.md` + session summaries) rather than raw `.jsonl` history. Raw history access is optional and only used when summaries are insufficient.
+**Approach:** Directly based on [reflect-skills](https://github.com/BayramAnnakov/claude-reflect/blob/main/commands/reflect-skills.md). Uses Claude's **semantic reasoning** (not regex) to detect repeating patterns across session history. The key difference from reflect-skills: also reads `docs/ai/memory/domain.md` as an additional signal source, and generates skills in the appropriate g/r scope.
 
-**Evidence sources (in priority order):**
-1. `docs/ai/memory/domain.md` — the primary condensed source (always available)
-2. Session summaries in `~/.claude/projects/<repo>/` — if present, boost confidence without full `.jsonl` scan
-3. Raw `.jsonl` session transcripts — only if summaries are absent and user opts in (slow)
-
-**Session history availability:**
-- If `~/.claude/projects/<repo>/` contains session files → cross-session evidence available (confidence boosted)
-- If session history is absent or sparse (< 3 sessions) → analyse `domain.md` alone; all candidates default to confidence = Low
+**Session data source:** `~/.claude/projects/<encoded-path>/*.jsonl` — same session files reflect-skills uses. A helper script (`extract_session_learnings.py`, bundled from claude-reflect's `scripts/`) extracts user messages from these files.
 
 **Logic:**
-1. Read `docs/ai/memory/domain.md`
-2. Check session evidence availability (see above)
-3. Identify entries that:
-   - Appear multiple times across sessions (if evidence available), OR
-   - Describe a reusable architectural pattern (DDD, hexagonal, functional, etc.), OR
-   - Are referenced frequently by other memory files
-4. Propose as skill candidate with evidence summary and confidence score
-5. On user approval:
-   - Ask user: **global** (`~/.claude/skills/<skill-name>/`) or **repo** (`.claude/skills/<skill-name>/`)
-   - Note: project-level skills do not exist in Claude Code — only global or repo
-   - Generate `SKILL.md` stub with frontmatter, placeholder content, and a `# TODO` marker
-   - Replace `domain.md` entry with pointer: `→ see skill: <skill-name>`
-6. Update `memory.md` index
+```
+1. (code) Find session JSONL files for this repo in ~/.claude/projects/<encoded>/
+2. (code) Extract user messages from JSONL via extract_session_learnings.py
+3. (code) Read docs/ai/memory/domain.md
+4. (AI)   Semantic pattern analysis across all evidence:
+           - Group messages by recurring intent (same intent, different wording = one pattern)
+           - Cross-reference with domain.md entries
+           - Score each pattern: repetition count, reusability, abstraction level
+5. (AI)   Propose candidates: pattern name, evidence count, proposed skill name, confidence
+6. (AI)   AskUserQuestion: approve/skip each candidate + choose scope (global or repo)
+7. (code) Generate SKILL.md stub at:
+           global: ~/.claude/skills/<skill-name>/SKILL.md
+           repo:   .claude/skills/<skill-name>/SKILL.md
+           (project-level skills don't exist in Claude Code)
+8. (code) Replace domain.md entry with: → see skill: <skill-name>
+9. (code) Update memory.md index
+```
 
-**Note:** Skills generated here are general-purpose skills at global or repo scope. They are NOT placed in `tcs-patterns/` — that plugin is for curated, team-shared patterns, not auto-generated candidates.
+**Note:** Generated skills are general-purpose, at global or repo scope. NOT in `tcs-patterns/` — that is for curated team-shared patterns. The user is informed that no project-level skills exist.
 
 ---
 
 ## 4. `tcs-helper:setup`
 
-**Purpose:** One-shot project onboarding. Generates `docs/ai/` structure + CLAUDE.md files from stack detection.
+**Purpose:** One-shot project onboarding. Generates `docs/ai/` structure, CLAUDE.md files, and installs required hooks. Designed to be extendable — other phases can register additional hook commands without conflicting.
 
 **Trigger:** User invokes `/setup` in a new or existing repo.
 
 **Logic:**
-1. Detect tech stack (scan package.json, go.mod, Cargo.toml, pyproject.toml, etc.)
-2. Detect existing patterns (DDD structure, hexagonal ports, CI provider)
-3. Generate:
+1. (code) Detect tech stack (package.json, go.mod, Cargo.toml, pyproject.toml, composer.json)
+2. (code) Detect existing patterns (DDD structure, hexagonal ports, CI provider, existing CLAUDE.md)
+3. (code) Generate:
    - `docs/ai/memory/` directory + all 6 category files (with starter content)
    - `docs/ai/memory/memory.md` (index)
-   - Root `CLAUDE.md` (from template, stack-customized)
-   - `src/CLAUDE.md` (from template, stack-customized)
-   - `test/CLAUDE.md` (from template, stack-customized)
-   - `docs/CLAUDE.md`
-   - `docs/ai/CLAUDE.md`
-4. Apply stack-specific template overrides from `plugins/tcs-helper/templates/stacks/` based on detected stack (Cloudflare, Convex, TypeScript, Go, etc.)
-5. Offer optional: create `docs/adr/` directory for architecture decision records
-6. Offer optional: configure PostToolUse hooks (format on save for detected stack)
+   - Root `CLAUDE.md` (from template, stack-customized; non-destructive if CLAUDE.md exists)
+   - `src/CLAUDE.md`, `test/CLAUDE.md`, `docs/CLAUDE.md`, `docs/ai/CLAUDE.md`
+4. (code) Apply stack-specific overrides from `plugins/tcs-helper/templates/stacks/`
+5. (code) **Install hooks** — merge tcs-helper's `hooks/hooks.json` into `~/.claude/settings.json`:
+   - UserPromptSubmit: `capture_learning.py`
+   - SessionStart: `session_start_reminder.py`
+   - PreCompact: `check_learnings.py`
+   - PostToolUse(Bash): `post_commit_reminder.py`
+   - Hook merge is additive — existing hooks are preserved; duplicates are skipped
+   - Set `cleanupPeriodDays: 99999` in settings.json (required for session history retention)
+6. (AI) Offer optional extras (AskUserQuestion):
+   - Create `docs/adr/` for Architecture Decision Records
+   - Add PostToolUse format-on-save hook for detected stack
+   - Show post-setup instructions for manual steps (e.g., YOLO=true usage)
 
-**Templates location:** `plugins/tcs-helper/templates/` (generic CLAUDE.md + category templates) and `plugins/tcs-helper/templates/stacks/` (stack-specific overrides, one file per stack + `generic.md` fallback).
+**Extensibility:** The hook merge mechanism (`merge_hooks.py`) is a standalone utility — other phases or plugins can call it to register additional hooks without touching setup's logic.
+
+**Templates location:** `plugins/tcs-helper/templates/` (generic) and `plugins/tcs-helper/templates/stacks/` (stack overrides, one file per stack + `generic.md` fallback).
 
 ---
 
 ## 5. Relationship to claude-reflect
 
-`/memory` is the TCS replacement for `/reflect` (claude-reflect). It absorbs the core capture and routing functionality while adding repo-level category routing and the three-scope model.
+tcs-helper builds **on top of** claude-reflect's architecture. The Python scripts and hook patterns are directly derived from it — the queue format is compatible, the session JSONL scanning is the same, the hook event model is identical.
 
-**What is migrated from claude-reflect:**
-- Queue file format (`learnings-queue.json`) and the session-hook that populates it
-- Global routing logic (personal corrections → `~/.claude/includes/`)
-- Session-end reflection flow
+**What TCS adds:**
+- `docs/ai/memory/` category routing (the repo layer that claude-reflect doesn't have)
+- `tcs_category` + `tcs_target` fields in queue items (extensions, ignored by claude-reflect)
+- YOLO/bypass mode (staged review file instead of direct writes)
+- `memory-sync`, `memory-cleanup`, `memory-promote` maintenance skills
 
-**What is different:**
-- `/memory` handles all three scopes (g/p/r) in one command instead of leaving repo-level to a separate tool
-- Category-based routing to `docs/ai/memory/` category files (not just global CLAUDE.md)
-- Bypass/YOLO mode detection with staged review file
-
-**Post-session flow with TCS:**
+**Post-session flow:**
 ```
-/memory           ← single command: processes queue, routes to correct scope + category
-                    global:  ~/.claude/includes/memory-*.md
-                    project: ~/Kouzou/projects/<proj>/memory.md
-                    repo:    docs/ai/memory/{category}.md
+[passive]  capture_learning.py hook → queue during session
 
-/memory-promote   ← periodic: scan domain.md for promotable patterns → skills
+[active]   /memory-add  ← process queue + any explicit input
+                           → global:  ~/.claude/includes/memory-*.md
+                           → project: <proj>/memory.md
+                           → repo:    docs/ai/memory/{category}.md
+
+[periodic] /memory-promote  ← scan domain.md + session history → skill candidates
 ```
-
-**Migration for existing claude-reflect users:** existing queue entries are compatible — the schema is unchanged. `/memory` reads the same `~/.claude/learnings-queue.json` file. After migrating, `/reflect` is no longer needed for TCS repos.
 
 ---
 
@@ -387,5 +427,5 @@ State {
 
 - [x] **ADR location** — resolved: `docs/adr/` (human-facing, consistent with §1.1 visible memory philosophy). Setup offers it as optional extra.
 - [ ] Sub-directories: `domain/`, `tools/` subdirs for expanded categories — defer until files grow large
-- [x] **YOLO mode** — resolved: when `--dangerously-skip-permissions` is active, writes go ONLY to `docs/ai/memory/yolo-review.md` (not to category files). User reviews and accepts/rejects via `/memory --review-yolo`. SessionStart hook reminds user if review file exists. See §3.1 for full spec.
-- [x] **Hook integration** — resolved: SessionEnd hook wiring for `memory-route` is excluded from Phase 6 scope. Requires claude-reflect hook infrastructure; setup skill outputs post-setup instructions for manual hook wiring instead. Deferred to a future phase.
+- [x] **YOLO mode** — resolved: detected via `YOLO=true` env var (not detectable from inside Claude context). Writes go ONLY to `docs/ai/memory/yolo-review.md` (staged, not to category files). SessionStart hook warns. `/memory-add --review-yolo` applies accepted entries. See §3.1.4.
+- [x] **Hook integration** — resolved: hooks are installed by `tcs-helper:setup` (Phase 6) via additive merge into `~/.claude/settings.json`. No manual wiring needed.
