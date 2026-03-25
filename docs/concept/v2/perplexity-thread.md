@@ -1024,3 +1024,397 @@ Willst du als nächstes eine passende „TCS v2 Memory \& Context Layout“-Seit
 
 [^4_14]: SKILL.md
 
+
+---
+
+# kannst du mir bitte auch noch den MCP Server zusammen fassen?
+
+Also die Änderungen am context-mode MCP server damit er:
+
+- als MCP Server Gateway / Registry funktioniert
+- als MCP Server Security Scanner funktioniert
+- und neu, damit KAIRN in dem MCP Server registriert werden kann und dann anstelle der internen Context Database für die entsprechenden informationen genutzt wird.
+
+Summary
+Der MCP‑Teil von deinem Design besteht aus einem erweiterten context-mode‑Server, der drei Rollen übernimmt: Gateway/Registry für andere MCP‑Server, Security‑Scanner für deren Konfiguration und optionaler Adapter, um Kairn als externes Projekt‑Gedächtnis anstelle der internen context-mode‑DB für bestimmte Daten zu nutzen.[^5_1][^5_2][^5_3][^5_4][^5_5][^5_6][^5_7]
+
+***
+
+## Findings
+
+### 1. Ausgangspunkt: context-mode heute
+
+- context-mode ist ein MCP‑Server, der alle Tool‑Calls abfängt, deren Output in eine per‑Projekt SQLite‑FTS5‑DB indexiert und nur verdichtete, relevante Ausschnitte an Claude zurückgibt.[^5_2][^5_3][^5_8][^5_9][^5_10]
+- Er sitzt zwischen Agent und Tools, kapselt subprocess‑Ausführung, speichert Session‑Events, und ermöglicht spätere gezielte Queries anstatt rohe Outputs ins Kontextfenster zu kippen.[^5_3][^5_11][^5_12]
+
+Das ist deine Basis für: „normaler“ Context‑Server, Session‑Kontinuität und Kontext‑Reduktion.
+
+***
+
+### 2. Erweiterung 1: MCP Server Gateway / Registry
+
+Ziel: context-mode soll mehrere nachgelagerte MCP‑Server bündeln und für Claude wie ein einziger Server erscheinen, ähnlich wie lasso‑mcp‑gateway.[^5_4][^5_7][^5_1]
+
+**Konzeptuell:**
+
+- context-mode Gateway‑Layer:
+    - Frontend: ein MCP‑Endpoint, den Claude Code als „context-mode“ anspricht.
+    - Backend: Registry von MCP‑Servern (filesystem, github, basic-memory, kairn, etc.), die per STDIO/HTTP eingebunden sind.[^5_13][^5_11][^5_2][^5_3]
+- Funktionen der Registry:
+    - Laden der Serverdefinitionen aus einer Konfig (z.B. `~/.context-mode/mcp.json` oder `~/.mcp/context-mode.json`).
+
+```
+- Dynamische Capability‑Registrierung: Tools der down‑stream MCPs werden als `<server>_<tool>` oder via Namespacing exponiert, ähnlich der Dynamic Capability Registration im lasso‑Gateway.[^5_1]
+```
+
+    - Routing: context-mode entscheidet anhand des Toolnamens / Namespaces, an welchen Server der Aufruf geht.[^5_7][^5_1]
+
+Damit hast du:
+
+- Einen einzigen MCP‑Entry in Claude Code, der intern viele Servers orchestriert.
+- Einen klaren Ort (context-mode) für spätere Security‑Filter und Policies.
+
+***
+
+### 3. Erweiterung 2: Security Scanner im Gateway
+
+Ziel: context-mode soll vor dem Laden/Expose von MCP‑Servern deren Risiko prüfen und Konfiguration entsprechend markieren/blocken, angelehnt an lasso‑mcp‑gateway‑Scanner.[^5_6][^5_4][^5_7][^5_1]
+
+**Bausteine:**
+
+- **Scan‑Zeitpunkt:**
+    - Beim Start von context-mode (oder wenn Konfig sich ändert) wird jede MCP‑Server‑Definition gescannt.[^5_1]
+- **Analyse‑Dimensionen:**
+    - Reputation: GitHub‑Infos, Stars, ggf. Marketplace‑Einträge, wenn verfügbar (ähnlich lasso‑Reputation Analysis).[^5_4][^5_1]
+    - Tool‑Beschreibungen: Pattern‑Scan auf sensible Aktionen (delete, exfiltrate, network‑calls, secrets‑read etc.), hidden instructions, riskante File‑Pfade.[^5_7][^5_1]
+    - Konfiguration: Ports, Pfade, Shell‑Kommandos – potentielle Injection‑Punkte.[^5_3][^5_7]
+- **Ergebnis \& Policy:**
+    - Score + Status pro Server: `passed`, `blocked`, `skipped`, `pending` – analog zur lasso‑Gateway‑Konfiguration.[^5_1]
+    - Gate im Gateway: Tools eines `blocked` Servers werden nicht registriert bzw. sind für Claude unsichtbar.[^5_7][^5_1]
+    - Logging: Audit‑Log (z.B. `~/.context-mode/scanner.log`) mit Begründungen, wie beim lasso‑Scanner.[^5_4][^5_1]
+
+Damit verhält sich context-mode nicht nur als Kontext‑Optimierer, sondern auch als Sicherheitslayer für alle Tools, die du über TCS/TCS‑Plugins nutzt.
+
+***
+
+### 4. Erweiterung 3: Kairn-Integration als externer Context Store
+
+Ziel: Kairn soll als persistentes, graphbasiertes Projekt‑Gedächtnis fungieren und für bestimmte „Memory‑/Context‑Anfragen“ statt der internen context-mode‑SQLite‑DB genutzt werden.[^5_5][^5_14][^5_15]
+
+**Kairn-Fähigkeiten (aus Evolving‑Lite/Kairn):**
+
+- Hält einen Knowledge‑Graph mit Projekten, Entscheidungen, „Experiences“, der beim Boot in Sekunden geladen wird.[^5_14][^5_5]
+- Unterstützt semantische Queries à la „Wie habe ich Auth‑Bug XY gelöst?“ statt reinem Text‑FTS.[^5_5][^5_14]
+- Baut sich durch kontinuierliches Lernen aus Code‑Fixes und Entscheidungen selbst weiter auf.[^5_14][^5_5]
+
+**Design im context-mode‑Gateway:**
+
+- context-mode bleibt Default‑Context‑Server:
+    - Interne SQLite‑DB trackt Tool‑Outputs, Logs, Session‑Events.[^5_3]
+- Wenn Kairn als MCP‑Server registriert ist (z.B. `kairn` mit Tools `kairn_query`, `kairn_learn`):[^5_15][^5_5][^5_14]
+    - Gateway markiert Kairn als „Semantic Memory Provider“ im Registry‑State.
+    - Bestimmte Kontext‑Skills oder Tools werden auf Kairn geroutet:
+        - „project‑level knowledge“ → Kairn.
+        - „raw tool output recall / logs“ → context-mode SQLite.[^5_5][^5_3]
+- Praktische Regeln (Beispiele):
+    - `context_search_recent_output` → context-mode interne DB.
+    - `context_search_decision_graph` oder `context_search_past_solution` → Kairn‑Tool.[^5_14][^5_3][^5_5]
+    - Beim Session‑Start kann context-mode optional einen „Bootup Context“ von Kairn holen (Graph‑Snapshot) und als condensed Summary an Claude liefern – wie im Evolving‑Lite Demo.[^5_5][^5_14]
+
+Kurz: context-mode bleibt für „raw context reduction“ zuständig, Kairn übernimmt „semantisches Knowledge‑Graph‑Memory“, sobald verfügbar.
+
+***
+
+## Recommendations
+
+Konkret für dein Design:
+
+- Definiere in deiner TCS‑Spec drei Schichten im MCP‑Teil:
+
+1. **Context-Server‑Abstraktion** (für TCS‑Skills): TCS sieht nur „Context‑Server“, nicht, ob intern SQLite oder Kairn genutzt wird.
+2. **context-mode Gateway** als Default‑Implementation mit Registry + Security‑Scanner.
+3. **Optionale Kairn‑Integration**: Wenn `kairn` registriert ist, werden bestimmte Kontext‑Queries umgeleitet.
+- In CLAUDE.md (global/projekt/repo) beschreibst du nur:
+    - „Nutze Context‑Server für Session‑Kontext; falls Kairn vorhanden, nutze es für Projekt‑Wissen.“
+    - Alle Details (Registrierung, Security‑Scanning) leben im MCP‑Server und seiner Config.
+
+Wenn du möchtest, kann ich daraus im nächsten Schritt eine „TCS MCP Context Server Design“-Seite im gleichen TITLE‑/TABLE‑Stil wie deine anderen Docs schreiben, inkl. Abschnitt für Registry, Security‑Scanner und Kairn‑Mode.
+<span style="display:none">[^5_16][^5_17][^5_18][^5_19][^5_20][^5_21][^5_22][^5_23][^5_24][^5_25][^5_26][^5_27][^5_28][^5_29][^5_30][^5_31][^5_32][^5_33][^5_34][^5_35]</span>
+
+<div align="center">⁂</div>
+
+[^5_1]: https://github.com/lasso-security/mcp-gateway/releases
+
+[^5_2]: https://github.com/mksglu/context-mode
+
+[^5_3]: https://betterstack.com/community/guides/ai/context-mode-mcp/
+
+[^5_4]: https://www.lasso.security/resources/lasso-releases-first-open-source-security-gateway-for-mcp
+
+[^5_5]: https://primeline.cc/blog/persistent-memory-evolving-lite
+
+[^5_6]: https://www.lasso.security/blog/why-mcp-agents-are-the-next-cyber-battleground
+
+[^5_7]: https://www.lasso.security/use-cases/mcp
+
+[^5_8]: https://www.linkedin.com/pulse/stop-burning-your-context-window-we-built-mode-mert-koseoglu-c04nf
+
+[^5_9]: https://www.linkedin.com/posts/mksglu_github-mksgluclaude-context-mode-activity-7431589485726814208-Ft9w
+
+[^5_10]: https://news.ycombinator.com/item?id=47193064
+
+[^5_11]: https://cultofclaude.com/skills/claude-context-mode/
+
+[^5_12]: https://skills-rank.com/skill/mksglu/context-mode/context-mode
+
+[^5_13]: https://github.com/mcp-s-ai/secure-mcp-gateway
+
+[^5_14]: https://www.youtube.com/watch?v=mR6Ss6Tnzm4
+
+[^5_15]: https://primeline.cc
+
+[^5_16]: overlap-analysis.md
+
+[^5_17]: sources.md
+
+[^5_18]: tcs-vision.md
+
+[^5_19]: tdd-sdd-integration.md
+
+[^5_20]: SKILL.md
+
+[^5_21]: https://github.com/mksglu
+
+[^5_22]: https://github.com/Illumina/canvas
+
+[^5_23]: https://gist.github.com/donn/0c501ab625625c381fdf3210bf0ff275
+
+[^5_24]: https://github.com/mik3y/usb-serial-for-android
+
+[^5_25]: https://github.com/vllm-project/vllm-project.github.io/activity
+
+[^5_26]: https://github.com/siderolabs/talos
+
+[^5_27]: https://github.com/sickcodes/Docker-OSX/issues/647
+
+[^5_28]: https://github.com/ggcr/Super-Temporal-LIIF
+
+[^5_29]: https://github.com/AnarchyLinux/installer/issues/103
+
+[^5_30]: https://github.com/lasso-security/mcp-gateway/activity
+
+[^5_31]: https://github.com/libfuse/libfuse/issues/382
+
+[^5_32]: https://github.com/facebook/react-native/blob/055c941c4045468af4ff2b8162d3a35dd993b1b9/Libraries/vendor/emitter/EventEmitter.js
+
+[^5_33]: https://github.com/lasso-security/mcp-gateway/security
+
+[^5_34]: https://zread.ai/mksglu/context-mode
+
+[^5_35]: https://www.reddit.com/r/CLine/comments/1qx4m16/how_are_people_managing_context_memory_with_cline/
+
+
+---
+
+# lass uns einmal an der Strukur im Repo arbeiten, den Rest habe ich schon ganz gut definiert.
+
+Ich denke wir sollten docs/ai/ nehmen, oder hast du einen besseren vorschlag wo die Root für die "Memory Bank" hin soll?
+Ich will diese nicht verstecken, sie soll ja auch für den Nutzer direkt lesbar sein.
+
+dann finde ich den Ansatz von youngleaders nicht schlecht.
+
+- memory.md entspricht die routing info für das repo
+- general.md die generellen informationen für die arbeit im repo (lazy loaded von memory.md)
+- projects.md fällt je weg, die lebt ja in ~/Kouzou/projects/<project>/memory.md und wird über @ aus der repo CLAUDE.md geladen (falls notwendig)
+der Rest mit Tools, Domain directories würde dann ja gut passen.
+
+Die andere Frage ist welche anderen Verzeichnisse es Standardmäßig geben sollte und was normale Best Practices sind.
+
+Könnte man z.b alle build related files wie esbuild, package.json auch in ein Unterverzeichnis packen? Ich möchte die root des repo möglichst klein halten.
+
+Ich denke wir brauchen
+
+- docs
+- test
+- src
+
+was noch? Vor allen in Bezug auf dann Verzeichnis bezogene CLAUDE.mds
+
+Das lazy loading müßte halt nur entsprechend definiert werden, so wie in dem reddit artikle.
+
+---
+
+https://www.reddit.com/r/ClaudeAI/comments/1lr6occ/tip_managing_large_claudemd_files_with_document/
+
+I discovered a simple pattern that's been a game-changer, and wanted to share:
+
+# Instead of one huge file, use document references:
+
+``` markdown
+### 🗺️ Key Documentation References
+- **Docker Architecture**: `/docs/DOCKER_ARCHITECTURE.md` 🐳
+- **Database Architecture**: `/docs/DATABASE_ARCHITECTURE.md`
+- **PASSWORD TRUTH**: `/docs/PASSWORD_TRUTH.md` 🚨 READ THIS FIRST!
+- **JWT Authentication**: `/docs/JWT_AUTHENTICATION_ARCHITECTURE.md` 🔐
+- **Security Checklist**: `/docs/SECURITY_CHECKLIST.md` 🚨
+- **Feature Requests**: `/docs/enhancements/README.md`
+- **Health Monitoring V2**: `/docs/enhancements/HEALTH_MONITORING_V2.md` 🆕
+```
+
+
+# The key insight: Critical documentation pattern
+
+I added this to my CLAUDE.md:
+
+```markdown
+## 📚 CRITICAL DOCUMENTATION PATTERN
+**ALWAYS ADD IMPORTANT DOCS HERE!** When you create or discover:
+- Architecture diagrams → Add reference path here
+- Database schemas → Add reference path here  
+- Problem solutions → Add reference path here
+- Setup guides → Add reference path here
+
+This prevents context loss! Update this file IMMEDIATELY when creating important docs.
+```
+
+
+# Why this works so well:
+
+1. [**CLAUDE.md**](http://claude.md/) **stays manageable** - Mine is still ~470 lines but references 15+ detailed docs
+2. **Deep dives live elsewhere** - Complex architecture docs can be as long as needed
+3. **Instant context** - Claude Code knows exactly where to find specific info
+4. **Problem/solution tracking** - That `/docs/PASSWORD_TRUTH.md` saved me hours!
+5. **Version control friendly** - Changes to specific docs don't bloat the main file
+
+---
+
+Allerdings hatte er wohl das ganze nicht so im Griff und hatte nachher zu viel Informationen / Dateien.. aber das sollte ja mit unseren anderen Ansatz abgedeckt sein.
+
+Mich interessiert jetzt erst einmal die Struktur des Repos für unseren Ansatz.
+
+Summary
+`docs/ai/` als sichtbare Root für die Memory‑Bank passt gut zu deinem Ziel („nicht verstecken“) und zu TCS‑Vision; die Repo‑Struktur lässt sich darum herum mit wenigen Standard‑Verzeichnissen und gezielten Verzeichnis‑CLAUDE.mds sauber aufziehen.[^6_1][^6_2][^6_3]
+
+***
+
+## Empfohlene Repo-Struktur
+
+**Root-Ebene (möglichst schlank)**
+
+- `CLAUDE.md`
+    - kurz, referenziert nur:
+        - `docs/ai/memory/memory.md` (Routing/Index),
+        - `docs/ai/CRITICAL_DOCS.md` (Referenzliste wie im Reddit‑Pattern),
+        - Projekt‑Memory via `@~/Kouzou/projects/<project>/memory.md` (falls nötig).[^6_2][^6_3]
+- `docs/`
+    - `ai/` → Memory‑Bank + AI‑Spezifika (siehe unten).
+    - `architecture/`, `design/` etc. für fachliche Doku.
+- `src/` – Code.
+- `test/` – Tests.
+- Optional:
+    - `config/` – Build‑/Tooling‑Konfigs (siehe unten).
+    - `scripts/` – Hilfsskripte.
+
+Alles andere (esbuild, Vite, tsconfig, etc.) kannst du schrittweise in `config/` oder `config/build/` verschieben, solange die jeweiligen Tools das unterstützen. Die Root bleibt so im Wesentlichen: `CLAUDE.md`, `docs/`, `src/`, `test/`, `config/`, `package.json` (falls nötig).[^6_3][^6_1]
+
+***
+
+## Memory Bank unter docs/ai/
+
+Strukturvorschlag direkt aus TCS‑Vision + Youngleaders‑Pattern abgeleitet:[^6_2][^6_3]
+
+- `docs/ai/memory/`
+    - `memory.md`
+        - Index + Routing‑Info für das Repo, analog Conneelys `MEMORY.md` (≤ 200 Zeilen).[^6_3][^6_2]
+        - Enthält auch den „Critical Documentation Pattern“-Block mit Pfaden zu wichtigen Docs (wie im Reddit‑Beispiel), z.B.:
+            - `/docs/architecture/DOCKER_ARCHITECTURE.md`
+            - `/docs/architecture/DATABASE_SCHEMA.md`
+            - `/docs/security/SECURITY_CHECKLIST.md`.[^6_2]
+    - `general.md`
+        - generelle Regeln und Konventionen für das Repo (Naming, Code‑Style, Repo‑Ziele), lazy‑loaded über Referenz aus `memory.md`.[^6_3]
+    - `tools.md`
+        - repo‑spezifisches Tool‑Wissen: Build‑Pipeline, CI‑Skripte, lokale Tools, Besonderheiten.[^6_2][^6_3]
+    - `domain.md`
+        - Business‑Regeln, Datenmodelle, Architektur‑Entscheidungen für dieses Repo.[^6_3]
+    - `decisions.md`
+        - ADR‑Kurzformen oder Links auf echte ADR‑Files (z.B. `docs/architecture/adr/`).[^6_1][^6_3]
+    - `context.md`
+        - aktuelle Ziele, Fokusbereiche, evtl. kurze „current sprint context“, wird von memory‑cleanup regelmäßig ausgedünnt.[^6_1][^6_3]
+    - `troubleshooting.md`
+        - bekannte Probleme und Fixes, kann über cleanup in einen `archive/`‑Bereich verschoben werden.[^6_1][^6_2][^6_3]
+
+Damit ist `docs/ai/memory/memory.md` dein zentrales Routing‑Dokument (Index + „Critical Docs“-Liste), während einzelne Dateien fokussiert bleiben.[^6_2][^6_3]
+
+***
+
+## Verzeichnis-bezogene CLAUDE.md
+
+Du kannst die CLAUDE‑Discovery so nutzen, dass sie dein Lazy‑Loading verstärkt:[^6_4][^6_2]
+
+- Root: `CLAUDE.md`
+    - beschreibt nur die Grundregeln und verweist auf `docs/ai/memory/memory.md`.
+- `src/CLAUDE.md`
+    - Fokus auf Code‑Qualität, TDD/SDD‑Integration, Architektur‑Regeln für Implementierung.[^6_5][^6_3]
+- `test/CLAUDE.md`
+    - Fokus auf Test‑Struktur, Naming‑Konventionen, Coverage‑Erwartungen, evtl. Hinweise zu Mutation‑Testing.[^6_1][^6_3]
+- `docs/CLAUDE.md`
+    - Regeln für Dokumentation (wie Architektur‑Docs aufgebaut sein sollen, wo sie gelistet werden).[^6_3]
+- `docs/ai/CLAUDE.md` (optional)
+    - erklärt, wie Memory‑Bank genutzt und gepflegt wird (wann `memory.md` zu aktualisieren ist, wie `domain.md` vs. `decisions.md` zu trennen sind).[^6_3]
+
+Diese Dateien werden nur geladen, wenn du in dem jeweiligen Verzeichnis arbeitest – das ist effektiv „directory‑scoped lazy loading“ und ersetzt viele explizite Load‑Kommandos in der Root‑CLAUDE.[^6_4][^6_2]
+
+***
+
+## Build-/Tooling-Dateien verschlanken
+
+Best Practices in Richtung „saubere Root“:
+
+- `config/` oder `config/build/`
+    - `config/build/esbuild.config.ts`
+    - `config/build/vite.config.ts`
+    - `config/jest.config.ts` etc.
+- `package.json` bleibt in der Root (weil Tools und Menschen das erwarten), aber du kannst Scripts/Felder minimal halten und vom TCS‑Setup‑Skill generieren lassen.[^6_1][^6_3]
+
+In `docs/ai/memory/tools.md` beschreibst du, wo diese Konfigs liegen, damit Claude sie schnell findet, ohne die Root mit Hunderten Dateien zu füllen.[^6_2][^6_3]
+
+***
+
+## Lazy Loading / Routing-Definition
+
+Inhaltlich kannst du das Reddit‑Pattern direkt in `memory.md` (oder Root‑CLAUDE) adaptieren:[^6_2]
+
+- In `CLAUDE.md`:
+    - „Für alle wichtigen Docs siehe `docs/ai/memory/memory.md` → Section CRITICAL DOCUMENTATION.“
+- In `memory.md`:
+    - Liste der wichtigsten Docs mit absoluten oder relativen Pfaden, wie in deinem Zitat.
+    - Hinweis: „Wenn du neue Architektur‑/Setup‑/Security‑Docs anlegst, füge sie hier hinzu.“
+
+Zusätzlich:
+
+- `memory.md` erklärt, welche anderen Memory‑Files es gibt und wofür sie zuständig sind (general/tools/domain/...).[^6_3]
+
+***
+
+## Empfehlung
+
+- Ja, `docs/ai/` ist eine gute sichtbare Root für die Memory‑Bank; sie passt zum TCS‑Vision‑Layout (`.claude/memory` war dort nur „indicative“, nicht fest).[^6_3]
+- Ich würde als nächsten Schritt ein konkretes Skelett für `docs/ai/memory/memory.md` + `general.md` + einen minimalen `CLAUDE.md`‑Header entwerfen, damit du die Struktur im ersten Repo direkt ausprobieren kannst.
+
+Möchtest du als nächstes ein konkretes Markdown‑Skelett für `CLAUDE.md` und `docs/ai/memory/memory.md` (inkl. Critical‑Docs‑Abschnitt) haben?
+<span style="display:none">[^6_6]</span>
+
+<div align="center">⁂</div>
+
+[^6_1]: overlap-analysis.md
+
+[^6_2]: sources.md
+
+[^6_3]: tcs-vision.md
+
+[^6_4]: https://thomaslandgraf.substack.com/p/claude-codes-memory-working-with
+
+[^6_5]: tdd-sdd-integration.md
+
+[^6_6]: SKILL.md
+
