@@ -39,7 +39,8 @@ A file-based memory system that:
 - As a developer, I want routing rules in CLAUDE.md (not in MEMORY.md) so the index budget isn't wasted on instructions.
 
 ### Learning Capture
-- As a developer, I want corrections and learnings from a session to be routed to the correct category file automatically (via `memory-route` after `/reflect`), so I don't have to manually decide where each learning goes.
+- As a developer, I want corrections and learnings from a session to be routed to the correct scope and category file automatically (via `/memory`), so I don't have to manually decide where each learning goes.
+- As a developer, I want `/memory` to handle all three scopes (global, project, repo) so I have a single command for all learning capture rather than separate tools per scope.
 - As a developer, I want the memory index (memory.md) to stay under 200 lines so it loads within context budget on every session start.
 
 ### Maintenance
@@ -54,12 +55,12 @@ A file-based memory system that:
 **In scope (M2):**
 - `docs/ai/memory/` directory structure with 6 category files
 - Root CLAUDE.md template + per-directory CLAUDE.md templates (src/, test/, docs/, docs/ai/)
-- `tcs-helper:memory-route` skill
+- `tcs-helper:memory` skill (absorbs claude-reflect: queue capture, g/p/r routing, session reflection)
 - `tcs-helper:memory-sync` skill
 - `tcs-helper:memory-cleanup` skill
 - `tcs-helper:memory-promote` skill
 - `tcs-helper:setup` skill (project onboarding)
-- Integration with `claude-reflect` (memory-route extends /reflect)
+- Migration of `claude-reflect` core functionality — queue format, global routing, session-end flow
 - Scope × Lifetime × Category routing table
 
 **Out of scope (M5):**
@@ -74,19 +75,19 @@ A file-based memory system that:
 
 - [ ] Root CLAUDE.md for a new repo is < 100 lines after setup
 - [ ] `docs/ai/memory/memory.md` index stays ≤ 200 lines
-- [ ] Running `/reflect` followed by `/memory-route` correctly routes learnings to category files with no manual intervention
-- [ ] Running `/memory-route` twice on the same learnings does not create duplicate entries (idempotent)
-- [ ] `/memory-route` can be invoked standalone (without prior `/reflect`) by pasting learning text directly
+- [ ] Running `/memory` correctly routes learnings to the right scope (global/project/repo) and category file with no manual intervention
+- [ ] Running `/memory` twice on the same learnings does not create duplicate entries (idempotent)
+- [ ] `/memory` can be invoked standalone with learning text as a direct argument
 - [ ] `memory-sync` detects and reports: missing @import in CLAUDE.md, orphaned memory files, routing rules in wrong file, and index approaching 200-line budget
-- [ ] `memory-promote` surfaces a domain pattern as a tcs-patterns candidate and replaces the domain.md entry with a pointer after approval
+- [ ] `memory-promote` surfaces a domain pattern as a skill candidate, generates it in user-chosen global or repo location, and replaces the domain.md entry with a pointer after approval
 - [ ] `memory-promote` behaves gracefully when session history is absent (analyses domain.md alone, confidence = Low)
 - [ ] `tcs-helper:setup` generates complete `docs/ai/` structure in a new repo in one invocation
 - [ ] `tcs-helper:setup` running on a repo with an existing CLAUDE.md adds the memory section without overwriting existing content
 - [ ] All memory operations function without any MCP server installed
-- [ ] All memory operations function without `claude-reflect` installed (degraded mode: manual input only)
+- [ ] All memory operations function without any prior tool installed (no claude-reflect dependency)
 
 ## Non-Goals
 
-- This is not a replacement for `claude-reflect`. It extends it; installing claude-reflect enables automatic capture but is not required.
 - This is not a database or semantic search system. Files are human-readable markdown.
 - This is not a session state manager. Session/really-short-lived data is handled in M5.
+- `tcs-patterns` is not required — `memory-promote` generates skills to user's chosen global or repo location.
