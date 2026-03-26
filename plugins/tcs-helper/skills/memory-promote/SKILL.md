@@ -15,8 +15,8 @@ Detect promotable patterns in domain.md and generate skill stubs.
 ### Step 1 — Gather evidence (code via Bash)
 
 ```bash
-# Find session files for this repo
-ENCODED=$(python3 -c "import sys; p=sys.argv[1]; print(p.replace('/','-'))" "$(pwd)")
+# Find session files for this repo (uses same encoding as reflect_utils.encode_project_path)
+ENCODED=$(python3 -c "import sys; sys.path.insert(0,'${CLAUDE_PLUGIN_ROOT}/scripts'); from lib.reflect_utils import encode_project_path; print(encode_project_path(sys.argv[1]))" "$(pwd)")
 ls ~/.claude/projects/$ENCODED/*.jsonl 2>/dev/null | head -20
 
 # Extract user messages from session files (if available)

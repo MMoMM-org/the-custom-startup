@@ -39,10 +39,13 @@ def load_queue(project_path: str) -> list:
 
 
 def save_queue(project_path: str, queue: list) -> None:
-    """Save the learnings queue for a project."""
-    queue_path = get_queue_path(project_path)
-    with open(queue_path, 'w', encoding='utf-8') as f:
-        json.dump(queue, f, indent=2, ensure_ascii=False)
+    """Save the learnings queue for a project. Silently no-ops on I/O errors."""
+    try:
+        queue_path = get_queue_path(project_path)
+        with open(queue_path, 'w', encoding='utf-8') as f:
+            json.dump(queue, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
 
 
 def create_queue_item(
