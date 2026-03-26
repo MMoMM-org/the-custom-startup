@@ -12,7 +12,7 @@ set -euo pipefail
 # Configuration
 # ==============================================================================
 
-PLUGINS="tcs-start@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup"
+PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup"
 
 # ==============================================================================
 # Colors
@@ -148,7 +148,7 @@ detect_installation() {
     local style
     style=$(jq -r '.outputStyle // ""' "$SETTINGS_FILE" 2>/dev/null)
     case "$style" in
-      "tcs-start:The Startup"|"tcs-start:The ScaleUp")
+      "tcs-workflow:The Startup"|"tcs-workflow:The ScaleUp")
         FOUND_OUTPUT_STYLE="$style"
         info "Output style: $style"
         ;;
