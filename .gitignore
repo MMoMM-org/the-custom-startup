@@ -1,5 +1,6 @@
 # IDE
 .claude/
+!.claude/startup.toml
 .idea/
 .vscode/
 *.swp

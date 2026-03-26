@@ -33,10 +33,21 @@ State {
 ## Constraints
 
 **Path Resolution (before any file operation):**
-1. Check `.claude/startup.toml` for `specs_dir` setting → use that path.
-2. Fall back to `the-custom-startup/specs/`.
-3. Fall back to `.start/specs/` (migration compatibility).
-4. Fall back to `docs/specs/` (legacy).
+
+```bash
+# startup.toml resolution — bash 3.2 compatible
+STARTUP_TOML=".claude/startup.toml"
+TCS_DOCS_BASE="docs/XDD"  # default
+
+if [ -f "$STARTUP_TOML" ]; then
+  _val=$(sed -n '/^\[tcs\]/,/^\[/p' "$STARTUP_TOML" | grep '^docs_base' | head -1 | sed 's/docs_base[[:space:]]*=[[:space:]]*//' | tr -d '"'"'"' ')
+  [ -n "$_val" ] && TCS_DOCS_BASE="$_val"
+fi
+
+TCS_SPECS_DIR="${TCS_DOCS_BASE}/specs"
+TCS_ADR_DIR="${TCS_DOCS_BASE}/adr"
+TCS_IDEAS_DIR="${TCS_DOCS_BASE}/ideas"
+```
 
 **Always:**
 - Use spec.py (co-located with this SKILL.md) for all directory operations.

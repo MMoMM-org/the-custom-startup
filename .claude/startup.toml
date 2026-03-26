@@ -1,0 +1,5 @@
+# TCS workflow configuration
+# docs_base: base directory for all TCS-managed artifacts
+# Subdirs derived automatically: {docs_base}/specs/, {docs_base}/adr/, {docs_base}/ideas/
+[tcs]
+docs_base = "docs/XDD"
