@@ -16,3 +16,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# AI/Documentation Cache
+docs/ai/external/
