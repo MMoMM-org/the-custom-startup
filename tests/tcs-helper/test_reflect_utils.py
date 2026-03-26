@@ -2,7 +2,6 @@
 import json
 import os
 import sys
-import tempfile
 import pytest
 from unittest.mock import patch
 
@@ -16,7 +15,8 @@ from lib.reflect_utils import (
 def test_encode_project_path_replaces_slashes():
     result = encode_project_path('/home/user/myproject')
     assert '/' not in result
-    assert '-' in result or '_' in result
+    # Leading - is preserved (root / → -), matching Claude Code's actual directory naming
+    assert result == '-home-user-myproject'
 
 
 def test_get_queue_path_returns_project_specific_path(tmp_path):

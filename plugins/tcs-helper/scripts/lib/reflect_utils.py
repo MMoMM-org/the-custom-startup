@@ -12,8 +12,8 @@ CLAUDE_DIR = os.path.expanduser('~/.claude')
 
 def encode_project_path(project_path: str) -> str:
     """Encode a project path to a safe directory name (matches claude-reflect encoding)."""
-    # Claude Code uses URL-encoding style: replace / with - and other special chars
-    encoded = project_path.replace('/', '-').replace(' ', '_').lstrip('-')
+    # Claude Code replaces / with - and preserves the leading - (root / → -)
+    encoded = project_path.replace('/', '-').replace(' ', '_')
     return encoded
 
 
