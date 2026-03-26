@@ -557,7 +557,7 @@ curl -fsSL https://raw.githubusercontent.com/rsmdt/the-startup/main/install.sh |
 **What it does:**
 - Adds the `rsmdt/the-startup` marketplace
 - Installs `team@the-startup` and `start@the-startup` plugins
-- Configures `tcs-start:The Startup` as the default output style
+- Configures `tcs-workflow:The Startup` as the default output style
 - Optionally installs the git-aware statusline
 
 **Flags:**
@@ -639,7 +639,7 @@ The capture workflow always checks existing documentation before creating new fi
 
 The `start` plugin includes two output styles for different working preferences. Both share the same operational fundamentals (verification, code ownership, scope management) but express them differently.
 
-**Activate via:** `/output-style tcs-start:The Startup` or `/output-style tcs-start:The ScaleUp`
+**Activate via:** `/output-style tcs-workflow:The Startup` or `/output-style tcs-workflow:The ScaleUp`
 
 ---
 
