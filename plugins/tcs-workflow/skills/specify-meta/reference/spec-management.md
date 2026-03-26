@@ -17,7 +17,7 @@ Before any file operation, resolve the specs directory using this priority chain
 ## Directory Structure
 
 ```
-the-custom-startup/specs/          # default location (configurable via startup.toml)
+docs/XDD/specs/                    # default location (configurable via startup.toml)
 ├── 001-user-authentication/
 │   ├── README.md                 # Managed by specify-meta skill
 │   ├── requirements.md           # Created by specify-requirements skill

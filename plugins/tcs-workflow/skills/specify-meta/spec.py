@@ -54,11 +54,10 @@ def get_template_path(template_name: str) -> Path:
 
 def resolve_specs_dir() -> Path:
     """
-    Resolve the active specs directory.
+    Return the active specs directory.
 
-    Resolution order:
-    1. Check `.claude/startup.toml` for `docs_base` → use `{docs_base}/specs/`
-    2. Fall back to `docs/XDD/specs/` (default)
+    Currently returns the hardcoded default (docs/XDD/specs).
+    TODO(Phase 2): read .claude/startup.toml [tcs] docs_base and return {docs_base}/specs.
     """
     return SPECS_DIR
 
