@@ -12,7 +12,15 @@ from lib.reflect_utils import load_queue, CLAUDE_DIR
 def main():
     try:
         project_path = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
-        queue = load_queue(project_path)
+        queue_override = os.environ.get('TCS_QUEUE_OVERRIDE')
+        if queue_override:
+            try:
+                with open(queue_override, 'r') as f:
+                    queue = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                queue = []
+        else:
+            queue = load_queue(project_path)
         if not queue:
             sys.exit(0)
 

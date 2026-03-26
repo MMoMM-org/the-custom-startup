@@ -7,7 +7,7 @@ import sys
 
 # Support queue path override for tests
 sys.path.insert(0, os.path.dirname(__file__))
-from lib.reflect_utils import detect_learning, load_queue, save_queue, create_queue_item, get_queue_path
+from lib.reflect_utils import detect_learning, load_queue, save_queue, create_queue_item
 
 
 def main():

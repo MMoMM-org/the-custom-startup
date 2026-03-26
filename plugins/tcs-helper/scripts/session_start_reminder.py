@@ -5,7 +5,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lib.reflect_utils import load_queue, get_queue_path
+from lib.reflect_utils import load_queue
 
 
 def main():
