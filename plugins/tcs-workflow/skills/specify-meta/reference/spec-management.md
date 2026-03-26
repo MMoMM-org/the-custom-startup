@@ -11,12 +11,8 @@
 
 Before any file operation, resolve the specs directory using this priority chain:
 
-1. Read `specs_dir` from `.claude/startup.toml` (written by install.sh)
-2. Fall back to `the-custom-startup/specs/`
-3. Fall back to `.start/specs/` (migration compatibility)
-4. Fall back to `docs/specs/` (legacy compatibility)
-
-Same chain applies for `ideas_dir` / `the-custom-startup/ideas/` / `.start/ideas/`.
+1. Check `.claude/startup.toml` for `docs_base` → use `{docs_base}/specs/`
+2. Fall back to `docs/XDD/specs/` (default)
 
 ## Directory Structure
 
@@ -37,11 +33,11 @@ the-custom-startup/specs/          # default location (configurable via startup.
     └── ...
 ```
 
-## Legacy Fallback
+## Path Resolution Notes
 
-The script supports backward compatibility:
+The script resolves specs directory at runtime:
 
-- **Read**: Checks `startup.toml` → `the-custom-startup/specs/` → `.start/specs/` → `docs/specs/`
+- **Read**: Checks `startup.toml` → `docs/XDD/specs/` (default)
 - **ID scanning**: Scans the resolved directory, takes max ID
 - **File names**: Supports both new (`requirements.md`, `solution.md`) and legacy (`product-requirements.md`, `solution-design.md`)
 - **Plan**: Supports both `plan/` directory and legacy `implementation-plan.md`

@@ -4,9 +4,7 @@
 # Fallback chain (first match wins):
 #   1. specs_dir from .claude/startup.toml in current working directory
 #   2. specs_dir from ~/.claude/startup.toml
-#   3. the-custom-startup/specs  (if directory exists)
-#   4. .start/specs              (if directory exists)
-#   5. docs/specs                (last resort)
+#   3. docs/XDD/specs            (default)
 #
 # Usage: scripts/get-specs-dir.sh
 # Output: path string, no trailing slash, to stdout
@@ -60,20 +58,8 @@ main() {
     return 0
   }
 
-  # 3. the-custom-startup/specs (exists as directory)
-  if [ -d "$PWD/the-custom-startup/specs" ]; then
-    printf '%s\n' "the-custom-startup/specs"
-    return 0
-  fi
-
-  # 4. .start/specs (exists as directory)
-  if [ -d "$PWD/.start/specs" ]; then
-    printf '%s\n' ".start/specs"
-    return 0
-  fi
-
-  # 5. docs/specs (last resort — always return something)
-  printf '%s\n' "docs/specs"
+  # 3. docs/XDD/specs (default — always return something)
+  printf '%s\n' "docs/XDD/specs"
   return 0
 }
 

@@ -22,8 +22,7 @@ script_dir = Path(__file__).resolve().parent
 plugin_root = script_dir.parent.parent
 
 # Specs are created in the current working directory
-SPECS_DIR = Path(".start/specs")
-LEGACY_SPECS_DIR = Path("docs/specs")
+SPECS_DIR = Path("docs/XDD/specs")
 # Skills directory for primary template lookup
 SKILLS_DIR = plugin_root / "skills"
 # Templates directory for fallback (deprecated)
@@ -58,30 +57,24 @@ def resolve_specs_dir() -> Path:
     Resolve the active specs directory.
 
     Resolution order:
-    1. .start/specs/ (primary)
-    2. docs/specs/ (legacy fallback)
+    1. Check `.claude/startup.toml` for `docs_base` → use `{docs_base}/specs/`
+    2. Fall back to `docs/XDD/specs/` (default)
     """
-    if SPECS_DIR.exists():
-        return SPECS_DIR
-    if LEGACY_SPECS_DIR.exists():
-        return LEGACY_SPECS_DIR
-    return SPECS_DIR  # default to new location for creation
+    return SPECS_DIR
 
 
 def get_next_spec_id() -> str:
     """Get next available spec ID by scanning existing directories."""
     max_id = 0
 
-    # Check both directories for existing specs
-    for specs_dir in [SPECS_DIR, LEGACY_SPECS_DIR]:
-        if specs_dir.exists():
-            for dir_path in specs_dir.iterdir():
-                if dir_path.is_dir():
-                    match = re.match(r'^(\d{3})-', dir_path.name)
-                    if match:
-                        num = int(match.group(1))
-                        if num > max_id:
-                            max_id = num
+    if SPECS_DIR.exists():
+        for dir_path in SPECS_DIR.iterdir():
+            if dir_path.is_dir():
+                match = re.match(r'^(\d{3})-', dir_path.name)
+                if match:
+                    num = int(match.group(1))
+                    if num > max_id:
+                        max_id = num
 
     # Return next ID with zero-padding
     return f"{max_id + 1:03d}"
@@ -97,17 +90,14 @@ def sanitize_name(name: str) -> str:
 
 def find_spec_dir(spec_id: str) -> Optional[Path]:
     """
-    Find a spec directory by ID, checking both locations.
+    Find a spec directory by ID.
 
-    Resolution order:
-    1. .start/specs/[NNN]-*/ (primary)
-    2. docs/specs/[NNN]-*/ (legacy fallback)
+    Looks in docs/XDD/specs/ (resolved from startup.toml or default).
     """
-    for specs_dir in [SPECS_DIR, LEGACY_SPECS_DIR]:
-        if specs_dir.exists():
-            for dir_path in specs_dir.iterdir():
-                if dir_path.is_dir() and dir_path.name.startswith(f"{spec_id}-"):
-                    return dir_path
+    if SPECS_DIR.exists():
+        for dir_path in SPECS_DIR.iterdir():
+            if dir_path.is_dir() and dir_path.name.startswith(f"{spec_id}-"):
+                return dir_path
     return None
 
 
