@@ -56,7 +56,7 @@ SETTINGS_FILE=""
 
 # Detected items (non-empty = found)
 FOUND_PLUGINS=""       # space-separated list
-FOUND_OUTPUT_STYLE=""  # e.g. "tcs-start:The Startup"
+FOUND_OUTPUT_STYLE=""  # e.g. "tcs-workflow:The Startup"
 FOUND_AGENT_TEAMS=""   # "yes" if set
 FOUND_STATUSLINE=""    # command string
 FOUND_SL_SCRIPTS_DIR="" # directory containing statusline scripts
