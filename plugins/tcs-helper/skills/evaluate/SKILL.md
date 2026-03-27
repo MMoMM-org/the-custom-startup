@@ -1,6 +1,6 @@
 ---
 name: evaluate
-description: "Score a proposed or existing skill/agent against the TCS vision criteria before absorbing it. Invoke before importing external skills, accepting community contributions, or deciding whether to build a new skill. Produces ABSORB / MERGE / SKIP verdict with reasoning."
+description: "Score a proposed or existing skill/agent against TCS vision criteria before absorbing it. Use when importing external skills, accepting community contributions, or deciding whether to build a new skill."
 user-invocable: true
 argument-hint: "<path/to/SKILL.md> | <description of proposed skill>"
 allowed-tools: Read, Glob, Grep, AskUserQuestion
@@ -49,7 +49,6 @@ State {
 - Run all 13 checks — never skip a category.
 - Flag blocking issues (any check that scores 0 in Uniqueness or Integration) separately.
 - Suggest the correct plugin placement even if verdict is SKIP.
-- Read `docs/concept/tcs-vision.md` if available — it is the authoritative source for criteria.
 
 **Never:**
 - Issue ABSORB verdict when any blocking issue exists.
@@ -58,7 +57,7 @@ State {
 
 ## Workflow
 
-### Step 1 — Parse Input
+### 1. Parse Input
 
 ```
 If $ARGUMENTS is a file path and the file exists:
@@ -73,7 +72,7 @@ Else:
 
 If blank: AskUserQuestion — "Provide a skill file path or a one-sentence description of the proposed skill."
 
-### Step 2 — Load Context
+### 2. Load Context
 
 ```bash
 # Existing skill list for overlap checks
@@ -87,7 +86,7 @@ grep -r "^description:" plugins/*/skills/*/SKILL.md 2>/dev/null
 
 Read `docs/concept/tcs-vision.md` if it exists (authoritative criteria source).
 
-### Step 3 — Run Checks
+### 3. Run Checks
 
 Evaluate each check. Score YES=1, PARTIAL=0.5, NO=0.
 
@@ -139,7 +138,7 @@ For I2: a skill that adds 1-2 steps to an existing workflow is a merge candidate
 
 For Description mode: score Q checks based on the description's implied design (PARTIAL if unclear).
 
-### Step 4 — Score and Verdict
+### 4. Score and Verdict
 
 ```
 score = sum of all check scores (max 13)
@@ -154,7 +153,7 @@ If score < 5:     verdict = SKIP        "Park for later — revisit if [conditio
 - U1=YES AND U2=NO → downgrade verdict to MERGE or SKIP regardless of score
 - I1=YES (conflict exists) → blocking issue, cannot ABSORB until resolved
 
-### Step 5 — Output Report
+### 5. Output Report
 
 ```
 ## TCS Skill Evaluation: [target name]

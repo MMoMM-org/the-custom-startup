@@ -1,6 +1,6 @@
 ---
 name: import-skill
-description: "Fetch a single skill from a GitHub repository and install it to ~/.claude/skills/ — without installing the full plugin. Use when you want one skill from a community repo, a teammate's plugin, or the TCS marketplace. Runs tcs-helper:evaluate before installing."
+description: "Fetch a single skill from a GitHub repository and install it to ~/.claude/skills/ without installing the full plugin. Use when you want one skill from a community repo, a teammate's plugin, or the TCS marketplace."
 user-invocable: true
 argument-hint: "<owner/repo> <skill-name> [--no-eval] [--dest <path>]"
 allowed-tools: Bash, Read, Write, AskUserQuestion
@@ -34,7 +34,7 @@ State {
   source: SkillSource
   target: InstallTarget
   files_fetched: string[]
-  eval_verdict: ABSORB | ABSORB_ADAPT | MERGE | SKIP | skipped
+  eval_verdict: ABSORB | ABSORB_ADAPT | MERGE | SKIP | SKIPPED
   installed: boolean
 }
 ```
@@ -55,7 +55,7 @@ State {
 
 ## Workflow
 
-### Step 1 — Parse Arguments
+### 1. Parse Arguments
 
 ```
 $ARGUMENTS format:
@@ -75,7 +75,7 @@ Parse into:
 
 If arguments are missing or malformed: AskUserQuestion with the expected format.
 
-### Step 2 — Discover Skill Location
+### 2. Discover Skill Location
 
 Search the repo for the skill directory. Try these paths in order:
 
@@ -103,7 +103,7 @@ If multiple matches: AskUserQuestion — show numbered list of candidate paths, 
 
 If no match: Report "Skill `{skill_name}` not found in `{owner}/{repo}`." and stop.
 
-### Step 3 — Preview
+### 3. Preview
 
 Show the user what will be fetched:
 
@@ -121,7 +121,7 @@ Install destination: {dest}
 
 AskUserQuestion: "Proceed with fetch?" — Yes / Cancel
 
-### Step 4 — Fetch Files
+### 4. Fetch Files
 
 List the skill directory contents:
 
@@ -136,7 +136,7 @@ For subdirectories (reference/, templates/, examples/): recurse one level.
 
 Store fetched content in memory; do not write to disk yet.
 
-### Step 5 — Evaluate (unless --no-eval)
+### 5. Evaluate (unless --no-eval)
 
 Pass the fetched SKILL.md content to `tcs-helper:evaluate` conceptually:
 
@@ -164,9 +164,9 @@ match (eval_verdict) {
 }
 ```
 
-If `--no-eval`: skip this step, set eval_verdict = skipped.
+If `--no-eval`: skip this step, set eval_verdict = SKIPPED.
 
-### Step 6 — Check Destination
+### 6. Check Destination
 
 ```bash
 [ -d "{dest}" ] && echo "EXISTS" || echo "CLEAR"
@@ -176,7 +176,7 @@ If destination exists:
 - AskUserQuestion: "Destination `{dest}` already exists. Overwrite / Rename to `{skill_name}-imported` / Abort?"
 - Rename appends `-imported` suffix
 
-### Step 7 — Install
+### 7. Install
 
 Create destination directory and write each fetched file:
 
@@ -189,13 +189,13 @@ mkdir -p "{dest}/examples"    # only if example files were fetched
 
 Write each file using the Write tool (preserves line endings, no shell escaping issues).
 
-### Step 8 — Report
+### 8. Report
 
 ```
 Installed: {skill_name}
 Destination: {dest}
 Files written: {N}
-Evaluation: {verdict | skipped}
+Evaluation: {verdict | SKIPPED}
 
 To use: /{skill_name}
 ```
