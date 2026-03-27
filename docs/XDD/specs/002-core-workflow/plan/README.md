@@ -73,10 +73,10 @@ Each phase is defined in a separate file. Tasks follow: **Prime** (context) → 
 
 > **Dependency order**: Phase 1 must complete before all others. Phases 2+3 can run in parallel after Phase 1. Phase 4 requires Phase 3. Phase 5 requires Phases 2+4. Phase 6 requires all.
 
-- [ ] [Phase 1: Foundation](phase-1.md)
-- [ ] [Phase 2: XDD Skill Family Renames](phase-2.md)
-- [ ] [Phase 3: TDD Enforcement Core](phase-3.md)
-- [ ] [Phase 4: Core Orchestration](phase-4.md)
+- [x] [Phase 1: Foundation](phase-1.md)
+- [x] [Phase 2: XDD Skill Family Renames](phase-2.md)
+- [x] [Phase 3: TDD Enforcement Core](phase-3.md)
+- [x] [Phase 4: Core Orchestration](phase-4.md)
 - [ ] [Phase 5: Parallel Skills Expansion](phase-5.md)
 - [ ] [Phase 6: Integration & Validation](phase-6.md)
 
