@@ -87,6 +87,7 @@ SPECS_DIR_NAME=""  # e.g. "the-custom-startup"
 PROMPTS=""         # yes | skip
 PROMPTS_BASE_DIR="" # absolute path, e.g. ~/.claude/the-custom-startup
 AGENT_TEAMS=""     # yes | no
+SATORI="no"        # yes | no
 STATUSLINE=""      # yes | skip
 STATUSLINE_REPLACE="" # yes | keep | skip  (when existing found)
 
@@ -382,7 +383,53 @@ choose_agent_teams() {
 }
 
 # ==============================================================================
-# Step 8: choose_statusline
+# Step 8: choose_satori
+# ==============================================================================
+
+choose_satori() {
+  printf "\n${BRIGHT_GREEN}── Satori MCP Gateway${RESET}\n\n"
+  printf "  Satori routes tool calls to downstream MCP servers and captures session context.\n\n"
+  ask "Install Satori? [y/N]:"
+  local choice
+  read -r choice </dev/tty
+  case "$choice" in
+    [yY]|[yY][eE][sS]) SATORI="yes"; success "Satori: will install" ;;
+    *)                  SATORI="no";  info    "Satori: skipped" ;;
+  esac
+}
+
+_write_satori_mcp_config() {
+  local abs_path="$1"
+  local settings_file
+
+  if [[ -f "$SETTINGS_FILE" ]]; then
+    settings_file="$SETTINGS_FILE"
+  elif [[ -f "$HOME/.claude/settings.json" ]]; then
+    settings_file="$HOME/.claude/settings.json"
+  else
+    warn "No Claude Code settings.json found — create one and add Satori manually:"
+    printf "  ${DIM}{ \"mcpServers\": { \"satori\": { \"command\": \"node\", \"args\": [\"$abs_path\"] } } }${RESET}\n"
+    return
+  fi
+
+  python3 - "$settings_file" "$abs_path" << 'PYEOF'
+import json, sys
+settings_file, abs_path = sys.argv[1], sys.argv[2]
+with open(settings_file) as f:
+    data = json.load(f)
+data.setdefault("mcpServers", {})["satori"] = {
+    "command": "node",
+    "args": [abs_path]
+}
+with open(settings_file, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+print("  Satori MCP entry written to " + settings_file)
+PYEOF
+}
+
+# ==============================================================================
+# Step 10: choose_statusline
 # ==============================================================================
 
 choose_statusline() {
@@ -431,7 +478,7 @@ choose_statusline() {
 }
 
 # ==============================================================================
-# Step 9: confirm_summary
+# Step 11: confirm_summary
 # ==============================================================================
 
 # Return plugin display string (space separated → comma separated)
@@ -472,6 +519,12 @@ confirm_summary() {
     printf "  %-22s %s\n" "Agent Teams:" "(skipped)"
   fi
 
+  if [[ "$SATORI" == "yes" ]]; then
+    printf "  %-22s %s\n" "Satori:" "install + build"
+  else
+    printf "  %-22s %s\n" "Satori:" "(skipped)"
+  fi
+
   case "$STATUSLINE" in
     yes)
       if [[ "$STATUSLINE_REPLACE" == "keep" ]]; then
@@ -498,7 +551,7 @@ confirm_summary() {
 }
 
 # ==============================================================================
-# Step 10: do_install
+# Step 12: do_install
 # ==============================================================================
 
 do_install() {
@@ -712,6 +765,36 @@ do_install() {
   elif [[ "$STATUSLINE" == "yes" && "$STATUSLINE_REPLACE" == "keep" ]]; then
     info "Keeping existing statusline configuration"
   fi
+
+  # --- Satori -----------------------------------------------------------------
+  if [[ "$SATORI" == "yes" ]]; then
+    info "Initializing Satori submodule..."
+    git submodule update --init modules/satori 2>/dev/null || true
+
+    info "Building Satori..."
+    local satori_dir
+    if [[ -n "$this_dir" && -d "$this_dir/modules/satori" ]]; then
+      satori_dir="$this_dir/modules/satori"
+    else
+      satori_dir="$(pwd)/modules/satori"
+    fi
+
+    if [[ ! -d "$satori_dir" ]]; then
+      warn "Satori directory not found at $satori_dir — skipping"
+    else
+      (cd "$satori_dir" && npm install --silent && npm run build --silent) || {
+        warn "Satori build failed — skipping MCP config"
+        return
+      }
+
+      local satori_abs
+      satori_abs="$(cd "$satori_dir" && pwd)/dist/src/index.js"
+
+      info "Writing Satori MCP config entry..."
+      _write_satori_mcp_config "$satori_abs"
+      success "Satori installed: $satori_abs"
+    fi
+  fi
 }
 
 # ==============================================================================
@@ -779,6 +862,7 @@ main() {
   choose_specs_dir
   choose_prompts
   choose_agent_teams
+  choose_satori
   choose_statusline
   confirm_summary
   do_install
