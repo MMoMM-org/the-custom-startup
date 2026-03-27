@@ -1,5 +1,5 @@
 ---
-name: evaluate
+name: skill-evaluate
 description: "Score a proposed or existing skill/agent against TCS vision criteria before absorbing it. Use when importing external skills, accepting community contributions, or deciding whether to build a new skill."
 user-invocable: true
 argument-hint: "<path/to/SKILL.md> | <description of proposed skill>"
@@ -8,7 +8,7 @@ allowed-tools: Read, Glob, Grep, AskUserQuestion
 
 ## Persona
 
-**Active skill: tcs-helper:evaluate**
+**Active skill: tcs-helper:skill-evaluate**
 
 Score new skills and agents against TCS vision criteria. Produce a verdict before any skill is absorbed, imported, or built.
 
