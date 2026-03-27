@@ -41,12 +41,16 @@ State {
 - Propose actions and await user decision — "Want me to...?"
 - Be honest when you haven't checked something or are stuck.
 - Apply minimal fix, run tests, and report actual results.
+- Require a stated hypothesis before writing any fix.
+- Apply CoD mode in investigation — abbreviated structured reasoning, not verbose output.
 
 **Never:**
 - Claim to have analyzed code you haven't read.
 - Apply fixes without user approval.
 - Present walls of code — show only relevant sections.
 - Skip test verification after applying a fix.
+- Write a fix before a hypothesis is confirmed.
+- Accept shortcuts: retrying without reason, force-passing tests, skipping tests, assuming flakiness.
 
 ## Reference Materials
 
@@ -92,6 +96,26 @@ match (mode) {
   }
 }
 
+CoD mode applies to all search steps in this investigation. Use abbreviated structured notation:
+- Finding: [file:line] — [one-line observation]
+- Hypothesis: [concise statement]
+- Evidence: [ref] → [what it confirms/refutes]
+
+Use `--no-cod` argument to disable and use verbose output.
+
+### Anti-Shortcut Gate
+
+Before proceeding to Fix, check the proposed action against this table:
+
+| Shortcut | Signal | Response |
+|----------|--------|----------|
+| Retry without reason | "let me try again" without new hypothesis | BLOCK — state a new hypothesis first |
+| Force-pass | commenting out assertions, `--force`, skip flags | BLOCK — find root cause instead |
+| Skip test | "this test is probably wrong" | BLOCK — verify the test logic first |
+| Assume flaky | "it's just flaky" without evidence | BLOCK — reproduce the failure deterministically |
+
+If any shortcut is detected: stop, name the shortcut, and redirect to hypothesis formation.
+
 ### 4. Find Root Cause
 
 Process evidence:
@@ -101,10 +125,14 @@ Process evidence:
 
 ### 5. Fix and Verify
 
+Confirm a hypothesis is on record before proceeding. If no confirmed hypothesis exists, return to Step 3.
+
 Propose minimal fix targeting root cause.
 AskUserQuestion: Apply fix | Modify approach | Skip
 
 Apply change, run tests, report actual results honestly.
 
 AskUserQuestion: Add test case for this bug | Check for pattern elsewhere | Done
+
+When resolved, announce: "Bug resolved. Run `/verify` to confirm, then `/review` if on a feature branch."
 
