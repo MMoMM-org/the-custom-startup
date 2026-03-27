@@ -1,0 +1,24 @@
+{
+  "name": "tcs-patterns",
+  "version": "1.0.0",
+  "description": "Domain pattern skills for TCS projects. Install only the patterns relevant to your stack.",
+  "author": {
+    "name": "Marcus Breiden"
+  },
+  "homepage": "https://github.com/MMoMM-org/the-custom-startup",
+  "repository": "https://github.com/MMoMM-org/the-custom-startup",
+  "license": "MIT",
+  "keywords": [
+    "patterns",
+    "ddd",
+    "hexagonal",
+    "typescript",
+    "testing",
+    "twelve-factor",
+    "mcp",
+    "node",
+    "python",
+    "go",
+    "api"
+  ]
+}
