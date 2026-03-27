@@ -27,10 +27,13 @@ miyo-satori/
 ├── src/
 │   ├── index.ts                  # Entry: MCP server bootstrap, tool registration
 │   ├── context/
-│   │   ├── store.ts              # SQLite FTS5 wrapper (CRUD + FTS queries)
-│   │   ├── summarizer.ts         # Compress raw tool output → compact summary
-│   │   ├── session-guide.ts      # Aggregate summaries → ≤2KB session guide
-│   │   └── schema.sql            # DB schema (applied on first run)
+│   │   ├── db.ts                 # SQLiteBase subclass — opens DB, WAL pragmas, schema migration
+│   │   ├── session-db.ts         # Session event store (session_events, session_meta, session_resume)
+│   │   ├── content-db.ts         # Content capture store (captures + FTS5)
+│   │   ├── snapshot.ts           # Build XML resume snapshot from session events (pure functions)
+│   │   ├── extract.ts            # Map tool hook payloads → SessionEvent objects
+│   │   ├── summarizer.ts         # Compress raw tool output → compact summary (content store)
+│   │   └── schema.sql            # Combined DB schema (applied on first run)
 │   ├── gateway/
 │   │   ├── registry.ts           # Downstream server registry (load, validate, lookup)
 │   │   └── router.ts             # satori_exec routing: server lookup → handler → downstream
@@ -211,15 +214,77 @@ No hashing or global path needed; data lives alongside `satori.toml`.
 <repo-root>/
 ├── satori.toml          # config (committed)
 ├── .satori/             # data dir (gitignored)
-│   ├── db.sqlite        # captures + session guides
+│   ├── db.sqlite        # session events + content captures
 │   └── scanner.log      # audit log
 └── .gitignore           # Satori install adds .satori/ entry
 ```
 
 Global config (`~/.satori/config.toml`) stays global. Only runtime data is repo-local.
 
+The DB has two logical stores in one file:
+
+### Session Event Store (session awareness)
+
+Derived from context-mode's implementation. Tracks what Claude is doing in this session
+so the snapshot can restore context after a compaction.
+
 ```sql
--- Tool output captures
+-- Raw events captured by hooks during a session
+CREATE TABLE IF NOT EXISTS session_events (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id  TEXT    NOT NULL,
+  type        TEXT    NOT NULL,   -- e.g. file_read, task_create, rule_content
+  category    TEXT    NOT NULL,   -- file | task | rule | decision | cwd | error |
+                                  --   env | git | subagent | intent | mcp | plan
+  priority    INTEGER NOT NULL DEFAULT 2,  -- 1=highest, 5=lowest; drives snapshot budget
+  data        TEXT    NOT NULL,
+  source_hook TEXT    NOT NULL,
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  data_hash   TEXT    NOT NULL DEFAULT ''  -- SHA256 prefix; dedup key
+);
+
+-- Per-session metadata
+CREATE TABLE IF NOT EXISTS session_meta (
+  session_id    TEXT    PRIMARY KEY,
+  project_dir   TEXT    NOT NULL,
+  started_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+  last_event_at TEXT,
+  event_count   INTEGER NOT NULL DEFAULT 0,
+  compact_count INTEGER NOT NULL DEFAULT 0
+);
+
+-- Pending XML snapshots (written at PreCompact, consumed at SessionStart)
+CREATE TABLE IF NOT EXISTS session_resume (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id  TEXT    NOT NULL UNIQUE,
+  snapshot    TEXT    NOT NULL,   -- XML ≤2048 bytes
+  event_count INTEGER NOT NULL,
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  consumed    INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_events_session  ON session_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_events_type     ON session_events(session_id, type);
+CREATE INDEX IF NOT EXISTS idx_session_events_priority ON session_events(session_id, priority);
+```
+
+**Event categories and priority tiers:**
+
+| Category | Priority | Snapshot budget |
+|----------|----------|-----------------|
+| `file`, `task`, `rule` | P1 | 50 % (~1024 B) |
+| `cwd`, `error`, `decision`, `env`, `git` | P2 | 35 % (~716 B) |
+| `subagent`, `skill`, `intent`, `mcp`, `plan` | P3–P4 | 15 % (~308 B) |
+
+FIFO eviction at 1000 events per session: lowest-priority (then oldest) event is dropped first.
+Deduplication window: same `type + data_hash` in the last 5 events → skip insert.
+
+### Content Capture Store (tool output search)
+
+Stores compressed tool output for FTS retrieval via `satori_context query`.
+
+```sql
+-- Raw tool output captures from satori_exec calls
 CREATE TABLE IF NOT EXISTS captures (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id  TEXT    NOT NULL,
@@ -227,8 +292,8 @@ CREATE TABLE IF NOT EXISTS captures (
   tool        TEXT    NOT NULL,
   input_json  TEXT,
   output_text TEXT    NOT NULL,
-  summary     TEXT,                -- compressed version, filled by summarizer
-  captured_at INTEGER NOT NULL     -- unix timestamp
+  summary     TEXT,              -- compressed; filled by summarizer post-capture
+  captured_at INTEGER NOT NULL   -- unix timestamp
 );
 
 -- FTS5 index over captures for fast retrieval
@@ -237,17 +302,99 @@ CREATE VIRTUAL TABLE IF NOT EXISTS captures_fts USING fts5(
   content='captures', content_rowid='id'
 );
 
--- Compact session guides
-CREATE TABLE IF NOT EXISTS session_guides (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id  TEXT    NOT NULL,
-  guide       TEXT    NOT NULL,    -- ≤2KB markdown
-  created_at  INTEGER NOT NULL
-);
-
 CREATE INDEX IF NOT EXISTS idx_captures_session ON captures(session_id);
-CREATE INDEX IF NOT EXISTS idx_guides_session   ON session_guides(session_id);
 ```
+
+---
+
+## Hooks Architecture
+
+Satori ships a set of Claude Code hooks (`.claude-plugin/hooks/hooks.json`) that capture
+session events and inject context. All hooks are non-blocking — hook failures are logged
+but never interrupt Claude's flow.
+
+| Hook | Trigger | What it does |
+|------|---------|--------------|
+| `PostToolUse` | After every tool call | Captures tool type + output summary → `session_events`; also writes to content `captures` |
+| `PreCompact` | Before context compaction | Builds XML snapshot from all session events → stores in `session_resume` |
+| `SessionStart` | On session open | Reads unconsumed `session_resume` → injects as `<session_resume>` system message |
+| `UserPromptSubmit` | Before user message | Injects lightweight context hint if no resume snapshot present |
+| `PreToolUse` | Before Bash/Read/Grep/WebFetch/Agent/Task | Intercepts tool call arguments for classification into event categories |
+
+### Event classification (PostToolUse)
+
+`extract.ts` maps each tool call to a `SessionEvent`:
+
+```
+file_read     → category=file,     priority=1,  data=path
+file_write    → category=file,     priority=1,  data=path
+file_edit     → category=file,     priority=1,  data=path
+task_create   → category=task,     priority=1,  data=JSON{subject}
+task_update   → category=task,     priority=1,  data=JSON{taskId, status}
+rule_path     → category=rule,     priority=1,  data=path
+rule_content  → category=rule,     priority=1,  data=content (≤400 chars)
+cwd_change    → category=cwd,      priority=2,  data=path
+error_caught  → category=error,    priority=2,  data=message (≤150 chars)
+decision_made → category=decision, priority=2,  data=text (≤200 chars)
+env_set       → category=env,      priority=2,  data=key=value
+git_op        → category=git,      priority=2,  data=op type
+subagent_*    → category=subagent, priority=3,  data=description
+intent_set    → category=intent,   priority=4,  data=mode string
+mcp_call      → category=mcp,      priority=4,  data=tool:args summary
+plan_enter    → category=plan,     priority=3,  data=status
+```
+
+---
+
+## Session Snapshot Format
+
+The `PreCompact` hook calls `snapshot.buildResumeSnapshot(events, opts)` — a pure function
+that converts stored `session_events` into an XML string injected at the next `SessionStart`.
+
+```xml
+<session_resume compact_count="2" events_captured="47" generated_at="2026-03-27T14:00:00Z">
+  <active_files>
+    <file path="src/index.ts" ops="read:3,edit:1" last="edit" />
+    <file path="src/gateway/router.ts" ops="write:1" last="write" />
+  </active_files>
+  <task_state>
+    - Implement satori_exec routing
+    - Write unit tests for handler pipeline
+  </task_state>
+  <rules>
+    <rule_content>Use absolute paths for MCP command fields</rule_content>
+    - CLAUDE.md
+  </rules>
+  <decisions>
+    - satori_exec single entry point instead of namespace per tool
+  </decisions>
+  <environment>
+    <cwd>/Volumes/Moon/Coding/miyo-satori</cwd>
+    <git op="commit" />
+  </environment>
+  <errors_encountered>
+    - TypeScript strict: implicit any on handler registry lookup
+  </errors_encountered>
+</session_resume>
+```
+
+**Budget**: 2048 bytes default. If over budget, priority tiers are dropped last-first
+(P3–P4 dropped first, then P2, then P1 trimmed). Even the header + footer alone always fits.
+
+**Sections and their source categories:**
+
+| XML section | Source categories | Notes |
+|-------------|-------------------|-------|
+| `<active_files>` | `file` | Deduplicated by path; last 10; op counts |
+| `<task_state>` | `task` | Pending/in-progress only; completed tasks omitted |
+| `<rules>` | `rule` | Unique paths + content blocks |
+| `<decisions>` | `decision` | Unique entries |
+| `<environment>` | `cwd`, `env`, `git` | Last cwd; last git op; all env entries |
+| `<errors_encountered>` | `error` | All recent errors |
+| `<plan_mode>` | `plan` | Present only if last plan event = `plan_enter` |
+| `<intent>` | `intent` | Last intent event only |
+| `<subagents>` | `subagent` | P2: completed; P3: launched |
+| `<mcp_tools>` | `mcp` | Deduplicated by tool name + call count |
 
 ---
 
