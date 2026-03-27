@@ -11,9 +11,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 the-custom-startup/
 ├── plugins/
-│   ├── tcs-start/                # Core workflow orchestration plugin
+│   ├── tcs-workflow/             # Core workflow orchestration plugin
 │   │   ├── .claude-plugin/       # Plugin manifest (plugin.json)
-│   │   ├── skills/               # 16 skills (12 user-invocable + 4 autonomous)
+│   │   ├── agents/               # Workflow agents (e.g., the-chief)
+│   │   ├── skills/               # 20 skills (user-invocable + autonomous)
+│   │   │   │                     # Core: analyze, brainstorm, constitution, debug,
+│   │   │   │                     #   document, guide, implement, parallel-agents,
+│   │   │   │                     #   receive-review, refactor, review, test,
+│   │   │   │                     #   validate, verify
+│   │   │   │                     # XDD: xdd, xdd-meta, xdd-plan, xdd-prd, xdd-sdd, xdd-tdd
 │   │   ├── output-styles/        # The Startup, The ScaleUp output styles
 │   │   └── README.md             # Detailed plugin documentation
 │   │
@@ -70,7 +76,7 @@ Each plugin lives in `plugins/[name]/` with:
 - `agents/` - Agent definitions (team plugin only)
 
 **Skill namespacing**: Claude Code automatically prefixes skills with the plugin name from
-`plugin.json`. A skill named `brainstorm` in the `tcs-start` plugin is invocable as `tcs-start:brainstorm`.
+`plugin.json`. A skill named `brainstorm` in the `tcs-workflow` plugin is invocable as `tcs-workflow:brainstorm`.
 The team plugin's domain skills are agent-internal and not user-invocable directly.
 
 ### Skill Structure
@@ -85,7 +91,7 @@ skills/[skill-name]/
 └── validation.md      # Quality checklists
 ```
 
-For full skill conventions, PICS structure, and transformation checklist, see the `writing-skills` skill (`plugins/tcs-start/skills/writing-skills/reference/conventions.md`).
+For full skill conventions, PICS structure, and transformation checklist, see the `writing-skills` skill (`plugins/tcs-workflow/skills/writing-skills/reference/conventions.md`).
 
 ### Agent Structure (Team Plugin)
 
@@ -128,11 +134,11 @@ claude plugin install ./plugins/team
 
 ### Invoking Skills as Commands
 
-The `tcs-start` plugin has no separate `commands/` directory — skills serve as the user-invocable
-entry points. Each skill in `plugins/tcs-start/skills/[name]/SKILL.md` is accessible as
-`/[name]` (e.g. `/specify`, `/implement`).
+The `tcs-workflow` plugin has no separate `commands/` directory — skills serve as the user-invocable
+entry points. Each skill in `plugins/tcs-workflow/skills/[name]/SKILL.md` is accessible as
+`/[name]` (e.g. `/xdd`, `/implement`).
 
-To add a new workflow entry point, add a skill directory under `plugins/tcs-start/skills/`.
+To add a new workflow entry point, add a skill directory under `plugins/tcs-workflow/skills/`.
 
 ### Editing Agents
 
@@ -157,9 +163,9 @@ Skills load minimal context initially, then progressively load:
 
 ### Spec-Driven Development
 
-The primary workflow: `/specify` → `/validate` → `/implement` → `/review`
+The primary workflow: `/xdd` → `/validate` → `/implement` → `/review`
 
-Specifications live in `.start/specs/[NNN]-[name]/` (legacy: `docs/specs/`):
+Specifications live in `docs/XDD/specs/[NNN]-[name]/`:
 - `requirements.md` - What to build
 - `solution.md` - How to build it
 - `plan/` - Execution sequence (README.md manifest + phase-N.md files)
@@ -185,7 +191,7 @@ Optional `CONSTITUTION.md` at project root defines checkable rules:
 | Skills | `plugins/*/skills/*/SKILL.md` | directory is skill name |
 | Agents | `plugins/tcs-team/agents/the-*/` | `the-[role]/[activity].md` |
 | Output Styles | `plugins/*/output-styles/*.md` | lowercase-kebab (e.g., `the-startup.md`) |
-| Specs | `.start/specs/[NNN]-*/` | 3-digit ID prefix |
+| Specs | `docs/XDD/specs/[NNN]-*/` | 3-digit ID prefix |
 
 ## Publishing
 
