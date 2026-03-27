@@ -577,10 +577,10 @@ The `start` plugin includes five autonomous skills that activate automatically b
 
 | Skill | Purpose |
 |-------|---------|
-| `specify-meta` | Spec directory creation, README tracking, phase transitions |
-| `specify-requirements` | PRD template, validation, requirements gathering |
-| `specify-solution` | SDD template, architecture design, ADR management |
-| `specify-plan` | PLAN template, task sequencing, dependency mapping |
+| `xdd-meta` | Spec directory creation, README tracking, phase transitions |
+| `xdd-prd` | PRD template, validation, requirements gathering |
+| `xdd-sdd` | SDD template, architecture design, ADR management |
+| `xdd-plan` | PLAN template, task sequencing, dependency mapping |
 
 ### Methodology Skills
 
@@ -860,10 +860,10 @@ Agent output: "I implemented a retry mechanism with exponential backoff for API 
 Rich templates for structured documentation, co-located with their skills:
 
 ```
-plugins/start/skills/
-├── specify-requirements/template.md   # Product requirements structure
-├── specify-solution/template.md       # Solution design structure
-├── specify-plan/template.md           # Implementation plan structure
+plugins/tcs-workflow/skills/
+├── xdd-prd/template.md                # Product requirements structure
+├── xdd-sdd/template.md                # Solution design structure
+├── xdd-plan/template.md               # Implementation plan structure
 └── document/templates/                # Knowledge capture templates
     ├── domain-template.md             # Business rules
     ├── pattern-template.md            # Technical patterns
