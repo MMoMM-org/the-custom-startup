@@ -96,7 +96,7 @@ Skill authoring tools, project memory system, and onboarding wizard. Install to 
 
 ## tcs-patterns — Domain Pattern Skills (`tcs-patterns@the-custom-startup`) — optional
 
-15 pattern skills covering architecture, testing, languages, and platform. Install only the patterns relevant to your stack — they activate on trigger terms and provide interactive pattern guidance.
+17 pattern skills covering architecture, testing, languages, and platform. Install only the patterns relevant to your stack — they activate on trigger terms and provide interactive pattern guidance.
 
 ```bash
 /plugin install tcs-patterns@the-custom-startup

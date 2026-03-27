@@ -28,7 +28,7 @@ Maintained for reference and attribution when publishing changes.
 **License:** Check repo for current license
 
 **What we use:**
-- TDD skill (RED-GREEN-REFACTOR iron law, rejected-rationalizations table) → `tcs-workflow:tdd`
+- TDD skill (RED-GREEN-REFACTOR iron law, rejected-rationalizations table) → `tcs-workflow:xdd-tdd`
 - Verification-before-completion discipline → `tcs-workflow:verify`
 - Receiving-code-review rigor pattern → `tcs-workflow:receive-review`
 - Git worktree workflow → `tcs-helper:git-worktree`
@@ -51,13 +51,21 @@ Maintained for reference and attribution when publishing changes.
 **License:** Check repo for current license
 
 **What we use:**
-- Domain skill library (DDD, hexagonal-architecture, functional, typescript-strict, mutation-testing, frontend-testing, react-testing, twelve-factor) → `tcs-patterns` plugin
+- Domain skill library → `tcs-patterns` plugin (17 skills total):
+  - Architecture: `ddd`, `hexagonal-architecture`, `functional`, `event-driven` (skill exists, no citypaul source)
+  - API & Types: `api-design` (no citypaul source), `typescript-strict`
+  - Testing: `testing`, `mutation-testing`, `frontend-testing`, `react-testing`, `twelve-factor` (via testing angle)
+  - `test-design-reviewer` — originally by Andrea Laforgia (andlaf-ak/claude-code-agents), adapted by citypaul, re-adapted for TCS; evaluates tests against Dave Farley's 8 properties
+  - `tdd` skill from citypaul — **dropped**; TCS already has `tcs-workflow:xdd-tdd` (from obra/superpowers). MUTATE step from citypaul `tdd` merged into `tcs-workflow:xdd-tdd` as an optional checkpoint.
+- All reference/ stub files in `tcs-patterns` skills populated with content from this repo (progressive disclosure pattern)
 - Philosophy-first CLAUDE.md approach (v3.0.0: ~100 lines core, skills on demand) → informs TCS modular CLAUDE.md design
 - ADR agent pattern → `tcs-team:the-architect/record-decision.md`
 - `/setup` command concept (stack detection → generate CLAUDE.md + hooks + agents) → `tcs-helper:setup`
-- TDD plan task format (explicit RED/GREEN/REFACTOR/MUTATE per step) → merged into `tcs-workflow:specify-plan`
+- TDD plan task format (explicit RED/GREEN/REFACTOR/MUTATE per step) → merged into `tcs-workflow:specify-plan`; MUTATE checkpoint also added to `tcs-workflow:xdd-tdd`
 - PR reviewer with TDD compliance dimension → informs `tcs-team` code-reviewer enhancements
 - Progress-guardian plan tracking concept → merged into `tcs-workflow:specify-meta` and `implement`
+
+**Attribution note:** `test-design-reviewer` skill originates from Andrea Laforgia (https://github.com/andlaf-ak/claude-code-agents/blob/main/test-design-reviewer.md), adopted via citypaul's adaptation. Attribution preserved in the skill file.
 
 ---
 
