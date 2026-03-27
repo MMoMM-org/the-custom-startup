@@ -69,11 +69,11 @@ them for security issues, and can add/remove servers via tool call.
 
 - [ ] **T3.5 satori_manage tool** `[activity: build-feature]`
 
-  1. Prime: Read `[ref: SDD/Tools Exposed to Claude Code/satori_manage]` — all 7 sub-commands. `[ref: SDD/Tools Exposed to Claude Code/satori_manage]`
-  2. Test: `list` returns all registered servers with state and handler. `add` writes new `[[servers]]` entry to correct scope TOML file. `remove` deletes entry from TOML. `enable`/`disable` toggle `enabled` flag in TOML. `state` returns current `ServerState`. `scan` re-runs security scanner and returns result. `[ref: SDD/Tools Exposed to Claude Code/satori_manage]`
-  3. Implement: Create `src/tools/satori-manage.ts` — dispatches on `sub_command`. `add`/`remove`/`enable`/`disable` read the target TOML, modify, and write back. `list` queries `ServerRegistry`. `state` queries lifecycle `LifecycleManager`. `scan` calls `scanner.scanConfig()`. `[ref: SDD/Tools Exposed to Claude Code/satori_manage]`
-  4. Validate: Integration test with temp `satori.toml`: `add` → file contains new entry; `remove` → entry gone; `enable`/`disable` → flag toggled. `list` → returns entries. `[ref: SDD/Tools Exposed to Claude Code/satori_manage]`
-  5. Success: All satori_manage sub-commands work; TOML mutations are non-destructive (preserve existing entries and comments where possible); tool registered in MCP server.
+  1. Prime: Read `[ref: SDD/Tools Exposed to Claude Code/satori_manage]` — all 8 sub-commands (list, add, remove, enable, disable, state, scan, reload). `[ref: SDD/Tools Exposed to Claude Code/satori_manage]`
+  2. Test: `list` returns all registered servers with state and handler. `add` writes new `[[servers]]` entry to correct scope TOML file. `remove` deletes entry from TOML. `enable`/`disable` toggle `enabled` flag in TOML. `state` returns current `ServerState`. `scan` re-runs security scanner and returns result. `reload` invalidates the tool catalog for the named server (or all) and triggers a fresh `tools/list` call on running servers. `[ref: SDD/Tools Exposed to Claude Code/satori_manage]`
+  3. Implement: Create `src/tools/satori-manage.ts` — dispatches on `sub_command`. `add`/`remove`/`enable`/`disable` read the target TOML, modify, and write back. `list` queries `ServerRegistry`. `state` queries lifecycle `LifecycleManager`. `scan` calls `scanner.scanConfig()`. `reload` calls `catalog.clear(name?)` then re-populates from `tools/list` on running servers. `[ref: SDD/Tools Exposed to Claude Code/satori_manage]`
+  4. Validate: Integration test with temp `satori.toml`: `add` → file contains new entry; `remove` → entry gone; `enable`/`disable` → flag toggled. `list` → returns entries. `reload` on a populated catalog → catalog cleared and repopulated. `[ref: SDD/Tools Exposed to Claude Code/satori_manage]`
+  5. Success: All 8 satori_manage sub-commands work; TOML mutations are non-destructive (preserve existing entries and comments where possible); tool registered in MCP server.
 
 - [ ] **T3.6 Phase 3 Validation** `[activity: validate]`
 

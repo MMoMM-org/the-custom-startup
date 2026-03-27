@@ -98,8 +98,8 @@ itself is a post-MVP deliverable.
 |----|-------------|----------|
 | R2.1 | Present as a single MCP server entry to Claude Code | Must |
 | R2.2 | Maintain a registry of downstream MCP server definitions loaded from config | Must |
-| R2.3 | Namespace downstream tools as `<server>_<tool>` to avoid collisions | Must |
-| R2.4 | Route tool calls to the correct downstream server based on namespace | Must |
+| R2.3 | Expose downstream tools via `satori_exec(server, tool, args)` — a single dispatch entry point; no per-tool namespace entries in `tools/list` | Must |
+| R2.4 | Route tool calls to the correct downstream server based on the `server` argument passed to `satori_exec` | Must |
 | R2.5 | Support g/p/r config: global (`~/.satori/config.toml`), project dir, repo root (`satori.toml`) | Must |
 | R2.6 | Support auto-registration of repo-level `.mcp.json` (enabled/disabled per config) | Should |
 
@@ -131,8 +131,8 @@ itself is a post-MVP deliverable.
 | R5.2 | Block forwarding when secrets are detected; log the occurrence | Must |
 | R5.3 | Scan tool descriptions and server configs on startup for risky patterns (exfiltrate, delete, hidden instructions) | Should |
 | R5.4 | Server status after scan: `passed / blocked / skipped / pending` | Should |
-| R5.5 | Tools from `blocked` servers are not registered — invisible to Claude | Should |
-| R5.6 | Write audit log at `~/.satori/scanner.log` with reasons | Should |
+| R5.5 | Tools from `blocked` servers are not registered — invisible to Claude | Must |
+| R5.6 | Write audit log at `.satori/scanner.log` (repo-local) with reasons | Should |
 | R5.7 | IN direction: optionally annotate or filter outputs from downstream before returning to Claude | May |
 
 ### R6 — TCS Integration (M4 scope only)
@@ -262,6 +262,34 @@ M2 (Memory System, file-only) ✅
 
 Satori is a dependency for M5. M5 adds the routing-table integration and skill-level
 detection that connects file-based memory with Satori context storage.
+
+---
+
+## Non-Functional Requirements
+
+| ID | Category | Requirement | Priority |
+|----|----------|-------------|----------|
+| NFR1 | Context reduction | Satori must reduce tool output size delivered to Claude by at least 90% on average (baseline: context-mode's reported 90–98%) | Should |
+| NFR2 | Session guide size | Session guide XML must not exceed 2048 bytes | Must |
+| NFR3 | Hook non-blocking | Hook failures must never interrupt Claude's active session | Must |
+| NFR4 | Standalone | Satori must be runnable and usable without TCS installed | Must |
+| NFR5 | Startup | Satori MCP server starts within 5 seconds on cold launch (no downstream servers starting) | Should |
+| NFR6 | DB isolation | Each project's database is isolated at `.satori/db.sqlite` relative to the repo root; no global shared state | Must |
+
+---
+
+## Acceptance Criteria
+
+One testable criterion per requirement group:
+
+| ID | Criterion | Verification |
+|----|-----------|--------------|
+| AC-R1 | `satori_context(restore)` returns a ≤2KB XML session guide generated from a prior PreCompact event | E2E test: T7.4 step 7 |
+| AC-R2 | `tools/list` returns exactly 5 tools; `satori_exec("memory", "create_entities", {...})` routes to a running npx downstream and returns a compact summary | E2E test: T7.4 steps 3–4 |
+| AC-R3 | A `beforeCall` implementation that returns `BlockedResult` prevents downstream forwarding; the audit log records the block | Unit test: T5.3 |
+| AC-R4 | A registered npx server with `enabled=true` is not started until the first `satori_exec` call targeting it | E2E test: T7.4 step 2 |
+| AC-R5 | `satori_exec` with an argument containing an API key pattern is blocked and logged to `.satori/scanner.log`; no downstream call is made | Unit test: T3.3 |
+| AC-R6.1 | After `install.sh` runs context-mode setup, `modules/satori/dist/index.js` exists and the MCP config `args` path is absolute and resolves to an existing file | Validation: T7.2 |
 
 ---
 

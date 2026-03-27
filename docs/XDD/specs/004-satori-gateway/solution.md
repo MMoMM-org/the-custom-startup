@@ -156,6 +156,10 @@ session_guide_max_bytes = 2048
 # Retain raw captures for N days before pruning
 retain_days = 30
 
+[lifecycle]
+# Timeout (ms) waiting for an npx server to pass its tools/list health check (default: 30000)
+npx_startup_timeout_ms = 30000
+
 [security]
 # Scan tool descriptions and configs at startup
 startup_scan = true
@@ -323,6 +327,31 @@ but never interrupt Claude's flow.
 | `SessionStart` | On session open | Reads unconsumed `session_resume` → injects as `<session_resume>` system message |
 | `UserPromptSubmit` | Before user message | Injects lightweight context hint if no resume snapshot present |
 | `PreToolUse` | Before Bash/Read/Grep/WebFetch/Agent/Task | Intercepts tool call arguments for classification into event categories |
+
+### Session ID Resolution
+
+Hook payloads from Claude Code carry a `transcript_path` field (path to the `.jsonl` transcript
+file) and optionally a `session_id` field. Satori extracts the session ID using the following
+priority chain, derived from context-mode's implementation:
+
+```typescript
+function extractSessionId(input: HookPayload): string {
+  // 1. UUID embedded in the transcript filename (most reliable)
+  if (input.transcript_path) {
+    const match = input.transcript_path.match(/([a-f0-9-]{36})\.jsonl$/);
+    if (match) return match[1];
+  }
+  // 2. Explicit session_id field in the hook payload
+  if (input.session_id) return input.session_id;
+  // 3. Environment variable (set by some Claude Code configurations)
+  if (process.env.CLAUDE_SESSION_ID) return process.env.CLAUDE_SESSION_ID;
+  // 4. Fallback: parent process PID (unique per Claude Code process)
+  return `pid-${process.ppid}`;
+}
+```
+
+Claude Code environment detection: check for `CLAUDE_PROJECT_DIR` or `CLAUDE_SESSION_ID`
+environment variables. Both are set by Claude Code when it launches hook processes.
 
 ### Event classification (PostToolUse)
 
@@ -604,7 +633,7 @@ Single tool with sub-command dispatch to avoid polluting Claude's tool list.
 
 | Sub-command | Arguments | Description |
 |-------------|-----------|-------------|
-| `restore` | `session_id?` | Load most recent session guide; returns ≤2KB markdown |
+| `restore` | `session_id?` | Load most recent session guide; returns ≤2KB XML |
 | `query` | `q: string`, `limit?: number` | FTS5 search over captures; returns ranked summaries |
 | `status` | — | Current DB stats: sessions, captures, guide count |
 | `flush` | — | Force session guide generation now (before compaction) |
@@ -620,6 +649,7 @@ Single tool with sub-command dispatch to avoid polluting Claude's tool list.
 | `disable` | `name: string` | Set `enabled = false` (does not remove config entry) |
 | `state` | `name: string` | Show current ServerState + last error if any |
 | `scan` | `name?: string` | Re-run security scan on one or all servers |
+| `reload` | `name?: string` | Invalidate tool catalog cache and re-run `tools/list` for one or all running servers; used after a downstream server adds or removes tools |
 
 `add` and `remove` write to `satori.toml` at the specified scope:
 - `scope = "repo"` (default) → `<repo-root>/satori.toml`
@@ -730,7 +760,7 @@ MCP command path must be absolute (relative paths fail in Claude Code — CLAUDE
 
 | Question | Notes |
 |----------|-------|
-| Session ID source | How does Satori assign/receive a session ID from Claude Code? Check if MCP protocol carries session context. |
+| ~~Session ID source~~ | **Resolved** — see Hooks Architecture / Session ID Resolution. Priority: `transcript_path` UUID → `session_id` field → `CLAUDE_SESSION_ID` env → `pid-${ppid}`. |
 | FTS5 summarizer quality | How good is the compression? May need a small LLM call or heuristic ranking. Prototype first. |
 | Docker availability check | Should Satori gracefully skip Docker servers if Docker is not installed? |
 | Config hot-reload | Can `satori.toml` be reloaded without restarting the MCP server? |

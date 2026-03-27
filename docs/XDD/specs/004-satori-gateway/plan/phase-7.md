@@ -38,7 +38,7 @@ roundtrip: server registration → `satori_exec` call → content capture → se
   1. Prime: Read `modules/satori/README.md` if it exists. `[ref: SDD/TCS Submodule (R6.1)]`
   2. Test: `npm run build` produces `dist/index.js`. `node dist/index.js` starts without error. `README.md` exists with: quick start, config schema summary, tool descriptions, hooks install instructions. `satori.toml.example` exists with all schema fields annotated. `[ref: SDD/Config Schema]`
   3. Implement: Finalize `README.md` — installation, configuration, Claude Code MCP setup, hooks setup, `satori_exec` usage examples. Create `satori.toml.example` from SDD schema (annotated). Verify `package.json` `main` points to `dist/index.js`. Add `"files"` field to package.json to exclude test fixtures from publish. `[ref: SDD/Config Schema]`
-  4. Validate: `npm pack --dry-run` lists expected files. `node dist/index.js` → MCP server starts. `tools/list` → 3 tools. `[ref: SDD/Tools Exposed to Claude Code]`
+  4. Validate: `npm pack --dry-run` lists expected files. `node dist/index.js` → MCP server starts. `tools/list` → 5 tools. `[ref: SDD/Tools Exposed to Claude Code]`
   5. Success: miyo-satori builds and starts; README covers all user-facing config; satori.toml.example is complete.
 
 - [ ] **T7.2 TCS install.sh integration (R6.1)** `[activity: build-platform]`
