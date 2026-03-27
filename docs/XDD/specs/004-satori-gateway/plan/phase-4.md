@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Lifecycle Management"
-status: pending
+status: completed
 version: "1.0"
 phase: 4
 ---
@@ -33,7 +33,7 @@ Builds the hot/cold lifecycle state machine for npx and Docker runtimes, the han
 and the passthrough handler. After this phase, Satori can start, health-check, and route through
 a downstream server.
 
-- [ ] **T4.1 Server state machine (lifecycle/state.ts + manager.ts)** `[activity: build-feature]`
+- [x] **T4.1 Server state machine (lifecycle/state.ts + manager.ts)** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Hot/Cold Lifecycle State Machine]` — full state diagram. `[ref: SDD/Repository Structure; src/lifecycle/]`
   2. Test: `LifecycleManager.start("filesystem")` transitions from `stopped → starting → running`. `start()` on an already-`running` server is a no-op. `start()` when state is `blocked` returns error immediately. `stop()` transitions `running → stopped`. State is readable via `getState(name)`. `[ref: SDD/Hot/Cold Lifecycle State Machine]`
@@ -41,7 +41,7 @@ a downstream server.
   4. Validate: Unit tests with mocked runtime modules: all state transitions verified; concurrent `start()` calls don't double-spawn. `[ref: SDD/Hot/Cold Lifecycle State Machine]`
   5. Success: State machine tests pass; transitions are correct; blocked state prevents start attempts.
 
-- [ ] **T4.2 npx runtime** `[activity: build-feature]`
+- [x] **T4.2 npx runtime** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Hot/Cold Lifecycle State Machine; npx runtime section]`. MCP SDK STDIO transport docs. `[ref: SDD/Hot/Cold Lifecycle State Machine]`
   2. Test: `NpxRuntime.start(config)` spawns a child process and returns a connected MCP `Client`. `tools/list` succeeds against the spawned server. `stop()` terminates the child process (SIGTERM + SIGKILL fallback). Timeout during `tools/list` → transitions to `error` state. `[ref: SDD/Hot/Cold Lifecycle State Machine]`
@@ -49,7 +49,7 @@ a downstream server.
   4. Validate: Integration test (skipped in CI if npx unavailable): spawn `@modelcontextprotocol/server-memory`, call `tools/list`, verify non-empty. Stop — process exits. `[ref: SDD/Hot/Cold Lifecycle State Machine]`
   5. Success: npx runtime starts a real MCP server, passes health check, stops cleanly; unit tests with mocked spawn pass in CI.
 
-- [ ] **T4.3 Docker runtime** `[activity: build-feature]`
+- [x] **T4.3 Docker runtime** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Hot/Cold Lifecycle State Machine; Docker runtime section]`. `dockerode` API docs. `[ref: SDD/Hot/Cold Lifecycle State Machine]`
   2. Test: `DockerRuntime.start(config)` calls `dockerode` to start container with correct env flags and port mapping. `stop()` stops the container. Docker unavailable → graceful error (not crash). `[ref: SDD/Hot/Cold Lifecycle State Machine]`
@@ -57,7 +57,7 @@ a downstream server.
   4. Validate: Unit tests with mocked dockerode verify API call shapes. Docker-unavailable test: graceful error returned. `[ref: SDD/Hot/Cold Lifecycle State Machine]`
   5. Success: Docker runtime implementation complete; unit tests pass; graceful docker-absent handling.
 
-- [ ] **T4.4 Handler interface and passthrough handler** `[activity: build-feature]`
+- [x] **T4.4 Handler interface and passthrough handler** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Handler Interface]` — `SatoriHandler`, `ToolCallRequest`, `ToolCallResponse`, `BlockedResult`. `[ref: SDD/Handler Interface]`
   2. Test: `PassthroughHandler.beforeCall(req)` returns `req` unchanged. `PassthroughHandler.afterCall(req, res)` returns `res` unchanged. `HandlerRegistry.lookup("passthrough")` returns `PassthroughHandler`. `HandlerRegistry.lookup("unknown")` returns `PassthroughHandler` (safe default). `[ref: SDD/Handler Interface]`
@@ -65,7 +65,7 @@ a downstream server.
   4. Validate: Unit tests: passthrough returns inputs unchanged; registry lookup by name; fallback to passthrough. `[ref: SDD/Handler Interface]`
   5. Success: Handler interface complete; passthrough is a safe no-op; registry falls back gracefully.
 
-- [ ] **T4.5 Phase 4 Validation** `[activity: validate]`
+- [x] **T4.5 Phase 4 Validation** `[activity: validate]`
 
   - `npm test` — all Phase 4 unit tests pass.
   - `npm run typecheck` — 0 errors.

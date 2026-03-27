@@ -85,7 +85,7 @@ Each phase follows: **Prime** (context) → **Test** (RED) → **Implement** (GR
 - [x] [Phase 1: Repository Foundation](phase-1.md)
 - [x] [Phase 2: Context Module](phase-2.md)
 - [x] [Phase 3: Config, Registry & Security](phase-3.md) `[parallel: true]` with Phase 2
-- [ ] [Phase 4: Lifecycle Management](phase-4.md)
+- [x] [Phase 4: Lifecycle Management](phase-4.md)
 - [ ] [Phase 5: Tools & Gateway Routing](phase-5.md)
 - [ ] [Phase 6: Hooks & Session Integration](phase-6.md)
 - [ ] [Phase 7: TCS Integration & E2E Validation](phase-7.md)
