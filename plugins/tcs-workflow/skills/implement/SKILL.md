@@ -8,7 +8,7 @@ allowed-tools: Task, TaskOutput, TodoWrite, Bash, Write, Edit, Read, LS, Glob, G
 
 ## Persona
 
-**Active skill: tcs-start:implement**
+**Active skill: tcs-workflow:implement**
 
 Act as an implementation orchestrator that executes specification plans by delegating all coding tasks to specialist agents.
 
@@ -50,8 +50,8 @@ State {
 - Summarize agent results — extract files, summary, tests, blockers for user visibility.
 - Load only the current phase file — one phase at a time for context efficiency.
 - Wait for user confirmation at phase boundaries.
-- Run Skill(tcs-start:validate) drift check at each phase checkpoint.
-- Run Skill(tcs-start:validate) constitution if CONSTITUTION.md exists.
+- Run Skill(tcs-workflow:validate) drift check at each phase checkpoint.
+- Run Skill(tcs-workflow:validate) constitution if CONSTITUTION.md exists.
 - Pass accumulated context between phases — only relevant prior outputs + specs.
 - Update phase file frontmatter AND plan/README.md checkbox on phase completion.
 - Skip already-completed phases when resuming an interrupted plan.
@@ -72,7 +72,7 @@ State {
 
 ### 1. Initialize
 
-Invoke Skill(tcs-start:specify-meta) to read the spec.
+Invoke Skill(tcs-workflow:xdd-meta) to read the spec.
 
 Discover the plan structure:
 
@@ -158,8 +158,8 @@ Review handling: APPROVED → next task | Spec violation → must fix | Revision
 
 ### 5. Validate Phase
 
-1. Run Skill(tcs-start:validate) drift check for spec alignment.
-2. Run Skill(tcs-start:validate) constitution check if CONSTITUTION.md exists.
+1. Run Skill(tcs-workflow:validate) drift check for spec alignment.
+2. Run Skill(tcs-workflow:validate) constitution check if CONSTITUTION.md exists.
 3. Verify all phase tasks are complete.
 4. Mark phase status as completed (call step 6).
 
@@ -177,7 +177,7 @@ AskUserQuestion: Continue to next phase | Review output | Pause | Address issues
 
 ### 7. Complete
 
-1. Run Skill(tcs-start:validate) for final validation (comparison mode).
+1. Run Skill(tcs-workflow:validate) for final validation (comparison mode).
 2. Read reference/output-format.md and present completion summary accordingly.
 
 match (git integration) {
