@@ -66,19 +66,26 @@ M4 kann parallel zu späteren M2-Phasen beginnen wenn M2 Phase 1-3 stabil ist.
 
 ## M4 — Satori/MCP Gateway
 
-**Spec:** `docs/XDD/specs/004-satori-gateway/` — **Placeholder, muss geschrieben werden**
+**Repo:** `MMoMM-org/miyo-satori` (standalone, TCS includes as git submodule)
+**Spec:** `docs/XDD/specs/004-satori-gateway/` (PRD ✓, SDD fehlt, Plan fehlt)
 **Basis:** `docs/concept/v2/context-mode-MCP-Server.md` + `docs/concept/v2/TCS v2 Memory & Context Layout Spec.md` §5
-**Status:** Spec fehlt komplett
+**Status:** PRD geschrieben — SDD als nächstes
 
-### Zu entscheiden / zu spezifizieren
+### Entschiedene Punkte
 
-- [ ] Name: "Satori" behalten oder "context-mode"?
-- [ ] MCP Gateway als Registry (single entry point für mehrere downstream Server)
-- [ ] Hot/cold mode: MCP Server nur laden wenn aktiv gebraucht
-- [ ] Security Scanner: MCP Server Configs vor Exposure prüfen
-- [ ] Kairn-Integration: optional semantic memory als Upgrade
-- [ ] g/p/r Config-Separation für MCP-Definitionen
-- [ ] Discovery: wie TCS erkennt ob context-mode und/oder Kairn installiert sind
+- [x] Name: **Satori** (`miyo-satori`)
+- [x] Eigenes Repo — standalone, als git submodule in TCS; wiederverwendbar außerhalb TCS
+- [x] Gateway/Registry: single MCP entry point, downstream Server via Namespace `<server>_<tool>`
+- [x] Handler/Plugin-Architektur zwischen Satori und jedem downstream Server (default: passthrough)
+- [x] Hot/cold: Server nur starten wenn a) enabled und b) tatsächlich aufgerufen
+- [x] Security: OUT primär (keine Secrets an downstream), IN optional (Filter auf Rückgabe)
+- [x] Kairn: optionaler Handler, kein hard dependency
+- [x] g/p/r Config-Separation: `~/.satori/mcp.json` / project dir / repo root
+
+### Noch offen (für SDD)
+
+- [ ] Discovery: wie TCS-Skills erkennen ob Satori läuft (tool-check vs CLAUDE.md flag vs beides)
+- [ ] Auto-Registration: `.mcp.json` im Repo-Root automatisch registrieren — abhängig von Claude Code MCP-Reload-Verhalten
 
 ---
 
