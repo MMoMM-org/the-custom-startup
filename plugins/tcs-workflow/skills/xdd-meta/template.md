@@ -29,4 +29,4 @@
 {{CONTEXT_NOTES}}
 
 ---
-*This file is managed by the specify-meta skill.*
+*This file is managed by the xdd-meta skill.*

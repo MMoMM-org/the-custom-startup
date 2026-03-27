@@ -3,7 +3,7 @@
 The Agentic Startup - Spec Generation Script
 Creates numbered spec directories with auto-incrementing IDs
 
-Location: plugins/start/skills/specify-meta/spec.py
+Location: plugins/tcs-workflow/skills/xdd-meta/spec.py
 Template resolution: skills/[template-name]/template.md (primary)
                     templates/[template-name].md (fallback, deprecated)
 """
@@ -16,8 +16,8 @@ from typing import Optional
 
 
 # Get plugin root from script location
-# This script is at: plugins/start/skills/specify-meta/spec.py
-# Plugin root is: plugins/start/
+# This script is at: plugins/tcs-workflow/skills/xdd-meta/spec.py
+# Plugin root is: plugins/tcs-workflow/
 script_dir = Path(__file__).resolve().parent
 plugin_root = script_dir.parent.parent
 
@@ -212,15 +212,15 @@ def create_spec(feature_name: str, template: Optional[str] = None) -> None:
             print(f"Adding template to existing spec: {spec_dir}")
 
             # Special handling for implementation-plan → plan/ directory
-            if template in ("specify-plan", "implementation-plan"):
-                create_plan_directory(spec_dir, "specify-plan")
+            if template in ("xdd-plan", "implementation-plan"):
+                create_plan_directory(spec_dir, "xdd-plan")
                 return
 
             # Map template names to short filenames
             filename_map = {
-                "specify-requirements": "requirements.md",
+                "xdd-prd": "requirements.md",
                 "product-requirements": "requirements.md",
-                "specify-solution": "solution.md",
+                "xdd-sdd": "solution.md",
                 "solution-design": "solution.md",
             }
             dest_name = filename_map.get(template, f"{template}.md")
@@ -254,13 +254,13 @@ def create_spec(feature_name: str, template: Optional[str] = None) -> None:
     # Copy template if requested
     if template:
         # Special handling for implementation-plan → plan/ directory
-        if template in ("specify-plan", "implementation-plan"):
-            create_plan_directory(spec_dir, "specify-plan")
+        if template in ("xdd-plan", "implementation-plan"):
+            create_plan_directory(spec_dir, "xdd-plan")
         else:
             filename_map = {
-                "specify-requirements": "requirements.md",
+                "xdd-prd": "requirements.md",
                 "product-requirements": "requirements.md",
-                "specify-solution": "solution.md",
+                "xdd-sdd": "solution.md",
                 "solution-design": "solution.md",
             }
             dest_name = filename_map.get(template, f"{template}.md")

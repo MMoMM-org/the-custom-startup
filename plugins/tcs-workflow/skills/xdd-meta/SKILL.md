@@ -1,12 +1,12 @@
 ---
-name: specify-meta
-description: Scaffold, status-check, and manage specification directories. Handles auto-incrementing IDs, README tracking, phase transitions, and decision logging in the configured specs directory (see .claude/startup.toml). Falls back to docs/specs/ for legacy specs. Used by both specify and implement workflows.
+name: xdd-meta
+description: Scaffold, status-check, and manage specification directories under docs/XDD/ (configurable via .claude/startup.toml). Handles auto-incrementing IDs, README tracking, phase transitions, and decision logging. Used by both xdd and implement workflows.
 allowed-tools: Read, Write, Edit, Bash, TodoWrite, Grep, Glob
 ---
 
 ## Persona
 
-**Active skill: tcs-workflow:specify-meta**
+**Active skill: tcs-workflow:xdd-meta**
 
 Act as a specification workflow orchestrator that manages specification directories and tracks user decisions throughout the PRD → SDD → PLAN workflow.
 
@@ -99,9 +99,9 @@ Update the spec directory to reflect the new phase.
 3. Hand off to the document-specific skill:
 
 match (phase) {
-  PRD  => specify-requirements skill
-  SDD  => specify-solution skill
-  PLAN => specify-plan skill
+  PRD  => xdd-prd skill
+  SDD  => xdd-sdd skill
+  PLAN => xdd-plan skill
 }
 
 4. On completion, return here for the next phase transition.

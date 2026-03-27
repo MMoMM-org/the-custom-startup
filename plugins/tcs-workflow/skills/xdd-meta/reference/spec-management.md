@@ -19,10 +19,10 @@ Before any file operation, resolve the specs directory using this priority chain
 ```
 docs/XDD/specs/                    # default location (configurable via startup.toml)
 ├── 001-user-authentication/
-│   ├── README.md                 # Managed by specify-meta skill
-│   ├── requirements.md           # Created by specify-requirements skill
-│   ├── solution.md               # Created by specify-solution skill
-│   └── plan/                     # Created by specify-plan skill
+│   ├── README.md                 # Managed by xdd-meta skill
+│   ├── requirements.md           # Created by xdd-prd skill
+│   ├── solution.md               # Created by xdd-sdd skill
+│   └── plan/                     # Created by xdd-plan skill
 │       ├── README.md             # Plan manifest (phases, checklist, context)
 │       ├── phase-1.md            # Per-phase tasks and TDD structure
 │       ├── phase-2.md
@@ -50,7 +50,7 @@ spec.py "feature name here"
 ```
 **Output:**
 ```
-Created spec directory: the-custom-startup/specs/005-feature-name-here
+Created spec directory: docs/XDD/specs/005-feature-name-here
 Spec ID: 005
 Specification directory created successfully
 ```
@@ -65,14 +65,14 @@ spec.py 005 --read
 ```toml
 id = "005"
 name = "feature-name-here"
-dir = "the-custom-startup/specs/005-feature-name-here"
+dir = "docs/XDD/specs/005-feature-name-here"
 
 [spec]
-prd = "the-custom-startup/specs/005-feature-name-here/requirements.md"
-sdd = "the-custom-startup/specs/005-feature-name-here/solution.md"
-plan_dir = "the-custom-startup/specs/005-feature-name-here/plan"
-plan = "the-custom-startup/specs/005-feature-name-here/plan/README.md"
-phases = ["the-custom-startup/specs/005-feature-name-here/plan/phase-1.md"]
+prd = "docs/XDD/specs/005-feature-name-here/requirements.md"
+sdd = "docs/XDD/specs/005-feature-name-here/solution.md"
+plan_dir = "docs/XDD/specs/005-feature-name-here/plan"
+plan = "docs/XDD/specs/005-feature-name-here/plan/README.md"
+phases = ["docs/XDD/specs/005-feature-name-here/plan/phase-1.md"]
 
 files = [
   "README.md",
@@ -85,12 +85,12 @@ files = [
 
 ### Add Template to Existing Spec
 ```bash
-spec.py 005 --add specify-requirements   # Creates requirements.md
-spec.py 005 --add specify-solution       # Creates solution.md
-spec.py 005 --add specify-plan           # Creates plan/README.md
+spec.py 005 --add xdd-prd    # Creates requirements.md
+spec.py 005 --add xdd-sdd    # Creates solution.md
+spec.py 005 --add xdd-plan   # Creates plan/README.md
 ```
 
-When `--add specify-plan` (or `--add implementation-plan`) is called, the script creates `plan/README.md` from the plan template instead of a monolithic file.
+When `--add xdd-plan` (or `--add implementation-plan`) is called, the script creates `plan/README.md` from the plan template instead of a monolithic file.
 
 ## Template Resolution
 
