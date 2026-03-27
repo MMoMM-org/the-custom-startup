@@ -128,7 +128,25 @@ If the user introduces new requirements during revision, acknowledge them and ad
 Present complete design summary.
 
 AskUserQuestion:
-  Save design to file — check `.claude/startup.toml` for `ideas_dir`, default `the-custom-startup/ideas/YYYY-MM-DD-<topic>.md`
-  Start specification — invoke /xdd with design context
+  Run spec-review — dispatch spec-review subagent before proceeding (recommended)
+  Start specification — invoke /xdd with design context (skip review)
+  Save design to file — check `.claude/startup.toml` for `ideas_dir`, default `docs/XDD/ideas/YYYY-MM-DD-<topic>.md`
   Done — keep design in conversation only
+
+If "Run spec-review" is chosen:
+
+Dispatch a spec-review subagent (sonnet) with:
+- The complete design summary
+- Instruction: identify gaps, ambiguities, unstated assumptions, or missing edge cases
+
+Subagent output format:
+- If gaps found: structured list of clarification prompts (e.g., "Q1: How does X handle Y when Z?") — NOT rejections
+- If no gaps: "No gaps found."
+
+```
+match (spec-review result) {
+  gaps found  => present gap list as clarification prompts; AskUserQuestion: Refine design | Proceed anyway | Back to step 3
+  no gaps     => announce "Design validated. Run `/xdd` to write the PRD."
+}
+```
 
