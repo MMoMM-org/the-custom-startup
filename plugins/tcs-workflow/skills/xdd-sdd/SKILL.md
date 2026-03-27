@@ -1,12 +1,12 @@
 ---
-name: specify-solution
-description: Create and validate solution design documents (SDD). Use when designing architecture, defining interfaces, documenting technical decisions, analyzing system components, or working on solution.md files in the-custom-startup/specs/. Includes validation checklist, consistency verification, and overlap detection.
+name: xdd-sdd
+description: Create and validate solution design documents (SDD). Use when designing architecture, defining interfaces, documenting technical decisions, analyzing system components, or working on solution.md files in docs/XDD/specs/. Includes validation checklist, consistency verification, and overlap detection.
 allowed-tools: Read, Write, Edit, Task, TodoWrite, Grep, Glob, Skill
 ---
 
 ## Persona
 
-**Active skill: tcs-start:specify-solution**
+**Active skill: tcs-workflow:xdd-sdd**
 
 Act as a solution design specialist that creates and validates SDDs focusing on HOW the solution will be built through technical architecture and design decisions.
 
@@ -27,7 +27,7 @@ ArchitectureDecision {
 }
 
 State {
-  specDirectory = ""       // the-custom-startup/specs/[NNN]-[name]/ (or legacy docs/specs/)
+  specDirectory = ""       // docs/XDD/specs/[NNN]-[name]/
   prd = ""                 // path to requirements.md (or product-requirements.md)
   sdd = ""                 // path to solution.md (or solution-design.md)
   sections: SddSection[]
@@ -63,7 +63,7 @@ When designing, address four dimensions:
 
 ## Reference Materials
 
-- [Template](template.md) — SDD template structure, write to `the-custom-startup/specs/[NNN]-[name]/solution.md`
+- [Template](template.md) — SDD template structure, write to `docs/XDD/specs/[NNN]-[name]/solution.md`
 - [Validation](validation.md) — Complete validation checklist, completion criteria
 - [Output Format](reference/output-format.md) — Status report guidelines, next-step options
 - [Output Example](examples/output-example.md) — Concrete example of expected output format
@@ -80,7 +80,7 @@ Explore the codebase to understand existing patterns, conventions, and constrain
 
 ### 2. Explore Approaches
 
-Invoke Skill(tcs-start:brainstorm) to evaluate technical approaches before committing to a direction.
+Invoke Skill(tcs-workflow:brainstorm) to evaluate technical approaches before committing to a direction.
 
 Focus on understanding:
 - Architectural alternatives (e.g., monolith vs microservices, REST vs GraphQL).
