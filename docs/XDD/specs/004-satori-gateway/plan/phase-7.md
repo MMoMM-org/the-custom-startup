@@ -1,6 +1,6 @@
 ---
 title: "Phase 7: TCS Integration & E2E Validation"
-status: pending
+status: completed
 version: "1.0"
 phase: 7
 ---
@@ -33,7 +33,7 @@ phase: 7
 Ships miyo-satori, wires it into TCS install.sh as a git submodule, and validates the full
 roundtrip: server registration → `satori_exec` call → content capture → session snapshot.
 
-- [ ] **T7.1 miyo-satori packaging and documentation** `[activity: build-platform]`
+- [x] **T7.1 miyo-satori packaging and documentation** `[activity: build-platform]`
 
   1. Prime: Read `modules/satori/README.md` if it exists. `[ref: SDD/TCS Submodule (R6.1)]`
   2. Test: `npm run build` produces `dist/index.js`. `node dist/index.js` starts without error. `README.md` exists with: quick start, config schema summary, tool descriptions, hooks install instructions. `satori.toml.example` exists with all schema fields annotated. `[ref: SDD/Config Schema]`
@@ -41,7 +41,7 @@ roundtrip: server registration → `satori_exec` call → content capture → se
   4. Validate: `npm pack --dry-run` lists expected files. `node dist/index.js` → MCP server starts. `tools/list` → 5 tools. `[ref: SDD/Tools Exposed to Claude Code]`
   5. Success: miyo-satori builds and starts; README covers all user-facing config; satori.toml.example is complete.
 
-- [ ] **T7.2 TCS install.sh integration (R6.1)** `[activity: build-platform]`
+- [x] **T7.2 TCS install.sh integration (R6.1)** `[activity: build-platform]`
 
   1. Prime: Read `install.sh` in TCS root. Read `[ref: SDD/TCS Submodule (R6.1)]` — MCP config block. CLAUDE.md guardrail: `.mcp.json` command paths must be absolute. `[ref: SDD/TCS Submodule (R6.1)]`
   2. Test: After `install.sh` runs context-mode section: `modules/satori/dist/index.js` exists (submodule initialized). Claude Code MCP config (`~/.claude/settings.json` or repo `.claude/settings.json`) contains a `satori` entry with absolute `args` path. The path resolves to an existing file. `[ref: PRD/R6.1; SDD/TCS Submodule (R6.1)]`
@@ -49,7 +49,7 @@ roundtrip: server registration → `satori_exec` call → content capture → se
   4. Validate: Run `install.sh` in test mode (or manually on a clean checkout): submodule initialized, dist built, MCP config entry present with absolute path, path resolves. `[ref: PRD/R6.1]`
   5. Success: `install.sh` initializes submodule, builds Satori, writes absolute-path MCP config; no relative paths in MCP config.
 
-- [ ] **T7.3 .gitignore and repo hygiene** `[activity: build-platform]`
+- [x] **T7.3 .gitignore and repo hygiene** `[activity: build-platform]`
 
   1. Prime: Check TCS root `.gitignore` and `modules/satori/.gitignore`. `[ref: SDD/SQLite Schema; Database location section]`
   2. Test: TCS `.gitignore` contains: `modules/satori/node_modules/`, `modules/satori/dist/`. `modules/satori/.gitignore` contains: `dist/`, `node_modules/`, `.satori/`. `satori.toml` is NOT gitignored (user commits their config). `.satori/` is gitignored. `[ref: SDD/SQLite Schema]`
@@ -57,7 +57,7 @@ roundtrip: server registration → `satori_exec` call → content capture → se
   4. Validate: `git status` after install shows no unexpected tracked files in `modules/satori/`. `.satori/` absent from git. `satori.toml.example` tracked. `[ref: SDD/SQLite Schema]`
   5. Success: No build artifacts tracked in git; `.satori/` correctly gitignored; satori.toml.example committed.
 
-- [ ] **T7.4 E2E roundtrip validation** `[activity: test-strategy]`
+- [x] **T7.4 E2E roundtrip validation** `[activity: test-strategy]`
 
   1. Prime: Read `[ref: PRD/R1–R5]` acceptance criteria. `[ref: SDD/Gateway Routing/Tool Call Flow]`
   2. Test (E2E script): (1) Start Satori MCP server. (2) `satori_manage(add, {name: "memory", runtime: "npx", command: "@modelcontextprotocol/server-memory"})`. (3) `satori_exec("memory", "create_entities", {entities: [{name: "test", entityType: "test", observations: ["hello"]}]})` → success response. (4) Verify capture in ContentDB (1 row). (5) `satori_context(query, {q: "hello"})` → returns capture summary. (6) `satori_context(flush)` → snapshot XML in session_resume. (7) `satori_context(restore)` → returns XML. (8) Shut down Satori. `[ref: PRD/R1, R2, R3, R5]`
@@ -65,7 +65,7 @@ roundtrip: server registration → `satori_exec` call → content capture → se
   4. Validate: `RUN_E2E=1 npm test -- test/e2e/` — all steps pass. If any step fails, the failure message identifies the failing step clearly. `[ref: PRD/R1–R5]`
   5. Success: Full roundtrip verified; all PRD R1–R5 acceptance criteria met.
 
-- [ ] **T7.5 Phase 7 Validation (M4 Complete)** `[activity: validate]`
+- [x] **T7.5 Phase 7 Validation (M4 Complete)** `[activity: validate]`
 
   - `npm test` — all unit tests pass.
   - `RUN_E2E=1 npm test -- test/e2e/` — E2E roundtrip passes.
