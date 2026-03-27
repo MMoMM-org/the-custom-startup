@@ -125,14 +125,14 @@ Then ask about branch deletion:
 > "Worktree at `{path}` removed."
 > (+ "Branch `{branch}` deleted." if applicable)
 
-## Always
+## Constraints
 
+**Always:**
 - Replace `/` with `-` when using branch name as part of a directory name
 - Surface git error output verbatim on failure
 - Show the resolved path before running any destructive command
 
-## Never
-
+**Never:**
 - Delete a branch without asking (unless YOLO=true and user explicitly passed `--delete-branch`)
 - Force-remove a dirty worktree without confirmation in normal mode
 - Create a worktree inside the current repo root

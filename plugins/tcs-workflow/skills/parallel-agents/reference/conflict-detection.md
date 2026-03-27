@@ -176,9 +176,9 @@ for each pair (A, B):
   for each path in A.writeTargets:
     if path in B.readTargets:
       dependencies.append({before: A.id, after: B.id, path: path})
+  for each path in B.writeTargets:
     if path in A.readTargets:
-      if path in B.writeTargets:
-        dependencies.append({before: B.id, after: A.id, path: path})
+      dependencies.append({before: B.id, after: A.id, path: path})
 ```
 
 Re-order execution groups:
