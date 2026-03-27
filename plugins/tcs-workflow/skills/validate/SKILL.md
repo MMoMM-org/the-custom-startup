@@ -133,4 +133,4 @@ match (validationMode) {
 
 Called by other workflow skills:
 - `/implement` — drift check at phase boundaries, constitution check at checkpoints
-- `/specify` — architecture alignment during SDD phase
+- `/xdd` — architecture alignment during SDD phase

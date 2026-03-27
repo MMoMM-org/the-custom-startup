@@ -340,10 +340,10 @@ Documentation skill captures discovered patterns:
 - Business rules discovered → Document in `docs/domain/`
 - External APIs found → Document in `docs/interfaces/`
 
-### During Specification (`/specify`)
+### During Specification (`/xdd`)
 - PRD/SDD references existing documentation
 - New patterns discovered → Document them
-- Specifications live in `the-custom-startup/specs/`, reference shared docs
+- Specifications live in `docs/XDD/specs/`, reference shared docs
 
 ### During Implementation (`/implement`)
 - Implementation follows documented patterns

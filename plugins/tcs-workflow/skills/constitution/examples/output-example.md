@@ -46,4 +46,4 @@ Integration Points:
 - /validate constitution - Check compliance
 - /implement - Active enforcement
 - /review - Code review checks
-- /specify - SDD alignment
+- /xdd - SDD alignment

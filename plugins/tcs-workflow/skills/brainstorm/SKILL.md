@@ -129,6 +129,6 @@ Present complete design summary.
 
 AskUserQuestion:
   Save design to file — check `.claude/startup.toml` for `ideas_dir`, default `the-custom-startup/ideas/YYYY-MM-DD-<topic>.md`
-  Start specification — invoke /specify with design context
+  Start specification — invoke /xdd with design context
   Done — keep design in conversation only
 
