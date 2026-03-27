@@ -5,6 +5,111 @@ Feature branches are created per item so each can be PR'd independently upstream
 
 ---
 
+## TCS v2 — Entscheidungsprotokoll & Roadmap
+
+**Stand:** 2026-03-27
+
+### Entschiedene Punkte (nicht nochmal diskutieren)
+
+- [x] 4-Plugin-Architektur: tcs-workflow / tcs-team / tcs-helper / tcs-patterns — **same repo**
+- [x] tcs-start → tcs-workflow Umbenennung — **done**
+- [x] tcs-patterns: 15 Skills, same repo — **done** (merged)
+- [x] skill-evaluate + skill-import — **done** (merged)
+- [x] M2 Scope: file-only, kein MCP — MCP kommt in M4/M5
+- [x] Routing-Grenze: MCP/Kairn ab **medium lived** (nicht erst "really short") — wird in M5 umgesetzt
+  - Files bleiben Source of Truth; MCP/Kairn sind zusätzliche Abfrageebene, kein Ersatz
+- [x] Reihenfolge: M2 → M4 → M5
+
+### Reihenfolge
+
+```
+M2 (Memory System, file-only)
+  └─ M4 (Satori/MCP Gateway)
+       └─ M5 (Memory + MCP Integration)
+```
+
+M4 kann parallel zu späteren M2-Phasen beginnen wenn M2 Phase 1-3 stabil ist.
+
+---
+
+## M2 — Memory + CLAUDE.md System
+
+**Spec:** `docs/XDD/specs/001-memory-claude/` (PRD ✓, SDD ✓, Plan ✓)
+**Plan:** `docs/superpowers/plans/2026-03-25-memory-system-m2.md` (6 Phasen)
+**Status:** Spec fertig, Implementation 0%
+
+### Vor dem Start
+
+- [ ] ROADMAP.md: `.start/specs/` → `docs/XDD/specs/` korrigieren
+- [ ] `2026-03-25-memory-system-m2.md`: `.start/specs/` → `docs/XDD/specs/` korrigieren
+- [ ] `001-memory-claude/solution.md` §3 Routing-Tabelle: Hinweis ergänzen dass MCP ab medium lived in M5 einsetzt
+
+### Implementation (6 Phasen)
+
+- [ ] Phase 1: Python-Infrastruktur (`lib/`, `reflect_utils.py`, Queue-Format)
+- [ ] Phase 2: Hooks (`capture_learning.py`, `session_start_reminder.py`, `check_learnings.py`, `post_commit_reminder.py`)
+- [ ] Phase 3: `memory-add` Routing-Logik
+- [ ] Phase 4: `memory-sync`, `memory-cleanup`, `memory-promote`
+- [ ] Phase 5: `tcs-helper:setup` (Onboarding-Wizard + Templates)
+- [ ] Phase 6: Integration & Validierung
+
+### Nach M2
+
+- [ ] `tcs-helper:setup` → tcs-patterns als optionalen Install-Schritt einbauen
+- [ ] AGENTS.md / README: tcs-patterns dokumentieren
+
+---
+
+## M4 — Satori/MCP Gateway
+
+**Spec:** `docs/XDD/specs/004-satori-gateway/` — **Placeholder, muss geschrieben werden**
+**Basis:** `docs/concept/v2/context-mode-MCP-Server.md` + `docs/concept/v2/TCS v2 Memory & Context Layout Spec.md` §5
+**Status:** Spec fehlt komplett
+
+### Zu entscheiden / zu spezifizieren
+
+- [ ] Name: "Satori" behalten oder "context-mode"?
+- [ ] MCP Gateway als Registry (single entry point für mehrere downstream Server)
+- [ ] Hot/cold mode: MCP Server nur laden wenn aktiv gebraucht
+- [ ] Security Scanner: MCP Server Configs vor Exposure prüfen
+- [ ] Kairn-Integration: optional semantic memory als Upgrade
+- [ ] g/p/r Config-Separation für MCP-Definitionen
+- [ ] Discovery: wie TCS erkennt ob context-mode und/oder Kairn installiert sind
+
+---
+
+## M5 — Memory + MCP Integration
+
+**Spec:** `docs/XDD/specs/005-memory-mcp/` (requirements.md vorhanden, Placeholder)
+**Status:** Wartet auf M2 + M4
+
+### Kernentscheidung (bereits gefällt)
+
+| Lifetime | M2 (file) | M5 (MCP added) |
+|---|---|---|
+| medium lived | `docs/ai/memory/` Source of Truth | + context-mode Index + Kairn semantisch |
+| short lived | `docs/ai/memory/context.md` | context-mode primary |
+| really short | context window | context-mode primary + Kairn |
+
+---
+
+## Offene Konzept-Fragen
+
+- [ ] `docs/concept/v2/` ist Perplexity-Brainstorming — **nicht direkt als Spec verwenden**
+  - Für M4: §5 (Context-Mode + Kairn) als Basis heranziehen, bereinigen
+  - Für M5: Routing-Tabelle §3.2 als Ausgangspunkt, Grenze aber verschoben (→ oben)
+- [ ] ADR-Location: `docs/adr/` oder `.claude/adr/`? (Setup bietet es optional an)
+
+---
+
+## Nächster Schritt → M2 starten
+
+1. Pfad-Fixes in ROADMAP + Plan
+2. `docs/XDD/specs/001-memory-claude/plan/` lesen
+3. Implement Phase 1
+
+---
+
 ## #1 — install.sh: Modular & Flexible
 
 **Branch:** `feat/install-modular`
