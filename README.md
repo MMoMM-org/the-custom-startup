@@ -54,7 +54,7 @@
 curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/install.sh | bash
 ```
 
-The interactive wizard guides you through: install target (global / repo / custom path) · which plugins (start / team / helper) · output style · multi-AI templates · statusline variant.
+The interactive wizard guides you through: install target (global / repo / custom path) · which plugins (workflow / team / helper / patterns) · output style · multi-AI templates · statusline variant.
 
 To uninstall:
 
@@ -128,13 +128,28 @@ Then start building:
 | **The DevOps** | Infrastructure, CI/CD, monitoring |
 | **The Meta Agent** | Agent design and generation |
 
-### Helper Plugin (`helper`) — Skill Authoring Tools *(optional)*
+### Helper Plugin (`tcs-helper`) — Skill Authoring + Memory System *(optional)*
 
-**1 user-invocable skill** for creating, auditing, and maintaining Claude Code skills and plugins. Install if you want to build on top of or contribute to The Custom Agentic Startup.
+Skill authoring tools and a file-based project memory system. Install to add structured memory to your repos or to build on the framework.
 
 | Skill | Purpose |
 |-------|---------|
-| `/skill-author` | Create, audit, and convert Claude Code skills — duplicate detection, PICS structure, agent discovery, verification |
+| `/skill-author` · `/skill-evaluate` · `/skill-import` | Create, audit, and fetch Claude Code skills |
+| `/setup` | Provision `docs/ai/memory/` + CLAUDE.md hierarchy; install learning-capture hooks |
+| `/memory-add` · `/memory-sync` · `/memory-cleanup` · `/memory-promote` | Capture and maintain session learnings across scopes |
+
+### Patterns Plugin (`tcs-patterns`) — Domain Pattern Skills *(optional)*
+
+**15 pattern skills** covering architecture, testing, languages, and platform. Install only what you need — they activate on trigger terms.
+
+| Category | Skills |
+|----------|--------|
+| **Architecture** | `/ddd` · `/hexagonal` · `/functional` · `/event-driven` |
+| **API & Types** | `/api-design` · `/typescript-strict` |
+| **Testing** | `/mutation-testing` · `/frontend-testing` · `/react-testing` |
+| **Platforms** | `/node-service` · `/python-project` · `/go-idiomatic` |
+| **DevOps** | `/twelve-factor` |
+| **Integrations** | `/mcp-server` · `/obsidian-plugin` |
 
 ---
 

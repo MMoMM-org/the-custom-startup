@@ -35,9 +35,33 @@ the-custom-startup/
 │   │   │   └── the-meta-agent.md # Agent design and generation
 │   │   └── skills/               # Domain skills (cross-cutting, design, development, infrastructure, quality)
 │   │
-│   └── tcs-helper/               # Skill authoring tools plugin (optional)
+│   ├── tcs-helper/               # Skill authoring + memory system plugin (optional)
+│   │   ├── .claude-plugin/       # Plugin manifest (plugin.json, v2.0.0)
+│   │   ├── hooks/hooks.json      # 4 hook events: UserPromptSubmit, SessionStart, PreCompact, PostToolUse
+│   │   ├── scripts/              # Python hook scripts + lib/reflect_utils.py
+│   │   ├── templates/            # 19 CLAUDE.md + memory templates (stacks: ts, go, python, cf, convex)
+│   │   └── skills/
+│   │       ├── skill-author/     # Create, audit, convert Claude Code skills (PICS, TDD Iron Law)
+│   │       ├── skill-evaluate/   # Evaluate a skill before importing or using
+│   │       ├── skill-import/     # Fetch + install a single skill from any GitHub repo
+│   │       ├── memory-add/       # Capture session learnings → route to correct memory file
+│   │       ├── memory-sync/      # Keep @imports and memory index in sync
+│   │       ├── memory-cleanup/   # Archive resolved issues, prune stale entries
+│   │       ├── memory-promote/   # Promote domain patterns to reusable skills
+│   │       ├── setup/            # Provision docs/ai/memory/ + CLAUDE.md hierarchy in new repos
+│   │       ├── docs/             # Generate and maintain project documentation
+│   │       ├── finish-branch/    # Branch completion workflow
+│   │       └── git-worktree/     # Git worktree management
+│   │
+│   └── tcs-patterns/             # Domain pattern skills plugin (optional, selective install)
 │       ├── .claude-plugin/       # Plugin manifest (plugin.json)
-│       └── skills/skill-author/  # Skill creation, auditing, and conversion
+│       └── skills/               # 15 pattern skills:
+│           │                     # Architecture: ddd, hexagonal, functional, event-driven
+│           │                     # API & Types: api-design, typescript-strict
+│           │                     # Testing: mutation-testing, frontend-testing, react-testing
+│           │                     # Platforms: node-service, python-project, go-idiomatic
+│           │                     # DevOps: twelve-factor (→ tcs-team:the-devops:build-platform)
+│           │                     # Integrations: mcp-server, obsidian-plugin
 │
 ├── scripts/
 │   ├── the-custom-startup-statusline-standard.sh   # Standard (single-line) statusline
