@@ -1,6 +1,6 @@
 ---
 name: finish-branch
-description: "Branch completion workflow. Run when a feature branch is ready to ship. Verifies tests pass, then offers: merge locally, push and create PR, keep as-is, or discard. Handles worktree cleanup automatically."
+description: "Use when a feature branch is ready to merge, push as a PR, keep, or discard. Also handles worktree cleanup when running inside a git worktree."
 user-invocable: true
 argument-hint: "[--option 1|2|3|4] (skip interactive if known)"
 allowed-tools: Bash, AskUserQuestion
@@ -30,7 +30,6 @@ State {
 ## Constraints
 
 **Always:**
-- Run tests before presenting options.
 - Require typed "discard" confirmation before deleting any branch.
 - Block options 1 and 2 when tests are failing.
 - Clean up the worktree registration for options 1 and 4.
@@ -42,7 +41,7 @@ State {
 
 ## Workflow
 
-### Step 1 — Capture branch context
+### 1. Capture branch context
 
 ```bash
 BRANCH=$(git branch --show-current)
@@ -53,7 +52,7 @@ IN_WORKTREE=$(git rev-parse --git-common-dir 2>/dev/null | grep -v "^\.git$" && 
 
 If `BRANCH` is empty (detached HEAD): surface an error and stop — finish-branch requires a named branch.
 
-### Step 2 — Detect test command
+### 2. Detect test command
 
 Priority order:
 
@@ -84,7 +83,7 @@ fi
 3. No test command found: AskUserQuestion:
    > "No test command detected. Enter your test command, or leave blank to skip tests (this will limit you to keep-as-is and discard)."
 
-### Step 3 — Run tests
+### 3. Run tests
 
 If `TEST_CMD` is set: run it and capture exit code and output.
 
@@ -95,7 +94,7 @@ If `TEST_CMD` is set: run it and capture exit code and output.
 
 If test command was skipped (blank input): treat as failing — options 3 and 4 only.
 
-### Step 4 — YOLO shortcut
+### 4. YOLO shortcut
 
 Check env vars before prompting:
 
@@ -108,7 +107,7 @@ YOLO_FINISH="${YOLO_FINISH:-}"
 - `YOLO=true` AND `YOLO_FINISH=merge` AND `testsPassed=true` → jump to Option 1 (no prompt).
 - Otherwise: continue to Step 5.
 
-### Step 5 — Present options
+### 5. Present options
 
 AskUserQuestion with the following choices (disable 1 and 2 if `testsPassed=false`):
 
@@ -129,7 +128,7 @@ Choose how to finish this branch:
 
 If `--option N` was passed as `$ARGUMENTS`: skip the prompt and use that option directly (still validate that 1/2 are blocked when tests failed).
 
-### Step 6 — Execute option
+### 6. Execute option
 
 #### Option 1 — Merge locally
 
@@ -194,7 +193,7 @@ Report: "Branch `{branch}` discarded."
 
 If input does not match `discard`: abort with "Deletion cancelled."
 
-### Step 7 — Worktree cleanup (options 1 and 4 only)
+### 7. Worktree cleanup
 
 Detect worktree path:
 

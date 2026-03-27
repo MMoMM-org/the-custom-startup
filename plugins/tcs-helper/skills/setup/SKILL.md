@@ -1,6 +1,6 @@
 ---
 name: setup
-description: One-shot project onboarding for TCS repos. Detects tech stack, generates docs/ai/memory/ structure and lean CLAUDE.md files, installs memory hooks. Run once in a new repo or to add memory structure to an existing one.
+description: "Use when setting up a new TCS repo, adding the memory system to an existing project, or re-running onboarding to repair a missing docs/ai/memory/ structure or CLAUDE.md hierarchy."
 user-invocable: true
 argument-hint: ""
 allowed-tools: Read, Write, Edit, Bash
@@ -12,9 +12,31 @@ allowed-tools: Read, Write, Edit, Bash
 
 Provision the TCS memory system for this repo.
 
+## Interface
+
+```
+State {
+  stack: string[]          // detected from manifest files
+  hasClaudeMd: boolean
+  hasMemoryStructure: boolean
+  ciSystem: string | null
+}
+```
+
+## Constraints
+
+**Always:**
+- Non-destructive: preserve existing CLAUDE.md content.
+- Idempotent: running twice produces no duplicates.
+- Report every file created or modified.
+
+**Never:**
+- Overwrite existing @imports or custom sections in CLAUDE.md.
+- Install hooks without user confirmation — the preview in Step 2 covers this.
+
 ## Workflow
 
-### Step 1 — Detect stack and existing state (code)
+### 1. Detect stack and existing state
 
 ```bash
 # Stack detection — check for manifest files
@@ -31,7 +53,7 @@ grep -l "convex" package.json 2>/dev/null && echo "convex"
 [ -d docs/ai/memory ] && echo "has-memory-structure"
 ```
 
-### Step 2 — Preview structure (AI — show before acting)
+### 2. Preview structure
 
 > "I'll create the following structure:
 >
@@ -46,7 +68,7 @@ grep -l "convex" package.json 2>/dev/null && echo "convex"
 >
 > Proceed? [yes/no]"
 
-### Step 3 — Generate memory structure (code)
+### 3. Generate memory structure
 
 ```bash
 # Create directories
@@ -64,7 +86,7 @@ sed -i.bak "s/\[Repo Name\]/${REPO_NAME}/g" docs/ai/memory/*.md
 rm -f docs/ai/memory/*.bak
 ```
 
-### Step 4 — Generate CLAUDE.md files (code + AI for existing CLAUDE.md)
+### 4. Generate CLAUDE.md files
 
 For each of: root, src/, test/, docs/, docs/ai/
 - If file doesn't exist: copy from template and apply stack overrides
@@ -75,7 +97,7 @@ For each of: root, src/, test/, docs/, docs/ai/
 
 Stack override application: read `templates/stacks/<detected-stack>.md` and append to `src/CLAUDE.md`.
 
-### Step 5 — Install hooks (code)
+### 5. Install hooks
 
 ```bash
 SETTINGS="${HOME}/.claude/settings.json"
@@ -86,14 +108,14 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/merge_hooks.py" "$HOOKS" "$SETTINGS" --se
 
 Report which hooks were added vs already present.
 
-### Step 6 — Optional extras (AI — AskUserQuestion)
+### 6. Optional extras
 
 > "Setup complete! Optional additions:
 > 1. Create docs/adr/ for Architecture Decision Records
 > 2. Add format-on-save hook for TypeScript (biome)
 > Skip optional steps? [yes/no/select]"
 
-### Step 7 — Summary
+### 7. Summary
 
 Show:
 - Files created/modified
@@ -101,11 +123,4 @@ Show:
 - YOLO=true usage instructions
 - "Run /memory-add to capture learnings, /memory-sync to verify structure"
 
-## Always
-- Non-destructive: never overwrite existing CLAUDE.md content
-- Idempotent: running twice produces no duplicates
-- Report every file created/modified
 
-## Never
-- Overwrite existing @imports or custom sections in CLAUDE.md
-- Install hooks without user confirmation (the preview in Step 2 covers this)

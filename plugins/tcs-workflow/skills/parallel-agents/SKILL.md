@@ -1,6 +1,6 @@
 ---
 name: parallel-agents
-description: "Safe parallel agent dispatch. Validates task independence, detects file conflicts, dispatches agents with curated context. Incorporates centminmod batch-operations conflict-grouping patterns."
+description: "Use when multiple independent tasks can be dispatched concurrently — validates task independence, detects file conflicts, and fans out agents with curated context."
 user-invocable: true
 argument-hint: "describe the parallel tasks, or pass --tasks-file path/to/tasks.md"
 allowed-tools: Read, Bash, Agent, AskUserQuestion, Glob
@@ -11,8 +11,6 @@ allowed-tools: Read, Bash, Agent, AskUserQuestion, Glob
 **Active skill: tcs-workflow:parallel-agents**
 
 Act as a parallel dispatch coordinator that safely fans out independent tasks to subagents, validates task independence before dispatching, and presents structured results for user review.
-
-**Tasks**: $ARGUMENTS
 
 ## Interface
 
@@ -74,13 +72,11 @@ State {
 
 Determine task source from $ARGUMENTS:
 
-```
 match ($ARGUMENTS) {
   "--tasks-file <path>" => Read file at <path>; parse each H2 section or numbered item as a task
   inline text           => split on blank lines or numbered list markers to extract N tasks
   empty                 => AskUserQuestion: "Describe the parallel tasks to run, one per line."
 }
-```
 
 Assign IDs: T1, T2, T3, ...
 

@@ -1,6 +1,6 @@
 ---
 name: memory-promote
-description: Detect mature domain patterns in domain.md that have become reusable knowledge. Analyze session history for repeating patterns (like reflect-skills). Propose as skill candidates. On approval, generate SKILL.md stub at user-chosen scope (global or repo). Run when domain.md grows or periodically.
+description: "Use when domain.md has grown large, patterns seem to be recurring across sessions, or you want to promote domain knowledge into reusable skills. Triggers on: promote memory, grow skills from memory, extract skill."
 user-invocable: true
 argument-hint: "[--days N] [--dry-run]"
 allowed-tools: Read, Write, Bash
@@ -12,9 +12,38 @@ allowed-tools: Read, Write, Bash
 
 Detect promotable patterns in domain.md and generate skill stubs.
 
+## Interface
+
+```
+Candidate {
+  name: string
+  evidence: string
+  confidence: High | Medium | Low
+  approved: boolean
+  scope: global | repo
+}
+
+State {
+  candidates: Candidate[]
+  dryRun: boolean     // --dry-run flag
+  days: number        // --days N lookback window
+}
+```
+
+## Constraints
+
+**Always:**
+- Show evidence for each candidate before asking for approval.
+- Inform the user that project-level skills do not exist — only global or repo.
+- Generate stub only — leave TODO markers for the user to fill in.
+
+**Never:**
+- Delete domain.md entries — replace with pointer only.
+- Generate skills with confidence = Low without explicit user override.
+
 ## Workflow
 
-### Step 1 — Gather evidence (code via Bash)
+### 1. Gather evidence
 
 ```bash
 # Find session files for this repo (uses same encoding as reflect_utils.encode_project_path)
@@ -26,7 +55,7 @@ ls ~/.claude/projects/$ENCODED/*.jsonl 2>/dev/null | head -20
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/extract_session_learnings.py" "$(pwd)" --days "${DAYS:-14}"
 ```
 
-### Step 2 — Semantic pattern analysis (AI reasoning)
+### 2. Semantic pattern analysis
 
 Read `docs/ai/memory/domain.md`. Cross-reference with session messages from Step 1.
 
@@ -40,7 +69,7 @@ For each domain.md entry and each cluster of similar session messages:
 
 Skip entries that are already pointers (`→ see skill:` format).
 
-### Step 3 — Propose candidates
+### 3. Propose candidates
 
 For each candidate (High or Medium confidence):
 
@@ -51,7 +80,7 @@ For each candidate (High or Medium confidence):
 
 AskUserQuestion: "Approve / Skip / Rename"
 
-### Step 4 — On approval: choose scope
+### 4. On approval: choose scope
 
 AskUserQuestion:
 > "Where should this skill be generated?
@@ -59,33 +88,45 @@ AskUserQuestion:
 > 2. Repo — .claude/skills/[name]/SKILL.md (only in this repo)
 > (Note: project-level skills don't exist in Claude Code — only global or repo)"
 
-### Step 5 — Generate SKILL.md stub
+### 5. Generate SKILL.md stub
 
 ```markdown
 ---
 name: [skill-name]
-description: [one-line description based on pattern]. Promoted from docs/ai/memory/domain.md on YYYY-MM-DD.
+description: "[TODO: trigger conditions only — when should this skill be used?]"
 user-invocable: false
 ---
 
-# [Skill Name]
+## Persona
 
-<!-- TODO: Fill in this skill based on the promoted pattern -->
+**Active skill: [plugin]:[skill-name]**
 
-## Pattern
+[TODO: one-sentence role description. Promoted from domain.md on YYYY-MM-DD.]
 
-[The domain.md entry that was promoted, as a starting point]
+## Interface
 
-## When to apply
-
-<!-- TODO: Define trigger conditions -->
-
-## How to apply
-
-<!-- TODO: Define the pattern steps -->
+```
+State {
+  // TODO: define working state
+}
 ```
 
-### Step 6 — Update domain.md
+## Constraints
+
+**Always:**
+- [TODO]
+
+**Never:**
+- [TODO]
+
+## Workflow
+
+### 1. [First Step]
+
+[TODO: add steps]
+```
+
+### 6. Update domain.md
 
 Replace the promoted entry with:
 ```
@@ -94,7 +135,7 @@ Replace the promoted entry with:
 
 Update memory.md index.
 
-### Step 7 — Report
+### 7. Report
 
 ```
 memory-promote complete:
@@ -103,11 +144,3 @@ memory-promote complete:
   · Skipped: 2 candidates (low confidence)
 ```
 
-## Always
-- Show evidence for each candidate before asking for approval
-- Inform user that project-level skills don't exist (only global or repo)
-- Generate stub only — leave TODO markers for the user to fill in
-
-## Never
-- Delete domain.md entries — replace with pointer only
-- Generate skills with confidence = Low without explicit user override

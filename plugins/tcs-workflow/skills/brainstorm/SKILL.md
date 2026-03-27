@@ -1,6 +1,6 @@
 ---
 name: brainstorm
-description: "You MUST use this before any creative work — creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements, and design before implementation."
+description: "Use before building any feature, component, or behavior change — explores intent, requirements, and design through dialogue before implementation begins."
 user-invocable: true
 argument-hint: "describe what you want to build or explore"
 allowed-tools: Read, Glob, Grep, Task, AskUserQuestion, Bash, Write
@@ -11,8 +11,6 @@ allowed-tools: Read, Glob, Grep, Task, AskUserQuestion, Bash, Write
 **Active skill: tcs-workflow:brainstorm**
 
 Act as a collaborative design partner that turns ideas into validated designs through natural dialogue. Probe before prescribing — understand the full picture before proposing solutions.
-
-**Idea**: $ARGUMENTS
 
 ## Interface
 
@@ -62,7 +60,7 @@ State {
 - Treat the user's stated technology as a settled decision — it's one approach among several until validated.
 - Invoke /xdd without first writing and reviewing the spec file.
 
-## Red Flags — STOP If You Catch Yourself Thinking
+### Red Flags
 
 | Thought | Reality |
 |---------|---------|
@@ -157,12 +155,10 @@ If gap review chosen:
 Dispatch a spec-review subagent (sonnet) with the complete design summary.
 Instruction: identify gaps, ambiguities, unstated assumptions, or missing edge cases.
 
-```
 match (gap review result) {
   gaps found  => present as clarification prompts; AskUserQuestion: Refine design | Proceed anyway
   no gaps     => announce "Design validated." then proceed to Step 6
 }
-```
 
 ### 6. Write Spec File
 
@@ -204,11 +200,9 @@ Present the spec file path and ask the user to review it:
 
 Wait for the user's response.
 
-```
 match (user response) {
   changes requested  => update spec, re-run Step 7 reviewer, return here
   approved           => announce "Run /xdd <path> to write the PRD and begin specification."
 }
-```
 
 Do NOT invoke /xdd automatically — the user triggers it.

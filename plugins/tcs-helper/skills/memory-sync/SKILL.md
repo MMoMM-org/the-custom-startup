@@ -1,6 +1,6 @@
 ---
 name: memory-sync
-description: Verify that CLAUDE.md @imports and memory.md index are in sync with actual docs/ai/memory/ files. Detects missing imports, orphaned files, routing rules in wrong location, and index budget issues. Run when adding memory files or periodically.
+description: "Use when memory files may be out of sync with CLAUDE.md imports, the memory.md index may be stale, or after adding or removing memory category files. Triggers on: sync memory, check memory structure, memory out of sync."
 user-invocable: true
 argument-hint: "[--fix]"
 allowed-tools: Read, Write, Edit, Bash
@@ -12,9 +12,35 @@ allowed-tools: Read, Write, Edit, Bash
 
 Audit the memory bank structure and report (or fix) synchronization issues.
 
+## Interface
+
+```
+CheckResult {
+  id: string
+  status: OK | WARN | ERROR
+  message: string
+  autoFixable: boolean
+}
+
+State {
+  results: CheckResult[]
+  fix: boolean    // --fix flag
+}
+```
+
+## Constraints
+
+**Always:**
+- Report clearly even when everything is OK.
+
+**Never:**
+- Modify memory content — only add missing structural entries.
+- Delete entries from memory.md — that is memory-cleanup's job.
+- Add `@` imports for files that are not strictly needed on every session start.
+
 ## Workflow
 
-### Step 1 — Gather state (code via Bash)
+### 1. Gather state
 
 ```bash
 # List all .md files in docs/ai/memory/ (excluding archive/)
@@ -25,7 +51,7 @@ wc -l docs/ai/memory/memory.md
 grep '@docs/ai/memory' CLAUDE.md
 ```
 
-### Step 2 — Run checks
+### 2. Run checks
 
 **Check 1: CLAUDE.md has @import for memory.md**
 - Read CLAUDE.md — look for `@docs/ai/memory/memory.md`
@@ -52,7 +78,7 @@ grep '@docs/ai/memory' CLAUDE.md
 - If line count ≥ 160: WARN — "memory.md approaching budget (N/200 lines)"
 - Otherwise: OK
 
-### Step 3 — Report
+### 3. Report
 
 ```
 memory-sync report:
@@ -65,10 +91,4 @@ memory-sync report:
 
 If issues found and `--fix` passed: apply auto-fixable items (missing @import only); flag manual items.
 
-## Always
-- Never modify memory content — only add missing structural entries
-- Report clearly even when everything is OK
 
-## Never
-- Delete entries from memory.md (that's memory-cleanup's job)
-- Add `@` imports for files that aren't strictly needed on every session start

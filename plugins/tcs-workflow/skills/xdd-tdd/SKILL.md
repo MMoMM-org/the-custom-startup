@@ -1,6 +1,6 @@
 ---
 name: xdd-tdd
-description: "Enforce RED-GREEN-REFACTOR iron law before any implementation code is written. Invoke at the start of each implementation task. No production code without a failing test first."
+description: "Use at the start of each implementation task — enforces the RED-GREEN-REFACTOR cycle and blocks production code until a failing test exists."
 user-invocable: true
 argument-hint: "[task description] [--sdd-ref SDD/Section-X.Y]"
 allowed-tools: Read, Bash, AskUserQuestion
@@ -27,30 +27,21 @@ TDDState {
 
 ## Constraints
 
+**Always:**
+- Enforce RED → GREEN → REFACTOR order without exception.
+
 **Never:**
-- Allow production code to be written before RED phase is confirmed (failing tests exist)
+- Allow production code to be written before RED phase is confirmed (failing tests exist).
 - Accept any rationalization for skipping tests:
   - "too simple to test" — rejected
   - "it's just a config change" — rejected
   - "I'll add tests later" — rejected
   - "it's obviously correct" — rejected
-  - See `[Iron Law](reference/iron-law.md)` for the full rejection table
-
-**YOLO Mode:**
-- Check: `[ "${YOLO:-false}" = "true" ]`
-- When YOLO=true: skip interactive confirmations, run tests automatically via Bash
-- Log any violations to `docs/ai/memory/yolo-review.md`:
-  - Create the file if it does not exist
-  - Append: `- [ ] [xdd-tdd] <violation description>`
-- Return APPROVED with a warning flag noting YOLO bypass
-
-**Argument parsing:**
-- On invocation, extract `--sdd-ref <ref>` from $ARGUMENTS if present
-- Remaining text in $ARGUMENTS is the task description
+  - See `reference/iron-law.md` for the full rejection table
 
 ## Workflow
 
-### Step 1 — Read SDD Contract
+### 1. Read SDD Contract
 
 If `--sdd-ref` was provided:
 - Read the referenced SDD section from `docs/XDD/specs/` (or the path given)
@@ -61,7 +52,7 @@ If no SDD ref:
 - Proceed with task description only
 - Derive expected behavior from the task text
 
-### Step 2 — Generate Test List
+### 2. Generate Test List
 
 From the contract or task description, produce a list of test names covering:
 - Happy path (main success scenario)
@@ -78,7 +69,7 @@ Tests to implement:
 
 In YOLO mode: skip user review, proceed directly to Step 3.
 
-### Step 3 — Confirm Test File Path
+### 3. Confirm Test File Path
 
 Propose a test file location based on project conventions:
 - Python: `tests/<module>/test_<name>.py`
@@ -91,7 +82,7 @@ In YOLO mode: use the proposed path automatically, no confirmation needed.
 
 Set `TDDState.test_file` to the confirmed path.
 
-### Step 4 — Wait for RED Confirmation
+### 4. Wait for RED Confirmation
 
 Output:
 ```
@@ -122,7 +113,7 @@ Do NOT write any production code yet.
 - Output: "BLOCKED — Tests pass before any implementation. This means either: (a) the behavior is already implemented and tested, or (b) the tests are not actually testing the intended behavior. Resolve this before proceeding."
 - Do not continue until the user resolves the conflict.
 
-### Step 5 — Approve GREEN Phase
+### 5. Approve GREEN Phase
 
 Once RED is confirmed:
 
@@ -140,7 +131,7 @@ Proceed to implementation. Rules:
 When all tests pass, report back.
 ```
 
-### Step 6 — Confirm PASS
+### 6. Confirm PASS
 
 **Non-YOLO:** Wait for user to report test results.
 
@@ -155,7 +146,7 @@ If any tests fail:
 - Output: "BLOCKED — Fix failing tests before proceeding. Do not add new code; focus only on making the existing tests pass."
 - Wait for user to resolve (or in YOLO mode: stop and log the failure)
 
-### Step 7 — REFACTOR Checkpoint
+### 7. REFACTOR Checkpoint
 
 Set phase = REFACTOR
 
@@ -192,4 +183,4 @@ If tests fail after refactor:
 
 ## Reference Materials
 
-- `[Iron Law](reference/iron-law.md)` — The iron law of TDD and rationalization rejection table
+- `reference/iron-law.md` — The iron law of TDD and rationalization rejection table

@@ -1,6 +1,6 @@
 ---
 name: receive-review
-description: "Structured code review response workflow. Process each review item with technical rigor — classify as Accept/Push Back/Defer/Question before acting."
+description: "Use when processing incoming code review feedback — classifies each item as Accept, Push Back, Defer, or Question before acting on any."
 user-invocable: true
 argument-hint: "[paste review comments or provide PR URL]"
 allowed-tools: Read, Bash, AskUserQuestion, WebFetch
@@ -11,8 +11,6 @@ allowed-tools: Read, Bash, AskUserQuestion, WebFetch
 **Active skill: tcs-workflow:receive-review**
 
 Act as a disciplined code review responder. For every review item, classify before acting. Apply fixes with evidence. Push back only with technical citations — never on preference.
-
-**Review Input**: $ARGUMENTS
 
 ## Interface
 
@@ -58,28 +56,18 @@ State {
 - Mark an item resolved before running verify on Accept fixes.
 - Skip items — every item in the input must appear in the summary table.
 
-## YOLO Mode
-
-When `[ "${YOLO:-false}" = "true" ]`:
-- Auto-classify unambiguous items and apply Accept fixes without prompting.
-- For ambiguous items (conflicting signals, no clear code reference), default to Question.
-- List Push Back and Defer items in the summary for manual follow-up rather than halting.
-- Still invoke `Skill(tcs-workflow:verify)` after applying fixes.
-
 ## Workflow
 
-### Step 1 — Parse Input
+### 1. Parse Input
 
 Detect input format from $ARGUMENTS:
 
-```
 match ($ARGUMENTS) {
   starts with "http" | github.com   => fetch with WebFetch or `gh pr view --comments <url>`
   /^\d+$/                           => run `gh pr view --comments $ARGUMENTS`
   blank                             => AskUserQuestion "Paste your review comments or provide a PR URL/number."
   default                           => treat as pasted review text
 }
-```
 
 Extract each review item. Assign sequential IDs: R1, R2, R3...
 
@@ -90,7 +78,7 @@ For each item record:
 
 If fewer than 1 item is found, ask: "I could not parse any review items. Can you paste the review comments directly?"
 
-### Step 2 — Classify Items
+### 2. Classify Items
 
 **Interactive mode** — present each item in turn:
 
@@ -122,7 +110,7 @@ Confirm the suggestion before proceeding.
 
 **YOLO mode** — auto-classify all items using the heuristic above without prompting. Present a summary of classifications and proceed.
 
-### Step 3 — Process by Classification
+### 3. Process by Classification
 
 Process each item according to its classification:
 
@@ -186,7 +174,7 @@ Regarding [location or topic] — [specific question that resolves the ambiguity
 
 Mark `status = listed`.
 
-### Step 4 — Output Summary
+### 4. Output Summary
 
 After all items are processed, output the structured summary table:
 
@@ -206,7 +194,7 @@ After all items are processed, output the structured summary table:
 **Questions:** [count] — see questions above for reviewer
 ```
 
-### Step 5 — Conclude
+### 5. Conclude
 
 If all items have `status = resolved`:
 ```
@@ -218,10 +206,3 @@ If any items have `status = listed`:
 [N] items require follow-up (see summary above).
 When reviewer responds to questions or deferred items are ready, re-run `/receive-review` with the new comments.
 ```
-
-## Integration Notes
-
-- **`review`** generates findings that feed into this skill as review items.
-- **`verify`** is invoked automatically on the Accept path — do not skip it.
-- **`finish-branch`** is the natural next step when all items are resolved.
-- Deferred items in `docs/ai/memory/context.md` persist across sessions for future follow-up.

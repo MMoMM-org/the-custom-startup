@@ -1,6 +1,6 @@
 ---
 name: docs
-description: "Fetch and cache current Claude Code documentation on demand. Use when you need to refresh knowledge on Claude Code hooks, MCP, tools, permissions, settings, agents, or skills. Checks for an MCP docs server before fetching directly."
+description: "Use when you need current Claude Code documentation on hooks, MCP, tools, permissions, settings, agents, or skills. Fetches and caches docs locally for up to 7 days."
 user-invocable: true
 argument-hint: "[topic: hooks | mcp | tools | permissions | settings | agents | skills | all] [--refresh]"
 allowed-tools: Bash, WebFetch, Read, Write
@@ -46,7 +46,7 @@ State {
 - Fetch from the network when a fresh, valid cache exists (unless `--refresh` is set).
 - Create `docs/ai/external/` — it is already in `.gitignore`; just write the file.
 
-## Topics Reference
+## Reference Materials
 
 | Topic | URL |
 |-------|-----|
@@ -60,14 +60,14 @@ State {
 
 ## Workflow
 
-### Step 1 — Parse arguments
+### 1. Parse arguments
 
 Extract `topic` and `--refresh` flag from `$ARGUMENTS`:
 - Strip `--refresh` from the argument string; set `refresh: true` if present.
 - The remaining token is the topic name (lowercase, trimmed).
 - If topic is empty or not in the Topics Reference table → print the table above and exit.
 
-### Step 2 — Check cache
+### 2. Check cache
 
 ```bash
 CACHE_DIR="docs/ai/external/claude"
@@ -82,7 +82,7 @@ fi
 
 If fresh and `refresh` is false: Read the cache file and present its content. Exit.
 
-### Step 3 — MCP check
+### 3. MCP check
 
 ```bash
 MCP_DOCS=$(claude mcp list 2>/dev/null | grep -i "docs\|documentation" | head -1)
@@ -90,7 +90,7 @@ MCP_DOCS=$(claude mcp list 2>/dev/null | grep -i "docs\|documentation" | head -1
 
 If `$MCP_DOCS` is non-empty: delegate the request to that MCP docs server. Exit after delegation.
 
-### Step 4 — Fetch and cache
+### 4. Fetch and cache
 
 For the resolved topic URL (from the Topics Reference table):
 1. Use WebFetch to retrieve the page content.
@@ -103,7 +103,7 @@ For the resolved topic URL (from the Topics Reference table):
 3. Write the combined content to `$CACHE_FILE` using the Write tool.
 4. Present the fetched content.
 
-### Step 5 — `all` topic
+### 5. `all` topic
 
 When topic is `all`: iterate through every entry in the Topics Reference table sequentially, running Steps 2–4 for each. Report a summary table at the end:
 
