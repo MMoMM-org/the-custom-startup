@@ -36,6 +36,7 @@ miyo-satori/
 │   │   └── schema.sql            # Combined DB schema (applied on first run)
 │   ├── gateway/
 │   │   ├── registry.ts           # Downstream server registry (load, validate, lookup)
+│   │   ├── catalog.ts            # Tool catalog cache (satori_find + satori_schema data source)
 │   │   └── router.ts             # satori_exec routing: server lookup → handler → downstream
 │   ├── handlers/
 │   │   ├── interface.ts          # SatoriHandler interface (the extension contract)
@@ -58,6 +59,8 @@ miyo-satori/
 │   └── tools/
 │       ├── satori-context.ts     # satori_context tool (sub-commands: restore, query, status)
 │       ├── satori-manage.ts      # satori_manage tool (server state, enable/disable)
+│       ├── satori-find.ts        # satori_find tool (search tools across all servers)
+│       ├── satori-schema.ts      # satori_schema tool (get full input schema for a tool)
 │       └── satori-exec.ts        # satori_exec tool (single entry point for all downstream calls)
 ├── satori.toml.example           # Annotated config template
 ├── package.json
@@ -400,36 +403,49 @@ that converts stored `session_events` into an XML string injected at the next `S
 
 ## Tool Naming Convention
 
-Claude Code sees Satori as a single MCP server exposing exactly **3 tools**, regardless of how many downstream servers are registered:
+Claude Code sees Satori as a single MCP server exposing exactly **5 tools**, regardless of how many downstream servers are registered:
 
 | Tool | Purpose |
 |------|---------|
 | `satori_context` | Context DB: restore, query, status, flush |
 | `satori_manage` | Server management: list, add, remove, enable, disable, state, scan |
-| `satori_exec` | Single entry point for ALL downstream tool calls |
+| `satori_find` | Search for tools across all registered servers by keyword |
+| `satori_schema` | Get the full input schema for a specific tool |
+| `satori_exec` | Execute a downstream tool by server + tool name |
 
-### Why satori_exec
+### Discovery + dispatch flow (mirrors Airis pattern)
 
-Exposing downstream tools as individual `<server>_<tool>` entries (e.g. `filesystem_read_file`, `github_create_issue`) does not reduce Claude's tool count — it grows it proportionally to the number of registered servers × tools per server. The entire point of the gateway is a fixed, minimal tool surface.
+```
+Claude: [satori_find("read file")]
+→ filesystem: read_file — Read a file from the filesystem
+→ filesystem: read_multiple_files — Read several files at once
 
-`satori_exec` keeps the tool list constant. All routing, handler pipeline, hot/cold lifecycle, and security scanning happen inside it.
+Claude: [satori_schema("filesystem", "read_file")]
+→ { path: { type: "string", description: "..." } }
+
+Claude: [satori_exec("filesystem", "read_file", { path: "/src/main.ts" })]
+→ compact summary of file contents
+```
+
+`satori_find` and `satori_schema` replace the auto-discovery that would otherwise come from
+exposing namespaced tools via `tools/list`. Claude calls them when it needs to discover what
+a server offers or verify an argument shape before executing.
+
+### Why not namespace tools
+
+Exposing downstream tools as individual `<server>_<tool>` entries (e.g. `filesystem_read_file`,
+`github_create_issue`) does not reduce Claude's tool count — it grows proportionally to
+registered servers × tools per server. The 5-tool surface stays constant regardless of
+how many downstream servers are registered.
 
 ### satori_exec signature
 
 ```typescript
 satori_exec(
   server: string,    // registered server name from satori.toml
-  tool: string,      // bare tool name (no namespace prefix)
-  args: Record<string, unknown>  // tool arguments, passed through as-is
+  tool: string,      // bare tool name (as returned by satori_find)
+  args: Record<string, unknown>  // tool arguments (schema from satori_schema)
 ) → string           // compact summary (not raw upstream output)
-```
-
-**Usage examples:**
-
-```
-satori_exec("filesystem", "read_file", { "path": "/src/main.ts" })
-satori_exec("github", "create_issue", { "title": "Bug", "body": "..." })
-satori_exec("kairn", "query", { "q": "auth flow" })
 ```
 
 **Server name collision**: if two `satori.toml` entries share the same `name` field (across g/p/r levels), the higher-priority scope wins and a warning is written to the audit log.
@@ -459,6 +475,26 @@ Claude calls: satori_exec("filesystem", "read_file", {path: "/src/main.ts"})
 10. context.summarizer.summarize(capture) → store summary
 11. Return compact summary (not raw output) to Claude
 ```
+
+### Discovery Flow
+
+```
+Claude: satori_find("read file")
+  → registry.list() + cached tool catalogs → filter by query
+  → [{ server: "filesystem", tool: "read_file", state: "running" }, ...]
+
+Claude: satori_schema("filesystem", "read_file")
+  → registry.lookup("filesystem") → return cached MCP tool definition
+  → { name: "read_file", description: "...", inputSchema: { path: {...} } }
+
+Claude: satori_exec("filesystem", "read_file", { path: "/src/main.ts" })
+  → full routing pipeline (see Tool Call Flow above)
+```
+
+**Tool catalog caching**: at startup and when a server first starts, Satori calls `tools/list`
+on the downstream server and caches the result. `satori_find` and `satori_schema` always serve
+from this cache — cold servers are searchable without starting them. Cache is invalidated on
+`satori_manage reload` or server restart.
 
 ### Server Name Collision Handling
 
@@ -592,15 +628,53 @@ Single tool with sub-command dispatch to avoid polluting Claude's tool list.
 
 This is the primary registration path when no `.mcp.json` exists.
 
+### `satori_find`
+
+Search for tools across all registered servers. Intended as the first step when Claude doesn't
+know which server/tool to use.
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `query` | `string` | Keyword or natural language — matched against tool name and description |
+| `server` | `string?` | Optional: limit results to a specific server |
+
+Returns a list of matches, each with `server`, `tool`, `description`, and `state` (hot/cold/blocked).
+Cold servers are included in results; Satori does not need to start them to return their tool list
+(tool list is cached at startup scan time).
+
+Example output:
+```json
+[
+  { "server": "filesystem", "tool": "read_file", "description": "Read a file from disk", "state": "running" },
+  { "server": "filesystem", "tool": "read_multiple_files", "description": "Read several files", "state": "running" }
+]
+```
+
+### `satori_schema`
+
+Get the full JSON input schema for a specific tool before calling it.
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `server` | `string` | Registered server name |
+| `tool` | `string` | Bare tool name |
+
+Returns the MCP tool definition: `{ name, description, inputSchema }`. The `inputSchema` is the
+raw JSON Schema as declared by the downstream server. Satori caches schemas at startup scan time;
+cold servers do not need to be started to return a cached schema.
+
+Error: unknown server or tool → `{"error": "..."}`.
+
 ### `satori_exec`
 
-Single entry point for all calls to registered downstream servers.
+Execute a downstream tool. Use `satori_find` to discover what's available and `satori_schema`
+to verify argument shape before calling.
 
 | Argument | Type | Description |
 |----------|------|-------------|
 | `server` | `string` | Registered server name (must match a `[[servers]]` entry) |
-| `tool` | `string` | Bare tool name as exposed by the downstream server |
-| `args` | `object` | Tool arguments — passed through to downstream after security scan |
+| `tool` | `string` | Bare tool name (as returned by `satori_find`) |
+| `args` | `object` | Tool arguments (shape from `satori_schema`) |
 
 Returns a compact summary string. Raw upstream output is stored in the context DB but not
 returned directly — Claude gets the summarized form only.

@@ -73,7 +73,7 @@ roundtrip: server registration → `satori_exec` call → content capture → se
   - `npm run build` — clean build.
   - TCS: `modules/satori/dist/index.js` present after `install.sh`.
   - MCP config: Satori entry with absolute path resolves to existing file.
-  - `tools/list` → exactly 3 tools.
+  - `tools/list` → exactly 5 tools.
   - PRD acceptance criteria checklist:
     - [x] R1 satori_context: restore, query, status, flush — verified in E2E
     - [x] R2 Gateway: single MCP entry, g/p/r config — verified
