@@ -1,18 +1,16 @@
 ---
 name: verify
-description: "Evidence-before-completion gate. Requires actual command output before any task or feature is marked done. No success claims without evidence."
+description: "Use when a task is complete and needs evidence before being marked done — requires actual command output from tests, builds, or lint commands before allowing completion."
 user-invocable: true
 argument-hint: "[task name or description]"
 allowed-tools: Bash, Read, AskUserQuestion
 ---
 
+## Persona
+
 **Active skill: tcs-workflow:verify**
 
-## Purpose
-
 Evidence gate for task and feature completion. No task may be marked done without actual command output proving it works. Assertions, verbal claims, and "it worked in my head" are not evidence.
-
----
 
 ## Interface
 
@@ -40,14 +38,17 @@ State {
 }
 ```
 
----
-
 ## Constraints
 
-- **Never mark a task done without at least one piece of evidence.**
-- Evidence must be actual command output — not assertions, not "it works", not "tests pass" without showing the output.
-- If any evidence shows failures: **BLOCKED** — do not allow completion.
-- If no evidence is collected: **BLOCKED** — "No evidence provided. Run verification commands before marking complete."
+**Always:**
+- Require at least one piece of evidence before marking any task done.
+- Evidence must be actual command output — not assertions, verbal claims, or "tests pass" without showing the output.
+- Block completion when any evidence item shows failures.
+- Block completion when no evidence is collected.
+
+**Never:**
+- Mark a task done without evidence.
+- Accept verbal claims or assertions as substitutes for command output.
 
 **Acceptable evidence types:**
 
@@ -58,28 +59,15 @@ State {
 | `lint_output` | `ruff`, `eslint`, `golangci-lint`, `flake8` |
 | `manual_record` | Explicit statement: what was manually verified + observable result |
 
----
-
-## YOLO Mode
-
-When `[ "${YOLO:-false}" = "true" ]`:
-- Execute verification commands automatically without interactive prompts.
-- Detect project type by scanning for: `pytest`/`pyproject.toml`/`setup.py` → Python; `package.json` → Node; `go.mod` → Go; `Cargo.toml` → Rust.
-- Run tests first, then lint if a linter config is present.
-- Write evidence summary to `docs/ai/memory/context.md` under `## Last Verified`.
-- Return the summary directly without interactive confirmation.
-
----
-
 ## Workflow
 
-### Step 1 — Identify task
+### 1. Identify task
 
 - Read `$ARGUMENTS` for the task name or description.
 - If blank: `AskUserQuestion "What task are you verifying?"`
 - Set `state.task` and `state.status = collecting`.
 
-### Step 2 — Collect evidence
+### 2. Collect evidence
 
 **Interactive mode:**
 
@@ -135,7 +123,7 @@ fi
 
 Record each command, its full output, and its exit code (`0` = pass, non-zero = fail).
 
-### Step 3 — Evaluate
+### 3. Evaluate
 
 - If `state.evidence` is empty:
   ```
@@ -159,7 +147,7 @@ Record each command, its full output, and its exit code (`0` = pass, non-zero = 
 
 - If all `evidence.status = pass`: proceed to Step 4.
 
-### Step 4 — Produce summary
+### 4. Produce summary
 
 Generate an `EvidenceSummary` and output:
 
@@ -184,12 +172,3 @@ Announce:
 ```
 Verification complete. You may now commit or mark this task done.
 ```
-
----
-
-## Integration Notes
-
-- **`implement`** suggests `/verify` at the end of each phase when YOLO mode is off.
-- **`receive-review`** calls `/verify` automatically after applying a fix batch.
-- The `EvidenceSummary` block is suitable for pasting directly into a commit message, PR description, or `context.md` update.
-- Evidence is not stored between sessions — always run fresh verification when reopening a task.

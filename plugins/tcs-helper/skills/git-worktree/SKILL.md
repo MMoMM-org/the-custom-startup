@@ -1,6 +1,6 @@
 ---
 name: git-worktree
-description: "Create and manage isolated git worktrees for parallel feature work. Each worktree gets its own working directory without branch switching."
+description: "Use when starting parallel feature work, managing multiple branches simultaneously, or switching between branches without losing working state."
 user-invocable: true
 argument-hint: "[branch-name] [--path custom/path] [--cleanup branch-name] [--list]"
 allowed-tools: Bash, AskUserQuestion
@@ -26,17 +26,34 @@ State {
 }
 ```
 
+## Constraints
+
+**Always:**
+- Replace `/` with `-` when using branch name as part of a directory name
+- Surface git error output verbatim on failure
+- Show the resolved path before running any destructive command
+
+**Never:**
+- Delete a branch without asking (unless YOLO=true and user explicitly passed `--delete-branch`)
+- Force-remove a dirty worktree without confirmation in normal mode
+- Create a worktree inside the current repo root
+
+
 ## Workflow
 
-### Step 1 — Parse arguments and detect mode
+### 1. Parse arguments and detect mode
 
-- `$ARGUMENTS` is empty or a branch name → mode: `create`
-- `$ARGUMENTS` starts with `--list` or is `list` → mode: `list`
-- `$ARGUMENTS` starts with `--cleanup` → mode: `cleanup`, extract branch name after flag
+```
+match ($ARGUMENTS) {
+  empty | branch-name  => mode: "create"
+  "--list" | "list"    => mode: "list"
+  "--cleanup <branch>" => mode: "cleanup", extract branch name
+}
+```
 - Extract `--path <value>` if present, store as `customPath`
 - Check `YOLO` env var: if `YOLO=true`, set `yolo: true`
 
-### Step 2 — List mode
+### 2. List mode
 
 ```bash
 git worktree list --porcelain
@@ -55,7 +72,7 @@ Status is `dirty` if the worktree has uncommitted changes (`git -C <path> status
 
 Exit after displaying.
 
-### Step 3 — Resolve create path
+### 3. Resolve create path
 
 ```bash
 REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
@@ -65,7 +82,7 @@ REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
 - Otherwise: `worktreePath = ../worktrees/${REPO_NAME}-${branch}`
   - Replace `/` with `-` in branch name (e.g. `feat/xyz` → `feat-xyz`)
 
-### Step 4 — Detect existing worktree
+### 4. Detect existing worktree
 
 ```bash
 git worktree list | grep -F "${branch}"
@@ -80,7 +97,7 @@ If a worktree for this branch is already registered:
 
   If New: append `-2` (then `-3`, etc.) until the path is free.
 
-### Step 5 — Create worktree
+### 5. Create worktree
 
 ```bash
 git worktree add "{worktreePath}" "{branch}"
@@ -94,7 +111,7 @@ If `{branch}` does not exist locally, `git worktree add` creates it. No extra fl
 
 On error (e.g. branch checked out elsewhere): surface the git error message and stop.
 
-### Step 6 — Cleanup mode
+### 6. Cleanup mode
 
 Extract branch name and resolve path:
 
@@ -117,7 +134,7 @@ Then ask about branch deletion:
 - **Normal mode**: AskUserQuestion: "Also delete branch `{branch}`?" [Yes / No]
   - If Yes: `git branch -d {branch}` (use `-D` if `-d` fails with "not fully merged")
 
-### Step 7 — Conclude
+### 7. Conclude
 
 **Create**: announce result:
 > "Worktree created at `{worktreePath}` on branch `{branch}`.
@@ -127,14 +144,12 @@ Then ask about branch deletion:
 > "Worktree at `{path}` removed."
 > (+ "Branch `{branch}` deleted." if applicable)
 
-## Constraints
+### Entry Point
 
-**Always:**
-- Replace `/` with `-` when using branch name as part of a directory name
-- Surface git error output verbatim on failure
-- Show the resolved path before running any destructive command
-
-**Never:**
-- Delete a branch without asking (unless YOLO=true and user explicitly passed `--delete-branch`)
-- Force-remove a dirty worktree without confirmation in normal mode
-- Create a worktree inside the current repo root
+```
+match (mode) {
+  "list"    => step 2, exit
+  "cleanup" => steps 6, 7
+  "create"  => steps 3, 4, 5, 7
+}
+```

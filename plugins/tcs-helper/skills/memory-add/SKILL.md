@@ -1,6 +1,6 @@
 ---
 name: memory-add
-description: Capture and route session learnings to the correct scope and category file. Run after any session where corrections or new knowledge emerged. Auto-triggers on: reflect, remember, learned, note this, add to memory, route this.
+description: "Use when learnings, corrections, or new knowledge emerged in this session and need to be persisted. Triggers on: reflect, remember, learned, note this, add to memory, route this."
 user-invocable: true
 argument-hint: "[learning text] | --review-yolo"
 allowed-tools: Read, Write, Edit, Bash
@@ -15,6 +15,18 @@ Capture learnings from this session and route each to the correct scope and cate
 ## Interface
 
 ```
+Learning {
+  text: string
+  source: manual | queue
+}
+
+RoutedLearning {
+  learning: Learning
+  scope: global | project | repo
+  category: general | tools | domain | decisions | context | troubleshooting
+  targetFile: string
+}
+
 State {
   learnings: Learning[]       // from queue or argument or manual
   routed: RoutedLearning[]    // scope + category + file + content
@@ -24,9 +36,22 @@ State {
 }
 ```
 
+## Constraints
+
+**Always:**
+- Read the target file before appending (deduplication check).
+- Add date comment before new entries.
+- Update memory.md index last-updated date after any repo-scope write.
+- Report clearly even when nothing was routed.
+
+**Never:**
+- Write to target files in YOLO mode — only to yolo-review.md.
+- Silently fail — always report what was done and what was skipped.
+- Create new memory files outside the 6 standard categories — use existing files or ask.
+
 ## Workflow
 
-### Step 1 — Detect mode
+### 1. Detect mode
 
 - If argument is `--review-yolo`: go to YOLO Review workflow (see below)
 - Check `YOLO` environment variable: if `YOLO=true`, set `yolo: true`
@@ -34,7 +59,7 @@ State {
 - Otherwise: read queue from `~/.claude/projects/<encoded-cwd>/learnings-queue.json`
   - If queue is empty and no arguments: ask "What did you learn this session?"
 
-### Step 2 — Classify each learning (AI reasoning)
+### 2. Classify each learning
 
 For each learning, classify using these keyword signals:
 
@@ -50,19 +75,19 @@ For each learning, classify using these keyword signals:
 
 If unclassified → AskUserQuestion: "Which file should this go to? [show list of options]"
 
-### Step 3 — Determine scope
+### 3. Determine scope
 
 - `personal` / `workflow` → global scope: `~/.claude/includes/memory-<category>.md`
 - Explicitly project-scoped fact → project memory (if configured in CLAUDE.md)
 - Default → repo scope: `docs/ai/memory/{category}.md`
 
-### Step 4 — Deduplication check
+### 4. Deduplication check
 
 For each learning, Read the target file.
 If a semantically identical fact already exists (same meaning, possibly different wording): skip silently, add to `skipped[]`.
 Cross-scope duplicates are NOT checked here (handled by memory-cleanup).
 
-### Step 5 — Write (or stage if YOLO)
+### 5. Write
 
 **Normal mode:** Append to target file:
 ```
@@ -78,7 +103,7 @@ Then update `memory.md` index: change `[updated: YYYY-MM-DD]` for the affected f
   *(YYYY-MM-DD)*
 ```
 
-### Step 6 — Report
+### 6. Report
 
 Show summary:
 - ✓ Routed N learnings: [file → count]
@@ -89,7 +114,7 @@ Clear processed items from queue file.
 
 ---
 
-## YOLO Review Workflow (`--review-yolo`)
+### YOLO Mode (`--review-yolo`)
 
 1. Read `docs/ai/memory/yolo-review.md`
 2. If file doesn't exist or is empty: report "No pending YOLO entries"
@@ -99,13 +124,3 @@ Clear processed items from queue file.
 6. Remove accepted entries from yolo-review.md (leave rejected ones, or clear if all accepted)
 7. Report: N entries written, N rejected
 
-## Always
-- Read the target file before appending (deduplication check)
-- Add date comment before new entries
-- Update memory.md index last-updated date after any repo-scope write
-- Exit 0 and report clearly even when nothing was routed
-
-## Never
-- Write to target files in YOLO mode (only to yolo-review.md)
-- Silently fail — always report what was done and what was skipped
-- Create new memory files that aren't in the 6 standard categories (use existing files or ask)

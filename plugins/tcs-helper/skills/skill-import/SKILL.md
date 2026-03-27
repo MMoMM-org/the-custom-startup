@@ -1,6 +1,6 @@
 ---
 name: skill-import
-description: "Fetch a single skill from a GitHub repository and install it to ~/.claude/skills/ without installing the full plugin. Use when you want one skill from a community repo, a teammate's plugin, or the TCS marketplace. Discovers all dependencies (scripts, hooks, agents, inter-skill calls) before installing — aborts if anything is unclear."
+description: "Fetch a single skill from a GitHub repository and install it to ~/.claude/skills/ without installing the full plugin. Use when you want one skill from a community repo, a teammate's plugin, or the TCS marketplace."
 user-invocable: true
 argument-hint: "<owner/repo> <skill-name> [--no-eval] [--dest <path>]"
 allowed-tools: Bash, Read, Write, AskUserQuestion
@@ -12,7 +12,6 @@ allowed-tools: Bash, Read, Write, AskUserQuestion
 
 Fetch one skill from any GitHub repo, map its full dependency footprint, evaluate it, and install it — or abort if anything is uncertain.
 
-**Request**: $ARGUMENTS
 
 ## Interface
 
@@ -177,7 +176,7 @@ Dependency analysis found {N} items that need clarification:
    (yes / no / don't know)
 ```
 
-If the user answers "don't know" to **any** item: ABORT. Report what was unclear and suggest they inspect the source repo manually or use a full plugin install instead.
+If the user answers "don't know" to **any** item: ABORT. Treat any answer other than "yes" or "no" as "don't know". Report what was unclear and suggest they inspect the source repo manually or use a full plugin install instead.
 
 ### 4. Preview
 

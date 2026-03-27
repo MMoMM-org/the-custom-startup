@@ -12,7 +12,6 @@ allowed-tools: Read, Glob, Grep, AskUserQuestion
 
 Score new skills and agents against TCS vision criteria. Produce a verdict before any skill is absorbed, imported, or built.
 
-**Target**: $ARGUMENTS
 
 ## Interface
 
@@ -142,11 +141,15 @@ For Description mode: score Q checks based on the description's implied design (
 
 ```
 score = sum of all check scores (max 13)
+```
 
-If score >= 12:   verdict = ABSORB      "Adopt as-is"
-If score >= 8:    verdict = ABSORB_ADAPT "Adopt with stated adaptations"
-If score >= 5:    verdict = MERGE        "Merge into [existing skill name]"
-If score < 5:     verdict = SKIP        "Park for later — revisit if [condition]"
+```
+match (score) {
+  >= 12 => verdict = ABSORB        "Adopt as-is"
+  >= 8  => verdict = ABSORB_ADAPT  "Adopt with stated adaptations"
+  >= 5  => verdict = MERGE         "Merge into [existing skill name]"
+  < 5   => verdict = SKIP          "Park for later — revisit if [condition]"
+}
 ```
 
 **Blocking issues override score:**
