@@ -1,14 +1,14 @@
 ---
-name: specify
-description: Create a comprehensive specification from a brief description. Manages specification workflow including directory creation, README tracking, and phase transitions.
+name: xdd
+description: Orchestrates xdd-prd → xdd-sdd → xdd-plan workflow. Manages specification directory creation, README tracking, and phase transitions.
 user-invocable: true
 argument-hint: "describe your feature or requirement to specify"
-allowed-tools: Task, TaskOutput, TodoWrite, Bash, Grep, Read, Write(.start/**, docs/**), Edit(.start/**, docs/**), AskUserQuestion, Skill, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
+allowed-tools: Task, TaskOutput, TodoWrite, Bash, Grep, Read, Write(docs/XDD/**, docs/**), Edit(docs/XDD/**, docs/**), AskUserQuestion, Skill, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
 ---
 
 ## Persona
 
-**Active skill: tcs-start:specify**
+**Active skill: tcs-workflow:xdd**
 
 Act as an expert requirements gatherer that creates specification documents for one-shot implementation.
 
@@ -25,7 +25,7 @@ SpecStatus {
 
 State {
   target = $ARGUMENTS
-  spec: string                   // resolved spec directory path (from specify-meta)
+  spec: string                   // resolved spec directory path (from xdd-meta)
   perspectives = []
   mode: Standard | Agent Team
   status: SpecStatus
@@ -57,7 +57,7 @@ State {
 
 ### 1. Initialize
 
-Invoke `Skill(tcs-start:specify-meta)` to create or read the spec directory.
+Invoke `Skill(tcs-workflow:xdd-meta)` to create or read the spec directory.
 
 match (spec status) {
   new      => AskUserQuestion:
@@ -89,7 +89,7 @@ Synthesize findings per the synthesis protocol in reference/perspectives.md. Res
 
 ### 4. Write PRD
 
-Invoke `Skill(tcs-start:specify-requirements)`.
+Invoke `Skill(tcs-workflow:xdd-prd)`.
 
 Focus: WHAT needs to be built and WHY it matters. Scope: business requirements only — defer technical details to SDD.
 
@@ -97,17 +97,17 @@ AskUserQuestion: Continue to SDD (recommended) | Finalize PRD
 
 ### 5. Write SDD
 
-Invoke `Skill(tcs-start:specify-solution)`.
+Invoke `Skill(tcs-workflow:xdd-sdd)`.
 
 Focus: HOW the solution will be built. Scope: design decisions and interfaces — defer code to implementation.
 
-If CONSTITUTION.md exists: invoke `Skill(tcs-start:validate)` constitution to verify architecture aligns with rules.
+If CONSTITUTION.md exists: invoke `Skill(tcs-workflow:validate)` constitution to verify architecture aligns with rules.
 
 AskUserQuestion: Continue to PLAN (recommended) | Finalize SDD
 
 ### 6. Write PLAN
 
-Invoke `Skill(tcs-start:specify-plan)`.
+Invoke `Skill(tcs-workflow:xdd-plan)`.
 
 Focus: task sequencing and dependencies. Scope: what and in what order — defer duration estimates.
 
@@ -115,7 +115,7 @@ AskUserQuestion: Finalize specification (recommended) | Revisit PLAN
 
 ### 7. Finalize
 
-Invoke `Skill(tcs-start:specify-meta)` to review and assess readiness.
+Invoke `Skill(tcs-workflow:xdd-meta)` to review and assess readiness.
 
 If git repository exists: AskUserQuestion: Commit + PR | Commit only | Skip git
 
