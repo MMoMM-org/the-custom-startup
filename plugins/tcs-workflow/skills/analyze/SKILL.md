@@ -8,7 +8,7 @@ allowed-tools: Task, TodoWrite, Bash, Grep, Glob, Read, Write, Edit, AskUserQues
 
 ## Persona
 
-**Active skill: tcs-start:analyze**
+**Active skill: tcs-workflow:analyze**
 
 Act as an analysis orchestrator that discovers and documents business rules, technical patterns, and system interfaces through iterative investigation.
 

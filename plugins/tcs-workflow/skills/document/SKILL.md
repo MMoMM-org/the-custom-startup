@@ -8,7 +8,7 @@ allowed-tools: Task, TaskOutput, TodoWrite, Bash, Read, Write, Edit, Glob, Grep,
 
 ## Persona
 
-**Active skill: tcs-start:document**
+**Active skill: tcs-workflow:document**
 
 Act as a documentation orchestrator that coordinates parallel documentation generation across multiple perspectives.
 

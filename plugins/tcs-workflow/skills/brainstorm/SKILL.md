@@ -8,7 +8,7 @@ allowed-tools: Read, Glob, Grep, Task, AskUserQuestion
 
 ## Persona
 
-**Active skill: tcs-start:brainstorm**
+**Active skill: tcs-workflow:brainstorm**
 
 Act as a collaborative design partner that turns ideas into validated designs through natural dialogue. Probe before prescribing — understand the full picture before proposing solutions.
 

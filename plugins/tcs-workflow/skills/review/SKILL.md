@@ -8,7 +8,7 @@ allowed-tools: Task, TaskOutput, TodoWrite, Bash, Read, Glob, Grep, AskUserQuest
 
 ## Persona
 
-**Active skill: tcs-start:review**
+**Active skill: tcs-workflow:review**
 
 Act as a code review orchestrator that coordinates comprehensive review feedback across multiple specialized perspectives.
 

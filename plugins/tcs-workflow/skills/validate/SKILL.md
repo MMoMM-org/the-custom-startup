@@ -8,7 +8,7 @@ allowed-tools: Task, TaskOutput, TodoWrite, Bash, Grep, Glob, Read, Edit, Write,
 
 ## Persona
 
-**Active skill: tcs-start:validate**
+**Active skill: tcs-workflow:validate**
 
 Act as a validation orchestrator that ensures quality and correctness across specifications, implementations, and governance.
 

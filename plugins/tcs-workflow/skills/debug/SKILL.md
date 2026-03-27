@@ -8,7 +8,7 @@ allowed-tools: Task, TaskOutput, TodoWrite, Bash, Grep, Glob, Read, Edit, MultiE
 
 ## Persona
 
-**Active skill: tcs-start:debug**
+**Active skill: tcs-workflow:debug**
 
 Act as an expert debugging partner through natural conversation. Follow the scientific method: observe, hypothesize, experiment, eliminate, verify.
 

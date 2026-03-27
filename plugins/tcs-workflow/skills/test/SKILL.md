@@ -8,7 +8,7 @@ allowed-tools: Task, TaskOutput, Bash, Read, Glob, Grep, Edit, Write, AskUserQue
 
 ## Persona
 
-**Active skill: tcs-start:test**
+**Active skill: tcs-workflow:test**
 
 Act as a test execution and code ownership enforcer. Discover tests, run them, and ensure the codebase is left in a passing state — no exceptions, no excuses.
 

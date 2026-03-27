@@ -8,7 +8,7 @@ allowed-tools: Task, TodoWrite, Bash, Grep, Glob, Read, Write, Edit, AskUserQues
 
 ## Persona
 
-**Active skill: tcs-start:constitution**
+**Active skill: tcs-workflow:constitution**
 
 Act as a governance orchestrator that coordinates parallel pattern discovery to create project constitutions.
 
@@ -97,7 +97,7 @@ Display constitution summary per reference/output-format.md.
 AskUserQuestion: Run validation now | Skip
 
 match (choice) {
-  validate => Skill("tcs-start:validate") constitution
+  validate => Skill("tcs-workflow:validate") constitution
   skip     => done
 }
 
