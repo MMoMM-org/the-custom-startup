@@ -77,6 +77,8 @@ repo-root/
 | Repo | short | `docs/ai/memory/{context,troubleshooting}.md` | memory-route + memory-cleanup |
 | Session | really short | context window / auto-memory | M5 (MCP, future) |
 
+> **M5 note:** In M5, MCP/Kairn will be added as an additional query layer starting at **medium lived** — files remain the source of truth, but context-mode indexes them for session queries and Kairn adds semantic search. The file locations in this table do not change; MCP is additive, not a replacement.
+
 ---
 
 ## 2. CLAUDE.md Design

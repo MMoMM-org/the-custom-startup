@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.x (scripts/hooks), Markdown (SKILL.md, templates), JSON (queue + hooks.json), pytest (Python tests)
 
-**Spec:** `.start/specs/001-memory-claude/` — read solution.md §3–4 before any phase.
+**Spec:** `docs/XDD/specs/001-memory-claude/` — read solution.md §3–4 before any phase.
 
 ---
 

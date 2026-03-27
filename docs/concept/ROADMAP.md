@@ -48,7 +48,7 @@ M3: tcs-patterns Plugin             M4: Satori/MCP Gateway
 ## Milestones
 
 ### M1 — Core Workflow Rebuild
-**Spec:** `.start/specs/002-core-workflow/`
+**Spec:** `docs/XDD/specs/002-core-workflow/`
 **Branch:** `feat/tcs-v2-m1-workflow` (when ready to implement)
 **Status:** Spec in progress
 
@@ -65,7 +65,7 @@ Reference: `docs/concept/overlap-analysis.md` — superpowers and citypaul absor
 ---
 
 ### M2 — Memory + CLAUDE.md System
-**Spec:** `.start/specs/001-memory-claude/`
+**Spec:** `docs/XDD/specs/001-memory-claude/`
 **Branch:** `feat/tcs-v2-m2-memory` (when ready to implement)
 **Status:** Spec complete — ready for `/implement`
 
@@ -83,7 +83,7 @@ Reference: `docs/concept/v2/TCS v2 Memory & Context Layout Spec.md`, `docs/conce
 ---
 
 ### M3 — tcs-patterns Plugin
-**Spec:** `.start/specs/003-tcs-patterns/`
+**Spec:** `docs/XDD/specs/003-tcs-patterns/`
 **Branch:** `feat/tcs-v2-m3-patterns` (when ready to implement)
 **Status:** Placeholder — specify after M1 stable
 
@@ -100,7 +100,7 @@ Reference: `docs/concept/overlap-analysis.md` — citypaul extraction table.
 ---
 
 ### M4 — Satori/MCP Gateway
-**Spec:** `.start/specs/004-satori-gateway/`
+**Spec:** `docs/XDD/specs/004-satori-gateway/`
 **Branch:** `feat/tcs-v2-m4-satori` (when ready to implement)
 **Status:** Placeholder — specify as standalone project
 
@@ -119,7 +119,7 @@ Reference: `docs/concept/v2/context-mode-MCP-Server.md`.
 ---
 
 ### M5 — Memory + MCP Integration
-**Spec:** `.start/specs/005-memory-mcp/`
+**Spec:** `docs/XDD/specs/005-memory-mcp/`
 **Branch:** `feat/tcs-v2-m5-mcp-memory` (when ready to implement)
 **Status:** Placeholder — specify after M2 + M4 complete
 
