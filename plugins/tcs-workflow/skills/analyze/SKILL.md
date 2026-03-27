@@ -41,11 +41,30 @@ State {
 - Work iteratively — execute discovery, documentation, review cycles.
 - Wait for user confirmation between each cycle.
 - Confirm before writing documentation to docs/ directories.
+- Apply CoD notation in research phases (Steps 1, 3) by default — structured abbreviated output.
+- Parse `--no-cod` from $ARGUMENTS; if present, use standard verbose output.
 
 **Never:**
 - Analyze code yourself — always delegate to specialist agents.
 - Proceed to next cycle without user confirmation.
 - Write documentation without asking user first.
+- Use CoD output that is uninterpretable — findings must be structured and readable.
+
+## CoD Mode
+
+CoD (Chain of Draft) is active by default for research phases. Use compact structured notation:
+
+**Default (CoD on):**
+```
+Finding: [file:line] — [one-line observation]
+Pattern: [name] — [brief description]
+Interface: [service] — [integration summary]
+```
+
+**`--no-cod` flag:**
+Use standard verbose output — full sentences, expanded explanations.
+
+To disable: pass `--no-cod` as an argument (e.g., `/analyze --no-cod business logic`).
 
 ## Reference Materials
 
@@ -62,6 +81,8 @@ Determine which perspectives to use based on $ARGUMENTS. Read reference/perspect
 
 If the target maps to a specific focus area, select the matching perspectives. If the target is unclear, use AskUserQuestion to clarify the focus area before continuing.
 
+Check for `--no-cod` flag in $ARGUMENTS. Set cod_mode accordingly (default: CoD on).
+
 ### 2. Select Mode
 
 AskUserQuestion:
@@ -74,6 +95,8 @@ Recommend Agent Team when: multiple domains | broad scope | all perspectives | c
 
 If Standard mode: launch parallel subagents per applicable perspectives.
 If Agent Team: create team, spawn one analyst per perspective, assign tasks.
+
+Research agents operate in CoD mode unless `--no-cod` is set. Include mode instruction in each agent prompt.
 
 ### 4. Synthesize Discoveries
 
