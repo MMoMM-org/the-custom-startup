@@ -13,7 +13,7 @@ Feature branches are created per item so each can be PR'd independently upstream
 
 - [x] 4-Plugin-Architektur: tcs-workflow / tcs-team / tcs-helper / tcs-patterns — **same repo**
 - [x] tcs-start → tcs-workflow Umbenennung — **done**
-- [x] tcs-patterns: 15 Skills, same repo — **done** (merged)
+- [x] tcs-patterns: 17 Skills, same repo — **done** (merged)
 - [x] skill-evaluate + skill-import — **done** (merged)
 - [x] M2 Scope: file-only, kein MCP — MCP kommt in M4/M5
 - [x] Routing-Grenze: MCP/Kairn ab **medium lived** (nicht erst "really short") — wird in M5 umgesetzt
@@ -57,6 +57,10 @@ M4 kann parallel zu späteren M2-Phasen beginnen wenn M2 Phase 1-3 stabil ist.
 
 - [x] `tcs-helper:setup` → tcs-patterns als optionalen Install-Schritt einbauen
 - [x] AGENTS.md / README: tcs-patterns dokumentieren
+- [x] tcs-patterns `reference/` Stubs befüllen (citypaul/.dotfiles als Quelle) — 2026-03-27
+- [x] `testing` + `test-design-reviewer` Skills zu tcs-patterns hinzufügen (17 total) — 2026-03-27
+- [x] `xdd-tdd` um optionalen MUTATE-Checkpoint erweitert — 2026-03-27
+- [x] `docs/concept/sources.md` Attribution aktualisiert — 2026-03-27
 
 ---
 
@@ -98,15 +102,15 @@ M4 kann parallel zu späteren M2-Phasen beginnen wenn M2 Phase 1-3 stabil ist.
 - [ ] `docs/concept/v2/` ist Perplexity-Brainstorming — **nicht direkt als Spec verwenden**
   - Für M4: §5 (Context-Mode + Kairn) als Basis heranziehen, bereinigen
   - Für M5: Routing-Tabelle §3.2 als Ausgangspunkt, Grenze aber verschoben (→ oben)
-- [ ] ADR-Location: `docs/adr/` oder `.claude/adr/`? (Setup bietet es optional an)
+- [x] ADR-Location: `docs/XDD/adr/` default (via `startup.toml` `docs_base` → configurable per repo)
 
 ---
 
-## Nächster Schritt → M2 starten
+## Nächster Schritt → M4 starten
 
-1. Pfad-Fixes in ROADMAP + Plan
-2. `docs/XDD/specs/001-memory-claude/plan/` lesen
-3. Implement Phase 1
+1. Entscheidungspunkte in TODO.md M4-Abschnitt durchgehen (Name, Registry-Konzept, Hot/cold)
+2. `docs/concept/v2/context-mode-MCP-Server.md` + `TCS v2 Memory & Context Layout Spec.md §5` lesen
+3. Spec unter `docs/XDD/specs/004-satori-gateway/` schreiben (PRD → SDD → Plan)
 
 ---
 
