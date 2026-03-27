@@ -35,8 +35,8 @@ TCS happens to use. The standalone nature is the reason for a separate repo.
    servers; tools are namespaced and routed transparently
 3. **Handler architecture** — extensible plugin layer between Satori and each registered
    downstream server; default is passthrough, specific handlers can add pre/post processing
-4. **Hot/cold loading** — downstream servers (especially npx-based) are only started when
-   a) enabled in config and b) actually invoked
+4. **Hot/cold loading** — downstream servers are only started when a) enabled in config and
+   b) actually invoked; supports npx and Docker-based server runtimes
 5. **Security — OUT direction** (primary) — ensure no secrets, API keys, or sensitive material
    are forwarded to downstream MCP servers
 6. **Security — IN direction** (optional) — filter or annotate data coming back from downstream
@@ -63,20 +63,33 @@ What Satori takes from reference projects (selective adoption):
 | context-mode | SQLite FTS5 DB, tool capture, session guide generation | Web viewer |
 | lasso-mcp-gateway | Gateway/registry pattern, security scan model, blocked-server gate | Full reputation scoring, cloud policy sync |
 | airis-mcp-gateway | Hot/cold server lifecycle, single-entrypoint tool routing | Full airis orchestration layer |
-| Kairn/evolving-lite | Semantic memory handler concept | Embedding infrastructure (Kairn supplies this) |
+| Kairn/evolving-lite | Optional handler replacing built-in SQLite for semantic queries | Embedding infrastructure (Kairn supplies this) |
+
+### Kairn as a Memory Backend
+
+By default, Satori uses its internal SQLite FTS5 database for all context storage. When Kairn
+is installed and registered as a handler, it takes over as the semantic query backend:
+
+- **SQLite** remains responsible for: raw tool output capture, log storage, session events
+- **Kairn handler** intercepts: session-boot context requests, semantic/graph queries
+  ("how did I fix this before?"), project knowledge lookups
+- The switch is automatic when Kairn is registered — no code change in Satori core required
+
+This means M4 ships with the handler interface that makes Kairn pluggable. The Kairn handler
+itself is a post-MVP deliverable.
 
 ---
 
 ## Requirements
 
-### R1 — Core Context Server
+### R1 — Context Server
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | R1.1 | Intercept and store tool call outputs in a per-project SQLite FTS5 database | Must |
 | R1.2 | Return compact, task-relevant summaries instead of raw outputs | Must |
 | R1.3 | Generate a ≤2KB session guide on PreCompact or session end | Must |
-| R1.4 | Expose a `satori_restore_context` tool to load session guide at session start | Must |
+| R1.4 | Expose a `satori_context` tool; sub-commands handle restore, query, and status | Must |
 | R1.5 | Isolate databases per project (keyed by repo root path) | Must |
 
 ### R2 — Gateway / Registry
@@ -87,7 +100,7 @@ What Satori takes from reference projects (selective adoption):
 | R2.2 | Maintain a registry of downstream MCP server definitions loaded from config | Must |
 | R2.3 | Namespace downstream tools as `<server>_<tool>` to avoid collisions | Must |
 | R2.4 | Route tool calls to the correct downstream server based on namespace | Must |
-| R2.5 | Support g/p/r config separation: global (`~/.satori/mcp.json`), project dir, repo root | Must |
+| R2.5 | Support g/p/r config: global (`~/.satori/config.toml`), project dir, repo root (`satori.toml`) | Must |
 | R2.6 | Support auto-registration of repo-level `.mcp.json` (enabled/disabled per config) | Should |
 
 ### R3 — Handler / Plugin Architecture
@@ -98,8 +111,8 @@ What Satori takes from reference projects (selective adoption):
 | R3.2 | Default handler: transparent passthrough (no transformation) | Must |
 | R3.3 | Handlers can intercept tool call inputs (before forwarding) and outputs (before returning) | Must |
 | R3.4 | Handlers are registered per downstream server in config | Must |
-| R3.5 | Ship a Kairn handler that routes semantic queries to Kairn and session-boot context requests | Should |
-| R3.6 | Handler registration API must allow third-party handlers without forking Satori | Should |
+| R3.5 | Handler registration API must allow third-party handlers without forking Satori | Should |
+| R3.6 | Ship a Kairn handler (post-MVP) that routes semantic queries to Kairn and replaces built-in SQLite for session-boot context | Future |
 
 ### R4 — Hot/Cold Loading
 
@@ -107,7 +120,7 @@ What Satori takes from reference projects (selective adoption):
 |----|-------------|----------|
 | R4.1 | Downstream servers are only started when enabled in config AND a tool call is received | Must |
 | R4.2 | Servers can be disabled globally or per-project without removing their config | Must |
-| R4.3 | npx-based servers are managed (start/stop) by Satori, not pre-started externally | Must |
+| R4.3 | Satori manages server lifecycle for npx-based and Docker-based runtimes; others may need external start | Must |
 | R4.4 | Server state (running/stopped/error) is accessible via a management tool | Should |
 
 ### R5 — Security
@@ -122,15 +135,14 @@ What Satori takes from reference projects (selective adoption):
 | R5.6 | Write audit log at `~/.satori/scanner.log` with reasons | Should |
 | R5.7 | IN direction: optionally annotate or filter outputs from downstream before returning to Claude | May |
 
-### R6 — TCS Integration
+### R6 — TCS Integration (M4 scope only)
+
+M4 delivers the submodule wiring. All skill-level integration (routing table, memory-add,
+skill detection) is deferred to `005-memory-mcp` (M5).
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | R6.1 | TCS includes `miyo-satori` as a git submodule | Must |
-| R6.2 | TCS install wizard offers context-mode as a feature; selecting it installs and configures Satori | Must |
-| R6.3 | TCS skills that use session context (`analyze`, `debug`, `implement`) detect Satori availability via tool presence and fall back to file-based memory if absent | Must |
-| R6.4 | `tcs-helper:memory-add` routing table: `really short lived` → Satori when available | Should |
-| R6.5 | Uninstall removes submodule and MCP config entry | Must |
 
 ---
 
@@ -142,14 +154,15 @@ Claude Code
     │ (single MCP entry: "satori")
     ▼
 ┌─────────────────────────────────────────────┐
-│  Satori Core                                │
+│  Satori                                     │
 │  ┌─────────────┐  ┌──────────────────────┐ │
-│  │ Context DB  │  │ Gateway / Registry   │ │
-│  │ (SQLite     │  │ ┌──────────────────┐ │ │
-│  │  FTS5)      │  │ │ Handler Registry │ │ │
-│  │             │  │ └──────────────────┘ │ │
-│  │ session     │  │   ↓ route + handle   │ │
-│  │ guide gen   │  └──────────────────────┘ │
+│  │ Context     │  │ Gateway / Registry   │ │
+│  │ Server      │  │ ┌──────────────────┐ │ │
+│  │ (SQLite     │  │ │ Handler Registry │ │ │
+│  │  FTS5)      │  │ └──────────────────┘ │ │
+│  │             │  │   ↓ route + handle   │ │
+│  │ satori_     │  └──────────────────────┘ │
+│  │ context     │          │                │
 │  └─────────────┘          │                │
 └───────────────────────────┼────────────────┘
                             │
@@ -157,62 +170,82 @@ Claude Code
           ▼                 ▼              ▼
    [passthrough]       [kairn]        [custom]
    downstream A        handler        handler
-        │                 │
-   npx server B      Kairn MCP
-   (hot/cold)        server
+        │              (future)
+   npx / docker
+   server B
+   (hot/cold)
 ```
 
 ---
 
 ## Configuration Model
 
+Config uses TOML. Location follows g/p/r resolution:
+- **Global**: `~/.satori/config.toml`
+- **Project**: `<project-dir>/satori.toml`
+- **Repo**: `satori.toml` at repo root (not hidden, version-controllable)
+
+Server-specific settings (env vars, paths, ports) live in the Satori config, not in `.mcp.json`.
+The `.mcp.json` in a repo can be auto-detected for server discovery only; Satori's own config
+is authoritative for how each server is started and configured.
+
 ```toml
-# ~/.satori/mcp.json (global config — project/repo override same structure)
+# satori.toml (repo root)
 
 [gateway]
-auto_register_mcp_json = true   # auto-detect .mcp.json in repo root
+auto_register_mcp_json = true   # detect .mcp.json in repo root for discovery
 
 [[servers]]
 name = "filesystem"
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem", "/path"]
+runtime = "npx"
+command = "@modelcontextprotocol/server-filesystem"
+args = ["/path/to/project"]
+env = {}
 handler = "passthrough"
 enabled = true
-security_scan = "passed"
 
 [[servers]]
-name = "kairn"
-command = "npx"
-args = ["-y", "@primeline/kairn-mcp"]
-handler = "kairn"
+name = "github"
+runtime = "docker"
+image = "ghcr.io/github/github-mcp-server"
+env = { GITHUB_PERSONAL_ACCESS_TOKEN = "${GITHUB_TOKEN}" }
+handler = "passthrough"
 enabled = true
-security_scan = "passed"
+
+# future — post-MVP
+[[servers]]
+name = "kairn"
+runtime = "npx"
+command = "@primeline/kairn-mcp"
+handler = "kairn"
+enabled = false
 ```
 
 ---
 
-## Discovery (Open Question)
+## Discovery (Open Question for SDD)
 
-How TCS and Satori-aware skills detect that Satori is running:
+Which TCS workflow skills need to know whether Satori is running?
 
-**Option A** — Tool-availability check: skills attempt `satori_restore_context` at session start;
-if tool is absent, fall back to file memory. No config needed.
+Memory-skill integration is out of scope for M4 (→ M5). The question for M4 is whether
+any non-memory TCS skills benefit from Satori awareness — e.g., `analyze`, `debug`, `implement`
+using `satori_context` for session state instead of re-reading files.
 
-**Option B** — CLAUDE.md flag: `tcs-helper:setup` writes `context_server: satori` to repo
-CLAUDE.md on install; skills read this flag.
-
-**Option C** — Both: flag for fast path, tool check as fallback.
+Candidate approaches:
+- **Tool-availability check**: skills attempt `satori_context` at session start; absent → fall back
+- **CLAUDE.md flag**: `tcs-helper:setup` writes `context_server: satori`; skills read the flag
+- **Both**: flag for fast path, tool check as runtime fallback
 
 Decision deferred to SDD.
 
 ---
 
-## Auto-Registration (Open Question)
+## Auto-Registration (Open Question for SDD)
 
-When a repo contains `.mcp.json`, Satori could auto-detect it and register those servers
-without manual config. Benefit: zero setup for repos that already have MCP config.
-Risk: unclear whether Claude Code re-reads MCP config mid-session or only on startup;
-auto-registered servers may not be available until next Claude Code launch.
+When a repo contains `.mcp.json`, Satori can detect the file and offer those servers for
+registration. Benefit: zero manual config for repos that already have MCP config.
+Risk: Claude Code may only read MCP config on startup — auto-registered servers may not be
+available until next launch. Needs testing before committing to the design.
 
 Decision deferred to SDD after testing Claude Code MCP reload behavior.
 
@@ -226,8 +259,8 @@ M2 (Memory System, file-only) ✅
        └─ M5 (Memory + MCP Integration)
 ```
 
-Satori is a dependency for M5. M5 adds the routing-table integration that makes
-`really short lived` and `short lived` memory use Satori as primary store.
+Satori is a dependency for M5. M5 adds the routing-table integration and skill-level
+detection that connects file-based memory with Satori context storage.
 
 ---
 
