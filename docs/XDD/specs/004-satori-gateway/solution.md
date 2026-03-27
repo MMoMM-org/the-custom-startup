@@ -33,8 +33,7 @@ miyo-satori/
 │   │   └── schema.sql            # DB schema (applied on first run)
 │   ├── gateway/
 │   │   ├── registry.ts           # Downstream server registry (load, validate, lookup)
-│   │   ├── router.ts             # Namespace-based tool call routing
-│   │   └── namespace.ts          # <server>_<tool> parsing + collision detection
+│   │   └── router.ts             # satori_exec routing: server lookup → handler → downstream
 │   ├── handlers/
 │   │   ├── interface.ts          # SatoriHandler interface (the extension contract)
 │   │   ├── passthrough.ts        # Default no-op handler
@@ -55,7 +54,8 @@ miyo-satori/
 │   │   └── auto-register.ts      # .mcp.json import → .mcp.satori-json rename
 │   └── tools/
 │       ├── satori-context.ts     # satori_context tool (sub-commands: restore, query, status)
-│       └── satori-manage.ts      # satori_manage tool (server state, enable/disable)
+│       ├── satori-manage.ts      # satori_manage tool (server state, enable/disable)
+│       └── satori-exec.ts        # satori_exec tool (single entry point for all downstream calls)
 ├── satori.toml.example           # Annotated config template
 ├── package.json
 ├── tsconfig.json
@@ -143,8 +143,8 @@ repo-level entries win over global entries with the same name.
 auto_register_mcp_json = false
 
 [context]
-# SQLite DB directory (default: ~/.satori/db/)
-db_dir = "~/.satori/db"
+# SQLite DB path, relative to repo root (default: .satori/db.sqlite)
+db_path = ".satori/db.sqlite"
 # Session guide size cap (bytes)
 session_guide_max_bytes = 2048
 # Retain raw captures for N days before pruning
@@ -157,8 +157,8 @@ startup_scan = true
 runtime_scan = true
 # Scan tool call outputs before returning (IN direction, optional)
 return_scan = false
-# Audit log location
-audit_log = "~/.satori/scanner.log"
+# Audit log path, relative to repo root (default: .satori/scanner.log)
+audit_log = ".satori/scanner.log"
 
 # Handler definitions (optional — built-ins: passthrough, kairn)
 [[handlers]]
@@ -167,7 +167,7 @@ module = "./handlers/my-handler.js"
 
 # Downstream server definitions
 [[servers]]
-name = "filesystem"          # used as namespace prefix: filesystem_<tool>
+name = "filesystem"          # identifier used in satori_exec("filesystem", ...)
 runtime = "npx"              # npx | docker | external
 command = "@modelcontextprotocol/server-filesystem"
 args = ["/path/to/root"]
@@ -204,7 +204,19 @@ at server start time. Unexpanded variables cause a startup error — not silent 
 
 ## SQLite Schema
 
-Database location: `<db_dir>/<project-hash>.db` where project hash = SHA256 of repo root path.
+Database location: `.satori/db.sqlite` at repo root — gitignored, local to the project.
+No hashing or global path needed; data lives alongside `satori.toml`.
+
+```
+<repo-root>/
+├── satori.toml          # config (committed)
+├── .satori/             # data dir (gitignored)
+│   ├── db.sqlite        # captures + session guides
+│   └── scanner.log      # audit log
+└── .gitignore           # Satori install adds .satori/ entry
+```
+
+Global config (`~/.satori/config.toml`) stays global. Only runtime data is repo-local.
 
 ```sql
 -- Tool output captures
@@ -239,23 +251,61 @@ CREATE INDEX IF NOT EXISTS idx_guides_session   ON session_guides(session_id);
 
 ---
 
+## Tool Naming Convention
+
+Claude Code sees Satori as a single MCP server exposing exactly **3 tools**, regardless of how many downstream servers are registered:
+
+| Tool | Purpose |
+|------|---------|
+| `satori_context` | Context DB: restore, query, status, flush |
+| `satori_manage` | Server management: list, add, remove, enable, disable, state, scan |
+| `satori_exec` | Single entry point for ALL downstream tool calls |
+
+### Why satori_exec
+
+Exposing downstream tools as individual `<server>_<tool>` entries (e.g. `filesystem_read_file`, `github_create_issue`) does not reduce Claude's tool count — it grows it proportionally to the number of registered servers × tools per server. The entire point of the gateway is a fixed, minimal tool surface.
+
+`satori_exec` keeps the tool list constant. All routing, handler pipeline, hot/cold lifecycle, and security scanning happen inside it.
+
+### satori_exec signature
+
+```typescript
+satori_exec(
+  server: string,    // registered server name from satori.toml
+  tool: string,      // bare tool name (no namespace prefix)
+  args: Record<string, unknown>  // tool arguments, passed through as-is
+) → string           // compact summary (not raw upstream output)
+```
+
+**Usage examples:**
+
+```
+satori_exec("filesystem", "read_file", { "path": "/src/main.ts" })
+satori_exec("github", "create_issue", { "title": "Bug", "body": "..." })
+satori_exec("kairn", "query", { "q": "auth flow" })
+```
+
+**Server name collision**: if two `satori.toml` entries share the same `name` field (across g/p/r levels), the higher-priority scope wins and a warning is written to the audit log.
+
+---
+
 ## Gateway Routing
 
 ### Tool Call Flow
 
 ```
-Claude calls: filesystem_read_file(path: "/src/main.ts")
+Claude calls: satori_exec("filesystem", "read_file", {path: "/src/main.ts"})
                 │
                 ▼
-1. Parse namespace: server="filesystem", tool="read_file"
+1. Validate arguments: server, tool, args all present
 2. Look up "filesystem" in registry → ServerConfig found
 3. Check ServerState → if stopped: lifecycle.start("filesystem")
 4. Look up handler for "filesystem" → PassthroughHandler
-5. handler.beforeCall({server: "filesystem", tool: "read_file", arguments: {...}})
-   → security.scanOut(arguments) — check for secrets
+5. handler.beforeCall({serverName: "filesystem", toolName: "read_file", arguments: {...}})
+   → security.scanOut(arguments) — check for secrets/keys
    → if blocked: return error to Claude, write audit log
-6. Forward to filesystem MCP server via STDIO/HTTP
-7. Receive response
+6. Forward to filesystem MCP server via STDIO/HTTP transport
+7. Receive response from downstream
 8. handler.afterCall(request, response)
    → (optional) security.scanIn(response)
 9. context.store.capture(session, server, tool, input, output)
@@ -263,11 +313,11 @@ Claude calls: filesystem_read_file(path: "/src/main.ts")
 11. Return compact summary (not raw output) to Claude
 ```
 
-### Namespace Collision Handling
+### Server Name Collision Handling
 
-If two registered servers expose a tool with the same base name, the namespace prefix prevents
-collision. If two servers have the same `name` field (e.g. from g/p/r merge), the lower-priority
-entry is shadowed and a warning is written to the audit log.
+If two `satori.toml` entries across g/p/r scopes share the same `name` field, the higher-priority
+scope wins (repo > project > global). The shadowed entry is ignored and a warning is written
+to the audit log at startup.
 
 ---
 
@@ -336,7 +386,7 @@ Before every `handler.beforeCall`, `security.scanOut` runs over the `arguments` 
 ```
 2026-03-27T14:00:00Z STARTUP  server=github   status=passed
 2026-03-27T14:01:00Z BLOCKED  server=evil-mcp status=blocked reason="tool 'exfiltrate_data' matches pattern"
-2026-03-27T14:02:00Z OUT_SCAN server=filesystem tool=write_file reason="secret pattern matched: sk-..."
+2026-03-27T14:02:00Z OUT_SCAN server=filesystem tool=write_file via=satori_exec reason="secret pattern matched: sk-..."
 ```
 
 ---
@@ -381,10 +431,38 @@ Single tool with sub-command dispatch to avoid polluting Claude's tool list.
 | Sub-command | Arguments | Description |
 |-------------|-----------|-------------|
 | `list` | — | List registered servers with state and handler |
-| `enable` | `name: string` | Enable a server in current scope config |
-| `disable` | `name: string` | Disable a server (does not remove config) |
+| `add` | `name`, `runtime`, `command/image`, `args?`, `env?`, `handler?`, `scope?` | Write a new `[[servers]]` entry to the target `satori.toml` (default scope: repo) |
+| `remove` | `name: string`, `scope?` | Remove a server entry from the target `satori.toml` |
+| `enable` | `name: string` | Set `enabled = true` in current scope config |
+| `disable` | `name: string` | Set `enabled = false` (does not remove config entry) |
 | `state` | `name: string` | Show current ServerState + last error if any |
 | `scan` | `name?: string` | Re-run security scan on one or all servers |
+
+`add` and `remove` write to `satori.toml` at the specified scope:
+- `scope = "repo"` (default) → `<repo-root>/satori.toml`
+- `scope = "project"` → `<project-dir>/satori.toml`
+- `scope = "global"` → `~/.satori/config.toml`
+
+This is the primary registration path when no `.mcp.json` exists.
+
+### `satori_exec`
+
+Single entry point for all calls to registered downstream servers.
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `server` | `string` | Registered server name (must match a `[[servers]]` entry) |
+| `tool` | `string` | Bare tool name as exposed by the downstream server |
+| `args` | `object` | Tool arguments — passed through to downstream after security scan |
+
+Returns a compact summary string. Raw upstream output is stored in the context DB but not
+returned directly — Claude gets the summarized form only.
+
+Error cases:
+- Server not registered → `{"error": "unknown server: <name>"}`
+- Server blocked by security scan → `{"error": "server blocked: <reason>"}`
+- Start timeout → `{"error": "server failed to start: <name>"}`
+- Tool not found on downstream → forwarded error from downstream
 
 ---
 
