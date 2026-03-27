@@ -26,6 +26,11 @@ Finding {
   code_example?: string  // required for CRITICAL, optional for HIGH
 }
 
+Severity display mapping — findings are presented in three groups:
+- CRITICAL / HIGH → **Critical**
+- MEDIUM → **Important**
+- LOW → **Suggestion**
+
 State {
   target = $ARGUMENTS
   perspectives = []              // from reference/perspectives.md
@@ -70,6 +75,14 @@ match (target) {
 
 Retrieve full file contents for context (not just diff).
 
+Resolve SHAs for precise diff context:
+```bash
+BASE_SHA=$(git merge-base origin/main HEAD 2>/dev/null || git merge-base main HEAD 2>/dev/null)
+HEAD_SHA=$(git rev-parse HEAD)
+```
+
+Pass `BASE_SHA..HEAD_SHA` as the diff boundary to all review subagents.
+
 Read reference/perspectives.md. Determine applicable conditional perspectives:
 
 match (changes) {
@@ -89,6 +102,10 @@ AskUserQuestion:
 Recommend Agent Team when: files > 10, perspectives >= 4, cross-domain, or constitution active.
 
 ### 3. Launch Reviews
+
+Each reviewer subagent receives:
+- Full file contents for context
+- Diff bounded by `$BASE_SHA..$HEAD_SHA` (not unbounded)
 
 match (mode) {
   Standard => launch parallel subagents per applicable perspectives
@@ -127,3 +144,4 @@ match (verdict) {
 
 AskUserQuestion(options)
 
+Announce: "Review complete. Run `/receive-review` to process feedback."
