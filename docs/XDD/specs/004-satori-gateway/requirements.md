@@ -135,6 +135,16 @@ itself is a post-MVP deliverable.
 | R5.6 | Write audit log at `.satori/scanner.log` (repo-local) with reasons | Should |
 | R5.7 | IN direction: optionally annotate or filter outputs from downstream before returning to Claude | May |
 
+### R2 (cont.) — Shell Pseudo-Server (post-MVP)
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| R2.7 | Ship a built-in shell pseudo-server accessible as `satori_exec("shell", ...)` with tools `execute`, `execute_file`, and `batch`; no `satori.toml` config required | Future |
+
+Context-mode parity: `ctx_execute` / `ctx_execute_file` / `ctx_batch_execute`. Output is captured
+and summarized like any other downstream tool call. Security OUT scan applies; the `shell` server
+name is reserved. See SDD "Post-MVP: Shell Pseudo-Server" for design details.
+
 ### R6 — TCS Integration (M4 scope only)
 
 M4 delivers the submodule wiring. All skill-level integration (routing table, memory-add,

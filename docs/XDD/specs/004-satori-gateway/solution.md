@@ -767,6 +767,43 @@ MCP command path must be absolute (relative paths fail in Claude Code — CLAUDE
 
 ---
 
+## Post-MVP: Shell Pseudo-Server (context-mode parity)
+
+context-mode exposes `ctx_execute`, `ctx_execute_file`, and `ctx_batch_execute` — tools that run
+shell commands and index their output into the capture store. This functionality is in scope for
+Satori but deferred post-MVP.
+
+**Design**: ship a built-in **shell pseudo-server** registered at Satori startup without any
+`satori.toml` config required. It behaves like a real downstream server from the gateway's
+perspective (goes through `satori_exec`, handler pipeline, content capture, summarizer) but is
+implemented internally rather than as a separate process.
+
+```
+satori_exec("shell", "execute",     { cmd: "npm test", cwd?: string })
+satori_exec("shell", "execute_file", { path: "scripts/run.sh", cwd?: string })
+satori_exec("shell", "batch",       { cmds: ["git status", "npm run build"] })
+```
+
+All three tools capture stdout+stderr into the content store and return a compact summary.
+The pseudo-server is always registered (state: `running`) and never goes through lifecycle
+management. Security OUT scan applies as normal — shell injection patterns are already in
+`patterns.ts` and will catch dangerous `cmd` values.
+
+**Implementation notes:**
+- `registry.ts`: add a `isPseudoServer` flag to `ServerConfig`; pseudo-servers bypass the
+  lifecycle manager and connect directly to an in-process handler
+- `src/servers/shell.ts`: implements the three tool handlers as Node.js `child_process.execFile`
+  calls with a configurable timeout
+- `satori_find("execute")` returns the shell pseudo-server tools like any other server
+- The `shell` name is reserved — user-defined servers cannot use it
+- Timeout default: 30 000 ms (same as `npx_startup_timeout_ms`); configurable via
+  `[servers.shell] timeout_ms` in `satori.toml`
+
+**Spec work needed before implementation**: add `R2.7` to PRD; add pseudo-server section to SDD
+Hot/Cold; add Phase 8 (or extend Phase 5) in the plan.
+
+---
+
 ## Reference
 
 - `docs/XDD/specs/004-satori-gateway/requirements.md` — PRD (this SDD implements)
