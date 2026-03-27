@@ -1,5 +1,6 @@
 ---
 name: feature-prioritization
+user-invocable: false
 description: RICE, MoSCoW, Kano, and value-effort prioritization frameworks with scoring methodologies and decision documentation. Use when prioritizing features, evaluating competing initiatives, creating roadmaps, or making build vs defer decisions.
 ---
 

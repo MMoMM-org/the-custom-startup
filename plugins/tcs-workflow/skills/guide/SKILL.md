@@ -103,7 +103,7 @@ After the recovery algorithm, resolve intent. If intent is blank and no open pla
 
 ```
 What would you like to do?
-1. New feature — brainstorm → specify → implement
+1. New feature — brainstorm → xdd → implement
 2. Fix a bug — debug → verify
 3. Process a code review — receive-review
 4. Review my code — review

@@ -1,5 +1,6 @@
 ---
 name: architecture-selection
+user-invocable: false
 description: System architecture patterns including monolith, microservices, event-driven, and serverless, with C4 modeling, scalability strategies, and technology selection criteria. Use when designing system architectures, evaluating patterns, or planning scalability.
 ---
 

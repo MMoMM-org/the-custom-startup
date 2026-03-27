@@ -1,5 +1,6 @@
 ---
 name: pattern-detection
+user-invocable: false
 description: Identify existing codebase patterns (naming conventions, architectural patterns, testing patterns) to maintain consistency. Use when generating code, reviewing changes, or understanding established practices.
 ---
 

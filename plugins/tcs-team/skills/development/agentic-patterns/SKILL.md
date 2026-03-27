@@ -1,5 +1,6 @@
 ---
 name: agentic-patterns
+user-invocable: false
 description: Context enrichment for agentic AI application development using LangChain, Vercel AI SDK, and assistant-ui. Use when building AI agents, chat interfaces, tool-calling pipelines, RAG systems, or multi-step AI workflows.
 ---
 
