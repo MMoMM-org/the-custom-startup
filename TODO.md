@@ -67,25 +67,29 @@ M4 kann parallel zu späteren M2-Phasen beginnen wenn M2 Phase 1-3 stabil ist.
 ## M4 — Satori/MCP Gateway
 
 **Repo:** `MMoMM-org/miyo-satori` (standalone, TCS includes as git submodule)
-**Spec:** `docs/XDD/specs/004-satori-gateway/` (PRD ✓, SDD fehlt, Plan fehlt)
+**Spec:** `docs/XDD/specs/004-satori-gateway/` (PRD ✓, SDD ✓, Plan ✓ — 7 phases)
 **Basis:** `docs/concept/v2/context-mode-MCP-Server.md` + `docs/concept/v2/TCS v2 Memory & Context Layout Spec.md` §5
-**Status:** PRD geschrieben — SDD als nächstes
+**Status:** Spec complete — ready for implementation in `miyo-satori` repo
 
 ### Entschiedene Punkte
 
 - [x] Name: **Satori** (`miyo-satori`)
 - [x] Eigenes Repo — standalone, als git submodule in TCS unter `modules/satori/`; wiederverwendbar außerhalb TCS
-- [x] Gateway/Registry: single MCP entry point, downstream Server via Namespace `<server>_<tool>`
+- [x] Gateway: single MCP entry point — **`satori_exec(server, tool, args)`** (kein `<server>_<tool>` namespace)
 - [x] Handler/Plugin-Architektur zwischen Satori und jedem downstream Server (default: passthrough)
 - [x] Hot/cold: Server nur starten wenn a) enabled und b) tatsächlich aufgerufen
 - [x] Security: OUT primär (keine Secrets an downstream), IN optional (Filter auf Rückgabe)
 - [x] Kairn: optionaler Handler, kein hard dependency
-- [x] g/p/r Config-Separation: `~/.satori/mcp.json` / project dir / repo root
+- [x] g/p/r Config: `~/.satori/config.toml` / project / repo root (`satori.toml`)
+- [x] DB: `.satori/db.sqlite` im Repo-Root (gitignored)
+- [x] Discovery (M4): tool presence check (`satori_context` vorhanden = Satori läuft)
+- [x] Auto-Registration: `.mcp.json` → `.mcp.satori-json` (opt-in via `auto_register_mcp_json`)
+- [x] Session events: context-mode Schema übernommen (session_events + snapshot XML ≤2048B)
 
-### Noch offen (für SDD)
+### Noch offen (für Implementierung)
 
-- [ ] Discovery: wie TCS-Skills erkennen ob Satori läuft (tool-check vs CLAUDE.md flag vs beides)
-- [ ] Auto-Registration: `.mcp.json` im Repo-Root automatisch registrieren — abhängig von Claude Code MCP-Reload-Verhalten
+- [ ] Session ID source: wie bekommt Satori die Claude Code Session ID? (MCP protocol check)
+- [ ] Config hot-reload: `satori.toml` ohne MCP-Server-Neustart nachladen?
 
 ---
 
@@ -113,11 +117,17 @@ M4 kann parallel zu späteren M2-Phasen beginnen wenn M2 Phase 1-3 stabil ist.
 
 ---
 
-## Nächster Schritt → M4 starten
+## Nächster Schritt → M4 implementieren
 
-1. Entscheidungspunkte in TODO.md M4-Abschnitt durchgehen (Name, Registry-Konzept, Hot/cold)
-2. `docs/concept/v2/context-mode-MCP-Server.md` + `TCS v2 Memory & Context Layout Spec.md §5` lesen
-3. Spec unter `docs/XDD/specs/004-satori-gateway/` schreiben (PRD → SDD → Plan)
+M4 Spec vollständig (PRD + SDD + Plan). Implementierung erfolgt im `miyo-satori` Repo.
+
+1. `modules/satori/` initialisieren: `npm init`, TypeScript setup (Phase 1)
+2. Context module: SessionDB + ContentDB + snapshot.ts (Phase 2, parallel zu Phase 3)
+3. Config + registry + security (Phase 3)
+4. Lifecycle + handler interface (Phase 4)
+5. satori_exec + gateway routing (Phase 5)
+6. Hooks (Phase 6)
+7. TCS install.sh integration + E2E test (Phase 7)
 
 ---
 
