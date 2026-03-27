@@ -3,7 +3,7 @@ name: implement
 description: Executes the implementation plan from a specification. Loops through plan phases, delegates tasks to specialists, updates phase status on completion. Supports resuming from partially-completed plans.
 user-invocable: true
 argument-hint: "spec ID to implement (e.g., 001), or file path"
-allowed-tools: Task, TaskOutput, TodoWrite, Bash, Write, Edit, Read, LS, Glob, Grep, MultiEdit, AskUserQuestion, Skill, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
+allowed-tools: Task, TaskOutput, Agent, TodoWrite, Bash, Write, Edit, Read, LS, Glob, Grep, MultiEdit, AskUserQuestion, Skill, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
 ---
 
 ## Persona
@@ -55,12 +55,19 @@ State {
 - Pass accumulated context between phases — only relevant prior outputs + specs.
 - Update phase file frontmatter AND plan/README.md checkbox on phase completion.
 - Skip already-completed phases when resuming an interrupted plan.
+- Dispatch tdd-guardian before every implementer subagent (4c).
+- Two-stage review: spec compliance (4f) ALWAYS before code quality (4g).
+- Fresh subagent per task: provide curated context only — no session history bleed.
+- Select cheapest model that can handle task complexity (4b).
 
 **Never:**
 - Implement code directly — you are an orchestrator ONLY.
 - Display full agent responses — extract key outputs only.
 - Skip phase boundary checkpoints.
 - Proceed past a blocking constitution violation (L1/L2).
+- Start code quality review (4g) before spec compliance (4f) passes.
+- Dispatch implementer when tdd-guardian returns BLOCK (unless YOLO=true).
+- Pass session history to implementer subagents — scene-setting only.
 
 ## Reference Materials
 
@@ -135,26 +142,121 @@ match (all phases completed) {
 
 ### 4. Execute Phase
 
-Read plan/phase-{phase.number}.md for current phase tasks.
-Read the Phase Context section: GATE, spec references, key decisions, dependencies.
+Read `plan/phase-{phase.number}.md` for current phase tasks.
+Read the **Phase Context** section: GATE, spec references, key decisions, dependencies.
 
-match (mode) {
-  Standard => {
-    Load ONLY current phase tasks into TodoWrite.
-    Parallel tasks (marked [parallel: true]): launch ALL in a single response.
-    Sequential tasks: launch one, await result, then next.
-    Update TodoWrite status after each task.
-  }
-  Agent Team => {
-    Create tasks via TaskCreate with phase/task metadata and dependency chains.
-    Spawn teammates by work stream — only roles needed for current phase.
-    Assign tasks. Monitor via automatic messages and TaskList.
-  }
-}
+Extract all unchecked tasks:
+```bash
+grep "^- \[ \]" plan/phase-{N}.md
+```
 
-As tasks complete, update task checkboxes in phase-N.md: `- [ ]` → `- [x]`
+Create TodoWrite entries for ALL tasks before starting any task.
 
-Review handling: APPROVED → next task | Spec violation → must fix | Revision needed → max 3 cycles | After 3 → escalate to user
+For each unchecked task (in order):
+
+#### 4a. Task Validation
+
+Check that the task has:
+- An SDD reference: `[ref: SDD/...]`
+- Prime/Test/Implement/Validate/Success structure
+
+If missing: AskUserQuestion "Task [name] has no SDD ref or TDD structure. Add before dispatching?" (--fast flag skips this check)
+
+#### 4b. Model Selection
+
+Select model based on task complexity:
+- **haiku** — 1-2 files, complete spec, mechanical (isolated function, config, file rename)
+- **sonnet** — multi-file integration, cross-concern coordination, pattern matching
+- **opus** — design judgment required, broad codebase understanding, debugging complex state
+
+Signals in task text: `[parallel: true]` → haiku unless integration; `[activity: domain-modeling]` or `[activity: data-architecture]` → sonnet; no ref + complex → opus.
+
+#### 4c. tdd-guardian Dispatch
+
+Dispatch `tdd-guardian` agent (haiku) with:
+- `task_description`: full task text from plan file
+- `sdd_ref`: extracted from `[ref: SDD/...]` tag, if present
+- `proposed_approach`: ask implementer subagent for their plan before writing code
+
+Guardian result:
+- **APPROVE** → proceed to 4d
+- **BLOCK** → halt, present reason to user, do NOT dispatch implementer
+  - YOLO=true: log violation to `docs/ai/memory/yolo-review.md`, proceed as APPROVE with warning
+
+#### 4d. Implementer Subagent Dispatch
+
+Dispatch a **fresh** implementer subagent. Provide ONLY:
+1. Exact task text (copy from plan file — do not summarize)
+2. Relevant SDD section (read and include verbatim if ref present)
+3. Scene-setting (3-5 lines):
+   - Spec name and ID
+   - Current phase number and title
+   - Repo root structure (top-level dirs only)
+   - Current branch name
+4. Do NOT include session history, prior task outputs, or unrelated context
+
+Implementer subagent must:
+- Follow TDD (RED before GREEN)
+- Commit their work
+- Self-review before reporting
+
+#### 4e. Implementer Status Handling
+
+```
+DONE                → proceed to 4f (spec compliance review)
+DONE_WITH_CONCERNS  → read concerns carefully; if about correctness/scope → address before 4f; if observational → note and proceed to 4f
+NEEDS_CONTEXT       → provide the missing context, re-dispatch same subagent with same model
+BLOCKED             → assess blocker:
+                       - Context problem → provide context, re-dispatch same model
+                       - Complexity problem → re-dispatch with upgraded model
+                       - Task too large → break into sub-tasks, create new TodoWrite entries
+                       - Plan is wrong → escalate to user with explanation
+```
+
+**Never** silently ignore a BLOCKED or NEEDS_CONTEXT status.
+
+#### 4f. Spec Compliance Review
+
+Dispatch spec compliance reviewer (sonnet) with:
+- Full task requirements text
+- Implementer's report (what they claim they built)
+- Instruction: read actual code, do not trust the report
+
+Reviewer checks:
+- Nothing missing (all requirements implemented)
+- Nothing extra (no over-building)
+- No misunderstanding of requirements
+
+Result:
+- ✅ Spec compliant → proceed to 4g
+- ❌ Issues found → implementer fixes → re-dispatch spec reviewer (repeat until ✅)
+
+#### 4g. Code Quality Review
+
+Dispatch code quality reviewer (sonnet) with BASE_SHA and HEAD_SHA of implementer's commits.
+
+Reviewer checks: correctness, naming, test coverage, simplicity, file responsibility.
+
+Result:
+- ✅ Approved → proceed to 4h
+- ❌ Issues found → implementer fixes → re-dispatch quality reviewer (repeat until ✅)
+
+**Spec compliance review (4f) must pass before code quality review (4g) begins.**
+
+#### 4h. Mark Task Complete
+
+Update task checkbox in plan file: `- [ ]` → `- [x]`
+Mark TodoWrite task as completed.
+Announce: "Task [name] complete. [N] tasks remaining in phase [M]."
+
+After all tasks in phase: announce "Phase [N] complete. Run `/verify` then `/review`."
+
+---
+
+YOLO mode `[ "${YOLO:-false}" = "true" ]`:
+- Skip confirmation prompts at 4a (task validation) and 4b (model selection confirmation)
+- tdd-guardian BLOCK → log to `docs/ai/memory/yolo-review.md`, proceed
+- Proceed through 4f and 4g automatically without user confirmation between reviews
 
 ### 5. Validate Phase
 
