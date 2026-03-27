@@ -83,8 +83,8 @@ Each phase follows: **Prime** (context) → **Test** (RED) → **Implement** (GR
 > - Phase 7 requires Phase 6 (E2E requires all components).
 
 - [x] [Phase 1: Repository Foundation](phase-1.md)
-- [ ] [Phase 2: Context Module](phase-2.md)
-- [ ] [Phase 3: Config, Registry & Security](phase-3.md) `[parallel: true]` with Phase 2
+- [x] [Phase 2: Context Module](phase-2.md)
+- [x] [Phase 3: Config, Registry & Security](phase-3.md) `[parallel: true]` with Phase 2
 - [ ] [Phase 4: Lifecycle Management](phase-4.md)
 - [ ] [Phase 5: Tools & Gateway Routing](phase-5.md)
 - [ ] [Phase 6: Hooks & Session Integration](phase-6.md)
