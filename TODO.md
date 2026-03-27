@@ -74,7 +74,7 @@ M4 kann parallel zu späteren M2-Phasen beginnen wenn M2 Phase 1-3 stabil ist.
 ### Entschiedene Punkte
 
 - [x] Name: **Satori** (`miyo-satori`)
-- [x] Eigenes Repo — standalone, als git submodule in TCS; wiederverwendbar außerhalb TCS
+- [x] Eigenes Repo — standalone, als git submodule in TCS unter `modules/satori/`; wiederverwendbar außerhalb TCS
 - [x] Gateway/Registry: single MCP entry point, downstream Server via Namespace `<server>_<tool>`
 - [x] Handler/Plugin-Architektur zwischen Satori und jedem downstream Server (default: passthrough)
 - [x] Hot/cold: Server nur starten wenn a) enabled und b) tatsächlich aufgerufen

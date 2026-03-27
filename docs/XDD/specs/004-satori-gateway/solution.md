@@ -402,6 +402,8 @@ The CLAUDE.md flag and skill-level integration are M5 deliverables.
 
 ## TCS Submodule (R6.1)
 
+Satori lives at `modules/satori/` in the TCS repo.
+
 ```bash
 # Added to TCS repo during install.sh context-mode setup:
 git submodule add https://github.com/MMoMM-org/miyo-satori modules/satori
