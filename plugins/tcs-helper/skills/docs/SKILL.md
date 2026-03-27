@@ -6,7 +6,9 @@ argument-hint: "[topic: hooks | mcp | tools | permissions | settings | agents | 
 allowed-tools: Bash, WebFetch, Read, Write
 ---
 
-# docs
+## Persona
+
+**Active skill: tcs-helper:docs**
 
 Fetch and cache Claude Code documentation, keeping it locally available for up to 7 days.
 

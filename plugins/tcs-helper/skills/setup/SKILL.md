@@ -6,7 +6,9 @@ argument-hint: ""
 allowed-tools: Read, Write, Edit, Bash
 ---
 
-# setup
+## Persona
+
+**Active skill: tcs-helper:setup**
 
 Provision the TCS memory system for this repo.
 

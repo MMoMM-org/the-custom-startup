@@ -6,7 +6,9 @@ argument-hint: "[--dry-run]"
 allowed-tools: Read, Write, Edit, Bash
 ---
 
-# memory-cleanup
+## Persona
+
+**Active skill: tcs-helper:memory-cleanup**
 
 Review and prune the memory bank. Always show candidates to the user before any changes.
 

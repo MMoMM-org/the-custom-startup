@@ -6,7 +6,9 @@ argument-hint: "[--option 1|2|3|4] (skip interactive if known)"
 allowed-tools: Bash, AskUserQuestion
 ---
 
-# finish-branch
+## Persona
+
+**Active skill: tcs-helper:finish-branch**
 
 Complete the current feature branch: verify tests, choose disposition, clean up.
 

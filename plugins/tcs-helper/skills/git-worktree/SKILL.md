@@ -6,7 +6,9 @@ argument-hint: "[branch-name] [--path custom/path] [--cleanup branch-name] [--li
 allowed-tools: Bash, AskUserQuestion
 ---
 
-# git-worktree
+## Persona
+
+**Active skill: tcs-helper:git-worktree**
 
 Create and manage isolated git worktrees for parallel feature work.
 

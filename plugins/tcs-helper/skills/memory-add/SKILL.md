@@ -6,7 +6,9 @@ argument-hint: "[learning text] | --review-yolo"
 allowed-tools: Read, Write, Edit, Bash
 ---
 
-# memory-add
+## Persona
+
+**Active skill: tcs-helper:memory-add**
 
 Capture learnings from this session and route each to the correct scope and category file.
 

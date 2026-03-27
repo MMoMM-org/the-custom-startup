@@ -6,7 +6,9 @@ argument-hint: "[--days N] [--dry-run]"
 allowed-tools: Read, Write, Bash
 ---
 
-# memory-promote
+## Persona
+
+**Active skill: tcs-helper:memory-promote**
 
 Detect promotable patterns in domain.md and generate skill stubs.
 

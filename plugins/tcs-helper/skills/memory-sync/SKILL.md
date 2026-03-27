@@ -6,7 +6,9 @@ argument-hint: "[--fix]"
 allowed-tools: Read, Write, Edit, Bash
 ---
 
-# memory-sync
+## Persona
+
+**Active skill: tcs-helper:memory-sync**
 
 Audit the memory bank structure and report (or fix) synchronization issues.
 
