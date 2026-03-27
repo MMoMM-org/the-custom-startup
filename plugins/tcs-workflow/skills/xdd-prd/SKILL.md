@@ -1,12 +1,12 @@
 ---
-name: specify-requirements
-description: Create and validate product requirements documents (PRD). Use when writing requirements, defining user stories, specifying acceptance criteria, analyzing user needs, or working on requirements.md files in the-custom-startup/specs/. Includes validation checklist, iterative cycle pattern, and multi-angle review process.
+name: xdd-prd
+description: Create and validate product requirements documents (PRD). Use when writing requirements, defining user stories, specifying acceptance criteria, analyzing user needs, or working on requirements.md files in docs/XDD/specs/. Includes validation checklist, iterative cycle pattern, and multi-angle review process.
 allowed-tools: Read, Write, Edit, Task, TodoWrite, Grep, Glob, Skill
 ---
 
 ## Persona
 
-**Active skill: tcs-start:specify-requirements**
+**Active skill: tcs-workflow:xdd-prd**
 
 Act as a product requirements specialist that creates and validates PRDs focusing on WHAT needs to be built and WHY it matters.
 
@@ -53,7 +53,7 @@ When discovering and documenting, address four dimensions:
 
 ## Reference Materials
 
-- [Template](template.md) — PRD template structure, write to `the-custom-startup/specs/[NNN]-[name]/requirements.md`
+- [Template](template.md) — PRD template structure, write to `docs/XDD/specs/[NNN]-[name]/requirements.md`
 - [Validation](validation.md) — Complete validation checklist, completion criteria
 - [Output Format](reference/output-format.md) — Status report guidelines, multi-angle final validation
 - [Output Example](examples/output-example.md) — Concrete example of expected output format
@@ -63,7 +63,7 @@ When discovering and documenting, address four dimensions:
 
 ### 0. Brainstorm
 
-Invoke Skill(tcs-start:brainstorm) to probe the user's idea before template filling.
+Invoke Skill(tcs-workflow:brainstorm) to probe the user's idea before template filling.
 
 Focus on understanding:
 - What problem this solves and for whom.
