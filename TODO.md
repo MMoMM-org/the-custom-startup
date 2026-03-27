@@ -55,8 +55,8 @@ M4 kann parallel zu späteren M2-Phasen beginnen wenn M2 Phase 1-3 stabil ist.
 
 ### Nach M2
 
-- [ ] `tcs-helper:setup` → tcs-patterns als optionalen Install-Schritt einbauen
-- [ ] AGENTS.md / README: tcs-patterns dokumentieren
+- [x] `tcs-helper:setup` → tcs-patterns als optionalen Install-Schritt einbauen
+- [x] AGENTS.md / README: tcs-patterns dokumentieren
 
 ---
 
