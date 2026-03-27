@@ -23,9 +23,9 @@ The `start` plugin provides ten user-invocable workflow skills, five autonomous 
 
 ## User-Invocable Skills
 
-These skills are invoked by the user via slash commands (e.g., `/specify`). Unlike autonomous skills which activate automatically based on context, user-invocable skills wait for explicit invocation.
+These skills are invoked by the user via slash commands (e.g., `/xdd`). Unlike autonomous skills which activate automatically based on context, user-invocable skills wait for explicit invocation.
 
-### `/specify <description>`
+### `/xdd <description>`
 
 Create comprehensive specifications from brief descriptions through deep research and specialist agent coordination.
 
@@ -33,8 +33,8 @@ Create comprehensive specifications from brief descriptions through deep researc
 
 **Usage:**
 ```bash
-/specify Build a real-time notification system with WebSocket support
-/specify 001  # Resume existing specification work
+/xdd Build a real-time notification system with WebSocket support
+/xdd 001  # Resume existing specification work
 ```
 
 **Key Features:**
@@ -524,7 +524,7 @@ Secrets must never be committed to source control.
 
 | Phase | Command | Enforcement |
 |-------|---------|-------------|
-| **Planning** | `/specify` (SDD) | SDD must not violate constitutional principles |
+| **Planning** | `/xdd` (SDD) | SDD must not violate constitutional principles |
 | **Task** | `/implement` | Task ordering respects constitutional priorities |
 | **Implementation** | `/implement` | Generated code checked; L1/L2 violations block completion |
 
@@ -625,7 +625,7 @@ docs/
 ### Auto-Documentation
 
 The `document` skill's Capture perspective automatically creates files in the correct location when patterns, interfaces, or domain rules are discovered during:
-- Specification creation (`/specify`)
+- Specification creation (`/xdd`)
 - Implementation (`/implement`)
 - Analysis (`/analyze`)
 
@@ -721,10 +721,10 @@ The ScaleUp provides contextual explanations as it works:
                   CONSTITUTION.md at project root
 ```
 
-### Primary Workflow: Specify > Validate > Implement > Review
+### Primary Workflow: XDD > Validate > Implement > Review
 
 ```
-/specify ──> /validate ──> /implement ──> /review
+/xdd ──> /validate ──> /implement ──> /review
    |              |              |              |
 Create specs  Check quality  Execute plan  Code review
 PRD+SDD+PLAN  3 Cs framework Phase-by-phase Security+Perf
@@ -741,7 +741,7 @@ Optional: /document after implementation for documentation sync
 **1. Create Specification**
 
 ```bash
-/specify Add real-time notification system with WebSocket support
+/xdd Add real-time notification system with WebSocket support
 ```
 
 **What happens:**
@@ -870,7 +870,7 @@ plugins/tcs-workflow/skills/
     └── interface-template.md          # External integrations
 ```
 
-**Usage:** Automatically used by `/specify` and `/document` when creating documentation
+**Usage:** Automatically used by `/xdd` and `/document` when creating documentation
 
 ---
 

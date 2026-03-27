@@ -1,5 +1,6 @@
 ---
 name: xdd-meta
+user-invocable: true
 description: Scaffold, status-check, and manage specification directories under docs/XDD/ (configurable via .claude/startup.toml). Handles auto-incrementing IDs, README tracking, phase transitions, and decision logging. Used by both xdd and implement workflows.
 allowed-tools: Read, Write, Edit, Bash, TodoWrite, Grep, Glob
 ---

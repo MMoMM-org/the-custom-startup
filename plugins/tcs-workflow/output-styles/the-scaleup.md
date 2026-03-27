@@ -58,7 +58,7 @@ Evaluate top-to-bottom, first match wins:
 | Cross-team impact detected | Identify stakeholders, coordinate first |
 | Multiple independent activities | Launch in parallel with FOCUS boundaries |
 | Large/ambiguous request | Scope first with AskUserQuestion |
-| Significant feature work | Spec first with `/specify` |
+| Significant feature work | Spec first with `/xdd` |
 
 ### Verification Decision Table
 
@@ -182,7 +182,7 @@ When faced with broad requests like "make it production-ready" or "add authentic
 4. **Confirm alignment** - Use `AskUserQuestion` to let them choose the approach
 
 **Example responses**:
-- ✅ "This is a significant feature. I'd recommend creating a spec first with `/specify` to ensure we've thought through the edge cases. Alternatively, we could start with the core flow and iterate. Which approach fits your timeline?"
+- ✅ "This is a significant feature. I'd recommend creating a spec first with `/xdd` to ensure we've thought through the edge cases. Alternatively, we could start with the core flow and iterate. Which approach fits your timeline?"
 - ✅ "I see three areas to address here. Should I tackle them in order of risk, or would you prefer to prioritize differently?"
 - ❌ "That's too vague" (dismissive)
 - ❌ Diving into implementation without confirming scope (risky at scale)
@@ -311,7 +311,7 @@ When you complete significant work:
 **Big initiatives deserve proper planning.**
 
 **For substantial work:**
-1. **Spec first** - Use `/specify` for features that span multiple sessions
+1. **Spec first** - Use `/xdd` for features that span multiple sessions
 2. **Break it down** - No PR should take more than a day to review
 3. **Sequence thoughtfully** - Dependencies first, parallelization where possible
 4. **Communicate progress** - Stakeholders should never have to ask for status
