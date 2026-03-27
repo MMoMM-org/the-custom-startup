@@ -36,22 +36,22 @@ M4 kann parallel zu späteren M2-Phasen beginnen wenn M2 Phase 1-3 stabil ist.
 
 **Spec:** `docs/XDD/specs/001-memory-claude/` (PRD ✓, SDD ✓, Plan ✓)
 **Plan:** `docs/superpowers/plans/2026-03-25-memory-system-m2.md` (6 Phasen)
-**Status:** Spec fertig, Implementation 0%
+**Status:** ✅ complete (merged to `customizing` 2026-03-26)
 
 ### Vor dem Start
 
-- [ ] ROADMAP.md: `.start/specs/` → `docs/XDD/specs/` korrigieren
-- [ ] `2026-03-25-memory-system-m2.md`: `.start/specs/` → `docs/XDD/specs/` korrigieren
-- [ ] `001-memory-claude/solution.md` §3 Routing-Tabelle: Hinweis ergänzen dass MCP ab medium lived in M5 einsetzt
+- [x] ROADMAP.md: `.start/specs/` → `docs/XDD/specs/` korrigieren
+- [x] `2026-03-25-memory-system-m2.md`: `.start/specs/` → `docs/XDD/specs/` korrigieren
+- [x] `001-memory-claude/solution.md` §3 Routing-Tabelle: Hinweis ergänzen dass MCP ab medium lived in M5 einsetzt
 
 ### Implementation (6 Phasen)
 
-- [ ] Phase 1: Python-Infrastruktur (`lib/`, `reflect_utils.py`, Queue-Format)
-- [ ] Phase 2: Hooks (`capture_learning.py`, `session_start_reminder.py`, `check_learnings.py`, `post_commit_reminder.py`)
-- [ ] Phase 3: `memory-add` Routing-Logik
-- [ ] Phase 4: `memory-sync`, `memory-cleanup`, `memory-promote`
-- [ ] Phase 5: `tcs-helper:setup` (Onboarding-Wizard + Templates)
-- [ ] Phase 6: Integration & Validierung
+- [x] Phase 1: Python-Infrastruktur (`lib/`, `reflect_utils.py`, Queue-Format)
+- [x] Phase 2: Hooks (`capture_learning.py`, `session_start_reminder.py`, `check_learnings.py`, `post_commit_reminder.py`)
+- [x] Phase 3: `memory-add` Routing-Logik
+- [x] Phase 4: `memory-sync`, `memory-cleanup`, `memory-promote`
+- [x] Phase 5: `tcs-helper:setup` (Onboarding-Wizard + Templates)
+- [x] Phase 6: Integration & Validierung (23 tests pass)
 
 ### Nach M2
 
