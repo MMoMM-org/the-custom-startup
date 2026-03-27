@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Tools & Gateway Routing"
-status: pending
+status: completed
 version: "1.0"
 phase: 5
 ---
@@ -37,7 +37,7 @@ Implements `satori_find`, `satori_schema`, `satori_exec`, the tool catalog cache
 gateway routing pipeline. After this phase the MCP server exposes all 5 tools and can discover
 and route calls to real downstream servers.
 
-- [ ] **T5.1 Tool catalog cache (catalog.ts)** `[activity: build-feature]`
+- [x] **T5.1 Tool catalog cache (catalog.ts)** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Gateway Routing/Discovery Flow]` — caching strategy, cold server search. `[ref: SDD/Repository Structure; src/gateway/catalog.ts]`
   2. Test: `ToolCatalog.populate(serverName, toolList)` stores tool definitions. `ToolCatalog.search("read file")` returns tools whose name or description matches. `ToolCatalog.getSchema("filesystem", "read_file")` returns cached MCP tool definition. `ToolCatalog.search("read")` with `server="filesystem"` filter returns only filesystem tools. Server not in catalog → `getSchema` returns null (not throw). `[ref: SDD/Gateway Routing/Discovery Flow]`
@@ -45,7 +45,7 @@ and route calls to real downstream servers.
   4. Validate: Unit tests: search hits on name and description; server filter works; missing server → empty results; `getSchema` for unknown tool → null. `[ref: SDD/Gateway Routing/Discovery Flow]`
   5. Success: Catalog tests pass; search is case-insensitive; cold servers searchable without starting them.
 
-- [ ] **T5.2 satori_find and satori_schema tools** `[activity: build-feature]`
+- [x] **T5.2 satori_find and satori_schema tools** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Tools Exposed to Claude Code/satori_find]` and `[ref: SDD/Tools Exposed to Claude Code/satori_schema]`. `[ref: SDD/Gateway Routing/Discovery Flow]`
   2. Test: `satori_find("read")` → list of matching tools across all servers with state. `satori_find("read", server="filesystem")` → only filesystem matches. `satori_find("zzznomatch")` → empty array. `satori_find("")` → returns all tools across all servers (empty query matches everything). `satori_schema("filesystem", "read_file")` → `{ name, description, inputSchema }`. `satori_schema("unknown", "tool")` → error JSON. `[ref: SDD/Tools Exposed to Claude Code/satori_find]`
@@ -53,7 +53,7 @@ and route calls to real downstream servers.
   4. Validate: Integration test: populate catalog with 3 servers (10 tools each), call `satori_find("create")` → subset returned with state. `satori_schema` roundtrip: populate → retrieve → correct shape. `[ref: SDD/Tools Exposed to Claude Code]`
   5. Success: Both tools registered; `satori_find` returns state-enriched results; `satori_schema` returns full inputSchema.
 
-- [ ] **T5.3 Gateway router (router.ts)** `[activity: build-feature]`
+- [x] **T5.3 Gateway router (router.ts)** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Gateway Routing/Tool Call Flow]` — 11-step pipeline. `[ref: SDD/Tool Naming Convention]`
   2. Test: `GatewayRouter.exec("filesystem", "read_file", {path: "..."})` with mocked registry, lifecycle, handler, and downstream client: calls `registry.lookup`, `lifecycle.start`, `handler.beforeCall`, downstream `callTool`, `handler.afterCall`, `contentDb.insertCapture`. Unknown server → error result. Blocked by `beforeCall` → error result, audit log entry. Security scan blocks → error result, no downstream call. `[ref: SDD/Gateway Routing/Tool Call Flow]`
@@ -61,7 +61,7 @@ and route calls to real downstream servers.
   4. Validate: Unit tests with all dependencies mocked: happy path (all 11 steps called in order), blocked path (beforeCall returns BlockedResult → no downstream call), scan blocked path, unknown server path, start failure path. `[ref: SDD/Gateway Routing/Tool Call Flow]`
   5. Success: Router tests pass for all branches; step ordering is correct; downstream never called after a block.
 
-- [ ] **T5.4 satori_exec tool** `[activity: build-feature]`
+- [x] **T5.4 satori_exec tool** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Tools Exposed to Claude Code/satori_exec]` — argument table, error cases. `[ref: SDD/Tool Naming Convention/Why satori_exec]`
   2. Test: `satori_exec({server: "filesystem", tool: "read_file", args: {path: "..."}})` calls `GatewayRouter.exec()` and returns result. Missing `server` argument → MCP error. Missing `tool` → MCP error. Unknown server → `{"error": "unknown server: filesystem"}`. `[ref: SDD/Tools Exposed to Claude Code/satori_exec]`
@@ -69,7 +69,7 @@ and route calls to real downstream servers.
   4. Validate: Integration test: start a real npx server (e.g. `@modelcontextprotocol/server-memory`), register it, call `satori_exec("memory", "create_entities", {...})` — response captured in ContentDB. `[ref: SDD/Tools Exposed to Claude Code/satori_exec]`
   5. Success: `satori_exec` registered in MCP server; routes to downstream; captures output; returns summary.
 
-- [ ] **T5.5 Content summarizer** `[activity: build-feature]`
+- [x] **T5.5 Content summarizer** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Repository Structure; src/context/summarizer.ts]`. `[ref: SDD/SQLite Schema/Content Capture Store]`
   2. Test: `summarize(rawOutput)` compresses a 5000-char tool output to ≤500 chars. Summary is human-readable (not just truncation). Structured JSON output → key fields extracted. Plain text → first N lines + trailing count. Empty input → empty summary. `[ref: SDD/Repository Structure; src/context/summarizer.ts]`
@@ -77,7 +77,7 @@ and route calls to real downstream servers.
   4. Validate: Unit tests: JSON object summary contains key names; long text summary ≤ 500 chars; short text unchanged. `[ref: SDD/Repository Structure; src/context/summarizer.ts]`
   5. Success: Summarizer produces ≤500 char output for all inputs; summary searchable in FTS5.
 
-- [ ] **T5.6 Wire all 5 tools into MCP server** `[activity: build-feature]`
+- [x] **T5.6 Wire all 5 tools into MCP server** `[activity: build-feature]`
 
   1. Prime: Review `src/index.ts` from Phase 1 (empty tool list). `[ref: SDD/Tools Exposed to Claude Code]`
   2. Test: `tools/list` returns exactly 5 tools: `satori_context`, `satori_manage`, `satori_find`, `satori_schema`, `satori_exec`. Each has a description. No extra tools. `[ref: SDD/Tool Naming Convention]`
@@ -85,7 +85,7 @@ and route calls to real downstream servers.
   4. Validate: `tools/list` → exactly 5 tools. `satori_find("read")` → non-empty if servers configured. `satori_exec` with unknown server → error JSON (not crash). `satori_context(status)` → JSON stats. `satori_manage(list)` → list (empty OK). `[ref: SDD/Tools Exposed to Claude Code]`
   5. Success: MCP server starts with 5 tools; all tools respond correctly; no crashes on bad input.
 
-- [ ] **T5.7 Phase 5 Validation** `[activity: validate]`
+- [x] **T5.7 Phase 5 Validation** `[activity: validate]`
 
   - `npm test` — all Phase 5 tests pass.
   - `npm run typecheck` — 0 errors.
