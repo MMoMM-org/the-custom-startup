@@ -106,7 +106,7 @@ Skill authoring tools, project memory system, and onboarding wizard. Install to 
 |----------|--------|
 | **Architecture** | `/ddd` · `/hexagonal` · `/functional` · `/event-driven` |
 | **API & Types** | `/api-design` · `/typescript-strict` |
-| **Testing** | `/mutation-testing` · `/frontend-testing` · `/react-testing` |
+| **Testing** | `/testing` · `/mutation-testing` · `/frontend-testing` · `/react-testing` · `/test-design-reviewer` |
 | **Platforms** | `/node-service` · `/python-project` · `/go-idiomatic` |
 | **DevOps** | `/twelve-factor` — dispatches `tcs-team:the-devops:build-platform` for implementation |
 | **Integrations** | `/mcp-server` · `/obsidian-plugin` |

@@ -140,13 +140,13 @@ Skill authoring tools and a file-based project memory system. Install to add str
 
 ### Patterns Plugin (`tcs-patterns`) — Domain Pattern Skills *(optional)*
 
-**15 pattern skills** covering architecture, testing, languages, and platform. Install only what you need — they activate on trigger terms.
+**17 pattern skills** covering architecture, testing, languages, and platform. Install only what you need — they activate on trigger terms.
 
 | Category | Skills |
 |----------|--------|
 | **Architecture** | `/ddd` · `/hexagonal` · `/functional` · `/event-driven` |
 | **API & Types** | `/api-design` · `/typescript-strict` |
-| **Testing** | `/mutation-testing` · `/frontend-testing` · `/react-testing` |
+| **Testing** | `/testing` · `/mutation-testing` · `/frontend-testing` · `/react-testing` · `/test-design-reviewer` |
 | **Platforms** | `/node-service` · `/python-project` · `/go-idiomatic` |
 | **DevOps** | `/twelve-factor` |
 | **Integrations** | `/mcp-server` · `/obsidian-plugin` |

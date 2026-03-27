@@ -146,7 +146,24 @@ If any tests fail:
 - Output: "BLOCKED — Fix failing tests before proceeding. Do not add new code; focus only on making the existing tests pass."
 - Wait for user to resolve (or in YOLO mode: stop and log the failure)
 
-### 7. REFACTOR Checkpoint
+### 7. MUTATE Checkpoint (optional — requires `tcs-patterns:mutation-testing`)
+
+If `tcs-patterns` is installed, run mutation analysis before refactoring to verify tests actually catch bugs:
+
+Output:
+```
+GREEN confirmed. Optional: MUTATE phase
+
+If tcs-patterns:mutation-testing is available, run /mutation-testing against the changed code now.
+Mutation testing validates test strength BEFORE you restructure code.
+Surviving mutants should be killed with additional tests before REFACTOR.
+
+Skip this step if tcs-patterns is not installed.
+```
+
+Proceed to REFACTOR regardless — this step is advisory.
+
+### 8. REFACTOR Checkpoint
 
 Set phase = REFACTOR
 
@@ -184,3 +201,6 @@ If tests fail after refactor:
 ## Reference Materials
 
 - `reference/iron-law.md` — The iron law of TDD and rationalization rejection table
+- `tcs-patterns:testing` — Test factory patterns, behavior-driven test structure, coverage theater detection
+- `tcs-patterns:mutation-testing` — Mutation analysis for MUTATE phase (optional, requires tcs-patterns plugin)
+- `tcs-patterns:test-design-reviewer` — Evaluate test quality against Dave Farley's 8 properties
