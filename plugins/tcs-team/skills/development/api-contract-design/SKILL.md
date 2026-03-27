@@ -1,5 +1,6 @@
 ---
 name: api-contract-design
+user-invocable: false
 description: REST and GraphQL API design patterns, OpenAPI/Swagger specifications, versioning strategies, and authentication patterns. Use when designing APIs, reviewing API contracts, evaluating API technologies, or implementing API endpoints.
 ---
 

@@ -77,15 +77,15 @@ After installation, optionally set up project governance rules that Claude enfor
 Switch [output style](docs/output-styles.md) anytime — The Startup is high-energy and fast, The ScaleUp is calm and educational:
 
 ```bash
-/output-style "start:The Startup"
-/output-style "start:The ScaleUp"
+/output-style "tcs-workflow:The Startup"
+/output-style "tcs-workflow:The ScaleUp"
 ```
 
 Then start building:
 
 ```bash
 # Step 1: Create a specification (requirements + technical design + implementation plan)
-/specify Add user authentication with OAuth support
+/xdd Add user authentication with OAuth support
 
 # Step 2: Optionally validate the spec before building
 /validate 001
@@ -100,15 +100,17 @@ Then start building:
 
 ## Plugins
 
-### Start Plugin (`start`) — Core Workflow
+### Workflow Plugin (`tcs-workflow`) — Core Workflow
 
-**10 user-invocable skills** covering the full development lifecycle. → [Full skill reference](docs/skills.md)
+**20 user-invocable skills** covering the full development lifecycle. → [Full skill reference](docs/skills.md)
 
 | Category | Skills |
 |----------|--------|
 | **Setup** | `/constitution` — project governance rules, auto-enforced during the build workflow |
-| **Build** | `/specify` → `/validate` → `/implement` — spec-driven development pipeline |
-| **Quality** | `/test` — code ownership enforcement · `/review` — multi-agent parallel code review |
+| **XDD** | `/xdd` → `/xdd-prd` → `/xdd-sdd` → `/xdd-plan` → `/xdd-tdd` · `/xdd-meta` — spec-driven development pipeline |
+| **Build** | `/xdd` → `/validate` → `/implement` — spec-driven development pipeline |
+| **Quality** | `/test` — code ownership enforcement · `/review` — multi-agent parallel code review · `/verify` · `/receive-review` |
+| **Assist** | `/guide` · `/parallel-agents` |
 | **Maintain** | `/analyze` · `/refactor` · `/debug` · `/document` |
 
 ### Team Plugin (`team`) — Specialist Agents

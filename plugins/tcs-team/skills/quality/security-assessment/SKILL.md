@@ -1,5 +1,6 @@
 ---
 name: security-assessment
+user-invocable: false
 description: Vulnerability review, threat modeling, OWASP patterns, and secure coding assessment. Use when reviewing code security, designing secure systems, performing threat analysis, or validating security implementations.
 ---
 

@@ -81,8 +81,8 @@ EOF
 TARGET=""          # global | current | other
 INSTALL_DIR=""     # ~ | $PWD | <path>
 SETTINGS_FILE=""   # resolved settings.json path
-PLUGINS=""         # space-separated list: tcs-start@the-custom-startup tcs-team@the-custom-startup
-OUTPUT_STYLE=""    # e.g. "tcs-start:The Startup" or ""
+PLUGINS=""         # space-separated list: tcs-workflow@the-custom-startup tcs-team@the-custom-startup
+OUTPUT_STYLE=""    # e.g. "tcs-workflow:The Startup" or ""
 SPECS_DIR_NAME=""  # e.g. "the-custom-startup"
 PROMPTS=""         # yes | skip
 PROMPTS_BASE_DIR="" # absolute path, e.g. ~/.claude/the-custom-startup
@@ -177,19 +177,19 @@ choose_target() {
 
 choose_plugins() {
   printf "\n${BRIGHT_GREEN}── Plugins${RESET}\n\n"
-  printf "  ${CYAN}1)${RESET} Both           — tcs-start + tcs-team  (recommended)\n"
-  printf "  ${CYAN}2)${RESET} tcs-start only — workflow skills\n"
-  printf "  ${CYAN}3)${RESET} tcs-team only  — specialist agents\n"
-  printf "  ${CYAN}4)${RESET} All three      — tcs-start + tcs-team + tcs-helper (skill authoring tools)\n"
+  printf "  ${CYAN}1)${RESET} Both              — tcs-workflow + tcs-team  (recommended)\n"
+  printf "  ${CYAN}2)${RESET} tcs-workflow only — workflow skills\n"
+  printf "  ${CYAN}3)${RESET} tcs-team only     — specialist agents\n"
+  printf "  ${CYAN}4)${RESET} All three         — tcs-workflow + tcs-team + tcs-helper (skill authoring tools)\n"
   printf "\n"
   ask "Select plugins [1-4, default: 1]:"
   local choice
   read -r choice </dev/tty
   case "$choice" in
-    2) PLUGINS="tcs-start@the-custom-startup" ;;
+    2) PLUGINS="tcs-workflow@the-custom-startup" ;;
     3) PLUGINS="tcs-team@the-custom-startup" ;;
-    4) PLUGINS="tcs-start@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup" ;;
-    *)  PLUGINS="tcs-start@the-custom-startup tcs-team@the-custom-startup" ;;
+    4) PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup" ;;
+    *)  PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup" ;;
   esac
   success "Plugins: $PLUGINS"
 }
@@ -208,9 +208,9 @@ choose_output_style() {
   local choice
   read -r choice </dev/tty
   case "$choice" in
-    2) OUTPUT_STYLE="tcs-start:The ScaleUp" ;;
+    2) OUTPUT_STYLE="tcs-workflow:The ScaleUp" ;;
     3) OUTPUT_STYLE="" ;;
-    *) OUTPUT_STYLE="tcs-start:The Startup" ;;
+    *) OUTPUT_STYLE="tcs-workflow:The Startup" ;;
   esac
   if [[ -n "$OUTPUT_STYLE" ]]; then
     success "Output style: $OUTPUT_STYLE"

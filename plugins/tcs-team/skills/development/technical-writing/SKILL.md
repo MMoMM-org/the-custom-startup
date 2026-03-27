@@ -1,5 +1,6 @@
 ---
 name: technical-writing
+user-invocable: false
 description: Create architectural decision records (ADRs), system documentation, API documentation, and operational runbooks. Use when capturing design decisions, documenting system architecture, creating API references, or writing operational procedures.
 ---
 

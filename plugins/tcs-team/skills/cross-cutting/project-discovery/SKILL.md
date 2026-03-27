@@ -1,5 +1,6 @@
 ---
 name: project-discovery
+user-invocable: false
 description: Unified codebase discovery across structure navigation, tech-stack detection, and documentation extraction. Use when onboarding to a project, locating implementation paths, identifying frameworks/tooling, or validating docs against code reality.
 ---
 

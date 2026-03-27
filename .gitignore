@@ -1,5 +1,6 @@
 # IDE
 .claude/
+!.claude/startup.toml
 .idea/
 .vscode/
 *.swp
@@ -8,6 +9,9 @@
 
 # Python
 __pycache__/
+venv/
+*.pyc
+.pytest_cache/
 
 # OS
 .DS_Store
@@ -15,3 +19,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# AI/Documentation Cache
+docs/ai/external/

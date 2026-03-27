@@ -139,6 +139,20 @@ Section order — each section is a `## ` heading:
 
 Sets the AI's role and expertise frame. Keep enforcement rules out — those go in Constraints.
 
+The **first line** of every Persona section must be the active-skill announcement:
+
+```
+**Active skill: [plugin]:[skill-name]**
+```
+
+For agents, use:
+
+```
+**Active agent: [role]:[activity]**
+```
+
+This line appears in the terminal when the skill activates, letting users track which skill is running. It must match the plugin name and skill directory name exactly.
+
 ### Interface
 
 Data shapes using TypeScript-like syntax. Inline enum values directly — no `type` aliases. Include State and optional Scope blocks here.

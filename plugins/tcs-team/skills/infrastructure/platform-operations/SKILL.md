@@ -1,5 +1,6 @@
 ---
 name: platform-operations
+user-invocable: false
 description: Unified platform operations guidance for CI/CD pipeline design, deployment strategies, observability, SLI/SLOs, and incident-ready rollouts. Use when building release workflows, production monitoring, or reliability controls.
 ---
 

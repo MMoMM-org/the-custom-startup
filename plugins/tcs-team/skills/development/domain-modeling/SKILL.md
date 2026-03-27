@@ -1,5 +1,6 @@
 ---
 name: domain-modeling
+user-invocable: false
 description: Unified domain and data modeling for business entities, invariants, schema design, aggregate boundaries, and evolution strategy. Use when designing business models, schema changes, bounded contexts, or consistency rules.
 ---
 

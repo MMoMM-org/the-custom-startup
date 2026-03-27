@@ -1,5 +1,6 @@
 ---
 name: requirements-elicitation
+user-invocable: false
 description: Requirement gathering techniques, stakeholder analysis, user story patterns, and specification validation. Use when clarifying vague requirements, resolving conflicting needs, documenting specifications, or validating requirements with stakeholders.
 ---
 
