@@ -1,0 +1,3 @@
+[submodule "modules/satori"]
+	path = modules/satori
+	url = https://github.com/MMoMM-org/miyo-satori.git

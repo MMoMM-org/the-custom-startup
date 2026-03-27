@@ -188,6 +188,7 @@ Config uses TOML. Location follows g/p/r resolution:
 Server-specific settings (env vars, paths, ports) live in the Satori config, not in `.mcp.json`.
 The `.mcp.json` in a repo can be auto-detected for server discovery only; Satori's own config
 is authoritative for how each server is started and configured.
+If auto-configuration is active and `.mcp.json` configuration is transferred to Satori the original `.mcp.json` is renamed to `.mcp.satori-json`
 
 ```toml
 # satori.toml (repo root)
