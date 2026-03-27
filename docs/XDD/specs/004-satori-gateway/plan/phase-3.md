@@ -35,7 +35,7 @@ Builds config loading, server registry, security scanner, audit log, auto-regist
 `satori_manage` tool. After this phase the gateway knows which servers are configured, can scan
 them for security issues, and can add/remove servers via tool call.
 
-- [ ] **T3.1 Config loader (TOML + g/p/r merge)** `[activity: build-feature]`
+- [x] **T3.1 Config loader (TOML + g/p/r merge)** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Config Schema/Resolution Order]` and the full TOML schema. `smol-toml` docs. `[ref: SDD/Config Schema]`
   2. Test: `loadConfig(repoRoot)` merges global → project → repo configs. Repo-level `[[servers]]` with same name as global entry shadows global. `${VAR}` in env fields expands from `process.env`. Unexpanded `${MISSING_VAR}` throws at expand time (not parse time). Missing config files are silently ignored (treated as empty). `[ref: SDD/Config Schema/Resolution Order]`
@@ -43,7 +43,7 @@ them for security issues, and can add/remove servers via tool call.
   4. Validate: Unit tests: merge test (3 configs, repo wins). Env expansion: `${GITHUB_TOKEN}` → actual value. Missing var → throws with clear message naming the var. All SDD TOML fields parse correctly (boolean, string, array). `[ref: SDD/Config Schema]`
   5. Success: Config loader tests pass; g/p/r merge correct; env expansion works; missing files tolerated.
 
-- [ ] **T3.2 Server registry** `[activity: build-feature]`
+- [x] **T3.2 Server registry** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Repository Structure; src/gateway/registry.ts]`. `[ref: SDD/Config Schema/Downstream server definitions]`
   2. Test: `ServerRegistry.load(config)` registers all `[[servers]]` entries. `registry.lookup("filesystem")` returns `ServerConfig`. `registry.lookup("unknown")` returns `null`. Duplicate `name` entries — last one wins (g/p/r already merged before registry load). `registry.list()` returns all entries with current `enabled` state. `[ref: SDD/Config Schema]`
@@ -51,7 +51,7 @@ them for security issues, and can add/remove servers via tool call.
   4. Validate: Unit tests for all methods. Load 3 servers; lookup each; lookup unknown → null; list() returns all 3. `[ref: SDD/Config Schema]`
   5. Success: Registry correctly populated from config; lookup and list work; all tests pass.
 
-- [ ] **T3.3 Security scanner and audit log** `[activity: review-security]`
+- [x] **T3.3 Security scanner and audit log** `[activity: review-security]`
 
   1. Prime: Read `[ref: SDD/Security Implementation]` — startup scan, runtime OUT scan, patterns, audit log format. `[ref: SDD/Security Implementation]`
   2. Test: `scanOut(args)` detects: `sk-[A-Za-z0-9]{20,}` API key in string value → `BlockedResult`; `GITHUB_PERSONAL_ACCESS_TOKEN` key with non-empty value → `BlockedResult`; clean args → `null` (not blocked). Startup config scan: `&&` in command field → flagged. Startup description scan: `exfiltrate` in tool description → blocked. Audit log: entries appended in correct format with ISO timestamp. `[ref: SDD/Security Implementation]`
@@ -59,7 +59,7 @@ them for security issues, and can add/remove servers via tool call.
   4. Validate: Unit tests: 6 blocked patterns hit; 3 clean inputs pass. Audit log test: write 3 entries, read file, verify ISO timestamps and format. `[ref: SDD/Security Implementation]`
   5. Success: All security tests pass; blocked inputs never reach downstream; audit log is append-only.
 
-- [ ] **T3.4 Auto-registration (.mcp.json import)** `[activity: build-feature]`
+- [x] **T3.4 Auto-registration (.mcp.json import)** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Auto-Registration]` — 5-step flow, `.mcp.satori-json` rename. `[ref: SDD/Auto-Registration]`
   2. Test: With `auto_register_mcp_json = true` and `.mcp.json` present: servers parsed and written to `satori.toml`; `.mcp.json` renamed to `.mcp.satori-json`. With `auto_register_mcp_json = false`: no import happens. `.mcp.json` absent: no error. Duplicate: server already in `satori.toml` → not duplicated. `[ref: SDD/Auto-Registration]`
@@ -67,7 +67,7 @@ them for security issues, and can add/remove servers via tool call.
   4. Validate: Integration test in temp dir: write `.mcp.json`, run `autoRegisterMcpJson()`, verify `satori.toml` contains server entries, `.mcp.satori-json` exists, `.mcp.json` gone. `[ref: SDD/Auto-Registration]`
   5. Success: Auto-registration test passes; idempotent on re-run; `.mcp.satori-json` preserved for rollback.
 
-- [ ] **T3.5 satori_manage tool** `[activity: build-feature]`
+- [x] **T3.5 satori_manage tool** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Tools Exposed to Claude Code/satori_manage]` — all 8 sub-commands (list, add, remove, enable, disable, state, scan, reload). `[ref: SDD/Tools Exposed to Claude Code/satori_manage]`
   2. Test: `list` returns all registered servers with state and handler. `add` writes new `[[servers]]` entry to correct scope TOML file. `remove` deletes entry from TOML. `enable`/`disable` toggle `enabled` flag in TOML. `state` returns current `ServerState`. `scan` re-runs security scanner and returns result. `reload` invalidates the tool catalog for the named server (or all) and triggers a fresh `tools/list` call on running servers. `[ref: SDD/Tools Exposed to Claude Code/satori_manage]`
@@ -75,7 +75,7 @@ them for security issues, and can add/remove servers via tool call.
   4. Validate: Integration test with temp `satori.toml`: `add` → file contains new entry; `remove` → entry gone; `enable`/`disable` → flag toggled. `list` → returns entries. `reload` on a populated catalog → catalog cleared and repopulated. `[ref: SDD/Tools Exposed to Claude Code/satori_manage]`
   5. Success: All 8 satori_manage sub-commands work; TOML mutations are non-destructive (preserve existing entries and comments where possible); tool registered in MCP server.
 
-- [ ] **T3.6 Phase 3 Validation** `[activity: validate]`
+- [x] **T3.6 Phase 3 Validation** `[activity: validate]`
 
   - `npm test` — all Phase 3 tests pass.
   - `npm run typecheck` — 0 errors.

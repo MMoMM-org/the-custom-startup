@@ -33,7 +33,7 @@ phase: 2
 Builds the full context module: two DB stores, session event extraction, XML snapshot builder,
 and the `satori_context` tool skeleton backed by real data.
 
-- [ ] **T2.1 SessionDB (session event store)** `[activity: build-feature]`
+- [x] **T2.1 SessionDB (session event store)** `[activity: build-feature]`
 
   1. Prime: Read context-mode `src/session/db.ts` completely — schema, FIFO eviction, dedup, prepared statements pattern. `[ref: SDD/SQLite Schema/Session Event Store]`
   2. Test: `SessionDB` inserts events; dedup skips same type+hash within 5-event window; eviction drops lowest-priority (then oldest) when count exceeds 1000; `getEvents()` returns ordered events; `upsertResume()` + `getResume()` roundtrip; `incrementCompactCount()` increments. `[ref: SDD/SQLite Schema/Session Event Store]`
@@ -41,7 +41,7 @@ and the `satori_context` tool skeleton backed by real data.
   4. Validate: All unit tests pass. Run with in-memory DB (`:memory:` path). Eviction test: insert 1001 events (priority 3), check count stays ≤ 1000. Dedup test: insert same type+data twice → count = 1. `[ref: SDD/SQLite Schema/Session Event Store]`
   5. Success: All SessionDB tests pass; eviction and dedup work correctly; transactions are atomic.
 
-- [ ] **T2.2 ContentDB (capture store + FTS5)** `[activity: build-feature]`
+- [x] **T2.2 ContentDB (capture store + FTS5)** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/SQLite Schema/Content Capture Store]` — captures + FTS5 schema. `[ref: SDD/Tools Exposed to Claude Code/satori_context query sub-command]`
   2. Test: `ContentDB.insertCapture()` stores a capture; `ContentDB.search("query")` returns ranked FTS5 results; `ContentDB.updateSummary()` fills the summary field; summary appears in subsequent FTS search results. `[ref: SDD/SQLite Schema/Content Capture Store]`
@@ -49,7 +49,7 @@ and the `satori_context` tool skeleton backed by real data.
   4. Validate: Insert 3 captures with different servers/tools; `search("specific term")` returns only matching capture; summary update visible in FTS results. Tests pass. `[ref: SDD/SQLite Schema/Content Capture Store]`
   5. Success: FTS5 search returns ranked results; summary field searchable after `updateSummary()`; all ContentDB tests pass.
 
-- [ ] **T2.3 Session event extraction (extract.ts)** `[activity: build-feature]`
+- [x] **T2.3 Session event extraction (extract.ts)** `[activity: build-feature]`
 
   1. Prime: Read context-mode `src/session/extract.ts`. Read `[ref: SDD/Hooks Architecture/Event classification]` — full category→type mapping table. `[ref: SDD/Hooks Architecture]`
   2. Test: `extractEvent(hookPayload)` returns correct `SessionEvent` for: `Read` tool (category=file, type=file_read), `Write` tool (file_write), `Edit` tool (file_edit), Bash tool (no session event — Bash is intercepted but not directly categorized unless it produces an error), `TaskCreate` (task, priority 1), `TaskUpdate` (task), `Agent` dispatch (subagent_launched, priority 3). Returns `null` for unknown tool types. `[ref: SDD/Hooks Architecture/Event classification]`
@@ -57,7 +57,7 @@ and the `satori_context` tool skeleton backed by real data.
   4. Validate: Unit tests cover all 14 event categories; boundary cases: malformed input returns null gracefully; data truncation at limits (path ≤200 chars, content ≤400 chars). `[ref: SDD/Hooks Architecture/Event classification]`
   5. Success: All extraction mappings tested and correct; pure function (no imports of DB modules).
 
-- [ ] **T2.4 Snapshot builder (snapshot.ts)** `[activity: build-feature]`
+- [x] **T2.4 Snapshot builder (snapshot.ts)** `[activity: build-feature]`
 
   1. Prime: Read context-mode `src/session/snapshot.ts` completely — all section renderers, `buildResumeSnapshot()`, budget trimming loop. Read `[ref: SDD/Session Snapshot Format]`. `[ref: SDD/Session Snapshot Format]`
   2. Test: `buildResumeSnapshot(events)` with full event set produces valid XML under 2048 bytes. P3-P4 sections dropped when over budget (verify by supplying large events). P1 sections (active_files, task_state, rules) always present if they fit. Active files deduped by path; last 10 kept. Task state omits completed tasks. `buildResumeSnapshot([])` returns `<session_resume ...></session_resume>` (minimal). `[ref: SDD/Session Snapshot Format]`
@@ -65,7 +65,7 @@ and the `satori_context` tool skeleton backed by real data.
   4. Validate: Unit test with 50 events produces XML ≤ 2048 bytes. Budget stress test: supply 200 file events (large paths) — output still ≤ 2048. Exact-boundary test: craft event set that produces output of exactly 2048 bytes — must not exceed. Section content is valid XML (no unescaped `<>&`). `buildResumeSnapshot([])` output passes XML parse. `[ref: SDD/Session Snapshot Format]`
   5. Success: All snapshot tests pass; output is always ≤ maxBytes; pure functions with no side effects.
 
-- [ ] **T2.5 satori_context tool (restore, query, status, flush)** `[activity: build-feature]`
+- [x] **T2.5 satori_context tool (restore, query, status, flush)** `[activity: build-feature]`
 
   1. Prime: Read `[ref: SDD/Tools Exposed to Claude Code/satori_context]` — sub-command table. `[ref: SDD/Tools Exposed to Claude Code]`
   2. Test: `restore` returns XML from `session_resume` (or "no snapshot available"); `query` returns FTS5 matches from ContentDB; `status` returns DB stats (session count, capture count, guide count); `flush` calls `buildResumeSnapshot()` and `upsertResume()` and returns confirmation. Unknown sub-command returns error. `[ref: SDD/Tools Exposed to Claude Code/satori_context]`
@@ -73,7 +73,7 @@ and the `satori_context` tool skeleton backed by real data.
   4. Validate: Integration test: insert 5 captures into ContentDB, call `query("keyword")` — matching capture returned. Insert 10 events, call `flush` — snapshot XML in session_resume table. Call `restore` — returns snapshot, marks consumed. `[ref: SDD/Tools Exposed to Claude Code/satori_context]`
   5. Success: All 4 sub-commands work end-to-end; `satori_context` registered in MCP server and visible in `tools/list`.
 
-- [ ] **T2.6 Phase 2 Validation** `[activity: validate]`
+- [x] **T2.6 Phase 2 Validation** `[activity: validate]`
 
   - `npm test` — all Phase 2 unit and integration tests pass.
   - `npm run typecheck` — 0 errors.

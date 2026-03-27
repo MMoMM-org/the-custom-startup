@@ -31,7 +31,7 @@ phase: 1
 Establishes the miyo-satori repo structure: package.json, tsconfig, lint config, CI skeleton, and a
 buildable MCP server entry point that responds to `initialize` and returns an empty tool list.
 
-- [ ] **T1.1 Initialize package.json and TypeScript config** `[activity: build-platform]`
+- [x] **T1.1 Initialize package.json and TypeScript config** `[activity: build-platform]`
 
   1. Prime: Read `modules/satori/package.json` if it exists. Check Node version: `node --version`. `[ref: SDD/Technology Stack]`
   2. Test: `npm install` succeeds. `npm run build` compiles to `dist/`. `npm run typecheck` returns 0 errors. `npm test` runs vitest and exits 0 (no test files yet = pass). `[ref: SDD/Technology Stack]`
@@ -39,7 +39,7 @@ buildable MCP server entry point that responds to `initialize` and returns an em
   4. Validate: `npm run build` — 0 errors. `npm run typecheck` — 0 errors. `dist/` created. `[ref: SDD/Technology Stack]`
   5. Success: `npm install && npm run build && npm test` all exit 0; `tsconfig.json` has `strict: true`; deps match SDD tech stack.
 
-- [ ] **T1.2 SQLiteBase helper** `[activity: build-feature]`
+- [x] **T1.2 SQLiteBase helper** `[activity: build-feature]`
 
   1. Prime: Read context-mode `src/db-base.ts` — SQLiteBase, WAL pragma, BunSQLiteAdapter, deleteDBFiles, closeDB. `[ref: SDD/SQLite Schema]`
   2. Test: `src/db-base.ts` exports `SQLiteBase` (abstract class). Subclass with empty `initSchema()` and `prepareStatements()` opens a DB file without error. `db.pragma("journal_mode")` returns `"wal"`. `db.cleanup()` removes DB file. `[ref: SDD/SQLite Schema]`
@@ -47,7 +47,7 @@ buildable MCP server entry point that responds to `initialize` and returns an em
   4. Validate: Unit test opens in-memory (`:memory:`) DB, runs `pragma journal_mode`, checks `"wal"`. Cleanup test: file created, then `cleanup()` removes it. All pass with `npm test`. `[ref: SDD/SQLite Schema]`
   5. Success: `SQLiteBase` opens, applies WAL, exposes `db` to subclasses, cleanup removes files; tests pass.
 
-- [ ] **T1.3 MCP server bootstrap (empty tool list)** `[activity: build-feature]`
+- [x] **T1.3 MCP server bootstrap (empty tool list)** `[activity: build-feature]`
 
   1. Prime: Read `@modelcontextprotocol/sdk` README for `McpServer` / `StdioServerTransport` setup. `[ref: SDD/Repository Structure; src/index.ts]`
   2. Test: `node dist/index.js` starts without error. Sending MCP `initialize` message over STDIO returns a valid `InitializeResult` with `protocolVersion` and `serverInfo.name = "satori"`. `tools/list` returns `{"tools": []}`. `[ref: SDD/Tools Exposed to Claude Code]`
@@ -55,7 +55,7 @@ buildable MCP server entry point that responds to `initialize` and returns an em
   4. Validate: `npm run build && echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"test","version":"1"}}}' | node dist/index.js` — valid JSON response received. `[ref: SDD/Tools Exposed to Claude Code]`
   5. Success: MCP server starts, responds to `initialize` and `tools/list`, exits cleanly on SIGTERM.
 
-- [ ] **T1.4 Phase 1 Validation** `[activity: validate]`
+- [x] **T1.4 Phase 1 Validation** `[activity: validate]`
 
   - `npm install && npm run build` — 0 errors.
   - `npm run typecheck` — 0 errors.
