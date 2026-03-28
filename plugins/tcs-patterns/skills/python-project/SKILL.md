@@ -44,9 +44,15 @@ State {
 - Run `pip install --break-system-packages` — always use a virtual environment.
 - Use `print()` for logging — use the `logging` module with appropriate levels.
 
+## Reference Materials
+
+- `reference/python-patterns.md` — pyproject.toml template, type hints, error handling, async patterns, pytest conventions
+
 ## Workflow
 
 ### 1. Check Environment
+
+Read `reference/python-patterns.md` Virtual Environment Setup section.
 
 ```bash
 [ -d venv ] && echo "venv present" || echo "MISSING venv"
@@ -57,6 +63,8 @@ python -m ruff --version 2>/dev/null || echo "ruff not installed"
 Flag missing venv as CRITICAL.
 
 ### 2. Check Config
+
+Read `reference/python-patterns.md` pyproject.toml template section.
 
 Look for `pyproject.toml` or `setup.cfg`. Verify `[tool.ruff]` and `[tool.mypy]` sections. Flag missing config as HIGH.
 
@@ -78,3 +86,5 @@ Flag bare excepts and mutable defaults.
 ### 5. Report
 
 Group violations by kind. Include file:line and concrete fix.
+
+Read `reference/python-patterns.md` Anti-Patterns table for concrete fixes.

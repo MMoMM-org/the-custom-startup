@@ -43,6 +43,10 @@ State {
 - Start goroutines without a clear ownership and shutdown path.
 - Use `init()` for logic beyond package-level variable initialization.
 
+## Reference Materials
+
+- `reference/go-patterns.md` — error handling, interface design, goroutine patterns, project layout, tooling
+
 ## Workflow
 
 ### 1. Scan for Ignored Errors
@@ -80,3 +84,5 @@ For each goroutine: is there a `WaitGroup`, channel, or `context` controlling it
 ### 5. Report
 
 Group violations by kind. Include file:line and idiomatic Go replacement.
+
+Read `reference/go-patterns.md` Anti-Patterns table for concrete fixes.

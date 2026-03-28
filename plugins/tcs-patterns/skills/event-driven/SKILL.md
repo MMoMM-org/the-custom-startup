@@ -43,9 +43,15 @@ State {
 - Use an event as a command (triggering behaviour that may be rejected without a command pattern).
 - Store derived state only in the event stream without a queryable projection.
 
+## Reference Materials
+
+- `reference/event-patterns.md` — event schema design, CQRS, saga patterns, transactional outbox, DLQ
+
 ## Workflow
 
 ### 1. Audit Event Schemas
+
+Read `reference/event-patterns.md` Event Schema Design and Naming Conventions sections.
 
 Find event class/type definitions. For each:
 - Past-tense name?
@@ -58,8 +64,12 @@ Flag any past-tense event type that contains handler logic as COMMAND_EVENT_MIX.
 
 ### 3. Audit Handler Idempotency
 
+Read `reference/event-patterns.md` Idempotent Handlers section.
+
 For each event handler: does it check for duplicate processing? Does it use an idempotency key or database constraint?
 
 ### 4. Report
 
 Group violations by kind. Include concrete fix for each.
+
+Read `reference/event-patterns.md` Anti-Patterns table for common fixes.

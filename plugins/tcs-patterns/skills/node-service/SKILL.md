@@ -41,9 +41,15 @@ State {
 - Mix callbacks and promises — pick one pattern per module.
 - Let the process exit on unhandled rejection without logging diagnostics.
 
+## Reference Materials
+
+- `reference/node-patterns.md` — project structure, startup/shutdown, config, logging, error handling, async patterns
+
 ## Workflow
 
 ### 1. Check Error Boundaries
+
+Read `reference/node-patterns.md` Startup and Global Error Boundaries section.
 
 ```bash
 grep -n "unhandledRejection\|uncaughtException\|process.on" "$TARGET" 2>/dev/null
@@ -52,6 +58,8 @@ grep -n "unhandledRejection\|uncaughtException\|process.on" "$TARGET" 2>/dev/nul
 Flag missing global handlers as HIGH.
 
 ### 2. Check Graceful Shutdown
+
+Read `reference/node-patterns.md` Graceful Shutdown section.
 
 ```bash
 grep -n "SIGTERM\|SIGINT\|server.close\|drain" "$TARGET" 2>/dev/null
@@ -78,3 +86,5 @@ Flag `await` inside loops and `.then()/.catch()` mixed with `async/await`.
 ### 5. Report
 
 Group violations by kind, severity descending. Include file:line and concrete fix.
+
+Read `reference/node-patterns.md` Anti-Patterns table for concrete fixes.
