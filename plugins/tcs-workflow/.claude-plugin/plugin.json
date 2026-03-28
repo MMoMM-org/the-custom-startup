@@ -1,7 +1,7 @@
 {
   "name": "tcs-workflow",
   "version": "3.2.2",
-  "description": "Workflow orchestration commands for agentic software development",
+  "description": "Core workflow plugin for spec-driven, test-verified software development",
   "author": {
     "name": "Rudolf S., Marcus Breiden"
   },
@@ -10,14 +10,12 @@
   "license": "MIT",
   "keywords": [
     "workflow",
-    "commands",
     "specification",
+    "tdd",
+    "sdd",
     "implementation",
-    "refactoring",
-    "code-review",
-    "documentation",
-    "migration"
+    "review"
   ],
-  "outputStyles": "./output-styles/",
-  "agents": "./agents/"
+  "outputStyles": "output-styles/",
+  "agents": "agents/"
 }

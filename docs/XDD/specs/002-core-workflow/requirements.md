@@ -254,7 +254,7 @@ Every journey begins and can restart with `/guide`:
 
 - **User Story:** As a developer writing a plan, I want every implementation task to include explicit RED/GREEN/REFACTOR steps anchored to an SDD contract so that TDD is embedded in the plan, not bolted on during implementation.
 - **Acceptance Criteria:**
-  - [ ] Given an SDD contract, When a plan task is generated, Then it includes: `[ref: SDD/Section X.Y]`, RED (test names + expected failures), GREEN (minimal implementation path), REFACTOR (cleanup criteria)
+  - [ ] Given an SDD contract, When a plan task is generated, Then it includes: `[ref: SDD/Section X.Y]`, **Test** step (test names + expected failures = RED), **Implement** step (minimal implementation path = GREEN), **Validate** step (cleanup criteria = REFACTOR)
   - [ ] Given a plan task without RED steps, When `/implement` reads it, Then it flags the task as incomplete and prompts to add RED steps before dispatching
   - [ ] Given a plan task without an SDD reference, When `/implement` reads it, Then it warns and requires confirmation that the task is intentionally self-contained
   - [ ] Given plan is complete, When it concludes, Then it announces: "Plan ready. Run `/implement phase-1` to begin."

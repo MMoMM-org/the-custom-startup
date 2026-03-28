@@ -42,22 +42,28 @@ The checkbox tracks "Payment Entity" as a unit. Prime/Test/Implement/Validate ar
 
 Every task follows red-green-refactor within this pattern:
 
+> **Terminology mapping**: xdd-plan uses **Prime / Test / Implement / Validate** as phase labels.
+> These map directly to the classic TDD cycle:
+> - **Test** = RED (test names + expected failures listed before any implementation)
+> - **Implement** = GREEN (minimal code to pass the tests)
+> - **Validate** = REFACTOR (cleanup criteria, lint, typecheck, spec compliance)
+
 ### 1. Prime Context
 - Read relevant specification sections
 - Understand interfaces and contracts
 - Load patterns and examples
 
-### 2. Write Tests (Red)
-- Test behavior before implementation
+### 2. Test (RED)
+- List test names and expected failures before any implementation
 - Reference PRD acceptance criteria
 - Cover happy path and edge cases
 
-### 3. Implement (Green)
-- Build to pass tests
+### 3. Implement (GREEN)
+- Build minimal code to pass the tests
 - Follow SDD architecture
 - Use discovered patterns
 
-### 4. Validate (Refactor)
+### 4. Validate (REFACTOR)
 - Run automated tests
 - Check code quality (lint, format)
 - Verify specification compliance

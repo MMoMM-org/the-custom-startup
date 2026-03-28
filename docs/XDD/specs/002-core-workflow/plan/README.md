@@ -50,7 +50,7 @@ version: "1.0"
 
 **Skill/Agent authoring rules**:
 - All new/modified **skills** → authored via `/tcs-helper:skill-author`
-- All new/modified **agents** → authored via `/plugin-dev:agent-creator`
+- All new/modified **agents** → authored via `/plugin-dev:agent-creator` (external plugin; install with `claude plugin install plugin-dev` if absent)
 - No hand-crafting SKILL.md or agent markdown outside these workflows
 
 **Implementation Commands**:

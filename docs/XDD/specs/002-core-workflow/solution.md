@@ -637,7 +637,7 @@ Output path: {adr_dir}/ADR-{NNN}-{kebab-title}.md
 ```json
 {
   "name": "tcs-workflow",
-  "version": "1.0.0",
+  "version": "3.2.2",
   "description": "Core workflow plugin for spec-driven, test-verified software development",
   "author": { "name": "Rudolf S., Marcus Breiden" },
   "homepage": "https://github.com/MMoMM-org/the-custom-startup",

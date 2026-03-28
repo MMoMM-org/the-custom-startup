@@ -37,11 +37,22 @@ State {
 
 ```bash
 # startup.toml resolution — bash 3.2 compatible
-STARTUP_TOML=".claude/startup.toml"
-TCS_DOCS_BASE="docs/XDD"  # default
+# Scope chain: repo (.claude/startup.toml) overrides global (~/.claude/startup.toml)
+_extract_docs_base() {
+  sed -n '/^\[tcs\]/,/^\[/p' "$1" | grep '^docs_base' | head -1 | sed 's/docs_base[[:space:]]*=[[:space:]]*//' | tr -d '"'"'"' '
+}
 
-if [ -f "$STARTUP_TOML" ]; then
-  _val=$(sed -n '/^\[tcs\]/,/^\[/p' "$STARTUP_TOML" | grep '^docs_base' | head -1 | sed 's/docs_base[[:space:]]*=[[:space:]]*//' | tr -d '"'"'"' ')
+TCS_DOCS_BASE="docs/XDD"  # built-in default
+
+# 1. Check global
+if [ -f "$HOME/.claude/startup.toml" ]; then
+  _val=$(_extract_docs_base "$HOME/.claude/startup.toml")
+  [ -n "$_val" ] && TCS_DOCS_BASE="$_val"
+fi
+
+# 2. Repo overrides global
+if [ -f ".claude/startup.toml" ]; then
+  _val=$(_extract_docs_base ".claude/startup.toml")
   [ -n "$_val" ] && TCS_DOCS_BASE="$_val"
 fi
 
