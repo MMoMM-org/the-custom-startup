@@ -43,16 +43,16 @@ Delivers automatic session capture, pre-compaction flush, session restore, and t
   **Prime**: Read `modules/satori/src/context/session-db.ts` and `modules/satori/src/context/snapshot.ts`; read `[ref: SDD/Hook Registration]` and `[ref: SDD/ADR-6]`; read `[ref: PRD/F5; memory routing AC]`
 
   **Test**:
-  - `post-tool-capture.js`: receives tool use JSON via env/stdin; calls `SessionDB.insertEvent()` with type='mcp'; exits 0
-  - `post-tool-capture.js`: exits 0 silently when `.satori/` absent (guard)
-  - `pre-compact-flush.js`: calls `buildResumeSnapshot()` and `sessionDb.upsertResume()`; exits 0
-  - `pre-compact-flush.js`: exits 0 silently when `.satori/` absent
-  - `session-start-restore.js`: calls `sessionDb.getResume()`; prints reminder to stdout if resume exists; exits 0
+  - `post-tool-use.ts`: receives tool use JSON via env/stdin; calls `SessionDB.insertEvent()` with type='mcp'; exits 0
+  - `post-tool-use.ts`: exits 0 silently when `.satori/` absent (guard)
+  - `pre-compact.ts`: calls `buildResumeSnapshot()` and `sessionDb.upsertResume()`; exits 0
+  - `pre-compact.ts`: exits 0 silently when `.satori/` absent
+  - `session-start.ts`: calls `sessionDb.getResume()`; prints reminder to stdout if resume exists; exits 0
 
   **Implement**:
-  - Create `modules/satori/hooks/post-tool-capture.js` — reads Claude Code PostToolUse payload; inserts event to SessionDB; `.satori/` guard; exits 0 always
-  - Create `modules/satori/hooks/pre-compact-flush.js` — calls `buildResumeSnapshot()`; upserts to `session_resume`; `.satori/` guard; exits 0 always
-  - Create `modules/satori/hooks/session-start-restore.js` — queries `session_resume` for latest unconsumed; prints context-mode active reminder + restore hint; `.satori/` guard; exits 0 always
+  - Create `modules/satori/hooks/scripts/post-tool-use.ts` — reads Claude Code PostToolUse payload; inserts event to SessionDB; `.satori/` guard; exits 0 always
+  - Create `modules/satori/hooks/scripts/pre-compact.ts` — calls `buildResumeSnapshot()`; upserts to `session_resume`; `.satori/` guard; exits 0 always
+  - Create `modules/satori/hooks/scripts/session-start.ts` — queries `session_resume` for latest unconsumed; prints context-mode active reminder + restore hint; `.satori/` guard; exits 0 always
 
   **Validate**: Unit tests for each script with mocked SessionDB; integration test with real `.satori/` dir
 

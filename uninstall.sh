@@ -62,6 +62,8 @@ FOUND_STATUSLINE=""    # command string
 FOUND_SL_SCRIPTS_DIR="" # directory containing statusline scripts
 FOUND_TOML=""          # absolute path to startup.toml
 FOUND_PROMPTS_BASE=""  # base dir containing templates/ docs/ bin/
+FOUND_SATORI_DB=""     # absolute path to .satori/db.sqlite
+FOUND_SATORI_KB=""     # absolute path to .satori/kb.sqlite
 
 # ==============================================================================
 # Step 1: check_dependencies
@@ -204,6 +206,17 @@ detect_installation() {
     fi
   fi
 
+  # --- Satori context databases ------------------------------------------------
+  local satori_dir="$INSTALL_DIR/.satori"
+  if [[ -f "$satori_dir/db.sqlite" ]]; then
+    FOUND_SATORI_DB="$satori_dir/db.sqlite"
+    info "Satori context DB: $FOUND_SATORI_DB"
+  fi
+  if [[ -f "$satori_dir/kb.sqlite" ]]; then
+    FOUND_SATORI_KB="$satori_dir/kb.sqlite"
+    info "Satori knowledge DB: $FOUND_SATORI_KB"
+  fi
+
   printf "\n"
 }
 
@@ -241,6 +254,13 @@ show_summary() {
     printf "  Nothing found. The Custom Startup does not appear to be installed\n"
     printf "  (checked: %s)\n\n" "$SETTINGS_FILE"
     exit 0
+  fi
+
+  if [[ -n "$FOUND_SATORI_DB" || -n "$FOUND_SATORI_KB" ]]; then
+    printf "\n"
+    printf "  ${YELLOW}Optional — Satori databases${RESET} (will ask before deleting):\n"
+    [[ -n "$FOUND_SATORI_DB" ]] && printf "    %s\n" "$FOUND_SATORI_DB"
+    [[ -n "$FOUND_SATORI_KB" ]] && printf "    %s\n" "$FOUND_SATORI_KB"
   fi
 
   if [[ -n "$FOUND_PROMPTS_BASE" ]]; then
@@ -318,6 +338,39 @@ do_uninstall() {
   if [[ -n "$FOUND_TOML" ]]; then
     rm -f "$FOUND_TOML"
     success "startup.toml deleted"
+  fi
+
+  # --- Satori context databases (optional) ------------------------------------
+  if [[ -n "$FOUND_SATORI_DB" ]]; then
+    printf "\n"
+    ask "Delete Satori context database? (${FOUND_SATORI_DB}) [y/N]:"
+    local choice
+    read -r choice </dev/tty
+    case "$choice" in
+      [yY]|[yY][eE][sS])
+        rm -f "$FOUND_SATORI_DB"
+        success "Satori context DB deleted"
+        ;;
+      *)
+        info "Kept: $FOUND_SATORI_DB"
+        ;;
+    esac
+  fi
+
+  if [[ -n "$FOUND_SATORI_KB" ]]; then
+    printf "\n"
+    ask "Delete Satori knowledge base? (${FOUND_SATORI_KB}) [y/N]:"
+    local choice
+    read -r choice </dev/tty
+    case "$choice" in
+      [yY]|[yY][eE][sS])
+        rm -f "$FOUND_SATORI_KB"
+        success "Satori knowledge DB deleted"
+        ;;
+      *)
+        info "Kept: $FOUND_SATORI_KB"
+        ;;
+    esac
   fi
 
   # --- Downloaded files (optional) --------------------------------------------

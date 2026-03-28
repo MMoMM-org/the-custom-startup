@@ -265,10 +265,10 @@ modules/satori/src/
 
 ```
 modules/satori/
-├── hooks/                              NEW directory
-│   ├── post-tool-capture.js           NEW: capture really-short-lived state to session DB
-│   ├── pre-compact-flush.js           NEW: flush session guide before compaction
-│   └── session-start-restore.js      NEW: inject session restore reminder on start
+├── hooks/scripts/                      NEW directory (TypeScript, compiled to dist/)
+│   ├── post-tool-use.ts               NEW: capture really-short-lived state to session DB
+│   ├── pre-compact.ts                 NEW: flush session guide before compaction
+│   └── session-start.ts              NEW: inject session restore reminder on start
 └── scripts/
     └── install-hooks.sh               NEW: Satori's own hook registration script
                                             called by Satori install; registers hooks into
@@ -454,23 +454,10 @@ Satori owns its hooks entirely. `modules/satori/scripts/install-hooks.sh` regist
 Each hook entry written by Satori's `install-hooks.sh`:
 
 ```json
-{
-  "name": "satori-post-tool-capture",
-  "event": "PostToolUse",
-  "condition": "test -d .satori",
-  "command": "node /absolute/path/to/modules/satori/hooks/post-tool-capture.js"
-},
-{
-  "name": "satori-pre-compact-flush",
-  "event": "PreCompact",
-  "condition": "test -d .satori",
-  "command": "node /absolute/path/to/modules/satori/hooks/pre-compact-flush.js"
-},
-{
-  "name": "satori-session-start-restore",
-  "event": "SessionStart",
-  "condition": "test -d .satori",
-  "command": "node /absolute/path/to/modules/satori/hooks/session-start-restore.js"
+"hooks": {
+  "PostToolUse":  [{"matcher": "", "hooks": [{"type": "command", "command": "node /abs/path/dist/hooks/scripts/post-tool-use.js"}]}],
+  "PreCompact":   [{"matcher": "", "hooks": [{"type": "command", "command": "node /abs/path/dist/hooks/scripts/pre-compact.js"}]}],
+  "SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": "node /abs/path/dist/hooks/scripts/session-start.js"}]}]
 }
 ```
 
