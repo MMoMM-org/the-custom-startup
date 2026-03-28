@@ -223,3 +223,7 @@ The repository is a Claude Code marketplace. Publishing happens via:
 1. Push to `main` branch
 2. GitHub Actions workflow creates release
 3. Users install via `./install.sh` or `/plugin marketplace add MMoMM-org/the-custom-startup`
+
+## Guardrails
+
+- During spec sessions, document all design decisions into the spec before moving to the next phase — don't defer or skip mid-discussion items.

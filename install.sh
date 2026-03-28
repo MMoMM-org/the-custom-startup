@@ -793,6 +793,45 @@ do_install() {
       info "Writing Satori MCP config entry..."
       _write_satori_mcp_config "$satori_abs"
       success "Satori installed: $satori_abs"
+
+      # Context mode opt-in (only if Satori is present and built)
+      if [[ -f "$satori_dir/scripts/install-hooks.sh" ]]; then
+        printf "\n"
+        ask "Enable context mode (session capture + memory hooks)? [y/N]:"
+        local ctx_choice
+        read -r ctx_choice </dev/tty
+        case "$ctx_choice" in
+          [yY]|[yY][eE][sS])
+            info "Registering Satori hooks..."
+            SATORI_HOOKS_SETTINGS="$SETTINGS_FILE" \
+              bash "$satori_dir/scripts/install-hooks.sh" || warn "Hook registration failed — run install-hooks.sh manually"
+            success "Context mode hooks registered"
+
+            # Append [context] block to satori.toml if absent
+            local toml_file
+            if [[ "$TARGET" == "global" ]]; then
+              toml_file="$HOME/.claude/satori.toml"
+            else
+              toml_file="$INSTALL_DIR/.claude/satori.toml"
+            fi
+            mkdir -p "$(dirname "$toml_file")"
+            if [[ ! -f "$toml_file" ]] || ! grep -q '^\[context\]' "$toml_file" 2>/dev/null; then
+              {
+                printf '\n[context]\n'
+                printf 'db_path                  = ".satori/db.sqlite"\n'
+                printf 'session_guide_max_bytes  = 2048\n'
+                printf 'retain_days              = 30\n'
+              } >> "$toml_file"
+              success "Context config written: $toml_file"
+            else
+              info "Context config already present in $toml_file"
+            fi
+            ;;
+          *)
+            info "Context mode: skipped"
+            ;;
+        esac
+      fi
     fi
   fi
 }
