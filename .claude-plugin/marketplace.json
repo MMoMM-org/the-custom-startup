@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Comprehensive agentic framework for Claude Code",
-    "version": "3.2.3",
+    "version": "4.0.0",
     "homepage": "https://github.com/MMoMM-org/the-custom-startup"
   },
   "plugins": [
     {
-      "name": "tcs-start",
-      "source": "./plugins/tcs-start",
-      "description": "Core workflow commands with output styles and productivity hooks"
+      "name": "tcs-workflow",
+      "source": "./plugins/tcs-workflow",
+      "description": "Core workflow plugin for spec-driven, test-verified software development"
     },
     {
       "name": "tcs-team",
@@ -22,7 +22,12 @@
     {
       "name": "tcs-helper",
       "source": "./plugins/tcs-helper",
-      "description": "Skill and agent development utilities for Claude Code plugin authors"
+      "description": "Helper tools — skill authoring, memory system, and project onboarding"
+    },
+    {
+      "name": "tcs-patterns",
+      "source": "./plugins/tcs-patterns",
+      "description": "Domain pattern skills for TCS projects — install only the patterns relevant to your stack"
     }
   ]
 }
