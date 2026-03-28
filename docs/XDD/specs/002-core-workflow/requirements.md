@@ -310,7 +310,7 @@ Every journey begins and can restart with `/guide`:
   - [ ] Given any TCS skill that dispatches a code-writing subagent, When the subagent is dispatched, Then the tdd-guardian agent is also dispatched with it as a gating check
   - [ ] Given the tdd-guardian receives a task, When it evaluates the subagent's proposed approach, Then it blocks if no test plan is present
   - [ ] Given a test plan exists, When the tdd-guardian approves, Then the code-writing subagent proceeds
-  - [ ] Given YOLO=true, When the tdd-guardian runs, Then violations are logged to `docs/ai/memory/context.md` and the subagent proceeds (no blocking in YOLO mode)
+  - [ ] Given YOLO=true, When the tdd-guardian runs, Then violations are logged to `docs/ai/memory/yolo-review.md` and the subagent proceeds (no blocking in YOLO mode)
 
 #### Feature 17: CoD (Chain of Draft) Mode — Default On
 
@@ -370,7 +370,7 @@ Every journey begins and can restart with `/guide`:
 - Spec compliance review must pass before code quality review begins
 - BLOCKED subagent: not retried with same model without changed context or scope
 - No subagent inherits session history — context is curated per task
-- YOLO=true: all confirmations skipped; violations logged to `docs/ai/memory/context.md`
+- YOLO=true: all confirmations skipped; violations logged to `docs/ai/memory/yolo-review.md` (bypass-permissions unattended mode — changes collected for deferred user review)
 
 **Edge Cases:**
 - Task without SDD reference → prompt: "No SDD reference. Add one or confirm self-contained."

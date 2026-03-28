@@ -35,11 +35,11 @@ version: "1.0"
 *GATE: Read all files in this section before starting any implementation.*
 
 **Specification**:
-- `.start/specs/002-core-workflow/requirements.md` — PRD (17 must-have features, personas, acceptance criteria)
-- `.start/specs/002-core-workflow/solution.md` — SDD (directory map, skill contracts, ADRs, startup.toml schema)
-- `plugins/tcs-start/skills/brainstorm/SKILL.md` — reference skill structure (PICS format, frontmatter)
-- `plugins/tcs-start/skills/implement/SKILL.md` — skill being enhanced in Phase 4
-- `plugins/tcs-start/skills/specify-meta/SKILL.md` — skill being renamed/updated in Phase 2
+- `docs/XDD/specs/002-core-workflow/requirements.md` — PRD (17 must-have features, personas, acceptance criteria)
+- `docs/XDD/specs/002-core-workflow/solution.md` — SDD (directory map, skill contracts, ADRs, startup.toml schema)
+- `plugins/tcs-workflow/skills/brainstorm/SKILL.md` — reference skill structure (PICS format, frontmatter)
+- `plugins/tcs-workflow/skills/implement/SKILL.md` — skill being enhanced in Phase 4
+- `plugins/tcs-workflow/skills/xdd-meta/SKILL.md` — skill renamed from specify-meta in Phase 2
 
 **Key Design Decisions**:
 - **ADR-1**: Plugin rename via `git mv` — preserves history; all `/tcs-start:*` become `/tcs-workflow:*`

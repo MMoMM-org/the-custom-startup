@@ -139,7 +139,7 @@ graph TB
         G[guide] --> I[implement]
         B[brainstorm] --> G
         SP[xdd-plan] --> I
-        I --> TDD[tdd skill]
+        I --> TDD[xdd-tdd]
         I --> PR[parallel-agents]
         I --> VR[verify]
         I --> RV[review]
@@ -201,7 +201,7 @@ plugins/tcs-workflow/                           RENAME from tcs-start/
     validate/                                   no change
     verify/                                     NEW
       SKILL.md
-    writing-skills/                             no change
+    writing-skills/                             REMOVED (was never implemented; skill-author reference is in tcs-helper)
     xdd/                                        RENAME from specify/
       SKILL.md                                  MODIFY: orchestrates xdd-prd → xdd-sdd → xdd-plan
     xdd-meta/                                   RENAME from xdd-meta/
@@ -355,7 +355,7 @@ Output:
   APPROVE: { test_file: string, test_names: string[], reason: "test plan valid" }
   BLOCK:   { reason: "no test plan" | "tests not written first" | "no SDD ref for non-trivial task" }
 
-YOLO=true: Log violation to docs/ai/memory/context.md, return APPROVE with warning flag
+YOLO=true: Log violation to docs/ai/memory/yolo-review.md, return APPROVE with warning flag
 ```
 
 #### tcs-workflow:verify
@@ -450,7 +450,7 @@ Intent: "continue" or [blank] + open plan found
   → implement phase-N (auto-detected)
 
 Intent: "write tests" or "TDD"
-  → tdd
+  → xdd-tdd
 
 Intent: "review my code"
   → review
@@ -767,7 +767,7 @@ sequenceDiagram
 
 ### System-Wide Patterns
 
-- **YOLO mode:** `YOLO=true` env var checked at every interactive confirmation point. Skills that write must support unattended mode. Side effects logged to `docs/ai/memory/context.md`.
+- **YOLO mode:** `YOLO=true` env var checked at every interactive confirmation point. Skills that write must support unattended mode. Violations and bypass side effects logged to `docs/ai/memory/yolo-review.md` as checkbox items for deferred user review. (Verify evidence summaries are an exception — written to `context.md` as session state for guide recovery.)
 - **CoD mode:** `/analyze` and `/debug` use Chain-of-Draft notation by default (abbreviated intermediate reasoning). Disabled via `--no-cod`.
 - **Handover announcements:** Every skill's final step announces the next action using the exact invocation string. No ambiguity about what to do next.
 - **Tool availability check:** Skills using `rg`/`fd`/`fzf` check for presence first: `command -v rg || (echo "Install: brew install ripgrep" && exit 1)`.
@@ -846,7 +846,7 @@ sequenceDiagram
 
 **TDD enforcement:**
 - [ ] WHEN tdd-guardian receives a task with no test plan, THE SYSTEM SHALL block and return reason
-- [ ] WHILE YOLO=true, THE SYSTEM SHALL log violations to context.md and proceed (not block)
+- [ ] WHILE YOLO=true, THE SYSTEM SHALL log violations to yolo-review.md and proceed (not block)
 
 **implement:**
 - [ ] WHEN a plan task has no SDD reference, THE SYSTEM SHALL warn before dispatching implementer
@@ -901,6 +901,6 @@ sequenceDiagram
 |------|------------|---------|
 | tdd-guardian | Lightweight enforcement agent (haiku model) that gates code-writing subagents on test plan presence | Dispatched by implement per task |
 | CoD | Chain of Draft — token-efficient intermediate reasoning notation | Default-on in analyze/debug |
-| YOLO mode | `YOLO=true` env var — skips all interactive confirmations, logs side effects to context.md | Cross-cutting constraint |
+| YOLO mode | `YOLO=true` env var — Claude Code `--bypass-permissions` unattended mode; skips all interactive confirmations, logs violations/bypasses to `yolo-review.md` for deferred user review | Cross-cutting constraint |
 | fresh subagent | A subagent dispatch with zero session history, receiving only curated task context | implement dispatches one per task |
 | git worktree | A secondary working directory linked to the same git repo, on a different branch | Created by tcs-helper:git-worktree |
