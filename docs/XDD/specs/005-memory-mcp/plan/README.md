@@ -85,7 +85,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 - [x] [Phase 2: Core Components — PolyglotExecutor + satori_kb Tool](phase-2.md)
 - [x] [Phase 3: Gateway Integration — BuiltinServer + Router + Wiring](phase-3.md)
 - [x] [Phase 4: Hooks + Install Flow](phase-4.md)
-- [ ] [Phase 5: Integration & E2E Validation](phase-5.md)
+- [x] [Phase 5: Integration & E2E Validation](phase-5.md)
 
 ---
 

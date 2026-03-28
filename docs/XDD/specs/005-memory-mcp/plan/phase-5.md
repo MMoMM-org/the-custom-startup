@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Integration & E2E Validation"
-status: pending
+status: completed
 version: "1.0"
 phase: 5
 ---
@@ -33,7 +33,7 @@ phase: 5
 
 Validates that all PRD acceptance criteria are met end-to-end and that graceful degradation works correctly in all Satori-absent scenarios.
 
-- [ ] **T5.1 BuiltinRuntime E2E** `[activity: validate]`
+- [x] **T5.1 BuiltinRuntime E2E** `[activity: validate]`
 
   **Prime**: Read `[ref: PRD/F3; all AC]` and `[ref: SDD/Primary Flow; satori_exec sequence]`
 
@@ -53,7 +53,7 @@ Validates that all PRD acceptance criteria are met end-to-end and that graceful 
   - Success: All F3 acceptance criteria met `[ref: PRD/F3]`
   - Success: Execution output appears in ContentDB captures `[ref: SDD/Primary Flow]`
 
-- [ ] **T5.2 satori_kb E2E** `[activity: validate]`
+- [x] **T5.2 satori_kb E2E** `[activity: validate]`
 
   **Prime**: Read `[ref: PRD/F4; all AC]` and `[ref: SDD/Complex Logic; RRF + Proximity Search]`
 
@@ -73,7 +73,7 @@ Validates that all PRD acceptance criteria are met end-to-end and that graceful 
   - Success: All F4 acceptance criteria met `[ref: PRD/F4]`
   - Success: Search < 200ms for 10K chunks `[ref: SDD/Quality Requirements]`
 
-- [ ] **T5.3 Graceful degradation** `[activity: validate]`
+- [x] **T5.3 Graceful degradation** `[activity: validate]`
 
   **Prime**: Read `[ref: SDD/Graceful Degradation table]` and `[ref: PRD/Graceful Degradation table]`; read `[ref: SDD/Error Handling; Satori absent]`
 
@@ -91,7 +91,7 @@ Validates that all PRD acceptance criteria are met end-to-end and that graceful 
   - Success: All hook scripts exit 0 with Satori absent `[ref: PRD/F2; detection AC]`
   - Success: No errors surface to user when Satori is not running `[ref: PRD/Graceful Degradation]`
 
-- [ ] **T5.4 Kairn backend warning** `[activity: validate]`
+- [x] **T5.4 Kairn backend warning** `[activity: validate]`
 
   **Prime**: Read `[ref: PRD/F7; AC]` and `[ref: SDD/ADR-7]`; read `modules/satori/src/index.ts` (Phase 3 output)
 
@@ -106,7 +106,7 @@ Validates that all PRD acceptance criteria are met end-to-end and that graceful 
 
   - Success: All F7 acceptance criteria met `[ref: PRD/F7]`
 
-- [ ] **T5.5 Full PRD acceptance criteria audit** `[activity: validate]`
+- [x] **T5.5 Full PRD acceptance criteria audit** `[activity: validate]`
 
   **Prime**: Read `[ref: PRD/requirements.md; full Acceptance Criteria for F1–F7]` and `[ref: SDD/Acceptance Criteria (EARS)]`
 
@@ -119,6 +119,6 @@ Validates that all PRD acceptance criteria are met end-to-end and that graceful 
   - Success: Zero uncovered PRD acceptance criteria `[ref: PRD/requirements.md; all F1–F7 ACs]`
   - Success: Build produces dist/ without errors `[ref: SDD/Deployment View]`
 
-- [ ] **T5.6 Phase 5 Validation** `[activity: validate]`
+- [x] **T5.6 Phase 5 Validation** `[activity: validate]`
 
   Final gate: run `npm run test`, `npm run typecheck`, `npm run build` from `modules/satori/`. All pass. Review `ac-coverage.md` — zero gaps. Commit satori submodule. Update `docs/XDD/specs/005-memory-mcp/README.md` — mark plan completed.
