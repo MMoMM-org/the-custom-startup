@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Hooks + Install Flow"
-status: pending
+status: completed
 version: "1.0"
 phase: 4
 ---
@@ -38,7 +38,7 @@ phase: 4
 
 Delivers automatic session capture, pre-compaction flush, session restore, and the installation flow.
 
-- [ ] **T4.1 Hook scripts** `[activity: backend-api]` `[parallel: true]`
+- [x] **T4.1 Hook scripts** `[activity: backend-api]` `[parallel: true]`
 
   **Prime**: Read `modules/satori/src/context/session-db.ts` and `modules/satori/src/context/snapshot.ts`; read `[ref: SDD/Hook Registration]` and `[ref: SDD/ADR-6]`; read `[ref: PRD/F5; memory routing AC]`
 
@@ -60,7 +60,7 @@ Delivers automatic session capture, pre-compaction flush, session restore, and t
   - Success: Session guide flushed before compaction `[ref: PRD/F5; PreCompact AC]`
   - Success: All scripts exit 0 when Satori absent — no errors surfaced to user `[ref: SDD/Error Handling; Satori absent]`
 
-- [ ] **T4.2 install-hooks.sh** `[activity: backend-api]` `[parallel: true]`
+- [x] **T4.2 install-hooks.sh** `[activity: backend-api]` `[parallel: true]`
 
   **Prime**: Read `[ref: SDD/Hook Registration]`; understand Claude Code hooks.json format (check `plugins/tcs-helper/hooks/hooks.json` for reference structure); read `[ref: SDD/ADR-5]`
 
@@ -80,7 +80,7 @@ Delivers automatic session capture, pre-compaction flush, session restore, and t
   - Success: Script idempotent on repeat runs `[ref: SDD/ADR-5]`
   - Success: bash 3.2 compatible (no `declare -A`) `[ref: CON-7]`
 
-- [ ] **T4.3 install.sh context-mode opt-in** `[activity: backend-api]` `[parallel: true]`
+- [x] **T4.3 install.sh context-mode opt-in** `[activity: backend-api]` `[parallel: true]`
 
   **Prime**: Read current `install.sh` in full; read `[ref: SDD/install.sh Changes]` and `[ref: PRD/F1; install opt-in AC]`
 
@@ -100,6 +100,6 @@ Delivers automatic session capture, pre-compaction flush, session restore, and t
   - Success: `satori.toml` `[context]` block written with all three fields `[ref: PRD/F1; satori.toml AC]`
   - Success: TCS install.sh contains no Satori-internal logic — only calls Satori's own scripts `[ref: SDD/ADR-5]`
 
-- [ ] **T4.4 Phase 4 Validation** `[activity: validate]`
+- [x] **T4.4 Phase 4 Validation** `[activity: validate]`
 
   Run full test suite. Verify hook scripts exit 0 in isolation (no Satori running). Manual smoke test: run `install.sh` with Satori present, opt in, verify `satori.toml` and hooks.json updated correctly. Verify uninstall.sh prompts for DB removal (both `db.sqlite` and `kb.sqlite`).
