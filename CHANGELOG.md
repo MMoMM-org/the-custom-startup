@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.0.0] - 2026-03-28
+
+> For full history see `git log`.
+
+### Breaking Changes
+
+- **Plugin renamed: `tcs-start` → `tcs-workflow`** — upgraders must reinstall the core workflow plugin under its new name. Any references to `tcs-start:*` in project CLAUDE.md files or scripts must be updated to `tcs-workflow:*`.
+
+### Added
+
+- **`tcs-patterns` plugin** (v1.1.0, optional) — 17 domain pattern skills, install only what your stack needs:
+  - Architecture: `ddd`, `hexagonal`, `functional`, `event-driven`
+  - API & Types: `api-design`, `typescript-strict`
+  - Testing: `testing`, `mutation-testing`, `frontend-testing`, `react-testing`, `test-design-reviewer`
+  - Platforms: `node-service`, `python-project`, `go-idiomatic`
+  - DevOps: `twelve-factor`
+  - Integrations: `mcp-server`, `obsidian-plugin`
+  - All 17 skills include `reference/` files with extended protocols (v1.1.0)
+- **XDD workflow skills** (6 new skills in `tcs-workflow`):
+  - `xdd` — spec-driven development entry point
+  - `xdd-meta` — spec metadata management
+  - `xdd-prd` — Product Requirements Document generation
+  - `xdd-sdd` — Solution Design Document generation
+  - `xdd-plan` — execution plan generation
+  - `xdd-tdd` — Test-Driven Development integration
+- **`tcs-team` v3.3.0** — new `record-decision` agent for capturing architectural decisions
+
+### Changed
+
+- **Documentation restructured** — flat `docs/` reorganized into 4-subdirectory information architecture:
+  - `getting-started/` — installation and quickstart
+  - `reference/` — skills, agents, plugins, commands
+  - `guides/` — workflow and multi-AI guides
+  - `about/` — philosophy, principles, changelog
+
+---
+
 ## [3.2.3] - 2026-03-23
 
 ### Changed
@@ -165,6 +202,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[4.0.0]: https://github.com/MMoMM-org/the-custom-startup/compare/v3.2.3...v4.0.0
 [3.2.3]: https://github.com/MMoMM-org/the-custom-startup/compare/v3.2.2...v3.2.3
 [3.2.2]: https://github.com/MMoMM-org/the-custom-startup/compare/v3.2.1...v3.2.2
 [3.2.1]: https://github.com/MMoMM-org/the-custom-startup/releases/tag/v3.2.1
