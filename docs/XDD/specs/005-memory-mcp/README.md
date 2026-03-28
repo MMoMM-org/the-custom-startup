@@ -32,6 +32,19 @@
 | 2026-03-28 | PLAN complete — 5 phases, 19 tasks | Phases 1–4 sequential with parallel opportunities; Phase 5 E2E validation |
 | 2026-03-27 | Kairn: context.backend field, warning-only for MVP | Replaces SQLite entirely post-MVP; field reserves the extension point without blocking M5 |
 | 2026-03-27 | ctx_stats / ctx_doctor: post-MVP (M5.1) | Observability tools, not blocking for core integration |
+| 2026-03-28 | Implementation complete — all 5 phases, 282 tests passing | Full E2E coverage; ac-coverage.md maps all F1–F7 ACs |
+
+## Drift Log
+
+| Date | Phase | Drift Type | Status | Notes |
+|------|-------|------------|--------|-------|
+| 2026-03-28 | Phase 4 | Contradicts | Updated | Hook file names in spec (post-tool-capture.js etc.) didn't match implementation (post-tool-use.ts etc.) — updated spec to match impl names |
+| 2026-03-28 | Phase 5 | Missing | Updated | F6 uninstall DB removal prompts not implemented — added .satori/ detection and optional-removal prompts to uninstall.sh |
+| 2026-03-28 | Phase 3 | Missing | Updated | knowledgeDb.close() missing from SIGINT/SIGTERM handlers in index.ts — added |
+| 2026-03-28 | Phase 1 | Contradicts | Updated | KnowledgeDB.search() default limit was 10, spec says 5 — corrected |
+| 2026-03-28 | Phase 3 | Contradicts | Acknowledged | F1 context-mode opt-in prompt does not name "context-mode" explicitly in choose_satori() — acceptable; follow-up prompt is clear |
+| 2026-03-28 | Phase 4 | Contradicts | Deferred | F1 AC-3 hook registration on opt-out: hooks installed but .satori/-guarded — safe at runtime; spec intent is satisfied by the guard |
+| 2026-03-28 | Phase 3 | Extra | Acknowledged | BuiltinServer batch mode uses hardcoded sessionId='builtin-batch' — intentional; batch shares one throttle bucket |
 
 ## Context
 
