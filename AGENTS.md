@@ -227,3 +227,5 @@ The repository is a Claude Code marketplace. Publishing happens via:
 ## Guardrails
 
 - During spec sessions, document all design decisions into the spec before moving to the next phase — don't defer or skip mid-discussion items.
+- `plugin.json` must only contain standard schema fields (`name`, `version`, `description`, `author`, `homepage`, `repository`, `license`, `keywords`). Never add `skills`, `hooks`, `agents`, `outputStyles`, or `templates` — Claude Code auto-discovers these from conventional directory names.
+- When renaming a plugin directory, also update `.claude-plugin/marketplace.json` — both `name` and `source` fields must match the new directory name or `claude plugin install` will fail.
