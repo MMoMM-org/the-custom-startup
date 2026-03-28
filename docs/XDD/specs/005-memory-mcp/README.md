@@ -45,6 +45,11 @@
 | 2026-03-28 | Phase 3 | Contradicts | Acknowledged | F1 context-mode opt-in prompt does not name "context-mode" explicitly in choose_satori() — acceptable; follow-up prompt is clear |
 | 2026-03-28 | Phase 4 | Contradicts | Deferred | F1 AC-3 hook registration on opt-out: hooks installed but .satori/-guarded — safe at runtime; spec intent is satisfied by the guard |
 | 2026-03-28 | Phase 3 | Extra | Acknowledged | BuiltinServer batch mode uses hardcoded sessionId='builtin-batch' — intentional; batch shares one throttle bucket |
+| 2026-03-28 | Phase 1 | Extra | Acknowledged | Fidelity audit: batch endpoint accepts JSON array (not newline-delimited text) — cleaner API for MCP callers; upstream used text for CLI compatibility |
+| 2026-03-28 | Phase 1 | Extra | Acknowledged | Fidelity audit: ctx_stats/getRuntimeSummary/getVersion MCP tools not ported — deferred to M5.1 per spec decision |
+| 2026-03-28 | Phase 1 | Extra | Acknowledged | Fidelity audit: RuntimeMap replaced by Language[] union type — idiomatic TypeScript; runtime resolution logic preserved |
+| 2026-03-28 | Phase 1 | Extra | Acknowledged | Fidelity audit: process termination uses SIGTERM not SIGKILL; maxOutputBytes = 5× upstream default — safer defaults for production use |
+| 2026-03-28 | Phase 1 | Extra | Acknowledged | Fidelity audit: truncateJSON/escapeXML helpers not ported — upstream used for MCP framing; Satori uses its own transport layer |
 
 ## Context
 
