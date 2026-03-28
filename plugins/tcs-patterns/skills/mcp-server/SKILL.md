@@ -50,11 +50,69 @@ State {
 
 ## Workflow
 
-### 1. Detect Transport
+### Entry Point
+
+match ($ARGUMENTS) {
+  empty | "build" | "new"  => execute Build workflow (steps 1–4)
+  file path | "audit"      => execute Audit workflow (steps 5–8)
+}
+
+### Build Workflow
+
+### 1. Scaffold Server
+
+Read `reference/mcp-patterns.md` Server Bootstrap section.
+
+Create the directory structure:
+```
+my-server/
+├── src/
+│   ├── index.ts        # Server entry point, transport, connect
+│   ├── tools.ts        # Tool definitions (ListTools handler)
+│   ├── handlers/       # One file per tool or tool group
+│   └── lib/            # Shared utilities (errorResult, successResult, validation)
+├── package.json        # name, version, main: dist/index.js, type: module
+├── tsconfig.json       # target: ES2022, module: Node16, strict: true
+└── README.md
+```
+
+### 2. Design Tool Surface
+
+For each tool:
+- Choose name (kebab-case)
+- Write description as two sentences: WHAT + WHEN/RETURNS
+- Define inputSchema per `reference/mcp-patterns.md` Tool Definition Template
+- If 2+ operations share a resource → use sub-command pattern
+
+### 3. Implement Handlers
+
+Per handler:
+- Validate input with Zod (`SafeParse` — never `parse`)
+- Call business logic (separate function, not inline)
+- Return `successResult(data)` or `errorResult(message, details)`
+- Never `throw` — always return structured error
+
+### 4. Wire Up and Verify
+
+```bash
+npm run build
+node dist/index.js  # should start and wait (stdio transport blocks)
+```
+
+List tools to confirm registration:
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | node dist/index.js
+```
+
+---
+
+### Audit Workflow
+
+### 5. Detect Transport
 
 Check for stdio vs SSE configuration. Flag missing transport initialisation as HIGH.
 
-### 2. Audit Tool Definitions
+### 6. Audit Tool Definitions
 
 For each registered tool:
 - `name` present and kebab-case?
@@ -66,15 +124,15 @@ For each registered tool:
 grep -n '"name"\|"description"\|"inputSchema"' "$TARGET" 2>/dev/null | head -40
 ```
 
-### 3. Audit Error Handling
+### 7. Audit Error Handling
 
 Scan for `throw`, `console.error`, `process.exit` in tool handlers. Each is a potential unstructured error.
 
-### 4. Audit Auth and Secrets
+### 8. Audit Auth and Secrets
 
 Scan for hardcoded tokens, keys, or paths in tool implementations. Flag as CRITICAL.
 
-### 5. Report
+### 9. Report
 
 Present violations grouped by kind. Include file:line and fix for each.
 
