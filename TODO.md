@@ -5,6 +5,132 @@ Feature branches are created per item so each can be PR'd independently upstream
 
 ---
 
+## TCS v2 — Entscheidungsprotokoll & Roadmap
+
+**Stand:** 2026-03-27
+
+### Entschiedene Punkte (nicht nochmal diskutieren)
+
+- [x] 4-Plugin-Architektur: tcs-workflow / tcs-team / tcs-helper / tcs-patterns — **same repo**
+- [x] tcs-start → tcs-workflow Umbenennung — **done**
+- [x] tcs-patterns: 17 Skills, same repo — **done** (merged)
+- [x] skill-evaluate + skill-import — **done** (merged)
+- [x] M2 Scope: file-only, kein MCP — MCP kommt in M4/M5
+- [x] Routing-Grenze: MCP/Kairn ab **medium lived** (nicht erst "really short") — wird in M5 umgesetzt
+  - Files bleiben Source of Truth; MCP/Kairn sind zusätzliche Abfrageebene, kein Ersatz
+- [x] Reihenfolge: M2 → M4 → M5
+
+### Reihenfolge
+
+```
+M2 (Memory System, file-only)
+  └─ M4 (Satori/MCP Gateway)
+       └─ M5 (Memory + MCP Integration)
+```
+
+M4 kann parallel zu späteren M2-Phasen beginnen wenn M2 Phase 1-3 stabil ist.
+
+---
+
+## M2 — Memory + CLAUDE.md System
+
+**Spec:** `docs/XDD/specs/001-memory-claude/` (PRD ✓, SDD ✓, Plan ✓)
+**Plan:** `docs/superpowers/plans/2026-03-25-memory-system-m2.md` (6 Phasen)
+**Status:** ✅ complete (merged to `customizing` 2026-03-26)
+
+### Vor dem Start
+
+- [x] ROADMAP.md: `.start/specs/` → `docs/XDD/specs/` korrigieren
+- [x] `2026-03-25-memory-system-m2.md`: `.start/specs/` → `docs/XDD/specs/` korrigieren
+- [x] `001-memory-claude/solution.md` §3 Routing-Tabelle: Hinweis ergänzen dass MCP ab medium lived in M5 einsetzt
+
+### Implementation (6 Phasen)
+
+- [x] Phase 1: Python-Infrastruktur (`lib/`, `reflect_utils.py`, Queue-Format)
+- [x] Phase 2: Hooks (`capture_learning.py`, `session_start_reminder.py`, `check_learnings.py`, `post_commit_reminder.py`)
+- [x] Phase 3: `memory-add` Routing-Logik
+- [x] Phase 4: `memory-sync`, `memory-cleanup`, `memory-promote`
+- [x] Phase 5: `tcs-helper:setup` (Onboarding-Wizard + Templates)
+- [x] Phase 6: Integration & Validierung (23 tests pass)
+
+### Nach M2
+
+- [x] `tcs-helper:setup` → tcs-patterns als optionalen Install-Schritt einbauen
+- [x] AGENTS.md / README: tcs-patterns dokumentieren
+- [x] tcs-patterns `reference/` Stubs befüllen (citypaul/.dotfiles als Quelle) — 2026-03-27
+- [x] `testing` + `test-design-reviewer` Skills zu tcs-patterns hinzufügen (17 total) — 2026-03-27
+- [x] `xdd-tdd` um optionalen MUTATE-Checkpoint erweitert — 2026-03-27
+- [x] `docs/concept/sources.md` Attribution aktualisiert — 2026-03-27
+
+---
+
+## M4 — Satori/MCP Gateway
+
+**Repo:** `MMoMM-org/miyo-satori` (standalone, TCS includes as git submodule)
+**Spec:** `docs/XDD/specs/004-satori-gateway/` (PRD ✓, SDD ✓, Plan ✓ — 7 phases)
+**Basis:** `docs/concept/v2/context-mode-MCP-Server.md` + `docs/concept/v2/TCS v2 Memory & Context Layout Spec.md` §5
+**Status:** Spec complete — ready for implementation in `miyo-satori` repo
+
+### Entschiedene Punkte
+
+- [x] Name: **Satori** (`miyo-satori`)
+- [x] Eigenes Repo — standalone, als git submodule in TCS unter `modules/satori/`; wiederverwendbar außerhalb TCS
+- [x] Gateway: single MCP entry point — **`satori_exec(server, tool, args)`** (kein `<server>_<tool>` namespace)
+- [x] Handler/Plugin-Architektur zwischen Satori und jedem downstream Server (default: passthrough)
+- [x] Hot/cold: Server nur starten wenn a) enabled und b) tatsächlich aufgerufen
+- [x] Security: OUT primär (keine Secrets an downstream), IN optional (Filter auf Rückgabe)
+- [x] Kairn: optionaler Handler, kein hard dependency
+- [x] g/p/r Config: `~/.satori/config.toml` / project / repo root (`satori.toml`)
+- [x] DB: `.satori/db.sqlite` im Repo-Root (gitignored)
+- [x] Discovery (M4): tool presence check (`satori_context` vorhanden = Satori läuft)
+- [x] Auto-Registration: `.mcp.json` → `.mcp.satori-json` (opt-in via `auto_register_mcp_json`)
+- [x] Session events: context-mode Schema übernommen (session_events + snapshot XML ≤2048B)
+
+### Noch offen (für Implementierung)
+
+- [ ] Session ID source: wie bekommt Satori die Claude Code Session ID? (MCP protocol check)
+- [ ] Config hot-reload: `satori.toml` ohne MCP-Server-Neustart nachladen?
+
+---
+
+## M5 — Memory + MCP Integration
+
+**Spec:** `docs/XDD/specs/005-memory-mcp/` (requirements.md vorhanden, Placeholder)
+**Status:** Wartet auf M2 + M4
+
+### Kernentscheidung (bereits gefällt)
+
+| Lifetime | M2 (file) | M5 (MCP added) |
+|---|---|---|
+| medium lived | `docs/ai/memory/` Source of Truth | + context-mode Index + Kairn semantisch |
+| short lived | `docs/ai/memory/context.md` | context-mode primary |
+| really short | context window | context-mode primary + Kairn |
+
+---
+
+## Offene Konzept-Fragen
+
+- [ ] `docs/concept/v2/` ist Perplexity-Brainstorming — **nicht direkt als Spec verwenden**
+  - Für M4: §5 (Context-Mode + Kairn) als Basis heranziehen, bereinigen
+  - Für M5: Routing-Tabelle §3.2 als Ausgangspunkt, Grenze aber verschoben (→ oben)
+- [x] ADR-Location: `docs/XDD/adr/` default (via `startup.toml` `docs_base` → configurable per repo)
+
+---
+
+## Nächster Schritt → M4 implementieren
+
+M4 Spec vollständig (PRD + SDD + Plan). Implementierung erfolgt im `miyo-satori` Repo.
+
+1. `modules/satori/` initialisieren: `npm init`, TypeScript setup (Phase 1)
+2. Context module: SessionDB + ContentDB + snapshot.ts (Phase 2, parallel zu Phase 3)
+3. Config + registry + security (Phase 3)
+4. Lifecycle + handler interface (Phase 4)
+5. satori_exec + gateway routing (Phase 5)
+6. Hooks (Phase 6)
+7. TCS install.sh integration + E2E test (Phase 7)
+
+---
+
 ## #1 — install.sh: Modular & Flexible
 
 **Branch:** `feat/install-modular`

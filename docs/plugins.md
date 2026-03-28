@@ -55,20 +55,61 @@ Adds 15 activity-based agents across 8 roles. They activate automatically when t
 
 ---
 
-## tcs-helper — Skill Authoring Tools (`tcs-helper@the-custom-startup`) — optional
+## tcs-helper — Skill Authoring + Memory System (`tcs-helper@the-custom-startup`) — optional
 
-Helper tools for creating and maintaining Claude Code skills and agents. Install this if you want to contribute skills to the framework or build your own.
+Skill authoring tools, project memory system, and onboarding wizard. Install to build on the framework or to add the memory system to your repos.
 
 ```bash
 /plugin install tcs-helper@the-custom-startup
 ```
 
-| Tool | What it does |
-|------|-------------|
-| `/skill-author` | Create, audit, or convert Claude Code skills — covers PICS structure, model selection, agent discovery, TDD Iron Law, and deployment verification |
-| `skills/skill-author/find-agents.sh` | Discovers all installed agents across plugin caches — used by `/skill-author` during skill creation |
+**Skill authoring:**
+
+| Skill | What it does |
+|-------|-------------|
+| `/skill-author` | Create, audit, or convert Claude Code skills — PICS structure, model selection, agent discovery, TDD Iron Law, verification |
+| `/skill-evaluate` | Evaluate a skill's quality before importing or using |
+| `/skill-import` | Fetch and install a single skill from any GitHub repo without installing the full plugin |
+
+**Memory system:**
+
+| Skill | What it does |
+|-------|-------------|
+| `/setup` | Provision `docs/ai/memory/` + CLAUDE.md hierarchy in a new repo; installs hooks |
+| `/memory-add` | Capture session learnings → route to correct scope (global/project/repo) and category file |
+| `/memory-sync` | Keep @imports and memory index in sync |
+| `/memory-cleanup` | Archive resolved issues, prune stale entries |
+| `/memory-promote` | Promote domain patterns from memory files to reusable skills |
+
+**Hooks (installed by `/setup`):**
+
+| Event | Hook | Purpose |
+|-------|------|---------|
+| `UserPromptSubmit` | `capture_learning.py` | Detect corrections/learnings, queue them |
+| `SessionStart` | `session_start_reminder.py` | Show pending queue count at session open |
+| `PreCompact` | `check_learnings.py` | Back up queue before context compaction |
+| `PostToolUse(Bash)` | `post_commit_reminder.py` | Remind to run `/memory-add` after git commit |
 
 → Full reference: [`plugins/tcs-helper/README.md`](../plugins/tcs-helper/README.md)
+
+---
+
+## tcs-patterns — Domain Pattern Skills (`tcs-patterns@the-custom-startup`) — optional
+
+17 pattern skills covering architecture, testing, languages, and platform. Install only the patterns relevant to your stack — they activate on trigger terms and provide interactive pattern guidance.
+
+```bash
+/plugin install tcs-patterns@the-custom-startup
+```
+
+| Category | Skills |
+|----------|--------|
+| **Architecture** | `/ddd` · `/hexagonal` · `/functional` · `/event-driven` |
+| **API & Types** | `/api-design` · `/typescript-strict` |
+| **Testing** | `/testing` · `/mutation-testing` · `/frontend-testing` · `/react-testing` · `/test-design-reviewer` |
+| **Platforms** | `/node-service` · `/python-project` · `/go-idiomatic` |
+| **DevOps** | `/twelve-factor` — dispatches `tcs-team:the-devops:build-platform` for implementation |
+| **Integrations** | `/mcp-server` · `/obsidian-plugin` |
 
 ---
 
@@ -79,9 +120,10 @@ Manual marketplace installation:
 ```bash
 /plugin marketplace add MMoMM-org/the-custom-startup
 
-/plugin install tcs-start@the-custom-startup    # core workflow
-/plugin install tcs-team@the-custom-startup     # specialist agents (optional)
-/plugin install tcs-helper@the-custom-startup   # skill authoring tools (optional)
+/plugin install tcs-workflow@the-custom-startup   # core workflow
+/plugin install tcs-team@the-custom-startup       # specialist agents (optional)
+/plugin install tcs-helper@the-custom-startup     # skill authoring + memory system (optional)
+/plugin install tcs-patterns@the-custom-startup   # domain pattern skills (optional)
 ```
 
 See [installation.md](installation.md) for what the install script sets up that marketplace install does not (statusline, startup.toml, output styles, multi-AI templates).

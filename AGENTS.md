@@ -11,9 +11,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 the-custom-startup/
 ├── plugins/
-│   ├── tcs-start/                # Core workflow orchestration plugin
+│   ├── tcs-workflow/             # Core workflow orchestration plugin
 │   │   ├── .claude-plugin/       # Plugin manifest (plugin.json)
-│   │   ├── skills/               # 16 skills (12 user-invocable + 4 autonomous)
+│   │   ├── agents/               # Workflow agents (e.g., the-chief)
+│   │   ├── skills/               # 20 skills (user-invocable + autonomous)
+│   │   │   │                     # Core: analyze, brainstorm, constitution, debug,
+│   │   │   │                     #   document, guide, implement, parallel-agents,
+│   │   │   │                     #   receive-review, refactor, review, test,
+│   │   │   │                     #   validate, verify
+│   │   │   │                     # XDD: xdd, xdd-meta, xdd-plan, xdd-prd, xdd-sdd, xdd-tdd
 │   │   ├── output-styles/        # The Startup, The ScaleUp output styles
 │   │   └── README.md             # Detailed plugin documentation
 │   │
@@ -29,9 +35,33 @@ the-custom-startup/
 │   │   │   └── the-meta-agent.md # Agent design and generation
 │   │   └── skills/               # Domain skills (cross-cutting, design, development, infrastructure, quality)
 │   │
-│   └── tcs-helper/               # Skill authoring tools plugin (optional)
+│   ├── tcs-helper/               # Skill authoring + memory system plugin (optional)
+│   │   ├── .claude-plugin/       # Plugin manifest (plugin.json, v2.0.0)
+│   │   ├── hooks/hooks.json      # 4 hook events: UserPromptSubmit, SessionStart, PreCompact, PostToolUse
+│   │   ├── scripts/              # Python hook scripts + lib/reflect_utils.py
+│   │   ├── templates/            # 19 CLAUDE.md + memory templates (stacks: ts, go, python, cf, convex)
+│   │   └── skills/
+│   │       ├── skill-author/     # Create, audit, convert Claude Code skills (PICS, TDD Iron Law)
+│   │       ├── skill-evaluate/   # Evaluate a skill before importing or using
+│   │       ├── skill-import/     # Fetch + install a single skill from any GitHub repo
+│   │       ├── memory-add/       # Capture session learnings → route to correct memory file
+│   │       ├── memory-sync/      # Keep @imports and memory index in sync
+│   │       ├── memory-cleanup/   # Archive resolved issues, prune stale entries
+│   │       ├── memory-promote/   # Promote domain patterns to reusable skills
+│   │       ├── setup/            # Provision docs/ai/memory/ + CLAUDE.md hierarchy in new repos
+│   │       ├── docs/             # Generate and maintain project documentation
+│   │       ├── finish-branch/    # Branch completion workflow
+│   │       └── git-worktree/     # Git worktree management
+│   │
+│   └── tcs-patterns/             # Domain pattern skills plugin (optional, selective install)
 │       ├── .claude-plugin/       # Plugin manifest (plugin.json)
-│       └── skills/skill-author/  # Skill creation, auditing, and conversion
+│       └── skills/               # 17 pattern skills:
+│           │                     # Architecture: ddd, hexagonal, functional, event-driven
+│           │                     # API & Types: api-design, typescript-strict
+│           │                     # Testing: testing, mutation-testing, frontend-testing, react-testing, test-design-reviewer
+│           │                     # Platforms: node-service, python-project, go-idiomatic
+│           │                     # DevOps: twelve-factor (→ tcs-team:the-devops:build-platform)
+│           │                     # Integrations: mcp-server, obsidian-plugin
 │
 ├── scripts/
 │   ├── the-custom-startup-statusline-standard.sh   # Standard (single-line) statusline
@@ -70,7 +100,7 @@ Each plugin lives in `plugins/[name]/` with:
 - `agents/` - Agent definitions (team plugin only)
 
 **Skill namespacing**: Claude Code automatically prefixes skills with the plugin name from
-`plugin.json`. A skill named `brainstorm` in the `tcs-start` plugin is invocable as `tcs-start:brainstorm`.
+`plugin.json`. A skill named `brainstorm` in the `tcs-workflow` plugin is invocable as `tcs-workflow:brainstorm`.
 The team plugin's domain skills are agent-internal and not user-invocable directly.
 
 ### Skill Structure
@@ -85,7 +115,7 @@ skills/[skill-name]/
 └── validation.md      # Quality checklists
 ```
 
-For full skill conventions, PICS structure, and transformation checklist, see the `writing-skills` skill (`plugins/tcs-start/skills/writing-skills/reference/conventions.md`).
+For full skill conventions, PICS structure, and transformation checklist, see the `writing-skills` skill (`plugins/tcs-workflow/skills/writing-skills/reference/conventions.md`).
 
 ### Agent Structure (Team Plugin)
 
@@ -128,11 +158,11 @@ claude plugin install ./plugins/team
 
 ### Invoking Skills as Commands
 
-The `tcs-start` plugin has no separate `commands/` directory — skills serve as the user-invocable
-entry points. Each skill in `plugins/tcs-start/skills/[name]/SKILL.md` is accessible as
-`/[name]` (e.g. `/specify`, `/implement`).
+The `tcs-workflow` plugin has no separate `commands/` directory — skills serve as the user-invocable
+entry points. Each skill in `plugins/tcs-workflow/skills/[name]/SKILL.md` is accessible as
+`/[name]` (e.g. `/xdd`, `/implement`).
 
-To add a new workflow entry point, add a skill directory under `plugins/tcs-start/skills/`.
+To add a new workflow entry point, add a skill directory under `plugins/tcs-workflow/skills/`.
 
 ### Editing Agents
 
@@ -157,9 +187,9 @@ Skills load minimal context initially, then progressively load:
 
 ### Spec-Driven Development
 
-The primary workflow: `/specify` → `/validate` → `/implement` → `/review`
+The primary workflow: `/xdd` → `/validate` → `/implement` → `/review`
 
-Specifications live in `.start/specs/[NNN]-[name]/` (legacy: `docs/specs/`):
+Specifications live in `docs/XDD/specs/[NNN]-[name]/`:
 - `requirements.md` - What to build
 - `solution.md` - How to build it
 - `plan/` - Execution sequence (README.md manifest + phase-N.md files)
@@ -185,7 +215,7 @@ Optional `CONSTITUTION.md` at project root defines checkable rules:
 | Skills | `plugins/*/skills/*/SKILL.md` | directory is skill name |
 | Agents | `plugins/tcs-team/agents/the-*/` | `the-[role]/[activity].md` |
 | Output Styles | `plugins/*/output-styles/*.md` | lowercase-kebab (e.g., `the-startup.md`) |
-| Specs | `.start/specs/[NNN]-*/` | 3-digit ID prefix |
+| Specs | `docs/XDD/specs/[NNN]-*/` | 3-digit ID prefix |
 
 ## Publishing
 
@@ -193,3 +223,7 @@ The repository is a Claude Code marketplace. Publishing happens via:
 1. Push to `main` branch
 2. GitHub Actions workflow creates release
 3. Users install via `./install.sh` or `/plugin marketplace add MMoMM-org/the-custom-startup`
+
+## Guardrails
+
+- During spec sessions, document all design decisions into the spec before moving to the next phase — don't defer or skip mid-discussion items.

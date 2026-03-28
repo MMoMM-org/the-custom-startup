@@ -1,5 +1,6 @@
 ---
 name: code-quality-review
+user-invocable: false
 description: Unified code review skill for correctness, design, readability, security, performance, testability, accessibility, and error-handling conventions. Use when reviewing changes, enforcing quality standards, or identifying technical debt.
 ---
 

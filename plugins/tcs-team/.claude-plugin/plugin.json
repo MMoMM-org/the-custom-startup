@@ -11,5 +11,6 @@
   "keywords": [
     "agents",
     "specialists"
-  ]
+  ],
+  "agents": "agents/"
 }

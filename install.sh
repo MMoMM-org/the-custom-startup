@@ -81,12 +81,13 @@ EOF
 TARGET=""          # global | current | other
 INSTALL_DIR=""     # ~ | $PWD | <path>
 SETTINGS_FILE=""   # resolved settings.json path
-PLUGINS=""         # space-separated list: tcs-start@the-custom-startup tcs-team@the-custom-startup
-OUTPUT_STYLE=""    # e.g. "tcs-start:The Startup" or ""
+PLUGINS=""         # space-separated list: tcs-workflow@the-custom-startup tcs-team@the-custom-startup
+OUTPUT_STYLE=""    # e.g. "tcs-workflow:The Startup" or ""
 SPECS_DIR_NAME=""  # e.g. "the-custom-startup"
 PROMPTS=""         # yes | skip
 PROMPTS_BASE_DIR="" # absolute path, e.g. ~/.claude/the-custom-startup
 AGENT_TEAMS=""     # yes | no
+SATORI="no"        # yes | no
 STATUSLINE=""      # yes | skip
 STATUSLINE_REPLACE="" # yes | keep | skip  (when existing found)
 
@@ -177,19 +178,19 @@ choose_target() {
 
 choose_plugins() {
   printf "\n${BRIGHT_GREEN}── Plugins${RESET}\n\n"
-  printf "  ${CYAN}1)${RESET} Both           — tcs-start + tcs-team  (recommended)\n"
-  printf "  ${CYAN}2)${RESET} tcs-start only — workflow skills\n"
-  printf "  ${CYAN}3)${RESET} tcs-team only  — specialist agents\n"
-  printf "  ${CYAN}4)${RESET} All three      — tcs-start + tcs-team + tcs-helper (skill authoring tools)\n"
+  printf "  ${CYAN}1)${RESET} Both              — tcs-workflow + tcs-team  (recommended)\n"
+  printf "  ${CYAN}2)${RESET} tcs-workflow only — workflow skills\n"
+  printf "  ${CYAN}3)${RESET} tcs-team only     — specialist agents\n"
+  printf "  ${CYAN}4)${RESET} All three         — tcs-workflow + tcs-team + tcs-helper (skill authoring tools)\n"
   printf "\n"
   ask "Select plugins [1-4, default: 1]:"
   local choice
   read -r choice </dev/tty
   case "$choice" in
-    2) PLUGINS="tcs-start@the-custom-startup" ;;
+    2) PLUGINS="tcs-workflow@the-custom-startup" ;;
     3) PLUGINS="tcs-team@the-custom-startup" ;;
-    4) PLUGINS="tcs-start@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup" ;;
-    *)  PLUGINS="tcs-start@the-custom-startup tcs-team@the-custom-startup" ;;
+    4) PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup" ;;
+    *)  PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup" ;;
   esac
   success "Plugins: $PLUGINS"
 }
@@ -208,9 +209,9 @@ choose_output_style() {
   local choice
   read -r choice </dev/tty
   case "$choice" in
-    2) OUTPUT_STYLE="tcs-start:The ScaleUp" ;;
+    2) OUTPUT_STYLE="tcs-workflow:The ScaleUp" ;;
     3) OUTPUT_STYLE="" ;;
-    *) OUTPUT_STYLE="tcs-start:The Startup" ;;
+    *) OUTPUT_STYLE="tcs-workflow:The Startup" ;;
   esac
   if [[ -n "$OUTPUT_STYLE" ]]; then
     success "Output style: $OUTPUT_STYLE"
@@ -382,7 +383,53 @@ choose_agent_teams() {
 }
 
 # ==============================================================================
-# Step 8: choose_statusline
+# Step 8: choose_satori
+# ==============================================================================
+
+choose_satori() {
+  printf "\n${BRIGHT_GREEN}── Satori MCP Gateway${RESET}\n\n"
+  printf "  Satori routes tool calls to downstream MCP servers and captures session context.\n\n"
+  ask "Install Satori? [y/N]:"
+  local choice
+  read -r choice </dev/tty
+  case "$choice" in
+    [yY]|[yY][eE][sS]) SATORI="yes"; success "Satori: will install" ;;
+    *)                  SATORI="no";  info    "Satori: skipped" ;;
+  esac
+}
+
+_write_satori_mcp_config() {
+  local abs_path="$1"
+  local settings_file
+
+  if [[ -f "$SETTINGS_FILE" ]]; then
+    settings_file="$SETTINGS_FILE"
+  elif [[ -f "$HOME/.claude/settings.json" ]]; then
+    settings_file="$HOME/.claude/settings.json"
+  else
+    warn "No Claude Code settings.json found — create one and add Satori manually:"
+    printf "  ${DIM}{ \"mcpServers\": { \"satori\": { \"command\": \"node\", \"args\": [\"$abs_path\"] } } }${RESET}\n"
+    return
+  fi
+
+  python3 - "$settings_file" "$abs_path" << 'PYEOF'
+import json, sys
+settings_file, abs_path = sys.argv[1], sys.argv[2]
+with open(settings_file) as f:
+    data = json.load(f)
+data.setdefault("mcpServers", {})["satori"] = {
+    "command": "node",
+    "args": [abs_path]
+}
+with open(settings_file, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+print("  Satori MCP entry written to " + settings_file)
+PYEOF
+}
+
+# ==============================================================================
+# Step 10: choose_statusline
 # ==============================================================================
 
 choose_statusline() {
@@ -431,7 +478,7 @@ choose_statusline() {
 }
 
 # ==============================================================================
-# Step 9: confirm_summary
+# Step 11: confirm_summary
 # ==============================================================================
 
 # Return plugin display string (space separated → comma separated)
@@ -472,6 +519,12 @@ confirm_summary() {
     printf "  %-22s %s\n" "Agent Teams:" "(skipped)"
   fi
 
+  if [[ "$SATORI" == "yes" ]]; then
+    printf "  %-22s %s\n" "Satori:" "install + build"
+  else
+    printf "  %-22s %s\n" "Satori:" "(skipped)"
+  fi
+
   case "$STATUSLINE" in
     yes)
       if [[ "$STATUSLINE_REPLACE" == "keep" ]]; then
@@ -498,7 +551,7 @@ confirm_summary() {
 }
 
 # ==============================================================================
-# Step 10: do_install
+# Step 12: do_install
 # ==============================================================================
 
 do_install() {
@@ -712,6 +765,75 @@ do_install() {
   elif [[ "$STATUSLINE" == "yes" && "$STATUSLINE_REPLACE" == "keep" ]]; then
     info "Keeping existing statusline configuration"
   fi
+
+  # --- Satori -----------------------------------------------------------------
+  if [[ "$SATORI" == "yes" ]]; then
+    info "Initializing Satori submodule..."
+    git submodule update --init modules/satori 2>/dev/null || true
+
+    info "Building Satori..."
+    local satori_dir
+    if [[ -n "$this_dir" && -d "$this_dir/modules/satori" ]]; then
+      satori_dir="$this_dir/modules/satori"
+    else
+      satori_dir="$(pwd)/modules/satori"
+    fi
+
+    if [[ ! -d "$satori_dir" ]]; then
+      warn "Satori directory not found at $satori_dir — skipping"
+    else
+      (cd "$satori_dir" && npm install --silent && npm run build --silent) || {
+        warn "Satori build failed — skipping MCP config"
+        return
+      }
+
+      local satori_abs
+      satori_abs="$(cd "$satori_dir" && pwd)/dist/src/index.js"
+
+      info "Writing Satori MCP config entry..."
+      _write_satori_mcp_config "$satori_abs"
+      success "Satori installed: $satori_abs"
+
+      # Context mode opt-in (only if Satori is present and built)
+      if [[ -f "$satori_dir/scripts/install-hooks.sh" ]]; then
+        printf "\n"
+        ask "Enable context mode (session capture + memory hooks)? [y/N]:"
+        local ctx_choice
+        read -r ctx_choice </dev/tty
+        case "$ctx_choice" in
+          [yY]|[yY][eE][sS])
+            info "Registering Satori hooks..."
+            SATORI_HOOKS_SETTINGS="$SETTINGS_FILE" \
+              bash "$satori_dir/scripts/install-hooks.sh" || warn "Hook registration failed — run install-hooks.sh manually"
+            success "Context mode hooks registered"
+
+            # Append [context] block to satori.toml if absent
+            local toml_file
+            if [[ "$TARGET" == "global" ]]; then
+              toml_file="$HOME/.claude/satori.toml"
+            else
+              toml_file="$INSTALL_DIR/.claude/satori.toml"
+            fi
+            mkdir -p "$(dirname "$toml_file")"
+            if [[ ! -f "$toml_file" ]] || ! grep -q '^\[context\]' "$toml_file" 2>/dev/null; then
+              {
+                printf '\n[context]\n'
+                printf 'db_path                  = ".satori/db.sqlite"\n'
+                printf 'session_guide_max_bytes  = 2048\n'
+                printf 'retain_days              = 30\n'
+              } >> "$toml_file"
+              success "Context config written: $toml_file"
+            else
+              info "Context config already present in $toml_file"
+            fi
+            ;;
+          *)
+            info "Context mode: skipped"
+            ;;
+        esac
+      fi
+    fi
+  fi
 }
 
 # ==============================================================================
@@ -779,6 +901,7 @@ main() {
   choose_specs_dir
   choose_prompts
   choose_agent_teams
+  choose_satori
   choose_statusline
   confirm_summary
   do_install

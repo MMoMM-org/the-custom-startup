@@ -1,5 +1,6 @@
 ---
 name: performance-analysis
+user-invocable: false
 description: Measurement approaches, profiling patterns, bottleneck identification, and optimization guidance. Use when diagnosing performance issues, establishing baselines, identifying bottlenecks, or planning for scale. Always measure before optimizing.
 ---
 

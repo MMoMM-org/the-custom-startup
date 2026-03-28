@@ -54,7 +54,7 @@
 curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/install.sh | bash
 ```
 
-The interactive wizard guides you through: install target (global / repo / custom path) · which plugins (start / team / helper) · output style · multi-AI templates · statusline variant.
+The interactive wizard guides you through: install target (global / repo / custom path) · which plugins (workflow / team / helper / patterns) · output style · multi-AI templates · statusline variant.
 
 To uninstall:
 
@@ -77,15 +77,15 @@ After installation, optionally set up project governance rules that Claude enfor
 Switch [output style](docs/output-styles.md) anytime — The Startup is high-energy and fast, The ScaleUp is calm and educational:
 
 ```bash
-/output-style "start:The Startup"
-/output-style "start:The ScaleUp"
+/output-style "tcs-workflow:The Startup"
+/output-style "tcs-workflow:The ScaleUp"
 ```
 
 Then start building:
 
 ```bash
 # Step 1: Create a specification (requirements + technical design + implementation plan)
-/specify Add user authentication with OAuth support
+/xdd Add user authentication with OAuth support
 
 # Step 2: Optionally validate the spec before building
 /validate 001
@@ -100,15 +100,17 @@ Then start building:
 
 ## Plugins
 
-### Start Plugin (`start`) — Core Workflow
+### Workflow Plugin (`tcs-workflow`) — Core Workflow
 
-**10 user-invocable skills** covering the full development lifecycle. → [Full skill reference](docs/skills.md)
+**20 user-invocable skills** covering the full development lifecycle. → [Full skill reference](docs/skills.md)
 
 | Category | Skills |
 |----------|--------|
 | **Setup** | `/constitution` — project governance rules, auto-enforced during the build workflow |
-| **Build** | `/specify` → `/validate` → `/implement` — spec-driven development pipeline |
-| **Quality** | `/test` — code ownership enforcement · `/review` — multi-agent parallel code review |
+| **XDD** | `/xdd` → `/xdd-prd` → `/xdd-sdd` → `/xdd-plan` → `/xdd-tdd` · `/xdd-meta` — spec-driven development pipeline |
+| **Build** | `/xdd` → `/validate` → `/implement` — spec-driven development pipeline |
+| **Quality** | `/test` — code ownership enforcement · `/review` — multi-agent parallel code review · `/verify` · `/receive-review` |
+| **Assist** | `/guide` · `/parallel-agents` |
 | **Maintain** | `/analyze` · `/refactor` · `/debug` · `/document` |
 
 ### Team Plugin (`team`) — Specialist Agents
@@ -126,13 +128,28 @@ Then start building:
 | **The DevOps** | Infrastructure, CI/CD, monitoring |
 | **The Meta Agent** | Agent design and generation |
 
-### Helper Plugin (`helper`) — Skill Authoring Tools *(optional)*
+### Helper Plugin (`tcs-helper`) — Skill Authoring + Memory System *(optional)*
 
-**1 user-invocable skill** for creating, auditing, and maintaining Claude Code skills and plugins. Install if you want to build on top of or contribute to The Custom Agentic Startup.
+Skill authoring tools and a file-based project memory system. Install to add structured memory to your repos or to build on the framework.
 
 | Skill | Purpose |
 |-------|---------|
-| `/skill-author` | Create, audit, and convert Claude Code skills — duplicate detection, PICS structure, agent discovery, verification |
+| `/skill-author` · `/skill-evaluate` · `/skill-import` | Create, audit, and fetch Claude Code skills |
+| `/setup` | Provision `docs/ai/memory/` + CLAUDE.md hierarchy; install learning-capture hooks |
+| `/memory-add` · `/memory-sync` · `/memory-cleanup` · `/memory-promote` | Capture and maintain session learnings across scopes |
+
+### Patterns Plugin (`tcs-patterns`) — Domain Pattern Skills *(optional)*
+
+**17 pattern skills** covering architecture, testing, languages, and platform. Install only what you need — they activate on trigger terms.
+
+| Category | Skills |
+|----------|--------|
+| **Architecture** | `/ddd` · `/hexagonal` · `/functional` · `/event-driven` |
+| **API & Types** | `/api-design` · `/typescript-strict` |
+| **Testing** | `/testing` · `/mutation-testing` · `/frontend-testing` · `/react-testing` · `/test-design-reviewer` |
+| **Platforms** | `/node-service` · `/python-project` · `/go-idiomatic` |
+| **DevOps** | `/twelve-factor` |
+| **Integrations** | `/mcp-server` · `/obsidian-plugin` |
 
 ---
 

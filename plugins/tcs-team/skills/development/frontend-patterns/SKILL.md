@@ -1,5 +1,6 @@
 ---
 name: frontend-patterns
+user-invocable: false
 description: Context enrichment for frontend UI development using shadcn/ui and Tailwind CSS. Use when building component libraries, implementing UI designs, theming, or working with accessible React components.
 ---
 

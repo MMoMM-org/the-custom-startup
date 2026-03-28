@@ -1,5 +1,6 @@
 ---
 name: user-research
+user-invocable: false
 description: User research and insight synthesis for interviews, usability testing, personas, journey mapping, and actionable product/design recommendations. Use when planning studies, collecting evidence, synthesizing patterns, or converting findings into prioritized decisions.
 ---
 
