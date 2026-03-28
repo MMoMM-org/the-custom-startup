@@ -15,7 +15,5 @@
     "sdd",
     "implementation",
     "review"
-  ],
-  "outputStyles": "output-styles/",
-  "agents": "agents/"
+  ]
 }
