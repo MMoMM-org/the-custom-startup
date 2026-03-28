@@ -14,7 +14,7 @@
 |----------|--------|-------|
 | requirements.md | completed | |
 | solution.md | completed | 4 ADRs confirmed |
-| plan/ | completed | 5 phases, 22 tasks |
+| plan/ | completed | 5 phases, 22 tasks — all implemented |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -29,6 +29,7 @@
 | 2026-03-28 | Add about/sources.md attribution doc | Keep citypaul, rsmdt attribution visible and explicit |
 | 2026-03-28 | PRD approved, transition to SDD | All sections complete, open questions resolved, CHANGELOG.md added as Should Have |
 | 2026-03-28 | SDD approved, transition to PLAN | All 4 ADRs confirmed by user |
+| 2026-03-28 | Implementation complete | All 5 phases executed; all acceptance criteria pass; old files deleted |
 
 ## Context
 

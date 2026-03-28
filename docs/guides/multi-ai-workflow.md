@@ -24,13 +24,13 @@ The spec-driven workflow has five phases. Here is which tool to use for each:
 
 | Phase | Slash Command | Best External Tool | Notes |
 |---|---|---|---|
-| Constitution (optional) | `/constitution` | Claude.ai | Use [`constitution-prompt.md`](templates/constitution-prompt.md); run once per project |
-| Research | `/analyze` | Perplexity | Use [`research-prompt.md`](templates/research-prompt.md) |
-| Brainstorm | `/brainstorm` | Claude.ai | Use [`brainstorm-prompt.md`](templates/brainstorm-prompt.md) |
-| Requirements (PRD) | `/specify` | Claude.ai | Use [`prd-prompt.md`](templates/prd-prompt.md) |
+| Constitution (optional) | `/constitution` | Claude.ai | Use [`constitution-prompt.md`](../templates/constitution-prompt.md); run once per project |
+| Research | `/analyze` | Perplexity | Use [`research-prompt.md`](../templates/research-prompt.md) |
+| Brainstorm | `/brainstorm` | Claude.ai | Use [`brainstorm-prompt.md`](../templates/brainstorm-prompt.md) |
+| Requirements (PRD) | `/specify` | Claude.ai | Use [`prd-prompt.md`](../templates/prd-prompt.md) |
 | Solution + Plan + Implement | `/implement` | Claude Code only | Requires codebase access |
 
-Each phase maps to the BUILD loop from [workflow.md](workflow.md). Constitution and Research are pre-BUILD setup. Brainstorm and PRD produce the input for `/specify`. The SDD and PLAN come from Claude Code's own `/specify` run after you import the PRD. Running multi-AI phases does not replace the BUILD loop — it front-loads the thinking before you open Claude Code.
+Each phase maps to the BUILD loop from [workflow.md](../workflow.md). Constitution and Research are pre-BUILD setup. Brainstorm and PRD produce the input for `/specify`. The SDD and PLAN come from Claude Code's own `/specify` run after you import the PRD. Running multi-AI phases does not replace the BUILD loop — it front-loads the thinking before you open Claude Code.
 
 The final phase (SDD, PLAN, implementation) requires reading and writing code. Use Claude Code for that.
 
@@ -40,7 +40,7 @@ The final phase (SDD, PLAN, implementation) requires reading and writing code. U
 
 If you do not have Perplexity, you have two options for research:
 
-**Option A — Claude.ai with web search:** The same [`research-prompt.md`](templates/research-prompt.md) templates work. Enable web search in Claude.ai (requires Pro or Team plan). Results are slightly less reliable for current data but reasoning quality is higher.
+**Option A — Claude.ai with web search:** The same [`research-prompt.md`](../templates/research-prompt.md) templates work. Enable web search in Claude.ai (requires Pro or Team plan). Results are slightly less reliable for current data but reasoning quality is higher.
 
 **Option B — Claude Code analyze:** Run `/analyze` directly in Claude Code. The analyze skill launches parallel specialist agents with WebSearch access. Best option when the research target is your own codebase or technology stack.
 
@@ -60,7 +60,7 @@ The Claude project or Perplexity space provides only minimal framework context. 
 
 2. **Standalone** — Paste the template into any Claude.ai conversation (or ChatGPT, or any LLM). It is fully self-contained. No project needed.
 
-**One project, one space.** Do not create a separate Claude project for brainstorm and another for PRD. Use a single project for all Claude.ai workflow phases. Reuse the same Perplexity space for all research queries. See [`setup-claude-project.md`](templates/setup-claude-project.md) and [`setup-perplexity-space.md`](templates/setup-perplexity-space.md) for setup instructions.
+**One project, one space.** Do not create a separate Claude project for brainstorm and another for PRD. Use a single project for all Claude.ai workflow phases. Reuse the same Perplexity space for all research queries. See [`setup-claude-project.md`](../templates/setup-claude-project.md) and [`setup-perplexity-space.md`](../templates/setup-perplexity-space.md) for setup instructions.
 
 ---
 
@@ -68,16 +68,16 @@ The Claude project or Perplexity space provides only minimal framework context. 
 
 | Template | Use For | Mirrors Skill |
 |---|---|---|
-| [`constitution-prompt.md`](templates/constitution-prompt.md) | Project governance rules | `/constitution` |
-| [`research-prompt.md`](templates/research-prompt.md) | Market, technology, and problem research | `/analyze` |
-| [`brainstorm-prompt.md`](templates/brainstorm-prompt.md) | Idea exploration and design | `/brainstorm` |
-| [`prd-prompt.md`](templates/prd-prompt.md) | Product requirements document | `/specify` |
-| [`setup-claude-project.md`](templates/setup-claude-project.md) | One-time Claude.ai project setup | — |
-| [`setup-perplexity-space.md`](templates/setup-perplexity-space.md) | One-time Perplexity space setup | — |
+| [`constitution-prompt.md`](../templates/constitution-prompt.md) | Project governance rules | `/constitution` |
+| [`research-prompt.md`](../templates/research-prompt.md) | Market, technology, and problem research | `/analyze` |
+| [`brainstorm-prompt.md`](../templates/brainstorm-prompt.md) | Idea exploration and design | `/brainstorm` |
+| [`prd-prompt.md`](../templates/prd-prompt.md) | Product requirements document | `/specify` |
+| [`setup-claude-project.md`](../templates/setup-claude-project.md) | One-time Claude.ai project setup | — |
+| [`setup-perplexity-space.md`](../templates/setup-perplexity-space.md) | One-time Perplexity space setup | — |
 
 ---
 
-## Export and Import Scripts ([`scripts/export-spec.sh`](../scripts/export-spec.sh) · [`scripts/import-spec.sh`](../scripts/import-spec.sh))
+## Export and Import Scripts ([`scripts/export-spec.sh`](../../scripts/export-spec.sh) · [`scripts/import-spec.sh`](../../scripts/import-spec.sh))
 
 These two scripts close the loop between Claude Code and external AI tools.
 
@@ -165,7 +165,7 @@ Both scripts resolve the specs directory using the same chain as the skills: `.c
 
 **Step 0 — Constitution**
 
-1. Open [`docs/templates/constitution-prompt.md`](templates/constitution-prompt.md) and copy the full contents.
+1. Open [`docs/templates/constitution-prompt.md`](../templates/constitution-prompt.md) and copy the full contents.
 2. Fill in `{{PROJECT_DESCRIPTION}}`, `{{TECH_STACK}}`, and `{{FOCUS_AREAS_OR_LEAVE_BLANK}}`.
 3. Start a new conversation in your Claude project and paste the filled-in template.
 4. Answer the discovery questions one by one. Claude will propose rules after each area.
@@ -174,7 +174,7 @@ Both scripts resolve the specs directory using the same chain as the skills: `.c
 
 **Step 1 — Research**
 
-1. Open [`docs/templates/research-prompt.md`](templates/research-prompt.md) and pick the query that fits your need (market, tech evaluation, best practices, or problem validation).
+1. Open [`docs/templates/research-prompt.md`](../templates/research-prompt.md) and pick the query that fits your need (market, tech evaluation, best practices, or problem validation).
 2. Copy that query block and fill in the `{{PLACEHOLDER}}` values.
 3. Paste into a new Perplexity thread (or Claude.ai conversation) and send.
 4. When the response is complete, copy the Markdown output and save it as a local file, for example `research-notes.md`. This file is for your own reference only — it does not go into the spec.
@@ -182,7 +182,7 @@ Both scripts resolve the specs directory using the same chain as the skills: `.c
 
 **Step 2 — Brainstorm**
 
-1. Open [`docs/templates/brainstorm-prompt.md`](templates/brainstorm-prompt.md) and copy the full contents.
+1. Open [`docs/templates/brainstorm-prompt.md`](../templates/brainstorm-prompt.md) and copy the full contents.
 2. Fill in `{{IDEA_DESCRIPTION}}`. Optionally paste relevant research findings below it as extra context.
 3. Start a new conversation in your Claude project and paste the filled-in template.
 4. Work through the dialogue — probe, approaches, design sections — until you reach the Conclude step.
@@ -191,7 +191,7 @@ Both scripts resolve the specs directory using the same chain as the skills: `.c
 
 **Step 3 — PRD**
 
-1. Open [`docs/templates/prd-prompt.md`](templates/prd-prompt.md) and copy the full contents.
+1. Open [`docs/templates/prd-prompt.md`](../templates/prd-prompt.md) and copy the full contents.
 2. Fill in `{{FEATURE_DESCRIPTION}}`. Paste your brainstorm design summary (and any research notes) into `{{OPTIONAL_CONTEXT}}`.
 3. Start a new conversation in your Claude project and paste the filled-in template.
 4. Work through the eight sections one by one, approving each before moving on.

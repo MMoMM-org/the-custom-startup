@@ -67,11 +67,11 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 
 > **Tracking Principle**: "Test" for documentation tasks means: verify the source material exists and is readable, and write down what the output should contain. "Implement" means write the file. "Validate" means check it against the acceptance criteria.
 
-- [ ] [Phase 1: Foundation and Getting Started](phase-1.md)
-- [ ] [Phase 2: Reference Layer](phase-2.md)
-- [ ] [Phase 3: Workflow and Patterns](phase-3.md)
-- [ ] [Phase 4: About Section](phase-4.md)
-- [ ] [Phase 5: README, Cleanup, and Validation](phase-5.md)
+- [x] [Phase 1: Foundation and Getting Started](phase-1.md)
+- [x] [Phase 2: Reference Layer](phase-2.md)
+- [x] [Phase 3: Workflow and Patterns](phase-3.md)
+- [x] [Phase 4: About Section](phase-4.md)
+- [x] [Phase 5: README, Cleanup, and Validation](phase-5.md)
 
 ---
 

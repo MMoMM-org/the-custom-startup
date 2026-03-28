@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: README, Cleanup, and Validation"
-status: pending
+status: completed
 version: "1.0"
 phase: 5
 ---
@@ -32,7 +32,7 @@ phase: 5
 
 Completes the rewrite: new README, delete all old files, verify link integrity, run final quality checks.
 
-- [ ] **T5.1 Rewrite README.md** `[activity: documentation]`
+- [x] **T5.1 Rewrite README.md** `[activity: documentation]`
 
   1. Prime: Read current `README.md` — note the ASCII art header (preserve verbatim) and "What's different" section (update, not delete); read `docs/getting-started/index.md` (T1.2) for value prop language to reuse `[ref: SDD/CON-3; SDD/Cross-Document Link Map]`
   2. Test: List what must change: (a) plugin count 3→4, (b) `tcs-start` → `tcs-workflow`, (c) feature list updated (XDD, tcs-patterns), (d) "What's different" section updated with v2 changes, (e) Quick Start commands use v2 namespace, (f) links to new doc paths
@@ -43,7 +43,7 @@ Completes the rewrite: new README, delete all old files, verify link integrity, 
     - [ ] "What's different" section updated and links to `about/sources.md` `[ref: PRD/Feature 5]`
     - [ ] All doc links point to new IA paths `[ref: SDD/Cross-Document Link Map]`
 
-- [ ] **T5.2 Delete old files** `[activity: documentation]` `[parallel: true]`
+- [x] **T5.2 Delete old files** `[activity: documentation]` `[parallel: true]`
 
   1. Prime: Read `docs/XDD/specs/006-docs-rewrite/solution.md` "Files to delete" list; verify each replacement file exists at its new path before deleting its old counterpart `[ref: SDD/ADR-2; SDD/Directory Map]`
   2. Test: For each file to delete, confirm the replacement exists:
@@ -66,7 +66,7 @@ Completes the rewrite: new README, delete all old files, verify link integrity, 
     - [ ] `docs/` root contains no loose `.md` files `[ref: SDD/Quality Requirements]`
     - [ ] `docs/concept/` and `docs/concept/v2/` deleted `[ref: PRD/Feature 4 — promote then delete]`
 
-- [ ] **T5.3 Link integrity check** `[activity: validate]`
+- [x] **T5.3 Link integrity check** `[activity: validate]`
 
   1. Prime: Understand which docs link to which — read `docs/XDD/specs/006-docs-rewrite/solution.md` Cross-Document Link Map
   2. Test: For each link in the Link Map, verify source file and destination file both exist
@@ -80,7 +80,7 @@ Completes the rewrite: new README, delete all old files, verify link integrity, 
   4. Validate: All internal doc links resolve; no references to deleted file paths (`docs/workflow.md`, `docs/skills.md`, etc.)
   5. Success: Zero broken internal links `[ref: SDD/Quality Requirements — link integrity]`
 
-- [ ] **T5.4 Final quality validation** `[activity: validate]`
+- [x] **T5.4 Final quality validation** `[activity: validate]`
 
   Run all acceptance criteria checks from the SDD:
 
@@ -108,7 +108,7 @@ Completes the rewrite: new README, delete all old files, verify link integrity, 
 
   5. Success: All SDD Acceptance Criteria pass `[ref: SDD/Acceptance Criteria — all 10 EARS criteria]`
 
-- [ ] **T5.5 Update spec README** `[activity: validate]`
+- [x] **T5.5 Update spec README** `[activity: validate]`
 
   1. Update `docs/XDD/specs/006-docs-rewrite/README.md`:
      - Set `plan/` status to `completed`

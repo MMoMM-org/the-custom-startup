@@ -1,10 +1,10 @@
 # Output Styles
 
-The `tcs-start` plugin ships with two output styles that change how Claude communicates while working. Switch anytime — quality and tool usage stay identical, only the voice changes.
+The `tcs-workflow` plugin ships with two output styles that change how Claude communicates while working. Switch anytime — quality and tool usage stay identical, only the voice changes.
 
 ```bash
-/output-style tcs-start:The Startup
-/output-style tcs-start:The ScaleUp
+/output-style tcs-workflow:The Startup
+/output-style tcs-workflow:The ScaleUp
 ```
 
 ---
@@ -67,15 +67,15 @@ Calm confidence with educational depth.
 
 ## Customizing
 
-Output styles are markdown files in `plugins/tcs-start/output-styles/`. The files define persona, voice patterns, constraints, and behavioral rules.
+Output styles are markdown files in `plugins/tcs-workflow/output-styles/`. The files define persona, voice patterns, constraints, and behavioral rules.
 
-- `plugins/tcs-start/output-styles/The Startup.md`
-- `plugins/tcs-start/output-styles/The ScaleUp.md`
+- `plugins/tcs-workflow/output-styles/The Startup.md`
+- `plugins/tcs-workflow/output-styles/The ScaleUp.md`
 
 After installation, Claude Code caches the plugin files locally. To customize without forking the repository, locate the cached files and edit them directly:
 
-**Global install:** `~/.claude/plugins/cache/the-custom-startup/tcs-start/x.y.z/`
+**Global install:** `~/.claude/plugins/cache/the-custom-startup/tcs-workflow/x.y.z/`
 
-**Repo install:** `<repo>/.claude/plugins/cache/the-custom-startup/tcs-start/x.y.z/`
+**Repo install:** `<repo>/.claude/plugins/cache/the-custom-startup/tcs-workflow/x.y.z/`
 
 Inside that directory, output styles are in `output-styles/`. The path includes a version segment — local edits will be overwritten when you update the plugin. To make persistent changes, fork the repository, edit the style files there, and install from your fork instead.

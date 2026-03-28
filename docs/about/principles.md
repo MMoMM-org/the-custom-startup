@@ -31,7 +31,7 @@ This document establishes the foundational principles for designing effective AI
 
 **Benefits**:
 - Reduced context pollution
-- Clearer error boundaries  
+- Clearer error boundaries
 - Better parallel execution
 - Improved maintainability
 
@@ -214,7 +214,7 @@ Ticket → the-chief (routing) →
 
 **Benefit**: Deep expertise in how to execute specific processes correctly.
 
-### 3. Framework-Aware Activity Specialization  
+### 3. Framework-Aware Activity Specialization
 
 **Principle**: Agents specialized in activities that adapt to detected frameworks/technologies.
 
@@ -384,7 +384,7 @@ I automatically detect the project's technology stack and apply relevant pattern
 - `the-analyst/research-product` - Human role: analyst, Activity: product research
 - `the-architect/design-system` - Human role: architect, Activity: system design
 
-**Benefits**: 
+**Benefits**:
 - Human-readable navigation
 - Clear specialization boundaries
 - Scalable organization structure
@@ -397,7 +397,7 @@ I automatically detect the project's technology stack and apply relevant pattern
 ```
 FOCUS: [Specific task and constraints]
 CONTEXT: [Only information relevant to this specialization]
-EXCLUDE: [What NOT to consider or implement] 
+EXCLUDE: [What NOT to consider or implement]
 SUCCESS: [Clear completion criteria]
 ```
 
@@ -448,7 +448,7 @@ parallel_tasks = [
 
 **Strategies**:
 - Filter context by agent specialization
-- Use focused prompts with clear boundaries  
+- Use focused prompts with clear boundaries
 - Exclude out-of-scope information
 - Provide only necessary background
 
@@ -581,7 +581,7 @@ Effective agent design follows proven software engineering principles adapted fo
 
 **✅ DO - Focus on WHAT:**
 - `api-design.md`: What they focus on - designing clear, maintainable API contracts
-- `database-design.md`: What they focus on - creating schemas balancing consistency and performance  
+- `database-design.md`: What they focus on - creating schemas balancing consistency and performance
 - `user-research.md`: What they focus on - understanding user needs and translating to product decisions
 
 **❌ DON'T - Focus on WHO or HOW:**
@@ -598,7 +598,7 @@ Agents **generally follow** existing patterns but can expand where it enhances t
 - **Personality opener** - pragmatic focus on delivered outcomes
 - **Focus Areas** - what they concentrate on (expand beyond common count if needed)
 - **Approach** - their methodology (flexible length based on complexity)
-- **Rules reference** - domain-appropriate practices  
+- **Rules reference** - domain-appropriate practices
 - **Anti-Patterns** - what to avoid (as many as relevant)
 - **Expected Output** - what they deliver (expand as needed for clarity)
 - **Closing tagline** - action-oriented summary
@@ -617,7 +617,7 @@ Each agent focuses on **what they do** across different frameworks:
 
 **Example - Component Architecture:**
 - **Primary Focus**: Creating reusable, maintainable UI components
-- **NOT**: React-specific implementation details  
+- **NOT**: React-specific implementation details
 - **Approach**: Patterns that work across Vue, React, Angular, etc.
 - **Framework Adaptation**: When React detected, applies hooks patterns; when Vue detected, applies composition API
 
@@ -674,7 +674,7 @@ Agents can expand any section if it **enhances the WHAT focus**:
 
 **When to expand Focus Areas:**
 - Specialization genuinely requires more areas for clarity
-- Additional areas help distinguish from related specializations  
+- Additional areas help distinguish from related specializations
 - Broader scope is necessary for the activity to be practically useful
 
 **When to expand Approach:**

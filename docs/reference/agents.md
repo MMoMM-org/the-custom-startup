@@ -2,7 +2,7 @@
 
 The `tcs-team` plugin provides 15 activity-based agents across 8 roles. They are invoked automatically by the output styles via the Agent tool, or directly by you for complex multi-domain work.
 
-The naming convention is `the-[role]/[activity]`. The role provides navigability; the activity defines what the agent actually does. This is intentional — agents specialize in *what they do*, not *who they are*. See [PHILOSOPHY.md](PHILOSOPHY.md) for the research behind this architecture.
+The naming convention is `the-[role]/[activity]`. The role provides navigability; the activity defines what the agent actually does. This is intentional — agents specialize in *what they do*, not *who they are*. See [the-custom-philosophy.md](../about/the-custom-philosophy.md) for the research behind this architecture.
 
 ---
 
@@ -81,4 +81,4 @@ Output styles (The Startup, The ScaleUp) invoke agents automatically when a task
 Use the agent: the-architect/review-security
 ```
 
-For detailed invocation syntax, tool permissions per agent, and activation examples, see [`plugins/tcs-team/README.md`](../plugins/tcs-team/README.md).
+For detailed invocation syntax, tool permissions per agent, and activation examples, see [`plugins/tcs-team/README.md`](../../plugins/tcs-team/README.md).

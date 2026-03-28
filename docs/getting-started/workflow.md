@@ -1,6 +1,6 @@
 # Workflow
 
-The Agentic Startup follows **spec-driven development**: write a specification first, then implement it. This prevents scope creep, reduces rework, and keeps Claude focused on what you actually want to build.
+The Custom Startup follows **spec-driven development**: write a specification first, then implement it. This prevents scope creep, reduces rework, and keeps Claude focused on what you actually want to build.
 
 ---
 
@@ -18,7 +18,7 @@ The Agentic Startup follows **spec-driven development**: write a specification f
 ┌──────────────────────────────────────────────────────────┐
 │                    BUILD (primary loop)                  │
 │                                                          │
-│  /specify ────► PRD → SDD → PLAN (one command)           │
+│  /xdd ────────► PRD → SDD → PLAN (XDD workflow)          │
 │      ▼                                                   │
 │  /validate ───► Quality check before you invest time     │
 │      ▼                                                   │
@@ -41,13 +41,26 @@ The Agentic Startup follows **spec-driven development**: write a specification f
 └──────────────────────────────────────────────────────────┘
 ```
 
+The BUILD loop uses the **XDD workflow** (Experience-Driven Development): `/xdd` orchestrates three linked documents — PRD, SDD, and PLAN — before any code is written. See [../reference/xdd.md](../reference/xdd.md) for the full XDD deep dive.
+
 ---
 
 ## Multi-AI Extension
 
 Some phases work better outside Claude Code. Use Claude.ai for conversational spec writing, Perplexity for research, then bring the results back with the import script.
 
-→ See [multi-ai-workflow.md](multi-ai-workflow.md) for the full guide, export/import scripts, and prompt templates.
+See [../guides/multi-ai-workflow.md](../guides/multi-ai-workflow.md) for the full guide, export/import scripts, and prompt templates.
+
+---
+
+## Output Styles
+
+Two built-in output styles adjust Claude's communication tone for your context:
+
+```bash
+/output-style tcs-workflow:The Startup    # high-signal, fast-paced — good for active builds
+/output-style tcs-workflow:The ScaleUp    # structured, process-oriented — good for team reviews
+```
 
 ---
 
@@ -59,53 +72,63 @@ Two optional steps run once per project, before the BUILD loop begins.
 
 **Governance rules** — run `/constitution` to create a `CONSTITUTION.md` at the project root. This defines enforceable coding, architecture, and process rules (L1 blocking with autofix, L2 blocking manual, L3 advisory). Once created, it is auto-checked during implementation.
 
-**Multi-AI front-load** — if you want to use Claude.ai or Perplexity for brainstorming, research, or PRD writing before opening Claude Code, set that up now. See [multi-ai-workflow.md](multi-ai-workflow.md) for the template files and session flow.
+**Multi-AI front-load** — if you want to use Claude.ai or Perplexity for brainstorming, research, or PRD writing before opening Claude Code, set that up now. See [../guides/multi-ai-workflow.md](../guides/multi-ai-workflow.md) for the template files and session flow.
 
-Neither step is required. Skip both and go straight to `/specify`.
+Neither step is required. Skip both and go straight to Step 1.
 
 ---
 
-### 1. Specify
+### Step 1: Specify (XDD)
 
 ```bash
-/specify Add real-time notification system with WebSocket support
+/xdd Add real-time notification system with WebSocket support
 ```
 
-Creates a spec directory with three documents:
+`/xdd` runs the XDD workflow — it calls `xdd-prd`, `xdd-sdd`, and `xdd-plan` in sequence, pausing for your confirmation between each phase. The result is three linked documents:
 
 ```
-the-custom-startup/specs/001-notification-system/
-├── requirements.md    # What to build and why (PRD)
-├── solution.md        # How to build it (SDD)
+docs/XDD/specs/001-notification-system/
+├── README.md          # spec manifest: phase status, decisions log
+├── requirements.md    # PRD — what to build and why (xdd-prd)
+├── solution.md        # SDD — how to build it (xdd-sdd)
 └── plan/
-    ├── README.md      # Plan manifest
-    └── phase-1.md     # Per-phase tasks
+    ├── README.md      # plan manifest with phase checklist
+    └── phase-1.md     # per-phase tasks with TDD structure
 ```
 
-> The spec directory location is configured in `.claude/startup.toml`. Default: `the-custom-startup/specs/`.
+> The spec base directory is configured via `.claude/startup.toml`. Default: `docs/XDD`.
 
-The spec cycle takes 15–30 minutes. Claude researches your codebase, asks clarifying questions, and produces three comprehensive documents in sequence.
+The spec cycle takes 15–30 minutes. Claude researches your codebase, asks clarifying questions, and produces the three documents in sequence.
 
-**Resume pattern** — context window full? Just run:
+**Resume pattern** — context window full? Pass the spec ID instead of a description:
+
 ```bash
-/specify 001
+/xdd 001
 ```
-Pass the ID instead of a description. Claude reads the existing spec and continues from where it left off. Each document (PRD → SDD → PLAN) can be completed in separate sessions.
 
-### 2. Validate
+Claude reads the existing spec and continues from where it left off. Each document (PRD → SDD → PLAN) can be completed in separate sessions.
+
+For the full XDD reference — individual skills, TDD enforcement, directory layout, and configuration — see [../reference/xdd.md](../reference/xdd.md).
+
+---
+
+### Step 2: Validate
 
 ```bash
 /validate 001
 ```
 
 Checks three things before you invest implementation time:
+
 - **Completeness** — all sections filled, no missing details
 - **Consistency** — no contradictions between PRD, SDD, and PLAN
 - **Correctness** — requirements are testable and achievable
 
-Validation is advisory — it provides recommendations but doesn't block you.
+Validation is advisory: it provides recommendations but does not block you.
 
-### 3. Implement
+---
+
+### Step 3: Implement
 
 ```bash
 /implement 001
@@ -113,9 +136,11 @@ Validation is advisory — it provides recommendations but doesn't block you.
 
 Executes the plan phase by phase, runs tests after each task, uses parallel agents within phases. You approve between phases.
 
-Large implementations may also need context resets. Run `/implement 001` again in a fresh conversation — Claude tracks progress in the spec files.
+Large implementations may need context resets. Run `/implement 001` again in a fresh conversation — Claude tracks progress in the spec files.
 
-### 4. Test, Review, Document
+---
+
+### Step 4: Quality gates
 
 ```bash
 /test        # Run tests, catch regressions
@@ -125,24 +150,6 @@ Large implementations may also need context resets. Run `/implement 001` again i
 
 ---
 
-## Spec Directory
-
-Specs live in the directory configured via `.claude/startup.toml`:
-
-```toml
-[paths]
-specs_dir = "the-custom-startup/specs"
-ideas_dir = "the-custom-startup/ideas"
-```
-
-**Fallback chain** (if no config):
-1. `.claude/startup.toml` → `specs_dir`
-2. `the-custom-startup/specs/`
-3. `.start/specs/` (migration compat)
-4. `docs/specs/` (legacy)
-
----
-
 ## All Commands
 
-→ See [skills.md](skills.md) for the full command reference and decision tree.
+See [../skills.md](../skills.md) for the full command reference and decision tree.
