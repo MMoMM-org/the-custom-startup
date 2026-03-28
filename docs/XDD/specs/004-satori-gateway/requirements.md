@@ -1,7 +1,7 @@
 ---
 spec: 004-satori-gateway
 document: requirements
-status: draft
+status: completed
 ---
 
 # PRD — Satori MCP Gateway (M4)

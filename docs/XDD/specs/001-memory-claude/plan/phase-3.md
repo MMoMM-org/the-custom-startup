@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: memory-sync Skill
-status: pending
+status: completed
 spec: 001-memory-claude
 ---
 
@@ -19,23 +19,23 @@ Keeps `@imports` and index entries synchronized. Ensures routing rules stay in C
 
 ## Tasks
 
-- [ ] Create `plugins/tcs-helper/skills/memory-sync/` directory
-- [ ] Write `SKILL.md` with:
+- [x] Create `plugins/tcs-helper/skills/memory-sync/` directory
+- [x] Write `SKILL.md` with:
   - Workflow: scan → verify imports → check budget → report
   - Fix mode: auto-fix missing imports, flag routing-rules-in-wrong-file
-- [ ] Implement checks:
+- [x] Implement checks:
   - Root CLAUDE.md has `@docs/ai/memory/memory.md`
   - All category files listed in `memory.md` index
   - No orphaned files in `docs/ai/memory/` (not in index)
   - Routing rules not duplicated in `memory.md`
   - `memory.md` line count ≤ 200 (warn at 160, error at 200)
-- [ ] Write `examples/output-example.md` — sample sync reports: OK case, missing @import case, orphaned file case, budget warning case
-- [ ] Register skill in plugin.json
+- [x] Write `examples/output-example.md` — sample sync reports: OK case, missing @import case, orphaned file case, budget warning case
+- [x] Register skill in plugin.json
 
 ## Verification
 
-- [ ] Detects missing `@import` in CLAUDE.md and offers to fix
-- [ ] Detects orphaned memory file (exists but not in index) and offers to add
-- [ ] Detects routing rules in memory.md and warns to move to CLAUDE.md
-- [ ] Reports "OK" when everything is in sync
-- [ ] Correctly counts lines in memory.md and warns when approaching budget
+- [x] Detects missing `@import` in CLAUDE.md and offers to fix
+- [x] Detects orphaned memory file (exists but not in index) and offers to add
+- [x] Detects routing rules in memory.md and warns to move to CLAUDE.md
+- [x] Reports "OK" when everything is in sync
+- [x] Correctly counts lines in memory.md and warns when approaching budget

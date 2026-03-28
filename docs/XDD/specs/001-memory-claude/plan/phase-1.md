@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: Templates + Directory Structure
-status: pending
+status: completed
 spec: 001-memory-claude
 ---
 
@@ -21,41 +21,41 @@ This phase creates the template files that `tcs-helper:setup` will use to genera
 
 ## Tasks
 
-- [ ] Create `plugins/tcs-helper/templates/` directory structure
-- [ ] Write generic root `CLAUDE.md` template (`templates/claude-root.md`)
+- [x] Create `plugins/tcs-helper/templates/` directory structure
+- [x] Write generic root `CLAUDE.md` template (`templates/claude-root.md`)
   - < 100 lines, routing rules section, @import for memory.md, stack placeholder
-- [ ] Write `src/CLAUDE.md` template (`templates/claude-src.md`)
+- [x] Write `src/CLAUDE.md` template (`templates/claude-src.md`)
   - TDD rules, SDD contract reference, import conventions placeholder
-- [ ] Write `test/CLAUDE.md` template (`templates/claude-test.md`)
+- [x] Write `test/CLAUDE.md` template (`templates/claude-test.md`)
   - Test naming, coverage expectations, test data patterns
-- [ ] Write `docs/CLAUDE.md` template (`templates/claude-docs.md`)
+- [x] Write `docs/CLAUDE.md` template (`templates/claude-docs.md`)
   - Documentation structure, when to update memory vs create new doc
-- [ ] Write `docs/ai/CLAUDE.md` template (`templates/claude-ai.md`)
+- [x] Write `docs/ai/CLAUDE.md` template (`templates/claude-ai.md`)
   - Memory bank maintenance rules, category definitions, when to run which skill
-- [ ] Write `docs/ai/memory/memory.md` template (`templates/memory-index.md`)
+- [x] Write `docs/ai/memory/memory.md` template (`templates/memory-index.md`)
   - Index format with Critical Documentation section, ≤ 200 line budget notice
-- [ ] Write category file templates (one per category, with starter content and guidance comments):
+- [x] Write category file templates (one per category, with starter content and guidance comments):
   - `templates/memory-general.md`
   - `templates/memory-tools.md`
   - `templates/memory-domain.md`
   - `templates/memory-decisions.md`
   - `templates/memory-context.md`
   - `templates/memory-troubleshooting.md`
-- [ ] Write Scope × Lifetime routing reference (`templates/routing-reference.md`)
-  - Table mapping learning types to files; imported by memory-route skill
-- [ ] Write stack-specific template overrides in `templates/stacks/` (consumed by Phase 6):
+- [x] Write Scope × Lifetime routing reference (`templates/routing-reference.md`)
+  - Table mapping learning types to files; imported by memory-add skill
+- [x] Write stack-specific template overrides in `templates/stacks/` (consumed by Phase 6):
   - `templates/stacks/typescript.md` — strict mode, import order, no `any` types
   - `templates/stacks/go.md` — gofmt, error handling, module conventions
   - `templates/stacks/python.md` — type hints, ruff config, pyproject conventions
   - `templates/stacks/cloudflare.md` — Workers/Pages patterns
   - `templates/stacks/convex.md` — Convex database patterns
   - `templates/stacks/generic.md` — fallback for undetected stacks
-- [ ] Update `plugins/tcs-helper/.claude-plugin/plugin.json` to register new templates directory
+- [x] Update `plugins/tcs-helper/.claude-plugin/plugin.json` to register new templates directory
 
 ## Verification
 
-- [ ] All template files exist and are valid markdown
-- [ ] CLAUDE.md templates are < 100 lines each
-- [ ] memory-index template has the Critical Documentation section, Archive section comment, and ≤ 200 line guidance
-- [ ] Routing reference table covers all 6 categories with clear examples
-- [ ] All 6 `templates/stacks/` files exist including `generic.md` fallback
+- [x] All template files exist and are valid markdown
+- [x] CLAUDE.md templates are < 100 lines each
+- [x] memory-index template has the Critical Documentation section, Archive section comment, and ≤ 200 line guidance
+- [x] Routing reference table covers all 6 categories with clear examples
+- [x] All 6 `templates/stacks/` files exist including `generic.md` fallback

@@ -1,7 +1,7 @@
 ---
 spec: 004-satori-gateway
 document: solution
-status: draft
+status: completed
 ---
 
 # SDD — Satori MCP Gateway (M4)
@@ -26,14 +26,13 @@ status: draft
 miyo-satori/
 ├── src/
 │   ├── index.ts                  # Entry: MCP server bootstrap, tool registration
+│   ├── db-base.ts                # SQLiteBase — opens DB, WAL pragmas, schema migration (schema embedded)
 │   ├── context/
-│   │   ├── db.ts                 # SQLiteBase subclass — opens DB, WAL pragmas, schema migration
 │   │   ├── session-db.ts         # Session event store (session_events, session_meta, session_resume)
 │   │   ├── content-db.ts         # Content capture store (captures + FTS5)
 │   │   ├── snapshot.ts           # Build XML resume snapshot from session events (pure functions)
 │   │   ├── extract.ts            # Map tool hook payloads → SessionEvent objects
-│   │   ├── summarizer.ts         # Compress raw tool output → compact summary (content store)
-│   │   └── schema.sql            # Combined DB schema (applied on first run)
+│   │   └── summarizer.ts         # Compress raw tool output → compact summary (content store)
 │   ├── gateway/
 │   │   ├── registry.ts           # Downstream server registry (load, validate, lookup)
 │   │   ├── catalog.ts            # Tool catalog cache (satori_find + satori_schema data source)
@@ -744,7 +743,7 @@ git submodule update --init --recursive
   "mcpServers": {
     "satori": {
       "command": "node",
-      "args": ["<abs-path-to>/modules/satori/dist/index.js"],
+      "args": ["<abs-path-to>/modules/satori/dist/src/index.js"],
       "env": {}
     }
   }
@@ -801,6 +800,22 @@ management. Security OUT scan applies as normal — shell injection patterns are
 
 **Spec work needed before implementation**: add `R2.7` to PRD; add pseudo-server section to SDD
 Hot/Cold; add Phase 8 (or extend Phase 5) in the plan.
+
+---
+
+## M5 Scope Acknowledgement
+
+The following components were deferred out of M4 during implementation and delivered in M5
+(005-memory-mcp):
+
+- `src/execution/` — PolyglotExecutor, per-language runtimes, safe env + file-content injection
+- `src/knowledge/` — KnowledgeDB, FTS5 + RRF, proximity reranking, fetchAndIndex
+- `satori_kb` MCP tool — knowledge search over the SQLite content store
+- `builtin` runtime (`ServerConfig.runtime = 'builtin'`) — BuiltinServer dispatch path
+- Schema field `context.backend` — tracks whether response came from content store
+
+These were originally scoped for M4 but not implemented. Rather than retroactively rewriting
+M4 scope, these components are fully specified and delivered in M5.
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 spec: 001-memory-claude
 document: plan
-status: pending
+status: completed
 ---
 
 # Implementation Plan — Memory + CLAUDE.md System (M2)
@@ -16,12 +16,12 @@ Skills in `plugins/tcs-helper/skills/`. Templates in `plugins/tcs-helper/templat
 
 ## Phases
 
-- [ ] [Phase 1: Templates + Directory Structure](phase-1.md)
-- [ ] [Phase 2: memory-add Skill + Python Infrastructure](phase-2.md)
-- [ ] [Phase 3: memory-sync Skill](phase-3.md)
-- [ ] [Phase 4: memory-cleanup Skill](phase-4.md)
-- [ ] [Phase 5: memory-promote Skill](phase-5.md)
-- [ ] [Phase 6: tcs-helper:setup Skill](phase-6.md)
+- [x] [Phase 1: Templates + Directory Structure](phase-1.md)
+- [x] [Phase 2: memory-add Skill + Python Infrastructure](phase-2.md)
+- [x] [Phase 3: memory-sync Skill](phase-3.md)
+- [x] [Phase 4: memory-cleanup Skill](phase-4.md)
+- [x] [Phase 5: memory-promote Skill](phase-5.md)
+- [x] [Phase 6: tcs-helper:setup Skill](phase-6.md)
 
 ## Dependencies
 

@@ -40,11 +40,11 @@ version: "1.0"
 
 **Reference implementation** (read before coding context or session modules):
 - `modules/satori/` — miyo-satori repo root (git submodule)
-- context-mode source (cloned at `/tmp/context-mode-research/` during analysis):
-  - `src/session/db.ts` — SessionDB, session_events schema, FIFO eviction, dedup
-  - `src/session/snapshot.ts` — `buildResumeSnapshot()`, XML format, priority trimming
-  - `src/session/extract.ts` — tool payload → SessionEvent mapping
-  - `src/db-base.ts` — SQLiteBase, WAL pragmas, BunSQLiteAdapter
+- context-mode reference implementation (see `modules/satori/` — ported during M4 analysis):
+  - `src/context/session-db.ts` — SessionDB, session_events schema, FIFO eviction, dedup
+  - `src/context/snapshot.ts` — `buildResumeSnapshot()`, XML format, priority trimming
+  - `src/context/extract.ts` — tool payload → SessionEvent mapping
+  - `src/db-base.ts` — SQLiteBase, WAL pragmas (schema embedded in class)
 
 **Key Design Decisions**:
 - `satori_exec(server, tool, args)` — single entry point; no `<server>_<tool>` namespace tools

@@ -9,7 +9,7 @@ phase: 6
 
 ## Phase Context
 
-**GATE**: Read `docs/XDD/specs/004-satori-gateway/solution.md` sections "Hooks Architecture" and "Session Snapshot Format" before starting. Also read context-mode's hooks.json and skills/context-mode/SKILL.md.
+**GATE**: Read `docs/XDD/specs/004-satori-gateway/solution.md` sections "Hooks Architecture" and "Session Snapshot Format" before starting. Also read context-mode's hooks.json (from the miyo-satori submodule reference implementation).
 
 **Specification References**:
 - `[ref: SDD/Hooks Architecture]` — 5 hooks: PostToolUse, PreCompact, SessionStart, UserPromptSubmit, PreToolUse

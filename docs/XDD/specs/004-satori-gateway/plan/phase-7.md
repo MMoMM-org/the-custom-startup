@@ -18,7 +18,7 @@ phase: 7
 - `[ref: PRD/R1–R5]` — full PRD acceptance criteria for M4 scope
 
 **Key Decisions**:
-- MCP command must use absolute path (CLAUDE.md guardrail): `node /abs/path/modules/satori/dist/index.js`
+- MCP command must use absolute path (CLAUDE.md guardrail): `node /abs/path/modules/satori/dist/src/index.js`
 - `install.sh` resolves absolute path at install time via `$(cd modules/satori && pwd)`
 - `satori.toml.example` is committed; `satori.toml` and `.satori/` are gitignored in user repos
 - Skill integration (context-search skill, CLAUDE.md flag) is M5 — not in scope here
@@ -36,16 +36,16 @@ roundtrip: server registration → `satori_exec` call → content capture → se
 - [x] **T7.1 miyo-satori packaging and documentation** `[activity: build-platform]`
 
   1. Prime: Read `modules/satori/README.md` if it exists. `[ref: SDD/TCS Submodule (R6.1)]`
-  2. Test: `npm run build` produces `dist/index.js`. `node dist/index.js` starts without error. `README.md` exists with: quick start, config schema summary, tool descriptions, hooks install instructions. `satori.toml.example` exists with all schema fields annotated. `[ref: SDD/Config Schema]`
-  3. Implement: Finalize `README.md` — installation, configuration, Claude Code MCP setup, hooks setup, `satori_exec` usage examples. Create `satori.toml.example` from SDD schema (annotated). Verify `package.json` `main` points to `dist/index.js`. Add `"files"` field to package.json to exclude test fixtures from publish. `[ref: SDD/Config Schema]`
-  4. Validate: `npm pack --dry-run` lists expected files. `node dist/index.js` → MCP server starts. `tools/list` → 5 tools. `[ref: SDD/Tools Exposed to Claude Code]`
+  2. Test: `npm run build` produces `dist/src/index.js`. `node dist/src/index.js` starts without error. `README.md` exists with: quick start, config schema summary, tool descriptions, hooks install instructions. `satori.toml.example` exists with all schema fields annotated. `[ref: SDD/Config Schema]`
+  3. Implement: Finalize `README.md` — installation, configuration, Claude Code MCP setup, hooks setup, `satori_exec` usage examples. Create `satori.toml.example` from SDD schema (annotated). Verify `package.json` `main` points to `dist/src/index.js`. Add `"files"` field to package.json to exclude test fixtures from publish. `[ref: SDD/Config Schema]`
+  4. Validate: `npm pack --dry-run` lists expected files. `node dist/src/index.js` → MCP server starts. `tools/list` → 5 tools. `[ref: SDD/Tools Exposed to Claude Code]`
   5. Success: miyo-satori builds and starts; README covers all user-facing config; satori.toml.example is complete.
 
 - [x] **T7.2 TCS install.sh integration (R6.1)** `[activity: build-platform]`
 
   1. Prime: Read `install.sh` in TCS root. Read `[ref: SDD/TCS Submodule (R6.1)]` — MCP config block. CLAUDE.md guardrail: `.mcp.json` command paths must be absolute. `[ref: SDD/TCS Submodule (R6.1)]`
-  2. Test: After `install.sh` runs context-mode section: `modules/satori/dist/index.js` exists (submodule initialized). Claude Code MCP config (`~/.claude/settings.json` or repo `.claude/settings.json`) contains a `satori` entry with absolute `args` path. The path resolves to an existing file. `[ref: PRD/R6.1; SDD/TCS Submodule (R6.1)]`
-  3. Implement: Add to `install.sh`: (1) `git submodule update --init modules/satori` if not initialized; (2) `cd modules/satori && npm install && npm run build`; (3) resolve absolute path `SATORI_ABS=$(cd modules/satori && pwd)/dist/index.js`; (4) write MCP config entry using absolute path. Gate the section behind a feature prompt (context-mode feature). `[ref: SDD/TCS Submodule (R6.1)]`
+  2. Test: After `install.sh` runs context-mode section: `modules/satori/dist/src/index.js` exists (submodule initialized). Claude Code MCP config (`~/.claude/settings.json` or repo `.claude/settings.json`) contains a `satori` entry with absolute `args` path. The path resolves to an existing file. `[ref: PRD/R6.1; SDD/TCS Submodule (R6.1)]`
+  3. Implement: Add to `install.sh`: (1) `git submodule update --init modules/satori` if not initialized; (2) `cd modules/satori && npm install && npm run build`; (3) resolve absolute path `SATORI_ABS=$(cd modules/satori && pwd)/dist/src/index.js`; (4) write MCP config entry using absolute path. Gate the section behind a feature prompt (context-mode feature). `[ref: SDD/TCS Submodule (R6.1)]`
   4. Validate: Run `install.sh` in test mode (or manually on a clean checkout): submodule initialized, dist built, MCP config entry present with absolute path, path resolves. `[ref: PRD/R6.1]`
   5. Success: `install.sh` initializes submodule, builds Satori, writes absolute-path MCP config; no relative paths in MCP config.
 
@@ -71,7 +71,7 @@ roundtrip: server registration → `satori_exec` call → content capture → se
   - `RUN_E2E=1 npm test -- test/e2e/` — E2E roundtrip passes.
   - `npm run typecheck` — 0 errors.
   - `npm run build` — clean build.
-  - TCS: `modules/satori/dist/index.js` present after `install.sh`.
+  - TCS: `modules/satori/dist/src/index.js` present after `install.sh`.
   - MCP config: Satori entry with absolute path resolves to existing file.
   - `tools/list` → exactly 5 tools.
   - PRD acceptance criteria checklist:

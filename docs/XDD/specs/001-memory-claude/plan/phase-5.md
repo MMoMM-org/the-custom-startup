@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: memory-promote Skill
-status: pending
+status: completed
 spec: 001-memory-claude
 ---
 
@@ -19,33 +19,33 @@ Detects mature domain patterns in `docs/ai/memory/domain.md` and proposes them a
 
 ## Tasks
 
-- [ ] Create `plugins/tcs-helper/skills/memory-promote/` directory
-- [ ] Write `SKILL.md` with:
+- [x] Create `plugins/tcs-helper/skills/memory-promote/` directory
+- [x] Write `SKILL.md` with:
   - Workflow: read domain.md → analyze for patterns → propose candidates → on approval → ask target scope → generate skill stub + replace with pointer
   - Pattern detection criteria (see SDD §3.4): repeats across sessions, reusable arch pattern, frequently referenced
-- [ ] Implement pattern detection:
+- [x] Implement pattern detection:
   - Primary: analyse `docs/ai/memory/domain.md` (condensed material, always available)
   - Secondary: check session summaries in `~/.claude/projects/<repo>/` if available (boost confidence)
   - Score entries by repetition + reusability
-- [ ] Skill candidate proposal format:
+- [x] Skill candidate proposal format:
   - What pattern was detected
   - Evidence (condensed summary + session count if available)
   - Proposed skill name
   - Confidence: High / Medium / Low
-- [ ] On user approval:
+- [x] On user approval:
   - Ask: **global** (`~/.claude/skills/<skill-name>/SKILL.md`) or **repo** (`.claude/skills/<skill-name>/SKILL.md`)
   - Note to user: project-level skills don't exist in Claude Code — only global or repo
   - Generate minimal `SKILL.md` stub with valid frontmatter + `# TODO` placeholder
   - Replace `domain.md` entry with: `→ see skill: <skill-name>`
   - Update memory.md index
-- [ ] Register skill in plugin.json
+- [x] Register skill in plugin.json
 
 ## Verification
 
-- [ ] Given a domain.md with repeated hexagonal architecture notes, proposes it as skill candidate
-- [ ] Confidence score reflects evidence quality (domain.md alone = Low, session evidence available = High)
-- [ ] Skill is generated at user-chosen global or repo path (NOT in tcs-patterns)
-- [ ] User is informed that project-level skills are not supported
-- [ ] After approval, domain.md entry is replaced with pointer (not deleted)
-- [ ] Generated SKILL.md stub has valid frontmatter and placeholder content
-- [ ] Running on a domain.md with no promotable patterns reports "no candidates found"
+- [x] Given a domain.md with repeated hexagonal architecture notes, proposes it as skill candidate
+- [x] Confidence score reflects evidence quality (domain.md alone = Low, session evidence available = High)
+- [x] Skill is generated at user-chosen global or repo path (NOT in tcs-patterns)
+- [x] User is informed that project-level skills are not supported
+- [x] After approval, domain.md entry is replaced with pointer (not deleted)
+- [x] Generated SKILL.md stub has valid frontmatter and placeholder content
+- [x] Running on a domain.md with no promotable patterns reports "no candidates found"
