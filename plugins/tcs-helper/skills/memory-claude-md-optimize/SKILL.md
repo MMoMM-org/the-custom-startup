@@ -1,6 +1,6 @@
 ---
 name: memory-claude-md-optimize
-description: "Optimize and migrate CLAUDE.md files into Memory Bank structure. Use when auditing CLAUDE.md quality, migrating flat files to categorized memory, replacing @-imports with descriptive references, or reducing context window consumption."
+description: "Optimize and migrate CLAUDE.md files into Memory Bank structure. Use when auditing CLAUDE.md quality, scoring content, migrating flat files to categorized memory, replacing @-imports with descriptive references, reducing context window token consumption, or cleaning up bloated CLAUDE.md files."
 user-invocable: true
 argument-hint: "[--dry-run] [--scope global|project|repo]"
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion
@@ -64,6 +64,14 @@ SecretDetection {
   line: number
   type: string                  // "API key", "GitHub token", "Password", etc.
   redacted_preview: string      // Line with secret replaced by [REDACTED]
+}
+
+SnapshotEntry {
+  path: string
+  scope: global | project | repo
+  lines: number
+  tokens: number
+  loading: always | lazy
 }
 
 OptimizationSnapshot {

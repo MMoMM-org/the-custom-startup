@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Integration & Validation"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 3
 ---
@@ -32,7 +32,7 @@ phase: 3
 
 Validates the complete skill against specifications, tests it with real CLAUDE.md files, and integrates it into the tcs-helper plugin.
 
-- [ ] **T3.1 Skill-Author Audit** `[activity: validate]`
+- [x] **T3.1 Skill-Author Audit** `[activity: validate]`
 
   1. Prime: Read skill authoring reference at `~/.claude/includes/skills-reference.md` `[ref: SDD/Cross-Cutting Concepts/Pattern Documentation]`. Read the complete SKILL.md and all reference docs.
   2. Test: Run `/skill-author audit` on the new skill. Verify: frontmatter is valid, description triggers on expected keywords, allowed-tools list is complete, workflow steps are numbered, constraints are actionable.
