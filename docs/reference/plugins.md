@@ -73,6 +73,7 @@ Optional. Provides skill authoring tools, the **[Memory Bank](../about/concepts.
 | `/memory-sync` | Keep `@imports` and the memory index in sync |
 | `/memory-cleanup` | Archive resolved issues, prune stale entries |
 | `/memory-promote` | Promote domain patterns from memory files to reusable skills |
+| `/memory-claude-md-optimize` | Audit, score, and migrate flat CLAUDE.md files into Memory Bank; replace @-imports with descriptive references |
 
 **Git workflow:**
 

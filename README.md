@@ -142,6 +142,7 @@ Skill authoring tools, a layered **[Memory Bank](docs/about/concepts.md#memory-b
 | `/skill-author` · `/skill-evaluate` · `/skill-import` | Create, audit, and fetch Claude Code skills |
 | `/setup` | Provision `docs/ai/memory/` + CLAUDE.md hierarchy; install learning-capture hooks |
 | `/memory-add` · `/memory-sync` · `/memory-cleanup` · `/memory-promote` | Capture and maintain session learnings across scopes |
+| `/memory-claude-md-optimize` | Audit, score, and migrate flat CLAUDE.md files into Memory Bank structure |
 | `/git-worktree` · `/finish-branch` | Git workflow management — isolated workspaces, branch completion |
 | `/docs` | Fetch and cache current Claude Code documentation on demand |
 
