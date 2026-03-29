@@ -12,7 +12,7 @@ set -euo pipefail
 # Configuration
 # ==============================================================================
 
-PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup"
+PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup tcs-patterns@the-custom-startup"
 
 # ==============================================================================
 # Colors
