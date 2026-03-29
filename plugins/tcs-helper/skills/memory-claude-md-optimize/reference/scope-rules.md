@@ -75,9 +75,31 @@ The cascade always moves downward — from broader scope to narrower. It never c
 
 ## @-Import Resolution
 
-@-imports appear as lines matching `^@(.+\.md)\s*$` in a CLAUDE.md file.
+## Reference Types
 
-Resolve the path using these rules in order:
+CLAUDE.md files can include other files via two mechanisms:
+
+### @-imports (eager loading)
+
+Lines matching `^@(.+\.md)\s*$`. These are loaded into context at session start — the primary cause of context bloat.
+
+### Descriptive references (lazy loading)
+
+Prose lines that mention file paths, e.g.:
+- "For routing rules, see docs/ai/memory/memory.md — consult when routing learnings"
+- "Memory routing rules and category definitions are documented in docs/ai/memory/memory.md"
+
+These are already-optimized references. Claude reads the file only when it judges the content is relevant. During discovery, extract paths matching `[a-zA-Z0-9_./-]+\.md` from prose lines, verify the file exists, and add to discovered files as `loading: lazy`.
+
+**Why this matters**: If a CLAUDE.md is already structured with descriptive references, the skill should recognize those referenced files and include them in analysis — not just @-imported files.
+
+---
+
+## @-Import and Path Resolution
+
+@-imports appear as lines matching `^@(.+\.md)\s*$` in a CLAUDE.md file. Descriptive references contain paths inline in prose.
+
+Resolve any discovered path using these rules in order:
 
 | Prefix | Resolution rule | Example |
 |--------|----------------|---------|

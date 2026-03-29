@@ -34,6 +34,8 @@
 | 2026-03-29 | ADR-4: Non-Blocking Secret Detection | Warn in report, don't block — user retains control |
 | 2026-03-29 | SDD complete, moving to PLAN | All 4 ADRs confirmed, project path fix applied |
 | 2026-03-29 | PLAN complete: 3 phases, 15 tasks | Phase 1: refs (parallel), Phase 2: SKILL.md, Phase 3: validation |
+| 2026-03-29 | Discovery also follows descriptive references | If CLAUDE.md already uses lazy refs (prose with paths), include those files in analysis too |
+| 2026-03-29 | Only standard AGENTS.md, no variants | FOR-AGENTS.md and similar not handled — keep scope narrow |
 
 ## Context
 

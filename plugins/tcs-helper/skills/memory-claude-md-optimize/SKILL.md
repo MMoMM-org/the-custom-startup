@@ -141,11 +141,14 @@ Read reference/scope-rules.md for scope definitions, cascade behavior, and @-imp
 
 Execute cascade discovery per scope-rules.md:
 - Start at the scope entry point (global: `~/.claude/CLAUDE.md`; project: project CLAUDE.md from @-import chain; repo: `./CLAUDE.md`)
-- For each file discovered: scan for @-import lines matching `^@(.+\.md)\s*$`
-- Resolve each @-import path (expand `~`, resolve relative to containing file, use absolute if starts with `/`)
+- For each file discovered, scan for two types of references:
+  1. **@-imports** (eager): lines matching `^@(.+\.md)\s*$` — these are always-loaded
+  2. **Descriptive references** (lazy): prose lines containing file paths matching `[a-zA-Z0-9_./-]+\.md` that point to existing files — these are already-optimized lazy-loaded references (e.g., "For routing rules, see docs/ai/memory/memory.md — consult when...")
+- Resolve each path (expand `~`, resolve relative to containing file, use absolute if starts with `/`)
 - Classify scope of resolved path: under `~/.claude/` → global; outside repo but not `~/.claude/` → project; inside repo → repo
+- Mark @-imports as `loading: always`; descriptive references as `loading: lazy`
 - Track a `visited` set of absolute paths — skip with warning if already visited (circular import detection)
-- If resolved path does not exist: log warning "Broken @-import: {path} in {source_file}" and continue
+- If resolved path does not exist: log warning "Broken reference: {path} in {source_file}" and continue
 - For repo scope: also Glob `**/CLAUDE.md`, find `AGENTS.md`, and Glob `docs/ai/memory/*.md`
 - Cascade downward through included scopes (global → project → repo); never cascade upward
 
