@@ -97,15 +97,13 @@ For each of: root, src/, test/, docs/, docs/ai/
 
 Stack override application: read `templates/stacks/<detected-stack>.md` and append to `src/CLAUDE.md`.
 
-### 5. Install hooks
+### 5. Hooks note
 
-```bash
-HOOKS="${CLAUDE_PLUGIN_ROOT}/hooks/hooks.json"
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/merge_hooks.py" "$HOOKS" --scope r --set-cleanup-period \
-  || echo "WARNING: hook installation failed — run manually after setup"
-```
+Hooks are declared in `hooks/hooks.json` inside the plugin and loaded natively by Claude Code
+when the plugin is enabled — no installation step is required.
 
-Report which hooks were added vs already present.
+Report that hooks will be active once the plugin is enabled (or are already active if the
+plugin was enabled before setup ran).
 
 ### 6. Optional extras
 

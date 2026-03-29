@@ -11,7 +11,11 @@ from lib.reflect_utils import load_queue, CLAUDE_DIR
 
 def main():
     try:
-        project_path = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
+        try:
+            data = json.loads(sys.stdin.read())
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+        project_path = data.get('cwd', os.getcwd())
         queue_override = os.environ.get('TCS_QUEUE_OVERRIDE')
         if queue_override:
             try:

@@ -26,7 +26,7 @@ When developing new skills in `plugins/tcs-helper/skills/`, they are not automat
    ```bash
    # Plugin cache (runtime)
    cp -r plugins/tcs-helper/skills/<skill-name> \
-     ~/.claude/plugins/cache/the-custom-startup/tcs-helper/2.0.0/skills/
+     ~/.claude/plugins/cache/the-custom-startup/tcs-helper/*/skills/
 
    # Marketplace source (discovery index)
    cp -r plugins/tcs-helper/skills/<skill-name> \
@@ -40,7 +40,7 @@ Both locations are required. Cache-only does not work — Claude Code validates 
 After testing, sync any changes back:
 ```bash
 cp -r plugins/tcs-helper/skills/<skill-name>/* \
-  ~/.claude/plugins/cache/the-custom-startup/tcs-helper/2.0.0/skills/<skill-name>/
+  ~/.claude/plugins/cache/the-custom-startup/tcs-helper/*/skills/<skill-name>/
 cp -r plugins/tcs-helper/skills/<skill-name>/* \
   ~/.claude/plugins/marketplaces/the-custom-startup/plugins/tcs-helper/skills/<skill-name>/
 ```

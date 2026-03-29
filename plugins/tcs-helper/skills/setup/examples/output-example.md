@@ -23,10 +23,11 @@ Creating docs/ai/memory/:
 Creating CLAUDE.md:
   ✓ CLAUDE.md (from templates/stacks/typescript.md — strict mode, import order, no any)
 
-Installing hooks via merge_hooks.py:
-  ✓ UserPromptSubmit — queue capture hook registered
-  ✓ PreCompact — auto-save hook registered
-  ✓ .claude/settings.json updated
+Hooks (native — loaded automatically when plugin is enabled):
+  ✓ UserPromptSubmit — queue capture hook active
+  ✓ SessionStart — pending learnings reminder active
+  ✓ PreCompact — auto-backup hook active
+  ✓ PostToolUse (Bash) — post-commit reminder active
 
 Done. Memory hierarchy provisioned. Start a session and corrections will be captured automatically.
 Run /memory-add to process the queue, /memory-sync to keep imports fresh.

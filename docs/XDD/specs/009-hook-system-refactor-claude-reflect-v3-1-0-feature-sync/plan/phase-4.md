@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Tool Errors + Deduplication (S1 + S2)"
-status: pending
+status: completed
 version: "1.0"
 phase: 4
 ---

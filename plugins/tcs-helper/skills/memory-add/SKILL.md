@@ -73,7 +73,17 @@ For each learning, classify using these keyword signals:
 | bug, error, fix, workaround, issue, broken, resolved | troubleshooting | docs/ai/memory/troubleshooting.md |
 | personal, always prefer, never use, my workflow | global | ~/.claude/includes/ |
 
+**Auto-routing for tool errors:** Queue items with `item_type: 'tool_error'` are automatically routed to `troubleshooting.md` regardless of keyword signals. The `error_pattern` field (e.g., `module_not_found`, `connection_refused`) is preserved in the written entry.
+
 If unclassified → AskUserQuestion: "Which file should this go to? [show list of options]"
+
+### 2b. Semantic validation (optional)
+
+If `TCS_SEMANTIC_VALIDATION` env var is not `false`:
+1. Use `validate_queue_items(learnings)` from `semantic_detector.py` to validate low-confidence items (confidence < 0.7).
+2. Items the AI identifies as non-learnings are removed from the list.
+3. Remaining items get merged confidence scores (average of regex + semantic).
+4. If `claude` CLI is unavailable: skip this step silently (no error, no blocking).
 
 ### 3. Determine scope
 
@@ -83,9 +93,15 @@ If unclassified → AskUserQuestion: "Which file should this go to? [show list o
 
 ### 4. Deduplication check
 
-For each learning, Read the target file.
-If a semantically identical fact already exists (same meaning, possibly different wording): skip silently, add to `skipped[]`.
-Cross-scope duplicates are NOT checked here (handled by memory-cleanup).
+For each learning:
+1. **Cross-category check first:** Use `find_duplicates(learning_text, 'docs/ai/memory/')` from `reflect_utils.py` to check ALL 6 category files for exact or near-duplicate entries.
+   - Exact duplicate (score 1.0): skip silently, add to `skipped[]`.
+   - Near-duplicate (score > 0.6): flag to user with both entries, ask: "Skip / Replace existing / Keep both".
+2. **Same-file check:** Read the target file. If a semantically identical fact already exists: skip silently, add to `skipped[]`.
+3. **Contradiction check:** Use `detect_contradictions(learning_text, existing_entries)` from `semantic_detector.py` to find conflicting entries across memory files.
+   - If contradiction found: flag to user with both entries and the contradiction reason.
+   - **Time-based recommendation:** Default to "Keep new (replace old)" since the newer entry reflects the most recent user preference. Present as: "Keep new — recommended (replaces old) / Keep old (skip new) / Keep both".
+   - Falls back to keyword-based detection when `claude` CLI is unavailable.
 
 ### 5. Write
 

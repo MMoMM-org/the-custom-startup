@@ -63,11 +63,11 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 
 > **Tracking Principle**: Track logical units that produce verifiable outcomes. The TDD cycle is the method, not separate tracked items.
 
-- [ ] [Phase 1: Test Foundation + Safety Net](phase-1.md)
-- [ ] [Phase 2: Hook System Cleanup (M1 + M2)](phase-2.md)
-- [ ] [Phase 3: Pattern Detection Extension (M3)](phase-3.md)
-- [ ] [Phase 4: Tool Errors + Deduplication (S1 + S2)](phase-4.md)
-- [ ] [Phase 5: Semantic Validation + Integration (C1 + C2)](phase-5.md)
+- [x] [Phase 1: Test Foundation + Safety Net](phase-1.md)
+- [x] [Phase 2: Hook System Cleanup (M1 + M2)](phase-2.md)
+- [x] [Phase 3: Pattern Detection Extension (M3)](phase-3.md)
+- [x] [Phase 4: Tool Errors + Deduplication (S1 + S2)](phase-4.md)
+- [x] [Phase 5: Semantic Validation + Integration (C1 + C2)](phase-5.md)
 
 **Dependency graph:**
 ```
