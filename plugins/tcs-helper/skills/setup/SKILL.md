@@ -100,9 +100,8 @@ Stack override application: read `templates/stacks/<detected-stack>.md` and appe
 ### 5. Install hooks
 
 ```bash
-SETTINGS="${HOME}/.claude/settings.json"
 HOOKS="${CLAUDE_PLUGIN_ROOT}/hooks/hooks.json"
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/merge_hooks.py" "$HOOKS" "$SETTINGS" --set-cleanup-period \
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/merge_hooks.py" "$HOOKS" --scope r --set-cleanup-period \
   || echo "WARNING: hook installation failed — run manually after setup"
 ```
 
