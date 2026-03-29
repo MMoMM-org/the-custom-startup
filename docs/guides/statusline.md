@@ -2,7 +2,7 @@
 
 Claude Code supports a custom status line — a bar at the bottom of the terminal that updates after each assistant message. This project ships four variants and an interactive configurator.
 
-Jump to: [Standard](#standard) · [Enhanced](#enhanced) · [Starship](#starship) · [Starship Reddit](#starship-reddit-variant) · [Configuration](#configuration)
+Jump to: [Standard](#standard) · [Enhanced](#enhanced) · [Configuration](#configuration) · [Starship](#starship) · [Starship Reddit](#starship-reddit-variant)
 
 ## Quick setup
 
@@ -122,6 +122,91 @@ plan = "pro"   # pro | max5x | max20x | api | auto
 The bar can also show session cost instead of tokens — set `budget_mode = "cost"` in `statusline.toml`. Cost thresholds are also estimates and vary by usage pattern.
 
 ---
+
+## Configuration
+
+All variants share a single config file: `statusline.toml`.
+
+**Global** (applies to all sessions):
+```
+~/.config/the-custom-startup/statusline.toml
+```
+
+**Per-repo** (overrides global for a specific project):
+```
+<repo>/.claude/statusline.toml
+```
+
+The per-repo file only needs the keys you want to override — everything else falls through to the global config.
+
+**Script locations** (after installation):
+
+| Install scope | Scripts | Config |
+|---|---|---|
+| Global | `~/.config/the-custom-startup/` | `~/.config/the-custom-startup/statusline.toml` |
+| Per-repo | `<repo>/.claude/` | `<repo>/.claude/statusline.toml` |
+
+### Full reference
+
+```toml
+# Subscription plan — drives token limit and cost thresholds
+# auto | pro | max5x | max20x | api
+plan          = "auto"
+fallback_plan = "pro"
+
+# Manual token limit override (skips plan lookup)
+# All plan limits are estimates — override here if the bar seems off.
+# Calibrate: raw_tokens / (/usage percent / 100)  e.g. 9388 / 0.33 = 28450
+# token_limit = 28450
+
+# Budget bar mode
+# "token" — tokens used vs plan limit  (enhanced default)
+# "cost"  — session cost vs threshold  (standard default)
+budget_mode = "token"
+
+# Format string (standard variant only)
+format = "<path> <branch>  <model>  <context>  <session>  <help>"
+
+# Cache TTLs in seconds
+ccusage_cache_ttl = 60   # billing block data
+git_cache_ttl     = 15   # branch / dirty state
+
+# Display toggles (enhanced variant)
+show_budget_bar  = true
+show_context_bar = true
+show_duration    = true
+show_git         = true
+show_remote_url  = true
+
+[thresholds.context]
+warn   = 70   # % — yellow
+danger = 90   # % — red
+
+[thresholds.budget]
+warn   = 70   # % — yellow
+danger = 90   # % — red
+
+# Explicit cost thresholds (optional — overrides plan defaults)
+[thresholds.cost]
+# warn   = 2.00
+# danger = 5.00
+```
+
+### Color thresholds
+
+Both bars use the same color scheme:
+
+| Color | Meaning |
+|---|---|
+| Green | Below warn threshold |
+| Yellow | At or above warn |
+| Red | At or above danger |
+
+---
+
+## Starship Variants
+
+The two Starship variants use your existing [Starship](https://starship.rs/) prompt as the status line — one is the fully-featured version shipped with this project, the other documents the minimal DIY approach from the [original Reddit post](https://www.reddit.com/r/ClaudeCode/comments/1r81675/use_your_starship_prompt_as_the_claude_code/).
 
 ### Starship
 
@@ -450,87 +535,6 @@ echo '{"model":{"display_name":"Opus"},"session_name":"test","context_window":{"
 - `STARSHIP_SHELL=` **is the key trick.** Without it, starship wraps ANSI color codes in shell-specific escape sequences (`%{...%}` for zsh, `\[...\]` for bash) meant for prompt rendering. Claude Code's status line is not a shell prompt — it needs raw ANSI output. Setting `STARSHIP_SHELL` to an empty string disables these wrappers.
 
 - **Separate config (optional).** If you want a different layout for the status line than your shell prompt, use `STARSHIP_CONFIG=~/.config/starship-statusline.toml starship prompt` in the bridge script instead. This lets you have a compact single-line status line while keeping a multi-line shell prompt.
-
----
-
-## Configuration
-
-All variants share a single config file: `statusline.toml`.
-
-**Global** (applies to all sessions):
-```
-~/.config/the-custom-startup/statusline.toml
-```
-
-**Per-repo** (overrides global for a specific project):
-```
-<repo>/.claude/statusline.toml
-```
-
-The per-repo file only needs the keys you want to override — everything else falls through to the global config.
-
-**Script locations** (after installation):
-
-| Install scope | Scripts | Config |
-|---|---|---|
-| Global | `~/.config/the-custom-startup/` | `~/.config/the-custom-startup/statusline.toml` |
-| Per-repo | `<repo>/.claude/` | `<repo>/.claude/statusline.toml` |
-
-### Full reference
-
-```toml
-# Subscription plan — drives token limit and cost thresholds
-# auto | pro | max5x | max20x | api
-plan          = "auto"
-fallback_plan = "pro"
-
-# Manual token limit override (skips plan lookup)
-# All plan limits are estimates — override here if the bar seems off.
-# Calibrate: raw_tokens / (/usage percent / 100)  e.g. 9388 / 0.33 = 28450
-# token_limit = 28450
-
-# Budget bar mode
-# "token" — tokens used vs plan limit  (enhanced default)
-# "cost"  — session cost vs threshold  (standard default)
-budget_mode = "token"
-
-# Format string (standard variant only)
-format = "<path> <branch>  <model>  <context>  <session>  <help>"
-
-# Cache TTLs in seconds
-ccusage_cache_ttl = 60   # billing block data
-git_cache_ttl     = 15   # branch / dirty state
-
-# Display toggles (enhanced variant)
-show_budget_bar  = true
-show_context_bar = true
-show_duration    = true
-show_git         = true
-show_remote_url  = true
-
-[thresholds.context]
-warn   = 70   # % — yellow
-danger = 90   # % — red
-
-[thresholds.budget]
-warn   = 70   # % — yellow
-danger = 90   # % — red
-
-# Explicit cost thresholds (optional — overrides plan defaults)
-[thresholds.cost]
-# warn   = 2.00
-# danger = 5.00
-```
-
-### Color thresholds
-
-Both bars use the same color scheme:
-
-| Color | Meaning |
-|---|---|
-| Green | Below warn threshold |
-| Yellow | At or above warn |
-| Red | At or above danger |
 
 ---
 

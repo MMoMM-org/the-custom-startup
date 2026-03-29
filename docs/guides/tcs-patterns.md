@@ -8,6 +8,41 @@ tcs-patterns is an optional plugin that brings 17 opinionated, interactive patte
 
 > Install only what's relevant to your stack — each skill adds ~25KB to your context
 
+### Installing individual skills
+
+If you don't want the full plugin, you can install individual skills:
+
+**Option A — Use `/skill-import` (requires tcs-helper):**
+
+```bash
+/skill-import MMoMM-org/the-custom-startup plugins/tcs-patterns/skills/ddd
+```
+
+This fetches a single skill from the repository and installs it to the correct location, including any supporting files in `reference/` or `examples/`.
+
+**Option B — Manual copy:**
+
+Copy the skill directory from the repo to your Claude Code skills directory:
+
+```bash
+cp -r plugins/tcs-patterns/skills/ddd ~/.claude/skills/ddd
+```
+
+Include the entire directory (SKILL.md plus any `reference/`, `examples/`, `validation.md` subdirectories) — the skill may reference these supporting files at runtime.
+
+### Agent integration
+
+When `tcs-team` agents delegate specialist work, they automatically use relevant pattern skills if installed. You don't need to invoke patterns manually during agent-driven workflows.
+
+| Agent | Uses patterns |
+|---|---|
+| `the-architect/design-system` | `ddd`, `hexagonal`, `event-driven`, `twelve-factor` |
+| `the-architect/review-security` | `api-design` |
+| `the-architect/review-robustness` | `functional`, `node-service` |
+| `the-developer/build-feature` | `typescript-strict`, `api-design`, `node-service`, `go-idiomatic`, `python-project` |
+| `the-tester/test-strategy` | `testing`, `mutation-testing`, `frontend-testing`, `react-testing`, `test-design-reviewer` |
+| `the-devops/build-platform` | `twelve-factor` |
+
 ---
 
 ## Architecture
