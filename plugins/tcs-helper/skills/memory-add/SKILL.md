@@ -77,6 +77,14 @@ For each learning, classify using these keyword signals:
 
 If unclassified → AskUserQuestion: "Which file should this go to? [show list of options]"
 
+### 2b. Semantic validation (optional)
+
+If `TCS_SEMANTIC_VALIDATION` env var is not `false`:
+1. Use `validate_queue_items(learnings)` from `semantic_detector.py` to validate low-confidence items (confidence < 0.7).
+2. Items the AI identifies as non-learnings are removed from the list.
+3. Remaining items get merged confidence scores (average of regex + semantic).
+4. If `claude` CLI is unavailable: skip this step silently (no error, no blocking).
+
 ### 3. Determine scope
 
 - `personal` / `workflow` → global scope: `~/.claude/includes/memory-<category>.md`
@@ -90,6 +98,9 @@ For each learning:
    - Exact duplicate (score 1.0): skip silently, add to `skipped[]`.
    - Near-duplicate (score > 0.6): flag to user with both entries, ask: "Skip / Replace existing / Keep both".
 2. **Same-file check:** Read the target file. If a semantically identical fact already exists: skip silently, add to `skipped[]`.
+3. **Contradiction check:** Use `detect_contradictions(learning_text, existing_entries)` from `semantic_detector.py` to find conflicting entries across memory files.
+   - If contradiction found: flag to user with both entries and the contradiction reason. Ask: "Keep new (replace old) / Keep old (skip new) / Keep both".
+   - Falls back to keyword-based detection when `claude` CLI is unavailable.
 
 ### 5. Write
 
