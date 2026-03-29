@@ -99,7 +99,8 @@ For each learning:
    - Near-duplicate (score > 0.6): flag to user with both entries, ask: "Skip / Replace existing / Keep both".
 2. **Same-file check:** Read the target file. If a semantically identical fact already exists: skip silently, add to `skipped[]`.
 3. **Contradiction check:** Use `detect_contradictions(learning_text, existing_entries)` from `semantic_detector.py` to find conflicting entries across memory files.
-   - If contradiction found: flag to user with both entries and the contradiction reason. Ask: "Keep new (replace old) / Keep old (skip new) / Keep both".
+   - If contradiction found: flag to user with both entries and the contradiction reason.
+   - **Time-based recommendation:** Default to "Keep new (replace old)" since the newer entry reflects the most recent user preference. Present as: "Keep new — recommended (replaces old) / Keep old (skip new) / Keep both".
    - Falls back to keyword-based detection when `claude` CLI is unavailable.
 
 ### 5. Write

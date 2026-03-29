@@ -110,22 +110,26 @@ MAX_CAPTURE_LENGTH = 2000  # skip very long prompts unless they contain "remembe
 # CJK correction patterns — ported from claude-reflect v3.1.0
 # Each tuple: (regex, name, is_correction)
 CJK_CORRECTION_PATTERNS = [
-    # Japanese
+    # Japanese — strong corrections (0.85)
+    (re.compile(r"^違う[、，,.\s！!。]|^ちがう[、,.\s]", re.UNICODE), "chigau", 0.85),
+    (re.compile(r"間違[いえっ]て", re.UNICODE), "machigatte", 0.85),
+    (re.compile(r"じゃなくて.{0,30}にして", re.UNICODE), "janakute-nishite", 0.85),
+    (re.compile(r"って言った[のよでじゃ]", re.UNICODE), "tte-itta", 0.85),
+    # Japanese — moderate corrections (0.75)
     (re.compile(r"^いや[、,.\s]|^いや違", re.UNICODE), "iya", 0.75),
-    (re.compile(r"^違う[、，,.\s！!。]|^ちがう[、,.\s]", re.UNICODE), "chigau", 0.75),
     (re.compile(r"そうじゃなく[てけ]|そっちじゃなく[てけ]", re.UNICODE), "souja-nakute", 0.75),
-    (re.compile(r"間違[いえっ]て", re.UNICODE), "machigatte", 0.75),
-    (re.compile(r"じゃなくて.{0,30}にして", re.UNICODE), "janakute-nishite", 0.75),
-    (re.compile(r"^やめて[。！!]?\s*$", re.UNICODE), "yamete", 0.75),
     (re.compile(r"^そうじゃない", re.UNICODE), "souja-nai", 0.75),
-    (re.compile(r"って言った[のよでじゃ]", re.UNICODE), "tte-itta", 0.75),
-    # Chinese
-    (re.compile(r"^不是[，,. ]", re.UNICODE), "bushi", 0.75),
-    (re.compile(r"^错了|^錯了", re.UNICODE), "cuole", 0.75),
-    (re.compile(r"不要.{0,20}要", re.UNICODE), "buyao-yao", 0.75),
-    # Korean
-    (re.compile(r"^아니[,. ]", re.UNICODE), "ani", 0.75),
-    (re.compile(r"틀렸", re.UNICODE), "teullyeoss", 0.75),
+    # Japanese — weaker/ambiguous (0.65)
+    (re.compile(r"^やめて[。！!]?\s*$", re.UNICODE), "yamete", 0.65),
+    # Chinese — strong (0.85)
+    (re.compile(r"^错了|^錯了", re.UNICODE), "cuole", 0.85),
+    (re.compile(r"不要.{0,20}要", re.UNICODE), "buyao-yao", 0.80),
+    # Chinese — moderate (0.70)
+    (re.compile(r"^不是[，,. ]", re.UNICODE), "bushi", 0.70),
+    # Korean — strong (0.85)
+    (re.compile(r"틀렸", re.UNICODE), "teullyeoss", 0.85),
+    # Korean — moderate (0.65)
+    (re.compile(r"^아니[,. ]", re.UNICODE), "ani", 0.65),
 ]
 
 # Non-correction phrases that superficially match correction patterns
@@ -182,10 +186,17 @@ def strip_code_blocks(text):
     return result
 
 
+_POSITIVE_CONTEXT_AROUND_CORRECTION = re.compile(
+    r'\b(actually|no)\b.{0,20}\b(exactly|correct|right|perfect|great|good)\b',
+    re.IGNORECASE,
+)
+
+
 def is_false_positive(text, matched_patterns):
     """Check if text is a non-correction phrase that superficially matches patterns.
 
     Returns True if the text is a false positive (should NOT be treated as a learning).
+    Detects positive context around correction keywords (e.g., "actually, that's exactly right").
     """
     stripped = text.strip()
     for pattern in NON_CORRECTION_PHRASES:
@@ -194,6 +205,9 @@ def is_false_positive(text, matched_patterns):
     for pattern in FALSE_POSITIVE_PATTERNS:
         if pattern.search(stripped):
             return True
+    # Correction keyword in positive context (e.g., "actually, that's exactly right")
+    if _POSITIVE_CONTEXT_AROUND_CORRECTION.search(stripped):
+        return True
     return False
 
 
@@ -346,11 +360,13 @@ def detect_learning(prompt):
             english_correction = True
             break
 
-    # Step 5b: CJK correction patterns
+    # Step 5b: CJK correction patterns (use pattern-specific confidence)
     cjk_correction = False
-    for pattern, _name, _conf in CJK_CORRECTION_PATTERNS:
+    cjk_base_confidence = 0.75
+    for pattern, _name, conf in CJK_CORRECTION_PATTERNS:
         if pattern.search(clean_text):
             cjk_correction = True
+            cjk_base_confidence = conf
             break
 
     # Step 6: Positive patterns
@@ -379,7 +395,7 @@ def detect_learning(prompt):
             _count_matches(clean_text, CORRECTION_PATTERNS)
             + _count_cjk_matches(clean_text)
         )
-        base = 0.75
+        base = cjk_base_confidence if cjk_correction and not english_correction else 0.75
         # Step 8: Confidence adjustment
         confidence = calculate_confidence(base, clean_text, pattern_count)
         return ('auto', 'correction', confidence)

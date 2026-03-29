@@ -210,10 +210,18 @@ def test_detect_learning_guardrail_takes_priority_over_positive():
 
 # Positive takes priority over correction patterns
 def test_detect_learning_positive_takes_priority_over_correction():
-    # "exactly right" matches positive; "actually" would match correction
-    prompt = "actually that's exactly right"
+    # "great approach" matches positive; "stop" would match correction
+    prompt = "stop, that's a great approach actually"
     result = detect_learning(prompt)
+    assert result is not None
     assert result[0] == 'positive'
+
+
+def test_detect_learning_positive_context_around_correction_filtered():
+    # "actually, that's exactly right" — correction keyword in positive context → false positive
+    prompt = "actually, that's exactly right"
+    result = detect_learning(prompt)
+    assert result is None
 
 
 # ---------------------------------------------------------------------------
