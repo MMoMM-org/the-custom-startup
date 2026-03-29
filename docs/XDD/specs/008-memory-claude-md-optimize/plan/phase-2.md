@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Core Skill Workflow"
-status: pending
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -35,7 +35,7 @@ phase: 2
 
 Delivers the complete SKILL.md with all 6 workflow phases and the example output document. This is the core deliverable of the specification.
 
-- [ ] **T2.1 SKILL.md — Frontmatter, Persona, Interface, Constraints** `[activity: skill-authoring]`
+- [x] **T2.1 SKILL.md — Frontmatter, Persona, Interface, Constraints** `[activity: skill-authoring]`
 
   1. Prime: Read existing skill patterns: `plugins/tcs-helper/skills/memory-cleanup/SKILL.md`, `plugins/tcs-helper/skills/memory-add/SKILL.md`, `plugins/tcs-helper/skills/setup/SKILL.md` `[ref: SDD/Building Block View/Directory Map]`. Read skill authoring reference at `~/.claude/includes/skills-reference.md`.
   2. Test: Verify frontmatter has: name (memory-claude-md-optimize), description (trigger keywords), user-invocable (true), argument-hint, allowed-tools. Verify Persona section identifies the active skill. Verify Interface section defines State and data types matching SDD entities. Verify Constraints section has Always/Never lists covering all SDD constraints (CON-1 through CON-6).
@@ -50,7 +50,7 @@ Delivers the complete SKILL.md with all 6 workflow phases and the example output
     - [ ] Interface matches SDD data models `[ref: SDD/Interface Specifications/Data Models]`
     - [ ] Constraints cover all SDD constraints CON-1 through CON-6 `[ref: SDD/Constraints]`
 
-- [ ] **T2.2 SKILL.md — Workflow Phases 1-3 (Discover, Score, Categorize)** `[activity: skill-authoring]`
+- [x] **T2.2 SKILL.md — Workflow Phases 1-3 (Discover, Score, Categorize)** `[activity: skill-authoring]`
 
   1. Prime: Read SDD runtime view `[ref: SDD/Runtime View/Primary Flow]`. Read SDD cascade discovery algorithm `[ref: SDD/Runtime View/Complex Logic]`. Read SDD scoring and categorization examples `[ref: SDD/Implementation Examples]`.
   2. Test: Verify workflow step 1 (Discover) handles: scope selection via AskUserQuestion, @-import chain following, project path discovery from imports, broken import warnings, file listing with scope/lines/tokens. Verify step 2 (Score) loads scoring-rubric.md, applies 6 criteria, produces grades. Verify step 3 (Categorize) loads categorization.md, classifies items, assesses scope fit.
@@ -66,7 +66,7 @@ Delivers the complete SKILL.md with all 6 workflow phases and the example output
     - [ ] Content categorization into 6 Memory Bank categories `[ref: PRD/Feature 3]`
     - [ ] Credential detection with non-blocking warnings `[ref: SDD/Architecture Decisions/ADR-4]`
 
-- [ ] **T2.3 SKILL.md — Workflow Phases 4-6 (Propose, Apply, Verify)** `[activity: skill-authoring]`
+- [x] **T2.3 SKILL.md — Workflow Phases 4-6 (Propose, Apply, Verify)** `[activity: skill-authoring]`
 
   1. Prime: Read SDD proposal structure `[ref: SDD/Building Block View/Directory Map]` (Proposal Output component). Read SDD apply criteria `[ref: SDD/Acceptance Criteria]`. Read SDD OPTIMIZATION-REPORT example `[ref: SDD/Implementation Examples/OPTIMIZATION-REPORT]`. Read SDD before/after verification `[ref: PRD/Feature 8]`.
   2. Test: Verify step 4 (Propose) creates temp dir with g/p/r structure, generates OPTIMIZATION-REPORT.md, handles --dry-run exit. Verify step 5 (Apply) creates backups, places new files, creates Memory Bank if missing. Verify step 6 (Verify) computes before/after snapshots, generates verification prompt, offers temp dir cleanup.
@@ -85,7 +85,7 @@ Delivers the complete SKILL.md with all 6 workflow phases and the example output
     - [ ] Verification prompt for new session `[ref: PRD/Feature 8/AC-4, AC-5, AC-6]`
     - [ ] Temp dir cleanup options (delete/archive/keep) `[ref: PRD/Feature 7]`
 
-- [ ] **T2.4 Output Example** `[activity: skill-authoring]` `[parallel: true]`
+- [x] **T2.4 Output Example** `[activity: skill-authoring]` `[parallel: true]`
 
   1. Prime: Read SDD OPTIMIZATION-REPORT example `[ref: SDD/Implementation Examples/OPTIMIZATION-REPORT]`. Read existing skill examples in `plugins/tcs-helper/skills/*/examples/`.
   2. Test: Verify the example shows a complete run: discovery summary, quality scores table, categorization results, @-import replacements, secret warnings, before/after comparison, verification prompt.
@@ -93,6 +93,6 @@ Delivers the complete SKILL.md with all 6 workflow phases and the example output
   4. Validate: Example covers all OPTIMIZATION-REPORT sections from SDD. Numbers are realistic and internally consistent.
   5. Success: Complete example that a user could reference to understand expected output `[ref: SDD/Implementation Examples/OPTIMIZATION-REPORT]`
 
-- [ ] **T2.5 Phase Validation** `[activity: validate]`
+- [x] **T2.5 Phase Validation** `[activity: validate]`
 
   - Read the complete SKILL.md. Verify all 6 workflow phases are present and complete. Verify reference doc paths are correct. Verify AskUserQuestion prompts match SDD interface spec. Verify error handling covers all cases from SDD error table. Run `/skill-author audit` to validate structure and quality.
