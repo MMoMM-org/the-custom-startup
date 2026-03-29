@@ -3,8 +3,7 @@
 # The Custom Startup — Import Spec
 #
 # Imports AI-generated content (from Claude.ai, Perplexity, etc.) into a
-# spec directory under .start/specs/ as a requirements.md (PRD) or
-# solution.md (SDD).
+# spec directory as a requirements.md (PRD) or solution.md (SDD).
 #
 # Usage:
 #   ./scripts/import-spec.sh [OPTIONS]
@@ -43,43 +42,48 @@ resolve_project_root() {
   fi
 }
 
-# Read a key from .claude/startup.toml, return default if missing.
-# Usage: read_startup_conf <root> <key> <default>
-read_startup_conf() {
-  local root="$1" key="$2" default="$3"
-  local conf="$root/.claude/startup.toml"
-  if [[ -f "$conf" ]]; then
-    local val
-    val=$(grep "^${key}[[:space:]]*=" "$conf" \
-      | sed 's/[^=]*=[[:space:]]*"\?\([^"]*\)"\?.*/\1/' \
-      | head -1)
-    echo "${val:-$default}"
-  else
-    echo "$default"
-  fi
+# Extract docs_base from [tcs] section of a TOML file.
+# Returns the value or empty string.
+_read_docs_base() {
+  local toml_file="$1"
+  [[ -f "$toml_file" ]] || return
+  sed -n '/^\[tcs\]/,/^\[/p' "$toml_file" \
+    | grep '^docs_base[[:space:]]*=' \
+    | head -1 \
+    | sed 's/docs_base[[:space:]]*=[[:space:]]*//' \
+    | tr -d '"'"'"
 }
 
 # Find the specs directory (creating default if none exist).
-# Priority: startup.toml → the-custom-startup/specs → .start/specs → docs/specs
+# Priority: repo startup.toml → global startup.toml → docs/XDD/specs → legacy paths
 resolve_specs_dir() {
   local root="$1"
-  local conf_dir
-  conf_dir=$(read_startup_conf "$root" "specs_dir" "")
-  if [[ -n "$conf_dir" ]]; then
-    local abs_dir="$root/$conf_dir"
-    [[ -d "$abs_dir" ]] && echo "$abs_dir" && return
-    # Configured but not yet created — return it (caller will mkdir)
-    echo "$abs_dir" && return
+
+  # Check repo-level startup.toml
+  local docs_base
+  docs_base=$(_read_docs_base "$root/.claude/startup.toml")
+  if [[ -n "$docs_base" ]]; then
+    echo "$root/$docs_base/specs"
+    return
   fi
-  if [[ -d "$root/the-custom-startup/specs" ]]; then
+
+  # Check global startup.toml
+  docs_base=$(_read_docs_base "$HOME/.claude/startup.toml")
+  if [[ -n "$docs_base" ]]; then
+    echo "$root/$docs_base/specs"
+    return
+  fi
+
+  # Directory existence fallback
+  if [[ -d "$root/docs/XDD/specs" ]]; then
+    echo "$root/docs/XDD/specs"
+  elif [[ -d "$root/the-custom-startup/specs" ]]; then
     echo "$root/the-custom-startup/specs"
   elif [[ -d "$root/.start/specs" ]]; then
     echo "$root/.start/specs"
-  elif [[ -d "$root/docs/specs" ]]; then
-    echo "$root/docs/specs"
   else
-    # Default: the-custom-startup/specs (will be created)
-    echo "$root/the-custom-startup/specs"
+    # Default (will be created by caller)
+    echo "$root/docs/XDD/specs"
   fi
 }
 
@@ -372,10 +376,10 @@ EOF
   echo "" >&2
   info "Next steps:"
   case "$DOC_TYPE" in
-    prd) echo "  1. Review requirements.md and refine with /start:specify" >&2
-         echo "  2. Create solution design: /start:specify-solution" >&2 ;;
-    sdd) echo "  1. Review solution.md and refine with /start:specify-solution" >&2
-         echo "  2. Create implementation plan: /start:specify-plan" >&2 ;;
+    prd) echo "  1. Review requirements.md and refine with /xdd-prd" >&2
+         echo "  2. Create solution design: /xdd-sdd" >&2 ;;
+    sdd) echo "  1. Review solution.md and refine with /xdd-sdd" >&2
+         echo "  2. Create implementation plan: /xdd-plan" >&2 ;;
   esac
   echo "" >&2
 }

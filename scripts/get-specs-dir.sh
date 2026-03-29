@@ -1,12 +1,15 @@
 #!/bin/bash
 # get-specs-dir.sh — resolve the configured specs directory
 #
+# Reads [tcs] docs_base from startup.toml and appends /specs.
+#
 # Fallback chain (first match wins):
-#   1. specs_dir from .claude/startup.toml in current working directory
-#   2. specs_dir from ~/.claude/startup.toml
-#   3. the-custom-startup/specs  (if directory exists)
-#   4. .start/specs              (if directory exists)
-#   5. docs/specs                (last resort)
+#   1. docs_base from .claude/startup.toml in current working directory
+#   2. docs_base from ~/.claude/startup.toml
+#   3. docs/XDD/specs             (if directory exists)
+#   4. the-custom-startup/specs   (legacy, if directory exists)
+#   5. .start/specs               (legacy, if directory exists)
+#   6. docs/XDD/specs             (default — always returns something)
 #
 # Usage: scripts/get-specs-dir.sh
 # Output: path string, no trailing slash, to stdout
@@ -14,28 +17,20 @@
 
 set -euo pipefail
 
-# Parse a key from a TOML file. Handles both bare and quoted values.
-# Usage: _parse_toml_key <file> <key>
-# Returns the value or empty string if not found.
-_parse_toml_key() {
-  local file="$1"
-  local key="$2"
-  grep "^${key}[[:space:]]*=" "$file" \
-    | sed 's/[^=]*=[[:space:]]*//' \
-    | tr -d '"'"'" \
-    | head -1
-}
-
-# Try to read specs_dir from a given toml file.
-# Usage: _read_specs_dir_from_toml <toml_file>
+# Extract docs_base from [tcs] section of a TOML file.
+# Usage: _read_docs_base <toml_file>
 # Prints the value and returns 0 on success, returns 1 if not found.
-_read_specs_dir_from_toml() {
+_read_docs_base() {
   local toml_file="$1"
   if [ ! -f "$toml_file" ]; then
     return 1
   fi
   local val
-  val=$(_parse_toml_key "$toml_file" "specs_dir")
+  val=$(sed -n '/^\[tcs\]/,/^\[/p' "$toml_file" \
+    | grep '^docs_base[[:space:]]*=' \
+    | head -1 \
+    | sed 's/docs_base[[:space:]]*=[[:space:]]*//' \
+    | tr -d '"'"'")
   if [ -n "$val" ]; then
     printf '%s' "$val"
     return 0
@@ -44,36 +39,40 @@ _read_specs_dir_from_toml() {
 }
 
 main() {
-  local specs_dir=""
+  local docs_base=""
 
   # 1. Project-local .claude/startup.toml
-  local local_toml="$PWD/.claude/startup.toml"
-  specs_dir=$(_read_specs_dir_from_toml "$local_toml") && {
-    printf '%s\n' "$specs_dir"
+  docs_base=$(_read_docs_base "$PWD/.claude/startup.toml") && {
+    printf '%s\n' "$docs_base/specs"
     return 0
   }
 
   # 2. Global ~/.claude/startup.toml
-  local global_toml="$HOME/.claude/startup.toml"
-  specs_dir=$(_read_specs_dir_from_toml "$global_toml") && {
-    printf '%s\n' "$specs_dir"
+  docs_base=$(_read_docs_base "$HOME/.claude/startup.toml") && {
+    printf '%s\n' "$docs_base/specs"
     return 0
   }
 
-  # 3. the-custom-startup/specs (exists as directory)
+  # 3. docs/XDD/specs (current default)
+  if [ -d "$PWD/docs/XDD/specs" ]; then
+    printf '%s\n' "docs/XDD/specs"
+    return 0
+  fi
+
+  # 4. the-custom-startup/specs (legacy)
   if [ -d "$PWD/the-custom-startup/specs" ]; then
     printf '%s\n' "the-custom-startup/specs"
     return 0
   fi
 
-  # 4. .start/specs (exists as directory)
+  # 5. .start/specs (legacy)
   if [ -d "$PWD/.start/specs" ]; then
     printf '%s\n' ".start/specs"
     return 0
   fi
 
-  # 5. docs/specs (last resort — always return something)
-  printf '%s\n' "docs/specs"
+  # 6. Default
+  printf '%s\n' "docs/XDD/specs"
   return 0
 }
 
