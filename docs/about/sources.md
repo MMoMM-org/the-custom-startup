@@ -78,6 +78,62 @@ The `the-startup` and `the-scaleup` output styles were developed for this fork a
 
 ---
 
+## Memory Bank — Source Influences
+
+The Memory Bank system in `tcs-helper` draws on several community approaches to Claude Code memory management.
+
+### claude-reflect
+
+**Repository:** [claude-reflect marketplace plugin](https://github.com/BayramAnnakov/claude-reflect)
+
+Foundation for the Memory Bank capture layer. The two-stage self-learning hooks (detect corrections → queue → route to destinations) and the learning destinations model (global CLAUDE.md, project CLAUDE.md, CLAUDE.local.md) directly informed the TCS global/project/repo routing table. The `reflect-skills` session analysis — identifying repeating patterns and generating skill files — provides the promotion mechanism used by `/memory-promote`.
+
+### John Conneely Memory System
+
+**Article:** [How I Finally Sorted My Claude Code Memory](https://www.youngleaders.tech/p/how-i-finally-sorted-my-claude-code-memory)
+
+The memory category taxonomy (general conventions, tools integrations, domain knowledge) is applied across TCS scopes instead of a single global bucket. The MEMORY.md index-only pattern with a ~200-line budget was adopted as a design constraint. The principle that routing rules belong in CLAUDE.md, not in MEMORY.md, directly informed the TCS approach.
+
+### centminmod/my-claude-code-setup
+
+**Repository:** [centminmod/my-claude-code-setup](https://github.com/centminmod/my-claude-code-setup)
+
+The memory bank architecture (per-concern files: activeContext, patterns, decisions, troubleshooting) informed the repo-level typed memory directory at `docs/ai/memory/`. The cleanup-context workflow (token reduction, archive resolved issues) forms the core of `/memory-cleanup`. Stack-aware CLAUDE.md templates (Cloudflare Workers, Convex) provided the pattern reused in `/setup`.
+
+### citypaul/.dotfiles (philosophy)
+
+**Repository:** [citypaul/.dotfiles](https://github.com/citypaul/.dotfiles)
+
+Beyond the pattern skills (listed above), the philosophy-first CLAUDE.md approach (~100 lines core, skills on demand) justified keeping all CLAUDE.md files lean and delegating detail to skills and memory docs. The setup command concept (detect stack, generate CLAUDE.md + hooks) directly inspired `/setup`.
+
+---
+
+## TDD Discipline — Source Influences
+
+### obra/superpowers
+
+**Repository:** [obrasuperpowers](https://github.com/obrasuperpowers) by Jesse Vincent
+
+The TDD RED-GREEN-REFACTOR iron law and the rejected-rationalizations table are embedded into the `xdd-tdd` skill and the TDD/SDD integration design. The verification-before-completion discipline (evidence-before-claims) is implemented as the `/verify` gate. The receiving-code-review rigor pattern forms the basis of `/receive-review`. Dispatching-parallel-agents patterns were absorbed into `/parallel-agents`. Systematic-debugging anti-shortcut rules strengthen `/debug`.
+
+---
+
+## Satori — Source Influences
+
+### context-mode
+
+**Repository:** [mksglu/context-mode](https://github.com/mksglu/context-mode) by Mert Koseoglu
+
+The MCP server concept — capturing tool outputs in a structured database and serving compact summaries instead of replaying full outputs — is the architectural basis for Satori's context capture layer. The reported 90-98% context reduction motivated offloading session data to a context server.
+
+### MCP Gateway patterns
+
+**Repositories:** [lasso-security/mcp-gateway](https://github.com/lasso-security/mcp-gateway), [agiletec-inc/airis-mcp-gateway](https://github.com/agiletec-inc/airis-mcp-gateway)
+
+The gateway design — composing multiple downstream MCP servers behind a single endpoint — provided the reference architecture for Satori's server routing layer.
+
+---
+
 ## Why Attribution Matters
 
 Keeping this document up to date serves a practical purpose: it makes the lineage of each component visible, which makes it straightforward to check upstream sources for improvements and to give proper credit when sharing or redistributing. If you port, adapt, or extend components from other sources, add them here.

@@ -1,6 +1,6 @@
 # Plugins
 
-The Custom Agentic Startup is distributed as four Claude Code marketplace plugins. Install all of them via the [interactive install script](../installation.md), or install individual plugins manually using the commands below.
+The Custom Agentic Startup is distributed as four Claude Code marketplace plugins. The [interactive install script](../getting-started/installation.md) lets you choose which plugins to install, or you can install individual plugins manually using the commands below.
 
 ---
 
@@ -54,7 +54,7 @@ Adds 15 activity-based agents across 8 specialist roles. They activate automatic
 /plugin install tcs-helper@the-custom-startup
 ```
 
-Optional. Provides skill authoring tools, a project memory system, and a repo onboarding wizard. Install this plugin when you want to build on the framework, author new skills, or add structured session-learning capture to your repos.
+Optional. Provides skill authoring tools, the **[Memory Bank](../about/concepts.md#memory-bank)** for structured learning and context minimization, and git workflow helpers. Install this plugin when you want to build on the framework, author new skills, or add persistent project knowledge to your repos.
 
 **Skill authoring:**
 
@@ -64,7 +64,7 @@ Optional. Provides skill authoring tools, a project memory system, and a repo on
 | `/skill-evaluate` | Evaluate a skill's quality before importing or using |
 | `/skill-import` | Fetch and install a single skill from any GitHub repo without installing the full plugin |
 
-**Memory system:**
+**Memory Bank:**
 
 | Skill | What it does |
 |-------|-------------|
@@ -74,7 +74,15 @@ Optional. Provides skill authoring tools, a project memory system, and a repo on
 | `/memory-cleanup` | Archive resolved issues, prune stale entries |
 | `/memory-promote` | Promote domain patterns from memory files to reusable skills |
 
-**Hooks (installed by `/setup`):**
+**Git workflow:**
+
+| Skill | What it does |
+|-------|-------------|
+| `/git-worktree` | Manage git worktrees for isolated parallel branch work |
+| `/finish-branch` | Branch completion workflow — merge, PR, keep, or discard |
+| `/docs` | Fetch and cache current Claude Code documentation on demand |
+
+**Hooks (installed by `/setup`, not by the install script):**
 
 | Event | Hook | Purpose |
 |-------|------|---------|

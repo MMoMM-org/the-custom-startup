@@ -2,7 +2,7 @@
 
 Claude Code supports a custom status line — a bar at the bottom of the terminal that updates after each assistant message. This project ships four variants and an interactive configurator.
 
-Jump to: [Standard](#standard) · [Enhanced](#enhanced) · [Starship](#starship) · [Starship Reddit](#starship-reddit-variant) · [Configuration](#configuration)
+Jump to: [Standard](#standard) · [Enhanced](#enhanced) · [Configuration](#configuration) · [Starship](#starship)
 
 ## Quick setup
 
@@ -123,7 +123,90 @@ The bar can also show session cost instead of tokens — set `budget_mode = "cos
 
 ---
 
-### Starship
+## Configuration
+
+All variants share a single config file: `statusline.toml`.
+
+**Global** (applies to all sessions):
+```
+~/.config/the-custom-startup/statusline.toml
+```
+
+**Per-repo** (overrides global for a specific project):
+```
+<repo>/.claude/statusline.toml
+```
+
+The per-repo file only needs the keys you want to override — everything else falls through to the global config.
+
+**Script locations** (after installation):
+
+| Install scope | Scripts | Config |
+|---|---|---|
+| Global | `~/.config/the-custom-startup/` | `~/.config/the-custom-startup/statusline.toml` |
+| Per-repo | `<repo>/.claude/` | `<repo>/.claude/statusline.toml` |
+
+### Full reference
+
+```toml
+# Subscription plan — drives token limit and cost thresholds
+# auto | pro | max5x | max20x | api
+plan          = "auto"
+fallback_plan = "pro"
+
+# Manual token limit override (skips plan lookup)
+# All plan limits are estimates — override here if the bar seems off.
+# Calibrate: raw_tokens / (/usage percent / 100)  e.g. 9388 / 0.33 = 28450
+# token_limit = 28450
+
+# Budget bar mode
+# "token" — tokens used vs plan limit  (enhanced default)
+# "cost"  — session cost vs threshold  (standard default)
+budget_mode = "token"
+
+# Format string (standard variant only)
+format = "<path> <branch>  <model>  <context>  <session>  <help>"
+
+# Cache TTLs in seconds
+ccusage_cache_ttl = 60   # billing block data
+git_cache_ttl     = 15   # branch / dirty state
+
+# Display toggles (enhanced variant)
+show_budget_bar  = true
+show_context_bar = true
+show_duration    = true
+show_git         = true
+show_remote_url  = true
+
+[thresholds.context]
+warn   = 70   # % — yellow
+danger = 90   # % — red
+
+[thresholds.budget]
+warn   = 70   # % — yellow
+danger = 90   # % — red
+
+# Explicit cost thresholds (optional — overrides plan defaults)
+[thresholds.cost]
+# warn   = 2.00
+# danger = 5.00
+```
+
+### Color thresholds
+
+Both bars use the same color scheme:
+
+| Color | Meaning |
+|---|---|
+| Green | Below warn threshold |
+| Yellow | At or above warn |
+| Red | At or above danger |
+
+---
+
+## Starship
+
+> Based on an idea from [r/ClaudeCode — Use Your Starship Prompt as the Claude Code Status Line](https://www.reddit.com/r/ClaudeCode/comments/1r81675/use_your_starship_prompt_as_the_claude_code/). This project's version extends the original approach with additional variables, the configurator, and `statusline.toml` support.
 
 Uses your existing [Starship](https://starship.rs/) prompt as the status line, extended with Claude-specific data (model, context, session, cost, duration). One config, two contexts.
 
@@ -268,269 +351,13 @@ echo '{"model":{"display_name":"Opus 4.6"},"session_name":"test","context_window
 
 ---
 
-### Starship Reddit Variant
+### Original Reddit approach (DIY reference)
 
 > Original post: [r/ClaudeCode — Use Your Starship Prompt as the Claude Code Status Line](https://www.reddit.com/r/ClaudeCode/comments/1r81675/use_your_starship_prompt_as_the_claude_code/)
 
-This variant documents the minimal DIY approach from the original Reddit post — a hand-crafted bridge script placed at `~/.claude/statusline.sh`, without the configurator. It covers a smaller default variable set and includes the author's notes on extending it with cost, duration, and lines-changed tracking.
+If you prefer a minimal hand-rolled setup without the configurator, the original Reddit post walks through creating a bridge script from scratch. The core technique is identical — export env vars from the JSON payload, call `starship prompt` — but with a smaller default variable set (model, context, session only). The post also covers how to extend it step by step with cost, duration, and lines-changed tracking.
 
-#### How Claude Code's status line works
-
-Claude Code's status line runs a shell command you configure in `~/.claude/settings.json`. After each assistant message, it pipes a JSON payload to your command's stdin containing session data: model name, context window usage, session ID, cost, token counts, and more.
-
-Your command reads the JSON, does whatever processing it needs, and prints text to stdout. Claude Code displays that text at the bottom of the terminal.
-
-The key fields in the JSON payload:
-
-| Field | Description |
-|---|---|
-| `model.display_name` | Current model (e.g. "Opus 4.6") |
-| `context_window.used_percentage` | How full the context window is |
-| `session_name` | Name set via /rename (if set) |
-| `session_id` | Unique session UUID |
-| `cost.total_cost_usd` | Session cost so far |
-| `cost.total_duration_ms` | Wall-clock time since session start |
-
-Full schema: https://code.claude.com/docs/en/statusline
-
-#### Step 1: The bridge script
-
-Create `~/.claude/statusline.sh`:
-
-```bash
-#!/bin/bash
-input=$(cat)
-
-export CLAUDE_MODEL=$(echo "$input" | jq -r '.model.display_name // "?"')
-export CLAUDE_SESSION=$(echo "$input" | jq -r '.session_name // empty // .session_id[:8]')
-export CLAUDE_CONTEXT=$(printf '%s%%' "$(echo "$input" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)")
-
-STARSHIP_SHELL= starship prompt
-```
-
-What it does:
-
-- Reads the JSON payload from stdin
-- Extracts three fields into environment variables using `jq`
-- `CLAUDE_SESSION` prefers the session name (set via `/rename`), falls back to the first 8 characters of the session ID
-- `CLAUDE_CONTEXT` formats the percentage as `35%`
-- Calls `starship prompt` with `STARSHIP_SHELL=` (empty) to suppress shell-specific prompt escape wrappers like zsh's `%{...%}` — Claude Code needs raw ANSI output
-
-Make it executable:
-
-```bash
-chmod +x ~/.claude/statusline.sh
-```
-
-**Prerequisite:** `jq` must be installed (`brew install jq` on macOS, `apt install jq` on Debian/Ubuntu).
-
-#### Step 2: Add env_var modules to Starship
-
-Add these modules to your `~/.config/starship.toml`:
-
-```toml
-# Claude Code statusline — env_var modules (no subshells, only visible when set)
-[env_var.CLAUDE_MODEL]
-variable = "CLAUDE_MODEL"
-format = "[\\[$env_value\\]]($style) "
-style = "bold cyan"
-
-[env_var.CLAUDE_CONTEXT]
-variable = "CLAUDE_CONTEXT"
-format = "[$env_value]($style) "
-style = "peach"
-
-[env_var.CLAUDE_SESSION]
-variable = "CLAUDE_SESSION"
-format = "[$env_value]($style)"
-style = "purple"
-```
-
-Then reference them in your `format` string:
-
-```toml
-format = """$directory$git_branch$git_status$all${env_var.CLAUDE_MODEL}${env_var.CLAUDE_CONTEXT}${env_var.CLAUDE_SESSION}"""
-```
-
-Append them at the end so they appear after your existing prompt modules.
-
-#### Why env_var instead of custom commands
-
-Starship offers two ways to display dynamic data:
-
-- `[custom.name]` — runs a shell command, captures its stdout. Each module spawns a subprocess.
-- `[env_var.NAME]` — reads an environment variable directly. No subprocess.
-
-Since the bridge script already exports the values as env vars, `env_var` is the right choice. It's faster (no subshell overhead per module) and simpler (no `when` conditions, `shell` config, or command strings). The modules are automatically invisible in your normal shell prompt because the variables aren't set outside the bridge script.
-
-#### Step 3: Configure Claude Code
-
-Add the status line to `~/.claude/settings.json`:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "~/.claude/statusline.sh"
-  }
-}
-```
-
-The status line updates after each assistant message. Changes to the script or starship config take effect on the next update.
-
-#### The result
-
-```
-my-project on  main [$!?] 󰠳 k3d-local ()
-❯ [Opus 4.6] 35% my-session-name
-```
-
-The same `starship.toml` powers both your shell prompt and your Claude Code status line. One config, two contexts.
-
-#### Extending the bridge script
-
-You can expose more fields from the JSON payload. The bridge script has access to everything Claude Code sends.
-
-**Add cost tracking:**
-
-```bash
-export CLAUDE_COST=$(printf '$%.2f' "$(echo "$input" | jq -r '.cost.total_cost_usd // 0')")
-```
-
-```toml
-[env_var.CLAUDE_COST]
-variable = "CLAUDE_COST"
-format = "[$env_value]($style) "
-style = "yellow"
-```
-
-**Add session duration:**
-
-```bash
-DURATION_MS=$(echo "$input" | jq -r '.cost.total_duration_ms // 0')
-MINS=$((DURATION_MS / 60000))
-SECS=$(((DURATION_MS % 60000) / 1000))
-export CLAUDE_DURATION="${MINS}m${SECS}s"
-```
-
-```toml
-[env_var.CLAUDE_DURATION]
-variable = "CLAUDE_DURATION"
-format = "[$env_value]($style)"
-style = "dimmed white"
-```
-
-**Add lines changed:**
-
-```bash
-ADDED=$(echo "$input" | jq -r '.cost.total_lines_added // 0')
-REMOVED=$(echo "$input" | jq -r '.cost.total_lines_removed // 0')
-export CLAUDE_LINES="+${ADDED}/-${REMOVED}"
-```
-
-```toml
-[env_var.CLAUDE_LINES]
-variable = "CLAUDE_LINES"
-format = "[$env_value]($style)"
-style = "green"
-```
-
-Add the corresponding `${env_var.NAME}` references to your format string and they'll appear in the status line.
-
-#### Tips
-
-- **Test without Claude Code.** Pipe mock JSON to the script to verify output:
-
-```bash
-echo '{"model":{"display_name":"Opus"},"session_name":"test","context_window":{"used_percentage":42}}' | ~/.claude/statusline.sh
-```
-
-- **Keep it fast.** The status line runs after every assistant message. Starship itself is fast, but if your config has expensive custom commands, they add up. `env_var` modules have zero overhead.
-
-- `STARSHIP_SHELL=` **is the key trick.** Without it, starship wraps ANSI color codes in shell-specific escape sequences (`%{...%}` for zsh, `\[...\]` for bash) meant for prompt rendering. Claude Code's status line is not a shell prompt — it needs raw ANSI output. Setting `STARSHIP_SHELL` to an empty string disables these wrappers.
-
-- **Separate config (optional).** If you want a different layout for the status line than your shell prompt, use `STARSHIP_CONFIG=~/.config/starship-statusline.toml starship prompt` in the bridge script instead. This lets you have a compact single-line status line while keeping a multi-line shell prompt.
-
----
-
-## Configuration
-
-All variants share a single config file: `statusline.toml`.
-
-**Global** (applies to all sessions):
-```
-~/.config/the-custom-startup/statusline.toml
-```
-
-**Per-repo** (overrides global for a specific project):
-```
-<repo>/.claude/statusline.toml
-```
-
-The per-repo file only needs the keys you want to override — everything else falls through to the global config.
-
-**Script locations** (after installation):
-
-| Install scope | Scripts | Config |
-|---|---|---|
-| Global | `~/.config/the-custom-startup/` | `~/.config/the-custom-startup/statusline.toml` |
-| Per-repo | `<repo>/.claude/` | `<repo>/.claude/statusline.toml` |
-
-### Full reference
-
-```toml
-# Subscription plan — drives token limit and cost thresholds
-# auto | pro | max5x | max20x | api
-plan          = "auto"
-fallback_plan = "pro"
-
-# Manual token limit override (skips plan lookup)
-# All plan limits are estimates — override here if the bar seems off.
-# Calibrate: raw_tokens / (/usage percent / 100)  e.g. 9388 / 0.33 = 28450
-# token_limit = 28450
-
-# Budget bar mode
-# "token" — tokens used vs plan limit  (enhanced default)
-# "cost"  — session cost vs threshold  (standard default)
-budget_mode = "token"
-
-# Format string (standard variant only)
-format = "<path> <branch>  <model>  <context>  <session>  <help>"
-
-# Cache TTLs in seconds
-ccusage_cache_ttl = 60   # billing block data
-git_cache_ttl     = 15   # branch / dirty state
-
-# Display toggles (enhanced variant)
-show_budget_bar  = true
-show_context_bar = true
-show_duration    = true
-show_git         = true
-show_remote_url  = true
-
-[thresholds.context]
-warn   = 70   # % — yellow
-danger = 90   # % — red
-
-[thresholds.budget]
-warn   = 70   # % — yellow
-danger = 90   # % — red
-
-# Explicit cost thresholds (optional — overrides plan defaults)
-[thresholds.cost]
-# warn   = 2.00
-# danger = 5.00
-```
-
-### Color thresholds
-
-Both bars use the same color scheme:
-
-| Color | Meaning |
-|---|---|
-| Green | Below warn threshold |
-| Yellow | At or above warn |
-| Red | At or above danger |
+The shipped Starship variant above already includes all of these extensions and adds `statusline.toml` support, so the Reddit approach is mainly useful as a learning reference or if you want full control over a hand-crafted script.
 
 ---
 

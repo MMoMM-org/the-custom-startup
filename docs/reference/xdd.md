@@ -1,39 +1,60 @@
 # XDD Workflow
 
-Experience-Driven Development (XDD) puts the spec before the code. Before a single line of
-implementation is written, you produce three linked documents: a Product Requirements Document
-(PRD) that defines *what* to build and *why*, a Solution Design Document (SDD) that defines
-*how* to build it, and an implementation Plan that sequences the work phase by phase. Only
-after all three are complete does implementation begin. This spec-first discipline makes
-implementation predictable and eliminates mid-build clarification cycles.
+eXtended Design & Development (XDD) puts the spec before the code. The name reflects that XDD
+*extends* traditional design (SDD) with test-driven discipline (TDD) — the X avoids the awkward
+"STDD" or "TSDD" that a literal combination would produce.
+
+Before a single line of implementation is written, you produce three linked documents: a Product
+Requirements Document (PRD) that defines *what* to build and *why*, a Solution Design Document
+(SDD) that defines *how* to build it, and an implementation Plan that sequences the work phase
+by phase with TDD-structured tasks. Only after all three are complete does implementation
+begin — and after implementation, you validate *back* against the spec to catch drift. This
+discipline makes implementation predictable and eliminates mid-build clarification cycles.
 
 ---
 
 ## The Workflow
 
 ```
-1. Brainstorm   — explore the problem space; clarify goals, scope, and constraints
+1. Brainstorm    — explore the problem space; clarify goals, scope, and constraints
         |
         v
-2. /xdd         — orchestrates the full spec loop:
+2. /xdd          — orchestrates the full spec loop:
         |
         |-- xdd-prd  → requirements.md    (WHAT and WHY)
-        |-- xdd-sdd  → solution.md        (HOW and WHERE)
-        |-- xdd-plan → plan/README.md     (task sequence, per phase files)
+        |-- xdd-sdd  → solution.md        (HOW and WHERE — contracts, interfaces)
+        |-- xdd-plan → plan/README.md     (TDD-structured tasks, per phase files)
         |
         v
-3. /validate    — verify the spec against CONSTITUTION.md rules (if present)
+3. /validate     — verify the spec quality (completeness, consistency, correctness)
         |
         v
-4. /implement   — execute the plan phase by phase, task by task (TDD: red → green → refactor)
+4. /implement    — execute the plan phase by phase, task by task
+        |            each task: tdd-guardian → RED → GREEN → REFACTOR → /verify
         |
         v
-5. /review      — code review before merging
+5. /validate     — validate implementation BACK against spec (drift detection)
+        |            catches: scope creep, missing items, contradictions, extras
+        |
+        v
+6. /test         — run full test suite, enforce code ownership
+        |
+        v
+7. /review       — multi-agent code review before merging
 ```
 
 Each phase in step 2 requires user confirmation before proceeding to the next. You can start
 at any phase (PRD, SDD, or PLAN) and skip phases your situation does not require. The
 `xdd-meta` skill manages spec directory scaffolding and tracks decisions throughout.
+
+### The Validation Loop
+
+Step 5 is what makes the spec-driven approach actually work in practice. After implementation,
+`/validate drift` compares what was built against the original spec, categorizing divergences as
+scope creep, missing items, contradictions, or extra work. This closes the loop: instead of
+leaving the spec as a write-once document nobody checks, you verify the result against the plan
+and fix any drift before shipping. This backward validation is the killer feature — it catches
+the gaps that Claude Code inevitably introduces during implementation.
 
 ---
 
@@ -142,19 +163,23 @@ Test, Implement, Validate.
 
 **Name:** `xdd-tdd`
 
-**Description:** Use at the start of each implementation task — enforces the RED-GREEN-REFACTOR
-cycle and blocks production code until a failing test exists.
+**Description:** Enforces the RED-GREEN-REFACTOR cycle and blocks production code until a
+failing test exists. Acts as a discipline guardian — it will not accept rationalizations for
+skipping tests.
 
-**When to use it:** Invoke at the start of each implementation task during the `/implement`
-phase. Pass the task description and an optional SDD section reference
-(`/xdd-tdd <task> --sdd-ref SDD/Section-X.Y`). This skill enforces the TDD iron law: no
-production code is written until a failing test exists, and it will not accept
-rationalizations for skipping tests.
+**When to use it:** Called automatically by `/implement` via the `tdd-guardian` agent before
+each implementation task. You can also invoke it directly with `/xdd-tdd <task>` and an
+optional SDD section reference (`--sdd-ref SDD/Section-X.Y`). The TDD approach is also
+ingrained into other workflow skills (xdd-plan structures tasks as TDD cycles, implement
+dispatches the guardian) — xdd-tdd exists to ensure nobody bypasses the discipline.
 
 **Key outputs:**
 - A list of test names to implement (happy path, edge cases, error states)
 - Confirmed test file path following project conventions
 - Phase gate progression: RED confirmed → GREEN approved → REFACTOR checkpoint → APPROVED
+
+**Iron law:** No production code without a failing test first. If code is written before a
+test: delete it, write the failing test, start over. No exceptions.
 
 ---
 

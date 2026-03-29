@@ -27,10 +27,10 @@ The spec-driven workflow has five phases. Here is which tool to use for each:
 | Constitution (optional) | `/constitution` | Claude.ai | Use [`constitution-prompt.md`](../templates/constitution-prompt.md); run once per project |
 | Research | `/analyze` | Perplexity | Use [`research-prompt.md`](../templates/research-prompt.md) |
 | Brainstorm | `/brainstorm` | Claude.ai | Use [`brainstorm-prompt.md`](../templates/brainstorm-prompt.md) |
-| Requirements (PRD) | `/specify` | Claude.ai | Use [`prd-prompt.md`](../templates/prd-prompt.md) |
+| Requirements (PRD) | `/xdd-prd` | Claude.ai | Use [`prd-prompt.md`](../templates/prd-prompt.md) |
 | Solution + Plan + Implement | `/implement` | Claude Code only | Requires codebase access |
 
-Each phase maps to the BUILD loop from [workflow.md](../workflow.md). Constitution and Research are pre-BUILD setup. Brainstorm and PRD produce the input for `/specify`. The SDD and PLAN come from Claude Code's own `/specify` run after you import the PRD. Running multi-AI phases does not replace the BUILD loop — it front-loads the thinking before you open Claude Code.
+Each phase maps to the BUILD loop from [workflow.md](../workflow.md). Constitution and Research are pre-BUILD setup. Brainstorm and PRD produce the input for `/xdd`. The SDD and PLAN come from Claude Code's own `/xdd` run after you import the PRD. Running multi-AI phases does not replace the BUILD loop — it front-loads the thinking before you open Claude Code.
 
 The final phase (SDD, PLAN, implementation) requires reading and writing code. Use Claude Code for that.
 
@@ -71,7 +71,7 @@ The Claude project or Perplexity space provides only minimal framework context. 
 | [`constitution-prompt.md`](../templates/constitution-prompt.md) | Project governance rules | `/constitution` |
 | [`research-prompt.md`](../templates/research-prompt.md) | Market, technology, and problem research | `/analyze` |
 | [`brainstorm-prompt.md`](../templates/brainstorm-prompt.md) | Idea exploration and design | `/brainstorm` |
-| [`prd-prompt.md`](../templates/prd-prompt.md) | Product requirements document | `/specify` |
+| [`prd-prompt.md`](../templates/prd-prompt.md) | Product requirements document | `/xdd-prd` |
 | [`setup-claude-project.md`](../templates/setup-claude-project.md) | One-time Claude.ai project setup | — |
 | [`setup-perplexity-space.md`](../templates/setup-perplexity-space.md) | One-time Perplexity space setup | — |
 
@@ -122,7 +122,7 @@ pbpaste | ./scripts/import-spec.sh --type prd --new my-feature
 ./scripts/import-spec.sh --type prd --input prd-output.md
 ```
 
-After import, the file sits at `the-custom-startup/specs/NNN-name/requirements.md` (or `solution.md`), ready for `/specify` or `/implement` in Claude Code.
+After import, the file sits at `the-custom-startup/specs/NNN-name/requirements.md` (or `solution.md`), ready for `/xdd` or `/implement` in Claude Code.
 
 ### Spec Paths Note
 
@@ -157,7 +157,7 @@ Both scripts resolve the specs directory using the same chain as the skills: `.c
 4. SDD + PLAN + Implement (Claude Code)
    → open your project in Claude Code
    → paste or import the PRD
-   → run /specify to generate SDD and PLAN
+   → run /xdd to generate SDD and PLAN
    → run /implement to execute the plan
 ```
 
@@ -204,4 +204,4 @@ Both scripts resolve the specs directory using the same chain as the skills: `.c
 ./scripts/import-spec.sh --type prd --new my-feature --input prd-output.md
 ```
 
-The script places the PRD at `the-custom-startup/specs/NNN-my-feature/requirements.md`, ready for `/specify` in Claude Code.
+The script places the PRD at `the-custom-startup/specs/NNN-my-feature/requirements.md`, ready for `/xdd` in Claude Code.

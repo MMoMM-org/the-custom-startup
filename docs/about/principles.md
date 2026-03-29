@@ -2,6 +2,8 @@
 
 **Evidence-Based Guidelines for AI Agent Architecture**
 
+> Based on research compiled for [The Startup](https://github.com/rsmdt/the-startup) by [Rudolf Schmidt (@rsmdt)](https://github.com/rsmdt), with additional research references from multi-agent frameworks and academic publications.
+
 This document establishes the foundational principles for designing effective AI agent systems, based on peer-reviewed research, industry best practices, and proven patterns from leading multi-agent frameworks.
 
 ## Table of Contents
@@ -728,3 +730,7 @@ When creating specialized agents:
 ---
 
 *This document is based on peer-reviewed research and industry best practices as of 2025. Update regularly as new research and patterns emerge.*
+
+---
+
+*Upstream source: [rsmdt/the-startup — Agent Design Principles](https://github.com/rsmdt/the-startup). Check upstream for updates and additional research.*

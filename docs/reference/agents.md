@@ -2,7 +2,7 @@
 
 The `tcs-team` plugin provides 15 activity-based agents across 8 roles. They are invoked automatically by the output styles via the Agent tool, or directly by you for complex multi-domain work.
 
-The naming convention is `the-[role]/[activity]`. The role provides navigability; the activity defines what the agent actually does. This is intentional — agents specialize in *what they do*, not *who they are*. See [the-custom-philosophy.md](../about/the-custom-philosophy.md) for the research behind this architecture.
+The naming convention is `the-[role]/[activity]`. The role provides navigability; the activity defines what the agent actually does. This is intentional — agents specialize in *what they do*, not *who they are*. See [principles.md](../about/principles.md) for the research behind this architecture.
 
 ---
 
