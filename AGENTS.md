@@ -74,15 +74,12 @@ the-custom-startup/
 │   └── statusline.toml                             # Statusline configuration template
 │
 ├── docs/
-│   ├── PHILOSOPHY.md             # Activity-based architecture rationale
-│   ├── PRINCIPLES.md             # Core development principles
-│   ├── multi-ai-workflow.md      # Using Claude.ai + Perplexity alongside Claude Code
-│   ├── workflow.md               # Full spec-driven workflow reference
-│   ├── skills.md                 # Skills reference
-│   ├── agents.md                 # Agents reference
-│   ├── plugins.md                # Plugins reference
-│   ├── statusline.md             # Statusline setup guide
-│   └── templates/                # Multi-AI prompt templates (PRD, brainstorm, research, etc.)
+│   ├── about/                    # Concepts, philosophy, principles, sources
+│   ├── getting-started/          # Index, installation, quick-start, workflow
+│   ├── guides/                   # Multi-AI workflow, statusline, tcs-patterns
+│   ├── reference/                # Agents, plugins, skills, output-styles, XDD
+│   ├── templates/                # Multi-AI prompt templates (PRD, brainstorm, research, etc.)
+│   └── XDD/                      # Spec directories, ADRs, ideas
 │
 ├── install.sh                    # Interactive install wizard
 ├── uninstall.sh                  # Interactive uninstall wizard
@@ -99,8 +96,8 @@ Each plugin lives in `plugins/[name]/` with:
 - `output-styles/` - Output style definitions
 - `agents/` - Agent definitions (team plugin only)
 
-**Skill namespacing**: Claude Code automatically prefixes skills with the plugin name from
-`plugin.json`. A skill named `brainstorm` in the `tcs-workflow` plugin is invocable as `tcs-workflow:brainstorm`.
+**Skill invocation**: Skills are invoked by their name directly (e.g., `/brainstorm`, `/implement`).
+Plugin-name prefixing (`tcs-workflow:brainstorm`) only applies to commands, not skills.
 The team plugin's domain skills are agent-internal and not user-invocable directly.
 
 ### Skill Structure
@@ -139,8 +136,8 @@ Each agent markdown file defines:
 
 ```bash
 # The plugins are directories - test by installing from local path
-claude plugin install ./plugins/start
-claude plugin install ./plugins/team
+claude plugin install ./plugins/tcs-workflow
+claude plugin install ./plugins/tcs-team
 
 # Or use the main installer to test full installation
 ./install.sh
@@ -224,8 +221,4 @@ The repository is a Claude Code marketplace. Publishing happens via:
 2. GitHub Actions workflow creates release
 3. Users install via `./install.sh` or `/plugin marketplace add MMoMM-org/the-custom-startup`
 
-## Guardrails
 
-- During spec sessions, document all design decisions into the spec before moving to the next phase — don't defer or skip mid-discussion items.
-- `plugin.json` must only contain standard schema fields (`name`, `version`, `description`, `author`, `homepage`, `repository`, `license`, `keywords`). Never add `skills`, `hooks`, `agents`, `outputStyles`, or `templates` — Claude Code auto-discovers these from conventional directory names.
-- When renaming a plugin directory, also update `.claude-plugin/marketplace.json` — both `name` and `source` fields must match the new directory name or `claude plugin install` will fail.
