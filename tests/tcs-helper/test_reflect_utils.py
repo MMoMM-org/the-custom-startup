@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../plugins/tcs-he
 from lib.reflect_utils import (
     get_queue_path, load_queue, save_queue, create_queue_item, encode_project_path,
     detect_learning, strip_code_blocks, is_false_positive, calculate_confidence,
+    find_duplicates,
 )
 
 
@@ -468,3 +469,106 @@ class TestDetectLearningPipeline:
         result = detect_learning(text)
         assert result is not None
         assert result[0] == 'explicit'
+
+
+# ---------------------------------------------------------------------------
+# T4.3 — find_duplicates() cross-category deduplication
+# ---------------------------------------------------------------------------
+
+def _write_memory_file(tmp_path, filename, entries):
+    """Write a markdown memory file with list entries to tmp_path."""
+    content = "# {}\n".format(filename)
+    for entry in entries:
+        content += "- {}\n".format(entry)
+    (tmp_path / filename).write_text(content, encoding='utf-8')
+
+
+class TestFindDuplicates:
+    """Tests for cross-category duplicate detection in the Memory Bank."""
+
+    def test_exact_duplicate_detected(self, tmp_path):
+        """Same text in a file returns a match with score 1.0."""
+        _write_memory_file(tmp_path, 'tools.md', ['use fd not find for file searches'])
+        results = find_duplicates('use fd not find for file searches', str(tmp_path))
+        assert len(results) == 1
+        assert results[0]['file'] == 'tools.md'
+        assert results[0]['score'] == 1.0
+        assert results[0]['match_type'] == 'exact'
+
+    def test_near_duplicate_detected(self, tmp_path):
+        """Similar text with >60% keyword overlap returns a match with score > 0.6."""
+        _write_memory_file(tmp_path, 'tools.md', ['always use fd command for file searching'])
+        results = find_duplicates('use fd for file searching', str(tmp_path))
+        assert len(results) == 1
+        assert results[0]['score'] > 0.6
+        assert results[0]['match_type'] == 'near'
+
+    def test_no_duplicate_passes_through(self, tmp_path):
+        """Completely different text returns empty list."""
+        _write_memory_file(tmp_path, 'general.md', ['commit after every completed task'])
+        results = find_duplicates('use venv for python dependencies', str(tmp_path))
+        assert results == []
+
+    def test_searches_all_category_files(self, tmp_path):
+        """Duplicate in tools.md is found even when other files have no match."""
+        _write_memory_file(tmp_path, 'general.md', ['commit after every completed task'])
+        _write_memory_file(tmp_path, 'tools.md', ['use fd not find for file searches'])
+        _write_memory_file(tmp_path, 'domain.md', ['plugin version bumps follow semver'])
+        results = find_duplicates('use fd not find for file searches', str(tmp_path))
+        assert len(results) == 1
+        assert results[0]['file'] == 'tools.md'
+
+    def test_empty_memory_dir_returns_empty(self, tmp_path):
+        """No files in memory_dir returns empty list without error."""
+        results = find_duplicates('use fd not find', str(tmp_path))
+        assert results == []
+
+    def test_performance_20_items(self, tmp_path):
+        """20 learning checks against 6 files complete in < 5 seconds."""
+        import time
+        categories = ['general.md', 'tools.md', 'domain.md', 'decisions.md', 'context.md', 'troubleshooting.md']
+        for cat in categories:
+            entries = ['entry number {} for category {}'.format(i, cat) for i in range(20)]
+            _write_memory_file(tmp_path, cat, entries)
+
+        learnings = ['check learning number {}'.format(i) for i in range(20)]
+        start = time.time()
+        for learning in learnings:
+            find_duplicates(learning, str(tmp_path))
+        elapsed = time.time() - start
+        assert elapsed < 5.0, "20 checks took {}s, expected < 5s".format(elapsed)
+
+    def test_returns_list_of_dicts_with_required_keys(self, tmp_path):
+        """Each result dict has file, line, match_type, and score keys."""
+        _write_memory_file(tmp_path, 'tools.md', ['use fd not find for file searches'])
+        results = find_duplicates('use fd not find for file searches', str(tmp_path))
+        assert len(results) == 1
+        result = results[0]
+        assert 'file' in result
+        assert 'line' in result
+        assert 'match_type' in result
+        assert 'score' in result
+
+    def test_multiple_duplicates_across_files(self, tmp_path):
+        """Same learning found in multiple files returns all matches."""
+        _write_memory_file(tmp_path, 'tools.md', ['use fd not find for file searches'])
+        _write_memory_file(tmp_path, 'general.md', ['use fd not find for file searches'])
+        results = find_duplicates('use fd not find for file searches', str(tmp_path))
+        assert len(results) == 2
+        files_found = {r['file'] for r in results}
+        assert 'tools.md' in files_found
+        assert 'general.md' in files_found
+
+    def test_line_field_contains_original_entry_text(self, tmp_path):
+        """The line field in the result contains the original entry text."""
+        _write_memory_file(tmp_path, 'tools.md', ['use fd not find for file searches'])
+        results = find_duplicates('use fd not find for file searches', str(tmp_path))
+        assert results[0]['line'] == 'use fd not find for file searches'
+
+    def test_non_list_lines_ignored(self, tmp_path):
+        """Lines not starting with "- " (headers, blanks) are not checked."""
+        content = "# tools.md\n\n## Section\nuse fd not find\n- use fd not find for file searches\n"
+        (tmp_path / 'tools.md').write_text(content, encoding='utf-8')
+        # Only the "- " line should be considered
+        results = find_duplicates('use fd not find for file searches', str(tmp_path))
+        assert len(results) == 1

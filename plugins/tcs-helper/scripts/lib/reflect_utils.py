@@ -237,6 +237,75 @@ def _count_cjk_matches(text):
     return count
 
 
+MEMORY_CATEGORIES = [
+    'general.md', 'tools.md', 'domain.md', 'decisions.md', 'context.md', 'troubleshooting.md',
+]
+
+DEDUP_STOPWORDS = frozenset([
+    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'it', 'this', 'that',
+])
+
+
+def _tokenize(text):
+    """Lowercase, strip punctuation, split on whitespace, remove stopwords."""
+    normalized = re.sub(r'[^\w\s]', ' ', text.lower())
+    return set(w for w in normalized.split() if w and w not in DEDUP_STOPWORDS)
+
+
+def _jaccard(set_a, set_b):
+    """Return Jaccard similarity between two token sets. Returns 0.0 if both empty."""
+    if not set_a and not set_b:
+        return 0.0
+    union = set_a | set_b
+    if not union:
+        return 0.0
+    return len(set_a & set_b) / len(union)
+
+
+def _normalize(text):
+    """Lowercase and strip whitespace for exact match comparison."""
+    return text.lower().strip()
+
+
+def find_duplicates(learning, memory_dir):
+    """Check a learning against all category files in memory_dir for duplicates.
+
+    Returns list of dicts:
+    [{"file": "tools.md", "line": "existing entry text", "match_type": "exact"|"near", "score": float}]
+
+    - Exact match: normalized text (lowercase, stripped) is identical → score 1.0
+    - Near match: Jaccard similarity > 0.6 → score = similarity value
+
+    Reads all .md files in memory_dir. Only lines starting with "- " are checked.
+    """
+    results = []
+    normalized_learning = _normalize(learning)
+    learning_tokens = _tokenize(learning)
+
+    for filename in os.listdir(memory_dir):
+        if not filename.endswith('.md'):
+            continue
+        filepath = os.path.join(memory_dir, filename)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+        except (IOError, OSError):
+            continue
+
+        for raw_line in lines:
+            if not raw_line.startswith('- '):
+                continue
+            entry = raw_line[2:].rstrip('\n').rstrip()
+            if _normalize(entry) == normalized_learning:
+                results.append({'file': filename, 'line': entry, 'match_type': 'exact', 'score': 1.0})
+                continue
+            score = _jaccard(learning_tokens, _tokenize(entry))
+            if score > 0.6:
+                results.append({'file': filename, 'line': entry, 'match_type': 'near', 'score': score})
+
+    return results
+
+
 def detect_learning(prompt):
     """Detect if a prompt contains a learning. Returns (type, patterns, confidence) or None.
 
