@@ -3,6 +3,10 @@
 ## Core Philosophy
 <!-- 2-3 lines: what this project is, key principles -->
 
+## Project Membership
+<!-- @pathtoproject claude.md e.g. ~/Kouzou/projects/miyo/miyo.md -->
+<!-- Delete otherwise -->
+
 ## Memory & Context
 @docs/ai/memory/memory.md
 

@@ -59,11 +59,6 @@ When adding to claude.md files, always consider scope:
 - Information valid for one repo → repo CLAUDE.md
   - If task-specific: create a new document and reference it with a description, not an @-import
 
-## Skills
-
-When creating, editing, or auditing Claude Code skills — use `/skill-author`.
-Reference for skill structure, frontmatter, invocation modes, and patterns:
-can be found in: `~/.claude/includes/skills-reference.md`
 
 ## Guardrails
 
