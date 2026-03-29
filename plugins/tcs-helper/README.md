@@ -1,42 +1,96 @@
 # tcs-helper Plugin
 
-Helper tools for The Custom Agentic Startup — skill authoring, agent discovery, and plugin development utilities.
+Helper tools for The Custom Agentic Startup — memory system, skill authoring, and project onboarding.
 
-This plugin is **optional**. Install it if you want to create or maintain skills and agents for Claude Code plugins.
+## Version 3.0.0
+
+### Breaking Changes
+
+- `merge_hooks.py` removed — hooks now load natively from `hooks/hooks.json` via Claude Code's plugin system. No manual hook installation needed.
+- Hook scripts read `cwd` from JSON stdin instead of `${PWD}` CLI argument.
+
+See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Skills
 
-### `tcs-helper:skill-author`
+### Memory Bank
 
-Guided workflow for creating, auditing, and converting Claude Code skills. Covers the full lifecycle: duplicate detection, PICS structure, model selection, agent discovery, verification, and deployment.
+| Skill | Description |
+|-------|-------------|
+| `/setup` | Provision `docs/ai/memory/` + CLAUDE.md hierarchy in a new repo |
+| `/memory-add` | Capture session learnings and route to the correct scope and category file |
+| `/memory-sync` | Keep `@imports` and memory index in sync |
+| `/memory-cleanup` | Archive resolved issues, prune stale entries |
+| `/memory-promote` | Promote domain patterns from memory files to reusable skills |
+| `/memory-claude-md-optimize` | Audit, score, and migrate flat CLAUDE.md into Memory Bank |
 
-→ Invocable as `/skill-author`
+### Skill Authoring
 
-### `tcs-helper:memory-claude-md-optimize`
+| Skill | Description |
+|-------|-------------|
+| `/skill-author` | Create, audit, or convert Claude Code skills |
+| `/skill-evaluate` | Evaluate skill quality before importing |
+| `/skill-import` | Fetch a single skill from any GitHub repo |
 
-Audits, scores, and migrates flat CLAUDE.md files into the structured Memory Bank system. Replaces eager @-imports with descriptive references, categorizes content into 6 memory categories, and measures context window savings. Non-destructive with backups and user review before applying.
+### Git Workflow
 
-→ Invocable as `/memory-claude-md-optimize [--dry-run] [--scope global|project|repo]`
+| Skill | Description |
+|-------|-------------|
+| `/git-worktree` | Manage git worktrees for parallel branch work |
+| `/finish-branch` | Branch completion — merge, PR, keep, or discard |
+| `/docs` | Fetch and cache current Claude Code documentation |
+
+## Hooks
+
+Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the plugin is enabled. No installation step required.
+
+| Event | Script | Purpose |
+|-------|--------|---------|
+| `UserPromptSubmit` | `capture_learning.py` | Detect corrections/learnings via regex (English + CJK), queue them |
+| `SessionStart` | `session_start_reminder.py` | Show pending queue count at session open |
+| `PreCompact` | `check_learnings.py` | Back up queue before context compaction |
+| `PostToolUse(Bash)` | `post_commit_reminder.py` | Remind to run `/memory-add` after git commit; capture persistent tool errors |
+
+### Pattern Detection
+
+`detect_learning()` uses an 8-step pipeline:
+1. Minimum length gate (< 5 chars rejected)
+2. Code block exclusion
+3. Explicit patterns (`remember:`) — confidence 1.0
+4. Guardrail patterns (`don't X unless`) — confidence 0.85
+5. Correction patterns (English + 13 CJK patterns) — confidence 0.65-0.85
+6. Positive patterns (`perfect!`, `exactly right`) — confidence 0.70
+7. False positive filter (non-correction phrases, positive context detection)
+8. Confidence adjustment (length, multi-pattern boost, cap 0.95)
+
+### Optional: Semantic Validation
+
+`scripts/lib/semantic_detector.py` provides optional AI-powered validation via `claude -p`:
+- Validates low-confidence items (< 0.7) before persisting
+- Detects contradictions between new and existing learnings
+- Controlled via `TCS_SEMANTIC_VALIDATION=false` env var
+- Falls back gracefully when `claude` CLI is unavailable
 
 ## Scripts
 
-### `skills/skill-author/find-agents.sh`
+| Script | Purpose |
+|--------|---------|
+| `scripts/lib/reflect_utils.py` | Core library — pattern detection, queue I/O, dedup |
+| `scripts/lib/semantic_detector.py` | Optional AI validation + contradiction detection |
+| `scripts/extract_session_learnings.py` | Extract user messages from Claude session JSONL files |
 
-Discovers all installed Claude Code agents across `~/.claude/agents/` and plugin caches. Returns agent names and descriptions for use by `skill-author` when determining whether a skill should delegate to an agent.
+## Tests
 
 ```bash
-find ~/.claude/plugins/cache -path "*/tcs-helper/skills/skill-author/find-agents.sh" -type f 2>/dev/null | head -1 | xargs bash
-# or directly if version is known:
-~/.claude/plugins/cache/the-custom-startup/tcs-helper/x.y.z/skills/skill-author/find-agents.sh
+source venv/bin/activate && python3 -m pytest tests/tcs-helper/ -v
+# 161 tests, ~1s
 ```
 
 ## Attribution
 
-The `skill-author` skill incorporates patterns and techniques from [obra/superpowers](https://github.com/obra/superpowers) — specifically the TDD-for-skills approach, Claude Search Optimization (CSO) guidelines, token efficiency techniques, and rationalization-proofing patterns. Used under MIT License.
+Learning capture patterns ported from [claude-reflect v3.1.0](https://github.com/BayramAnnakov/claude-reflect) by Bayram Annakov. The `skill-author` skill incorporates patterns from [obra/superpowers](https://github.com/obra/superpowers). Both used under MIT License.
 
 ## Installation
-
-The install wizard (`install.sh`) offers `tcs-helper` as an optional third plugin. To install manually:
 
 ```bash
 /plugin marketplace add MMoMM-org/the-custom-startup

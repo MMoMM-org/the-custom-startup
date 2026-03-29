@@ -83,14 +83,14 @@ Optional. Provides skill authoring tools, the **[Memory Bank](../about/concepts.
 | `/finish-branch` | Branch completion workflow — merge, PR, keep, or discard |
 | `/docs` | Fetch and cache current Claude Code documentation on demand |
 
-**Hooks (installed by `/setup`, not by the install script):**
+**Hooks (natively loaded from `hooks/hooks.json` when plugin is enabled):**
 
 | Event | Hook | Purpose |
 |-------|------|---------|
-| `UserPromptSubmit` | `capture_learning.py` | Detect corrections and learnings, queue them |
+| `UserPromptSubmit` | `capture_learning.py` | Detect corrections and learnings (English + CJK), queue them |
 | `SessionStart` | `session_start_reminder.py` | Show pending queue count at session open |
 | `PreCompact` | `check_learnings.py` | Back up queue before context compaction |
-| `PostToolUse(Bash)` | `post_commit_reminder.py` | Remind to run `/memory-add` after git commit |
+| `PostToolUse(Bash)` | `post_commit_reminder.py` | Remind to run `/memory-add` after git commit; capture persistent tool errors |
 
 ---
 
