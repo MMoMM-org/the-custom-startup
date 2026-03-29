@@ -178,23 +178,50 @@ choose_target() {
 
 choose_plugins() {
   printf "\n${BRIGHT_GREEN}── Plugins${RESET}\n\n"
-  printf "  ${CYAN}1)${RESET} Both              — tcs-workflow + tcs-team  (recommended)\n"
-  printf "  ${CYAN}2)${RESET} tcs-workflow only — workflow skills\n"
-  printf "  ${CYAN}3)${RESET} tcs-team only     — specialist agents\n"
-  printf "  ${CYAN}4)${RESET} Core + helper     — tcs-workflow + tcs-team + tcs-helper (Memory Bank + skill authoring)\n"
-  printf "  ${CYAN}5)${RESET} All four          — everything + tcs-patterns (domain pattern skills)\n"
+  printf "  ${CYAN}1)${RESET} Recommended       — tcs-workflow + tcs-team + tcs-helper (workflow, agents, Memory Bank)\n"
+  printf "  ${CYAN}2)${RESET} Core only         — tcs-workflow + tcs-team (workflow + agents, no Memory Bank)\n"
+  printf "  ${CYAN}3)${RESET} All               — everything including tcs-patterns (domain pattern skills)\n"
+  printf "  ${CYAN}4)${RESET} Pick and choose   — select individual plugins\n"
   printf "\n"
-  ask "Select plugins [1-5, default: 1]:"
+  ask "Select plugins [1-4, default: 1]:"
   local choice
   read -r choice </dev/tty
   case "$choice" in
-    2) PLUGINS="tcs-workflow@the-custom-startup" ;;
-    3) PLUGINS="tcs-team@the-custom-startup" ;;
-    4) PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup" ;;
-    5) PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup tcs-patterns@the-custom-startup" ;;
-    *)  PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup" ;;
+    2) PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup" ;;
+    3) PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup tcs-patterns@the-custom-startup" ;;
+    4) _pick_plugins ;;
+    *) PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup" ;;
   esac
   success "Plugins: $PLUGINS"
+}
+
+_pick_plugins() {
+  PLUGINS=""
+  printf "\n  Select which plugins to install (y/n for each):\n\n"
+
+  ask "tcs-workflow — core workflow skills (20 skills, required for others) [Y/n]:"
+  local c; read -r c </dev/tty
+  case "$c" in [nN]|[nN][oO]) ;; *) PLUGINS="$PLUGINS tcs-workflow@the-custom-startup" ;; esac
+
+  ask "tcs-team     — 15 specialist agents across 8 roles [Y/n]:"
+  read -r c </dev/tty
+  case "$c" in [nN]|[nN][oO]) ;; *) PLUGINS="$PLUGINS tcs-team@the-custom-startup" ;; esac
+
+  ask "tcs-helper   — Memory Bank, skill authoring, git workflows [Y/n]:"
+  read -r c </dev/tty
+  case "$c" in [nN]|[nN][oO]) ;; *) PLUGINS="$PLUGINS tcs-helper@the-custom-startup" ;; esac
+
+  ask "tcs-patterns — 17 domain pattern skills (architecture, testing, platforms) [y/N]:"
+  read -r c </dev/tty
+  case "$c" in [yY]|[yY][eE][sS]) PLUGINS="$PLUGINS tcs-patterns@the-custom-startup" ;; esac
+
+  PLUGINS="${PLUGINS# }"
+  if [[ -z "$PLUGINS" ]]; then
+    warn "No plugins selected — at minimum tcs-workflow is recommended"
+    ask "Install tcs-workflow anyway? [Y/n]:"
+    read -r c </dev/tty
+    case "$c" in [nN]|[nN][oO]) ;; *) PLUGINS="tcs-workflow@the-custom-startup" ;; esac
+  fi
 }
 
 # ==============================================================================
