@@ -78,7 +78,7 @@ Validates the complete skill against specifications, tests it with real CLAUDE.m
     - [ ] New content proposed as additions, not overwrites `[ref: PRD/Feature 10/AC-1]`
     - [ ] Recommends /memory-cleanup for maintenance `[ref: PRD/Feature 10/AC-2]`
 
-- [ ] **T3.5 Documentation & Commit** `[activity: documentation]`
+- [x] **T3.5 Documentation & Commit** `[activity: documentation]`
 
   1. Prime: Read global CLAUDE.md rules (update README and docs when shipping). Read spec README for decision log updates.
   2. Test: Verify README mentions the new skill. Verify spec README has all decisions logged. Verify any relevant documentation is updated.
