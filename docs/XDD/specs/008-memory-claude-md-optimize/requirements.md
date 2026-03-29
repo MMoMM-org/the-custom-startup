@@ -160,9 +160,9 @@ The result is leaner CLAUDE.md files, properly categorized memory, and lower con
 
 - **User Story:** As a TCS user, I want to see the impact of the optimization in terms of context usage so I can verify the improvement.
 - **Acceptance Criteria:**
-  - [x] Given the skill starts, When discovery and scoring complete, Then a "BEFORE" snapshot is captured: per-file line counts, total token estimate, and a note to run `/context` and `/memory` for live baseline
-  - [x] Given apply completes, When the summary is shown, Then an "AFTER" section shows: new per-file line counts, estimated token savings, and instructions to reload the session (start a new conversation) and run `/context` and `/memory` to see the actual difference
-  - [x] Given the OPTIMIZATION-REPORT.md, When it is generated, Then it includes both the BEFORE and AFTER snapshots plus instructions for manual verification
+  - [x] Given the skill starts, When discovery and scoring complete, Then a "BEFORE" snapshot is computed and saved: per-file line counts, per-file token estimates (chars/4 approximation), total token cost across all memory/CLAUDE.md files, and which files are always-loaded vs lazy-loaded
+  - [x] Given apply completes, When the summary is shown, Then an "AFTER" section is computed from the new file sizes: per-file line counts, per-file token estimates, total token cost, and the delta (tokens saved)
+  - [x] Given the OPTIMIZATION-REPORT.md, When it is generated, Then it includes both BEFORE and AFTER snapshots in a comparison table, plus a note that the user should start a new session and run `/context` to see the actual live difference (since the current session still has old files cached)
 
 ### Should Have Features
 
@@ -182,14 +182,15 @@ The result is leaner CLAUDE.md files, properly categorized memory, and lower con
 
 ### Could Have Features
 
-#### Feature 11: AGENTS.md Context Reduction
+#### Feature 11: AGENTS.md Context Optimization
 
-- **User Story:** As a TCS user, I want the optimization to address AGENTS.md context duplication so that the same content isn't loaded twice (once via CLAUDE.md, once via AGENTS.md).
+- **User Story:** As a TCS user, I want the optimization to address AGENTS.md context duplication so that the same content isn't loaded twice via the `@AGENTS.md` import in CLAUDE.md.
+- **Background (research finding):** Claude Code does NOT auto-load AGENTS.md. The official docs state: "Claude Code reads CLAUDE.md, not AGENTS.md." The recommended pattern is `@AGENTS.md` inside CLAUDE.md. This means any context duplication comes from the @-import, not from auto-loading. AGENTS.md exists as an industry-standard file for other AI coding tools (Codex, Cursor, Aider, Jules, Zed, Factory) — it should be kept for cross-tool compatibility but optimized for context efficiency.
 - **Acceptance Criteria:**
-  - [x] Given AGENTS.md exists and contains content that overlaps with CLAUDE.md, When the optimization runs, Then it flags the duplication and the context cost
-  - [x] Given duplication is found, When the user is prompted, Then they can choose: (a) make AGENTS.md a thin pointer that references CLAUDE.md for details, (b) rename AGENTS.md to remove it from auto-loading (Claude Code auto-loads AGENTS.md but has no setting to exclude it), or (c) keep both as-is
-  - [x] Given the user chooses to make AGENTS.md a pointer, When apply runs, Then AGENTS.md is rewritten to contain only a brief project description and a reference to CLAUDE.md for full context
-  - [x] Given the user chooses to rename, When prompted, Then the default new name is `FOR-AGENTS.md` (not auto-loaded) and the user can override
+  - [x] Given AGENTS.md exists and CLAUDE.md contains `@AGENTS.md`, When the optimization runs, Then it calculates the token cost of the import and flags whether AGENTS.md content duplicates what's already in CLAUDE.md or memory files
+  - [x] Given duplication is found, When the user is prompted, Then they can choose: (a) replace `@AGENTS.md` with a descriptive reference in CLAUDE.md (stops eager loading but keeps AGENTS.md for other tools), (b) slim down AGENTS.md to a brief project description only (reduce what the @-import loads), (c) remove the `@AGENTS.md` import entirely (AGENTS.md stays for other tools, Claude Code ignores it), or (d) keep as-is
+  - [x] Given the user chooses option (a) — descriptive reference, When apply runs, Then the `@AGENTS.md` line in CLAUDE.md is replaced with: "Project structure and agent guidance is documented in AGENTS.md — consult when working on agent definitions or understanding repo layout"
+  - [x] Given the user chooses option (b) — slim down, When apply runs, Then AGENTS.md is rewritten to contain only a brief project description and the repo structure, with detailed instructions kept only in CLAUDE.md and memory files
 
 ### Won't Have (This Phase)
 
