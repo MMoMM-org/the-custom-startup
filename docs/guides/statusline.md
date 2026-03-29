@@ -206,7 +206,7 @@ Both bars use the same color scheme:
 
 ## Starship Variants
 
-The two Starship variants use your existing [Starship](https://starship.rs/) prompt as the status line — one is the fully-featured version shipped with this project, the other documents the minimal DIY approach from the [original Reddit post](https://www.reddit.com/r/ClaudeCode/comments/1r81675/use_your_starship_prompt_as_the_claude_code/).
+The Starship integration is based on an idea from the [original Reddit post](https://www.reddit.com/r/ClaudeCode/comments/1r81675/use_your_starship_prompt_as_the_claude_code/). The fully-featured version shipped with this project extends that approach with additional variables, the configurator, and `statusline.toml` support. The Reddit variant section below documents the original minimal DIY approach for reference.
 
 ### Starship
 
