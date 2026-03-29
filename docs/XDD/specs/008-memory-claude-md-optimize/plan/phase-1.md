@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Reference Documents"
-status: pending
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -33,7 +33,7 @@ phase: 1
 
 Establishes the knowledge base that guides Claude's analysis during skill execution. Each reference doc is a standalone rubric loaded on-demand by the SKILL.md workflow.
 
-- [ ] **T1.1 Categorization Reference** `[activity: domain-modeling]` `[parallel: true]`
+- [x] **T1.1 Categorization Reference** `[activity: domain-modeling]` `[parallel: true]`
 
   1. Prime: Read existing categorization signals in `plugins/tcs-helper/skills/memory-add/SKILL.md` `[ref: SDD/Implementation Examples/Content Categorization]`. Read Memory Bank templates in `plugins/tcs-helper/templates/memory-*.md` for category definitions. Read `plugins/tcs-helper/templates/routing-reference.md` for routing rules.
   2. Test: Verify the reference doc covers all 6 categories with: definition, signal keywords, 3+ examples per category, edge case guidance (multi-category items), scope-fit signals (generic vs specific)
@@ -44,7 +44,7 @@ Establishes the knowledge base that guides Claude's analysis during skill execut
     - [ ] PRD business rules 1-8 all represented `[ref: PRD/Detailed Feature Specifications]`
     - [ ] Scope-fit criteria (generic vs specific) defined with examples `[ref: PRD/Feature 3/AC-3, AC-4]`
 
-- [ ] **T1.2 Quality Scoring Rubric** `[activity: domain-modeling]` `[parallel: true]`
+- [x] **T1.2 Quality Scoring Rubric** `[activity: domain-modeling]` `[parallel: true]`
 
   1. Prime: Read PRD Feature 2 scoring criteria `[ref: PRD/Feature 2]`. Read SDD scoring algorithm `[ref: SDD/Implementation Examples/Quality Scoring]`. Research Anthropic's claude-md-management plugin for scoring patterns (noted in PRD Supporting Research).
   2. Test: Verify the rubric covers all 6 criteria with: definition, point allocation, scoring guidance (what earns 0 / mid / full marks), grade boundaries, warning thresholds
@@ -56,7 +56,7 @@ Establishes the knowledge base that guides Claude's analysis during skill execut
     - [ ] Low-score guidance (below 50) with improvement suggestions `[ref: PRD/Feature 2/AC-3]`
     - [ ] Line count warning thresholds defined `[ref: PRD/Feature 2/AC-4]`
 
-- [ ] **T1.3 Scope Rules Reference** `[activity: domain-modeling]` `[parallel: true]`
+- [x] **T1.3 Scope Rules Reference** `[activity: domain-modeling]` `[parallel: true]`
 
   1. Prime: Read SDD scope cascade algorithm `[ref: SDD/Runtime View/Complex Logic]`. Read SDD system context diagram `[ref: SDD/External Interfaces]`. Read existing scope patterns in `plugins/tcs-helper/skills/memory-add/SKILL.md` (scope determination section).
   2. Test: Verify the reference doc covers: 3 scope definitions (global/project/repo), cascade behavior for each starting scope, project directory discovery via @-imports (NOT hardcoded paths), file types per scope, scope-fit assessment (when to recommend moving content between scopes)
@@ -68,6 +68,6 @@ Establishes the knowledge base that guides Claude's analysis during skill execut
     - [ ] Project directory discovered via @-imports, not hardcoded `[ref: SDD/Runtime View/Complex Logic]`
     - [ ] @-import resolution rules (relative, absolute, ~-prefixed) `[ref: PRD/Feature 1/AC-6]`
 
-- [ ] **T1.4 Phase Validation** `[activity: validate]`
+- [x] **T1.4 Phase Validation** `[activity: validate]`
 
   - Read all 3 reference docs. Verify internal consistency (no contradictions between categorization signals and scope rules). Verify all PRD features 1-3 are addressable from the reference docs. Verify a developer implementing the SKILL.md could use these docs without further clarification.
