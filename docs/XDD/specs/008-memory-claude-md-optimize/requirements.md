@@ -162,7 +162,10 @@ The result is leaner CLAUDE.md files, properly categorized memory, and lower con
 - **Acceptance Criteria:**
   - [x] Given the skill starts, When discovery and scoring complete, Then a "BEFORE" snapshot is computed and saved: per-file line counts, per-file token estimates (chars/4 approximation), total token cost across all memory/CLAUDE.md files, and which files are always-loaded vs lazy-loaded
   - [x] Given apply completes, When the summary is shown, Then an "AFTER" section is computed from the new file sizes: per-file line counts, per-file token estimates, total token cost, and the delta (tokens saved)
-  - [x] Given the OPTIMIZATION-REPORT.md, When it is generated, Then it includes both BEFORE and AFTER snapshots in a comparison table, plus a note that the user should start a new session and run `/context` to see the actual live difference (since the current session still has old files cached)
+  - [x] Given the OPTIMIZATION-REPORT.md, When it is generated, Then it includes both BEFORE and AFTER snapshots in a comparison table
+  - [x] Given the OPTIMIZATION-REPORT.md, When it is generated, Then it includes a "Verification Prompt" section — a ready-to-paste prompt the user can run in a new Claude Code session to verify the actual live difference
+  - [x] Given the verification prompt, When generated, Then it explains WHY a new session is needed ("The current session still has old files cached. Claude Code loads CLAUDE.md and memory files at session start, so you need a fresh session to see the new structure in action."), asks the user to run `/context` and `/memory`, and compares the live output against the BEFORE numbers from the report
+  - [x] Given the verification prompt, When generated, Then it is a self-contained block the user can copy-paste, formatted as: context explanation, instruction to run `/context`, instruction to run `/memory`, and what to look for (e.g., "Memory files should show fewer tokens than the BEFORE value of X tokens")
 
 ### Should Have Features
 
