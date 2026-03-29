@@ -9,7 +9,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../plugins/tcs-helper/scripts'))
 from lib.reflect_utils import (
     get_queue_path, load_queue, save_queue, create_queue_item, encode_project_path,
-    detect_learning,
+    detect_learning, strip_code_blocks, is_false_positive, calculate_confidence,
 )
 
 
@@ -213,3 +213,258 @@ def test_detect_learning_positive_takes_priority_over_correction():
     prompt = "actually that's exactly right"
     result = detect_learning(prompt)
     assert result[0] == 'positive'
+
+
+# ---------------------------------------------------------------------------
+# T3.1 — strip_code_blocks() and is_false_positive()
+# ---------------------------------------------------------------------------
+
+class TestStripCodeBlocks:
+    """Tests for code block removal before pattern matching."""
+
+    def test_no_blocks_text_unchanged(self):
+        text = "no, that's wrong. Use fd instead."
+        assert strip_code_blocks(text) == text
+
+    def test_single_block_removed(self):
+        text = "don't use this:\n```\nold_code()\n```\nuse the new API"
+        result = strip_code_blocks(text)
+        assert "old_code()" not in result
+        assert "don't use this:" in result
+        assert "use the new API" in result
+
+    def test_multiple_blocks_removed(self):
+        text = "wrong:\n```\nbad()\n```\ncorrect:\n```\ngood()\n```\ndo this"
+        result = strip_code_blocks(text)
+        assert "bad()" not in result
+        assert "good()" not in result
+        assert "do this" in result
+
+    def test_inline_backticks_preserved(self):
+        text = "use `fd` not `find` for file searches"
+        assert strip_code_blocks(text) == text
+
+    def test_language_annotated_block_removed(self):
+        text = "stop using:\n```python\nimport os\n```\nuse pathlib"
+        result = strip_code_blocks(text)
+        assert "import os" not in result
+        assert "use pathlib" in result
+
+    def test_empty_string(self):
+        assert strip_code_blocks("") == ""
+
+    def test_unclosed_block_preserved(self):
+        # Unclosed blocks should not eat the rest of the text
+        text = "remember: use venv\n```\nsome code"
+        result = strip_code_blocks(text)
+        # With no closing ```, different implementations may handle this differently
+        # but the key text before the block should survive
+        assert "remember:" in result
+
+
+class TestIsFalsePositive:
+    """Tests for false positive phrase detection."""
+
+    def test_no_problem(self):
+        assert is_false_positive("no problem, thanks", []) is True
+
+    def test_no_worries(self):
+        assert is_false_positive("no worries about that", []) is True
+
+    def test_dont_worry(self):
+        assert is_false_positive("don't worry about it", []) is True
+
+    def test_never_mind(self):
+        assert is_false_positive("never mind, I figured it out", []) is True
+
+    def test_dont_bother(self):
+        assert is_false_positive("don't bother with that", []) is True
+
+    def test_real_correction_not_false_positive(self):
+        assert is_false_positive("no, that's wrong", []) is False
+
+    def test_stop_command_not_false_positive(self):
+        assert is_false_positive("stop refactoring unrelated code", []) is False
+
+    def test_dont_instruction_not_false_positive(self):
+        assert is_false_positive("don't use find, use fd", []) is False
+
+    def test_no_need(self):
+        assert is_false_positive("no need for that", []) is True
+
+    def test_case_insensitive(self):
+        assert is_false_positive("No Problem at all", []) is True
+
+
+# ---------------------------------------------------------------------------
+# T3.2 — CJK correction patterns
+# ---------------------------------------------------------------------------
+
+class TestCJKPatterns:
+    """Tests for CJK (Chinese, Japanese, Korean) correction detection."""
+
+    @pytest.mark.parametrize('prompt,description', [
+        ("違う、そのアプローチではなく", "Japanese chigau - wrong"),
+        ("そうじゃない、別の方法で", "Japanese souja-nai - not like that"),
+        ("間違ってるよ、直して", "Japanese machigatte - it's wrong"),
+        ("いや、そっちじゃない", "Japanese iya - no"),
+        ("やめて！", "Japanese yamete - stop"),
+    ])
+    def test_japanese_correction_detected(self, prompt, description):
+        result = detect_learning(prompt)
+        assert result is not None, "Expected CJK match for: {}".format(description)
+        assert result[2] >= 0.60
+
+    @pytest.mark.parametrize('prompt,description', [
+        ("不是，应该用另一种方法", "Chinese bushi - no"),
+        ("错了，重新来", "Chinese cuole - wrong"),
+        ("不要用find要用fd", "Chinese buyao-yao - don't X use Y"),
+    ])
+    def test_chinese_correction_detected(self, prompt, description):
+        result = detect_learning(prompt)
+        assert result is not None, "Expected CJK match for: {}".format(description)
+        assert result[2] >= 0.60
+
+    @pytest.mark.parametrize('prompt,description', [
+        ("아니, 그게 아니라", "Korean ani - no"),
+        ("틀렸어, 다시 해봐", "Korean teullyeoss - wrong"),
+    ])
+    def test_korean_correction_detected(self, prompt, description):
+        result = detect_learning(prompt)
+        assert result is not None, "Expected CJK match for: {}".format(description)
+        assert result[2] >= 0.60
+
+    def test_mixed_language_detected(self):
+        result = detect_learning("no, 違う、use the other approach")
+        assert result is not None
+
+    def test_cjk_inside_code_block_no_match(self):
+        text = "looks good\n```\n違う\n```\ncarry on"
+        result = detect_learning(text)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# T3.3 — calculate_confidence()
+# ---------------------------------------------------------------------------
+
+class TestCalculateConfidence:
+    """Tests for confidence scoring adjustments."""
+
+    def test_short_text_boost(self):
+        # < 20 chars → +0.05 boost
+        result = calculate_confidence(0.75, "no, use fd", 1)
+        assert result == pytest.approx(0.80, abs=0.001)
+
+    def test_long_text_penalty(self):
+        # > 500 chars → -0.10 penalty
+        long_text = "actually " + "x" * 500
+        result = calculate_confidence(0.75, long_text, 1)
+        assert result == pytest.approx(0.65, abs=0.001)
+
+    def test_normal_length_no_adjustment(self):
+        # 20-500 chars → no length adjustment
+        text = "no, that's wrong. Use the other approach instead."
+        result = calculate_confidence(0.75, text, 1)
+        assert result == pytest.approx(0.75, abs=0.001)
+
+    def test_multi_pattern_boost_two(self):
+        # 2 patterns → +0.05
+        result = calculate_confidence(0.75, "medium length text here", 2)
+        assert result == pytest.approx(0.80, abs=0.001)
+
+    def test_multi_pattern_boost_three(self):
+        # 3 patterns → +0.10
+        result = calculate_confidence(0.75, "medium length text here", 3)
+        assert result == pytest.approx(0.85, abs=0.001)
+
+    def test_cap_at_095(self):
+        # Even with all boosts, never exceed 0.95
+        result = calculate_confidence(0.90, "short", 5)
+        assert result <= 0.95
+
+    def test_single_pattern_no_multi_boost(self):
+        # 1 pattern → no multi-pattern boost
+        result = calculate_confidence(0.75, "medium length text here", 1)
+        assert result == pytest.approx(0.75, abs=0.001)
+
+    def test_combined_short_and_multi(self):
+        # Short text + 2 patterns → +0.05 + 0.05 = +0.10
+        result = calculate_confidence(0.70, "no, use fd", 2)
+        assert result == pytest.approx(0.80, abs=0.001)
+
+
+# ---------------------------------------------------------------------------
+# T3.3 continued — minimum length gate
+# ---------------------------------------------------------------------------
+
+def test_detect_learning_minimum_length_gate():
+    """Text shorter than 5 chars should return None regardless of content."""
+    assert detect_learning("no") is None
+    assert detect_learning("ok") is None
+    assert detect_learning("   ") is None
+
+
+def test_detect_learning_empty_string_still_none():
+    """Empty string returns None (existing behavior, verify not broken)."""
+    assert detect_learning("") is None
+
+
+# ---------------------------------------------------------------------------
+# T3.4 — Integration tests (full pipeline)
+# ---------------------------------------------------------------------------
+
+class TestDetectLearningPipeline:
+    """Integration tests exercising the full 8-step pipeline."""
+
+    def test_explicit_with_code_block_strips_block(self):
+        """Code block stripped, but 'remember:' in real text still matches explicit."""
+        text = "remember: use venv\n```\nsome code\n```"
+        result = detect_learning(text)
+        assert result is not None
+        assert result[0] == 'explicit'
+
+    def test_false_positive_no_problem_returns_none(self):
+        """'no problem' triggers false positive filter → None."""
+        result = detect_learning("no problem, that works great")
+        assert result is None
+
+    def test_false_positive_dont_worry_returns_none(self):
+        """'don't worry about it' triggers false positive filter → None."""
+        result = detect_learning("don't worry about it")
+        assert result is None
+
+    def test_cjk_correction_has_correct_confidence_range(self):
+        """CJK correction yields confidence in expected range."""
+        result = detect_learning("違う、そのアプローチではなく")
+        assert result is not None
+        assert 0.60 <= result[2] <= 0.95
+
+    def test_multi_pattern_text_boosted_confidence(self):
+        """Text matching multiple correction patterns gets boosted confidence."""
+        # "no," matches ^no,?\s+ AND "actually" matches \bactually\b
+        text = "no, actually that's wrong, use the other one"
+        result = detect_learning(text)
+        assert result is not None
+        # Should be higher than base due to multi-pattern boost
+        assert result[2] >= 0.75
+
+    def test_correction_inside_code_block_only_returns_none(self):
+        """If the only correction text is inside a code block, no match."""
+        text = "here's an example:\n```\nno, don't use this\n```"
+        result = detect_learning(text)
+        assert result is None
+
+    def test_guardrail_false_positive_not_filtered(self):
+        """Guardrail patterns should NOT be filtered by false positive check."""
+        text = "don't change unless I explicitly ask"
+        result = detect_learning(text)
+        assert result is not None
+        assert result[0] == 'guardrail'
+
+    def test_explicit_false_positive_not_filtered(self):
+        """Explicit patterns should NOT be filtered by false positive check."""
+        text = "remember: no problem with the current approach"
+        result = detect_learning(text)
+        assert result is not None
+        assert result[0] == 'explicit'

@@ -107,25 +107,212 @@ CORRECTION_PATTERNS = [
 ]
 MAX_CAPTURE_LENGTH = 2000  # skip very long prompts unless they contain "remember:"
 
+# CJK correction patterns — ported from claude-reflect v3.1.0
+# Each tuple: (regex, name, is_correction)
+CJK_CORRECTION_PATTERNS = [
+    # Japanese
+    (re.compile(r"^いや[、,.\s]|^いや違", re.UNICODE), "iya", 0.75),
+    (re.compile(r"^違う[、，,.\s！!。]|^ちがう[、,.\s]", re.UNICODE), "chigau", 0.75),
+    (re.compile(r"そうじゃなく[てけ]|そっちじゃなく[てけ]", re.UNICODE), "souja-nakute", 0.75),
+    (re.compile(r"間違[いえっ]て", re.UNICODE), "machigatte", 0.75),
+    (re.compile(r"じゃなくて.{0,30}にして", re.UNICODE), "janakute-nishite", 0.75),
+    (re.compile(r"^やめて[。！!]?\s*$", re.UNICODE), "yamete", 0.75),
+    (re.compile(r"^そうじゃない", re.UNICODE), "souja-nai", 0.75),
+    (re.compile(r"って言った[のよでじゃ]", re.UNICODE), "tte-itta", 0.75),
+    # Chinese
+    (re.compile(r"^不是[，,. ]", re.UNICODE), "bushi", 0.75),
+    (re.compile(r"^错了|^錯了", re.UNICODE), "cuole", 0.75),
+    (re.compile(r"不要.{0,20}要", re.UNICODE), "buyao-yao", 0.75),
+    # Korean
+    (re.compile(r"^아니[,. ]", re.UNICODE), "ani", 0.75),
+    (re.compile(r"틀렸", re.UNICODE), "teullyeoss", 0.75),
+]
 
-def detect_learning(prompt: str) -> tuple:
-    """Detect if a prompt contains a learning. Returns (type, patterns, confidence) or None."""
+# Non-correction phrases that superficially match correction patterns
+NON_CORRECTION_PHRASES = [
+    re.compile(p, re.IGNORECASE) for p in [
+        r"^no\s+problem",
+        r"^no\s+worries",
+        r"^no\s+need\b",
+        r"^no\s+way\b",
+        r"^don't\s+worry",
+        r"^don't\s+mind",
+        r"^don't\s+bother",
+        r"^never\s+mind",
+        r"^stop\s+worrying",
+    ]
+]
+
+# False positive patterns — text that looks like corrections but isn't
+FALSE_POSITIVE_PATTERNS = [
+    re.compile(p, re.IGNORECASE) for p in [
+        r"[?\uff1f]$",
+        r"^(please|can you|could you|would you|help me)\b",
+        r"^I (need|want|would like)\b",
+        r"^(ok|okay|alright)[,.]?\s+(so|now|let)",
+    ]
+]
+
+
+def _effective_length(text):
+    """Return effective length, counting CJK characters as 2 (they carry more meaning)."""
+    count = 0
+    for ch in text:
+        cp = ord(ch)
+        # CJK Unified Ideographs, Hiragana, Katakana, Hangul Syllables
+        if (0x4E00 <= cp <= 0x9FFF or 0x3040 <= cp <= 0x309F
+                or 0x30A0 <= cp <= 0x30FF or 0xAC00 <= cp <= 0xD7AF
+                or 0xFF01 <= cp <= 0xFF60):
+            count += 2
+        else:
+            count += 1
+    return count
+
+
+def strip_code_blocks(text):
+    """Remove triple-backtick delimited code blocks from text before pattern matching.
+
+    Preserves inline backtick-enclosed text (single backticks).
+    Unclosed blocks are removed from the opening fence onward.
+    """
+    # Match ``` with optional language tag through closing ```
+    result = re.sub(r'```[^\n]*\n.*?```', '', text, flags=re.DOTALL)
+    # Handle unclosed code blocks — remove from opening fence to end
+    result = re.sub(r'```[^\n]*\n.*$', '', result, flags=re.DOTALL)
+    return result
+
+
+def is_false_positive(text, matched_patterns):
+    """Check if text is a non-correction phrase that superficially matches patterns.
+
+    Returns True if the text is a false positive (should NOT be treated as a learning).
+    """
+    stripped = text.strip()
+    for pattern in NON_CORRECTION_PHRASES:
+        if pattern.search(stripped):
+            return True
+    for pattern in FALSE_POSITIVE_PATTERNS:
+        if pattern.search(stripped):
+            return True
+    return False
+
+
+def calculate_confidence(base, text, pattern_count):
+    """Adjust confidence based on text length, pattern count, and context.
+
+    Rules:
+    - Short text (< 20 chars): +0.05 boost (corrections are often terse)
+    - Long text (> 500 chars): -0.10 penalty (likely not a focused correction)
+    - Multiple patterns: +0.05 per extra match (cap 0.95)
+    """
+    confidence = base
+
+    text_len = len(text.strip())
+    if text_len < 20:
+        confidence += 0.05
+    elif text_len > 500:
+        confidence -= 0.10
+
+    if pattern_count > 1:
+        confidence += 0.05 * (pattern_count - 1)
+
+    return min(confidence, 0.95)
+
+
+def _count_matches(text, patterns):
+    """Count how many patterns match the given text."""
+    count = 0
+    for pattern in patterns:
+        if pattern.search(text):
+            count += 1
+    return count
+
+
+def _count_cjk_matches(text):
+    """Count how many CJK patterns match the given text."""
+    count = 0
+    for pattern, _name, _conf in CJK_CORRECTION_PATTERNS:
+        if pattern.search(text):
+            count += 1
+    return count
+
+
+def detect_learning(prompt):
+    """Detect if a prompt contains a learning. Returns (type, patterns, confidence) or None.
+
+    8-step pipeline:
+    1. Minimum length gate (< 5 chars → None)
+    2. Strip code blocks
+    3. Check explicit patterns (highest priority)
+    4. Check guardrail patterns
+    5. Check correction patterns (English + CJK)
+    6. Check positive patterns
+    7. False positive filter (correction/positive only)
+    8. Confidence adjustment
+    """
+    # Step 1: Minimum length gate (CJK chars count as 2)
+    if _effective_length(prompt.strip()) < 5:
+        return None
+
+    # Length gate for very long prompts (preserve existing behavior)
     if len(prompt) > MAX_CAPTURE_LENGTH and not EXPLICIT_PATTERN.search(prompt):
         return None
 
-    if EXPLICIT_PATTERN.search(prompt):
+    # Step 2: Strip code blocks
+    clean_text = strip_code_blocks(prompt)
+
+    # Step 3: Explicit patterns — highest priority, no false-positive filtering
+    if EXPLICIT_PATTERN.search(clean_text):
         return ('explicit', 'explicit', 1.0)
 
+    # Step 4: Guardrail patterns — high priority, no false-positive filtering
     for pattern in GUARDRAIL_PATTERNS:
-        if pattern.search(prompt):
+        if pattern.search(clean_text):
             return ('guardrail', 'guardrail', 0.85)
 
-    for pattern in POSITIVE_PATTERNS:
-        if pattern.search(prompt):
-            return ('positive', 'positive', 0.70)
-
+    # Step 5: Correction patterns (English)
+    english_correction = False
     for pattern in CORRECTION_PATTERNS:
-        if pattern.search(prompt):
-            return ('auto', 'correction', 0.75)
+        if pattern.search(clean_text):
+            english_correction = True
+            break
+
+    # Step 5b: CJK correction patterns
+    cjk_correction = False
+    for pattern, _name, _conf in CJK_CORRECTION_PATTERNS:
+        if pattern.search(clean_text):
+            cjk_correction = True
+            break
+
+    # Step 6: Positive patterns
+    positive_match = False
+    for pattern in POSITIVE_PATTERNS:
+        if pattern.search(clean_text):
+            positive_match = True
+            break
+
+    # Determine best match by priority: positive > correction (preserves existing order)
+    if positive_match:
+        # Step 7: False positive filter
+        if is_false_positive(clean_text, []):
+            return None
+        pattern_count = _count_matches(clean_text, POSITIVE_PATTERNS)
+        # Step 8: Confidence adjustment
+        confidence = calculate_confidence(0.70, clean_text, pattern_count)
+        return ('positive', 'positive', confidence)
+
+    if english_correction or cjk_correction:
+        # Step 7: False positive filter
+        if is_false_positive(clean_text, []):
+            return None
+        # Count total correction matches for confidence boost
+        pattern_count = (
+            _count_matches(clean_text, CORRECTION_PATTERNS)
+            + _count_cjk_matches(clean_text)
+        )
+        base = 0.75
+        # Step 8: Confidence adjustment
+        confidence = calculate_confidence(base, clean_text, pattern_count)
+        return ('auto', 'correction', confidence)
 
     return None
