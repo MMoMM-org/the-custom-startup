@@ -120,6 +120,7 @@ Within each scope, knowledge is organized by category:
 1. **Capture** — Python hooks (installed by `/setup`) detect corrections and learnings during sessions, queuing them at `~/.claude/projects/<encoded>/learnings-queue.json`
 2. **Route** — `/memory-add` processes the queue and routes each learning to the correct scope and category file
 3. **Maintain** — `/memory-sync` keeps indices in sync, `/memory-cleanup` archives stale entries, `/memory-promote` elevates recurring patterns into reusable skills
+4. **Optimize** — `/memory-claude-md-optimize` audits and migrates flat CLAUDE.md files into the Memory Bank structure, replacing eager @-imports with descriptive references to reduce context window consumption
 
 ### Context Minimization
 

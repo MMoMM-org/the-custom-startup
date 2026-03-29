@@ -12,6 +12,12 @@ Guided workflow for creating, auditing, and converting Claude Code skills. Cover
 
 → Invocable as `/skill-author`
 
+### `tcs-helper:memory-claude-md-optimize`
+
+Audits, scores, and migrates flat CLAUDE.md files into the structured Memory Bank system. Replaces eager @-imports with descriptive references, categorizes content into 6 memory categories, and measures context window savings. Non-destructive with backups and user review before applying.
+
+→ Invocable as `/memory-claude-md-optimize [--dry-run] [--scope global|project|repo]`
+
 ## Scripts
 
 ### `skills/skill-author/find-agents.sh`
