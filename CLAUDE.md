@@ -1,4 +1,22 @@
+# the-custom-startup
+
+## Core Philosophy
+TCS plugin ecosystem — Claude Code plugins, skills, agents, and workflow tooling.
+
 @AGENTS.md
+
+## Memory & Context
+@docs/ai/memory/memory.md
+
+## Routing Rules
+<!-- Run /memory-add to capture learnings. Routing reference: docs/ai/memory/routing-reference.md -->
+- Personal/workflow corrections → global (~/.claude/includes/)
+- Repo conventions/style → docs/ai/memory/general.md
+- Tool/CI/build knowledge → docs/ai/memory/tools.md
+- Domain/business rules → docs/ai/memory/domain.md
+- Architectural decisions → docs/ai/memory/decisions.md
+- Current focus/blockers → docs/ai/memory/context.md
+- Bugs/fixes → docs/ai/memory/troubleshooting.md
 
 ## Testing Skills During Development
 
