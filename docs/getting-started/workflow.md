@@ -1,6 +1,6 @@
 # Workflow
 
-The Custom Startup follows **spec-driven development**: write a specification first, then implement it. This prevents scope creep, reduces rework, and keeps Claude focused on what you actually want to build.
+The Custom Startup follows **spec-driven development with TDD enforcement**: write a specification first, then implement it with test-first discipline. This prevents scope creep, reduces rework, keeps Claude focused on what you actually want to build, and verifies the result against the spec.
 
 ---
 
@@ -22,7 +22,10 @@ The Custom Startup follows **spec-driven development**: write a specification fi
 │      ▼                                                   │
 │  /validate ───► Quality check before you invest time     │
 │      ▼                                                   │
-│  /implement ──► Execute plan phase-by-phase              │
+│  /implement ──► Execute plan phase-by-phase (TDD per     │
+│      │          task: RED → GREEN → REFACTOR)             │
+│      ▼                                                   │
+│  /validate ───► Check implementation against spec (drift) │
 │      ▼                                                   │
 │  /test ───────► Run tests, enforce code ownership        │
 │      ▼                                                   │
@@ -41,7 +44,7 @@ The Custom Startup follows **spec-driven development**: write a specification fi
 └──────────────────────────────────────────────────────────┘
 ```
 
-The BUILD loop uses the **XDD workflow** (Experience-Driven Development): `/xdd` orchestrates three linked documents — PRD, SDD, and PLAN — before any code is written. See [../reference/xdd.md](../reference/xdd.md) for the full XDD deep dive.
+The BUILD loop uses the **XDD workflow** (eXtended Design & Development): `/xdd` orchestrates three linked documents — PRD, SDD, and PLAN — before any code is written. Implementation follows TDD discipline per task (RED → GREEN → REFACTOR), and a post-implementation validation step checks what was built against the original spec to catch drift. See [../reference/xdd.md](../reference/xdd.md) for the full XDD deep dive.
 
 ---
 
@@ -128,7 +131,7 @@ Validation is advisory: it provides recommendations but does not block you.
 
 ---
 
-### Step 3: Implement
+### Step 3: Implement (with TDD)
 
 ```bash
 /implement 001
@@ -136,11 +139,30 @@ Validation is advisory: it provides recommendations but does not block you.
 
 Executes the plan phase by phase, runs tests after each task, uses parallel agents within phases. You approve between phases.
 
+Each task follows TDD discipline automatically:
+1. The `tdd-guardian` agent checks for a test plan before implementation begins
+2. **RED** — write failing tests anchored to SDD contracts
+3. **GREEN** — write minimal implementation to pass
+4. **REFACTOR** — clean up while keeping tests green
+5. `/verify` — evidence gate (tests pass, output verified)
+
 Large implementations may need context resets. Run `/implement 001` again in a fresh conversation — Claude tracks progress in the spec files.
 
 ---
 
-### Step 4: Quality gates
+### Step 4: Validate back
+
+```bash
+/validate drift 001
+```
+
+After implementation, validate what was built against the original spec. This catches drift — scope creep, missing items, contradictions, or unplanned additions. Fix any issues before moving to quality gates.
+
+This backward validation is what makes the spec-driven approach work in practice: it's not just spec → code, it's spec → code → verify against spec → fix.
+
+---
+
+### Step 5: Quality gates
 
 ```bash
 /test        # Run tests, catch regressions

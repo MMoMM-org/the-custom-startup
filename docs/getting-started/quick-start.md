@@ -33,9 +33,11 @@ Creates a `CONSTITUTION.md` at your project root that defines enforceable coding
 /xdd Add user authentication
 ```
 
-This kicks off the XDD workflow: Claude researches your codebase, asks you clarifying questions, and produces three linked documents — PRD, SDD, and PLAN — before any code is written. It's interactive; Claude will ask questions along the way.
+This kicks off the XDD (eXtended Design & Development) workflow: Claude researches your codebase, asks you clarifying questions, and produces three linked documents — PRD, SDD, and PLAN — before any code is written. It's interactive; Claude will ask questions along the way.
 
 The spec lands in `docs/XDD/specs/001-user-authentication/` (the directory name reflects your feature).
+
+> **Tip:** `/xdd` orchestrates the full pipeline automatically (PRD → SDD → Plan). If you want more control over individual phases, invoke them directly: `/xdd-prd`, `/xdd-sdd`, `/xdd-plan`.
 
 ---
 
@@ -55,7 +57,7 @@ Checks the spec for completeness, consistency, and correctness before you invest
 /implement 001
 ```
 
-Executes the plan phase by phase using parallel agents. Claude pauses for your confirmation between phases.
+Executes the plan phase by phase using parallel agents. Claude pauses for your confirmation between phases. TDD is enforced automatically — the `tdd-guardian` agent blocks production code until a failing test exists for each task.
 
 ---
 
