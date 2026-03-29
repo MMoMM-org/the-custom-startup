@@ -212,6 +212,18 @@ For each discovered file:
    - For matches: record in SecretDetection[] with [REDACTED] preview
    - This is NON-BLOCKING — warn in output, continue processing
 
+6. Detect skill-overlap: for each section in a CLAUDE.md file that references a skill
+   (mentions `/skill-name`, a skill description, or points to an include file):
+   - Read the referenced skill's SKILL.md description field (from the installed plugin)
+   - Read the referenced include file (if any)
+   - Compare the CLAUDE.md section content and the include content against the skill's own description and workflow
+   - If substantial overlap (the section or include largely restates what the skill already provides):
+     AskUserQuestion:
+       Keep this section as-is
+       Replace with a brief pointer: "Use /skill-name for [purpose]"
+       Remove the section entirely (the skill handles this)
+   - This catches: CLAUDE.md sections that document how to use a skill when the skill itself is already loaded and self-describing, and include files that duplicate skill documentation
+
 For each @-import found during discovery:
 1. Analyze the imported file's content
 2. Generate a descriptive reference: "For [topic], see [path] — [description of contents and when to use]"
@@ -222,6 +234,7 @@ Display categorization summary:
 - Scope mismatch recommendations: list items with current_scope → recommended_scope
 - @-import replacement proposals: | File | Import | Proposed Reference | ~Token Savings |
 - Credential warnings (if any): | File | Line | Type | Preview |
+- Skill-overlap detections (if any): | Section | Skill | Overlap | Recommendation |
 
 ---
 
