@@ -1,8 +1,8 @@
-# Why I Forked The Agentic Startup
+# Why The Custom Startup Exists
 
-The original framework by Rudolf Schmidt is genuinely good. The core idea — write a specification before writing code, then execute it with parallel specialist agents — reflects how senior engineers actually think, and it works. What the framework lacked was everything around the edges: how you get it running, how you stay oriented while it runs, how you use it away from a terminal, and how it fits into the directory structure of a real project.
+The original framework by Rudolf Schmidt ([the-startup](https://github.com/rsmdt/the-startup)) is genuinely good. The core idea — write a specification before writing code, then execute it with parallel specialist agents — reflects how senior engineers actually think, and it works. What the framework lacked was everything around the edges: how you get it running, how you stay oriented while it runs, how you use it away from a terminal, how it fits into the directory structure of a real project, and how it keeps context usage manageable across long sessions.
 
-This fork exists to close those gaps.
+What started as a fork to close those gaps has grown into an opinionated, standalone framework — a curated collection of 4 plugins, 20+ skills, 15 specialist agents, and supporting infrastructure that does not depend on external plugins for its core functionality.
 
 ---
 
@@ -75,6 +75,38 @@ The naming convention — `the-[human-role]/[activity]` — keeps it navigable. 
 
 ---
 
+## TDD + SDD integration
+
+The original framework had SDD (Solution Design Documents) as the bridge between requirements and code. This fork adds TDD (Test-Driven Development) as a hard gate between design and implementation.
+
+The insight: SDD defines contracts (interfaces, data models, behavior expectations). TDD verifies them (each contract becomes a failing test before any implementation). Neither works well alone — SDD without TDD produces designs that may never be correctly implemented; TDD without SDD produces tests that may be testing the wrong things.
+
+The `xdd-tdd` skill enforces the RED-GREEN-REFACTOR iron law. The `tdd-guardian` agent (dispatched automatically by `/implement`) blocks production code until a failing test exists. The plan tasks produced by `/xdd-plan` are structured as TDD cycles anchored to SDD contracts. This is not advisory — it is a hard gate.
+
+See [concepts.md](concepts.md) for the full TDD + SDD integration design.
+
+---
+
+## Memory Bank
+
+Long Claude Code sessions accumulate context. Eventually the window fills up, context compaction loses detail, and the AI forgets what it learned earlier. The Memory Bank is a layered knowledge system that moves durable learnings out of the context window and into structured files.
+
+Three scopes (global, project, repo) with six categories (general, tools, domain, decisions, context, troubleshooting) store knowledge where Claude Code's own file discovery rules will find it — but only when working in the relevant directory. This is context minimization through file structure: knowledge is available when relevant without consuming budget upfront.
+
+Python hooks passively capture corrections and learnings during sessions. Five maintenance skills (`/memory-add`, `/memory-sync`, `/memory-cleanup`, `/memory-promote`, `/setup`) keep the bank lean. The promotion lifecycle — patterns that recur across sessions are elevated from memory files into reusable skills — means the bank gets leaner over time, not larger.
+
+See [concepts.md](concepts.md) for the full Memory Bank design.
+
+---
+
+## Satori — optional context reduction
+
+Even with the Memory Bank, some sessions generate more context than the window can hold. Satori is an MCP gateway that sits between Claude Code and your MCP servers, capturing session activity into a local database and serving compact summaries instead of replaying full tool outputs. The install script offers Satori setup as an optional step.
+
+Satori and the Memory Bank operate at different time scales: Satori handles ephemeral session context, the Memory Bank holds durable knowledge. Together they form a two-tier system that keeps context usage low while maintaining both session continuity and cross-session learning.
+
+---
+
 ## Spec-driven development
 
 The primary workflow enforces spec-first development. This is not bureaucracy — it is how you avoid the most expensive mistakes.
@@ -87,6 +119,8 @@ The principle underneath all of it: **humans decide, AI executes.** The framewor
 
 ---
 
-This fork adds infrastructure around a solid core. Any behavioral changes from upstream are noted in the [What's different](../../README.md#whats-different) section of the main README.
+What started as infrastructure around a solid core has become a complete development framework. The spec-driven workflow, TDD discipline, Memory Bank, and optional Satori integration work together to make Claude Code sessions predictable, reviewable, and context-efficient.
 
-Thanks to Rudolf for creating this great toolset.
+Any behavioral changes from upstream are noted in the [What's different](../../README.md#whats-different) section of the main README. Full attribution is in [sources.md](sources.md).
+
+Thanks to Rudolf Schmidt ([@rsmdt](https://github.com/rsmdt)) for creating [the-startup](https://github.com/rsmdt/the-startup) — the foundation this framework builds on.
