@@ -12,8 +12,8 @@ from lib.reflect_utils import detect_learning, load_queue, save_queue, create_qu
 
 def main():
     try:
-        project_path = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
         data = json.loads(sys.stdin.read())
+        project_path = data.get('cwd', os.getcwd())
         prompt = data.get('prompt', '')
 
         detection = detect_learning(prompt)

@@ -9,6 +9,7 @@ Tests that only need to verify exit behaviour (empty queue, malformed input)
 use subprocess.run with TCS_QUEUE_OVERRIDE so they never touch ~/.claude.
 """
 import importlib
+import io
 import json
 import os
 import re
@@ -44,6 +45,8 @@ def load_main_with_patched_claude_dir(monkeypatch, claude_dir: str):
     """Import (or reload) check_learnings with CLAUDE_DIR pointing to claude_dir.
 
     Returns the main() callable from the freshly-loaded module.
+    Also patches sys.stdin to provide an empty JSON payload so the script's
+    stdin-based cwd detection does not consume or block on pytest's stdin.
     """
     # Patch reflect_utils first so the constant is overridden before main imports it
     if 'lib.reflect_utils' in sys.modules:
@@ -61,6 +64,9 @@ def load_main_with_patched_claude_dir(monkeypatch, claude_dir: str):
 
     import check_learnings
     monkeypatch.setattr(check_learnings, 'CLAUDE_DIR', claude_dir)
+    # Provide a fresh stdin for each in-process call so the script can read
+    # its JSON payload without consuming or blocking on pytest's stdin.
+    monkeypatch.setattr('sys.stdin', io.StringIO('{}'))
     return check_learnings.main
 
 

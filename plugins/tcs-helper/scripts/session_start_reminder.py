@@ -13,7 +13,11 @@ def main():
         if os.environ.get('CLAUDE_REFLECT_REMINDER', '').lower() == 'false':
             sys.exit(0)
 
-        project_path = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
+        try:
+            data = json.loads(sys.stdin.read())
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+        project_path = data.get('cwd', os.getcwd())
         messages = []
 
         # Check queue

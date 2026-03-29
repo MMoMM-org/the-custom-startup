@@ -22,8 +22,10 @@ def run_reminder(queue_items=None, yolo_review_exists=False, project_path='/test
             env['TCS_YOLO_REVIEW_PATH'] = os.path.join(tmp, 'yolo-review.md')
             with open(env['TCS_YOLO_REVIEW_PATH'], 'w') as f:
                 f.write('- [ ] **Target:** `docs/ai/memory/tools.md`\n  Test entry\n')
+        stdin_data = json.dumps({'cwd': project_path})
         result = subprocess.run(
-            [sys.executable, script, project_path],
+            [sys.executable, script],
+            input=stdin_data,
             capture_output=True, text=True, env=env
         )
     return result

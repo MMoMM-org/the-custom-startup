@@ -3,17 +3,17 @@
     "UserPromptSubmit": [{
       "matcher": "",
       "hooks": [{"type": "command",
-        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/capture_learning.py\" \"${PWD}\""}]
+        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/capture_learning.py\""}]
     }],
     "SessionStart": [{
       "matcher": "",
       "hooks": [{"type": "command",
-        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start_reminder.py\" \"${PWD}\""}]
+        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start_reminder.py\""}]
     }],
     "PreCompact": [{
       "matcher": "",
       "hooks": [{"type": "command",
-        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/check_learnings.py\" \"${PWD}\""}]
+        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/check_learnings.py\""}]
     }],
     "PostToolUse": [{
       "matcher": "Bash",
