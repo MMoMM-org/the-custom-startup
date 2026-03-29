@@ -33,18 +33,21 @@
 
 **The Agentic Startup** is a multi-agent AI framework that makes Claude Code work like a startup team. Instead of asking Claude to "just build it", you specify what you want first — creating a clear plan with requirements, a technical design, and an implementation roadmap. Then you execute that plan with parallel specialist agents that work together to turn your ideas into shipped code.
 
-**20 skills across 4 plugins. Specify first, then build with confidence.**
+**20+ skills across 4 plugins. Specify first, then build with confidence.**
 
 ### Key Features
 
 - **[Spec-Driven Development](docs/getting-started/index.md)** — PRD → SDD → Implementation Plan → Code. Write the plan before writing code.
-- **[Experience-Driven Development (XDD)](docs/reference/xdd.md)** — PRD → SDD → Plan → Implement. Full spec-first workflow with 6 dedicated XDD skills.
+- **[eXtended Design & Development (XDD)](docs/reference/xdd.md)** — PRD → SDD → Plan → Implement → Validate back. Full spec-first workflow with 6 dedicated XDD skills and backward validation to catch drift.
+- **[TDD Enforcement](docs/about/concepts.md#tdd--sdd-integration)** — RED → GREEN → REFACTOR iron law. The `tdd-guardian` agent blocks production code until a failing test exists — no exceptions.
 - **[Parallel Agent Execution](docs/reference/agents.md)** — Multiple specialist agents work simultaneously within each implementation phase.
+- **[Memory Bank](docs/about/concepts.md#memory-bank)** — Layered memory system (global / project / repo) with progressive disclosure. Keeps context usage low while maintaining project knowledge across sessions. Run `/setup` to provision.
+- **[Multi-AI Workflow](docs/guides/multi-ai-workflow.md)** — Export specs as prompts for Claude.ai or Perplexity, import the results back as PRD or SDD.
 - **[Quality Gates](docs/getting-started/workflow.md#step-3-validate-before-implementation)** — Built-in validation at every stage: before you build, while you build, and before you ship.
+- **[Satori Integration](docs/about/concepts.md#satori--mcp-gateway-optional)** *(optional)* — MCP gateway that captures session activity and serves compact summaries, further reducing context consumption.
 - **Resume Across Sessions** — Specs live on disk. Hit a context limit? Start a fresh session and pick up exactly where you left off.
 - **[Interactive Install Wizard](#installation)** — Choose install target, plugins, output style, statusline, and multi-AI templates — with a confirmation summary before anything is written.
 - **[3 Statusline Variants](docs/guides/statusline.md)** — Standard, enhanced with live token budget bar (via ccusage), and Starship bridge — all configurable via `statusline.toml`.
-- **[Multi-AI Workflow](docs/guides/multi-ai-workflow.md)** — Export specs as prompts for Claude.ai or Perplexity, import the results back as PRD or SDD.
 - **[Output Styles](docs/reference/output-styles.md)** — The Startup (high-energy, fast) and The ScaleUp (calm, educational).
 - **Configurable Spec Paths** — `.claude/startup.toml` tells all skills and scripts where your specs live.
 
@@ -56,7 +59,7 @@
 curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/install.sh | bash
 ```
 
-The interactive wizard guides you through: install target (global / repo / custom path) · which plugins (workflow / team / helper / patterns) · output style · multi-AI templates · statusline variant.
+The interactive wizard lets you choose: install target (global / repo / custom path) · which plugins ([workflow](#workflow-plugin-tcs-workflow--core-workflow) / [team](#team-plugin-tcs-team--specialist-agents) / [helper](#helper-plugin-tcs-helper--skill-authoring--memory-bank-optional) / [patterns](#patterns-plugin-tcs-patterns--domain-pattern-skills-optional)) · output style · multi-AI templates · statusline variant · optional [Satori](docs/about/concepts.md#satori--mcp-gateway-optional) MCP gateway.
 
 To uninstall:
 
@@ -109,10 +112,10 @@ Then start building:
 | Category | Skills |
 |----------|--------|
 | **Setup** | `/constitution` — project governance rules, auto-enforced during the build workflow |
-| **XDD** | `/xdd` → `/xdd-prd` → `/xdd-sdd` → `/xdd-plan` → `/xdd-tdd` · `/xdd-meta` — spec-driven development pipeline |
-| **Build** | `/xdd` → `/validate` → `/implement` — spec-driven development pipeline |
+| **XDD** | `/xdd` → `/xdd-prd` → `/xdd-sdd` → `/xdd-plan` → `/xdd-tdd` · `/xdd-meta` — spec + TDD pipeline |
+| **Build** | `/xdd` → `/validate` → `/implement` (with TDD enforcement) — spec-driven development pipeline |
 | **Quality** | `/test` — code ownership enforcement · `/review` — multi-agent parallel code review · `/verify` · `/receive-review` |
-| **Assist** | `/guide` · `/parallel-agents` |
+| **Assist** | `/guide` · `/brainstorm` · `/parallel-agents` |
 | **Maintain** | `/analyze` · `/refactor` · `/debug` · `/document` |
 
 ### Team Plugin (`tcs-team`) — Specialist Agents
@@ -130,19 +133,21 @@ Then start building:
 | **The DevOps** | Infrastructure, CI/CD, monitoring |
 | **The Meta Agent** | Agent design and generation |
 
-### Helper Plugin (`tcs-helper`) — Skill Authoring + Memory System *(optional)*
+### Helper Plugin (`tcs-helper`) — Skill Authoring + Memory Bank *(optional)*
 
-Skill authoring tools and a file-based project memory system. Install to add structured memory to your repos or to build on the framework.
+Skill authoring tools, a layered **[Memory Bank](docs/about/concepts.md#memory-bank)** for structured learning and context minimization, and git workflow helpers. Install to add persistent project knowledge to your repos or to extend the framework.
 
 | Skill | Purpose |
 |-------|---------|
 | `/skill-author` · `/skill-evaluate` · `/skill-import` | Create, audit, and fetch Claude Code skills |
 | `/setup` | Provision `docs/ai/memory/` + CLAUDE.md hierarchy; install learning-capture hooks |
 | `/memory-add` · `/memory-sync` · `/memory-cleanup` · `/memory-promote` | Capture and maintain session learnings across scopes |
+| `/git-worktree` · `/finish-branch` | Git workflow management — isolated workspaces, branch completion |
+| `/docs` | Fetch and cache current Claude Code documentation on demand |
 
 ### Patterns Plugin (`tcs-patterns`) — Domain Pattern Skills *(optional)*
 
-**17 pattern skills** covering architecture, testing, languages, and platform. Install only what you need — they activate on trigger terms.
+**17 pattern skills** covering architecture, testing, languages, and platform. Install only what you need — they activate on trigger terms. Agents from `tcs-team` automatically use relevant pattern skills when delegating specialist work.
 
 | Category | Skills |
 |----------|--------|
@@ -157,15 +162,17 @@ Skill authoring tools and a file-based project memory system. Install to add str
 
 ## What's Different
 
-This fork extends the original with:
+The Custom Startup evolved from a fork of [the-startup](https://github.com/rsmdt/the-startup) into an opinionated, standalone framework. It retains the spec-driven workflow and activity-based agent architecture from upstream, and adds:
 
-- **[Interactive install/uninstall wizards](docs/getting-started/workflow.md)** — global / repo / other path, plugin selection, output style, multi-AI templates, statusline with conflict detection, confirm before writing anything
+- **[Memory Bank](docs/about/concepts.md#memory-bank)** — Layered memory system (global / project / repo) with progressive disclosure for context minimization. Capture session learnings, maintain project knowledge, promote patterns to reusable skills.
+- **[TDD enforcement](docs/about/concepts.md#tdd--sdd-integration)** — `xdd-tdd` skill + `tdd-guardian` agent enforce the RED → GREEN → REFACTOR iron law during implementation. No production code without a failing test.
+- **[Satori gateway](docs/about/concepts.md#satori--mcp-gateway-optional)** *(optional)* — MCP gateway for session context capture, compact summaries, and downstream server routing. Further reduces context consumption.
+- **[XDD workflow](docs/reference/xdd.md)** — 6-skill spec pipeline (xdd, xdd-meta, xdd-prd, xdd-sdd, xdd-plan, xdd-tdd) with backward validation to detect spec drift after implementation
+- **[Interactive install/uninstall wizards](docs/getting-started/installation.md)** — global / repo / other path, plugin selection, output style, multi-AI templates, statusline with conflict detection, optional Satori setup
 - **[3 statusline variants](docs/guides/statusline.md)** — standard, enhanced (token budget bar via ccusage), Starship bridge — each configurable via `statusline.toml`
-- **Configurable specs directory** — `.claude/startup.toml` tells skills and scripts where your specs live; fallback chain keeps backward compatibility
 - **[Multi-AI workflow](docs/guides/multi-ai-workflow.md)** — export specs as prompts for Claude.ai or Perplexity, import results back as PRD/SDD
-- **XDD workflow** — 6-skill spec pipeline (xdd, xdd-meta, xdd-prd, xdd-sdd, xdd-plan, xdd-tdd) for structured spec-first development
 - **[tcs-patterns plugin](docs/guides/tcs-patterns.md)** — 17 optional domain pattern skills (architecture, testing, platforms, integrations)
-- **Script naming consistency** — all statusline scripts share the `the-custom-startup-*` prefix
+- **Configurable specs directory** — `.claude/startup.toml` tells skills and scripts where your specs live; fallback chain keeps backward compatibility
 
 See [about/sources.md](docs/about/sources.md) for full attribution.
 
@@ -180,8 +187,6 @@ See [about/sources.md](docs/about/sources.md) for full attribution.
 
 ## License
 
-Original work © [Rudolf Schmidt](https://github.com/rsmdt) — MIT License. See [LICENSE](LICENSE) for the full original license text.
+MIT License. See [LICENSE](LICENSE) for the full text.
 
-New parts added in this fork (install wizard, statusline scripts, multi-AI workflow, export/import scripts) © Marcus Breiden — MIT License.
-
-Starship statusline integration based on an idea from [Reddit r/ClaudeCode](https://www.reddit.com/r/ClaudeCode/comments/1r81675/use_your_starship_prompt_as_the_claude_code/).
+For detailed attribution of all source influences — upstream fork, pattern skills, Memory Bank design, TDD discipline, and Satori — see [docs/about/sources.md](docs/about/sources.md).
