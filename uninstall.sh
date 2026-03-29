@@ -184,24 +184,32 @@ detect_installation() {
     FOUND_TOML="$toml_file"
     info "startup.toml: $toml_file"
 
-    # Read prompts_dir to find downloaded files base
-    local prompts_rel
-    prompts_rel=$(grep '^prompts_dir' "$toml_file" 2>/dev/null \
-      | sed 's/^prompts_dir[[:space:]]*=[[:space:]]*"\(.*\)"/\1/' || true)
-    if [[ -n "$prompts_rel" ]]; then
-      # Resolve to absolute path
-      local abs_prompts
-      if [[ "$prompts_rel" = /* ]]; then
-        abs_prompts="$prompts_rel"
-      else
-        abs_prompts="$toml_dir/$prompts_rel"
+    # Read multi_ai_dir from [tcs] section (current), or prompts_dir from [paths] (legacy)
+    local multi_ai_rel=""
+    multi_ai_rel=$(sed -n '/^\[tcs\]/,/^\[/p' "$toml_file" 2>/dev/null \
+      | grep '^multi_ai_dir[[:space:]]*=' \
+      | head -1 \
+      | sed 's/multi_ai_dir[[:space:]]*=[[:space:]]*//' \
+      | tr -d '"'"'" || true)
+    if [[ -z "$multi_ai_rel" ]]; then
+      # Legacy: prompts_dir pointed to templates/ subdir — go up one level
+      multi_ai_rel=$(grep '^prompts_dir' "$toml_file" 2>/dev/null \
+        | sed 's/^prompts_dir[[:space:]]*=[[:space:]]*"\(.*\)"/\1/' || true)
+      if [[ -n "$multi_ai_rel" ]]; then
+        # prompts_dir was <base>/templates — strip /templates to get base
+        multi_ai_rel="$(dirname "$multi_ai_rel")"
       fi
-      # Go up one level (templates/ → base)
-      local base
-      base="$(dirname "$abs_prompts")"
-      if [[ -d "$base/templates" || -d "$base/docs" || -d "$base/bin" ]]; then
-        FOUND_PROMPTS_BASE="$base"
-        info "Downloaded files: $base/"
+    fi
+    if [[ -n "$multi_ai_rel" ]]; then
+      local abs_base
+      if [[ "$multi_ai_rel" = /* ]]; then
+        abs_base="$multi_ai_rel"
+      else
+        abs_base="$INSTALL_DIR/$multi_ai_rel"
+      fi
+      if [[ -d "$abs_base/templates" || -d "$abs_base/bin" || -f "$abs_base/multi-ai-workflow.md" ]]; then
+        FOUND_PROMPTS_BASE="$abs_base"
+        info "Downloaded files: $abs_base/"
       fi
     fi
   fi
@@ -376,14 +384,17 @@ do_uninstall() {
   # --- Downloaded files (optional) --------------------------------------------
   if [[ -n "$FOUND_PROMPTS_BASE" ]]; then
     printf "\n"
-    ask "Delete downloaded templates and scripts? (${FOUND_PROMPTS_BASE}/templates|docs|bin) [y/N]:"
+    ask "Delete downloaded templates and scripts? (${FOUND_PROMPTS_BASE}/) [y/N]:"
     local choice
     read -r choice </dev/tty
     case "$choice" in
       [yY]|[yY][eE][sS])
         rm -rf "$FOUND_PROMPTS_BASE/templates" \
-                "$FOUND_PROMPTS_BASE/docs" \
-                "$FOUND_PROMPTS_BASE/bin" 2>/dev/null || true
+                "$FOUND_PROMPTS_BASE/bin" \
+                "$FOUND_PROMPTS_BASE/multi-ai-workflow.md" \
+                "$FOUND_PROMPTS_BASE/docs" 2>/dev/null || true
+        # Remove base dir if now empty
+        rmdir "$FOUND_PROMPTS_BASE" 2>/dev/null || true
         success "Downloaded files deleted"
         ;;
       *)
