@@ -172,6 +172,12 @@ This backward validation is what makes the spec-driven approach work in practice
 
 ---
 
+## Memory Bank (optional)
+
+If you have `tcs-helper` installed, the **[Memory Bank](../about/concepts.md#memory-bank)** captures session learnings and project knowledge across sessions. Run `/setup` once per repo to provision the structure, then use `/memory-add` after sessions to route learnings to the correct scope and category. The Memory Bank uses lazy loading via file structure to keep context usage low — knowledge is available when relevant without consuming budget upfront.
+
+---
+
 ## All Commands
 
 See [../skills.md](../skills.md) for the full command reference and decision tree.
