@@ -73,6 +73,8 @@ For each learning, classify using these keyword signals:
 | bug, error, fix, workaround, issue, broken, resolved | troubleshooting | docs/ai/memory/troubleshooting.md |
 | personal, always prefer, never use, my workflow | global | ~/.claude/includes/ |
 
+**Auto-routing for tool errors:** Queue items with `item_type: 'tool_error'` are automatically routed to `troubleshooting.md` regardless of keyword signals. The `error_pattern` field (e.g., `module_not_found`, `connection_refused`) is preserved in the written entry.
+
 If unclassified → AskUserQuestion: "Which file should this go to? [show list of options]"
 
 ### 3. Determine scope
@@ -83,9 +85,11 @@ If unclassified → AskUserQuestion: "Which file should this go to? [show list o
 
 ### 4. Deduplication check
 
-For each learning, Read the target file.
-If a semantically identical fact already exists (same meaning, possibly different wording): skip silently, add to `skipped[]`.
-Cross-scope duplicates are NOT checked here (handled by memory-cleanup).
+For each learning:
+1. **Cross-category check first:** Use `find_duplicates(learning_text, 'docs/ai/memory/')` from `reflect_utils.py` to check ALL 6 category files for exact or near-duplicate entries.
+   - Exact duplicate (score 1.0): skip silently, add to `skipped[]`.
+   - Near-duplicate (score > 0.6): flag to user with both entries, ask: "Skip / Replace existing / Keep both".
+2. **Same-file check:** Read the target file. If a semantically identical fact already exists: skip silently, add to `skipped[]`.
 
 ### 5. Write
 
