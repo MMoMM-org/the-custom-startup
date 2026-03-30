@@ -52,9 +52,11 @@ if [ -f "$STARTUP_TOML" ]; then
   [ -n "$_val" ] && TCS_DOCS_BASE="$_val"
 fi
 ADR_DIR="${TCS_DOCS_BASE}/adr"
+mkdir -p "$ADR_DIR"
 ```
 
 Default when `startup.toml` is absent or has no `docs_base`: `docs/XDD/adr/`.
+The directory is created on demand — no pre-setup required.
 
 ## Decision: Sequential Numbering
 
