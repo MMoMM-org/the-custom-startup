@@ -108,9 +108,8 @@ plugin was enabled before setup ran).
 ### 6. Optional extras
 
 > "Setup complete! Optional additions:
-> 1. Create docs/adr/ for Architecture Decision Records
-> 2. Add format-on-save hook for TypeScript (biome)
-> 3. Install tcs-patterns domain pattern skills — run: /plugin install tcs-patterns@the-custom-startup
+> 1. Add format-on-save hook for TypeScript (biome)
+> 2. Install tcs-patterns domain pattern skills — run: /plugin install tcs-patterns@the-custom-startup
 >    Includes: ddd, hexagonal, functional, event-driven, api-design, typescript-strict,
 >    mutation-testing, frontend-testing, react-testing, node-service, python-project,
 >    go-idiomatic, twelve-factor, mcp-server, obsidian-plugin
