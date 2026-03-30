@@ -116,6 +116,25 @@ State {
 - Delete @-import targets — only replace the import line with a descriptive reference.
 - Block operations on credential detection — warn in report only.
 - Create @-imports in memory.md — it is an index only.
+- Propose replacing **protected @-imports** (see Protected @-Imports below).
+- Flag "skill overlap" when a CLAUDE.md section says "use /skill-name" and points to a reference file — the reference file supplements the skill, it does not duplicate it.
+
+### Protected @-Imports
+
+Some @-imports are structural and must **never** be proposed for replacement:
+
+| Pattern | Reason |
+|---------|--------|
+| `@docs/ai/memory/memory.md` | Memory bank index — routing hub for the memory system |
+| `@~/*/projects/*/` (project-level team/config) | Critical project context loaded for every session in that project |
+| `@AGENTS.md` | Cross-tool compatibility file (handled separately in Step 4) |
+
+**Detection rule**: Before adding an @-import to `ImportReplacement[]`, check:
+1. Is the target a memory index file (`memory.md` in a `memory/` directory)? → **Skip**
+2. Is the target a project-level config outside the repo (resolved path matches `~/*/projects/`)? → **Skip**
+3. Is the target `AGENTS.md`? → **Skip** (handled in Step 4)
+
+Only propose replacement for @-imports that are genuinely candidates for lazy-loading (architecture docs, large reference files, supplementary context).
 
 ## Reference Materials
 
@@ -217,17 +236,23 @@ For each discovered file:
    - Read the referenced skill's SKILL.md description field (from the installed plugin)
    - Read the referenced include file (if any)
    - Compare the CLAUDE.md section content and the include content against the skill's own description and workflow
-   - If substantial overlap (the section or include largely restates what the skill already provides):
+   - **NOT skill-overlap** (skip these patterns):
+     - Section says "use /skill-name" and points to a reference/include file → this is the intended pattern (directive + reference). The include supplements the skill with content the skill itself does not contain (e.g., detailed schemas, examples, lookup tables). Do not flag.
+     - Section is a short directive (1-3 lines) pointing to a skill → too small to be overlap
+   - **IS skill-overlap** (flag these):
+     - Section restates the skill's workflow steps, constraints, or persona in prose
+     - Include file contains content that is substantially identical to the skill's own SKILL.md sections
+   - If substantial overlap detected:
      AskUserQuestion:
        Keep this section as-is
        Replace with a brief pointer: "Use /skill-name for [purpose]"
        Remove the section entirely (the skill handles this)
-   - This catches: CLAUDE.md sections that document how to use a skill when the skill itself is already loaded and self-describing, and include files that duplicate skill documentation
 
 For each @-import found during discovery:
-1. Analyze the imported file's content
-2. Generate a descriptive reference: "For [topic], see [path] — [description of contents and when to use]"
-3. Record in ImportReplacement[] with estimated token savings (file token_estimate)
+1. Check against Protected @-Imports rules (see Constraints) — if protected, skip with note "Protected: [reason]"
+2. Analyze the imported file's content
+3. Generate a descriptive reference: "For [topic], see [path] — [description of contents and when to use]"
+4. Record in ImportReplacement[] with estimated token savings (file token_estimate)
 
 Display categorization summary:
 - Items per category table: | Category | Count | Files |
