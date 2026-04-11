@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.0.3] - 2026-04-11
+
+### Fixed
+
+- **`post_commit_reminder.py` JSON schema** — The PostToolUse(Bash) hook was emitting `{"hookSpecificOutput": "text"}` (string), which Claude Code rejects with "JSON validation failed". Fixed to emit the required object shape `{"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": "text"}}`. Triggered after every `git commit` (non-amend). Tests updated accordingly (17/17 pass).
+
 ## [3.0.0] - 2026-03-30
 
 ### Breaking Changes

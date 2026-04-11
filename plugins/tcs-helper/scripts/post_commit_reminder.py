@@ -81,10 +81,13 @@ def _handle_git_commit(command):
     """Print hookSpecificOutput if command is a non-amend git commit."""
     if 'git commit' in command and '--amend' not in command:
         output = {
-            'hookSpecificOutput': (
-                '💡 Committed! Any corrections or learnings from this session? '
-                'Run /memory-add to capture them.'
-            )
+            'hookSpecificOutput': {
+                'hookEventName': 'PostToolUse',
+                'additionalContext': (
+                    '💡 Committed! Any corrections or learnings from this session? '
+                    'Run /memory-add to capture them.'
+                ),
+            }
         }
         print(json.dumps(output))
 
