@@ -57,7 +57,8 @@ def test_git_commit_with_message_outputs_reminder():
     assert result.stdout.strip() != ''
     output = json.loads(result.stdout)
     assert 'hookSpecificOutput' in output
-    assert 'memory-add' in output['hookSpecificOutput'].lower()
+    assert output['hookSpecificOutput']['hookEventName'] == 'PostToolUse'
+    assert 'memory-add' in output['hookSpecificOutput']['additionalContext'].lower()
 
 
 def test_git_commit_amend_produces_no_output():
@@ -90,8 +91,11 @@ def test_output_is_valid_json_with_hook_specific_output_key():
     output = json.loads(result.stdout)
     assert isinstance(output, dict)
     assert 'hookSpecificOutput' in output
-    assert isinstance(output['hookSpecificOutput'], str)
-    assert len(output['hookSpecificOutput']) > 0
+    hso = output['hookSpecificOutput']
+    assert isinstance(hso, dict)
+    assert hso['hookEventName'] == 'PostToolUse'
+    assert isinstance(hso['additionalContext'], str)
+    assert len(hso['additionalContext']) > 0
 
 
 def test_git_commit_no_flags_outputs_reminder():
@@ -99,6 +103,7 @@ def test_git_commit_no_flags_outputs_reminder():
     assert result.returncode == 0
     output = json.loads(result.stdout)
     assert 'hookSpecificOutput' in output
+    assert output['hookSpecificOutput']['hookEventName'] == 'PostToolUse'
 
 
 # --- Tool error detection tests ---
@@ -176,7 +181,8 @@ def test_git_commit_detection_still_works(tmp_path):
     assert result.returncode == 0
     output = json.loads(result.stdout)
     assert 'hookSpecificOutput' in output
-    assert 'memory-add' in output['hookSpecificOutput'].lower()
+    assert output['hookSpecificOutput']['hookEventName'] == 'PostToolUse'
+    assert 'memory-add' in output['hookSpecificOutput']['additionalContext'].lower()
 
 
 def test_error_counter_persists_across_calls(tmp_path):
