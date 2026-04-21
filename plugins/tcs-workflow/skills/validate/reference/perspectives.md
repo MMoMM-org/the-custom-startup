@@ -97,7 +97,7 @@ Perspective definitions, activation rules, and detailed focus areas for the vali
 
 | Validation Mode | Perspectives Applied |
 |----------------|---------------------|
-| **Spec Validation** | ✅ Completeness, 🔗 Consistency, 📐 Coverage + ambiguity detection |
+| **Spec Validation** | ✅ Completeness, 🔗 Consistency, 📍 Alignment, 📐 Coverage + ambiguity detection |
 | **File Validation** | ✅ Completeness, 🔗 Consistency, 📍 Alignment |
 | **Drift Detection** | 📊 Drift, 📍 Alignment, 🔗 Consistency |
 | **Constitution** | 📜 Constitution |

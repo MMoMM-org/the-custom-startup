@@ -111,6 +111,8 @@ Invoke `Skill(tcs-workflow:xdd-plan)`.
 
 Focus: task sequencing and dependencies. Scope: what and in what order — defer duration estimates.
 
+After `xdd-plan` returns, invoke `Skill(tcs-workflow:validate)` with the spec ID. Surface Alignment findings — plan tasks that modify existing files may reference targets whose current state has drifted from the SDD's picture.
+
 AskUserQuestion: Finalize specification (recommended) | Revisit PLAN
 
 ### 7. Finalize
