@@ -1,5 +1,7 @@
 # the-custom-startup
 
+@~/Kouzou/standards/general.md
+
 ## Core Philosophy
 TCS plugin ecosystem — Claude Code plugins, skills, agents, and workflow tooling.
 
