@@ -2,7 +2,7 @@
 
 **Specialized agent library for Claude Code with consolidated, high-signal activities for software delivery.**
 
-The `team` plugin provides **8 specialized roles**, **15 agents** (13 activity-based + the-chief + the-meta-agent), and **16 reusable skills**. This consolidation keeps specialist depth while reducing overlap and context bloat.
+The `team` plugin provides **7 specialized roles**, **15 agents** (14 activity-based + the-chief), and **16 reusable skills**. This consolidation keeps specialist depth while reducing overlap and context bloat.
 
 ---
 
@@ -30,13 +30,14 @@ The `team` plugin provides **8 specialized roles**, **15 agents** (13 activity-b
 |----------|-------|
 | `research-product` | Market analysis, requirement clarification, prioritization, stakeholder alignment |
 
-### The Architect (4 activities)
+### The Architect (5 activities)
 
 **System design and technical governance specialist**
 
 | Activity | Focus |
 |----------|-------|
 | `design-system` | Scalable architecture, service boundaries, data + deployment strategy |
+| `record-decision` | Architecture Decision Records (ADRs) with context, rationale, and supersession tracking |
 | `review-security` | Application security + dependency/supply-chain review |
 | `review-robustness` | Complexity and concurrency risk review |
 | `review-compatibility` | Breaking-change detection, migration safety, backwards compatibility |
@@ -76,12 +77,6 @@ The `team` plugin provides **8 specialized roles**, **15 agents** (13 activity-b
 |----------|-------|
 | `build-platform` | Containers + IaC + CI/CD as one delivery platform |
 | `monitor-production` | Observability, SLI/SLOs, alerting, incident diagnostics |
-
-### The Meta Agent
-
-**Agent design and generation specialist**
-
-- `the-meta-agent`
 
 ---
 
