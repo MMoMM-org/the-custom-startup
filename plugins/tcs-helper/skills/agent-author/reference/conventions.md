@@ -2,136 +2,248 @@
 
 The definitive reference for Claude Code subagent structure. Apply when creating, modernizing, or auditing agents.
 
+**Sources:**
+- [Anthropic — Create custom subagents](https://code.claude.com/docs/en/sub-agents)
+- [Anthropic — Subagents in the SDK](https://code.claude.com/docs/en/agent-sdk/subagents)
+- [rsmdt/the-startup PRINCIPLES.md](https://github.com/rsmdt/the-startup/blob/main/docs/PRINCIPLES.md) (April 2026, primary-source-grounded)
+
+This document supersedes any older conventions derived from pre-2026 community guides.
+
 ---
 
 ## Agent Anatomy
 
-agents/[agent-name].md      # Single flat file (NOT a directory)
+Agents are **flat `.md` files** with YAML frontmatter. There is no `agents/foo/AGENT.md` form — `agents/foo.md` is the only valid layout. **This differs from skills**, which must be directories with `SKILL.md`.
 
-Unlike skills, agents are **flat .md files** with YAML frontmatter. There is no `agents/foo/AGENT.md` convention — `agents/foo.md` is the only valid form.
+### Locations by scope (highest precedence first)
 
-Locations by scope:
-
-| Scope | Path | Loaded by |
+| Scope | Path | Notes |
 |---|---|---|
-| User-global | `~/.claude/agents/<name>.md` | Every session on the machine |
-| Plugin | `plugins/<plugin>/agents/<name>.md` | Sessions where plugin is enabled |
-| Project | `<repo>/.claude/agents/<name>.md` | Sessions in that repo (team-shared via git) |
+| Managed (org) | per `permissions` config | Org-wide policy |
+| `--agents` CLI flag | session-only JSON | Ad-hoc |
+| Project | `<repo>/.claude/agents/<name>.md` | Team-shared via git |
+| User | `~/.claude/agents/<name>.md` | Personal, all projects |
+| Plugin | `plugins/<plugin>/agents/<role>/<activity>.md` | Read-only, requires plugin enabled |
+
+For activity-scoped agents (most common case), nest under role: `agents/the-architect/design-system.md`. For role-less single-purpose agents, top-level: `agents/the-chief.md`.
 
 ---
 
-## Frontmatter
+## Frontmatter Reference
 
-Required fields:
+Per Anthropic's official subagent schema:
 
-```yaml
+| Field | Required | Notes |
+|---|---|---|
+| `name` | Yes | Matches filename stem, lowercase-kebab |
+| `description` | Yes | Routing contract — see § Description below |
+| `tools` | No | Whitelist; enforced at dispatch — see § Tool Scoping |
+| `disallowedTools` | No | Denylist applied to inherited set |
+| `model` | No | `haiku` \| `sonnet` \| `opus` \| specific ID — see § Model Selection |
+| `color` | No | Visual identifier — see § Color Mapping |
+| `permissionMode` | No | `default` \| `acceptEdits` \| `auto` \| `plan` (parent stricter mode wins) |
+| `maxTurns` | No | Hard cap on agentic turns |
+| `skills` | No | Preloads listed skills into the subagent at startup (full body, not just availability) |
+| `mcpServers` | No | Name reference (share parent connection) or inline definition |
+| `hooks` | No | Fires only while subagent is active |
+| `memory` | No | `user` \| `project` \| `local` for persistent cross-session memory |
+| `background` | No | `true` for concurrent execution |
+| `isolation` | No | `worktree` runs agent in fresh git worktree, auto-cleaned on no-op |
+| `initialPrompt` | No | Auto-submitted first turn when running as main session via `--agent` |
+| `user-invocable` | No | `false` to hide from `/` menu while keeping programmatic dispatch |
+
 ---
-name: kebab-case-name        # lowercase, hyphens, 3–50 chars
-description: |               # action-oriented trigger description
-  Use PROACTIVELY ... when ...
-  MUST BE USED when ...
-model: sonnet                # sonnet | opus | haiku — see Model Selection
-tools: Read, Grep, Glob      # minimum set per archetype
+
+## Description — The Activation Contract
+
+Claude's auto-delegation router reads the `description` field via **text reasoning**, not embedding retrieval or keyword matching. Description quality directly determines whether the agent ever gets invoked.
+
+### Hard Rules (PRINCIPLES § 2.1)
+
+- **Front-load the trigger scenario in the first ~50 characters** — the `/skills` UI truncates at 250 chars, the field hard-caps at 1,024.
+- **Third-person, scenario-anchored.** *"Reviews changes for security and compliance issues. Use when the task mentions auth, permissions, or injection."* — not *"Helps with security."*
+- **Expect under-triggering.** Anthropic explicitly notes Claude tends to skip skills/agents when it should invoke them. Use *"slightly pushy"* phrasing: `Use PROACTIVELY when…` and `MUST BE USED when…`.
+- **Include 2–3 `<example>` blocks** showing concrete invocation scenarios — improves parent-side delegation accuracy.
+
+See `description-patterns.md` for templates and good/bad examples.
+
 ---
-```
 
-Optional fields:
+## Tool Scoping (PRINCIPLES § 2.5)
 
-```yaml
-color: blue                  # blue | cyan | green | yellow | red | magenta
-```
+For subagents, `tools` in frontmatter is a **whitelist applied before the first turn** — tools not listed are stripped from the catalog at dispatch time. Defaults differ by archetype:
 
-### Description Field — The #1 Delegation Lever
+| Archetype | Tools | Notes |
+|---|---|---|
+| Reviewer / Explorer / Architect | `Read, Grep, Glob` | Read-only, never `Write` |
+| Debugger / Implementer | `Read, Edit, Write, Bash` | Needs to fix and verify |
+| Test Runner | `Read, Bash` | Runs tests, reads output |
+| Security Reviewer | `Read, Grep, Glob` | NEVER `Write` — risk of leaking findings into repo |
+| Docs Writer | `Read, Write` | No `Bash` needed |
 
-Claude's auto-delegation router reads the `description` field. A passive description means the agent rarely triggers, even when relevant. See `description-patterns.md` for full templates and good/bad examples.
+**Rules:**
+- Never `tools: *`.
+- Never `tools: inherit` without explicit justification — inheriting loses the parent's approval history, so dangerous tools re-prompt every call.
+- When `Bash` is necessary, pair with a `PreToolUse` hook that validates commands (e.g., SELECT-only for a DB-query agent).
+- For sub-subagent spawning, restrict explicitly: `tools: Agent(name1, name2)`.
 
-**Minimum requirements:**
-- Contains `Use PROACTIVELY` or `MUST BE USED`
-- 2–5 concrete trigger phrases (`when the task mentions X`, `when the user asks for Y`)
-- Action-oriented, not role-descriptive
-- Distinguishable from main-agent scope
+---
 
-**NEVER summarize the agent's workflow in the description** — Claude may follow the description as a shortcut and skip reading the system prompt.
+## Model Selection (PRINCIPLES § 2.6)
 
-### Model Selection
+April 2026 pricing and capability:
+
+| Model | Input $/M | Output $/M | SWE-bench |
+|---|---|---|---|
+| Haiku | 0.80 | 4.00 | ~73% |
+| Sonnet | 3.00 | 15.00 | ~80% |
+| Opus | 15.00 | 75.00 | ~89% |
 
 | Model | When to use | Examples |
 |---|---|---|
-| `sonnet` | **Default for almost all agents** | Reviewer, Explorer, Debugger, Implementer, Docs writer |
-| `opus` | Only with explicit rationale | Deep architecture decisions, critical security audits, hardest root-cause debugging |
-| `haiku` | Trivial, fast, narrow tasks | Simple file inspection, single-string lookups, basic config checks |
-| `inherit` | **Reject this** | Inherits session model — usually Opus → wastes tokens for simple agents |
+| `haiku` | High-volume **read-heavy** work | Codebase search, file discovery, pattern matching. Anthropic's built-in `Explore` uses Haiku |
+| `sonnet` | Default for general coding and implementation | Reviewers, debuggers, implementers, doc writers, most architects |
+| `opus` | Complex reasoning only | Architectural review of large systems, security analysis with novel threats, hard refactors |
+| omit `model` | Inherit parent's session model | When no tactical reason to override |
 
-**Rule:** if the task could be handled in <30 seconds of reasoning, use `haiku`. If it needs systematic work over multiple files but no novel reasoning, use `sonnet`. Use `opus` only when stakes or complexity genuinely require it, and document the reason in a comment near the frontmatter.
+**TCS convention** (deviates from upstream PRINCIPLES.md slightly):
 
-### Tools — Minimum Per Archetype
+For team-style activity agents that get dispatched many times, **explicitly set `model: sonnet`** rather than omitting. Reason: omitting inherits the session model — when the user runs Opus, every dispatch costs Opus tokens for tasks that don't need Opus reasoning. Explicit `sonnet` produces predictable cost.
 
-| Archetype | Default tools | Rationale |
-|---|---|---|
-| Reviewer | `Read, Grep, Glob` | Read-only, no risk of accidental edits |
-| Explorer | `Read, Grep, Glob` | Read-only, finds files and patterns |
-| Debugger | `Read, Edit, Write, Bash` | Needs to fix code and run verification |
-| Implementer | `Read, Edit, Write, Bash` | Writes and tests changes |
-| Architect | `Read, Grep, Glob` | Reviews structure, doesn't edit |
-| Security Reviewer | `Read, Grep, Glob` | NEVER `Write` — risk of leaking changes |
-| Test Runner | `Read, Bash` | Runs tests, reads output, no edits |
-| Docs Writer | `Read, Write` | Writes docs without code execution |
-
-**Rule:** start from the archetype's default. Add tools only with stated reason. Strip anything not justified.
-
-### Color Mapping
-
-| Color | Semantic |
-|---|---|
-| blue / cyan | Analysis, exploration, review |
-| green | Generation, creation, building |
-| yellow | Validation, caution, warning |
-| red | Security, critical, dangerous |
-| magenta | Transformation, refactoring, creative |
-
-Color is optional but useful — it lets users visually identify which agent is running in the terminal status line.
+Use `inherit` only when:
+- The agent's reasoning genuinely scales with model (some architecture/security work)
+- And the user explicitly requested model flexibility
+- And you've documented why in a frontmatter comment
 
 ---
 
-## System Prompt Structure
+## Color Mapping (TCS Convention)
 
-Every agent system prompt should follow this skeleton. Each section is a `## ` heading.
+Optional `color:` field for visual identification. TCS team agents follow this palette:
 
-### 1. Role
+| Color | Semantic | Examples |
+|---|---|---|
+| `blue` | Architect / analysis | `design-system`, `record-decision`, `review-compatibility` |
+| `cyan` | Research / exploration | `research-product`, `the-meta-agent` |
+| `magenta` | Designer / transformation | `design-interaction`, `design-visual`, `research-user` |
+| `green` | Developer / building | `build-feature`, `optimize-performance` |
+| `red` | DevOps / production / security-critical | `build-platform`, `monitor-production` |
+| `yellow` | Tester / validator / chief | `test-strategy`, `the-chief`, `tdd-guardian` |
 
-One sentence stating the agent's identity and primary expertise frame. No long persona prose.
+Match color to the agent's archetype, not its frontend nicety.
 
-> You are a focused code review subagent specializing in correctness, regression risk, and missing test coverage.
+---
 
-### 2. Responsibilities
+## Body Structure — ICMDA Layout
 
-Numbered list. Concrete and scoped. Avoid abstract words like "ensure quality" — say what the agent actually checks.
+Body sections, in order. Each is a `## ` heading.
 
-### 3. Do not
+### 1. `## Identity`
 
-Explicit boundaries. What the agent must NEVER do. This prevents scope creep and overlap with the main agent.
+One or two sentences. Role + purpose + frame.
 
-> Do not:
-> - Edit files directly.
-> - Re-implement features.
-> - Speculate beyond what is observable in the code.
+> *"You are a senior code reviewer ensuring high standards of code quality and security."*
 
-### 4. Workflow
+Keep enforcement rules out — those go in Constraints.
 
-Numbered steps describing how the agent works. Be specific — vague workflows produce vague results.
+### 2. `## Constraints`
 
-### 5. Verification Behavior
+Use the `Constraints { require {} never {} }` block syntax (TCS convention). Markdown `**Always:**` / `**Never:**` lists are also acceptable.
 
-How the agent grounds its findings in evidence. Force the agent to cite file:line, quote relevant code, or run commands rather than speculate.
+```
+Constraints {
+  require {
+    Capture decision context honestly — include pressures and constraints
+    Document rejected alternatives with genuine reasoning
+  }
+  never {
+    Create duplicates — check existing artifacts first
+    Omit the Alternatives Considered section
+  }
+}
+```
 
-> For each finding:
-> - Cite the exact file path and line number.
-> - Quote the relevant code snippet.
-> - Explain why it is a problem with reference to the codebase.
+### 3. `## Vision` (optional)
 
-### 6. Output Format
+What the agent reads and internalizes before doing the work. Lists for orientation:
 
-The fixed structure for the agent's return value. See `output-formats.md` for archetype-specific templates. Free-form prose is reject-on-sight.
+> Before writing, read and internalize:
+> 1. `.claude/startup.toml` — resolve `docs_base`
+> 2. Existing ADRs in `{adr_dir}/`
+> 3. The decision input from the user
+
+### 4. `## Mission`
+
+Single-sentence purpose statement. The "why" of the agent.
+
+### 5. `## Decision: <Topic>` (one or more)
+
+Routing tables for decision points. First match wins.
+
+| IF condition | THEN action | Rationale |
+|---|---|---|
+| Multiple unrelated activities | Split into separate agents | Single-activity agents outperform generalists |
+| One activity across many domains | Keep as one agent | Activity focus trumps domain |
+
+Use multiple `## Decision: <X>` sections if the agent makes several distinct decisions during its workflow.
+
+### 6. `## Activities`
+
+Numbered list of concrete actions. Be specific — vague activities produce vague results.
+
+> 1. Identify the relevant modules, interfaces, and architectural seams.
+> 2. Check whether responsibilities are cleanly separated.
+> 3. Look for coupling, unclear ownership, and likely long-term maintenance risks.
+
+### 7. `## Output`
+
+Typed table defining the agent's return contract:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| findings | Finding[] | Yes | Audit findings list |
+| filesReviewed | string[] | Yes | Paths examined |
+| recommendedNextStep | string | Yes | Single-sentence next action |
+
+**Free-form prose output is reject-on-sight.** Every agent must define an explicit return contract.
+
+### Optional sections
+
+- `## YOLO Mode` — for agents that behave differently when `YOLO=true`
+- `## Evaluation Logic` — for gate-style agents (e.g., `tdd-guardian`)
+- `## Validation Checklist` — for agents that audit other artifacts
+
+---
+
+## Active-Agent Announcement
+
+The first non-blank line after the frontmatter (and before any `## ` heading) **must be**:
+
+```
+**Active agent: <plugin>:<role>:<activity>**
+```
+
+For top-level agents:
+
+```
+**Active agent: <plugin>:<name>**
+```
+
+This appears in the terminal status line when the agent activates, letting users track which agent is running.
+
+---
+
+## Anti-Patterns (PRINCIPLES § 4.5)
+
+- **`tools: *`** — grants everything; loses parent approvals; every call re-prompts
+- **Mega-role god-agents** — single agent with 50+ KB prompt and ten responsibilities
+- **Assuming parent context is visible** — it isn't; pass everything through the task prompt
+- **Parallel agents with implicit inter-dependencies** — siblings don't see each other
+- **Headless write-capable agents with no review gate** — run plan mode first, or require human review between read and write phases
+- **Context bloat from verbose subagent returns** — ask for key findings, not exhaustive details
+- **Permission-mode confusion** — parent mode overrides; stricter-than-parent honored, looser is not
+
+See `anti-patterns.md` for the complete list with fix guidance.
 
 ---
 
@@ -140,57 +252,14 @@ The fixed structure for the agent's return value. See `output-formats.md` for ar
 | Component | Target |
 |---|---|
 | Frontmatter | 5–15 lines |
-| System prompt | <200 lines |
-| Total file | <250 lines |
+| Body | ≤ 25 KB total (PRINCIPLES § 4.3) |
+| Identity | 1–2 sentences |
+| Mission | 1 sentence |
 
-If the system prompt exceeds 200 lines, externalize verbose checklists or examples to a sibling reference file (rare for agents — usually the prompt should be tight).
+If the body exceeds 25 KB, externalize verbose checklists or examples to a sibling reference file (`agents/the-architect/reference/<topic>.md`), or preload via `skills:` frontmatter.
 
 ---
 
-## Anatomy Example — Skeleton
+## Canonical Example
 
-```markdown
----
-name: code-reviewer
-description: |
-  Use PROACTIVELY to review code changes for correctness, regression risk, and missing test coverage when the task mentions code review, PR review, "ready to merge", or completed implementation work.
-  MUST BE USED after any non-trivial code change before the change is committed.
-model: sonnet
-color: blue
-tools: Read, Grep, Glob, Bash
----
-
-You are a focused code review subagent specializing in correctness, regression risk, and missing test coverage.
-
-## Responsibilities
-1. Review only files relevant to the requested change (use git diff if applicable).
-2. Identify correctness issues, edge cases, and missing tests.
-3. Flag regression risks tied to the change.
-
-## Do not
-- Edit files directly.
-- Re-implement features or refactor unrelated code.
-- Speculate beyond what is observable in the code.
-
-## Workflow
-1. Identify the change scope from $ARGUMENTS or `git diff`.
-2. Read each changed file fully (not just the diff).
-3. Cross-reference callers and tests for impacted symbols.
-4. Run existing tests via Bash if a test command is provided.
-5. Synthesize findings using the output format below.
-
-## Verification Behavior
-For each finding:
-- Cite the exact file path and line number.
-- Quote the relevant code snippet.
-- Explain why it is a problem and propose a specific fix.
-
-## Output Format
-- **Critical** (correctness, security, data loss)
-- **Warning** (regression risk, edge cases, missing tests)
-- **Suggestion** (maintainability, style, naming)
-- **Files checked**
-- **Recommended next step**
-```
-
-This skeleton is the gold standard. See `examples/canonical-agent.md` for the fully annotated version.
+See `examples/canonical-agent.md` for a fully annotated agent demonstrating ICMDA layout with all conventions.

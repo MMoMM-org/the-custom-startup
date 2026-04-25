@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.2.0] - 2026-04-25
+
+### Changed
+
+- **`agent-author` conventions overhauled** — re-grounded in `rsmdt/the-startup` `docs/PRINCIPLES.md` (April 2026) and the actual ICMDA layout used by all `tcs-team` agents. Replaces the earlier Perplexity-based PICS draft. Updates: conventions.md (ICMDA + frontmatter schema + tool/model/color tables), description-patterns.md (first-50-char rule, third-person, `<example>` blocks), output-formats.md (typed-table per archetype), anti-patterns.md (PRINCIPLES § 4.5 list), canonical-agent.md (full ICMDA reviewer example), audit-output.md (ICMDA-aware audit checklist), SKILL.md (Mechanism Check as Step 1).
+- **`skill-author` Mechanism Check** — symmetric Step 1 added before mode selection. Walks the load-bearing question from PRINCIPLES § 5.2 ("should output remain visible in parent conversation?"). Recommends handoff to `agent-author` if a subagent is the right mechanism instead of a skill.
+
+### Added
+
+- **Shared `decision-tree.md`** — identical content in both `agent-author/reference/` and `skill-author/reference/`. Sourced from PRINCIPLES § 5.2 sequential decision tree + worked examples + common confusions. Sync header in both files.
+- **`agent-author/evals/pressure-scenarios.md`** — three persisted pressure-test scenarios (lazy spec, wrong mechanism, lazy audit) with expected behaviors, failure modes to watch, and 2026-04-25 baseline PASS verdicts. Per PRINCIPLES § 2.7 evaluation-first authoring; re-run after any non-trivial skill change.
+
 ## [3.1.0] - 2026-04-25
 
 ### Added

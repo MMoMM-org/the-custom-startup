@@ -1,12 +1,12 @@
 # Audit Output Example
 
-Concrete example of what an Audit-mode response looks like. Use this as the target shape when reporting findings to the user.
+Concrete example of what an Audit-mode response looks like, against the ICMDA-aware audit checklist. Use this as the target shape when reporting findings to the user.
 
 ---
 
 ## Scenario
 
-User asks: "Audit my `~/.claude/agents/architect.md` agent — it never seems to get auto-invoked."
+User asks: *"Audit my `~/.claude/agents/architect.md` agent — it never seems to get auto-invoked."*
 
 The agent file currently looks like:
 
@@ -30,37 +30,39 @@ When asked about architecture, provide thoughtful analysis and recommendations.
 
 **File:** `~/.claude/agents/architect.md`
 **Archetype:** Architect (intended) — currently misconfigured
-**Verdict:** Multiple FAILs — agent will not auto-trigger reliably and has unsafe tool grant.
+**Verdict:** Multiple FAILs across description, tools, model, and ICMDA structure. Will not auto-trigger reliably and has unsafe tool grant.
 
 ## Audit Checklist
 
-| Check | Status | Note |
-|---|---|---|
-| Frontmatter — valid YAML | PASS | |
-| Frontmatter — `name` present | PASS | |
-| Frontmatter — `description` present | PASS | |
-| Frontmatter — `model` present | **FAIL** | Missing — will inherit session model (likely Opus, wasteful) |
-| Frontmatter — `tools` minimal | **FAIL** | 7 tools including `Write`/`Edit` — Architect should be read-only |
-| Description — action verb | **FAIL** | No `Use PROACTIVELY` or `MUST BE USED` |
-| Description — trigger phrases | **FAIL** | Zero concrete triggers |
-| Description — scope distinct | **FAIL** | "expert ... who can help" overlaps with main agent |
-| Description — workflow leak | PASS | Doesn't summarize workflow |
-| System prompt — Role | WARN | Persona prose ("brilliant ... 20 years ...") instead of single-sentence identity |
-| System prompt — Responsibilities | **FAIL** | None — body is generic "provide thoughtful analysis" |
-| System prompt — Do not | **FAIL** | No boundaries defined |
-| System prompt — Workflow | **FAIL** | No numbered steps |
-| System prompt — Verification | **FAIL** | No evidence-grounding instructions |
-| System prompt — Output format | **FAIL** | No fixed structure — free prose |
-| Color | WARN | Not set — Architect should be `cyan` or `blue` |
-| Size | PASS | Under 200 lines (way under) |
+| Category | Check | Status | Note |
+|---|---|---|---|
+| Frontmatter | Valid YAML, `name` + `description` present | PASS | |
+| Frontmatter | `name` matches filename stem | PASS | |
+| Frontmatter | `model` set explicitly | **FAIL** | Missing → inherits session model (Opus → wasteful) |
+| Frontmatter | `tools` minimal per archetype | **FAIL** | 7 tools incl. `Write`/`Edit` — Architect should be read-only |
+| Frontmatter | `color` matches archetype | WARN | Not set; Architect should be `blue` |
+| Description | Trigger in first ~50 chars | **FAIL** | Generic "expert ... who can help" |
+| Description | Contains `Use PROACTIVELY` or `MUST BE USED` | **FAIL** | Neither |
+| Description | At least 2 trigger phrases | **FAIL** | Zero |
+| Description | Third-person, scenario-anchored | **FAIL** | "An expert ... who can help" — vague role description |
+| Description | Does NOT summarize the workflow | PASS | |
+| Description | High-value agent has 2–3 `<example>` blocks | **FAIL** | None |
+| Active-agent announcement | First non-blank line after frontmatter | **FAIL** | Missing |
+| ICMDA | `## Identity` (1–2 sentences) | **FAIL** | Persona prose, not Identity section |
+| ICMDA | `## Constraints` | **FAIL** | Missing |
+| ICMDA | `## Mission` | **FAIL** | Missing |
+| ICMDA | `## Decision: <Topic>` if routing decisions | **FAIL** | Missing |
+| ICMDA | `## Activities` numbered list | **FAIL** | Missing |
+| ICMDA | `## Output` typed table or rubrics | **FAIL** | Missing — free prose only |
+| Size | Body ≤ 25 KB | PASS | Way under |
 
 ## Findings
 
 ### FAIL #1 — Description won't trigger auto-delegation
 
-**Current:** "An expert software architect who can help design systems."
+**Current:** *"An expert software architect who can help design systems."*
 
-**Problem:** No imperative phrase, no trigger words. Claude's router has nothing to match against. This is the root cause of "never gets auto-invoked."
+**Problem:** No imperative phrase, no trigger words, trigger scenario not in first 50 chars. Per PRINCIPLES § 2.1, descriptions are read by Claude's text-reasoning router; phrasing without `Use PROACTIVELY` / `MUST BE USED` and concrete user-language triggers reliably under-trigger. This is the root cause of "never gets auto-invoked".
 
 **Fix:**
 
@@ -68,14 +70,28 @@ When asked about architecture, provide thoughtful analysis and recommendations.
 description: |
   Use PROACTIVELY when the task involves system architecture decisions, service boundaries, scaling trade-offs, or technology selection.
   MUST BE USED when the user asks "how should we design X", evaluates microservices vs monolith, or plans for 10x growth.
-  Triggers: architecture review, system design, "should we use X", scaling, service boundaries, design trade-offs.
+  Examples:
+
+  <example>
+  Context: New service planning.
+  user: "We need to design the architecture for our new payment service"
+  assistant: "I'll use the architect agent to evaluate boundaries, scaling, and integration patterns."
+  <commentary>System design from scratch is the canonical trigger.</commentary>
+  </example>
+
+  <example>
+  Context: Architectural trade-off question.
+  user: "Should we go microservices or stick with the monolith?"
+  assistant: "I'll use the architect agent for that trade-off analysis."
+  <commentary>Architecture trade-off question.</commentary>
+  </example>
 ```
 
 ### FAIL #2 — Unsafe tool grant
 
 **Current:** `Read, Write, Edit, Bash, Grep, Glob, WebFetch`
 
-**Problem:** Architect agents review and recommend; they don't edit code. `Write`/`Edit` enable accidental changes during exploration.
+**Problem:** Architect agents review and recommend; they don't edit code. `Write`/`Edit` enable accidental changes during exploration. Per PRINCIPLES § 2.5, default to `Read, Grep, Glob` for research/analysis agents.
 
 **Fix:**
 
@@ -83,13 +99,13 @@ description: |
 tools: Read, Grep, Glob
 ```
 
-(Add `WebFetch` only if the agent needs to look up external architecture references — and explain why in a comment.)
+(Add `WebFetch` only with explicit comment if the agent needs to look up external architecture references.)
 
 ### FAIL #3 — Model not set
 
 **Current:** No `model` field.
 
-**Problem:** Inherits session model. If the user runs Opus, every architect invocation costs Opus tokens — overkill for most architecture reviews.
+**Problem:** Inherits session model. Per TCS convention (and to avoid Opus-cost surprises), explicitly set `sonnet` for activity agents.
 
 **Fix:**
 
@@ -97,57 +113,78 @@ tools: Read, Grep, Glob
 model: sonnet
 ```
 
-Escalate to `opus` only with explicit rationale (e.g., the agent is intended specifically for the hardest cross-system architecture decisions). Document the reason in a comment.
+Escalate to `opus` only with explicit rationale (e.g., this agent handles the hardest cross-system architecture decisions). Document the reason in a comment near the frontmatter.
 
-### FAIL #4 — System prompt has no operational structure
+### FAIL #4 — System prompt has no ICMDA structure
 
-**Current:** Persona prose + "provide thoughtful analysis".
+**Current:** Persona prose + "provide thoughtful analysis."
 
-**Problem:** No Responsibilities, no Do-not, no Workflow, no Verification, no Output Format. The agent has no reliable behavior — it will produce different shapes of output every invocation.
+**Problem:** Missing all six required sections (Identity / Constraints / Mission / Decision / Activities / Output). The agent has no reliable behavior — different shapes of output every invocation. Persona prose adds zero routing or operational value.
 
-**Fix:** rewrite the system prompt using the canonical skeleton (see `examples/canonical-agent.md`). Skeleton:
+**Fix:** rewrite the body using the ICMDA skeleton (see `examples/canonical-agent.md`):
 
 ```markdown
+**Active agent: architect**
+
+## Identity
+
 You are a focused architecture review subagent specializing in system boundaries, scaling risks, and technology trade-offs.
 
-## Responsibilities
-1. Review proposed or existing architecture for boundary violations and coupling.
-2. Evaluate scaling and operational risks.
-3. Compare against established patterns in the codebase.
+## Constraints
 
-## Do not
-- Edit files or write code.
-- Re-implement features.
-- Speculate beyond what is observable in the code or docs.
+```
+Constraints {
+  require {
+    Cite specific files / interfaces for every finding
+    Reference existing patterns or established conventions
+    Distinguish observed risks from speculative concerns
+  }
+  never {
+    Edit files or write code
+    Re-implement features
+    Speculate beyond what is observable in the code or docs
+  }
+}
+```
 
-## Workflow
-1. Identify the relevant modules, interfaces, and architectural seams.
+## Mission
+
+Surface architectural risks and trade-offs early so technology choices are made with eyes open.
+
+## Decision: Review Scope
+
+| IF target involves | THEN start with | Rationale |
+|---|---|---|
+| New service/system | Existing similar services in repo | Match local conventions first |
+| Refactor of existing | Current implementation + callers | Understand status quo before redesigning |
+| Trade-off question | Both options' implications in this codebase context | Concrete analysis, not generic advice |
+
+## Activities
+
+1. Identify relevant modules, interfaces, and architectural seams.
 2. Read existing patterns in similar areas of the codebase.
 3. Evaluate the proposal against those patterns.
 4. Identify scaling, coupling, and ownership risks.
 5. Format findings using the output template.
 
-## Verification Behavior
-For each finding:
-- Cite specific files / interfaces.
-- Reference existing patterns or established conventions.
-- Distinguish observed risks from speculative concerns.
+## Output
 
-## Output Format
-- **Critical risks** — boundary violations, scaling failures, coupling
-- **Design weaknesses** — weak abstractions, unclear ownership
-- **Positive signals** — patterns aligned with existing design
-- **Files reviewed**
-- **Recommended next step**
+| Field | Type | Required | Description |
+|---|---|---|---|
+| criticalRisks | string[] | Yes | Boundary violations, scaling failures, coupling |
+| designWeaknesses | string[] | Yes | Weak abstractions, unclear ownership |
+| positiveSignals | string[] | No | Patterns aligned with existing design |
+| filesReviewed | string[] | Yes | |
+| recommendedNextStep | string | Yes | |
 ```
 
 ## Modernize Recommendation
 
 Apply all four fixes together. The agent will then:
-- Auto-trigger on architecture-related tasks (description fixes #1)
-- Run safely without accidental edits (tools fix #2)
-- Use appropriate model cost (#3)
-- Produce consistent, useful output (#4)
+- Auto-trigger on architecture-related tasks (Fix #1)
+- Run safely without accidental edits (Fix #2)
+- Use predictable model cost (Fix #3)
+- Produce consistent, parseable output (Fix #4)
 
 ## Recommended Next Step
 
@@ -161,8 +198,9 @@ Or apply manually using the patches above. Re-run audit afterwards to confirm al
 ## Notes on this report shape
 
 - **Verdict line up top** — user knows immediately whether the agent is OK or broken.
-- **Checklist table** — every check from `output-formats.md` audit checklist, with status.
+- **Checklist table** — every check from `output-formats.md` Audit Checklist, with status.
 - **Findings grouped by severity** — FAILs first, with root cause + specific fix code shown inline.
 - **Modernize recommendation** — explicit next-step invocation the user can run.
+- **References to canonical-agent.md** — for the full ICMDA template.
 
 This shape works for both "audit this agent" requests and post-Modernize verification reports.

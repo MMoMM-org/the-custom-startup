@@ -1,152 +1,202 @@
 # Subagent Anti-Patterns
 
-Community-validated failure modes from real-world Claude Code subagent usage. Reject any agent that exhibits these patterns; modernize existing agents to remove them.
+Failure modes from the official Anthropic guidance, the `the-startup` PRINCIPLES.md (April 2026), and community experience. Reject any agent that exhibits these patterns; modernize existing agents to remove them.
+
+**Sources:**
+- [Anthropic — Create custom subagents](https://code.claude.com/docs/en/sub-agents)
+- [rsmdt/the-startup PRINCIPLES.md § 4.5](https://github.com/rsmdt/the-startup/blob/main/docs/PRINCIPLES.md)
+- [Steve Kinney — Common Sub-Agent Anti-Patterns and Pitfalls](https://stevekinney.com/courses/ai-development/subagent-anti-patterns)
 
 ---
 
-## 1. The Mega-Generalist
+## Tool & Permission Anti-Patterns
 
-**Symptom:** "An expert senior engineer who can review, debug, architect, and write tests."
+### `tools: *`
 
-**Why it fails:**
-- Description is too broad to trigger reliably — Claude's router can't distinguish from main-agent scope.
-- High overlap with main agent → Claude defaults to handling it inline.
-- No distillation benefit — agent's output reads like main-agent output.
+Grants Bash, Write, everything. Loses parent's approval history → every call re-prompts. Highest-severity reject-on-sight.
 
-**Fix:** split into focused archetypes (Reviewer, Debugger, Architect). Each gets one job, one trigger pattern, one output format.
+**Fix:** explicit whitelist per archetype. See `conventions.md` § Tool Scoping.
 
----
+### `tools: inherit` without justification
 
-## 2. The Persona Cosplay
+Inheriting parent tools loses dangerous-tool approvals. Use `inherit` only when the agent genuinely needs the parent's full toolset AND the user has explicitly opted in.
 
-**Symptom:** "You are a 10x rockstar engineer with 20 years of experience at FAANG..."
+**Fix:** explicit `tools: Read, Grep, Glob` (or whatever's actually needed).
 
-**Why it fails:**
-- Persona prose adds zero routing or verification value.
-- Wastes tokens on every invocation.
-- Distracts from the operational instructions.
+### Headless write-capable agent with no review gate
 
-**Fix:** open with a single sentence: `You are a focused <archetype> subagent specializing in <domain>.` Move all enforcement to **Responsibilities**, **Do not**, and **Workflow** sections.
+Agent has `Write` and `Edit` and runs autonomously without `permissionMode: plan` or human review between read and write phases.
 
----
+**Fix:** add `permissionMode: plan` or split into a read-only audit agent + a separate apply step that requires user confirmation.
 
-## 3. The All-Tools-Just-in-Case
+### Permission-mode confusion
 
-**Symptom:** `tools: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch, Task, ...`
+Setting `permissionMode: auto` on a subagent assuming it loosens the parent's stricter mode. Parent mode wins when stricter; subagent mode is honored only if as-strict-or-stricter.
 
-**Why it fails:**
-- Reviewer/Explorer agents shouldn't have `Write` — risk of accidental edits.
-- Security agents shouldn't have `Write` — could leak findings into the repo.
-- Bash without scope can run anything → unsafe and unauditable.
-- More tools = more surface for the agent to drift off task.
-
-**Fix:** strip to archetype default. Add a tool only with explicit reason in a comment.
+**Fix:** test in the actual permission context the agent will run in. Document the expected mode.
 
 ---
 
-## 4. The Inherit-Model Trap
+## Scope & Identity Anti-Patterns
 
-**Symptom:** `model: inherit` (or no `model` set, with the user running Opus)
+### The Mega-Generalist (PRINCIPLES § 4.5)
+
+Single agent with 50+ KB prompt and ten responsibilities. Examples: *"You are a senior 10x rockstar who reviews, debugs, designs, and writes tests."*
 
 **Why it fails:**
-- Inherits the session model — usually Opus.
-- Spends Opus tokens on tasks that Sonnet handles fine.
-- Compounds across many invocations.
+- Description too broad to trigger reliably
+- High overlap with main agent → Claude defaults to handling inline
+- No distillation benefit — output reads like main-agent output
+- Un-parallelizable, hard to audit
 
-**Fix:** explicit `model: sonnet` for nearly everything. Escalate to `opus` only for deep architecture, hardest debugging, or critical security audits — and document the reason.
+**Fix:** split into focused activity-scoped archetypes. See PRINCIPLES § 2.4 — *"Many small activity-scoped agents beat single role-agents."*
+
+### The Persona Cosplay
+
+*"You are a 10x rockstar engineer with 20 years of experience at FAANG..."*
+
+**Why it fails:**
+- Persona prose adds zero routing or verification value
+- Wastes tokens on every invocation
+- Distracts from operational instructions
+
+**Fix:** open with a single sentence: `You are a focused <archetype> subagent specializing in <domain>.` All enforcement → Constraints, Activities.
+
+### The Chat Buddy
+
+Agent designed for back-and-forth dialogue, brainstorming, *"let's iterate together."*
+
+**Why it fails:**
+- Subagents have isolated context — they don't see the conversation history
+- Iterative chat belongs in the main thread
+- Each round wastes context-isolation benefit
+
+**Fix:** subagents deliver **focused artifacts** (reports, plans, diffs, findings). Move interactive work to main thread or a slash command.
 
 ---
 
-## 5. The Free-Prose Output
+## Description Anti-Patterns
 
-**Symptom:** "Here's what I found: ..." — followed by paragraphs of unstructured text.
+### Generic Role Description
 
-**Why it fails:**
-- Hard to parse for orchestration (commands, other skills, the main agent).
-- Important findings buried in prose.
-- Inconsistent across invocations.
+`description: An expert software architect.`
 
-**Fix:** every agent gets a fixed format with named rubrics (Critical/Warning/Suggestion, Symptom/Root Cause/Evidence, etc.). See `output-formats.md`.
+**Why it fails:** no action verb, no triggers, overlaps with main agent.
 
----
+**Fix:** see `description-patterns.md` for the action + trigger + examples pattern.
 
-## 6. The Chat Buddy
+### Workflow Summary in Description (PRINCIPLES § 3.4 documented bug)
 
-**Symptom:** Agent designed for back-and-forth dialogue, brainstorming, "let's iterate together".
+`description: Reads files, analyzes diff, runs tests, writes report.`
 
-**Why it fails:**
-- Subagents run with their own context — they don't see the conversation history naturally.
-- Iterative chat belongs in the main thread.
-- Each round wastes context-isolation benefit.
+**Why it fails:** Claude may follow the description as a shortcut and skip reading the system prompt body. **Documented failure mode** — caused real production behavior breaks (one review instead of two when description summarized "two-stage review").
 
-**Fix:** subagents deliver **focused artifacts** (reports, plans, diffs, findings). Move interactive work to the main thread or a slash command.
+**Fix:** description = triggering conditions only. Workflow stays in body.
 
----
+### Stale Description
 
-## 7. The Repo-Vacuum
+Agent's description was written when the feature launched, never updated. Misses current trigger phrases users say.
 
-**Symptom:** Agent reads "the whole codebase" and returns a 5000-line report.
-
-**Why it fails:**
-- Pollutes both the agent's context and the main agent's response.
-- Defeats the context-isolation purpose.
-- Findings get lost in the noise.
-
-**Fix:** the agent must filter aggressively. Add to **Workflow**: "Identify only files relevant to the change/task. Read those fully. Do not load the entire repo." Add to **Output format**: "Return only findings that matter — no exhaustive lists."
+**Fix:** modernize descriptions periodically. When auditing, check description against current user vocabulary.
 
 ---
 
-## 8. The Plan-Mode Replacement
+## Context & Communication Anti-Patterns
 
-**Symptom:** A "research" or "architect" subagent that does what `Plan Mode` already does.
+### Assuming Parent Context Is Visible
 
-**Why it fails:**
-- Plan Mode + main-thread exploration handles most "investigate this" cases cleanly.
-- The subagent adds context-switching cost without unique benefit.
-- User has to constantly re-explain the task.
+Agent system prompt references *"the file we just discussed"* or *"the user's earlier point about X"*. **Subagents do not see parent conversation.** They get only: their system prompt, the Agent-tool task prompt, project `CLAUDE.md`, and their tool catalog.
 
-**Fix:** before authoring a research/architect subagent, ask: "would Plan Mode + main-thread Explore handle this?" If yes, skip the subagent.
+**Fix:** the Agent-tool dispatch prompt is the **only** parent → child channel. Pass everything explicitly: file paths, decisions, constraints.
+
+### The Repo-Vacuum
+
+Agent reads the whole codebase and returns a 5000-line report. Defeats context-isolation purpose.
+
+**Fix:** add explicit filtering in workflow ("Identify only files relevant to the change") and aggregation in output ("Return only findings that matter — no exhaustive lists").
+
+### Parallel Agents With Implicit Inter-Dependencies
+
+Spawning 3 sibling agents that assume they can see each other's outputs. Siblings return to parent independently — they cannot communicate.
+
+**Fix:** either sequence them (run A, pass result to B), or escalate to Agent Teams for genuine peer coordination.
+
+### Context Bloat From Verbose Returns
+
+Agent returns full transcripts, exhaustive file lists, raw test output. Pollutes parent context, kills isolation benefit.
+
+**Fix:** require key findings only in `Output` section. *"Filtered one-line failure summaries cross barriers; raw transcripts do not."* (PRINCIPLES § 5.6)
 
 ---
 
-## 9. The Stale Description
+## Structural Anti-Patterns
 
-**Symptom:** Agent's description was written when the feature launched, never updated. Doesn't include current trigger phrases users actually say.
+### No Output Format
+
+Agent returns free-form prose. No rubrics, no named fields, no typed table.
+
+**Why it fails:** hard to parse for orchestration, important findings buried in prose, inconsistent across invocations.
+
+**Fix:** every agent gets a fixed `## Output` section with typed table or named rubrics. See `output-formats.md`.
+
+### Wrong Mechanism Choice
+
+Building a subagent for what should be a skill (or vice versa). Symptoms:
+- "Subagent" runs every interaction with no real isolation benefit
+- User constantly re-explains context the agent should already have
+- Agent's output is incremental dialogue, not a distilled artifact
+
+**Fix:** run through `decision-tree.md` Q1 ("Should output remain visible in parent conversation?"). If you find yourself building a subagent for an inherently inline task, switch to a skill.
+
+### Plan-Mode Replacement (PRINCIPLES § 4.5 implicit)
+
+Building a "research" or "architect" subagent to do what `Plan Mode` already handles cleanly.
 
 **Why it fails:**
-- User language evolves; trigger phrases drift.
-- Old descriptions miss new failure modes the agent could handle.
-- Auto-delegation rate decays silently over time.
+- Plan Mode + main-thread Explore handles most "investigate this" cases
+- The subagent adds context-switching cost without unique benefit
 
-**Fix:** modernize descriptions periodically. When auditing, check description against current user vocabulary. Update trigger phrases.
+**Fix:** before authoring, ask: "would Plan Mode + main-thread Explore handle this?" If yes, skip the subagent.
 
 ---
 
-## 10. The Over-Reliance on Auto-Delegation
+## Model & Cost Anti-Patterns
 
-**Symptom:** Agents designed assuming Claude will always auto-invoke them when relevant.
+### Over-Specced Model
 
-**Why it fails:**
-- Auto-delegation is non-deterministic — even a perfect description doesn't guarantee invocation.
-- Users may need to invoke explicitly: "Use the code-reviewer agent to ..."
-- Without a manual fallback, the agent is unreliable.
+Using `model: opus` for a reviewer that does straightforward code reading.
 
-**Fix:**
-- Make descriptions strong (see `description-patterns.md`) but don't rely on them alone.
-- Document explicit invocation in the agent's README or in the main repo's CLAUDE.md.
-- Consider a slash command (`/review-change`) that explicitly invokes the subagent.
+**Why it fails:** 5× the input cost, 5× the output cost vs sonnet. Compounds across many invocations.
+
+**Fix:** sonnet is the default. Opus only with explicit rationale (deep architecture, hard root-cause, critical security).
+
+### Under-Specced Model
+
+Using `model: haiku` for substantive reasoning work (architecture decisions, complex debugging).
+
+**Why it fails:** Haiku is for read-heavy, narrow tasks. Substantive reasoning produces shallow output and may require retries.
+
+**Fix:** if the agent's activities involve trade-off analysis, multi-file reasoning, or judgment calls, use sonnet.
+
+### Implicit Inheritance When Session = Opus
+
+Omitting `model:` field on activity agents. When user runs Opus, every dispatch costs Opus tokens.
+
+**Fix:** TCS convention — explicitly set `model: sonnet` for team-style activity agents. Predictable cost, no inheritance surprises.
 
 ---
 
 ## Reject-on-Sight Checklist
 
-When auditing, immediately reject the agent if:
+When auditing an agent, immediately reject if:
 
 - [ ] Description has no `Use PROACTIVELY` / `MUST BE USED`
 - [ ] Description summarizes the workflow
-- [ ] Tools list is "all tools" or unjustifiably broad
-- [ ] Model is `inherit` (with no explicit reason)
-- [ ] No fixed output format
+- [ ] `tools: *` or unjustifiably broad list
+- [ ] `tools: inherit` without explicit justification
+- [ ] Model is `inherit` (with no documented reason)
+- [ ] No `## Output` section with explicit format
 - [ ] Persona prose dominates the system prompt
-- [ ] Scope overlaps significantly with another existing agent
-- [ ] Agent designed for interactive chat
+- [ ] Scope overlaps significantly with main agent or another existing agent
+- [ ] Designed for interactive chat instead of artifact delivery
+- [ ] Body exceeds 25 KB without progressive disclosure to references
