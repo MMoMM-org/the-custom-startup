@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.1.0] - 2026-04-25
+
+### Added
+
+- **`agent-author` skill** — Authoring assistant for Claude Code subagents (mirrors `skill-author` for skills). Supports Create / Audit / Modernize modes. Enforces TCS opinions: `sonnet` as default model (rejects `inherit`), action-oriented descriptions with `Use PROACTIVELY`/`MUST BE USED` triggers, minimum tool sets per archetype, and fixed output formats. Includes reference docs (conventions, description-patterns, decision-tree, output-formats, anti-patterns) and annotated examples.
+
 ## [3.0.3] - 2026-04-11
 
 ### Fixed
