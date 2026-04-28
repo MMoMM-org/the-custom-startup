@@ -217,29 +217,22 @@ BLOCKED             → assess blocker:
 
 #### 4f. Spec Compliance Review
 
-Dispatch spec compliance reviewer (sonnet) with:
+Dispatch the `spec-compliance-reviewer` agent (Agent tool, `subagent_type: spec-compliance-reviewer`) with:
 - Full task requirements text
 - Implementer's report (what they claim they built)
 - Instruction: read actual code, do not trust the report
 
-Reviewer checks:
-- Nothing missing (all requirements implemented)
-- Nothing extra (no over-building)
-- No misunderstanding of requirements
-
-Result:
-- ✅ Spec compliant → proceed to 4g
-- ❌ Issues found → implementer fixes → re-dispatch spec reviewer (repeat until ✅)
+Agent verdict (PASS or FAIL with fix list):
+- ✅ PASS → proceed to 4g
+- ❌ FAIL → implementer addresses fix list → re-dispatch `spec-compliance-reviewer` (repeat until PASS)
 
 #### 4g. Code Quality Review
 
-Dispatch code quality reviewer (sonnet) with BASE_SHA and HEAD_SHA of implementer's commits.
+Dispatch the `code-quality-reviewer` agent (Agent tool, `subagent_type: code-quality-reviewer`) with BASE_SHA and HEAD_SHA of implementer's commits.
 
-Reviewer checks: correctness, naming, test coverage, simplicity, file responsibility.
-
-Result:
-- ✅ Approved → proceed to 4h
-- ❌ Issues found → implementer fixes → re-dispatch quality reviewer (repeat until ✅)
+Agent verdict (PASS or FAIL with fix list, scoped to BASE_SHA..HEAD_SHA):
+- ✅ PASS → proceed to 4h
+- ❌ FAIL → implementer addresses fix list → re-dispatch `code-quality-reviewer` (repeat until PASS)
 
 **Spec compliance review (4f) must pass before code quality review (4g) begins.**
 
