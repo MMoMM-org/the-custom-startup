@@ -1,8 +1,9 @@
 ---
 title: "Phase 4: Plan and Write Modes"
-status: pending
+status: completed
 version: "1.0"
 phase: 4
+completed: 2026-05-06
 ---
 
 # Phase 4: Plan and Write Modes
@@ -36,7 +37,7 @@ phase: 4
 
 This phase delivers working `plan` and `write` modes. Verifiable outcome: `/doc-product plan` against an Obsidian plugin produces a docs/ skeleton proposal; `/doc-product write installation` drafts a clean installation page through guided dialogue.
 
-- [ ] **T4.1 Skeleton Templates (4 repo types)** `[activity: template-design]` `[parallel: true]`
+- [x] **T4.1 Skeleton Templates (4 repo types)** `[activity: template-design]` `[parallel: true]`
 
   1. **Prime**: Inspect `miyo-kado/docs/` (the reference for "good") and `miyo-tomo/README.md` (the anti-pattern). Read SDD `[ref: SDD/Directory Map — templates/]`.
   2. **Test**: Each skeleton template specifies the same minimum page set (installation, configuration, usage, troubleshooting) plus type-specific additions (e.g. TCS plugin gets per-component reference; Python gets a "first command" page). Each template includes a top-level `docs/README.md` index that links to all topic pages. By inspection: minimum pages present in every template; type-specific extras documented.
@@ -46,7 +47,7 @@ This phase delivers working `plan` and `write` modes. Verifiable outcome: `/doc-
      - [ ] Four skeletons cover Obsidian, Python, TCS plugin, generic `[ref: PRD/F1 AC1-AC4]`
      - [ ] Each includes a `docs/README.md` index `[ref: PRD/Should-Have plan mode index README]`
 
-- [ ] **T4.2 modes/plan.md — Repo Detection, Skeleton Proposal, Diff** `[activity: build-feature]` `[parallel: true]`
+- [x] **T4.2 modes/plan.md — Repo Detection, Skeleton Proposal, Diff** `[activity: build-feature]` `[parallel: true]`
 
   1. **Prime**: Read SDD §Acceptance Criteria — Plan mode + PRD F1.
   2. **Test**: Pressure scenarios:
@@ -62,7 +63,7 @@ This phase delivers working `plan` and `write` modes. Verifiable outcome: `/doc-
      - [ ] All 6 PRD F1 acceptance criteria pass `[ref: PRD/F1 ACs]`
      - [ ] No fabricated content; placeholders only `[ref: SDD/Acceptance Criteria — plan mode last]`
 
-- [ ] **T4.3 modes/write.md — Section-by-Section Drafting Workflow** `[activity: build-feature]` `[parallel: true]`
+- [x] **T4.3 modes/write.md — Section-by-Section Drafting Workflow** `[activity: build-feature]` `[parallel: true]`
 
   1. **Prime**: Read SDD §Acceptance Criteria — Write mode + PRD F2 + reference Anthropic's `doc-coauthoring` skill (the inspiration for this workflow shape).
   2. **Test**: Pressure scenarios:
@@ -77,7 +78,7 @@ This phase delivers working `plan` and `write` modes. Verifiable outcome: `/doc-
      - [ ] All 4 PRD F2 acceptance criteria pass `[ref: PRD/F2 ACs]`
      - [ ] Iterative structure preserves prior sections `[ref: SDD/Acceptance Criteria — write mode]`
 
-- [ ] **T4.4 reference/conventions.md — Page Type → Section Structure Map** `[activity: template-design]`
+- [x] **T4.4 reference/conventions.md — Page Type → Section Structure Map** `[activity: template-design]`
 
   1. **Prime**: Inspect what `miyo-kado/docs/installation.md`, `miyo-kado/docs/configuration.md`, `miyo-kado/docs/troubleshooting.md` contain — those are the reference good states.
   2. **Test**: For each of the 4 minimum page types (installation, configuration, usage, troubleshooting), the conventions document specifies a section structure that, when followed, would let a first-time-installer / config-explorer / troubleshooter persona answer their required questions. Tested indirectly via Phase 5 dogfood reader-test passes.
@@ -87,7 +88,7 @@ This phase delivers working `plan` and `write` modes. Verifiable outcome: `/doc-
      - [ ] Page type → section map covers all 4 minimum page types
      - [ ] Used by `modes/write.md` to drive section proposals
 
-- [ ] **T4.5 Phase 4 Validation** `[activity: validate]`
+- [x] **T4.5 Phase 4 Validation** `[activity: validate]`
 
   - Run `/skill-author audit`.
   - Run plan against three repo types (Obsidian, Python, TCS plugin) using fixture or real targets.
@@ -99,4 +100,24 @@ This phase delivers working `plan` and `write` modes. Verifiable outcome: `/doc-
 
 ## Deviations
 
-(None yet.)
+(None.)
+
+---
+
+## Phase 4 Completion Report (2026-05-06)
+
+**Tasks completed**: T4.1 (4 skeleton templates), T4.2 (modes/plan.md), T4.3 (modes/write.md), T4.4 (reference/conventions.md), T4.5 (validation).
+
+**Test posture**: 13 test scripts pass cleanly (369 assertions across the doc-product skill). All Phase 4 tests RED-then-GREEN per TDD. shellcheck clean across `scripts/` and `tests/`.
+
+**Reviews**: every Phase 4 task passed `spec-compliance-reviewer` then `code-quality-reviewer`. Iterations recorded in commits 0fc7d2a → a4a2c90.
+
+**Skill-author audit**: PASS. Receptionist pattern upheld; PICS structure complete; description trigger-rich; size 92 lines. One advisory (`modes/extract.md` at 533 lines is over the 500-line target — non-blocking, applies to T3.x).
+
+**Drift report**: Excellent — 0 missing, 0 contradicts, 0 scope-creep. 4 LOW-severity advisories suggesting modest documentation polish in `solution.md` (detection priority order, skeleton path resolution, page-type matching rule). Captured for backlog; not blocking Phase 5.
+
+**Remediation signals confirmed clean**: `--type` flag (T4.2 prior scope-creep) fully removed; `.bak` mechanism (T4.2 prior scope-creep) fully removed; Option B fallback (T4.3 prior scope-creep) fully removed.
+
+**ADR upholding**: ADR-1 (mode-router) confirmed — SKILL.md is a pure Receptionist; ADR-7 (single `/doc-product` command) confirmed — no per-mode shortcuts in `plugin.json`.
+
+Ready for Phase 5 (Dogfood and Validation).
