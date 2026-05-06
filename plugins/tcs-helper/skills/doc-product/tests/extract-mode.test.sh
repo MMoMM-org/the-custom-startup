@@ -91,6 +91,9 @@ assert_contains "A3: references detect-source.sh" "detect-source.sh"
 assert_contains "A4: dispatch typescript → parse-ts-settings" "typescript"
 assert_contains "A4: dispatch jsonschema → parse-jsonschema" "jsonschema"
 assert_contains "A4: dispatch pydantic → parse-pydantic" "pydantic"
+assert_contains "A4b: extract.md invokes parse-jsonschema.sh" "parse-jsonschema.sh"
+assert_contains "A4c: extract.md invokes parse-pydantic.sh" "parse-pydantic.sh"
+assert_contains "A4d: extract.md invokes parse-ts-settings.sh" "parse-ts-settings.sh"
 
 # ---------------------------------------------------------------------------
 # A5: Documents multi-source AskUserQuestion flow
@@ -114,12 +117,14 @@ assert_contains "A7: --no-index flag mentioned" "--no-index"
 # ---------------------------------------------------------------------------
 assert_contains "A8: manifest.json explicitly named" "manifest.json"
 assert_contains "A8: plugin.json explicitly named" "plugin.json"
+assert_contains "A8: pyproject.toml explicitly named" "pyproject.toml"
 
 # ---------------------------------------------------------------------------
 # A9: Documents NEVER auto-overwriting docs/configuration.md
 # ---------------------------------------------------------------------------
 assert_contains "A9: no silent overwrite stated" "overwrite"
 assert_contains "A9: docs/configuration.md referenced" "docs/configuration.md"
+assert_contains "A9b: first-run write path documented" "First run"
 
 # ---------------------------------------------------------------------------
 # A10: References templates/configuration-template.md for rendering

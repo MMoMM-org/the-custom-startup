@@ -338,7 +338,10 @@ they appear to contain settings-like data:
 - `manifest.json` (Obsidian plugin manifest)
 - `plugin.json` (TCS plugin manifest)
 - `package.json` (Node.js package manifest)
-- `pyproject.toml` (Python project manifest)
+- `pyproject.toml` (Python project manifest) — in v1 this is additionally excluded by
+  file-extension scope: `scripts/detect-source.sh` only scans `*.ts`, `*.json`, and
+  `*.py` files, so `.toml` files are never reached. The manifest-ignore rule for
+  `pyproject.toml` applies for v2 if `.toml` scanning is added.
 
 `scripts/detect-source.sh` enforces this exclusion at detection time. If the user
 manually passes one of these files via `--source`, print:

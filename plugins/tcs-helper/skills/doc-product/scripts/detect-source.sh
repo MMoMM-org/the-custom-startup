@@ -12,8 +12,9 @@
 # Exit: always 0. Detection failures (jq missing, etc.) are silently skipped.
 #
 # Exclusions:
-#   - manifest files by name: manifest.json, plugin.json, package.json, pyproject.toml
-#   - directories: node_modules/, __pycache__/, .git/, dist/, build/, tests/fixtures/
+#   - manifest files by name: manifest.json, plugin.json, package.json
+#   - pyproject.toml excluded by extension scope (only *.ts, *.json, *.py are scanned)
+#   - directories: node_modules/, __pycache__/, .git/, dist/, build/, tests/
 
 set -uo pipefail
 
@@ -40,7 +41,10 @@ fi
 _is_manifest_file() {
   local basename="$1"
   case "$basename" in
-    manifest.json|plugin.json|package.json|pyproject.toml) return 0 ;;
+    manifest.json|plugin.json|package.json) return 0 ;;
+    # defensive: pyproject.toml is .toml so never reaches the *.json filter,
+    # but listed here for v2-readiness if .toml scanning is added.
+    pyproject.toml) return 0 ;;
   esac
   return 1
 }
@@ -67,7 +71,7 @@ _detect_typescript() {
     fi
   done < <(find "$repo" \
     \( -name node_modules -o -name __pycache__ -o -name .git \
-       -o -name dist -o -name build \) -prune -o \
+       -o -name dist -o -name build -o -name tests \) -prune -o \
     -type f -name '*.ts' -print \
     2>/dev/null)
 }
@@ -100,7 +104,7 @@ _detect_jsonschema() {
     fi
   done < <(find "$repo" \
     \( -name node_modules -o -name __pycache__ -o -name .git \
-       -o -name dist -o -name build \) -prune -o \
+       -o -name dist -o -name build -o -name tests \) -prune -o \
     -type f -name '*.json' -print \
     2>/dev/null)
 }
@@ -127,7 +131,7 @@ _detect_pydantic() {
     fi
   done < <(find "$repo" \
     \( -name node_modules -o -name __pycache__ -o -name .git \
-       -o -name dist -o -name build \) -prune -o \
+       -o -name dist -o -name build -o -name tests \) -prune -o \
     -type f -name '*.py' -print \
     2>/dev/null)
 }
