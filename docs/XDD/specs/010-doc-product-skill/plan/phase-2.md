@@ -95,7 +95,7 @@ This phase delivers a working `review` mode that produces a gap report when invo
      - [x] No file write — output renders inline only `[ref: SDD/ADR-6]`
      - [x] Empty sections collapsed (zero-fail run still produces a meaningful report)
 
-- [ ] **T2.5 modes/review.md — Orchestrator Workflow** `[activity: build-feature]`
+- [x] **T2.5 modes/review.md — Orchestrator Workflow** `[activity: build-feature]`
 
   1. **Prime**: Read SDD §Runtime View — review mode primary flow + algorithm. `[ref: SDD/Runtime View]`
   2. **Test**: End-to-end pressure scenarios on a fixture docs/ tree:
@@ -108,9 +108,9 @@ This phase delivers a working `review` mode that produces a gap report when invo
   3. **Implement**: Author `modes/review.md` per the SDD primary flow. The mode body is Markdown instructions to Claude that orchestrate: prereq check → load personas (T2.2 helper) → resolve scope → build plan → parallel dispatch via `xargs -P` or background-and-wait → aggregate via T2.4 renderer.
   4. **Validate**: All pressure scenarios produce documented behaviour. The full review run completes within the SDD performance target (≤ 60s for default 4 personas × 2 questions on a small docs/ tree).
   5. **Success**:
-     - [ ] All 6 pressure scenarios pass `[ref: SDD/Acceptance Criteria — Review mode]`
-     - [ ] Strict 100% required-question pass/fail logic enforced `[ref: SDD/ADR-3 + EARS criterion]`
-     - [ ] Performance target met `[ref: SDD/Quality Requirements — Performance]`
+     - [x] All 6 pressure scenarios pass `[ref: SDD/Acceptance Criteria — Review mode]`
+     - [x] Strict 100% required-question pass/fail logic enforced `[ref: SDD/ADR-3 + EARS criterion]`
+     - [x] Performance target met `[ref: SDD/Quality Requirements — Performance]`
 
 - [ ] **T2.6 Phase 2 Validation** `[activity: validate]`
 
