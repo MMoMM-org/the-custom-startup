@@ -100,7 +100,7 @@ assert_contains "A4: pyproject.toml named for detection" "pyproject.toml"
 # A5: Documents the unknown-manifest fallback (AskUserQuestion + asks user)
 # ---------------------------------------------------------------------------
 assert_contains "A5: AskUserQuestion referenced for unknown manifest" "AskUserQuestion"
-assert_contains "A5: asks user before proposing for unknown type" "ask"
+assert_contains "A5: asks user before proposing for unknown type" "before proposing anything"
 
 # ---------------------------------------------------------------------------
 # A6: Documents diff logic — Keep / Replace / Merge as per-page labels
@@ -108,6 +108,7 @@ assert_contains "A5: asks user before proposing for unknown type" "ask"
 assert_contains "A6: Keep choice documented" "Keep"
 assert_contains "A6: Replace choice documented" "Replace"
 assert_contains "A6: Merge choice documented" "Merge"
+assert_contains "A6c: MERGE label appears in confirm list / report" "MERGE"
 
 # ---------------------------------------------------------------------------
 # A7: Documents propose-then-confirm (both words present)

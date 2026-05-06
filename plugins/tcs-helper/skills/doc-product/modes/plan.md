@@ -71,7 +71,7 @@ order (first match wins):
 | 1 | `manifest.json` present | `obsidian` — Obsidian plugin |
 | 2 | `plugin.json` present | `tcs-plugin` — TCS plugin |
 | 3 | `pyproject.toml` present | `python` — Python tool |
-| 4 | none of the above | `generic` OR unknown — see below |
+| 4 | none of the above | `unknown` — user prompted below |
 
 **Detection logic:**
 
@@ -178,8 +178,8 @@ choice:
 docs/installation.md already exists. What would you like to do with it?
   Keep    — leave the existing file untouched; skip creating a placeholder
   Replace — overwrite the existing file with a fresh placeholder
-  Merge   — keep the existing file as-is; you will manually incorporate any
-             new sections afterwards
+  Merge   — keep the existing file untouched; you will manually incorporate
+             any proposed sections afterwards
 
 (Keep / Replace / Merge)
 ```
@@ -206,6 +206,7 @@ Here is what plan mode will write:
   CREATE  docs/installation.md
   KEEP    docs/configuration.md  (existing — not touched)
   REPLACE docs/usage.md          (existing — placeholder replaces content)
+  MERGE   docs/usage-advanced.md (existing — not written; you will merge sections manually)
   CREATE  docs/troubleshooting.md
 
 Confirm? (yes / no / edit the list)
@@ -261,14 +262,14 @@ Rules for placeholder content:
 Step 4. Use the Write tool to overwrite the existing file directly with the placeholder
 content.
 
----
+**MERGE behaviour:** Pages the author chose Merge are NOT written by this mode — they are
+treated identically to Keep for write purposes; the author handles section incorporation
+manually after the mode exits.
 
-## Step 7: Write `docs/README.md` Index
-
-The `docs/README.md` index page is always part of the proposed skeleton. Treat it as any
-other page in Steps 4–6 (subject to Keep / Replace / Merge if it already exists).
-
-The placeholder index links to all other topic pages created or kept in this run:
+**README.md placeholder format:** `docs/README.md` is always part of the proposed skeleton
+and is subject to Keep / Replace / Merge like any other page. When writing it, use the
+following index placeholder format — the link list must reflect only the pages actually
+created or kept in this run:
 
 ```markdown
 # Documentation
@@ -296,7 +297,7 @@ Use relative links (e.g. `[Installation](installation.md)`) — not absolute pat
 
 ---
 
-## Step 8: Final Report
+## Step 7: Final Report
 
 After all writes complete, print a summary:
 
@@ -312,6 +313,9 @@ Files written:
 Files kept (not touched):
   KEEP    docs/configuration.md
 
+Files flagged for manual merge:
+  MERGE   docs/usage-advanced.md
+
 Files skipped (not in approved list):
   (none)
 
@@ -323,7 +327,7 @@ Next steps:
     reader personas.
 ```
 
-Adjust the output to reflect what was actually written, kept, replaced, and skipped.
+Adjust the output to reflect what was actually written, kept, replaced, merged, and skipped.
 
 ---
 
