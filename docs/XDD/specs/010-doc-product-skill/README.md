@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-05-06 |
-| **Current Phase** | SDD |
+| **Current Phase** | PLAN |
 | **Last Updated** | 2026-05-06 |
 
 ## Documents
@@ -13,8 +13,8 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | 22 Gherkin ACs; 0 markers; PRD reviewed and approved by Marcus |
-| solution.md | in_progress | 7/7 ADRs confirmed; multi-page corpus design + generic personas resolved per Marcus's inline notes; awaiting final approval before PLAN |
-| plan/ | pending | Awaiting PLAN authoring |
+| solution.md | completed | 7/7 ADRs confirmed; multi-page corpus + generic personas resolved; SDD approved |
+| plan/ | in_progress | 5 phases (skeleton/router → review → extract → plan+write → dogfood); 27 tasks; 12 parallel-tagged; 79 spec refs; awaiting final approval before /implement |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
