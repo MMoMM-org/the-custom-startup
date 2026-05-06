@@ -72,9 +72,8 @@ resolve_personas_file() {
 # Returns 0 (true) if it contains an "extends: defaults" directive; 1 otherwise.
 # Only project overrides can have extends:; defaults never reference themselves.
 personas_extends_defaults() {
-  local active_file repo_root default_path
+  local active_file default_path
   active_file="$(resolve_personas_file)"
-  repo_root="$(_repo_root)"
   default_path="$(_skill_root)/templates/personas-default.md"
 
   if [ "$active_file" = "$default_path" ]; then
@@ -149,8 +148,7 @@ validate_personas_file() {
       if (has_questions == 0) {
         printf "ERROR: persona \"%s\" has no questions list\n", pid > "/dev/stderr"
         errors++
-      }
-      if (q_count == 0) {
+      } else if (q_count == 0) {
         printf "ERROR: persona \"%s\" has zero questions\n", pid > "/dev/stderr"
         errors++
       }

@@ -250,6 +250,39 @@ scenario_4b() {
 }
 
 # ---------------------------------------------------------------------------
+# Scenario 4c: Malformed — no questions: key at all (distinct from zero-questions)
+# Expects: exit non-zero, "no questions list" in stderr, "zero questions" absent.
+# ---------------------------------------------------------------------------
+scenario_4c() {
+  printf '\n--- Scenario 4c: Malformed — no questions: key → only "no questions list" error ---\n'
+
+  local stderr_out exit_code
+  exit_code=0
+  stderr_out="$(validate_personas_file "$FIXTURES/malformed-no-questions-key.md" 2>&1)" \
+    || exit_code=$?
+
+  if [ "$exit_code" -ne 0 ]; then
+    pass "S4c: validate_personas_file exits non-zero for missing questions key"
+  else
+    fail "S4c: validate_personas_file exits non-zero for missing questions key" \
+      "exited 0 unexpectedly"
+  fi
+
+  assert_contains "S4c: error message names the persona" \
+    "no-questions-key-persona" "$stderr_out"
+  assert_contains "S4c: error reports no questions list" \
+    "no questions list" "$stderr_out"
+
+  # The "zero questions" message must NOT appear — it is redundant when the key is absent.
+  if printf '%s\n' "$stderr_out" | grep -qF "zero questions"; then
+    fail "S4c: spurious zero-questions error absent" \
+      "got both errors; expected only 'no questions list'"
+  else
+    pass "S4c: spurious zero-questions error absent"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Run all scenarios
 # ---------------------------------------------------------------------------
 
@@ -261,6 +294,7 @@ scenario_2
 scenario_3
 scenario_4a
 scenario_4b
+scenario_4c
 
 # ---------------------------------------------------------------------------
 # Summary
