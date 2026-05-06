@@ -179,15 +179,21 @@ scenario_3() {
   assert_exit_zero "S3: exit code is 0" "$PARSER_EXIT"
   assert_contains "S3: header present" "name	type	default	description" "$PARSER_STDOUT"
 
-  # All 3 fields have [NEEDS DESCRIPTION]
+  # All 4 fields have [NEEDS DESCRIPTION]
   local needs_desc_count
   needs_desc_count="$(printf '%s\n' "$PARSER_STDOUT" | grep -c '\[NEEDS DESCRIPTION\]' || true)"
-  assert_eq "S3: all 3 fields get [NEEDS DESCRIPTION]" "3" "$needs_desc_count"
+  assert_eq "S3: all 4 fields get [NEEDS DESCRIPTION]" "4" "$needs_desc_count"
 
   # Const defaults are present
   assert_contains "S3: host default from const" "	'localhost'	" "$PARSER_STDOUT"
   assert_contains "S3: port default from const" "	8080	" "$PARSER_STDOUT"
   assert_contains "S3: verbose default from const" "	false	" "$PARSER_STDOUT"
+  assert_contains "S3: tags default from const" "	[]	" "$PARSER_STDOUT"
+
+  # tags is a plain array; should not have [NEEDS REVIEW]
+  local tags_line
+  tags_line="$(printf '%s\n' "$PARSER_STDOUT" | grep '^tags	' || true)"
+  assert_not_contains "S3: tags plain array not [NEEDS REVIEW]" "[NEEDS REVIEW]" "$tags_line"
 
   # No fabricated descriptions
   assert_not_contains "S3: no fabricated description text" "hostname" "$PARSER_STDOUT"
