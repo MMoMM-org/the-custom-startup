@@ -330,11 +330,17 @@ scenario_7() {
   config_line="$(printf '%s\n' "$PARSER_STDOUT" | grep '^config	' || true)"
   assert_contains "S7: config (intersection) gets [NEEDS REVIEW]" "[NEEDS REVIEW]" "$config_line"
 
+  # 'mappedProp: { [K in MappedKeys]: string }' → [NEEDS REVIEW]
+  local mapped_line
+  mapped_line="$(printf '%s\n' "$PARSER_STDOUT" | grep '^mappedProp	' || true)"
+  assert_contains "S7: mappedProp (mapped type) gets [NEEDS REVIEW]" "[NEEDS REVIEW]" "$mapped_line"
+
   # stderr lists the unparseable fields' original type expressions
   assert_contains "S7: stderr lists [NEEDS REVIEW] hints" "[NEEDS REVIEW]" "$PARSER_STDERR"
   assert_contains "S7: stderr mentions metadata" "metadata" "$PARSER_STDERR"
   assert_contains "S7: stderr mentions sortKey or keyof" "sortKey" "$PARSER_STDERR"
   assert_contains "S7: stderr mentions config intersection" "config" "$PARSER_STDERR"
+  assert_contains "S7: stderr mentions mappedProp or mapped type" "mappedProp" "$PARSER_STDERR"
 }
 
 # ---------------------------------------------------------------------------
