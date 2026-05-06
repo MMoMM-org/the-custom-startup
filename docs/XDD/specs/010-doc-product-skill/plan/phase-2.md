@@ -49,8 +49,8 @@ This phase delivers a working `review` mode that produces a gap report when invo
   3. **Implement**: Author `templates/personas-default.md` with the YAML structure from SDD §Persona File Schema (post-2026-05-06 generic-language version). Include the 4 personas with their generic phrasing.
   4. **Validate**: Inspection check; parser sanity check.
   5. **Success**:
-     - [ ] File matches SDD persona schema (post-update) `[ref: SDD/Persona File Schema]`
-     - [ ] Default personas use generic language (no "plugin", no "macOS" hardcoded) `[ref: SDD/Acceptance Criteria — Review mode last]`
+     - [x] File matches SDD persona schema (post-update) `[ref: SDD/Persona File Schema]`
+     - [x] Default personas use generic language (no "plugin", no "macOS" hardcoded) `[ref: SDD/Acceptance Criteria — Review mode last]`
 
 - [ ] **T2.2 Persona Override Resolution Helper** `[activity: build-feature]`
 
@@ -91,9 +91,9 @@ This phase delivers a working `review` mode that produces a gap report when invo
   3. **Implement**: Author `templates/gap-report-template.md` with the schema from SDD. Renderer logic lives in `modes/review.md` (Markdown templating instructions for Claude — no Bash file-write). Include the deterministic ordering: required-fail first, optional after, infrastructure last.
   4. **Validate**: Fixture-driven inspection — each fixture produces the expected Markdown.
   5. **Success**:
-     - [ ] Template matches SDD §Gap Report Schema `[ref: SDD/Gap Report Schema]`
-     - [ ] No file write — output renders inline only `[ref: SDD/ADR-6]`
-     - [ ] Empty sections collapsed (zero-fail run still produces a meaningful report)
+     - [x] Template matches SDD §Gap Report Schema `[ref: SDD/Gap Report Schema]`
+     - [x] No file write — output renders inline only `[ref: SDD/ADR-6]`
+     - [x] Empty sections collapsed (zero-fail run still produces a meaningful report)
 
 - [ ] **T2.5 modes/review.md — Orchestrator Workflow** `[activity: build-feature]`
 
@@ -124,4 +124,4 @@ This phase delivers a working `review` mode that produces a gap report when invo
 
 ## Deviations
 
-(None yet.)
+- **Plan checkbox bookkeeping (orchestrator-introduced)**: T2.1's checkbox flip (`[ ]` → `[x]`) was applied to `phase-2.md` by the orchestrator after commit `6cbb6ef` (T2.1's implementer commit) and was carried into the working tree of `5d5c941` (T2.4's commit). Reading `git log -- plan/phase-2.md` will show T2.1's tick landing in T2.4's commit, not T2.1's. No code-state divergence — only the plan-file history is misleading. Future tasks should flip the checkbox **inside** the implementer commit rather than as a separate orchestrator edit.

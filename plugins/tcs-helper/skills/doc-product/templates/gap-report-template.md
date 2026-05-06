@@ -62,7 +62,7 @@ The renderer MUST apply the following sort order before rendering:
 
 One Markdown table row per persona:
 
-```
+```markdown
 | {{persona_id}} | {{required_flag}} | {{pass_count}} / {{total_required_questions}} | {{status_cell}} |
 ```
 
