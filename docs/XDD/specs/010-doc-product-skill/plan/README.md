@@ -125,7 +125,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 
 > **Tracking Principle**: Track logical units that produce verifiable outcomes. The TDD cycle is the method, not separate tracked items.
 
-- [ ] [Phase 1: Skill Scaffold and Mode Router](phase-1.md)
+- [x] [Phase 1: Skill Scaffold and Mode Router](phase-1.md)
 - [ ] [Phase 2: Review Mode and Reader-Test Engine](phase-2.md)
 - [ ] [Phase 3: Extract Mode and Settings Parsers](phase-3.md)
 - [ ] [Phase 4: Plan and Write Modes](phase-4.md)

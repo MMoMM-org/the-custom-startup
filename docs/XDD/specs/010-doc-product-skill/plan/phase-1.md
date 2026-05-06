@@ -1,8 +1,9 @@
 ---
 title: "Phase 1: Skill Scaffold and Mode Router"
-status: pending
+status: completed
 version: "1.0"
 phase: 1
+completed: 2026-05-06
 ---
 
 # Phase 1: Skill Scaffold and Mode Router
@@ -33,7 +34,7 @@ phase: 1
 
 This phase delivers an installable, discoverable skill that auto-triggers on appropriate prompts and dispatches to mode files (which print TODO stubs in this phase). Verifiable outcome: `/doc-product plan` resolves and prints "Phase 2 placeholder", proving the router works end-to-end.
 
-- [ ] **T1.1 Skill Directory Skeleton and Frontmatter** `[activity: build-feature]`
+- [x] **T1.1 Skill Directory Skeleton and Frontmatter** `[activity: build-feature]`
 
   1. **Prime**: Read `plugins/tcs-helper/skills/skill-author/SKILL.md` and `plugins/tcs-helper/skills/finish-branch/SKILL.md` for PICS structure reference. Read `~/.claude/rules/authoring.md` for description-quality rules. `[ref: SDD/Implementation Context — Code Context]`
   2. **Test**: Author the skill skeleton structure on a fresh branch. Verify (via `find plugins/tcs-helper/skills/doc-product`) that the directory tree matches SDD §Directory Map exactly: SKILL.md + modes/ + templates/ + scripts/ + reference/ subdirs all present. Verify the SKILL.md frontmatter is valid YAML with `name: doc-product`, the SDD-specified description (containing "Use PROACTIVELY" and "MUST BE USED" plus 5 trigger phrases), and `allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion`.
@@ -45,7 +46,7 @@ This phase delivers an installable, discoverable skill that auto-triggers on app
      - [ ] `/skill-author` audit passes with no FAIL items
      - [ ] Description contains all required trigger phrases per `~/.claude/rules/authoring.md`
 
-- [ ] **T1.2 SKILL.md Mode Router Workflow** `[activity: build-feature]`
+- [x] **T1.2 SKILL.md Mode Router Workflow** `[activity: build-feature]`
 
   1. **Prime**: Read SDD §Solution Strategy and §Mode Routing Contract. `[ref: SDD/Solution Strategy]` `[ref: SDD/Mode Routing Contract]`
   2. **Test**: Add tests as a Markdown checklist inside SKILL.md (TCS skill testing pattern: pressure scenarios, not unit tests). Pressure cases:
@@ -60,7 +61,7 @@ This phase delivers an installable, discoverable skill that auto-triggers on app
      - [ ] SKILL.md size < 200 lines
      - [ ] Mode-router section in body matches SDD §Implementation Examples — Mode Router
 
-- [ ] **T1.3 Mode-File Stubs and Plugin Manifest Bump** `[activity: build-feature]` `[parallel: true]`
+- [x] **T1.3 Mode-File Stubs and Plugin Manifest Bump** `[activity: build-feature]` `[parallel: true]`
 
   1. **Prime**: Read `plugins/tcs-helper/.claude-plugin/plugin.json` to know the current version. Read repo memory feedback `feedback_no-manual-marketplace-sync` (in `~/.claude/projects/.../memory/`).
   2. **Test**: After implementation, the four mode-stub files must exist and each must print a clear "Phase N (P2 / P3 / P4) — not yet implemented; this stub will be replaced in [phase]" message when read. Verify the plugin.json minor version bumps cleanly (e.g. 3.2.0 → 3.3.0). Verify after pushing to the marketplace branch and restarting Claude Code, `/doc-product` appears in the slash menu.
@@ -73,7 +74,7 @@ This phase delivers an installable, discoverable skill that auto-triggers on app
      - [ ] plugin.json version incremented per `feedback_no-manual-marketplace-sync` memory
      - [ ] Skill appears in `/` menu after Claude Code restart `[ref: SDD/Deployment View — Plugin Manifest Update]`
 
-- [ ] **T1.4 Phase 1 Validation** `[activity: validate]`
+- [x] **T1.4 Phase 1 Validation** `[activity: validate]`
 
   - Re-run `/skill-author audit` on the full doc-product skill directory.
   - Run all four mode-router pressure scenarios end-to-end via the slash menu.
