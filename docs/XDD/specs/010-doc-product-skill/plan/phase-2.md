@@ -42,7 +42,7 @@ phase: 2
 
 This phase delivers a working `review` mode that produces a gap report when invoked against a `docs/` directory. Verifiable outcome: `/doc-product review` against a known-good doc returns PASS; against a known-bad doc returns FAIL with specific gaps named.
 
-- [ ] **T2.1 Default Personas Template** `[activity: build-feature]` `[parallel: true]`
+- [x] **T2.1 Default Personas Template** `[activity: build-feature]` `[parallel: true]`
 
   1. **Prime**: Read SDD §Persona File Schema in detail. Re-read PRD personas section to remember the user-facing intent.
   2. **Test**: After authoring `templates/personas-default.md`, verify by inspection: 4 personas present (first-time-installer, config-explorer, troubleshooter, migrator); each has id, required, description, questions list; each question has id, required, text, pages. Test the schema is parseable: write a tiny Bash helper that emits each persona's required-question count via `grep`/`awk` and verify the numbers match what's expected.
@@ -84,7 +84,7 @@ This phase delivers a working `review` mode that produces a gap report when invo
      - [ ] Multi-page corpus concatenated with delimiters `[ref: SDD/Acceptance Criteria — review mode]`
      - [ ] Infrastructure errors distinguished from genuine gaps `[ref: SDD/Error Handling rows]`
 
-- [ ] **T2.4 Gap Report Template and Renderer** `[activity: template-design]` `[parallel: true]`
+- [x] **T2.4 Gap Report Template and Renderer** `[activity: template-design]` `[parallel: true]`
 
   1. **Prime**: Read SDD §Gap Report Schema. `[ref: SDD/Gap Report Schema]`
   2. **Test**: Given a fixture aggregate-results JSON (mix of pass / fail / infra-error / informational), the renderer must produce Markdown matching the schema: header table by persona, "Failing required findings" section listing only required-fail items, "Optional findings" only when present, "Infrastructure errors" only when present. Verify presentation handles N=0 cases (no fails → no section, no infra errors → no section).
