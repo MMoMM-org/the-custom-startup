@@ -12,9 +12,9 @@ phase: 5
 **GATE**: Read all referenced files before starting this phase.
 
 **Specification References**:
-- `[ref: PRD/Success Metrics — KPIs; lines: 235-243]` — adoption + quality + self-reported targets
-- `[ref: PRD/Open Questions; lines: 270-280]` — v2 deferrals to capture during dogfood
-- `[ref: SDD/Quality Requirements; lines: 814-820]` — performance, usability, reliability targets
+- `[ref: PRD/Success Metrics — KPIs]` — adoption + quality + self-reported targets
+- `[ref: PRD/Open Questions]` — v2 deferrals to capture during dogfood
+- `[ref: SDD/Quality Requirements]` — performance, usability, reliability targets
 
 **Key Decisions**:
 - v1 adoption target: ≥3 TCS / MiYo repos with `doc-product`-generated docs.
@@ -38,8 +38,8 @@ This phase delivers v1 readiness validation by running the skill against three r
   3. **Implement**: Run the skill end-to-end on a feature branch in miyo-tomo (don't commit yet; capture artefacts as comments on the spec PR). Record (a) outcomes of each mode, (b) any gaps in the reader-test, (c) any errors / surprises that should be classified.
   4. **Validate**: Final reader-test on the produced docs achieves PASS, OR specific gaps are documented as v2-backlog (recorded in spec README open questions). The miyo-tomo improvement is the primary v1 validation case.
   5. **Success**:
-     - [ ] Skill ran end-to-end against miyo-tomo without unrecoverable error `[ref: PRD/KPI Adoption; lines: 235-237]`
-     - [ ] Reader-test final outcome PASS or documented gap-acceptance `[ref: PRD/KPI Quality; lines: 240-241]`
+     - [ ] Skill ran end-to-end against miyo-tomo without unrecoverable error `[ref: PRD/KPI Adoption]`
+     - [ ] Reader-test final outcome PASS or documented gap-acceptance `[ref: PRD/KPI Quality]`
      - [ ] All issues found are classified (v1-blocker vs v2-backlog vs not-an-issue)
 
 - [ ] **T5.2 Dogfood: tcs-helper plugin's own user-facing docs** `[activity: dogfood]` `[parallel: true]`
@@ -49,7 +49,7 @@ This phase delivers v1 readiness validation by running the skill against three r
   3. **Implement**: Same as T5.1 against `plugins/tcs-helper/` (treat as a self-contained "repo" within the monorepo for the purposes of this dogfood).
   4. **Validate**: Reader-test PASS on the produced tcs-helper user docs, or gaps documented.
   5. **Success**:
-     - [ ] Skill ran end-to-end against tcs-helper user docs `[ref: PRD/KPI Adoption; lines: 235-237]`
+     - [ ] Skill ran end-to-end against tcs-helper user docs `[ref: PRD/KPI Adoption]`
      - [ ] Reader-test final outcome PASS or documented gap-acceptance
 
 - [ ] **T5.3 Dogfood: One Other MiYo Repo (Marcus selects)** `[activity: dogfood]` `[parallel: true]`

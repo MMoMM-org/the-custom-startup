@@ -129,7 +129,7 @@ CON-9 **Bash 3.2 compatibility.** Per Marcus's global standards (`~/Kouzou/stand
   relevance: MEDIUM
   why: "Bash-orchestrated skill example — shows tool budget and bash invocation patterns"
 
-- file: plugins/tcs-helper/plugin.json
+- file: plugins/tcs-helper/.claude-plugin/plugin.json
   relevance: HIGH
   why: "Plugin manifest where the new skill must be registered (auto-discovery via skills/ directory)"
 
@@ -150,7 +150,7 @@ CON-9 **Bash 3.2 compatibility.** Per Marcus's global standards (`~/Kouzou/stand
 ### Implementation Boundaries
 
 - **Must Preserve**: Existing tcs-helper skills (`skill-author`, `memory-*`, `finish-branch`, etc.) and their frontmatter conventions.
-- **Can Modify**: `plugins/tcs-helper/plugin.json` (version bump on adding new skill — per memory `feedback_no-manual-marketplace-sync`); root CLAUDE.md if new design references are needed (already done in wiring branch).
+- **Can Modify**: `plugins/tcs-helper/.claude-plugin/plugin.json` (version bump on adding new skill — per memory `feedback_no-manual-marketplace-sync`); root CLAUDE.md if new design references are needed (already done in wiring branch).
 - **Must Not Touch**: `main` branch directly (block-main-edits hook); other plugins (`tcs-team`, `tcs-workflow`, `tcs-patterns`, `plugin-dev`); any `~/.claude/plugins/cache/` or `~/.claude/plugins/marketplaces/` paths (per `feedback_no-manual-marketplace-sync`: bump version + push instead).
 
 ### External Interfaces
@@ -288,7 +288,7 @@ plugins/tcs-helper/skills/doc-product/
     └── claude-p-contract.md     # NEW: claude -p invocation contract, JSON schema, error handling
 
 # Plugin manifest (must be modified)
-plugins/tcs-helper/plugin.json   # MODIFY: bump version (semver minor); skill auto-discovered via directory
+plugins/tcs-helper/.claude-plugin/plugin.json   # MODIFY: bump version (semver minor); skill auto-discovered via directory
 ```
 
 ### Interface Specifications
@@ -767,7 +767,7 @@ N/A — single skill, no multi-component deployment.
 
 ### Plugin Manifest Update
 
-- `plugins/tcs-helper/plugin.json` version bumps semver minor (e.g. 3.2.0 → 3.3.0). Per memory `feedback_no-manual-marketplace-sync`: bump and push, do not manually copy to cache.
+- `plugins/tcs-helper/.claude-plugin/plugin.json` version bumps semver minor (e.g. 3.2.0 → 3.3.0). Per memory `feedback_no-manual-marketplace-sync`: bump and push, do not manually copy to cache.
 
 ## Cross-Cutting Concepts
 
@@ -911,7 +911,7 @@ Translation of the PRD's 22 Gherkin acceptance criteria into EARS-format system 
 
 **Cross-cutting:**
 - [ ] WHEN any mode requires the `claude` CLI but it is missing, THE SYSTEM SHALL exit before any subprocess invocation with a setup-instruction message.
-- [ ] WHILE the skill is running on `main` / `master`, THE SYSTEM SHALL respect the project's `block-main-edits.sh` PreToolUse hook (no Write into tracked, ignored-by-default paths is needed).
+- [ ] WHILE the skill is running on `main` / `master`, THE SYSTEM SHALL NOT issue Write/Edit on tracked files — the `block-main-edits.sh` PreToolUse hook denies these by default; gitignored paths are exempt but the skill should not rely on that for its primary outputs (the author should be on a feature branch).
 
 ## Risks and Technical Debt
 

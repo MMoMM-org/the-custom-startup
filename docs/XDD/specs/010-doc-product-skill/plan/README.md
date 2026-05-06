@@ -57,7 +57,7 @@ When implementation requires changes from the specification:
 
 - `[parallel: true]` — Tasks that can run concurrently
 - `[component: name]` — For multi-component features (N/A here — single skill)
-- `[ref: document/section; lines: X-Y]` — Links to specifications
+- `[ref: document/section]` — Links to specifications by section name (line ranges intentionally omitted — sections are stable, line numbers drift)
 - `[activity: type]` — Activity hint for specialist selection
 
 ### Success Criteria

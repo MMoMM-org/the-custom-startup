@@ -12,12 +12,12 @@ phase: 3
 **GATE**: Read all referenced files before starting this phase.
 
 **Specification References**:
-- `[ref: SDD/Building Block View — Directory Map; lines: 244-280]` — parser scripts location
-- `[ref: SDD/Implementation Examples — Settings Parser; lines: 582-600]` — TS parser approach
-- `[ref: SDD/Acceptance Criteria — Extract mode; lines: 887-895]` — EARS criteria
-- `[ref: SDD/Error Handling — Parser dependency missing + Settings file unparseable; lines: 666-668]` — failure modes
-- `[ref: SDD/ADR-5; lines: 791-796]` — separate parsers + dependency reporting
-- `[ref: PRD/Feature 3 — extract mode; lines: 138-163]` — PRD acceptance criteria
+- `[ref: SDD/Building Block View — Directory Map]` — parser scripts location
+- `[ref: SDD/Implementation Examples — Settings Parser]` — TS parser approach
+- `[ref: SDD/Acceptance Criteria — Extract mode]` — EARS criteria
+- `[ref: SDD/Error Handling — Parser dependency missing + Settings file unparseable]` — failure modes
+- `[ref: SDD/ADR-5]` — separate parsers + dependency reporting
+- `[ref: PRD/Feature 3 — extract mode]` — PRD acceptance criteria
 
 **Key Decisions**:
 - ADR-5: separate Bash scripts per source type. Each detects its own runtime dependencies before parsing and surfaces a clear, actionable error when missing.
@@ -38,7 +38,7 @@ This phase delivers a working `extract` mode that produces `docs/configuration.m
 
 - [ ] **T3.1 parse-ts-settings.sh — TypeScript Interface Parser** `[activity: build-feature]` `[parallel: true]`
 
-  1. **Prime**: Read SDD §Settings Parser implementation example + ADR-5 rationale. `[ref: SDD/Settings Parser; lines: 582-600]`
+  1. **Prime**: Read SDD §Settings Parser implementation example + ADR-5 rationale. `[ref: SDD/Settings Parser]`
   2. **Test**: Pressure scenarios on fixture TS files:
      - Single `interface Settings { … }` with primitive types and JSDoc → emits TSV with name / type / default (where `=` literal present) / description.
      - Field with no JSDoc → description column is `[NEEDS DESCRIPTION]`.
@@ -48,9 +48,9 @@ This phase delivers a working `extract` mode that produces `docs/configuration.m
   3. **Implement**: Author `scripts/parse-ts-settings.sh`. Bash 3.2 compatible. Regex-based parsing; reasonable cleanup of JSDoc comments (`/** … */` block extraction). Output: TSV on stdout. Errors / `[NEEDS REVIEW]` lines on stderr.
   4. **Validate**: All pressure scenarios pass; `shellcheck` clean.
   5. **Success**:
-     - [ ] TS interface produces complete TSV `[ref: PRD/F3 AC1; lines: 142-143]`
-     - [ ] Missing JSDoc → `[NEEDS DESCRIPTION]`, never fabricated `[ref: PRD/F3 AC5; lines: 159-160]`
-     - [ ] Unparseable constructs → `[NEEDS REVIEW]`, listed on stderr `[ref: SDD/Risks — TS parsing fragility; lines: 922-923]`
+     - [ ] TS interface produces complete TSV `[ref: PRD/F3 AC1]`
+     - [ ] Missing JSDoc → `[NEEDS DESCRIPTION]`, never fabricated `[ref: PRD/F3 AC5]`
+     - [ ] Unparseable constructs → `[NEEDS REVIEW]`, listed on stderr `[ref: SDD/Risks — TS parsing fragility]`
 
 - [ ] **T3.2 parse-jsonschema.sh — JSON Schema Parser** `[activity: build-feature]` `[parallel: true]`
 
@@ -64,8 +64,8 @@ This phase delivers a working `extract` mode that produces `docs/configuration.m
   3. **Implement**: Author `scripts/parse-jsonschema.sh`. Front-runs `command -v jq` check. Uses `jq` filters to walk `properties`, emit TSV.
   4. **Validate**: All pressure scenarios pass.
   5. **Success**:
-     - [ ] JSON Schema produces complete TSV `[ref: PRD/F3 AC2; lines: 144-145]`
-     - [ ] Missing-dependency error surfaces `(a) name (b) why (c) install command` per ADR-5 `[ref: SDD/ADR-5 added constraint; lines: 794-795]`
+     - [ ] JSON Schema produces complete TSV `[ref: PRD/F3 AC2]`
+     - [ ] Missing-dependency error surfaces `(a) name (b) why (c) install command` per ADR-5 `[ref: SDD/ADR-5 added constraint]`
 
 - [ ] **T3.3 parse-pydantic.sh — Pydantic / Dataclass Parser** `[activity: build-feature]` `[parallel: true]`
 
@@ -80,8 +80,8 @@ This phase delivers a working `extract` mode that produces `docs/configuration.m
   3. **Implement**: Author `scripts/parse-pydantic.sh`. Front-runs `command -v python3` check. Uses inline `python3 -c '…'` to introspect the module via `importlib` and emit TSV. Handle Pydantic v1 / v2 / dataclass via duck-typing. Gracefully report dependency issues.
   4. **Validate**: All pressure scenarios pass.
   5. **Success**:
-     - [ ] Pydantic / dataclass produces complete TSV `[ref: PRD/F3 AC3; lines: 146-147]`
-     - [ ] Missing python3 → SDD-specified install message `[ref: SDD/Acceptance Criteria — extract dependency; lines: 894-895]`
+     - [ ] Pydantic / dataclass produces complete TSV `[ref: PRD/F3 AC3]`
+     - [ ] Missing python3 → SDD-specified install message `[ref: SDD/Acceptance Criteria — extract dependency]`
      - [ ] Missing pydantic module → actionable secondary install message; does not crash
 
 - [ ] **T3.4 Configuration Template + Markdown Renderer** `[activity: template-design]`
@@ -91,7 +91,7 @@ This phase delivers a working `extract` mode that produces `docs/configuration.m
   3. **Implement**: Author `templates/configuration-template.md`. Renderer logic lives in `modes/extract.md` (Markdown instructions to Claude — no Bash write). Include a header section for the configuration page (intro paragraph + table).
   4. **Validate**: Fixture-driven inspection.
   5. **Success**:
-     - [ ] Template renders TSV → configuration.md matching PRD F3 contract `[ref: PRD/F3 user story + ACs; lines: 138-163]`
+     - [ ] Template renders TSV → configuration.md matching PRD F3 contract `[ref: PRD/F3 user story + ACs]`
      - [ ] Markers preserved through rendering pipeline
 
 - [ ] **T3.5 modes/extract.md — Source Detection, Dispatch, Diff** `[activity: build-feature]`
@@ -107,9 +107,9 @@ This phase delivers a working `extract` mode that produces `docs/configuration.m
   3. **Implement**: Author `modes/extract.md` per SDD. Source detection uses file globbing (`*.ts`, `*.json`, `*.py`). Dispatcher invokes T3.1/T3.2/T3.3 via Bash. Diff is `git diff --no-index` against existing file or by string compare.
   4. **Validate**: All pressure scenarios pass.
   5. **Success**:
-     - [ ] Source detection + dispatch matches PRD F3 AC1-AC3 `[ref: PRD/F3; lines: 142-147]`
-     - [ ] Re-run diff surfaces changes, never silent overwrite `[ref: PRD/F3 AC4; lines: 156-158]`
-     - [ ] v1 ignores manifest sources `[ref: SDD/Acceptance Criteria — extract last clause; line: 893]`
+     - [ ] Source detection + dispatch matches PRD F3 AC1-AC3 `[ref: PRD/F3]`
+     - [ ] Re-run diff surfaces changes, never silent overwrite `[ref: PRD/F3 AC4]`
+     - [ ] v1 ignores manifest sources `[ref: SDD/Acceptance Criteria — extract last clause]`
 
 - [ ] **T3.6 Phase 3 Validation** `[activity: validate]`
 

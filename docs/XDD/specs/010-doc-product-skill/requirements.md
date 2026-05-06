@@ -160,6 +160,7 @@ A TCS workflow author (Marcus or future contributor) integrates `doc-product:rev
   - [ ] Given the source settings file changes after extraction, When I re-run `extract` mode, Then the skill diffs the new output against the existing `configuration.md` and surfaces the changes for review rather than overwriting silently.
   - [ ] Given a settings field has no description / JSDoc / docstring, When I invoke `extract` mode, Then the skill marks that field as `[NEEDS DESCRIPTION]` rather than fabricating one.
   - [ ] Given a manifest file (manifest.json, plugin.json, pyproject.toml metadata block) is present alongside the settings source, When I invoke `extract` mode in v1, Then the skill ignores it — manifest-derived metadata (author, version, repository links) is explicitly deferred to v2.
+  - [ ] Given the detected source type's parser has a missing runtime dependency (e.g. Pydantic source detected but `python3` is not on PATH; JSON Schema detected but `jq` is not installed), When I invoke `extract` mode, Then the skill exits before any parsing with a clear error naming (a) the missing dependency, (b) why it is needed for this source type, and (c) the platform-specific install command. The skill never silently degrades, falls back to a different parser, or fabricates output.
 
 #### Feature 4: `review` mode — Automated reader test (KILLER FEATURE)
 - **User Story:** As a plugin author, I want my docs tested against persona-based reader simulations using fresh `claude -p` instances, so I get an objective gap report before users hit the gaps.
@@ -277,6 +278,7 @@ All v1-blocking clarifications resolved. Remaining items are deferrable to SDD o
 - [ ] **(v2)** Manifest-derived "Plugin Metadata" section in `extract` mode.
 - [ ] **(v2)** `tcs-helper:doc-stats` aggregation skill across repos.
 - [ ] **(v2)** Recruit 1–2 other TCS plugin authors for usability feedback after Marcus's v1 dogfooding stabilizes.
+- [ ] **(v2)** Should-Have features not folded into v1 SDD/plan — implementer may opportunistically include if cheap: cross-page consistency check during `review`; `--since <ref>` diff-aware reader testing scope filter (SDD mentions the CLI flag but no plan task implements it). If skipped in v1, capture as v2 backlog at the end of dogfood (Phase 5).
 - [ ] **(SDD)** Whether to also expose individual modes as their own slash commands (`/doc-plan`, `/doc-write`, etc.) in addition to `/doc-product <mode>` — Could-Have, design tradeoff.
 
 ---

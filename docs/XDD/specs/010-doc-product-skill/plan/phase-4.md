@@ -12,12 +12,12 @@ phase: 4
 **GATE**: Read all referenced files before starting this phase.
 
 **Specification References**:
-- `[ref: SDD/Building Block View — Directory Map; lines: 244-280]` — templates/skeleton-* location
-- `[ref: SDD/Acceptance Criteria — Plan mode; lines: 871-880]` — EARS for plan
-- `[ref: SDD/Acceptance Criteria — Write mode; lines: 882-885]` — EARS for write
-- `[ref: PRD/Feature 1 — plan mode; lines: 95-118]` — PRD ACs for plan
-- `[ref: PRD/Feature 2 — write mode; lines: 120-136]` — PRD ACs for write
-- `[ref: SDD/Quality Requirements — Usability; line: 818]` — no surprise file writes principle
+- `[ref: SDD/Building Block View — Directory Map]` — templates/skeleton-* location
+- `[ref: SDD/Acceptance Criteria — Plan mode]` — EARS for plan
+- `[ref: SDD/Acceptance Criteria — Write mode]` — EARS for write
+- `[ref: PRD/Feature 1 — plan mode]` — PRD ACs for plan
+- `[ref: PRD/Feature 2 — write mode]` — PRD ACs for write
+- `[ref: SDD/Quality Requirements — Usability]` — no surprise file writes principle
 
 **Key Decisions**:
 - Plan mode: propose-then-confirm; never overwrite silently. Diff against existing `docs/` and offer Keep / Replace / Merge per page.
@@ -38,13 +38,13 @@ This phase delivers working `plan` and `write` modes. Verifiable outcome: `/doc-
 
 - [ ] **T4.1 Skeleton Templates (4 repo types)** `[activity: template-design]` `[parallel: true]`
 
-  1. **Prime**: Inspect `miyo-kado/docs/` (the reference for "good") and `miyo-tomo/README.md` (the anti-pattern). Read SDD `[ref: SDD/Directory Map — templates/; lines: 250-256]`.
+  1. **Prime**: Inspect `miyo-kado/docs/` (the reference for "good") and `miyo-tomo/README.md` (the anti-pattern). Read SDD `[ref: SDD/Directory Map — templates/]`.
   2. **Test**: Each skeleton template specifies the same minimum page set (installation, configuration, usage, troubleshooting) plus type-specific additions (e.g. TCS plugin gets per-component reference; Python gets a "first command" page). Each template includes a top-level `docs/README.md` index that links to all topic pages. By inspection: minimum pages present in every template; type-specific extras documented.
   3. **Implement**: Author `templates/skeleton-obsidian.md`, `skeleton-python.md`, `skeleton-tcs-plugin.md`, `skeleton-generic.md`. Each is a Markdown file describing the proposed `docs/` tree with one section per page (page name + one-sentence purpose + suggested section structure for that page).
   4. **Validate**: Inspection check against PRD F1 ACs (every PRD-required minimum page is in every skeleton).
   5. **Success**:
-     - [ ] Four skeletons cover Obsidian, Python, TCS plugin, generic `[ref: PRD/F1 AC1-AC4; lines: 100-107]`
-     - [ ] Each includes a `docs/README.md` index `[ref: PRD/Should-Have plan mode index README; line: 197]`
+     - [ ] Four skeletons cover Obsidian, Python, TCS plugin, generic `[ref: PRD/F1 AC1-AC4]`
+     - [ ] Each includes a `docs/README.md` index `[ref: PRD/Should-Have plan mode index README]`
 
 - [ ] **T4.2 modes/plan.md — Repo Detection, Skeleton Proposal, Diff** `[activity: build-feature]` `[parallel: true]`
 
@@ -59,8 +59,8 @@ This phase delivers working `plan` and `write` modes. Verifiable outcome: `/doc-
   3. **Implement**: Author `modes/plan.md` per SDD. Detection uses Glob. Proposal renders the chosen skeleton template. Diff via `git diff --no-index` or directory comparison. Writing uses the Write tool with placeholder bodies.
   4. **Validate**: All pressure scenarios pass.
   5. **Success**:
-     - [ ] All 6 PRD F1 acceptance criteria pass `[ref: PRD/F1 ACs; lines: 100-118]`
-     - [ ] No fabricated content; placeholders only `[ref: SDD/Acceptance Criteria — plan mode last; line: 879]`
+     - [ ] All 6 PRD F1 acceptance criteria pass `[ref: PRD/F1 ACs]`
+     - [ ] No fabricated content; placeholders only `[ref: SDD/Acceptance Criteria — plan mode last]`
 
 - [ ] **T4.3 modes/write.md — Section-by-Section Drafting Workflow** `[activity: build-feature]` `[parallel: true]`
 
@@ -74,8 +74,8 @@ This phase delivers working `plan` and `write` modes. Verifiable outcome: `/doc-
   3. **Implement**: Author `modes/write.md` per SDD + Anthropic doc-coauthoring's discover→document→review pattern, adapted for user-facing docs. The mode body is Markdown instructions to Claude that orchestrate the conversation; section structures per page type live in `reference/conventions.md` (a small lookup table).
   4. **Validate**: All pressure scenarios pass.
   5. **Success**:
-     - [ ] All 4 PRD F2 acceptance criteria pass `[ref: PRD/F2 ACs; lines: 124-135]`
-     - [ ] Iterative structure preserves prior sections `[ref: SDD/Acceptance Criteria — write mode; line: 884]`
+     - [ ] All 4 PRD F2 acceptance criteria pass `[ref: PRD/F2 ACs]`
+     - [ ] Iterative structure preserves prior sections `[ref: SDD/Acceptance Criteria — write mode]`
 
 - [ ] **T4.4 reference/conventions.md — Page Type → Section Structure Map** `[activity: template-design]`
 
