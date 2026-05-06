@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PartialSettings",
+  "type": "object",
+  "properties": {
+    "timeout": {
+      "type": "integer",
+      "default": 30,
+      "description": "Request timeout in seconds."
+    },
+    "retries": {
+      "type": "integer",
+      "default": 3
+    }
+  }
+}
