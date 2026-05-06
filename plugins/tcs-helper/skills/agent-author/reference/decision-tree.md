@@ -138,6 +138,46 @@ This is intentional friction. Picking the wrong mechanism is the highest-cost, h
 
 ---
 
+## Granularity & Receptionist Pattern (After Mechanism Is Chosen)
+
+The tree above decides *which mechanism*. Two further questions decide *how to slice it* — these are the L2 decisions where most over- or under-engineering happens.
+
+### Q-Extract. Should this Skill be extracted at all, or inlined into its consumer?
+
+Extract only if **at least one** of these holds:
+
+1. **Multi-consumer** — two or more agents/workflows genuinely need the same procedure
+2. **Progressive disclosure** — body + reference files exceed ~200 LOC (preloading would waste parent context)
+3. **User-invocable** — user should be able to invoke it via `/name`
+4. **Slash-command identity** — it IS a workflow entry point (e.g. `/xdd`, `/implement`, `/review`)
+
+If **none** hold (single consumer, small body, no slash use case): **inline into the consuming agent**. Extracting produces a SKILL.md, frontmatter, README row, and ongoing maintenance for zero gain.
+
+> *Audit signal:* a skill with `count=1` callers in `skills:` frontmatter, no `reference/*.md` files, and a SKILL.md under ~150 lines is a candidate to inline.
+
+### Q-Consolidate. Should specialists stay distinct, or merge into one + multiple skills?
+
+Keep specialists as separate **subagents** when **all three** hold:
+
+1. **Distinct trigger surface** — auto-routing depends on description match; merged descriptions either bloat or over-generalize
+2. **Distinct output schema** — domain-specific fields (`CVE`/`severity` vs `migrationPath` vs `trigger`) don't share well
+3. **Parallel dispatch is the value** — skills serialize; only subagents truly parallelize
+
+When all three hold and each specialist is already lean (~70–150 LOC), consolidating saves little and costs routing accuracy.
+
+### Receptionist Pattern
+
+A single front-door routes incoming work to the right specialist. TCS implements two layers:
+
+- **L1 — Main conversation:** auto-triggers skills via description match, dispatches subagents via the Agent tool. Handles single-domain requests directly.
+- **L2 — `the-chief`:** invoked when work is ambiguous, spans domains, or benefits from explicit complexity scoring before dispatch.
+
+For agent-internal skills (e.g. `project-discovery`): set `user-invocable: false` — they auto-load via `skills:` frontmatter and don't need to clutter the `/` menu. For pattern references (e.g. `/obsidian-plugin`): user-invocable AND auto-trigger is fine.
+
+→ Full reasoning, worked examples, and anti-patterns: [`docs/about/skill-and-agent-design.md`](../../../../../docs/about/skill-and-agent-design.md)
+
+---
+
 ## Other Mechanisms (Reference)
 
 | Mechanism | When | Context | Communication |
