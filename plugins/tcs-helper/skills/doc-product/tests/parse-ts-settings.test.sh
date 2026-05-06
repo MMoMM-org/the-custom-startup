@@ -89,15 +89,6 @@ assert_exit_code() {
   fi
 }
 
-assert_exit_nonzero() {
-  local label="$1" code="$2"
-  if [ "$code" -ne 0 ]; then
-    pass "$label"
-  else
-    fail "$label" "exit code was 0 (expected non-zero)"
-  fi
-}
-
 # Run parser, capturing stdout and stderr separately.
 # Sets PARSER_STDOUT, PARSER_STDERR, PARSER_EXIT.
 _run_parser() {

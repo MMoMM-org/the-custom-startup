@@ -9,10 +9,11 @@ export interface Settings {
   port: number;
 
   /** Timeout in seconds. */
-  timeout: number;
+  timeout?: number;
 }
 
-// Note: 'timeout' is intentionally absent from the const to test [NEEDS DEFAULT].
+// Note: 'timeout' is intentionally absent from the const to exercise [NEEDS DEFAULT].
+// The field is optional (?) so this const is valid TypeScript.
 export const DEFAULT_SETTINGS: Settings = {
   host: 'localhost',
   port: 8080,
