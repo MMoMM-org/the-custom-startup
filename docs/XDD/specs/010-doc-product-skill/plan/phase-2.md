@@ -52,7 +52,7 @@ This phase delivers a working `review` mode that produces a gap report when invo
      - [x] File matches SDD persona schema (post-update) `[ref: SDD/Persona File Schema]`
      - [x] Default personas use generic language (no "plugin", no "macOS" hardcoded) `[ref: SDD/Acceptance Criteria — Review mode last]`
 
-- [ ] **T2.2 Persona Override Resolution Helper** `[activity: build-feature]`
+- [x] **T2.2 Persona Override Resolution Helper** `[activity: build-feature]`
 
   1. **Prime**: Read SDD §Persona File Schema "Override mechanism" + ADR-4 confirmed text. `[ref: SDD/ADR-4]`
   2. **Test**: Pressure scenarios (Bash unit tests against fixture persona files):
@@ -63,9 +63,9 @@ This phase delivers a working `review` mode that produces a gap report when invo
   3. **Implement**: Author a helper Bash function (in `scripts/reader-test.sh` or a separate `scripts/lib-personas.sh`) that resolves the active persona set. Bash 3.2 compatible — no associative arrays. Use `git rev-parse --show-toplevel` to anchor `.claude/doc-personas.md` resolution.
   4. **Validate**: All pressure scenarios pass.
   5. **Success**:
-     - [ ] Override resolution matches ADR-4 contract `[ref: SDD/ADR-4]`
-     - [ ] Malformed persona file produces actionable error before any subprocess call `[ref: SDD/Error Handling — Persona file malformed]`
-     - [ ] Bash 3.2 compatible — `bash --version` shows 3.2 on the test environment, script runs without error `[ref: SDD/CON-9]`
+     - [x] Override resolution matches ADR-4 contract `[ref: SDD/ADR-4]`
+     - [x] Malformed persona file produces actionable error before any subprocess call `[ref: SDD/Error Handling — Persona file malformed]`
+     - [x] Bash 3.2 compatible — `bash --version` shows 3.2 on the test environment, script runs without error `[ref: SDD/CON-9]`
 
 - [ ] **T2.3 reader-test.sh — claude -p Invocation Driver** `[activity: build-feature]`
 
