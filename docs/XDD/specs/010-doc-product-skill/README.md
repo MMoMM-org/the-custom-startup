@@ -5,14 +5,14 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-05-06 |
-| **Current Phase** | Initialization |
+| **Current Phase** | PRD |
 | **Last Updated** | 2026-05-06 |
 
 ## Documents
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| requirements.md | pending | Awaiting PRD authoring |
+| requirements.md | in_progress | Drafted; 22 Gherkin acceptance criteria; 0 [NEEDS CLARIFICATION] markers; awaiting Marcus approval |
 | solution.md | pending | Awaiting SDD authoring |
 | plan/ | pending | Awaiting PLAN authoring |
 
@@ -24,7 +24,11 @@
 |------|----------|-----------|
 | 2026-05-06 | Spec scaffolded as 010-doc-product-skill | Brainstorm chose all-four-modes scope, all repo targets, lives in tcs-helper |
 | 2026-05-06 | XDD workflow over ad-hoc build | Per `feedback_spec_first` memo: previous M3 work without spec caused rework |
-| 2026-05-06 | Skill vs agent architecture deferred to PRD/SDD | Open question raised in brainstorm: one skill with mode router vs agent + sibling skills — needs explicit analysis against `docs/about/skill-and-agent-design.md` |
+| 2026-05-06 | Skill vs agent architecture: ONE skill with mode router | Heuristics from `docs/about/skill-and-agent-design.md` (now wired into decision-tree) confirm: progressive disclosure + user-invocable + slash-identity all hold; modes are sequential not parallel; reader-test isolation via `claude -p` (OS process) beats Agent-tool isolation. No separate front-door agent needed. |
+| 2026-05-06 | Reader-test pass threshold: strict 100% on required questions | Marcus's choice in PRD clarification round: clean binary pass/fail beats configurable thresholds that erode over time |
+| 2026-05-06 | No telemetry in v1 | Marcus's choice: KPIs verified from git artifacts and `docs/.reader-test/` reports; no event pipeline. v2 may revisit via `tcs-helper:doc-stats` |
+| 2026-05-06 | extract scope: settings only (TS / JSON Schema / Pydantic) in v1 | Manifest-derived "Plugin Metadata" deferred to v2 to keep parser surface area focused |
+| 2026-05-06 | User research scope: solo-author n=1 (Marcus) for v1 | Recruiting other TCS plugin authors deferred to v2; v1 dogfood on MiYo + TCS plugins owned by Marcus |
 
 ## Context
 
