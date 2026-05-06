@@ -205,15 +205,15 @@ A TCS workflow author (Marcus or future contributor) integrates `doc-product:rev
 3. Skill resolves which docs pages are in scope (all pages, named page, or changed-since).
 4. Skill orchestrates `claude -p` invocations in parallel (one per persona × question pair, per page).
 5. Each `claude -p` call receives: the doc page contents only, the persona description, the question, and the structured-output instructions.
-6. Skill collects all responses, aggregates by persona, and produces a Markdown gap report (saved to `docs/.reader-test/<timestamp>.md`).
-7. Skill prints a summary in the parent conversation: pass/fail per persona, top gaps to address.
+6. Skill collects all responses, aggregates by persona, and produces a Markdown gap report **rendered inline in the parent conversation** (not persisted to disk in v1).
+7. Skill prints a summary in the parent conversation: pass/fail per persona, top gaps to address. The full gap report follows as Markdown for the author to copy/act on.
 8. If running in non-interactive mode, skill exits with non-zero status on fail.
 
 **Business Rules:**
 - A persona's questions are partitioned into `required` (counts toward pass/fail) and `optional` (informational only).
 - Required questions must achieve `found: yes` for the persona to pass; `partial` and `no` count as fail.
 - The aggregate doc set passes the gate when all `required: true` personas pass.
-- Gap reports are append-only history — they are not overwritten between runs, allowing trend tracking.
+- Reader-test runs are stateless — no historical reports, no audit log, no `docs/.reader-test/` directory. Each run stands alone; trend tracking is deliberately out of v1 scope.
 
 **Edge Cases:**
 - Scenario: `claude -p` invocation fails or times out. → Expected: the skill records the failure as a `found: no` with reason "reader-test infrastructure error" and continues with remaining pairs; final summary distinguishes infrastructure failures from genuine doc gaps.
@@ -226,25 +226,18 @@ A TCS workflow author (Marcus or future contributor) integrates `doc-product:rev
 
 ### Key Performance Indicators
 
-Outcome-based, self-attested by the author (no telemetry pipeline in v1 — see Tracking Requirements below).
+Outcome-based, self-attested by the author. v1 is deliberately stateless — no telemetry, no on-disk audit logs, no historical reports. Success is judged on observable artifacts that exist regardless of the skill (the `docs/` tree itself, git history, the author's own retrospective).
 
-- **Adoption (qualitative):** Within one quarter of v1 release, at least three TCS / MiYo repos (`miyo-tomo` mandatory as the worst-state benchmark) have had their docs migrated to a `doc-product`-generated `docs/` tree.
-- **Engagement (workflow integration):** For each adopting repo, the author can demonstrate that `extract` is re-run after every release that changes settings, and `review` is run at least once per `docs/`-touching PR — verifiable from git history (commit messages or `docs/.reader-test/` artifacts).
-- **Quality (observable):** A second `review` run on a `doc-product`-maintained repo, after the author has addressed the first run's gap report, achieves a passing reader-test (all required personas at 100% on required questions). `miyo-tomo`'s converted docs are the baseline target.
-- **Self-reported value:** After three months of use, the author reports (in `docs/ai/memory/context.md` or equivalent) whether the skill saved time vs hand-authoring docs, and whether the reader-test caught at least one real gap that would have shipped otherwise.
+- **Adoption (qualitative):** Within one quarter of v1 release, at least three TCS / MiYo repos (`miyo-tomo` mandatory as the worst-state benchmark) have had their docs migrated to a `doc-product`-generated `docs/` tree. Verifiable by inspecting each repo's `docs/` directory for the expected layout.
+- **Engagement (workflow integration):** For each adopting repo, the author has integrated `extract` and `review` into their normal workflow. Verifiable indirectly via git history (commits that touch settings interfaces are followed by commits that touch `configuration.md`).
+- **Quality (observable):** Running `review` on a `doc-product`-maintained repo achieves a passing reader-test (all required personas at 100% on required questions). The author re-runs as needed to confirm.
+- **Self-reported value:** After three months of use, the author writes a brief retrospective (in personal notes / memory) on whether the skill saved time vs hand-authoring and whether the reader-test caught at least one real gap.
 
 ### Tracking Requirements
 
-**No telemetry pipeline in v1.** No event collection, no aggregation across repos. KPIs above are verified from artifacts the skill already produces; the verification table below replaces a traditional event-tracking table.
+**Explicitly out of scope for v1.** No telemetry, no event collection, no on-disk audit logs, no `docs/.reader-test/` directory. The skill is stateless; each invocation produces output in the parent conversation only.
 
-| KPI | Verification source |
-|-----|---------------------|
-| Adoption — ≥3 repos migrated | Presence of `docs/.reader-test/` directory and a non-trivial `docs/` tree in the target repos; counted manually by the author at quarterly review |
-| Engagement — `extract` per release, `review` per PR | Git log for commits referencing `extract` / `review` artifacts; `docs/.reader-test/` timestamped reports |
-| Quality — second `review` run passes | Two timestamped reports in `docs/.reader-test/` showing fail → pass progression |
-| Self-reported value | Note in `docs/ai/memory/context.md` (or repo-equivalent) after three months |
-
-The skill's outputs (gap reports under `docs/.reader-test/<timestamp>.md`, generated `docs/` files) are themselves the audit trail and live in git history. Authors who want trend data can grep / jq across timestamped reports directly. A future `tcs-helper:doc-stats` skill aggregating across repos may be considered in v2 if the need surfaces.
+If trend tracking or cross-repo aggregation becomes important later, it will be a separate v2 concern (e.g. a future `tcs-helper:doc-stats` skill) and will not retroactively introduce persistence into the `doc-product` skill itself.
 
 ---
 
