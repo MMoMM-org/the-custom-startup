@@ -82,9 +82,7 @@ Use the Read tool to check whether `docs/<page_name>.md` exists.
 
 ### If the file does NOT exist
 
-Do not create content silently. Choose option A (preferred):
-
-**Option A — Route to plan mode:**
+When the placeholder is missing, route to plan mode and stop.
 
 ```
 docs/<page_name>.md does not exist.
@@ -95,23 +93,6 @@ the placeholder for <page_name>.md. Then return to `/doc-product write <page_nam
 ```
 
 Stop. Do not proceed to Step 3.
-
-**Option B — Refuse with a clear error** (fall back to this only when plan mode is
-unavailable or the author explicitly asks to skip the plan step):
-
-```
-docs/<page_name>.md not found.
-
-Expected path: <absolute path to docs/<page_name>.md>
-
-Resolve this by either:
-  1. Running `/doc-product plan` to create the full docs/ skeleton (recommended).
-  2. Manually creating the file with at minimum an H1 heading and a TODO marker.
-
-Then re-run `/doc-product write <page_name>`.
-```
-
-Stop. Do not proceed.
 
 ### If the file exists
 
@@ -284,7 +265,7 @@ draft (not just punctuation or whitespace). Read both drafts and judge whether t
 content changed materially.
 
 If 3 iterations have passed and the draft is not substantively different from the
-iteration-1 draft, use AskUserQuestion before offering another Iterate option:
+first-shown draft, use AskUserQuestion before offering another Iterate option:
 
 ```
 This section has been iterated 3 times without a substantive change.

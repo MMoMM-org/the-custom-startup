@@ -117,7 +117,7 @@ assert_contains "A4: reference/conventions.md referenced" "reference/conventions
 #     Both 'propose' AND 'confirm' must appear
 # ---------------------------------------------------------------------------
 assert_contains "A5: propose documented" "propose"
-assert_contains "A5: confirm documented" "confirm"
+assert_contains "A5: 'confirm before drafting' gate present" "confirm before drafting"
 
 # ---------------------------------------------------------------------------
 # A6: Documents per-section drafting
@@ -162,11 +162,7 @@ assert_contains "A8: approved documented" "approved"
 # A9: Documents the 3-iteration "can anything be removed?" rule
 #     Both a count ("3" or "three") AND "remove" must appear
 # ---------------------------------------------------------------------------
-if grep -qFe "3" < "$WRITE_MODE" || grep -qFe "three" < "$WRITE_MODE"; then
-  pass "A9: iteration count (3 or three) documented"
-else
-  fail "A9: iteration count documented" "neither '3' nor 'three' found"
-fi
+assert_contains "A9: '3 iterations' rule present" "3 iterations"
 assert_contains "A9: remove mentioned for iteration gate" "remove"
 
 # ---------------------------------------------------------------------------
