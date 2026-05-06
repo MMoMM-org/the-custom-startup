@@ -16,6 +16,7 @@
 #   - pyproject.toml excluded by extension scope (only *.ts, *.json, *.py are scanned)
 #   - directories: node_modules/, __pycache__/, .git/, dist/, build/, tests/
 
+# -e omitted: grep/find pipelines return non-zero on no-match; errexit would abort on legitimate empty results.
 set -uo pipefail
 
 # ---------------------------------------------------------------------------

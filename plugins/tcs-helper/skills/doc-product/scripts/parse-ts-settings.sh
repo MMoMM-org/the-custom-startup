@@ -26,6 +26,7 @@
 # Note: multi-line data is passed to awk via a temp file (not -v) to avoid
 # the "newline in string" restriction on -v arguments in awk.
 
+# -e omitted: grep/awk/find pipelines return non-zero on no-match; errexit would abort on legitimate empty results.
 set -uo pipefail
 
 # ---------------------------------------------------------------------------
