@@ -1,0 +1,5 @@
+name	type	default	description
+apiKey	string	''	The API key used to authenticate requests to the remote service.
+timeout	number	[NEEDS DEFAULT]	[NEEDS DESCRIPTION]
+retryPolicy	[NEEDS REVIEW]	'exponential'	The retry strategy applied on transient failures.
+logLevel	'debug' | 'info' | 'warn' | 'error'	'info'	Controls the verbosity of log output.
