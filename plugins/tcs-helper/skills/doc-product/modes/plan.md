@@ -1,6 +1,6 @@
 # `plan` Mode — Repo Detection, Skeleton Proposal, and `docs/` Placeholder Writes
 
-**Invocation:** `/doc-product plan [--type <obsidian|python|tcs-plugin|generic>]`
+**Invocation:** `/doc-product plan`
 
 This mode analyses the current repository to determine its type, selects the matching
 skeleton from `templates/`, proposes the resulting `docs/` tree to the author, diffs
@@ -61,35 +61,7 @@ Before starting, verify the following. Stop and report any failure; do not proce
 
 ---
 
-## Step 1: Parse Flags
-
-Read `$ARGUMENTS` for the optional `--type` flag:
-
-```bash
-REPO_TYPE=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --type) REPO_TYPE="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-```
-
-**Validate `--type` if supplied.** `REPO_TYPE` must be one of:
-`obsidian`, `python`, `tcs-plugin`, `generic`.
-
-If any other value is given, stop:
-
-```
-plan: unknown type '<value>'. Must be one of: obsidian | python | tcs-plugin | generic
-```
-
-If `--type` was supplied and is valid, skip Step 2 (detection) entirely and proceed
-directly to Step 3 (skeleton selection).
-
----
-
-## Step 2: Repo-Type Detection
+## Step 1: Repo-Type Detection
 
 Use the Glob tool to look for known manifest files at the repo root. Detection priority
 order (first match wins):
@@ -143,7 +115,7 @@ Wait for the author's response. Set `REPO_TYPE` to the chosen value, then contin
 
 ---
 
-## Step 3: Select and Load Skeleton Template
+## Step 2: Select and Load Skeleton Template
 
 Map `REPO_TYPE` to the matching skeleton file in the `doc-product` skill's `templates/`
 directory:
@@ -166,7 +138,7 @@ Parse the skeleton to produce a list of proposed pages. Each entry records:
 
 ---
 
-## Step 4: Render the Proposal
+## Step 3: Render the Proposal
 
 Present the proposed `docs/` tree to the author in a clear, readable format before asking
 anything. Example format:
@@ -184,11 +156,11 @@ Proposed docs/ tree for this obsidian repo:
   └── commands-reference.md   — command palette entries
 ```
 
-Adjust the list and descriptions to match the skeleton selected in Step 3.
+Adjust the list and descriptions to match the skeleton selected in Step 2.
 
 ---
 
-## Step 5: Diff Against Existing `docs/`
+## Step 4: Diff Against Existing `docs/`
 
 Check whether the repo already has a `docs/` directory:
 
@@ -196,7 +168,7 @@ Check whether the repo already has a `docs/` directory:
 docs_dir="$REPO_ROOT/docs"
 ```
 
-If `docs/` does not exist: all proposed pages are new. Skip to Step 6.
+If `docs/` does not exist: all proposed pages are new. Skip to Step 5.
 
 If `docs/` exists: for each proposed page, check whether the file already exists.
 For each page that already exists, use AskUserQuestion to ask the author for a per-page
@@ -205,7 +177,7 @@ choice:
 ```
 docs/installation.md already exists. What would you like to do with it?
   Keep    — leave the existing file untouched; skip creating a placeholder
-  Replace — archive or remove the existing file; write a fresh placeholder
+  Replace — overwrite the existing file with a fresh placeholder
   Merge   — keep the existing file as-is; you will manually incorporate any
              new sections afterwards
 
@@ -217,12 +189,12 @@ a fresh placeholder (no question needed).
 
 **NEVER overwrite an existing file silently.** The mode will never write to an existing
 file unless the author explicitly chose Replace in the per-page question and confirmed
-in Step 6. Any page the author chose `Keep` must remain exactly as-is after this mode
+in Step 5. Any page the author chose `Keep` must remain exactly as-is after this mode
 completes. This is a hard contract.
 
 ---
 
-## Step 6: Propose-Then-Confirm
+## Step 5: Propose-Then-Confirm
 
 After all per-page choices have been collected, present the full intended-write list to
 the author and ask for confirmation before writing any file:
@@ -241,7 +213,7 @@ Confirm? (yes / no / edit the list)
 
 Wait for the author's response.
 
-- **yes** — proceed to Step 7.
+- **yes** — proceed to Step 6.
 - **no** — abort without writing any file. Inform the author: "No files written."
 - **edit** — use AskUserQuestion to let the author add, remove, or change choices before
   confirming again.
@@ -250,7 +222,7 @@ Do not write a single file before receiving explicit confirmation.
 
 ---
 
-## Step 7: Write Placeholder Files
+## Step 6: Write Placeholder Files
 
 For each page approved for writing (CREATE or REPLACE), use the Write tool to create the
 placeholder file.
@@ -285,22 +257,16 @@ Rules for placeholder content:
   the skeleton already lists generically.
 - No fabricated content of any kind.
 
-**REPLACE behaviour:** Before writing a replacement placeholder, move the existing file
-to `<filename>.bak` so the author retains the original content for reference:
-
-```bash
-mv "$page_path" "${page_path}.bak"
-Write "$page_path" with placeholder content
-```
-
-Inform the author: "Moved existing file to `<filename>.bak` — original content preserved."
+**REPLACE behaviour:** The author has already given explicit consent by choosing Replace in
+Step 4. Use the Write tool to overwrite the existing file directly with the placeholder
+content.
 
 ---
 
-## Step 8: Write `docs/README.md` Index
+## Step 7: Write `docs/README.md` Index
 
 The `docs/README.md` index page is always part of the proposed skeleton. Treat it as any
-other page in Steps 5–7 (subject to Keep / Replace / Merge if it already exists).
+other page in Steps 4–6 (subject to Keep / Replace / Merge if it already exists).
 
 The placeholder index links to all other topic pages created or kept in this run:
 
@@ -330,7 +296,7 @@ Use relative links (e.g. `[Installation](installation.md)`) — not absolute pat
 
 ---
 
-## Step 9: Final Report
+## Step 8: Final Report
 
 After all writes complete, print a summary:
 
@@ -340,7 +306,7 @@ plan mode complete.
 Files written:
   CREATE  docs/README.md
   CREATE  docs/installation.md
-  REPLACE docs/usage.md        (original at docs/usage.md.bak)
+  REPLACE docs/usage.md
   CREATE  docs/troubleshooting.md
 
 Files kept (not touched):
@@ -364,13 +330,13 @@ Adjust the output to reflect what was actually written, kept, replaced, and skip
 ## Quality and Safety Contract
 
 - This mode NEVER overwrites an existing file silently. Every existing file that is
-  touched requires an explicit Replace choice from the author in Step 5, followed by
-  confirmation in Step 6.
+  touched requires an explicit Replace choice from the author in Step 4, followed by
+  confirmation in Step 5.
 - This mode NEVER fabricates content. Every written file is a placeholder with a TODO
   callout and empty H2 sections. No example values, no concrete commands, no invented
   prose.
-- AskUserQuestion is used at every decision point: unknown repo type (Step 2), per-page
-  Keep / Replace / Merge (Step 5), and final confirmation (Step 6).
+- AskUserQuestion is used at every decision point: unknown repo type (Step 1), per-page
+  Keep / Replace / Merge (Step 4), and final confirmation (Step 5).
 - If the author answers "no" at the confirmation step, zero files are written.
 
 ---
@@ -382,11 +348,10 @@ Adjust the output to reflect what was actually written, kept, replaced, and skip
 | Not in a git repo | Stop at Prerequisites; print message |
 | On `main`/`master` | Advisory only; do not block |
 | Skeleton template missing | Stop at Prerequisites; print which file is missing |
-| `--type` value unrecognised | Stop at Step 1; print valid options |
-| No recognised manifest | AskUserQuestion in Step 2; wait for author |
+| No recognised manifest | AskUserQuestion in Step 1; wait for author |
 | Existing `docs/` page | AskUserQuestion per page (Keep / Replace / Merge) |
 | Author declines confirmation | Abort; zero files written |
-| Replace: existing file present | Move to `.bak` before writing placeholder |
+| Replace: existing file present | Overwrite directly (explicit consent given in Step 4) |
 
 ---
 
@@ -435,7 +400,7 @@ Detected: python repo (pyproject.toml present).
 
 docs/installation.md already exists. What would you like to do with it?
   Keep    — leave the existing file untouched
-  Replace — move existing to .bak; write a fresh placeholder
+  Replace — overwrite with a fresh placeholder
   Merge   — keep the existing file; merge new sections manually
 
 (Keep / Replace / Merge)
@@ -458,9 +423,3 @@ What type of project is this? Choose one:
 
 Author selects `generic`. Mode loads `templates/skeleton-generic.md` and continues.
 
-### Example 4: Explicit type override
-
-**Invocation:** `/doc-product plan --type tcs-plugin`
-
-Detection (Step 2) is skipped. The mode loads `templates/skeleton-tcs-plugin.md`
-directly and presents the TCS plugin proposal.
