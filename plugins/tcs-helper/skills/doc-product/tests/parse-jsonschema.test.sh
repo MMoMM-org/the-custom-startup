@@ -4,12 +4,16 @@
 #
 # Strategy:
 #   - Fixture JSON Schema files live under tests/fixtures/jsonschema/.
-#   - Missing-jq scenario: prepend a minimal PATH (/var/empty) so command -v jq fails.
+#   - Missing-jq scenario: stub PATH dir containing bash but not jq.
 #   - Sandbox-safe temp dirs under /tmp/claude-501 (mktemp -d avoided per harness pattern).
 #
 # Usage: bash tests/parse-jsonschema.test.sh
 # Exit: 0 if all scenarios pass; non-zero with failure count otherwise.
-
+#
+# SC2030: subshell-local PATH modification in scenario_4 is intentional.
+# SC2329: shellcheck cannot trace assert_eq/assert_contains through scenario
+#         functions; they are invoked indirectly.
+# shellcheck disable=SC2030,SC2329
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
