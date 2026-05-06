@@ -373,7 +373,7 @@ Adjust to reflect what was actually drafted, approved, removed, and left outstan
 | Situation | Behaviour |
 |---|---|
 | No page name provided | AskUserQuestion for page name before proceeding |
-| `docs/<page_name>.md` does not exist | Route to plan mode (option A); stop |
+| `docs/<page_name>.md` does not exist | Route to plan mode; stop |
 | `docs/<page_name>.md` is missing a section heading from conventions | Surface as "missing" in Step 4; include in proposal |
 | Page type not in `reference/conventions.md` | AskUserQuestion: closest type or custom list |
 | Required fact missing from repo | AskUserQuestion (Step 6b); no fabrication |
