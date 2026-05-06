@@ -7,7 +7,7 @@
 #   2. Mentions every minimum page (installation, configuration, usage, troubleshooting).
 #   3. Mentions docs/README.md (the index page requirement).
 #   4. Contains type-specific extras:
-#        tcs-plugin: "components" or "per-component reference"
+#        tcs-plugin: "per-component reference" or "components-reference.md"
 #        python: "first command" or "quickstart"
 #
 # By-inspection tests — no executable output is parsed; assertions are
@@ -197,6 +197,7 @@ scenario_generic() {
   # Use discriminating page filenames rather than bare type names (the intro prose
   # of skeleton-generic.md names the other types as counterexamples — that is expected).
   assert_not_contains "[generic] must NOT contain settings-reference (obsidian page)" "settings-reference" "$content"
+  assert_not_contains "[generic] must NOT contain commands-reference (obsidian page)" "commands-reference" "$content"
   assert_not_contains "[generic] must NOT contain quickstart"                          "quickstart"         "$content"
   assert_not_contains "[generic] must NOT contain components-reference"                "components-reference" "$content"
   assert_not_contains "[generic] must NOT contain tcs-plugin"                          "tcs-plugin"         "$content"
