@@ -626,19 +626,39 @@ echo "$RESULT" | jq -e '.found' >/dev/null 2>&1 \
 echo "$RESULT"
 ```
 
-#### Example: Settings Parser (TypeScript interface → table)
+#### Example: Settings Parser (TypeScript paired interface + const → table)
 
 **Why this example**: TS parsing is the v1 highest-value extract source. The shape of the parser informs how fields map to the doc table.
 
-```bash
-# scripts/parse-ts-settings.sh — extract Settings interface fields to a structured table
-# Strategy: regex-match the interface block, then per-line extract: name, type, optional flag, default (if = literal),
-#          and JSDoc comment block immediately preceding the field.
-# Output: TSV: <name>\t<type>\t<default>\t<description>
+**Convention** (real-world, e.g. `obsidian-archivist/src/model/Settings.ts`): TS settings ship as a **paired** declaration — an `interface` (types + JSDoc, no initializers; TS forbids `=` in interfaces) plus a `const DEFAULT_*` of the same type providing defaults. The parser reads both blocks and joins by field name.
 
-# (Detailed regex strategy TBD in implementation phase — extract simplifies enormously when
-#  the source uses a single Settings interface block; multi-interface unions handled via
-#  AskUserQuestion to disambiguate which interface is the user-facing settings.)
+```typescript
+// Real-world TS settings convention (the parser's input format):
+export interface PluginSettings {
+  /** API endpoint URL. */
+  apiUrl: string;
+  /** Retry count. */
+  retries: number;
+}
+
+export const DEFAULT_SETTINGS: PluginSettings = {
+  apiUrl: 'https://api.example.com',
+  retries: 3,
+};
+```
+
+```bash
+# scripts/parse-ts-settings.sh — extract paired (interface + const) settings to a structured table
+# Strategy:
+#   1. Locate the target interface block (default `Settings`; honor env TS_INTERFACE_NAME; list all interfaces on stderr).
+#   2. Per field in the interface, extract: name, type, JSDoc comment block immediately preceding.
+#   3. Locate the matching `const DEFAULT_*: <InterfaceName> = { … }` block.
+#   4. Per field in the const, extract literal value.
+#   5. Join interface fields with const values by name; emit TSV.
+#      - Missing const value → [NEEDS DEFAULT]
+#      - Missing JSDoc → [NEEDS DESCRIPTION]
+#      - Type uses generics / mapped / intersection → [NEEDS REVIEW] on stderr; field still emitted with marker.
+# Output: TSV: <name>\t<type>\t<default>\t<description>
 ```
 
 #### Test Examples as Interface Documentation

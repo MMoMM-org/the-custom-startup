@@ -1,8 +1,9 @@
 ---
 title: "Phase 3: Extract Mode and Settings Parsers"
-status: pending
+status: completed
 version: "1.0"
 phase: 3
+completed: 2026-05-06
 ---
 
 # Phase 3: Extract Mode and Settings Parsers
@@ -36,23 +37,29 @@ phase: 3
 
 This phase delivers a working `extract` mode that produces `docs/configuration.md` from one of three settings sources, with clean dependency reporting when a required runtime is missing. Verifiable outcome: `/doc-product extract` on a TS interface produces a configuration page matching the source; on a Pydantic source with `python3` missing, surfaces a clear install instruction.
 
-- [ ] **T3.1 parse-ts-settings.sh — TypeScript Interface Parser** `[activity: build-feature]` `[parallel: true]`
+- [x] **T3.1 parse-ts-settings.sh — TypeScript Interface Parser** `[activity: build-feature]` `[parallel: true]`
+
+  > **Convention (Deviation 1, see end of file):** TS interface properties cannot have `=` initializers — that is invalid syntax. The real-world convention (e.g. `obsidian-archivist/Settings.ts`) is **paired**: `interface Foo { name: type; }` + `const DEFAULT_FOO: Foo = { name: value };`. The parser MUST handle this paired pattern.
 
   1. **Prime**: Read SDD §Settings Parser implementation example + ADR-5 rationale. `[ref: SDD/Settings Parser]`
-  2. **Test**: Pressure scenarios on fixture TS files:
-     - Single `interface Settings { … }` with primitive types and JSDoc → emits TSV with name / type / default (where `=` literal present) / description.
-     - Field with no JSDoc → description column is `[NEEDS DESCRIPTION]`.
-     - Field with union type (`string | number`): emits the literal union as the type.
-     - Multiple interfaces in one file (`Settings`, `InternalState`): script asks via stdout which one is user-facing settings (or relies on caller's dispatcher to disambiguate via AskUserQuestion).
-     - Source contains generics, mapped types, intersection types: emits `[NEEDS REVIEW]` for those fields rather than guessing.
-  3. **Implement**: Author `scripts/parse-ts-settings.sh`. Bash 3.2 compatible. Regex-based parsing; reasonable cleanup of JSDoc comments (`/** … */` block extraction). Output: TSV on stdout. Errors / `[NEEDS REVIEW]` lines on stderr.
-  4. **Validate**: All pressure scenarios pass; `shellcheck` clean.
+  2. **Test**: Pressure scenarios on fixture TS files (all fixtures must be **valid TS**):
+     - Paired `interface Settings { … }` (with JSDoc per field) + `const DEFAULT_SETTINGS: Settings = { … };` → emits TSV joining interface fields with const values by name.
+     - Interface field with no matching key in the const → default column is `[NEEDS DEFAULT]`.
+     - Interface field with no JSDoc → description column is `[NEEDS DESCRIPTION]`.
+     - Field with union type (`'small' | 'medium' | 'large'`): emits the literal union as the type.
+     - Multiple interfaces in one file (`Settings`, `InternalState`): script defaults to `Settings` if present, else first interface; lists all interfaces found on stderr so the dispatcher can drive AskUserQuestion. Honors env var `TS_INTERFACE_NAME` to override.
+     - No matching `const DEFAULT_*: <Interface>` — all defaults emit `[NEEDS DEFAULT]`; interface still parses successfully.
+     - Source contains generics, mapped types, intersection types: those fields emit `[NEEDS REVIEW]` for the type column rather than guessing; listed on stderr.
+  3. **Implement**: Author `scripts/parse-ts-settings.sh`. Bash 3.2 compatible. Regex-based parsing of (a) the chosen interface block, (b) the matching `const DEFAULT_*: <Interface> = { … }` block. Reasonable cleanup of JSDoc comments (`/** … */` block extraction). Output: TSV on stdout (header: `name<TAB>type<TAB>default<TAB>description`). Errors / `[NEEDS REVIEW]` hints on stderr.
+  4. **Validate**: All pressure scenarios pass; `shellcheck` clean; **all fixtures must be valid TypeScript** (no `=` inside interfaces).
   5. **Success**:
-     - [ ] TS interface produces complete TSV `[ref: PRD/F3 AC1]`
+     - [ ] Paired interface + const produces complete TSV `[ref: PRD/F3 AC1]`
      - [ ] Missing JSDoc → `[NEEDS DESCRIPTION]`, never fabricated `[ref: PRD/F3 AC5]`
+     - [ ] Missing const value → `[NEEDS DEFAULT]`, never fabricated
      - [ ] Unparseable constructs → `[NEEDS REVIEW]`, listed on stderr `[ref: SDD/Risks — TS parsing fragility]`
+     - [ ] All test fixtures compile as valid TypeScript
 
-- [ ] **T3.2 parse-jsonschema.sh — JSON Schema Parser** `[activity: build-feature]` `[parallel: true]`
+- [x] **T3.2 parse-jsonschema.sh — JSON Schema Parser** `[activity: build-feature]` `[parallel: true]`
 
   1. **Prime**: Read SDD ADR-5 + the dependency-check requirement (`jq` is required for this parser).
   2. **Test**: Pressure scenarios:
@@ -67,7 +74,7 @@ This phase delivers a working `extract` mode that produces `docs/configuration.m
      - [ ] JSON Schema produces complete TSV `[ref: PRD/F3 AC2]`
      - [ ] Missing-dependency error surfaces `(a) name (b) why (c) install command` per ADR-5 `[ref: SDD/ADR-5 added constraint]`
 
-- [ ] **T3.3 parse-pydantic.sh — Pydantic / Dataclass Parser** `[activity: build-feature]` `[parallel: true]`
+- [x] **T3.3 parse-pydantic.sh — Pydantic / Dataclass Parser** `[activity: build-feature]` `[parallel: true]`
 
   1. **Prime**: Read SDD ADR-5 + the dependency-check requirement (`python3` is required for this parser).
   2. **Test**: Pressure scenarios:
@@ -84,7 +91,7 @@ This phase delivers a working `extract` mode that produces `docs/configuration.m
      - [ ] Missing python3 → SDD-specified install message `[ref: SDD/Acceptance Criteria — extract dependency]`
      - [ ] Missing pydantic module → actionable secondary install message; does not crash
 
-- [ ] **T3.4 Configuration Template + Markdown Renderer** `[activity: template-design]`
+- [x] **T3.4 Configuration Template + Markdown Renderer** `[activity: template-design]`
 
   1. **Prime**: Read PRD F3 acceptance criteria for the configuration page format.
   2. **Test**: Given a fixture TSV file, the renderer produces a Markdown table matching the template: rows for each setting; columns for Name, Type, Default, Description; example value row per setting if available; `[NEEDS DESCRIPTION]` and `[NEEDS REVIEW]` markers preserved verbatim.
@@ -94,7 +101,7 @@ This phase delivers a working `extract` mode that produces `docs/configuration.m
      - [ ] Template renders TSV → configuration.md matching PRD F3 contract `[ref: PRD/F3 user story + ACs]`
      - [ ] Markers preserved through rendering pipeline
 
-- [ ] **T3.5 modes/extract.md — Source Detection, Dispatch, Diff** `[activity: build-feature]`
+- [x] **T3.5 modes/extract.md — Source Detection, Dispatch, Diff** `[activity: build-feature]`
 
   1. **Prime**: Read SDD §ADR-5 + acceptance criteria EARS clauses for extract.
   2. **Test**: Pressure scenarios:
@@ -111,7 +118,7 @@ This phase delivers a working `extract` mode that produces `docs/configuration.m
      - [ ] Re-run diff surfaces changes, never silent overwrite `[ref: PRD/F3 AC4]`
      - [ ] v1 ignores manifest sources `[ref: SDD/Acceptance Criteria — extract last clause]`
 
-- [ ] **T3.6 Phase 3 Validation** `[activity: validate]`
+- [x] **T3.6 Phase 3 Validation** `[activity: validate]`
 
   - Run `/skill-author audit`.
   - Run end-to-end extract against three real targets: a fixture TS interface, a fixture JSON Schema, a fixture Pydantic class.
@@ -123,4 +130,21 @@ This phase delivers a working `extract` mode that produces `docs/configuration.m
 
 ## Deviations
 
-(None yet.)
+### Deviation 1 — TS settings convention is paired interface + const, not interface-with-initializers (2026-05-06)
+
+**Original spec language** (T3.1, plan v1.0): "Single `interface Settings { … }` with primitive types and JSDoc → emits TSV with name / type / default (where `=` literal present) / description."
+
+**Problem**: TypeScript interfaces cannot have `=` initializers on properties — that is a TS1246 error ("An interface property cannot have an initializer"). The original spec described an invalid TS syntax that no real codebase produces. This was caught when IDE diagnostics flagged the test fixtures.
+
+**Real-world convention** (e.g. `obsidian-archivist/src/model/Settings.ts`): **paired** declaration:
+- `export interface PluginSettings { … }` — fields with type + JSDoc, no initializers
+- `export const DEFAULT_SETTINGS: PluginSettings = { … }` — paired const supplying defaults
+
+**Decision** (Marcus, 2026-05-06): adopt the paired pattern. The parser reads both blocks and joins by field name. Missing const values emit `[NEEDS DEFAULT]`.
+
+**Impact**:
+- T3.1 spec rewritten above to describe the paired pattern.
+- All T3.1 test fixtures must be valid TypeScript.
+- Parser refactored to detect + parse `const DEFAULT_*: <Interface> = { … }` blocks.
+- New TSV marker `[NEEDS DEFAULT]` introduced (alongside `[NEEDS DESCRIPTION]` and `[NEEDS REVIEW]`).
+- SDD §Settings Parser implementation example updated to reflect the real convention.
