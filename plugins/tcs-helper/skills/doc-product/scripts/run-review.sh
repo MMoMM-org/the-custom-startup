@@ -259,8 +259,6 @@ fi
 RESULTS_DIR="${TMPDIR_RUN}/results"
 mkdir -p "$RESULTS_DIR"
 
-RUNNING=0
-
 _wait_for_slot() {
   while true; do
     # Count background jobs
@@ -294,7 +292,6 @@ while IFS=' ' read -r p_id q_id; do
       printf '{"found":"no","answer":null,"unclear":["reader-test config error"],"guessed":[],"page_used":null,"error":"invocation_error"}\n' > "$OUT_FILE"
     fi
   ) &
-  RUNNING=$((RUNNING + 1))
 done < "$WORK_PLAN_FILE"
 
 # Wait for all background jobs to finish

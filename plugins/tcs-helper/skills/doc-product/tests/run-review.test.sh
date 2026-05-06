@@ -9,6 +9,7 @@
 #   S4: READER_TEST_PARALLEL=2 → max concurrent subprocesses never exceeds 2
 #   S5: claude CLI missing → exit 2, setup message, no subprocess called
 #   S6: Non-interactive FAIL signal → exit 1, outcome=FAIL in JSON
+#   S7: Infra-only run (all tuples error) → outcome=PASS, exit 0 (Fixture-4 rule)
 #
 # Strategy: a stub reader-test.sh is placed on PATH (via READER_TEST env var override
 # is not available in run-review.sh, so instead we write a stub reader-test.sh to a
@@ -176,32 +177,36 @@ exit 0
 STUB
 }
 
-# Stub that records concurrent invocations for concurrency test
-# Uses a lock directory: each invocation creates a subdir, sleeps, then removes it.
-# A separate counter file tracks the observed maximum.
+# Stub that records concurrent invocations for concurrency test.
+# Each invocation appends "START <pid>" then sleeps then appends "STOP <pid>"
+# to a shared events file. Post-run, _peak_concurrency scans that file and
+# computes the maximum overlap — no read-modify-write race.
 _stub_concurrency() {
   local lock_dir="$1"
   cat <<STUB
 #!/usr/bin/env bash
-# Stub reader-test.sh — concurrency counter
-LOCK_DIR="${lock_dir}"
-mkdir -p "\${LOCK_DIR}/\$\$"
-# Count current slots
-current="\$(ls "\$LOCK_DIR" | grep -v max | wc -l | tr -d ' ')"
-# Update max
-max_file="\${LOCK_DIR}/max"
-current_max=0
-if [ -f "\$max_file" ]; then
-  current_max="\$(cat "\$max_file")"
-fi
-if [ "\$current" -gt "\$current_max" ]; then
-  printf '%s\n' "\$current" > "\$max_file"
-fi
+# Stub reader-test.sh — concurrency event recorder (no TOCTOU)
+EVENTS_FILE="${lock_dir}/events"
+printf 'START %s\n' "\$\$" >> "\$EVENTS_FILE"
 sleep 0.15
-rm -rf "\${LOCK_DIR}/\$\$"
+printf 'STOP %s\n' "\$\$" >> "\$EVENTS_FILE"
 printf '{"found":"yes","answer":"ok","unclear":[],"guessed":[],"page_used":"docs/installation.md"}\n'
 exit 0
 STUB
+}
+
+# _peak_concurrency <events_file>
+# Reads START/STOP records (one per line) and returns the maximum number
+# of START records that appear before their matching STOP — i.e. peak overlap.
+# Uses pure awk; no external sort needed.
+_peak_concurrency() {
+  local events_file="$1"
+  [ -f "$events_file" ] || { printf '0\n'; return; }
+  awk '
+    /^START / { active++; if (active > peak) peak = active }
+    /^STOP /  { if (active > 0) active-- }
+    END { print (peak ? peak : 0) }
+  ' "$events_file"
 }
 
 # ---------------------------------------------------------------------------
@@ -364,10 +369,8 @@ scenario_4() {
     bash "${skill_dir}/scripts/run-review.sh"
   )" || exit_code=$?
 
-  local max_concurrent=0
-  if [ -f "${lock_dir}/max" ]; then
-    max_concurrent="$(cat "${lock_dir}/max")"
-  fi
+  local max_concurrent
+  max_concurrent="$(_peak_concurrency "${lock_dir}/events")"
 
   if [ "${max_concurrent:-0}" -le 2 ]; then
     pass "S4: max concurrent ≤ 2 (observed: ${max_concurrent})"
@@ -501,6 +504,72 @@ scenario_6() {
 }
 
 # ---------------------------------------------------------------------------
+# S7: Fixture-4 rule — all tuples produce infra errors → outcome=PASS, exit 0
+# Verifies that infra errors do NOT contribute to FAIL.
+# Strategy: stub reader-test.sh exits 1 unconditionally; run-review.sh wraps
+# that as an invocation_error JSON envelope (infra error, not a gap).
+# ---------------------------------------------------------------------------
+scenario_7() {
+  printf '\n--- S7: Infra-only run (all reader-test calls fail) → PASS, exit 0 ---\n'
+
+  local tmpdir skill_dir repo_dir
+  tmpdir="$(_make_tmpdir)"
+  skill_dir="${tmpdir}/skill"
+  repo_dir="${tmpdir}/repo"
+  mkdir -p "$skill_dir" "$repo_dir"
+  _setup_fixture_repo "$repo_dir"
+
+  # Stub that exits 1 unconditionally — simulates claude invocation failure.
+  # run-review.sh catches non-zero exit from reader-test and writes an
+  # invocation_error JSON envelope (the infra-error branch at lines ~292-294).
+  _build_temp_skill "$skill_dir" "$(cat <<'STUB'
+#!/usr/bin/env bash
+# Stub reader-test.sh — always exits 1 (simulates claude failure)
+exit 1
+STUB
+)"
+
+  local output exit_code
+  exit_code=0
+  output="$(
+    export PERSONAS_FILE="$PERSONAS_FIXTURE"
+    export REPO_ROOT_OVERRIDE="$repo_dir"
+    bash "${skill_dir}/scripts/run-review.sh"
+  )" || exit_code=$?
+
+  # Fixture-4 rule: infra errors alone must not produce FAIL
+  assert_exit_zero "S7: exit code is 0 (infra-only → PASS)" "$exit_code"
+  assert_json_field "S7: outcome is PASS (not FAIL)" ".outcome" "PASS" "$output"
+
+  # Every tuple must have an error field set
+  local tuple_count error_count
+  tuple_count="$(printf '%s\n' "$output" | jq '.tuples | length' 2>/dev/null || true)"
+  error_count="$(printf '%s\n' "$output" | \
+    jq '[.tuples[] | select(.error != null and .error != "")] | length' 2>/dev/null || true)"
+
+  if [ "${tuple_count:-0}" -ge 1 ] && [ "$error_count" = "$tuple_count" ]; then
+    pass "S7: every tuple has .error set (all are infra errors)"
+  else
+    fail "S7: every tuple has .error set (all are infra errors)" \
+      "tuples=${tuple_count} with error=${error_count}"
+  fi
+
+  # No tuple's infra error should flip outcome to FAIL — the gate must distinguish
+  local fail_count
+  fail_count="$(printf '%s\n' "$output" | \
+    jq '[.tuples[] | select(.error == null or .error == "") | select(.found == "no" or .found == "partial")] | length' \
+    2>/dev/null || true)"
+  if [ "${fail_count:-0}" -eq 0 ]; then
+    pass "S7: no clean (non-error) fail tuples contributed to outcome"
+  else
+    fail "S7: no clean (non-error) fail tuples contributed to outcome" \
+      "found ${fail_count} clean fail tuples"
+  fi
+
+  rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all scenarios
 # ---------------------------------------------------------------------------
 scenario_1
@@ -509,6 +578,7 @@ scenario_3
 scenario_4
 scenario_5
 scenario_6
+scenario_7
 
 # ---------------------------------------------------------------------------
 # Summary
