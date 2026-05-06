@@ -59,8 +59,11 @@ State {
 
 ## Reference Materials
 
-- `reference/obsidian-api.md` — API patterns, lifecycle/DOM/settings/vault subtleties, anti-pattern catalog
-- `reference/testing-patterns.md` — Vitest setup, mock parity, live-test discipline, hot-reload, lint rationale
+- `reference/obsidian-api.md` — API patterns, lifecycle/DOM/settings/vault subtleties, misc gotchas, concurrency, anti-pattern catalog
+- `reference/testing-patterns.md` — Vitest setup, mock parity, live-test discipline, hot-reload, `obsidianmd/*` lint rationale
+- `reference/architectural-patterns.md` — adapter layout, permission/trust boundaries, audit log shape, UI patterns, build/bundle/release (load when designing structure beyond a few hundred LOC)
+- `reference/path-sanitization.md` — deterministic 10-step pipeline for OS-FS writes outside the vault
+- `reference/user-extensibility.md` — trust model, hook policy, `require.cache` eviction (load only when the plugin executes user-authored code)
 
 ## Workflow
 

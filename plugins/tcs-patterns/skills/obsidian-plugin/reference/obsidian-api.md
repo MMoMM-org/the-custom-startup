@@ -627,6 +627,135 @@ Rules:
 
 ---
 
+## Misc API Gotchas
+
+### Command IDs Are Bare — Obsidian Adds the Plugin Prefix
+
+```typescript
+// Correct
+this.addCommand({ id: "run-import", name: "Run Import" });
+
+// Wrong — palette shows "MyPlugin: MyPlugin: Run Import"
+this.addCommand({ id: "myplugin:run-import", name: "Run Import" });
+```
+
+### `console.debug`, Not `console.log`
+
+The Obsidian community-plugin reviewer bot enforces `console.debug` over `console.log` on PRs to the obsidian-releases repo. User-facing impact: DevTools hides the Verbose level by default. Document the toggle in support docs (a screenshot of the DevTools log-level dropdown showing Verbose enabled lets users self-diagnose "no debug output" reports).
+
+### Native Dialogs via `@electron/remote`
+
+For folder/file/save pickers outside the vault:
+
+```typescript
+async function chooseFolder(): Promise<string | null> {
+  try {
+    const remote = require("@electron/remote");
+    const result = await remote.dialog.showOpenDialog({ properties: ["openDirectory"] });
+    return result.canceled ? null : result.filePaths[0];
+  } catch {
+    new Notice("Native dialogs are unavailable. Paste the folder path into the settings field instead.");
+    return null;
+  }
+}
+```
+
+Mark `@electron/remote` and `electron` as `external` in esbuild — neither should be bundled. Future Obsidian builds may disable Electron remote entirely; the Notice fallback keeps the plugin usable when that happens.
+
+### `manifest.dir` Is Typed Optional
+
+Several Obsidian APIs return `manifest.dir` as `string | undefined`. Provide a defensive default at every consumer:
+
+```typescript
+const pluginDir = this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`;
+```
+
+Never observed undefined in current Obsidian builds, but the type permits it and a future build could exercise it.
+
+### `import.meta.url` Is Empty in CJS Bundles
+
+esbuild with `format: "cjs"` does not populate `import.meta.url`. For `createRequire(...)` and other "where am I" code, use `__filename` (the CJS global, valid at runtime in a CJS bundle):
+
+```typescript
+import { createRequire } from "node:module";
+// eslint-disable-next-line @typescript-eslint/prefer-import
+const localRequire = createRequire(__filename);
+```
+
+### `app.openWithDefaultApp(path)` Is Vault-Relative Only
+
+Passing an OS-absolute path silently re-roots it inside the vault and finds nothing. Convert to vault-relative first; for files outside the vault, fall back to a Notice surfacing the absolute path so the user can navigate manually.
+
+### Asset URLs Need `getResourcePath`
+
+Plugin DOM rendering has no notion of "where the plugin is installed." For `<img>`, `<video>`, `<audio>` `src` attributes pointing at files inside the plugin install dir:
+
+```typescript
+const pluginDir = this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`;
+const url = this.app.vault.adapter.getResourcePath(`${pluginDir}/assets/banner.png`);
+img.src = `${url}?v=${this.manifest.version}`;  // cache-bust on plugin update
+```
+
+---
+
+## Concurrency Patterns
+
+### `Map<Id, true>` Is Atomic for In-Flight Registries
+
+JS is single-threaded; a synchronous `if (map.has(id)) return false; map.set(id, true);` sequence runs atomically — no Promise lock, no Mutex library. The pattern works for "skip overlapping ticks of the same scheduled rule," "deduplicate concurrent requests by ID," and similar:
+
+```typescript
+class InFlightRegistry<K> {
+  private set = new Set<K>();
+  tryAcquire(key: K): boolean {
+    if (this.set.has(key)) return false;
+    this.set.add(key);
+    return true;
+  }
+  release(key: K): void { this.set.delete(key); }
+}
+```
+
+Document the rationale in code so a contributor doesn't add a Mutex out of caution.
+
+### Single Promise Queue for Append-Only Files
+
+When a structured log / audit / event file is mutated from many concurrent code paths, serialize via a private Promise queue:
+
+```typescript
+class AppendOnlyLog {
+  private queue: Promise<unknown> = Promise.resolve();
+  append(entry: string): Promise<void> {
+    const next = this.queue.then(() => this.writeLine(entry));
+    this.queue = next.catch(() => undefined);  // failure must not poison the chain
+    return next;
+  }
+}
+```
+
+This guarantees on-disk byte ordering without fcntl locks or write-once-with-mtime tricks.
+
+### Epoch-Based Cancellation for Callback-Style APIs
+
+When an external library is callback-style and doesn't support `AbortSignal`, threading a cancellation token through every layer is heavyweight. Pattern: hold a monotonic `epoch: number` on the owning class. Every operation captures the epoch on entry; concurrent transitions (disconnect-while-attaching, dispose-while-reconnecting, force-reconnect-while-auto-reconnecting) bump it; the in-flight operation compares its captured epoch against the live one on resolution and bails if they diverge:
+
+```typescript
+class Connection {
+  private epoch = 0;
+  async connect() {
+    const myEpoch = ++this.epoch;
+    const result = await this.api.connectCb();
+    if (myEpoch !== this.epoch) return;  // superseded — abort silently
+    this.applyResult(result);
+  }
+  disconnect() { this.epoch++; /* ...*/ }
+}
+```
+
+One-line check beats `AbortController` plumbing for this case.
+
+---
+
 ## Common Anti-Patterns
 
 | Anti-pattern | Problem | Fix |
@@ -661,3 +790,11 @@ Rules:
 | Reading frontmatter / tags / headings via `vault.read` + parse | Slow at scale — cache already has it | `app.metadataCache.getFileCache(file)?.frontmatter` |
 | Treating `tags: a` and `tags: [a]` and `tags: "a,b"` as same shape | Fails for half of real-world vaults | Match flow array, block array, comma-string, scalar — case-insensitive |
 | Persisting credentials or per-device state in `data.json` | Replicated by Obsidian Sync to peer devices | Sidecar via `app.vault.adapter.write` |
+| `console.log(...)` in plugin code | Bot-rejected on community-plugin PRs | `console.debug(...)` (document Verbose toggle for users) |
+| `addCommand({ id: "myplugin:foo", ... })` | Obsidian prepends plugin name → "MyPlugin: MyPlugin: Foo" | Bare ID — `addCommand({ id: "foo", name: "Foo" })` |
+| Modal `contentEl.addEventListener("keydown", ...)` to intercept Esc | Obsidian's framework `Scope` handles Esc before contentEl listeners | Override in `onClose()` instead |
+| `import.meta.url` in CJS bundle | Empty at runtime — esbuild CJS doesn't populate it | `__filename` (CJS global) |
+| `app.openWithDefaultApp(absolutePath)` | Re-roots inside vault, file not found | Convert to vault-relative first; Notice fallback for outside-vault |
+| `<img src="assets/x.png">` from plugin DOM | No notion of plugin install dir | `app.vault.adapter.getResourcePath(pluginDir + "/" + rel)` |
+| Module-scoped state for cross-instance pattern | Survives plugin disable/enable; accumulates ghost handlers | Field-scoped on plugin instance with explicit teardown |
+| Bundling `electron` or `@electron/remote` | Bundle bloat; runtime mismatch with Electron host | Mark both as `external` in esbuild |
