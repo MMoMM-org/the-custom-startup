@@ -67,7 +67,7 @@ This phase delivers a working `review` mode that produces a gap report when invo
      - [x] Malformed persona file produces actionable error before any subprocess call `[ref: SDD/Error Handling — Persona file malformed]`
      - [x] Bash 3.2 compatible — `bash --version` shows 3.2 on the test environment, script runs without error `[ref: SDD/CON-9]`
 
-- [ ] **T2.3 reader-test.sh — claude -p Invocation Driver** `[activity: build-feature]`
+- [x] **T2.3 reader-test.sh — claude -p Invocation Driver** `[activity: build-feature]`
 
   1. **Prime**: Read SDD §claude -p Invocation Contract + §Reader-Test Bash Driver implementation example. `[ref: SDD/claude -p Invocation Contract]` `[ref: SDD/Reader-Test Bash Driver]`
   2. **Test**: Pressure scenarios for the script:
@@ -80,9 +80,9 @@ This phase delivers a working `review` mode that produces a gap report when invo
   3. **Implement**: Author `scripts/reader-test.sh` per the SDD example. Bash 3.2 compatible. Uses `git rev-parse --show-toplevel` for repo-anchored page resolution. Wraps `claude -p` with `timeout`. Validates JSON shape via `jq`.
   4. **Validate**: All pressure scenarios pass on the test environment. Script passes `shellcheck`.
   5. **Success**:
-     - [ ] Single-tuple invocation produces SDD-compliant JSON envelope `[ref: SDD/claude -p Invocation Contract]`
-     - [ ] Multi-page corpus concatenated with delimiters `[ref: SDD/Acceptance Criteria — review mode]`
-     - [ ] Infrastructure errors distinguished from genuine gaps `[ref: SDD/Error Handling rows]`
+     - [x] Single-tuple invocation produces SDD-compliant JSON envelope `[ref: SDD/claude -p Invocation Contract]`
+     - [x] Multi-page corpus concatenated with delimiters `[ref: SDD/Acceptance Criteria — review mode]`
+     - [x] Infrastructure errors distinguished from genuine gaps `[ref: SDD/Error Handling rows]`
 
 - [x] **T2.4 Gap Report Template and Renderer** `[activity: template-design]` `[parallel: true]`
 
