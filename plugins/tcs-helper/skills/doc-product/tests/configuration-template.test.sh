@@ -13,7 +13,7 @@
 # Usage: bash tests/configuration-template.test.sh
 # Exit: 0 if all assertions pass; non-zero with failure count otherwise.
 
-set -uo pipefail
+set -euo pipefail
 
 # ---------------------------------------------------------------------------
 # Locate files
@@ -66,6 +66,15 @@ assert_file_contains() {
   fi
 }
 
+assert_eq() {
+  local label="$1" expected="$2" actual="$3"
+  if [ "$expected" = "$actual" ]; then
+    pass "$label"
+  else
+    fail "$label" "expected=$(printf '%q' "$expected") got=$(printf '%q' "$actual")"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Assertion (a): template file exists
 # ---------------------------------------------------------------------------
@@ -94,7 +103,7 @@ assert_file_contains "c: verbatim rule documented"              "verbatim"      
 # Assertion (d): template includes header section / intro paragraph placeholder
 # ---------------------------------------------------------------------------
 printf '\n--- (d) Template includes header / intro section ---\n'
-assert_file_contains "d: template has H1 heading marker"    "# "    "$TEMPLATE"
+assert_file_contains "d: template has H1 Configuration heading" "# Configuration" "$TEMPLATE"
 assert_file_contains "d: template references intro section" "intro" "$TEMPLATE"
 
 # ---------------------------------------------------------------------------
@@ -123,6 +132,16 @@ printf '\n--- (f) Golden file preserves all three markers verbatim ---\n'
 assert_file_contains "f: golden preserves [NEEDS DESCRIPTION]" "[NEEDS DESCRIPTION]" "$GOLDEN"
 assert_file_contains "f: golden preserves [NEEDS REVIEW]"      "[NEEDS REVIEW]"      "$GOLDEN"
 assert_file_contains "f: golden preserves [NEEDS DEFAULT]"     "[NEEDS DEFAULT]"     "$GOLDEN"
+
+# ---------------------------------------------------------------------------
+# Assertion (g): golden file data rows match TSV (count + per-name cells)
+# ---------------------------------------------------------------------------
+printf '\n--- (g) Golden file data rows match TSV ---\n'
+row_count=$(grep -c '^| \`' "$GOLDEN" || true)
+assert_eq "g: golden has 4 data rows" "4" "$row_count"
+for name in apiKey timeout retryPolicy logLevel; do
+  assert_file_contains "g: golden has \`$name\` cell" "| \`$name\` " "$GOLDEN"
+done
 
 # ---------------------------------------------------------------------------
 # Summary

@@ -100,9 +100,8 @@ Column order is fixed: `Name`, `Type`, `Default`, `Description`.
 ```
 
 - **Name cell** — always wrapped in backticks.
-- **Type cell** — always wrapped in backticks. If the type value is `[NEEDS REVIEW]`,
-  emit the marker as-is (no backtick wrapping around the marker itself, but inside the
-  table cell): `| [NEEDS REVIEW] |`.
+- **Type cell** — always wrapped in backticks. The marker `[NEEDS REVIEW]` is no
+  exception — the type cell always gets backtick wrapping, so emit: `| \`[NEEDS REVIEW]\` |`.
 - **Default cell** — wrapped in backticks when it is a literal value. If the default is
   `[NEEDS DEFAULT]`, emit the marker as-is without backtick wrapping: `| [NEEDS DEFAULT] |`.
 - **Description cell** — plain text (no backtick wrapping). If the description is
