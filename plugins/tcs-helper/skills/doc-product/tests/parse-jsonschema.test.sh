@@ -147,24 +147,35 @@ scenario_3() {
 
 # ---------------------------------------------------------------------------
 # Scenario 4: jq not on PATH → exit 2, ADR-5 error on stderr
+#
+# Strategy: build a stub PATH directory that contains bash (symlinked to the
+# real bash) but NOT jq.  PATH="/var/empty" would also hide bash in this
+# sandboxed environment (exit 127), so we use a controlled stub dir instead.
 # ---------------------------------------------------------------------------
 scenario_4() {
   printf '\n--- Scenario 4: jq not on PATH → ADR-5 missing-dependency error ---\n'
 
+  # Build a stub dir: bash present, jq absent.
+  local stub_dir
+  stub_dir="$(_make_tmpdir)"
+  ln -sf "$(command -v bash)" "${stub_dir}/bash"
+  # Deliberately do NOT link jq.
+
   local stderr_out exit_code
   exit_code=0
-  # Restrict PATH to /var/empty — nothing executable lives there, so jq is absent.
   # SC2030: intentional subshell variable modification.
   # shellcheck disable=SC2030
-  stderr_out="$(PATH="/var/empty" bash "$PARSER" "${FIXTURES}/happy-path.json" 2>&1 >/dev/null)" \
+  stderr_out="$(PATH="$stub_dir" bash "$PARSER" "${FIXTURES}/happy-path.json" 2>&1 >/dev/null)" \
     || exit_code=$?
+
+  rm -rf "$stub_dir"
 
   assert_exit_code "S4: exits 2 when jq missing" "2" "$exit_code"
 
-  assert_contains "S4: error line names jq"          "error: jq not found"                                                           "$stderr_out"
-  assert_contains "S4: reason line explains why"     "reason: parsing JSON Schema requires jq for safe field extraction"             "$stderr_out"
-  assert_contains "S4: install line gives brew cmd"  "brew install jq"                                                               "$stderr_out"
-  assert_contains "S4: install line gives apt cmd"   "apt-get install jq"                                                            "$stderr_out"
+  assert_contains "S4: error line names jq"          "error: jq not found"                                                 "$stderr_out"
+  assert_contains "S4: reason line explains why"     "reason: parsing JSON Schema requires jq for safe field extraction"   "$stderr_out"
+  assert_contains "S4: install line gives brew cmd"  "brew install jq"                                                     "$stderr_out"
+  assert_contains "S4: install line gives apt cmd"   "apt-get install jq"                                                  "$stderr_out"
 }
 
 # ---------------------------------------------------------------------------
