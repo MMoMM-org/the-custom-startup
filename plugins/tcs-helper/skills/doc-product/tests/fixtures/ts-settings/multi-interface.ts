@@ -6,7 +6,7 @@ export interface Settings {
   apiKey: string;
 
   /** Request timeout in milliseconds. */
-  requestTimeout: number = 5000;
+  requestTimeout: number;
 }
 
 /**
@@ -19,3 +19,13 @@ export interface InternalState {
   /** Current connection count. */
   connectionCount: number;
 }
+
+export const DEFAULT_SETTINGS: Settings = {
+  apiKey: '',
+  requestTimeout: 5000,
+};
+
+export const DEFAULT_INTERNAL_STATE: InternalState = {
+  initialised: false,
+  connectionCount: 0,
+};

@@ -3,8 +3,14 @@ export interface Settings {
   logLevel: string | number;
 
   /** Connection mode. */
-  mode: "tcp" | "udp" | "ws";
+  mode: 'small' | 'medium' | 'large';
 
   /** Threshold value. */
-  threshold: number | null = 0;
+  threshold: number | null;
 }
+
+export const DEFAULT_SETTINGS: Settings = {
+  logLevel: 'info',
+  mode: 'medium',
+  threshold: 0,
+};
