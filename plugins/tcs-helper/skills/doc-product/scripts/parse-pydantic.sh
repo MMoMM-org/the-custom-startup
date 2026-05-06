@@ -48,7 +48,7 @@ fi
 # Check for pydantic import in file + pydantic availability in python3
 # Only relevant when the file actually imports pydantic.
 # ---------------------------------------------------------------------------
-if grep -q 'from pydantic\|import pydantic' "$PYTHON_FILE"; then
+if grep -qE '^[[:space:]]*(from pydantic[[:space:]]|import pydantic([[:space:]]|$))' "$PYTHON_FILE"; then
   # File uses pydantic — verify python3 can import it
   if ! python3 -c 'import pydantic' 2>/dev/null; then
     printf 'error: Pydantic module unavailable in this environment\n' >&2
@@ -62,6 +62,7 @@ fi
 # Inline Python — introspect the module and emit TSV
 # All Python error output is captured; no raw tracebacks reach the caller.
 # ---------------------------------------------------------------------------
+set +e
 python3 -c '
 import sys
 import os
@@ -205,16 +206,6 @@ def type_str(annotation):
     return s
 
 # ---------------------------------------------------------------------------
-# Stringify default value
-# ---------------------------------------------------------------------------
-def default_str(val, missing_sentinel):
-    if val is missing_sentinel or val is inspect.Parameter.empty:
-        return NEEDS_DEFAULT
-    if val is dataclasses.MISSING:
-        return NEEDS_DEFAULT
-    return repr(val)
-
-# ---------------------------------------------------------------------------
 # Emit TSV
 # ---------------------------------------------------------------------------
 print("name\ttype\tdefault\tdescription")
@@ -279,6 +270,6 @@ else:
     print("error: unsupported class type for {}".format(target_name), file=sys.stderr)
     sys.exit(3)
 ' "$PYTHON_FILE" "$CLASS_NAME"
-
 PYTHON_EXIT=$?
+set -e
 exit $PYTHON_EXIT

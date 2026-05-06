@@ -123,10 +123,13 @@ scenario_1() {
     return 0
   fi
 
-  local stdout stderr exit_code
+  local stdout stderr exit_code s1_tmpdir s1_stderr_file
   exit_code=0
-  stdout="$(bash "$PARSER" "${FIXTURES}/pydantic-v2.py" AppConfig 2>/tmp/claude-501/s1-stderr-$$)" || exit_code=$?
-  stderr="$(cat /tmp/claude-501/s1-stderr-$$ 2>/dev/null || true)"
+  s1_tmpdir="$(_make_tmpdir)"
+  s1_stderr_file="${s1_tmpdir}/stderr"
+  stdout="$(bash "$PARSER" "${FIXTURES}/pydantic-v2.py" AppConfig 2>"$s1_stderr_file")" || exit_code=$?
+  stderr="$(cat "$s1_stderr_file" 2>/dev/null || true)"
+  rm -rf "$s1_tmpdir"
 
   assert_eq "S1: exit code 0" "0" "$exit_code"
 
@@ -261,7 +264,7 @@ scenario_5() {
   assert_contains "S5: error names python3" "python3" "$stderr"
   assert_contains "S5: error says 'not found'" "not found" "$stderr"
   assert_contains "S5: reason line present" "reason:" "$stderr"
-  assert_contains "S5: reason mentions pydantic/dataclass" "python3" "$stderr"
+  assert_contains "S5: reason mentions pydantic/dataclass" "Pydantic / dataclass" "$stderr"
   assert_contains "S5: install line present" "install:" "$stderr"
   assert_contains "S5: brew install command" "brew install python3" "$stderr"
   assert_contains "S5: apt-get install command" "apt-get install python3" "$stderr"
