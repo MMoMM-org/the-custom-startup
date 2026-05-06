@@ -181,7 +181,7 @@ _run_with_timeout() {
   shift
   if command -v timeout >/dev/null 2>&1; then
     timeout "$secs" "$@"
-    return $?
+    return
   fi
   # Perl fallback for macOS without coreutils
   perl -e '
@@ -197,7 +197,6 @@ _run_with_timeout() {
     my $status = $?;
     exit($status >> 8);
   ' -- "$secs" "$@"
-  return $?
 }
 
 # ---------------------------------------------------------------------------

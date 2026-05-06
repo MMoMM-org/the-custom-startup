@@ -43,6 +43,9 @@ fi
 
 # ---------------------------------------------------------------------------
 # Sandbox-safe tempdir creation (matches lib-personas.test.sh pattern)
+# mktemp -d is avoided because the macOS Claude Code sandbox blocks it even
+# when TMPDIR is set to an allowed path. Manual mkdir under a known-writable
+# base is used instead.
 # ---------------------------------------------------------------------------
 _make_tmpdir() {
   local base="/tmp/claude-501"
@@ -142,8 +145,10 @@ case "${STUB_MODE:-happy}" in
     exit 0
     ;;
   hang)
-    sleep 300
-    exit 0
+    # exec replaces the shell process so SIGKILL hits sleep directly.
+    # Without exec, killing the stub leaves the sleep grandchild alive,
+    # keeping the $() stdout pipe open and blocking the test.
+    exec sleep 300
     ;;
   rate-limit)
     printf 'rate limit exceeded\n' >&2
@@ -365,6 +370,42 @@ scenario_6() {
 }
 
 # ---------------------------------------------------------------------------
+# Scenario 7: Timeout — stub hangs, READER_TEST_TIMEOUT=1 triggers alarm/kill
+# Exercises the Perl-fallback _run_with_timeout path (active on macOS without
+# GNU coreutils). READER_TEST_TIMEOUT=1 keeps wall-clock time to ~1s.
+# Expected: exit 0, JSON with .error == "timeout_or_invocation_failure".
+# ---------------------------------------------------------------------------
+scenario_7() {
+  printf '\n--- Scenario 7: Timeout — hang stub + 1s timeout → infra error JSON ---\n'
+
+  local tmpdir stub_dir repo_dir
+  tmpdir="$(_make_tmpdir)"
+  stub_dir="${tmpdir}/bin"
+  repo_dir="${tmpdir}/repo"
+  mkdir -p "$stub_dir"
+  _setup_fixture_repo "$repo_dir"
+  _write_stub_claude "$stub_dir"
+
+  local output exit_code
+  exit_code=0
+  output="$(
+    export PATH="${stub_dir}:${PATH}"
+    export STUB_MODE=hang
+    export REPO_ROOT_OVERRIDE="$repo_dir"
+    export PERSONAS_FILE="$PERSONAS_FIXTURE"
+    export READER_TEST_TIMEOUT=1
+    bash "$READER_TEST" test-reader what-is-it
+  )" || exit_code=$?
+
+  assert_exit_zero "S7: exit code is 0 (timeout is infra error)" "$exit_code"
+  assert_json_field "S7: found == no" ".found" "no" "$output"
+  assert_json_field "S7: error == timeout_or_invocation_failure" \
+    ".error" "timeout_or_invocation_failure" "$output"
+
+  rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all scenarios
 # ---------------------------------------------------------------------------
 scenario_1
@@ -373,6 +414,7 @@ scenario_3
 scenario_4
 scenario_5
 scenario_6
+scenario_7
 
 # ---------------------------------------------------------------------------
 # Summary
