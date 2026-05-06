@@ -150,6 +150,15 @@ assert_contains "A12: v1 manifest section present" "v1"
 assert_contains "A13: REPO_ROOT variable referenced" "REPO_ROOT"
 
 # ---------------------------------------------------------------------------
+# A14: Flag handling — --source and --type are documented and parsed
+# ---------------------------------------------------------------------------
+assert_contains "A14a: --source flag handled" "--source"
+assert_contains "A14b: --type flag handled" "--type"
+assert_contains "A14c: SOURCE_PATH variable assigned" "SOURCE_PATH"
+assert_contains "A14d: SOURCE_TYPE variable assigned" "SOURCE_TYPE"
+assert_contains "A14e: Step 2 skip condition documented" "Skip this step entirely if"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 printf '\n========================================\n'

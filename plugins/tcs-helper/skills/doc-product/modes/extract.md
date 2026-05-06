@@ -15,6 +15,40 @@ either writes `docs/configuration.md` directly (first run) or surfaces a diff fo
 
 ---
 
+## Step 1a: Parse Flags
+
+Before anything else, parse the flags the user passed to `/doc-product extract`:
+
+```bash
+SOURCE_PATH=""
+SOURCE_TYPE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --source) SOURCE_PATH="$2"; shift 2 ;;
+    --type)   SOURCE_TYPE="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+```
+
+**Validate `--type` if supplied:** `SOURCE_TYPE` must be one of `typescript`, `jsonschema`, or
+`pydantic`. If any other value is given, stop and print:
+
+```
+extract: unknown type '<value>'. Must be one of: typescript | jsonschema | pydantic
+```
+
+**Flag interaction rules:**
+
+- If **both** `--source` and `--type` are provided: Step 2 (auto-detection) is **skipped
+  entirely** — `SOURCE_PATH` and `SOURCE_TYPE` are already set; proceed directly to Step 4.
+- If **only `--source`** is provided (no `--type`): Step 2 still runs, but the detector is
+  called only on the single file/directory pointed to by `SOURCE_PATH` rather than the full
+  repo root.
+- If **neither** is provided: Step 2 performs a full repo-root scan (default behaviour).
+
+---
+
 ## Step 1: Prerequisites
 
 Before any detection or parsing work, verify the following. On any failure, stop and print
@@ -73,6 +107,10 @@ This is not a blocker — proceed regardless.
 ---
 
 ## Step 2: Source Detection
+
+> **Skip this step entirely if `$SOURCE_TYPE` is non-empty** (set via `--type` in Step 1a).
+> When both `--source` and `--type` were supplied, `SOURCE_PATH` and `SOURCE_TYPE` are already
+> set — proceed directly to Step 4.
 
 Run `scripts/detect-source.sh` with `REPO_ROOT` to discover settings source files:
 
@@ -180,6 +218,19 @@ Select the parser script based on `SOURCE_TYPE`:
 | `typescript` | `scripts/parse-ts-settings.sh` | none (regex-based) |
 | `jsonschema` | `scripts/parse-jsonschema.sh` | `jq` |
 | `pydantic` | `scripts/parse-pydantic.sh` | `python3` |
+
+Assign `parser_script` and `tmpfile_stderr` before invoking the parser:
+
+```bash
+case "$SOURCE_TYPE" in
+  typescript) parser_script="parse-ts-settings.sh" ;;
+  jsonschema) parser_script="parse-jsonschema.sh" ;;
+  pydantic)   parser_script="parse-pydantic.sh" ;;
+  *) printf 'extract: unknown source type: %s\n' "$SOURCE_TYPE" >&2; exit 4 ;;
+esac
+tmpfile_stderr="$(mktemp "${TMPDIR:-/tmp}/doc-product-extract-err.XXXXXX")"
+trap 'rm -f "$tmpfile_stderr"' EXIT
+```
 
 Run the parser:
 

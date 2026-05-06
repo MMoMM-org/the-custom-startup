@@ -106,6 +106,11 @@ scenario_1() {
 scenario_2() {
   printf '\n--- Scenario 2: single-jsonschema/ → jsonschema line ---\n'
 
+  if ! command -v jq >/dev/null 2>&1; then
+    printf 'SKIP  S2: jq not available\n'
+    return
+  fi
+
   _run_detector "$FIXTURES/single-jsonschema"
 
   assert_exit_zero "S2: exit code is 0" "$DETECTOR_EXIT"
