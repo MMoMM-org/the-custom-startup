@@ -36,15 +36,6 @@ fail() {
   printf 'FAIL  %s — %s\n' "$1" "$2"
 }
 
-assert_eq() {
-  local label="$1" expected="$2" actual="$3"
-  if [ "$expected" = "$actual" ]; then
-    pass "$label"
-  else
-    fail "$label" "expected=$(printf '%q' "$expected") got=$(printf '%q' "$actual")"
-  fi
-}
-
 assert_contains() {
   local label="$1" needle="$2" haystack="$3"
   if printf '%s\n' "$haystack" | grep -qF "$needle"; then
