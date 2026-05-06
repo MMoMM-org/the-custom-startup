@@ -10,9 +10,10 @@
 #
 # Exit codes:
 #   0 — success (may include [NEEDS DESCRIPTION] markers)
-#   1 — file not found
+#   1 — wrong usage or file not found
 #   2 — jq not on PATH
 #   3 — schema has no top-level "properties" object
+#   4 — invalid JSON
 
 set -euo pipefail
 
@@ -44,7 +45,15 @@ fi
 # ---------------------------------------------------------------------------
 # Validate that schema has a top-level "properties" object
 # ---------------------------------------------------------------------------
-has_properties="$(jq 'if .properties and (.properties | type) == "object" then "yes" else "no" end' "$SCHEMA_FILE" -r)"
+jq_out="$(jq 'if .properties and (.properties | type) == "object" then "yes" else "no" end' "$SCHEMA_FILE" -r 2>/dev/null)" \
+  || jq_rc=$?
+jq_rc="${jq_rc:-0}"
+if [ "$jq_rc" -ne 0 ]; then
+  printf 'error: invalid JSON in %s\n' "$SCHEMA_FILE" >&2
+  printf 'reason: jq could not parse the schema file\n' >&2
+  exit 4
+fi
+has_properties="$jq_out"
 
 if [ "$has_properties" != "yes" ]; then
   printf 'error: schema has no top-level "properties" object — cannot extract settings\n' >&2
@@ -68,6 +77,7 @@ printf 'name\ttype\tdefault\tdescription\n'
 # Default: jq -c renders the value as compact JSON (strings remain quoted).
 # Description: field "description" or "[NEEDS DESCRIPTION]" if absent.
 # ---------------------------------------------------------------------------
+jq_rc=0
 jq -r '
   .properties | to_entries[] |
   .key as $name |
@@ -107,4 +117,9 @@ jq -r '
   ) as $description |
 
   [$name, $type, $default, $description] | @tsv
-' "$SCHEMA_FILE"
+' "$SCHEMA_FILE" 2>/dev/null || jq_rc=$?
+if [ "$jq_rc" -ne 0 ]; then
+  printf 'error: invalid JSON in %s\n' "$SCHEMA_FILE" >&2
+  printf 'reason: jq could not parse the schema file\n' >&2
+  exit 4
+fi

@@ -218,6 +218,24 @@ scenario_6() {
 }
 
 # ---------------------------------------------------------------------------
+# Scenario 7: Invalid JSON input → exit 4, ADR-5 error on stderr
+# ---------------------------------------------------------------------------
+scenario_7() {
+  printf '\n--- Scenario 7: Invalid JSON input → exit 4, error on stderr ---\n'
+
+  local tmpdir stderr_out exit_code
+  tmpdir="$(_make_tmpdir)"
+  printf '{ "broken":' > "${tmpdir}/invalid.json"
+  exit_code=0
+  stderr_out="$(bash "$PARSER" "${tmpdir}/invalid.json" 2>&1 >/dev/null)" \
+    || exit_code=$?
+  rm -rf "$tmpdir"
+
+  assert_exit_code "S7: exits 4 for invalid JSON" "4" "$exit_code"
+  assert_contains "S7: error names the file" "error: invalid JSON" "$stderr_out"
+}
+
+# ---------------------------------------------------------------------------
 # Run all scenarios
 # ---------------------------------------------------------------------------
 scenario_1
@@ -226,6 +244,7 @@ scenario_3
 scenario_4
 scenario_5
 scenario_6
+scenario_7
 
 # ---------------------------------------------------------------------------
 # Summary
