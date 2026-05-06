@@ -1,6 +1,6 @@
 ---
 name: obsidian-plugin
-description: "Use when building or reviewing Obsidian plugins — enforces plugin lifecycle patterns, proper event listener cleanup, mobile compatibility, and Obsidian API usage over raw DOM manipulation."
+description: "Use when building or reviewing Obsidian plugins — covers lifecycle subtleties, listener and timer cleanup, mobile compatibility, settings reactivity, vault write and event discipline, real-vault testing patterns, and common API gotchas (normalizePath, vault.process vs vault.modify, processFrontMatter, popout-window globals, layout-ready timing, Sync-aware persistence)."
 user-invocable: true
 argument-hint: "[plugin source path to audit]"
 allowed-tools: Read, Bash, Grep, Glob
@@ -36,17 +36,34 @@ State {
 - Use `this.addCommand(...)`, `this.addRibbonIcon(...)`, etc. — never add raw commands to the app.
 - Test on mobile (iOS/Android) or use `Platform.isMobile` for mobile-specific code paths.
 - Implement `onunload()` to clean up anything not registered through Obsidian's register methods.
+- Use `app.workspace.onLayoutReady(cb)` for first-time setup work — `workspace.on('layout-ready', cb)` does not fire when the plugin is enabled after layout is already ready.
+- Use `addClass` / `removeClass` / `toggleClass` on Obsidian-managed DOM (Ribbon, Status Bar, Setting items, leaves).
+- Use `activeDocument` / `activeWindow` over the bare `document` / `window` globals — popout windows have their own document.
+- Read live settings through the plugin reference at call time (`plugin.settings.X`), not via a captured `settings` object.
+- Use `vault.process(file, current => next)` for read-modify-write on tracked TFiles; `vault.modify` / `vault.modifyBinary` for whole-file replacement.
+- Use `app.fileManager.processFrontMatter(file, fm => { ... })` for frontmatter mutations.
+- Use `app.fileManager.trashFile(file)` for deletes — honors the user's trash preference.
+- Surface validation errors inline next to the offending input — never silently drop a value in `onChange`.
 
 **Never:**
 - Use `document.addEventListener` directly — always use `registerDomEvent`.
 - Access `app.workspace.containerEl` directly for DOM manipulation when a Workspace API exists.
-- Write to the vault without `vault.modify` or `vault.create` — raw `fs` writes bypass Obsidian.
 - Use `setTimeout` or `setInterval` without clearing them in `onunload`.
 - Store state in memory that must survive plugin reload — use plugin settings (`this.loadData`).
+- Use `vault.adapter.*` writes for paths Obsidian tracks — bypasses the editor cache and desyncs disk vs editor.
+- Suppress self-fired vault events at the source via "I'm writing" flags — absorb at the sink (idempotent or window-based).
+- Set `el.className = ...` on Ribbon, Status Bar, Setting items, or any Obsidian-managed element — overwrites Obsidian's layout classes.
+- Pass `typedArray.buffer` to a binary write call without verifying it's the exact slice — `subarray()` results expose the entire backing ArrayBuffer.
+- Pass an OS-absolute path through `normalizePath` — it strips leading `/` and silently re-roots inside the vault.
+- Persist credentials or per-device state in `data.json` — Obsidian Sync replicates `data.json` byte-for-byte.
 
 ## Reference Materials
 
-- `reference/obsidian-api.md` — obsidian api
+- `reference/obsidian-api.md` — API patterns, lifecycle/DOM/settings/vault subtleties, misc gotchas, concurrency, anti-pattern catalog
+- `reference/testing-patterns.md` — Vitest setup, mock parity, live-test discipline, hot-reload, `obsidianmd/*` lint rationale
+- `reference/architectural-patterns.md` — adapter layout, permission/trust boundaries, audit log shape, UI patterns, build/bundle/release (load when designing structure beyond a few hundred LOC)
+- `reference/path-sanitization.md` — deterministic 10-step pipeline for OS-FS writes outside the vault
+- `reference/user-extensibility.md` — trust model, hook policy, `require.cache` eviction (load only when the plugin executes user-authored code)
 
 ## Workflow
 
@@ -142,8 +159,30 @@ Flag direct DOM manipulation bypassing Obsidian API as HIGH.
 
 Flag Node.js-only APIs (`fs`, `path`, `child_process`) used without `Platform.isDesktop` guard as HIGH.
 
-### 9. Report
+### 9. Scan for Vault Write Traps
+
+```bash
+grep -rn "vault\.adapter\.\(write\|writeBinary\|rename\|remove\)" "$TARGET" 2>/dev/null
+grep -rn "vault\.delete\|adapter\.remove" "$TARGET" 2>/dev/null
+grep -rn "vault\.read.*vault\.modify\|read(.*).*modify(" "$TARGET" 2>/dev/null
+grep -rn "normalizePath" "$TARGET" 2>/dev/null
+```
+
+Flag adapter-layer writes on tracked paths as HIGH (use `vault.modify` / `vault.process`). Flag `vault.delete` as MEDIUM (prefer `fileManager.trashFile`). Flag read-modify-write sequences as MEDIUM (prefer `vault.process` to avoid TOCTOU). Flag any `normalizePath(absolutePath)` call as CRITICAL.
+
+### 10. Scan for Lifecycle and Settings Issues
+
+```bash
+grep -rn "workspace\.on(\s*['\"]layout-ready" "$TARGET" 2>/dev/null
+grep -rn "workspace\.getLeaf(false)" "$TARGET" 2>/dev/null
+grep -rn "el\.className\s*=" "$TARGET" 2>/dev/null
+grep -rn "\bdocument\.activeElement\b" "$TARGET" 2>/dev/null
+```
+
+Flag `workspace.on('layout-ready', ...)` as HIGH (use `app.workspace.onLayoutReady` instead). Flag `workspace.getLeaf(false)` in ribbon/command handlers as HIGH (does not reuse leaves). Flag `el.className =` on plugin-managed elements as HIGH. Flag `document.activeElement` as MEDIUM (use `activeDocument.activeElement` for popout safety).
+
+### 11. Report
 
 Group by violation kind. Include concrete Obsidian API replacement for each.
 
-Read `reference/obsidian-api.md` for API mapping table.
+Read `reference/obsidian-api.md` for the full API/anti-pattern mapping. Read `reference/testing-patterns.md` for test-side issues.

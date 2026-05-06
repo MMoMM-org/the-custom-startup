@@ -27,3 +27,6 @@ docs/ai/external/
 modules/satori/node_modules/
 modules/satori/dist/
 modules/satori/.satori/
+
+# Local scratch / handoff buffers
+tmp/
