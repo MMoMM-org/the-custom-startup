@@ -17,6 +17,7 @@
 # Exit: 0 if all checks pass; non-zero (fail count) otherwise.
 
 set -uo pipefail
+# set -e intentionally omitted — non-zero exits from grep/assert must not abort the harness.
 
 # ---------------------------------------------------------------------------
 # Locate templates directory
@@ -52,10 +53,21 @@ assert_file_exists() {
 
 assert_contains() {
   local label="$1" needle="$2" haystack="$3"
+  # -i: headings are capitalised; case-insensitive match is intentional.
   if printf '%s\n' "$haystack" | grep -qiF "$needle"; then
     pass "$label"
   else
     fail "$label" "expected to contain: $(printf '%q' "$needle")"
+  fi
+}
+
+assert_not_contains() {
+  local label="$1" needle="$2" haystack="$3"
+  # -i: case-insensitive match — same idiom as assert_contains, inverted.
+  if printf '%s\n' "$haystack" | grep -qiF "$needle"; then
+    fail "$label" "expected NOT to contain: $(printf '%q' "$needle")"
+  else
+    pass "$label"
   fi
 }
 
@@ -65,7 +77,6 @@ assert_contains() {
 read_template() {
   local path="$1"
   if [ -f "$path" ]; then
-    # shellcheck disable=SC2155
     local content
     content="$(cat "$path")"
     printf '%s' "$content"
@@ -157,13 +168,13 @@ scenario_tcs_plugin() {
   assert_minimum_pages "tcs-plugin" "$content"
   assert_readme_index  "tcs-plugin" "$content"
 
-  # TCS-plugin-specific extra: "components" or "per-component reference"
+  # TCS-plugin-specific extra: "per-component reference" or "components-reference.md"
   if printf '%s\n' "$content" | grep -qiF "per-component reference" ||
-     printf '%s\n' "$content" | grep -qiF "components"; then
-    pass "[tcs-plugin] mentions per-component reference or components"
+     printf '%s\n' "$content" | grep -qiF "components-reference.md"; then
+    pass "[tcs-plugin] mentions per-component reference or components-reference.md"
   else
-    fail "[tcs-plugin] mentions per-component reference or components" \
-         "neither 'per-component reference' nor 'components' found"
+    fail "[tcs-plugin] mentions per-component reference or components-reference.md" \
+         "neither 'per-component reference' nor 'components-reference.md' found"
   fi
 }
 
@@ -181,6 +192,14 @@ scenario_generic() {
 
   assert_minimum_pages "generic" "$content"
   assert_readme_index  "generic" "$content"
+
+  # Generic skeleton must NOT contain type-specific extras.
+  # Use discriminating page filenames rather than bare type names (the intro prose
+  # of skeleton-generic.md names the other types as counterexamples — that is expected).
+  assert_not_contains "[generic] must NOT contain settings-reference (obsidian page)" "settings-reference" "$content"
+  assert_not_contains "[generic] must NOT contain quickstart"                          "quickstart"         "$content"
+  assert_not_contains "[generic] must NOT contain components-reference"                "components-reference" "$content"
+  assert_not_contains "[generic] must NOT contain tcs-plugin"                          "tcs-plugin"         "$content"
 }
 
 # ---------------------------------------------------------------------------
