@@ -5,15 +5,15 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-05-06 |
-| **Current Phase** | PRD |
+| **Current Phase** | SDD |
 | **Last Updated** | 2026-05-06 |
 
 ## Documents
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| requirements.md | in_progress | Drafted; 22 Gherkin acceptance criteria; 0 [NEEDS CLARIFICATION] markers; awaiting Marcus approval |
-| solution.md | pending | Awaiting SDD authoring |
+| requirements.md | completed | 22 Gherkin ACs; 0 markers; PRD reviewed and approved by Marcus |
+| solution.md | in_progress | 7/7 ADRs confirmed; multi-page corpus design + generic personas resolved per Marcus's inline notes; awaiting final approval before PLAN |
 | plan/ | pending | Awaiting PLAN authoring |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
@@ -29,6 +29,9 @@
 | 2026-05-06 | No telemetry in v1 | Marcus's choice: KPIs verified from git artifacts and `docs/.reader-test/` reports; no event pipeline. v2 may revisit via `tcs-helper:doc-stats` |
 | 2026-05-06 | extract scope: settings only (TS / JSON Schema / Pydantic) in v1 | Manifest-derived "Plugin Metadata" deferred to v2 to keep parser surface area focused |
 | 2026-05-06 | User research scope: solo-author n=1 (Marcus) for v1 | Recruiting other TCS plugin authors deferred to v2; v1 dogfood on MiYo + TCS plugins owned by Marcus |
+| 2026-05-06 | ADR-1..7 confirmed in SDD | Mode router (1), claude -p subprocess (2), stateless review (3), persona override = replace+opt-in extends (4), separate parser scripts with explicit dependency reporting (5), gap report inline only (6), single /doc-product slash with mode arg (7) |
+| 2026-05-06 | Persona language: generic + LLM extracts specifics from doc | Default personas avoid project-type and OS hardcoding; reader resolves "Obsidian Plugin"/"macOS"/etc. from the doc itself; project override for edge cases |
+| 2026-05-06 | Multi-page corpus per question | Each persona question declares `pages: [...]`; skill concatenates listed pages into a single corpus per `claude -p` call. Tests both navigation and content in one shot. Default for built-ins: README.md + topic page |
 
 ## Context
 
