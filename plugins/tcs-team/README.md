@@ -2,7 +2,7 @@
 
 **Specialized agent library for Claude Code with consolidated, high-signal activities for software delivery.**
 
-The `team` plugin provides **7 specialized roles**, **15 agents** (14 activity-based + the-chief), and **16 reusable skills**. This consolidation keeps specialist depth while reducing overlap and context bloat.
+The `team` plugin provides **7 specialized roles**, **15 agents** (14 activity-based + the-chief), and **15 reusable skills**. This consolidation keeps specialist depth while reducing overlap and context bloat.
 
 ---
 
@@ -100,8 +100,7 @@ skills: project-discovery, pattern-detection, api-contract-design
 | | `feature-prioritization` | RICE/MoSCoW/Kano/value-effort prioritization |
 | | `requirements-elicitation` | Requirement gathering, conflict resolution, acceptance criteria |
 | **Design** | `user-research` | Research planning, evidence synthesis, personas, journey mapping |
-| **Development** | `agentic-patterns` | Multi-agent orchestration and agentic design patterns |
-| | `api-contract-design` | REST/GraphQL contract design and versioning |
+| **Development** | `api-contract-design` | REST/GraphQL contract design and versioning |
 | | `architecture-selection` | Pattern selection for monolith/microservices/serverless/event-driven |
 | | `domain-modeling` | Domain + data modeling, invariants, schema evolution |
 | | `frontend-patterns` | Frontend component patterns and UI architecture |

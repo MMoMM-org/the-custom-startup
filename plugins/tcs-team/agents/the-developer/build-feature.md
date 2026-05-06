@@ -1,7 +1,7 @@
 ---
 name: build-feature
 description: PROACTIVELY build features across any technology layer. MUST BE USED when implementing UI components, API endpoints, services, database logic, or integrations. Automatically invoke for any "build", "implement", "create", or "add" requests involving code. Includes component architecture, API design, domain modeling, and state management. Examples:\n\n<example>\nContext: The user needs to build a UI component.\nuser: "We need a reusable data table component with sorting and pagination"\nassistant: "I'll use the build-feature agent to create the data table component with proper state management and accessibility."\n<commentary>\nUI component building needs the build-feature agent for architecture and implementation.\n</commentary>\n</example>\n\n<example>\nContext: The user needs to build an API endpoint.\nuser: "Create a REST API for user management with CRUD operations"\nassistant: "Let me use the build-feature agent to design and implement the user management API with proper validation and error handling."\n<commentary>\nAPI implementation needs the build-feature agent for contract design and business logic.\n</commentary>\n</example>\n\n<example>\nContext: The user needs to build domain logic.\nuser: "Implement the order processing workflow with inventory checks"\nassistant: "I'll use the build-feature agent to model the order domain and implement the processing workflow with proper business rules."\n<commentary>\nDomain logic implementation needs the build-feature agent for modeling and validation.\n</commentary>\n</example>
-skills: project-discovery, pattern-detection, code-quality-review, api-contract-design, domain-modeling, testing, agentic-patterns, frontend-patterns
+skills: project-discovery, pattern-detection, code-quality-review, api-contract-design, domain-modeling, testing, frontend-patterns
 model: sonnet
 color: green
 ---
@@ -77,6 +77,18 @@ Evaluate target. First match wins.
 | Database operation | Transaction rollback, log details, return generic error | Never expose DB errors to client |
 | External service timeout | Fallback value or graceful degradation | Timeout + fallback + alert |
 | Unexpected runtime error | Catch at boundary, log full context, return safe error | Error boundary pattern |
+
+## Decision: Agentic AI Features
+
+When the target involves AI agents, chat interfaces, tool-calling, RAG, or multi-step AI workflows, fetch current documentation before designing the integration — APIs in this space change fast and signatures must be verified against current docs:
+
+| Framework | llms.txt URL | Use for |
+|---|---|---|
+| LangChain | `https://docs.langchain.com/llms.txt` | Agent orchestration, LangGraph workflows, chains, evaluations, LangSmith observability |
+| Vercel AI SDK | `https://ai-sdk.dev/llms.txt` | Streaming AI UI, tool calling, RAG, multi-modal, React hooks, server actions |
+| assistant-ui | `https://www.assistant-ui.com/llms.txt` | React chat UI components, runtime integrations, thread management |
+
+Detect which frameworks are relevant before fetching — only pull docs that match the target. Note breaking changes or version-specific behavior. Do not assume API signatures without consulting current documentation.
 
 ## Decision: Testing Strategy
 
