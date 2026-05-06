@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Review Mode and Reader-Test Engine"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -112,16 +112,35 @@ This phase delivers a working `review` mode that produces a gap report when invo
      - [x] Strict 100% required-question pass/fail logic enforced `[ref: SDD/ADR-3 + EARS criterion]`
      - [x] Performance target met `[ref: SDD/Quality Requirements — Performance]`
 
-- [ ] **T2.6 Phase 2 Validation** `[activity: validate]`
+- [x] **T2.6 Phase 2 Validation** `[activity: validate]`
 
-  - Run `/skill-author audit` on review mode files.
-  - Run end-to-end review against a known-bad fixture (e.g. an early miyo-tomo README snapshot if available, or a stripped-down test fixture).
-  - Verify gap report renders entirely inline; no `.reader-test/` directory created (per ADR-3).
-  - Verify against SDD §Acceptance Criteria — Review mode (all 7 EARS criteria pass).
-  - If any deviation from SDD was required, log in Deviations.
+  - [x] `/skill-author audit` on doc-product skill — PASS. SKILL.md frontmatter, PICS structure, description quality, size limits all green. modes/review.md is internally consistent and enforces ADR-6 (no `Write` tool for gap report).
+  - [x] End-to-end review against known-bad fixture — exercised via `tests/run-review.test.sh` Scenario 2 (`p1/q1` returns `found: no` → outcome=FAIL, exit 1, gap named); 19 assertions across 7 scenarios pass; wall-clock 1.165s vs 60s SDD target.
+  - [x] Gap report renders entirely inline; no `.reader-test/` directory created. Verified by `ls -la .reader-test` (No such file). modes/review.md:135 explicit "do not use the `Write` tool"; run-review.sh emits aggregate JSON to stdout only.
+  - [x] SDD §Acceptance Criteria — Review mode (all EARS criteria mapped):
+    - [x] Load personas via lib-personas.sh `resolve_active_persona_set` (defaults + ADR-4 override)
+    - [x] One claude -p subprocess per persona × question via reader-test.sh
+    - [x] BEGIN/END delimiters + `(page not found in repo)` for missing pages (reader-test.sh:126-134)
+    - [x] Records `found, answer, unclear, guessed, page_used` (reader-test.sh JSON envelope)
+    - [x] Generic personas (templates/personas-default.md, T2.1)
+    - [x] FAIL when any required persona has `found in {partial, no}` on required question (run-review.sh:338-347)
+    - [x] Non-interactive context + FAIL → `exit 1` (run-review.sh:363-364) + `<!-- DOC-PRODUCT-REVIEW: FAIL -->` marker
+    - [x] Infrastructure errors recorded, continue remaining tuples, NOT contributing to FAIL (Fixture-4 rule, S7 covers this)
+    - [x] Gap reports NOT persisted to disk (ADR-6) — modes/review.md:135 + run-review.sh stdout-only
+  - [x] Deviations logged below.
 
 ---
 
 ## Deviations
 
-- **Plan checkbox bookkeeping (orchestrator-introduced)**: T2.1's checkbox flip (`[ ]` → `[x]`) was applied to `phase-2.md` by the orchestrator after commit `6cbb6ef` (T2.1's implementer commit) and was carried into the working tree of `5d5c941` (T2.4's commit). Reading `git log -- plan/phase-2.md` will show T2.1's tick landing in T2.4's commit, not T2.1's. No code-state divergence — only the plan-file history is misleading. Future tasks should flip the checkbox **inside** the implementer commit rather than as a separate orchestrator edit.
+- **Plan checkbox bookkeeping (orchestrator-introduced, T2.1)**: T2.1's checkbox flip (`[ ]` → `[x]`) was applied to `phase-2.md` by the orchestrator after commit `6cbb6ef` (T2.1's implementer commit) and was carried into the working tree of `5d5c941` (T2.4's commit). Reading `git log -- plan/phase-2.md` will show T2.1's tick landing in T2.4's commit, not T2.1's. No code-state divergence — only the plan-file history is misleading. Subsequent tasks (T2.2, T2.3, T2.5) flipped checkboxes inside the implementer commit per the corrected pattern.
+
+- **Perl-based timeout fallback (T2.3)**: GNU `timeout` (from coreutils) is not installed on the dev machine. `scripts/reader-test.sh` implements a Perl-based `_run_with_timeout` that triggers when `timeout` is absent. Perl ships with macOS by default; the Perl path uses `fork`+`alarm` and exits 124 on timeout (matching GNU timeout's convention). Script prefers GNU `timeout` when on PATH. Exercised by `tests/reader-test.test.sh` Scenario 7 (STUB_MODE=hang + READER_TEST_TIMEOUT=1s, ~1s wall-clock) which proved the fallback catches the timeout deterministically. Unrelated bug fixed during S7 implementation: original `sleep 300` stub forked a grandchild that kept the stdout capture pipe open after SIGKILL → switched to `exec sleep 300` so the signal hits the sleeping process directly.
+
+- **macOS awk compatibility (T2.2)**: macOS one-true-awk 20200816 rejects `!` as a unary operator inside `if()` and `&&!/pattern/` compound patterns. `scripts/lib-personas.sh` rewrites all such constructs to use `if (x == 0)` and explicit `match()` guards. Documented inline in the script header. CON-9 (Bash 3.2 compatibility) was preserved.
+
+- **Sandbox `mktemp -d` workaround (tests only)**: Sandbox blocks `mktemp -d` even with `$TMPDIR` set. Test runners (`tests/lib-personas.test.sh`, `tests/reader-test.test.sh`, `tests/run-review.test.sh`) use explicit `mkdir -p /tmp/claude-501/...`. Test-environment-only; production scripts use `$TMPDIR` or `git rev-parse --show-toplevel` correctly.
+
+- **PATH-stripping strategy for `claude`-missing scenario (T2.5 S5)**: The real `claude` binary lives at `/Users/marcus/.local/bin/claude` (a directory whose name does not contain "claude"). The test removes the exact directory of the real `claude` binary from PATH rather than pattern-matching on path components. Robust on this machine but worth noting for portability.
+
+- **Concurrency tracker rewrite (T2.5 S4)**: Initial `_stub_concurrency` had a TOCTOU race on `max_file` read-modify-write. Replaced with append-only `START <pid>` / `STOP <pid>` event log and post-run awk peak-overlap scan. Race window eliminated; assertion still verifies `max_concurrent ≤ READER_TEST_PARALLEL`.

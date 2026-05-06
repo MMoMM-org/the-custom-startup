@@ -14,7 +14,7 @@
 |----------|--------|-------|
 | requirements.md | completed | 22 Gherkin ACs; 0 markers; PRD reviewed and approved by Marcus |
 | solution.md | completed | 7/7 ADRs confirmed; multi-page corpus + generic personas resolved; SDD approved |
-| plan/ | in_progress | 5 phases (skeleton/router → review → extract → plan+write → dogfood); 27 tasks total. Phase 1 ✅ completed 2026-05-06 (skill scaffolded, mode router live, plugin bumped 3.2.0→3.3.0). Phases 2-5 pending. |
+| plan/ | in_progress | 5 phases (skeleton/router → review → extract → plan+write → dogfood); 27 tasks total. Phase 1 ✅ completed 2026-05-06 (skill scaffolded, mode router live, plugin bumped 3.2.0→3.3.0). Phase 2 ✅ completed 2026-05-06 (review mode + reader-test engine live: lib-personas.sh, reader-test.sh, run-review.sh + 70 test assertions across 3 runners; 6 deviations logged in phase-2.md). Phases 3-5 pending. |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
