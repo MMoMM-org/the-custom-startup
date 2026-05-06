@@ -17,4 +17,4 @@
 
 ## Critical Documentation
 <!-- Add important docs here when created — Claude loads these on demand -->
-<!-- - [Architecture Overview](../architecture/overview.md) -->
+- [Skill and Agent Design](../../about/skill-and-agent-design.md) — when to use skill vs subagent vs slash command, one-to-many extraction threshold, receptionist pattern, anti-patterns

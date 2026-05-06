@@ -2,6 +2,8 @@
 
 All 20 skills provided by the `tcs-workflow` plugin.
 
+For the design rationale behind choosing a skill over a subagent or inlining capability into an agent, see [skill-and-agent-design.md](../about/skill-and-agent-design.md).
+
 ---
 
 ## Decision Tree
