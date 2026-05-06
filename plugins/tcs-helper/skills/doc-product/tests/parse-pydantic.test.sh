@@ -236,14 +236,26 @@ scenario_4() {
 
 # ---------------------------------------------------------------------------
 # Scenario 5: python3 not on PATH → ADR-5 error format, exit 2
+#
+# Strategy: build a minimal stub PATH directory that contains bash (symlink)
+# but no python3, so command -v python3 fails inside the parser while the
+# shell itself still runs. Using PATH=/var/empty would kill bash too.
 # ---------------------------------------------------------------------------
 scenario_5() {
   printf '\n--- Scenario 5: python3 not on PATH → ADR-5 missing-dep error ---\n'
 
+  local stubdir
+  stubdir="$(_make_tmpdir)"
+
+  # Provide bash so the script shebang / set -euo pipefail works
+  ln -sf "$(command -v bash)" "${stubdir}/bash"
+
   local stderr exit_code
   exit_code=0
-  stderr="$(PATH="/var/empty" bash "$PARSER" "${FIXTURES}/dataclass.py" 2>&1 >/dev/null)" \
+  stderr="$(PATH="${stubdir}" bash "$PARSER" "${FIXTURES}/dataclass.py" 2>&1 >/dev/null)" \
     || exit_code=$?
+
+  rm -rf "$stubdir"
 
   assert_eq "S5: exit code 2" "2" "$exit_code"
   assert_contains "S5: error names python3" "python3" "$stderr"
