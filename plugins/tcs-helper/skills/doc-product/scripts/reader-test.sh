@@ -211,11 +211,22 @@ if ! RESULT="$(_run_with_timeout "$READER_TEST_TIMEOUT" \
 fi
 
 # ---------------------------------------------------------------------------
-# Validate JSON shape via jq; fall back to unparseable_response on failure
+# Unwrap claude -p --output-format json envelope and validate inner shape
+#
+# `claude -p --output-format json` returns a wrapper object:
+#   {"type":"result","subtype":"success","result":"<inner-JSON-as-string>",...}
+# The model's actual JSON (with .found etc.) is nested under .result as a
+# stringified payload. We must:
+#   1. Extract .result from the outer wrapper.
+#   2. Parse it as JSON via `fromjson`.
+#   3. Verify it has the .found field this skill contracts on.
+# Any failure (no wrapper, no .result, .result not JSON, no .found) → emit
+# the unparseable_response sentinel JSON and exit 0.
 # ---------------------------------------------------------------------------
-if ! printf '%s\n' "$RESULT" | jq -e '.found' >/dev/null 2>&1; then
+INNER="$(printf '%s\n' "$RESULT" | jq -c 'try (.result | fromjson) catch empty' 2>/dev/null || true)"
+if [ -z "$INNER" ] || ! printf '%s\n' "$INNER" | jq -e '.found' >/dev/null 2>&1; then
   printf '{"found":"no","answer":null,"unclear":["reader-test malformed response"],"guessed":[],"page_used":null,"error":"unparseable_response"}\n'
   exit 0
 fi
 
-printf '%s\n' "$RESULT"
+printf '%s\n' "$INNER"
