@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.4.1] - 2026-05-07
+
+### Changed (breaking — slash command rename)
+
+- **Skill renamed `doc-product` → `claude-docs`** — initial dogfood feedback from Marcus: the v1 slash command `/doc-product` was unintuitive in TCS / MiYo contexts. Renamed throughout: skill directory (`plugins/tcs-helper/skills/doc-product/` → `plugins/tcs-helper/skills/claude-docs/`), `name:` frontmatter field, active-skill announcement (`tcs-helper:doc-product` → `tcs-helper:claude-docs`), all `/doc-product {plan|write|extract|review}` slash command invocations across the four mode files, the gap-report template, the personas-default header, the `lib-personas.sh` reference, the `write-mode.test.sh` test assertions, and "the doc-product skill" prose in error messages and template intros. Spec ID `010-doc-product-skill` preserved as a historical reference (the spec name is stable; only the skill identity changed). The output directory `docs/` is **unchanged** — the skill still writes user-facing documentation to a target repo's `docs/` tree.
+
+  All 369 test assertions across 13 test files green. The previous `/doc-product` invocation is no longer available; users invoke `/claude-docs {plan|write|extract|review}` instead.
+
 ## [3.4.0] - 2026-05-07
 
 ### Added

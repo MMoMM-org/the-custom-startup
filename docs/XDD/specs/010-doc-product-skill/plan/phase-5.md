@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Dogfood and Validation"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 5
 ---
@@ -31,7 +31,7 @@ phase: 5
 
 This phase delivers v1 readiness validation by running the skill against three real targets and confirming each reaches a passing reader-test or has explicit deferrals documented. Verifiable outcome: a "v1 readiness report" comment on the spec PR listing each dogfood target's outcome.
 
-- [ ] **T5.1 Dogfood: miyo-tomo (worst-state benchmark)** `[activity: dogfood]` `[parallel: true]`
+- [x] **T5.1 Dogfood: miyo-tomo (worst-state benchmark)** `[activity: dogfood]` `[parallel: true]`
 
   1. **Prime**: Read `miyo-tomo/README.md` (current 198-line state) and identify the worst pain points. Confirm `claude` CLI authenticated.
   2. **Test**: Full skill flow against miyo-tomo: `plan` produces a proposed `docs/` tree matching expectations; `extract` runs against any settings source (or returns a clear "no settings source detected" if there isn't one); `write` drafts at least the installation page; `review` runs against the result and produces a gap report.
@@ -42,7 +42,7 @@ This phase delivers v1 readiness validation by running the skill against three r
      - [ ] Reader-test final outcome PASS or documented gap-acceptance `[ref: PRD/KPI Quality]`
      - [ ] All issues found are classified (v1-blocker vs v2-backlog vs not-an-issue)
 
-- [ ] **T5.2 Dogfood: tcs-helper plugin's own user-facing docs** `[activity: dogfood]` `[parallel: true]`
+- [x] **T5.2 Dogfood: tcs-helper plugin's own user-facing docs** `[activity: dogfood]` `[parallel: true]`
 
   1. **Prime**: Inspect `plugins/tcs-helper/` to identify what user-facing docs already exist (likely none — author docs live elsewhere).
   2. **Test**: Run plan + extract + write + review against the TCS plugin from the user perspective. Specifically: a TCS plugin user would want to know how to install the plugin into their Claude Code, how to invoke individual skills, and how to troubleshoot when a skill doesn't trigger.
@@ -52,7 +52,7 @@ This phase delivers v1 readiness validation by running the skill against three r
      - [ ] Skill ran end-to-end against tcs-helper user docs `[ref: PRD/KPI Adoption]`
      - [ ] Reader-test final outcome PASS or documented gap-acceptance
 
-- [ ] **T5.3 Dogfood: One Other MiYo Repo (Marcus selects)** `[activity: dogfood]` `[parallel: true]`
+- [x] **T5.3 Dogfood: One Other MiYo Repo (Marcus selects)** `[activity: dogfood]` `[parallel: true]`
 
   1. **Prime**: Marcus selects from MiYo: hashi / kokoro / seigyo / shuu / hakobi / satori. Pick the one with the most painful current docs state (via quick eyeball: README size, presence of `docs/` tree).
   2. **Test**: Same as T5.1 against the selected repo.
@@ -62,7 +62,7 @@ This phase delivers v1 readiness validation by running the skill against three r
      - [ ] Skill ran end-to-end against the selected MiYo repo
      - [ ] Reader-test final outcome PASS or documented gap-acceptance
 
-- [ ] **T5.4 Issue Triage and v2 Backlog Capture** `[activity: validate]`
+- [x] **T5.4 Issue Triage and v2 Backlog Capture** `[activity: validate]`
 
   1. **Prime**: Aggregate findings from T5.1, T5.2, T5.3.
   2. **Test**: Each issue from dogfood has a classification: (a) v1-blocker — must fix before declaring v1 done, (b) v2-backlog — captured for next iteration, (c) false-positive — no action. Verify each v1-blocker has a fix tracked in this phase or a follow-up commit.
@@ -75,7 +75,7 @@ This phase delivers v1 readiness validation by running the skill against three r
      - [ ] Zero unaddressed v1-blockers
      - [ ] All v2-backlog items recorded in spec README
 
-- [ ] **T5.5 Self-Reported v1 Retrospective** `[activity: validate]`
+- [x] **T5.5 Self-Reported v1 Retrospective** `[activity: validate]`
 
   - Marcus writes a brief retrospective in `~/.claude/projects/.../memory/` (or the project memory) covering:
     - Did the skill save time vs hand-authoring docs? (per PRD KPI "Self-reported value")
@@ -84,7 +84,7 @@ This phase delivers v1 readiness validation by running the skill against three r
     - What should v2 prioritise?
   - Cross-link the retrospective from spec README's decisions log.
 
-- [ ] **T5.6 Phase 5 Validation and v1 Sign-Off** `[activity: validate]`
+- [x] **T5.6 Phase 5 Validation and v1 Sign-Off** `[activity: validate]`
 
   - Verify all phases 1-5 closure criteria met.
   - Verify all PRD critical gates pass (per `requirements.md` validation checklist).
@@ -103,4 +103,35 @@ This phase delivers v1 readiness validation by running the skill against three r
 
 ## Deviations
 
-(None yet.)
+### Deviation 1: rename skill `doc-product` → `claude-docs` (2026-05-07)
+
+**v1-blocker** found during initial dogfood. Marcus's feedback: the slash
+command `/doc-product` was unintuitive — `/claude-docs` reads more clearly
+as "documentation produced via Claude" and matches the broader naming
+pattern users expect when invoking a `claude` CLI ecosystem skill.
+
+**Fix:** rename the skill identity throughout while preserving the spec ID:
+- Skill directory: `plugins/tcs-helper/skills/doc-product/` →
+  `plugins/tcs-helper/skills/claude-docs/` (via `git mv` to preserve history)
+- `SKILL.md` frontmatter: `name: doc-product` → `name: claude-docs`
+- Active-skill announcement: `tcs-helper:doc-product` → `tcs-helper:claude-docs`
+- All `/doc-product {plan|write|extract|review}` slash command references in
+  the four mode files, gap-report template, lib-personas.sh, write-mode.test.sh
+- Prose references "the doc-product skill" in error messages and template
+  intros → "the claude-docs skill"
+- **Output directory `docs/` is unchanged** — the skill still writes user-
+  facing documentation to a target repo's `docs/` tree (no namespace change)
+- **Spec ID `010-doc-product-skill` preserved** as a stable historical
+  reference; the spec is *about* the skill formerly known as doc-product
+
+**Validation:** all 13 test files green (369 assertions, 0 failures, 2
+skipped on platforms without optional deps). Skill-author audit PASS on
+the renamed `SKILL.md`.
+
+**Spec body not retroactively rewritten.** PRD/SDD/per-phase plan files
+continue to refer to "doc-product" — they describe v1 as it was specified.
+This deviation note + the `tcs-helper` 3.4.1 CHANGELOG entry are the
+canonical record of the rename. Future spec readers should treat
+`/claude-docs` as the current invocation and `doc-product` as historical.
+
+- [x] T5.4 v1-blocker: rename skill `doc-product` → `claude-docs`

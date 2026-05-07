@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-05-06 |
-| **Current Phase** | PLAN |
-| **Last Updated** | 2026-05-06 |
+| **Current Phase** | Ready (v1) |
+| **Last Updated** | 2026-05-07 |
 
 ## Documents
 
@@ -14,7 +14,7 @@
 |----------|--------|-------|
 | requirements.md | completed | 22 Gherkin ACs; 0 markers; PRD reviewed and approved by Marcus |
 | solution.md | completed | 7/7 ADRs confirmed; multi-page corpus + generic personas resolved; SDD approved |
-| plan/ | in_progress | 5 phases (skeleton/router → review → extract → plan+write → dogfood); 27 tasks total. Phase 1 ✅ completed 2026-05-06 (skill scaffolded, mode router live, plugin bumped 3.2.0→3.3.0). Phase 2 ✅ completed 2026-05-06 (review mode + reader-test engine live: lib-personas.sh, reader-test.sh, run-review.sh + 70 test assertions across 3 runners; 6 deviations logged in phase-2.md). Phases 3-5 pending. |
+| plan/ | completed | 5/5 phases ✅. Phase 1 (scaffold + router), Phase 2 (review + reader-test engine), Phase 3 (extract + 3 parsers), Phase 4 (plan + write modes), Phase 5 (dogfood + v1 sign-off). 369 test assertions across 13 test files green. v1-blocker from dogfood (skill rename `doc-product` → `claude-docs`, tcs-helper 3.4.1) closed; deviation recorded in `plan/phase-5.md` Deviation 1. Ready for downstream adoption. |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -32,6 +32,8 @@
 | 2026-05-06 | ADR-1..7 confirmed in SDD | Mode router (1), claude -p subprocess (2), stateless review (3), persona override = replace+opt-in extends (4), separate parser scripts with explicit dependency reporting (5), gap report inline only (6), single /doc-product slash with mode arg (7) |
 | 2026-05-06 | Persona language: generic + LLM extracts specifics from doc | Default personas avoid project-type and OS hardcoding; reader resolves "Obsidian Plugin"/"macOS"/etc. from the doc itself; project override for edge cases |
 | 2026-05-06 | Multi-page corpus per question | Each persona question declares `pages: [...]`; skill concatenates listed pages into a single corpus per `claude -p` call. Tests both navigation and content in one shot. Default for built-ins: README.md + topic page |
+| 2026-05-07 | Skill renamed `doc-product` → `claude-docs` (Phase 5 v1-blocker) | Initial dogfood: slash command `/doc-product` was unintuitive; `/claude-docs` reads more clearly and matches the `claude` ecosystem naming. Renamed: skill directory, SKILL.md `name:`, active-skill announcement, all `/doc-product {plan\|write\|extract\|review}` invocations across the skill. Output directory `docs/` unchanged. Spec ID `010-doc-product-skill` preserved as a historical reference. tcs-helper 3.4.0 → 3.4.1. See `plan/phase-5.md` Deviation 1 for full record. |
+| 2026-05-07 | v1 signed off — Phase 5 closed | Dogfood + rename validation complete. All 5 phases ✅ in `plan/README.md`; phase-5.md status: completed; T5.1–T5.6 all checked. Reader-test passed on rendered docs across the dogfood targets; no further v1-blockers. Spec moves to "Ready (v1)". v2 backlog (manifest metadata extraction, multi-class Pydantic, `@example` JSDoc, watch mode, cross-file interface resolution) recorded in `plan/phase-3.md`/`extract.md` Step 8. |
 
 ## Context
 

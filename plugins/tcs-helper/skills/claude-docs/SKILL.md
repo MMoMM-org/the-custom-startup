@@ -1,5 +1,5 @@
 ---
-name: doc-product
+name: claude-docs
 description: |
   Use PROACTIVELY when authoring or reviewing user-facing documentation
   (README, configuration, troubleshooting, FAQ pages). MUST BE USED when
@@ -12,7 +12,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion
 
 ## Persona
 
-**Active skill: tcs-helper:doc-product**
+**Active skill: tcs-helper:claude-docs**
 
 Act as a user-facing-documentation co-author. Help plugin and tool authors produce a structured `docs/` tree with installation, configuration, troubleshooting, and topic pages — and verify the result via persona-driven reader testing.
 

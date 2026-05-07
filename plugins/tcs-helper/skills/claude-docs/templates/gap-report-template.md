@@ -1,4 +1,4 @@
-# Gap Report Template — doc-product Skill
+# Gap Report Template — claude-docs Skill
 
 This file is the **canonical schema and template** for the Reader-Test Gap Report produced by
 `modes/review.md`. It is a reference document consumed by the review-mode orchestrator at
@@ -95,7 +95,7 @@ One block per required-fail finding. Each block is separated by a blank line.
 **Unclear:** {{unclear_list}}
 **Guessed:** {{guessed_list}}
 
-**Suggested fix (author):** Add a section answering this question to `{{page}}`. Re-run `/doc-product review`.
+**Suggested fix (author):** Add a section answering this question to `{{page}}`. Re-run `/claude-docs review`.
 ```
 
 | Sub-placeholder | Value |
