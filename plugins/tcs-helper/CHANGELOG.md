@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.4.0] - 2026-05-07
+
+### Added
+
+- **`doc-product` skill — Phases 1–4 functional** — Mode-router skill (`/doc-product {plan|write|extract|review}`) for authoring and reviewing user-facing documentation. Implements all four modes per spec-010: `plan` (repo analysis + `docs/` skeleton), `write` (section-by-section drafting via discover → document → review), `extract` (settings → configuration page from TS / JSON Schema / Pydantic sources), `review` (persona-driven reader testing via `claude -p` subprocess). Includes built-in persona library, four skeleton templates, configuration + gap-report templates, and Bash parsers per source type. Phase 5 (dogfood) outstanding.
+
+## [3.3.0] - 2026-05-06
+
+### Added
+
+- **`doc-product` skill scaffold (Phase 1 of spec-010)** — Skill skeleton with mode-router SKILL.md and TODO stubs for the four mode files. Routes `/doc-product {plan|write|extract|review}` via case-insensitive leading-token match with AskUserQuestion fallback. Mode bodies progressively disclosed.
+
 ## [3.2.0] - 2026-04-25
 
 ### Changed
