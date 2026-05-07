@@ -297,7 +297,47 @@ Use relative links (e.g. `[Installation](installation.md)`) — not absolute pat
 
 ---
 
-## Step 7: Final Report
+## Step 7: Update Root README Documentation Section
+
+After all docs/ writes complete, refresh the consumer repo's root `README.md`
+so it has a `## Documentation` section pointing at the new pages. This closes
+the discoverability gap — visitors landing on the GitHub README see a single
+top-level entry point into the docs tree instead of tracking down scattered
+in-flow links.
+
+Invoke the shared helper:
+
+```bash
+bash "${SKILL_ROOT}/scripts/update-readme-docs-section.sh" \
+  --readme   "${REPO_ROOT}/README.md" \
+  --docs-dir "${REPO_ROOT}/docs"
+```
+
+The script is **idempotent** and **non-destructive**:
+
+- If a `<!-- doc-product:documentation:start -->` … `<!-- doc-product:documentation:end -->`
+  marker pair already exists → updates the block content only.
+- If a hand-written `## Documentation` section exists **without markers** →
+  emits a warning and **leaves the README unchanged**. Surface the warning to
+  the author; suggest wrapping the existing section in markers manually if
+  they want auto-refresh.
+- If neither exists → inserts the section before `## License`, or appends if
+  no License heading is present.
+- If the root README is missing entirely → emits a notice and skips. Do not
+  create a README in plan mode.
+
+Page ordering is canonical (`installation`, `setup`, `configuration`, `usage`,
+`template-syntax`, `instructions-json`, `troubleshooting`, `faq`) followed by
+remaining pages alphabetically. Files matching `README.md`, `CLAUDE.md`,
+`AGENTS.md`, or `CONSTITUTION.md` are excluded — they are tree indices or AI
+metadata, not user-facing docs.
+
+Capture the script's first stdout line (`UPDATE …`, `INSERT …`, `APPEND …`, or
+the notice/warning) so the Step 8 final report can surface what happened.
+
+---
+
+## Step 8: Final Report
 
 After all writes complete, print a summary:
 
@@ -318,6 +358,9 @@ Files flagged for manual merge:
 
 Files skipped (not in approved list):
   (none)
+
+Root README:
+  UPDATE  README.md  (Documentation section refreshed)
 
 Next steps:
   - Run `/doc-product write <page>` to draft content for each placeholder page.
