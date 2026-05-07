@@ -674,13 +674,23 @@ Never observed undefined in current Obsidian builds, but the type permits it and
 
 ### `import.meta.url` Is Empty in CJS Bundles
 
-esbuild with `format: "cjs"` does not populate `import.meta.url`. For `createRequire(...)` and other "where am I" code, use `__filename` (the CJS global, valid at runtime in a CJS bundle):
+esbuild with `format: "cjs"` does not populate `import.meta.url`. For `createRequire(...)` and other "where am I" code, use `__filename` (the CJS global, valid at runtime in a CJS bundle).
+
+Do **not** disable an ESLint rule to silence the type complaint — disabled rules block community-plugin submission. Instead, declare `__filename` via the project's TypeScript ambient types (`@types/node` in devDependencies covers it) and use it directly:
 
 ```typescript
 import { createRequire } from "node:module";
-// eslint-disable-next-line @typescript-eslint/prefer-import
 const localRequire = createRequire(__filename);
 ```
+
+If the project deliberately omits `@types/node` to keep the type surface minimal, declare `__filename` locally in a `src/types/runtime-globals.d.ts` ambient file:
+
+```typescript
+// runtime-globals.d.ts
+declare const __filename: string;
+```
+
+Either path keeps every ESLint rule enabled.
 
 ### `app.openWithDefaultApp(path)` Is Vault-Relative Only
 

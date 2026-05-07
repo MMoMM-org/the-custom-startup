@@ -15,7 +15,7 @@ Act as an Obsidian plugin developer. Respect the plugin lifecycle. Never leak li
 ## Interface
 
 ObsidianViolation {
-  kind: LISTENER_LEAK | DOM_BYPASS | MOBILE_INCOMPATIBLE | LIFECYCLE_VIOLATION | VAULT_WRITE_UNGUARDED
+  kind: LISTENER_LEAK | DOM_BYPASS | MOBILE_INCOMPATIBLE | LIFECYCLE_VIOLATION | VAULT_WRITE_UNGUARDED | LINT_RULE_DISABLED
   file: string
   line?: number
   fix: string
@@ -56,6 +56,7 @@ State {
 - Pass `typedArray.buffer` to a binary write call without verifying it's the exact slice — `subarray()` results expose the entire backing ArrayBuffer.
 - Pass an OS-absolute path through `normalizePath` — it strips leading `/` and silently re-roots inside the vault.
 - Persist credentials or per-device state in `data.json` — Obsidian Sync replicates `data.json` byte-for-byte.
+- Disable **any** ESLint rule — no `// eslint-disable`, no `// eslint-disable-line`, no `// eslint-disable-next-line`, no `'rule': 'off'` entries in `.eslintrc*`. The Obsidian community-plugin reviewer bot (`obsidianmd/obsidian-releases`) scans submission PRs for disabled rules and **rejects the plugin from official registration** if any are found. This applies to every rule the project's ESLint config loads — `obsidianmd/*`, `@typescript-eslint/*`, base `eslint:recommended`, and any other plugin. If a rule conflicts with the code, **change the code, not the rule**. Document the workaround in a code comment when the alternative is non-obvious.
 
 ## Reference Materials
 
@@ -181,7 +182,16 @@ grep -rn "\bdocument\.activeElement\b" "$TARGET" 2>/dev/null
 
 Flag `workspace.on('layout-ready', ...)` as HIGH (use `app.workspace.onLayoutReady` instead). Flag `workspace.getLeaf(false)` in ribbon/command handlers as HIGH (does not reuse leaves). Flag `el.className =` on plugin-managed elements as HIGH. Flag `document.activeElement` as MEDIUM (use `activeDocument.activeElement` for popout safety).
 
-### 11. Report
+### 11. Scan for Disabled ESLint Rules (Community-Plugin Submission Blocker)
+
+```bash
+grep -rn -E "eslint-disable|/\*\s*eslint-disable" "$TARGET" --include="*.ts" --include="*.tsx" --include="*.js" 2>/dev/null
+grep -rn -E "['\"][a-z@/-]+['\"]\s*:\s*['\"]?off['\"]?" "$TARGET" --include=".eslintrc*" --include="eslint.config*" 2>/dev/null
+```
+
+Flag **every match** as CRITICAL with kind `LINT_RULE_DISABLED`. The Obsidian community-plugin reviewer bot (`obsidianmd/obsidian-releases`) scans submission PRs for disabled rules and rejects plugins with any disabled rule — `obsidianmd/*`, `@typescript-eslint/*`, or otherwise. There is no "justified disable" exception at the bot. Fix: change the code to satisfy the rule. If the rule is genuinely wrong for the project, raise it upstream — do not disable locally.
+
+### 12. Report
 
 Group by violation kind. Include concrete Obsidian API replacement for each.
 

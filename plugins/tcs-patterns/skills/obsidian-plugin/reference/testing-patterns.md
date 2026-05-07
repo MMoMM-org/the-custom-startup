@@ -110,18 +110,23 @@ Pattern: each test mutates → asserts → explicitly restores its own changes. 
 
 ### Fake Timers vs `prefer-active-window-timers`
 
-`vi.useFakeTimers()` only intercepts global `setInterval` / `setTimeout`. The `obsidianmd/prefer-active-window-timers` lint rule prefers `activeWindow.setInterval`. They cannot both win.
+`vi.useFakeTimers()` only intercepts global `setInterval` / `setTimeout`. The `obsidianmd/prefer-active-window-timers` lint rule prefers `activeWindow.setInterval`. The two patterns conflict — but the resolution is **not** to disable the lint rule. Disabling any `obsidianmd/*` rule (or any ESLint rule at all) blocks community-plugin submission via `obsidianmd/obsidian-releases` (see "Why These Rules Matter" below).
 
-For a plugin with no popout-window code paths, prefer global timers and disable the lint rule inline with a justification comment that names the trade-off:
+The correct resolution is on the test side, not the production side. Production code uses `activeWindow.setInterval` (or `this.registerInterval(window.setInterval(...))`) unconditionally. Tests stub the active-window timer functions directly with `vi.spyOn`:
 
 ```typescript
-// eslint-disable-next-line obsidianmd/prefer-active-window-timers
-// Rationale: vi.useFakeTimers() only intercepts global timers. This plugin
-// has no popout-window code paths, so global timers are safe.
-this.timer = setInterval(() => this.tick(), 1000);
+import { vi } from "vitest";
+
+beforeEach(() => {
+  // Replace activeWindow's timers with controllable doubles.
+  // No useFakeTimers() — it would not intercept activeWindow.* anyway.
+  vi.spyOn(activeWindow, "setInterval").mockImplementation((cb: TimerHandler, ms?: number) => {
+    return scheduleControllable(cb, ms);  // your test-controlled scheduler
+  });
+});
 ```
 
-For a popout-aware plugin, find a different test strategy — the active-window timers matter more than fake-timer convenience.
+Or, when the timer logic is the unit under test, extract the scheduling into a small adapter and inject a fake at the call site. The lint rule stays green; the test still has full control of timing; the plugin remains popout-safe.
 
 ### Privacy Regression as a Build-Failing Grep Test
 
@@ -183,7 +188,7 @@ Workarounds:
 
 ## Why These `obsidianmd/*` ESLint Rules Matter
 
-The `eslint-plugin-obsidianmd` package ships a recommended config — leave it enabled. Concrete bugs each rule has been observed to prevent:
+The `eslint-plugin-obsidianmd` package ships a recommended config — leave it enabled, **and never disable any rule it provides**. Concrete bugs each rule has been observed to prevent:
 
 | Rule | Bug it prevents |
 |---|---|
@@ -194,4 +199,10 @@ The `eslint-plugin-obsidianmd` package ships a recommended config — leave it e
 | `obsidianmd/no-html-element-creation` | Catches direct `createElement` calls; does NOT catch destructured helpers |
 | `obsidianmd/no-forbidden-elements` | Runtime `<style>` injection breaking style ordering |
 
-If a rule must be disabled on a specific line, add a comment naming the bug being accepted — future reviewers can verify the trade-off is still warranted.
+### Community-Plugin Submission Gate
+
+The Obsidian community-plugin reviewer bot at `obsidianmd/obsidian-releases` scans every submission PR for disabled ESLint rules and **rejects the plugin from official registration if any rule is disabled** — whether via line-level `// eslint-disable*` comments, file-level disables, or `'rule': 'off'` entries in `.eslintrc*`. This applies to **every rule the project's ESLint config loads**, not only `obsidianmd/*` — `@typescript-eslint/*`, base `eslint:recommended`, and any other plugin's rules are equally in-scope.
+
+The submission gate has no "justified disable" exception. If a rule conflicts with the code, the only acceptable resolution is to **change the code**, not the rule. If the rule is genuinely wrong for all consumers, raise it upstream with the relevant ESLint plugin maintainers.
+
+This is the single most common reason plugins fail community-plugin review on the first pass.
