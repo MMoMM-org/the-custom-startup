@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PluginConfig",
+  "type": "object",
+  "properties": {
+    "host": {
+      "type": "string",
+      "default": "localhost",
+      "description": "The hostname to connect to."
+    },
+    "port": {
+      "type": "integer",
+      "default": 8080,
+      "description": "The port number."
+    }
+  }
+}

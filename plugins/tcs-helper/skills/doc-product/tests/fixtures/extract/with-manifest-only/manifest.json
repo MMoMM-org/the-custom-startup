@@ -1,0 +1,10 @@
+{
+  "id": "com.example.myplugin",
+  "name": "My Plugin",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "A test plugin manifest.",
+  "author": "Test Author",
+  "authorUrl": "https://example.com",
+  "isDesktopOnly": false
+}
