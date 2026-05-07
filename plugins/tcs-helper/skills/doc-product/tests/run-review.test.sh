@@ -82,13 +82,13 @@ _build_temp_skill() {
 }
 
 # ---------------------------------------------------------------------------
-# Fixture repo: docs/installation.md and docs/configuration.md
+# Fixture repo: claude-docs/installation.md and claude-docs/configuration.md
 # ---------------------------------------------------------------------------
 _setup_fixture_repo() {
   local repo="$1"
-  mkdir -p "${repo}/docs"
-  printf 'Install by running: ./setup.sh\n' > "${repo}/docs/installation.md"
-  printf 'Main config: set TIMEOUT=30 in config.yaml\n' > "${repo}/docs/configuration.md"
+  mkdir -p "${repo}/claude-docs"
+  printf 'Install by running: ./setup.sh\n' > "${repo}/claude-docs/installation.md"
+  printf 'Main config: set TIMEOUT=30 in config.yaml\n' > "${repo}/claude-docs/configuration.md"
 }
 
 # ---------------------------------------------------------------------------
@@ -156,7 +156,7 @@ _stub_happy() {
   cat <<'STUB'
 #!/usr/bin/env bash
 # Stub reader-test.sh — always returns found:yes
-printf '{"found":"yes","answer":"Found the answer.","unclear":[],"guessed":[],"page_used":"docs/installation.md"}\n'
+printf '{"found":"yes","answer":"Found the answer.","unclear":[],"guessed":[],"page_used":"claude-docs/installation.md"}\n'
 exit 0
 STUB
 }
@@ -171,7 +171,7 @@ QUESTION_ID="${2:-}"
 if [ "$PERSONA_ID" = "p1" ] && [ "$QUESTION_ID" = "q1" ]; then
   printf '{"found":"no","answer":"Not described.","unclear":["how to install"],"guessed":[],"page_used":null}\n'
 else
-  printf '{"found":"yes","answer":"Found the answer.","unclear":[],"guessed":[],"page_used":"docs/installation.md"}\n'
+  printf '{"found":"yes","answer":"Found the answer.","unclear":[],"guessed":[],"page_used":"claude-docs/installation.md"}\n'
 fi
 exit 0
 STUB
@@ -190,7 +190,7 @@ EVENTS_FILE="${lock_dir}/events"
 printf 'START %s\n' "\$\$" >> "\$EVENTS_FILE"
 sleep 0.15
 printf 'STOP %s\n' "\$\$" >> "\$EVENTS_FILE"
-printf '{"found":"yes","answer":"ok","unclear":[],"guessed":[],"page_used":"docs/installation.md"}\n'
+printf '{"found":"yes","answer":"ok","unclear":[],"guessed":[],"page_used":"claude-docs/installation.md"}\n'
 exit 0
 STUB
 }
@@ -292,8 +292,8 @@ scenario_2() {
 }
 
 # ---------------------------------------------------------------------------
-# S3: --page scoping → only q1 and q3 run (both on docs/installation.md)
-#     q2 (docs/configuration.md only) must be absent
+# S3: --page scoping → only q1 and q3 run (both on claude-docs/installation.md)
+#     q2 (claude-docs/configuration.md only) must be absent
 # ---------------------------------------------------------------------------
 scenario_3() {
   printf '\n--- S3: --page scoping → only installation.md questions run ---\n'
@@ -311,11 +311,11 @@ scenario_3() {
   output="$(
     export PERSONAS_FILE="$PERSONAS_FIXTURE"
     export REPO_ROOT_OVERRIDE="$repo_dir"
-    bash "${skill_dir}/scripts/run-review.sh" --page docs/installation.md
+    bash "${skill_dir}/scripts/run-review.sh" --page claude-docs/installation.md
   )" || exit_code=$?
 
-  # q1 and q3 are on docs/installation.md → should run
-  # q2 is on docs/configuration.md only → should NOT run
+  # q1 and q3 are on claude-docs/installation.md → should run
+  # q2 is on claude-docs/configuration.md only → should NOT run
   local tuple_count
   tuple_count="$(printf '%s\n' "$output" | jq '.tuples | length' 2>/dev/null || true)"
   if [ "${tuple_count:-0}" -eq 2 ]; then
@@ -410,7 +410,7 @@ scenario_5() {
   stub_content="$(cat <<STUB
 #!/usr/bin/env bash
 printf 'STUB_INVOKED\n' >> '${invocation_log}'
-printf '{"found":"yes","answer":"ok","unclear":[],"guessed":[],"page_used":"docs/installation.md"}\n'
+printf '{"found":"yes","answer":"ok","unclear":[],"guessed":[],"page_used":"claude-docs/installation.md"}\n'
 exit 0
 STUB
 )"

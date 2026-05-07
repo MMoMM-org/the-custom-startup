@@ -75,20 +75,20 @@ Or enter any other page name.
 Resolve the target path:
 
 ```
-target_file = docs/<page_name>.md  (relative to repo root)
+target_file = claude-docs/<page_name>.md  (relative to repo root)
 ```
 
-Use the Read tool to check whether `docs/<page_name>.md` exists.
+Use the Read tool to check whether `claude-docs/<page_name>.md` exists.
 
 ### If the file does NOT exist
 
 When the placeholder is missing, route to plan mode and stop.
 
 ```
-docs/<page_name>.md does not exist.
+claude-docs/<page_name>.md does not exist.
 
 write mode requires a placeholder file to be present before drafting can begin.
-Run `/doc-product plan` first to create the docs/ skeleton, which will produce
+Run `/doc-product plan` first to create the claude-docs/ skeleton, which will produce
 the placeholder for <page_name>.md. Then return to `/doc-product write <page_name>`.
 ```
 
@@ -139,7 +139,7 @@ With the target file contents (from Step 2) and the section structure (from Step
 Report the discovery to the author:
 
 ```
-Current state of docs/<page_name>.md:
+Current state of claude-docs/<page_name>.md:
 
   Approved (will be preserved):
     ## Prerequisites       ← already has content
@@ -164,7 +164,7 @@ Render the full section list for unwritten and missing sections — the order fr
 Present it to the author and AskUserQuestion to confirm before drafting:
 
 ```
-Proposed section structure for the unwritten portions of docs/<page_name>.md
+Proposed section structure for the unwritten portions of claude-docs/<page_name>.md
 (from reference/conventions.md — <page_name> type):
 
   ## Install
@@ -288,7 +288,7 @@ On **Keep-as-is**: treat as Approve — commit the section and move on.
 When the author approves a section (via Approve or Keep-as-is):
 
 Use the **Edit tool** to perform a surgical replacement of only the approved section's
-content in `docs/<page_name>.md`. Do NOT use the Write tool to rewrite the whole file
+content in `claude-docs/<page_name>.md`. Do NOT use the Write tool to rewrite the whole file
 — that would clobber other sections.
 
 The Edit operation replaces:
@@ -328,7 +328,7 @@ The loop ends when:
 After the loop ends, print a summary:
 
 ```
-write mode complete — docs/<page_name>.md
+write mode complete — claude-docs/<page_name>.md
 
 Sections drafted and approved:
   ## Install           ← approved; written to file
@@ -373,8 +373,8 @@ Adjust to reflect what was actually drafted, approved, removed, and left outstan
 | Situation | Behaviour |
 |---|---|
 | No page name provided | AskUserQuestion for page name before proceeding |
-| `docs/<page_name>.md` does not exist | Route to plan mode; stop |
-| `docs/<page_name>.md` is missing a section heading from conventions | Surface as "missing" in Step 4; include in proposal |
+| `claude-docs/<page_name>.md` does not exist | Route to plan mode; stop |
+| `claude-docs/<page_name>.md` is missing a section heading from conventions | Surface as "missing" in Step 4; include in proposal |
 | Page type not in `reference/conventions.md` | AskUserQuestion: closest type or custom list |
 | Required fact missing from repo | AskUserQuestion (Step 6b); no fabrication |
 | Author pauses the session | Stop loop; report what is drafted and what remains |
@@ -390,7 +390,7 @@ Adjust to reflect what was actually drafted, approved, removed, and left outstan
 **Invocation:** `/doc-product write installation`
 
 ```
-Current state of docs/installation.md:
+Current state of claude-docs/installation.md:
 
   Approved (will be preserved):
     (none — file is a full placeholder)
@@ -453,10 +453,10 @@ Can anything be removed from this section to make it clearer or shorter?
 **Invocation:** `/doc-product write migration`
 
 ```
-docs/migration.md does not exist.
+claude-docs/migration.md does not exist.
 
 write mode requires a placeholder file to be present before drafting can begin.
-Run `/doc-product plan` first to create the docs/ skeleton, which will produce
+Run `/doc-product plan` first to create the claude-docs/ skeleton, which will produce
 the placeholder for migration.md. Then return to `/doc-product write migration`.
 ```
 

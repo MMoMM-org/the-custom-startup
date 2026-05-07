@@ -1,6 +1,6 @@
 # Page Type → Section Structure
 
-This file maps each minimum `docs/` page type to a recommended section structure,
+This file maps each minimum `claude-docs/` page type to a recommended section structure,
 the purpose of each section, and a "must include" checklist. `modes/write.md`
 references this map when proposing section structure to the author.
 

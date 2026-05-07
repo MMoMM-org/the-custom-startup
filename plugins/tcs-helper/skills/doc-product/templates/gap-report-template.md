@@ -17,7 +17,7 @@ The following `{{placeholder}}` tokens appear in the schema below. The renderer
 | Placeholder | Type | Description |
 |---|---|---|
 | `{{run_timestamp}}` | ISO 8601 string | UTC timestamp when the review run started, e.g. `2026-05-06T14:32:00Z` |
-| `{{pages_tested}}` | comma-separated paths | All page paths actually evaluated, e.g. `README.md, docs/installation.md` |
+| `{{pages_tested}}` | comma-separated paths | All page paths actually evaluated, e.g. `README.md, claude-docs/installation.md` |
 | `{{persona_count}}` | integer | Total number of active personas |
 | `{{persona_source_label}}` | string | Either `defaults` (built-in `personas-default.md`) or `project override at \`.claude/doc-personas.md\`` |
 | `{{outcome}}` | `PASS` or `FAIL` | FAIL when any required persona has at least one required-question fail; otherwise PASS |

@@ -188,7 +188,7 @@ scenario_7() {
 }
 
 # ---------------------------------------------------------------------------
-# Scenario 8: re-run-existing/ → one typescript line (docs/configuration.md ignored)
+# Scenario 8: re-run-existing/ → one typescript line (claude-docs/configuration.md ignored)
 # ---------------------------------------------------------------------------
 scenario_8() {
   printf '\n--- Scenario 8: re-run-existing/ → one typescript line ---\n'

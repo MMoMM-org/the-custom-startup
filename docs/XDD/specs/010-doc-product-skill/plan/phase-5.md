@@ -103,4 +103,29 @@ This phase delivers v1 readiness validation by running the skill against three r
 
 ## Deviations
 
-(None yet.)
+### Deviation 1: rename output directory `docs/` → `claude-docs/` (2026-05-07)
+
+**v1-blocker** found during initial dogfood. The skill writes user-facing
+documentation into the target repo's `docs/` tree, but most TCS / MiYo target
+repos already have `docs/` for ADRs, project XDD specs, and internal dev notes.
+Writing into `docs/` collides with this prior content (and risks the skill
+either overwriting unrelated files or producing a confusing mixed tree).
+
+**Fix:** rename the output directory to `claude-docs/` everywhere in the skill
+— mode files, scripts (the `run-review.sh` page-scope scanner), templates
+(skeletons, configuration template, gap-report template, persona pages
+references), reference/conventions.md, SKILL.md description and notes-for-
+implementers, plus the test fixtures and assertions. Repo-internal `docs/`
+references that are not the skill's output (e.g. `docs/about/skill-and-agent-
+design.md` in SKILL.md's notes section) are preserved.
+
+**Validation:** all 13 test files green (369 assertions, 0 failures, 2
+skipped on platforms without optional deps). Shellcheck clean.
+
+**Spec body not retroactively rewritten.** The PRD and SDD describe the v1
+intent at the time it was specified. This deviation note + the CHANGELOG
+entry for tcs-helper 3.4.1 are the canonical record of the rename. Future
+spec readers should treat `claude-docs/` as the current convention; `docs/`
+as historical.
+
+- [x] T5.4 v1-blocker: rename `docs/` → `claude-docs/` throughout skill

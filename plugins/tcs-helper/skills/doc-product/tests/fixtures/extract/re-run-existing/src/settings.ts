@@ -1,5 +1,5 @@
 /**
- * Updated settings — the docs/ page is stale relative to this.
+ * Updated settings — the claude-docs/ page is stale relative to this.
  */
 export interface RerunSettings {
   /** Host to connect to. */

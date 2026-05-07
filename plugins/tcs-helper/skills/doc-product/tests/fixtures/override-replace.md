@@ -22,11 +22,11 @@ personas:
       - id: advanced-config
         required: true
         text: "What advanced configuration options are available?"
-        pages: [docs/configuration.md]
+        pages: [claude-docs/configuration.md]
       - id: scripting
         required: false
         text: "Can I script or automate this tool?"
-        pages: [docs/scripting.md]
+        pages: [claude-docs/scripting.md]
 
   - id: contributor
     required: false

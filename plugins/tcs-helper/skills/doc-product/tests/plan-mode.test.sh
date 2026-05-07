@@ -11,7 +11,7 @@
 #   - documents diff logic with Keep / Replace / Merge choices
 #   - documents propose-then-confirm workflow
 #   - documents placeholder-only writes (placeholder + TODO)
-#   - documents docs/README.md index creation
+#   - documents claude-docs/README.md index creation
 #   - documents that files are NEVER silently overwritten
 #   - references the templates/ directory for skeleton location
 #
@@ -123,9 +123,9 @@ assert_contains "A8: placeholder documented" "placeholder"
 assert_contains "A8: TODO documented" "TODO"
 
 # ---------------------------------------------------------------------------
-# A9: Documents docs/README.md index creation
+# A9: Documents claude-docs/README.md index creation
 # ---------------------------------------------------------------------------
-assert_contains "A9: docs/README.md index documented" "docs/README.md"
+assert_contains "A9: claude-docs/README.md index documented" "claude-docs/README.md"
 
 # ---------------------------------------------------------------------------
 # A10: Documents NEVER silently overwriting (never + overwrite)

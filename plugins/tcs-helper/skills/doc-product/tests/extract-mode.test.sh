@@ -10,7 +10,7 @@
 #   - documents multi-source / no-source AskUserQuestion flows
 #   - documents diff logic
 #   - documents manifest-ignore rule
-#   - documents NEVER auto-overwriting docs/configuration.md
+#   - documents NEVER auto-overwriting claude-docs/configuration.md
 #   - references templates/configuration-template.md
 #   - documents marker preservation
 #
@@ -120,10 +120,10 @@ assert_contains "A8: plugin.json explicitly named" "plugin.json"
 assert_contains "A8: pyproject.toml explicitly named" "pyproject.toml"
 
 # ---------------------------------------------------------------------------
-# A9: Documents NEVER auto-overwriting docs/configuration.md
+# A9: Documents NEVER auto-overwriting claude-docs/configuration.md
 # ---------------------------------------------------------------------------
 assert_contains "A9: no silent overwrite stated" "overwrite"
-assert_contains "A9: docs/configuration.md referenced" "docs/configuration.md"
+assert_contains "A9: claude-docs/configuration.md referenced" "claude-docs/configuration.md"
 assert_contains "A9b: first-run write path documented" "First run"
 
 # ---------------------------------------------------------------------------

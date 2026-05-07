@@ -160,13 +160,13 @@ _resolve_scope_pages() {
   if [ -n "$SINCE_REF" ]; then
     # Pages changed since the given git ref
     git diff --name-only "${SINCE_REF}...HEAD" 2>/dev/null \
-      | grep '^docs/.*\.md$' \
+      | grep '^claude-docs/.*\.md$' \
       || true
     return
   fi
 
-  # Default: all docs/*.md under the repo root
-  find "${REPO_ROOT}/docs" -name '*.md' 2>/dev/null \
+  # Default: all claude-docs/*.md under the repo root
+  find "${REPO_ROOT}/claude-docs" -name '*.md' 2>/dev/null \
     | sed "s|^${REPO_ROOT}/||" \
     | sort \
     || true

@@ -1,7 +1,7 @@
 # Run-Review Test Personas Fixture
 # 2 personas × 3 questions for run-review.sh pressure tests.
-# p1 (required): 2 required questions (q1 on docs/installation.md, q2 on docs/configuration.md)
-# p2 (non-required): 1 non-required question (q3 on docs/installation.md)
+# p1 (required): 2 required questions (q1 on claude-docs/installation.md, q2 on claude-docs/configuration.md)
+# p2 (non-required): 1 non-required question (q3 on claude-docs/installation.md)
 
 ```yaml
 personas:
@@ -13,11 +13,11 @@ personas:
       - id: q1
         required: true
         text: "How do I install this software?"
-        pages: [docs/installation.md]
+        pages: [claude-docs/installation.md]
       - id: q2
         required: true
         text: "What is the main configuration option?"
-        pages: [docs/configuration.md]
+        pages: [claude-docs/configuration.md]
 
   - id: p2
     required: false
@@ -27,5 +27,5 @@ personas:
       - id: q3
         required: false
         text: "Are there any prerequisites for installation?"
-        pages: [docs/installation.md]
+        pages: [claude-docs/installation.md]
 ```

@@ -3,8 +3,9 @@ name: doc-product
 description: |
   Use PROACTIVELY when authoring or reviewing user-facing documentation
   (README, configuration, troubleshooting, FAQ pages). MUST BE USED when
-  the user asks to plan a docs/ tree, draft a doc page, extract a configuration
-  reference from settings code, or run a reader test against existing docs.
+  the user asks to plan a claude-docs/ tree, draft a doc page, extract a
+  configuration reference from settings code, or run a reader test against
+  existing docs.
   Trigger phrases: "plan docs", "write configuration page", "review my docs",
   "extract settings into doc", "reader-test the README".
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion
@@ -14,7 +15,9 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion
 
 **Active skill: tcs-helper:doc-product**
 
-Act as a user-facing-documentation co-author. Help plugin and tool authors produce a structured `docs/` tree with installation, configuration, troubleshooting, and topic pages — and verify the result via persona-driven reader testing.
+Act as a user-facing-documentation co-author. Help plugin and tool authors produce a structured `claude-docs/` tree with installation, configuration, troubleshooting, and topic pages — and verify the result via persona-driven reader testing.
+
+The skill writes user-facing docs into `claude-docs/` (not `docs/`) so the output never collides with a target repo's existing `docs/` tree (used for ADRs, project specs, internal dev notes, etc.). The repo's existing `docs/` is left untouched.
 
 This skill is a Receptionist that routes incoming work to one of four modes. Each mode owns its own deeper workflow (in `modes/<mode>.md`); this entry point only dispatches.
 
@@ -48,12 +51,12 @@ DispatchResult {
 
 ## Reference Materials
 
-- `modes/plan.md` — repo analysis + `docs/` skeleton proposal
+- `modes/plan.md` — repo analysis + `claude-docs/` skeleton proposal
 - `modes/write.md` — section-by-section page drafting workflow
 - `modes/extract.md` — settings → configuration page generator
 - `modes/review.md` — persona-driven reader testing via `claude -p`
 - `templates/personas-default.md` — built-in persona library (overridable per project)
-- `templates/skeleton-{obsidian,python,tcs-plugin,generic}.md` — default `docs/` skeletons
+- `templates/skeleton-{obsidian,python,tcs-plugin,generic}.md` — default `claude-docs/` skeletons
 - `templates/configuration-template.md` — output structure for `extract`
 - `templates/gap-report-template.md` — Markdown structure for `review` output
 - `scripts/reader-test.sh` — orchestrates a single `claude -p` reader simulation
@@ -89,4 +92,4 @@ When the mode hands control back, this file ends — there is no post-processing
 
 ## Notes for Implementers
 
-This skill follows the **Receptionist pattern** documented in `docs/about/skill-and-agent-design.md`. The single `SKILL.md` entry point routes to mode bodies via progressive disclosure (mode bodies are loaded only when invoked). Per ADR-1 of spec 010-doc-product-skill, this design was chosen over an agent-with-skills variant or four sibling skills because the modes share the docs/ tree as domain context, are sequential not parallel, and benefit from a single description-driven trigger surface.
+This skill follows the **Receptionist pattern** documented in `docs/about/skill-and-agent-design.md`. The single `SKILL.md` entry point routes to mode bodies via progressive disclosure (mode bodies are loaded only when invoked). Per ADR-1 of spec 010-doc-product-skill, this design was chosen over an agent-with-skills variant or four sibling skills because the modes share the `claude-docs/` tree as domain context, are sequential not parallel, and benefit from a single description-driven trigger surface.

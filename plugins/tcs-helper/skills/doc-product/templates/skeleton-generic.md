@@ -1,16 +1,16 @@
 # Skeleton: Generic
 
-This file describes the proposed `docs/` tree for a repository that does not match
+This file describes the proposed `claude-docs/` tree for a repository that does not match
 a recognised project type (Obsidian plugin, Python tool, or TCS plugin). It contains
 only the four minimum pages plus the index README. `plan` mode reads this skeleton and
 creates the pages listed below as empty placeholder files.
 
 ---
 
-## Proposed docs/ tree
+## Proposed claude-docs/ tree
 
 ```
-docs/
+claude-docs/
 ├── README.md
 ├── installation.md
 ├── configuration.md
@@ -22,21 +22,21 @@ docs/
 
 ## Page Descriptions
 
-### docs/README.md
+### claude-docs/README.md
 
-**Purpose:** Top-level index that orients any reader landing in the `docs/` directory.
+**Purpose:** Top-level index that orients any reader landing in the `claude-docs/` directory.
 Links to every other page so the tree is navigable from the root.
 
 **Suggested section structure:**
 
 - H2 `## Overview` — one paragraph describing what the project does and who it is for.
-- H2 `## Documentation map` — bulleted list of links to every page in `docs/`:
+- H2 `## Documentation map` — bulleted list of links to every page in `claude-docs/`:
   `installation.md`, `configuration.md`, `usage.md`, `troubleshooting.md`.
 - H2 `## Quick links` — optional; direct links to the most common entry points.
 
 ---
 
-### docs/installation.md
+### claude-docs/installation.md
 
 **Purpose:** Guides a new user from zero to a working installation, verifying that
 the software is present and responding.
@@ -51,7 +51,7 @@ the software is present and responding.
 
 ---
 
-### docs/configuration.md
+### claude-docs/configuration.md
 
 **Purpose:** Documents every user-configurable option: name, type, default value,
 and what it controls.
@@ -65,7 +65,7 @@ and what it controls.
 
 ---
 
-### docs/usage.md
+### claude-docs/usage.md
 
 **Purpose:** Shows a user how to accomplish real tasks with the software after
 installation and configuration.
@@ -78,7 +78,7 @@ installation and configuration.
 
 ---
 
-### docs/troubleshooting.md
+### claude-docs/troubleshooting.md
 
 **Purpose:** Helps a user recover from common failure modes without reaching the
 author. Written from the user's symptom.

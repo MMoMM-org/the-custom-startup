@@ -27,7 +27,7 @@ name<TAB>type<TAB>default<TAB>description
 
 ### Output format
 
-The renderer produces a single Markdown file (`docs/configuration.md`) with the
+The renderer produces a single Markdown file (`claude-docs/configuration.md`) with the
 following structure:
 
 1. **H1 title** — `# Configuration`
@@ -196,7 +196,7 @@ Key points illustrated by this example:
 
 ## Re-run Behaviour
 
-When `extract` mode is run against a repo that already has `docs/configuration.md`, the
+When `extract` mode is run against a repo that already has `claude-docs/configuration.md`, the
 renderer MUST NOT overwrite silently. It produces the new Markdown, diffs it against the
 existing file, and surfaces the diff for author review. Only the author explicitly
 approves an overwrite. (Implementation: `modes/extract.md` T3.5.)
@@ -214,4 +214,4 @@ When the extract mode renderer (T3.5) consumes this template:
 5. Emit the intro paragraph with plugin name substituted (or `the plugin` fallback).
 6. Emit the table header.
 7. Emit one table row per data row.
-8. Check for existing `docs/configuration.md` — diff if present, write if absent.
+8. Check for existing `claude-docs/configuration.md` — diff if present, write if absent.

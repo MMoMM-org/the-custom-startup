@@ -1,11 +1,11 @@
-# `extract` Mode — Settings Source → `docs/configuration.md`
+# `extract` Mode — Settings Source → `claude-docs/configuration.md`
 
 **Invocation:** `/doc-product extract [--source <path>] [--type <typescript|jsonschema|pydantic>]`
 
 This mode detects the project's settings source file (TypeScript interface, JSON Schema, or
 Pydantic / dataclass model), invokes the appropriate parser script to produce a TSV, renders
 the TSV into a Markdown configuration page per `templates/configuration-template.md`, and
-either writes `docs/configuration.md` directly (first run) or surfaces a diff for review
+either writes `claude-docs/configuration.md` directly (first run) or surfaces a diff for review
 (re-run). Files are never overwritten silently.
 
 > **ADR-5 contract:** each parser detects its own runtime dependencies before parsing. If a
@@ -99,7 +99,7 @@ If `current_branch` is `main` or `master`, print an advisory:
 
 ```
 Advisory: you are on the default branch. Consider running extract on a feature branch
-so docs/configuration.md changes can be reviewed before merging.
+so claude-docs/configuration.md changes can be reviewed before merging.
 ```
 
 This is not a blocker — proceed regardless.
@@ -315,12 +315,12 @@ Hold the rendered Markdown in a variable: `rendered_md`.
 
 ---
 
-## Step 6: Write or Diff `docs/configuration.md`
+## Step 6: Write or Diff `claude-docs/configuration.md`
 
-### 6a — First run (docs/configuration.md absent)
+### 6a — First run (claude-docs/configuration.md absent)
 
 ```bash
-output_file="$REPO_ROOT/docs/configuration.md"
+output_file="$REPO_ROOT/claude-docs/configuration.md"
 if [ ! -f "$output_file" ]; then
   mkdir -p "$(dirname "$output_file")"
   printf '%s\n' "$rendered_md" > "$output_file"
@@ -328,15 +328,15 @@ if [ ! -f "$output_file" ]; then
 fi
 ```
 
-Tell the user: "Created `docs/configuration.md` — review the file and fill in any
+Tell the user: "Created `claude-docs/configuration.md` — review the file and fill in any
 `[NEEDS DESCRIPTION]` / `[NEEDS DEFAULT]` / `[NEEDS REVIEW]` markers."
 
-### 6b — Re-run (docs/configuration.md present)
+### 6b — Re-run (claude-docs/configuration.md present)
 
 **NEVER overwrite silently.** Always produce a diff first.
 
 ```bash
-output_file="$REPO_ROOT/docs/configuration.md"
+output_file="$REPO_ROOT/claude-docs/configuration.md"
 existing_file="$output_file"
 new_file="$(mktemp "${TMPDIR:-/tmp}/doc-product-extract-new.XXXXXX.md")"
 printf '%s\n' "$rendered_md" > "$new_file"
@@ -344,13 +344,13 @@ printf '%s\n' "$rendered_md" > "$new_file"
 diff_output="$(git diff --no-index "$existing_file" "$new_file" 2>&1 || true)"
 ```
 
-If `diff_output` is empty (no changes): tell the user "No changes — `docs/configuration.md`
+If `diff_output` is empty (no changes): tell the user "No changes — `claude-docs/configuration.md`
 is already up to date." Clean up `$new_file` and stop.
 
 If there are changes, display the diff inline:
 
 ```
-docs/configuration.md has changed since the last extract run.
+claude-docs/configuration.md has changed since the last extract run.
 Diff (existing → new):
 
 <diff_output>
@@ -360,18 +360,18 @@ AskUserQuestion:
 
 ```
 How would you like to proceed?
-  1. Apply changes — overwrite docs/configuration.md with the new content
+  1. Apply changes — overwrite claude-docs/configuration.md with the new content
   2. Discard — keep the existing file unchanged
-  3. Save as docs/configuration.md.new — write new content alongside existing for manual merge
+  3. Save as claude-docs/configuration.md.new — write new content alongside existing for manual merge
 ```
 
 Act on the user's choice:
 
 - **Apply (1):** `cp "$new_file" "$existing_file"` — then tell the user "Updated
-  `docs/configuration.md`."
+  `claude-docs/configuration.md`."
 - **Discard (2):** remove `$new_file`, tell the user "No changes applied."
 - **Save as .new (3):** `cp "$new_file" "${existing_file}.new"` — tell the user
-  "Saved new version at `docs/configuration.md.new`. Merge manually, then delete
+  "Saved new version at `claude-docs/configuration.md.new`. Merge manually, then delete
   the `.new` file."
 
 Always clean up `$new_file` after acting on the choice.
@@ -444,8 +444,8 @@ These items are deferred to v2 and MUST NOT be implemented in v1:
 | 2+ sources detected | AskUserQuestion to pick user-facing source (Step 3) |
 | Parser exits non-zero — missing dep | Print ADR-5 error (dep name, reason, install); stop |
 | Parser exits non-zero — other | Print stderr; stop |
-| `docs/configuration.md` exists | Diff and AskUserQuestion; never silent overwrite (Step 6b) |
-| `docs/configuration.md` absent | Write directly; tell user (Step 6a) |
+| `claude-docs/configuration.md` exists | Diff and AskUserQuestion; never silent overwrite (Step 6b) |
+| `claude-docs/configuration.md` absent | Write directly; tell user (Step 6a) |
 | `manifest.json` / `plugin.json` passed as `--source` | Print v1 manifest-ignore message; stop (Step 7) |
 | `jq` missing (JSON Schema source) | Parser's own dep check fires; mode forwards the error |
 | `python3` missing (Pydantic source) | Parser's own dep check fires; mode forwards the error |
@@ -461,10 +461,10 @@ These items are deferred to v2 and MUST NOT be implemented in v1:
 ```
 Detected: typescript source at /path/to/repo/src/settings.ts
 [parser runs...]
-Created: docs/configuration.md — review the file and fill in any markers.
+Created: claude-docs/configuration.md — review the file and fill in any markers.
 ```
 
-### Example 2: Re-run — stale docs/configuration.md
+### Example 2: Re-run — stale claude-docs/configuration.md
 
 **Invocation:** `/doc-product extract` (settings.ts has new field `tls: boolean`)
 
@@ -472,10 +472,10 @@ Created: docs/configuration.md — review the file and fill in any markers.
 Detected: typescript source at /path/to/repo/src/settings.ts
 [parser runs...]
 
-docs/configuration.md has changed since the last extract run.
+claude-docs/configuration.md has changed since the last extract run.
 Diff (existing → new):
 
---- docs/configuration.md
+--- claude-docs/configuration.md
 +++ (new)
 @@ -8,3 +8,4 @@
  | `host` | `string` | `'localhost'` | Host to connect to. |
@@ -483,9 +483,9 @@ Diff (existing → new):
 +| `tls` | `boolean` | `false` | Enable TLS. |
 
 How would you like to proceed?
-  1. Apply changes — overwrite docs/configuration.md with the new content
+  1. Apply changes — overwrite claude-docs/configuration.md with the new content
   2. Discard — keep the existing file unchanged
-  3. Save as docs/configuration.md.new — write new content alongside existing for manual merge
+  3. Save as claude-docs/configuration.md.new — write new content alongside existing for manual merge
 ```
 
 ### Example 3: Multi-source repo

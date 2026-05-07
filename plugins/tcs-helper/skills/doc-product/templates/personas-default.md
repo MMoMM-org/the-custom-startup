@@ -34,11 +34,11 @@ personas:
       - id: install
         required: true
         text: "How do I install this, step by step?"
-        pages: [README.md, docs/installation.md]
+        pages: [README.md, claude-docs/installation.md]
       - id: verify-install
         required: true
         text: "After installing, how do I verify it is running correctly?"
-        pages: [README.md, docs/installation.md]
+        pages: [README.md, claude-docs/installation.md]
 
   - id: config-explorer
     required: true
@@ -49,11 +49,11 @@ personas:
       - id: setting-purpose
         required: true
         text: "Pick the most prominent configuration option in the document. What does it do, and what is its default?"
-        pages: [docs/configuration.md]
+        pages: [claude-docs/configuration.md]
       - id: setting-impact
         required: false
         text: "For that same setting, what happens if I leave it at its default?"
-        pages: [docs/configuration.md]
+        pages: [claude-docs/configuration.md]
 
   - id: troubleshooter
     required: true
@@ -64,7 +64,7 @@ personas:
       - id: common-error
         required: true
         text: "Pick the first error message or failure scenario described in the document. What does it mean and how do I fix it?"
-        pages: [docs/troubleshooting.md]
+        pages: [claude-docs/troubleshooting.md]
 
   - id: migrator
     required: false
@@ -74,7 +74,7 @@ personas:
       - id: migration-path
         required: false
         text: "If the document references migrating from another tool, summarise how the migration works. If no migration is described, answer 'no migration documented'."
-        pages: [README.md, docs/migration.md]
+        pages: [README.md, claude-docs/migration.md]
 ```
 
 ## Schema Notes

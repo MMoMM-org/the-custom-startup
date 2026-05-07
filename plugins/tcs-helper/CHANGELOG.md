@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.4.1] - 2026-05-07
+
+### Fixed
+
+- **`doc-product` output directory renamed `docs/` → `claude-docs/`** — initial dogfood revealed that writing into `docs/` collides with target repos' existing `docs/` trees (used for ADRs, XDD specs, and internal dev notes in TCS / MiYo repos). The skill now writes user-facing docs into `claude-docs/` instead. All four modes (plan, write, extract, review), templates (4 skeletons + configuration + gap-report), reference/conventions.md, SKILL.md description, the `run-review.sh` page-scope scanner, and the test suite (13 files, 369 assertions, all green) updated. Repo-internal `docs/` references that are not the skill's output (e.g. `docs/about/skill-and-agent-design.md`) are preserved. See `docs/XDD/specs/010-doc-product-skill/plan/phase-5.md` Deviation 1 for full record.
+
 ## [3.4.0] - 2026-05-07
 
 ### Added

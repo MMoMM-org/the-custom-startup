@@ -32,6 +32,7 @@
 | 2026-05-06 | ADR-1..7 confirmed in SDD | Mode router (1), claude -p subprocess (2), stateless review (3), persona override = replace+opt-in extends (4), separate parser scripts with explicit dependency reporting (5), gap report inline only (6), single /doc-product slash with mode arg (7) |
 | 2026-05-06 | Persona language: generic + LLM extracts specifics from doc | Default personas avoid project-type and OS hardcoding; reader resolves "Obsidian Plugin"/"macOS"/etc. from the doc itself; project override for edge cases |
 | 2026-05-06 | Multi-page corpus per question | Each persona question declares `pages: [...]`; skill concatenates listed pages into a single corpus per `claude -p` call. Tests both navigation and content in one shot. Default for built-ins: README.md + topic page |
+| 2026-05-07 | Output directory renamed `docs/` → `claude-docs/` (Phase 5 v1-blocker) | Initial dogfood revealed namespace collision: target TCS / MiYo repos already use `docs/` for ADRs, XDD specs, and internal dev notes. Writing the skill's user-facing output into `docs/` would intermix with prior content and risk overwrites. Renamed throughout skill (modes, scripts, templates, reference, tests, fixtures); repo-internal `docs/` references preserved. tcs-helper 3.4.0 → 3.4.1. See `plan/phase-5.md` Deviation 1 for full record. |
 
 ## Context
 

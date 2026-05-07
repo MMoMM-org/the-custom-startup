@@ -15,7 +15,7 @@ personas:
       - id: migration-path
         required: true
         text: "If the document references migrating from another tool, summarise how the migration works. If no migration is described, answer 'no migration documented'."
-        pages: [README.md, docs/migration.md]
+        pages: [README.md, claude-docs/migration.md]
 
   - id: api-consumer
     required: false
@@ -25,5 +25,5 @@ personas:
       - id: api-entry
         required: false
         text: "What APIs or extension points does this tool expose?"
-        pages: [docs/api.md]
+        pages: [claude-docs/api.md]
 ```

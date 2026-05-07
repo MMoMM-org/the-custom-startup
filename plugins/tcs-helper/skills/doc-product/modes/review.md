@@ -52,7 +52,7 @@ Invoke `bash scripts/run-review.sh` with any flags the user passed:
 bash scripts/run-review.sh
 
 # Page scope
-bash scripts/run-review.sh --page docs/installation.md
+bash scripts/run-review.sh --page claude-docs/installation.md
 
 # Git-diff scope
 bash scripts/run-review.sh --since <ref>
@@ -76,12 +76,12 @@ Capture both stdout (aggregate JSON) and exit code. The helper:
 {
   "outcome": "PASS" | "FAIL",
   "persona_source": "defaults" | "project override at `.claude/doc-personas.md`",
-  "pages_tested": ["docs/foo.md", "..."],
+  "pages_tested": ["claude-docs/foo.md", "..."],
   "tuples": [
     {
       "persona_id": "first-time-installer",
       "question_id": "install",
-      "page_used": "docs/installation.md",
+      "page_used": "claude-docs/installation.md",
       "found": "yes" | "partial" | "no",
       "answer": "...",
       "unclear": [],
@@ -206,7 +206,7 @@ If `outcome == "PASS"`:
 # Reader-Test Gap Report
 
 **Run:** 2026-05-06T14:32:00Z
-**Pages tested:** README.md, docs/installation.md, docs/configuration.md, docs/troubleshooting.md
+**Pages tested:** README.md, claude-docs/installation.md, claude-docs/configuration.md, claude-docs/troubleshooting.md
 **Personas active:** 4 (defaults)
 **Outcome:** PASS
 
@@ -234,7 +234,7 @@ No `## Failing required findings` section (zero fails).
 # Reader-Test Gap Report
 
 **Run:** 2026-05-06T14:35:00Z
-**Pages tested:** README.md, docs/installation.md, docs/troubleshooting.md
+**Pages tested:** README.md, claude-docs/installation.md, claude-docs/troubleshooting.md
 **Personas active:** 4 (defaults)
 **Outcome:** FAIL
 
@@ -250,14 +250,14 @@ No `## Failing required findings` section (zero fails).
 ## Failing required findings
 
 ### troubleshooter — `common-error`
-**Page:** `docs/troubleshooting.md`
+**Page:** `claude-docs/troubleshooting.md`
 **Question:** "Pick the first error message or failure scenario described in the document. What does it mean and how do I fix it?"
 **Found:** `no`
 **Reader's answer (verbatim):** "The document does not describe any error messages."
 **Unclear:** ["what errors can occur", "how to recover"]
 **Guessed:** []
 
-**Suggested fix (author):** Add a section answering this question to `docs/troubleshooting.md`. Re-run `/doc-product review`.
+**Suggested fix (author):** Add a section answering this question to `claude-docs/troubleshooting.md`. Re-run `/doc-product review`.
 ```
 
 ---

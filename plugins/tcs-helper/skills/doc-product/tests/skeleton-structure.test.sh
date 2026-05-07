@@ -5,7 +5,7 @@
 # Verifies that each of the four skeleton templates:
 #   1. Exists at the expected path.
 #   2. Mentions every minimum page (installation, configuration, usage, troubleshooting).
-#   3. Mentions docs/README.md (the index page requirement).
+#   3. Mentions claude-docs/README.md (the index page requirement).
 #   4. Contains type-specific extras:
 #        tcs-plugin: "per-component reference" or "components-reference.md"
 #        python: "first command" or "quickstart"
@@ -100,7 +100,7 @@ assert_minimum_pages() {
 assert_readme_index() {
   local type="$1" content="$2"
 
-  assert_contains "[$type] mentions docs/README.md" "docs/README.md" "$content"
+  assert_contains "[$type] mentions claude-docs/README.md" "claude-docs/README.md" "$content"
 }
 
 # ---------------------------------------------------------------------------
