@@ -2,6 +2,10 @@
 
 ## [3.4.2] - 2026-05-07
 
+### Changed
+
+- **`doc-product` SKILL.md: enriched mode-selection menu** — when `/doc-product` is invoked without a mode (or with an unrecognised mode), the receptionist's `AskUserQuestion` previously listed only bare option labels (`plan / write / extract / review`). Users had to read the mode files to know what each one did. The Mode menu is now a documented table under `Workflow / 1. Parse Mode`, with concrete one-line descriptions per mode plus the intended `plan → write → extract → review` flow. The receptionist pattern is preserved — descriptors are user-facing data, not mode logic.
+
 ### Fixed
 
 - **`doc-product` review mode: `claude -p --output-format json` wrapper unwrapping** — `scripts/reader-test.sh` ran `jq -e '.found'` against the outer wrapper object instead of the nested model payload. `claude -p --output-format json` returns `{"type":"result","subtype":"success","result":"<inner-JSON-as-string>",...}` where the model's `.found`/`.answer`/etc. live inside `.result` as a stringified payload. The pre-fix script saw `.found` missing on the wrapper and routed every tuple through the `unparseable_response` branch — a uniform failure across every `/doc-product review` run against real `claude`. Fix: unwrap via `try (.result | fromjson) catch empty`, validate the inner has `.found`, and emit the inner JSON. The existing test stubs were also updated to emit the realistic wrapper shape (they previously emitted flat JSON, which masked the bug). New scenario S8 covers the wrapper-without-`.result` subtype path (e.g. `error_max_turns`).

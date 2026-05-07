@@ -73,10 +73,23 @@ match (mode_token) {
   "write"   => Read modes/write.md, follow its Workflow with the remaining args.
   "extract" => Read modes/extract.md, follow its Workflow with the remaining args.
   "review"  => Read modes/review.md, follow its Workflow with the remaining args.
-  ""        => AskUserQuestion: "Which mode?" Options: plan / write / extract / review.
-  *         => Print recognised modes; AskUserQuestion to disambiguate. Never silently pick a default.
+  ""        => AskUserQuestion with the mode menu (see "Mode menu" below).
+  *         => Print "Unknown mode: <token>. Recognised modes:" then the
+               mode menu, then AskUserQuestion to disambiguate. Never
+               silently pick a default.
 }
 ```
+
+**Mode menu** — when AskUserQuestion is needed (empty or unknown mode), present these four options. Each option's `description` field MUST be filled in so the user can pick without re-reading docs:
+
+| Option label | Description |
+|---|---|
+| `plan` | Analyse the repo, propose a `docs/` skeleton (installation, configuration, troubleshooting, …) plus a docs-tree index. **Run first** when the repo has no `docs/` yet. |
+| `write` | Draft one page section-by-section (e.g. `installation`, `troubleshooting`, `usage`). Requires `plan` to have run first so the page placeholder exists. Argument: the page name. |
+| `extract` | Auto-generate `docs/configuration.md` from settings code (TS interfaces, JSON Schema, Pydantic). Re-run after settings change to keep the page in sync. |
+| `review` | Persona-driven reader test — runs each persona's questions against the docs via `claude -p` and emits a gap report. Read-only; never edits files. Run after `write` to check for gaps. |
+
+The intended flow is **plan → write (per page) → extract → review**, but each mode is independently usable once its prerequisites are met.
 
 ### 2. Hand Off
 
