@@ -20,6 +20,9 @@ TCS plugin ecosystem — Claude Code plugins, skills, agents, and workflow tooli
 - Current focus/blockers → docs/ai/memory/context.md
 - Bugs/fixes → docs/ai/memory/troubleshooting.md
 
+## Design References
+- Skill / subagent / slash-command granularity decisions → `docs/about/skill-and-agent-design.md` (consult before extracting a Skill or splitting/consolidating specialists; the L2 heuristics are also mirrored in `plugins/tcs-helper/skills/{skill,agent}-author/reference/decision-tree.md`)
+
 ## Testing Skills During Development
 
 When developing new skills in `plugins/tcs-helper/skills/`, they are not automatically available in Claude Code sessions. To make a skill available for testing:
