@@ -323,7 +323,36 @@ The loop ends when:
 
 ---
 
-## Step 10: Final Report
+## Step 10: Refresh Root README Documentation Section
+
+After the page write loop ends (whether completed or paused), refresh the
+consumer repo's root `README.md` so its `## Documentation` section reflects
+the page just drafted (and any other pages currently in `docs/`).
+
+Invoke the shared helper:
+
+```bash
+bash "${SKILL_ROOT}/scripts/update-readme-docs-section.sh" \
+  --readme   "${REPO_ROOT}/README.md" \
+  --docs-dir "${REPO_ROOT}/docs"
+```
+
+The script is **idempotent** — calling it after every `write` invocation is
+safe. The first call inserts the marker block; subsequent calls update it in
+place. New pages appear in the section automatically; reordered or removed
+pages are reflected on next call. See `modes/plan.md` Step 7 for the full
+behaviour contract (marker handling, hand-written-section warning, exclusions,
+ordering rules).
+
+Capture the script's first stdout line so the Step 11 final report can
+surface what happened (`UPDATE …`, `INSERT …`, `APPEND …`, notice, or
+warning). If the script emits a warning about an unmarked hand-written
+section, surface it verbatim — the author needs to decide whether to wrap
+their existing section in markers.
+
+---
+
+## Step 11: Final Report
 
 After the loop ends, print a summary:
 
@@ -342,6 +371,9 @@ Sections still unwritten (session paused):
 
 Sections with [NEEDS] markers (facts outstanding):
   ## Verify — [NEEDS: minimum runtime version]
+
+Root README:
+  UPDATE  README.md  (Documentation section refreshed)
 
 Next steps:
   - Fill in [NEEDS] markers before running /doc-product review.

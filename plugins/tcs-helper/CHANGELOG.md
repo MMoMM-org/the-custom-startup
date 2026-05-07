@@ -1,6 +1,28 @@
 # Changelog
 
+## [3.5.0] - 2026-05-07
+
+### Added
+
+- **`doc-product`: root README `## Documentation` section management** — `plan` and `write` modes now refresh a `## Documentation` section in the consumer repo's root `README.md` via the new shared script `scripts/update-readme-docs-section.sh`. Closes the discoverability gap dogfood feedback identified — visitors landing on a project's GitHub README now see a single top-level entry into the docs tree instead of having to track down scattered in-flow links.
+
+  **Behaviour:**
+  - Section is delimited by HTML marker comments (`<!-- doc-product:documentation:start -->` / `<!-- doc-product:documentation:end -->`) so subsequent runs replace the block content idempotently without touching surrounding README content.
+  - Hand-written `## Documentation` sections **without** markers are detected and **left alone** — the script emits a warning suggesting the author wrap their section in markers if they want auto-refresh.
+  - Insertion: before `## License` if present, otherwise appended.
+  - Page ordering: canonical (`installation`, `setup`, `configuration`, `usage`, `template-syntax`, `instructions-json`, `troubleshooting`, `faq`) then remaining pages alphabetically.
+  - Excluded: `README.md` (in-tree index), `CLAUDE.md`, `AGENTS.md`, `CONSTITUTION.md` — AI/project metadata, not user-facing pages.
+  - Bullet text: H1 page title + (optional) one-sentence summary extracted from a `> blockquote` immediately following the H1. No blockquote → bullet is just the title link.
+  - Missing root README → notice + skip (does **not** create one).
+  - In-flow `[…](docs/foo.md)` references in surrounding prose are **untouched** — only the marker block and the section heading are managed.
+
+  Wired into `plan` Step 7 (Final Report renumbered to Step 8) and `write` Step 10 (Final Report renumbered to Step 11). 33 new tests in `tests/update-readme-docs-section.test.sh` covering INSERT / UPDATE / APPEND / WARN / no-README / no-docs paths plus idempotency, dry-run, ordering, and bad-argument handling. Total doc-product suite: 404 passing (was 371).
+
 ## [3.4.2] - 2026-05-07
+
+### Changed
+
+- **`doc-product` SKILL.md: enriched mode-selection menu** — when `/doc-product` is invoked without a mode (or with an unrecognised mode), the receptionist's `AskUserQuestion` previously listed only bare option labels (`plan / write / extract / review`). Users had to read the mode files to know what each one did. The Mode menu is now a documented table under `Workflow / 1. Parse Mode`, with concrete one-line descriptions per mode plus the intended `plan → write → extract → review` flow. The receptionist pattern is preserved — descriptors are user-facing data, not mode logic.
 
 ### Fixed
 
