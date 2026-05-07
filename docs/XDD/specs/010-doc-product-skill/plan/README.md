@@ -129,7 +129,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 - [x] [Phase 2: Review Mode and Reader-Test Engine](phase-2.md)
 - [x] [Phase 3: Extract Mode and Settings Parsers](phase-3.md)
 - [x] [Phase 4: Plan and Write Modes](phase-4.md)
-- [ ] [Phase 5: Dogfood and Validation](phase-5.md)
+- [x] [Phase 5: Dogfood and Validation](phase-5.md)
 
 **Sequencing rationale:**
 - Phase 1 establishes the skill skeleton and mode-router contract; nothing else can be tested without it.

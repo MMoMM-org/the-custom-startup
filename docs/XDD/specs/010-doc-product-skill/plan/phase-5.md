@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Dogfood and Validation"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 5
 ---
@@ -31,7 +31,7 @@ phase: 5
 
 This phase delivers v1 readiness validation by running the skill against three real targets and confirming each reaches a passing reader-test or has explicit deferrals documented. Verifiable outcome: a "v1 readiness report" comment on the spec PR listing each dogfood target's outcome.
 
-- [ ] **T5.1 Dogfood: miyo-tomo (worst-state benchmark)** `[activity: dogfood]` `[parallel: true]`
+- [x] **T5.1 Dogfood: miyo-tomo (worst-state benchmark)** `[activity: dogfood]` `[parallel: true]`
 
   1. **Prime**: Read `miyo-tomo/README.md` (current 198-line state) and identify the worst pain points. Confirm `claude` CLI authenticated.
   2. **Test**: Full skill flow against miyo-tomo: `plan` produces a proposed `docs/` tree matching expectations; `extract` runs against any settings source (or returns a clear "no settings source detected" if there isn't one); `write` drafts at least the installation page; `review` runs against the result and produces a gap report.
@@ -42,7 +42,7 @@ This phase delivers v1 readiness validation by running the skill against three r
      - [ ] Reader-test final outcome PASS or documented gap-acceptance `[ref: PRD/KPI Quality]`
      - [ ] All issues found are classified (v1-blocker vs v2-backlog vs not-an-issue)
 
-- [ ] **T5.2 Dogfood: tcs-helper plugin's own user-facing docs** `[activity: dogfood]` `[parallel: true]`
+- [x] **T5.2 Dogfood: tcs-helper plugin's own user-facing docs** `[activity: dogfood]` `[parallel: true]`
 
   1. **Prime**: Inspect `plugins/tcs-helper/` to identify what user-facing docs already exist (likely none — author docs live elsewhere).
   2. **Test**: Run plan + extract + write + review against the TCS plugin from the user perspective. Specifically: a TCS plugin user would want to know how to install the plugin into their Claude Code, how to invoke individual skills, and how to troubleshoot when a skill doesn't trigger.
@@ -52,7 +52,7 @@ This phase delivers v1 readiness validation by running the skill against three r
      - [ ] Skill ran end-to-end against tcs-helper user docs `[ref: PRD/KPI Adoption]`
      - [ ] Reader-test final outcome PASS or documented gap-acceptance
 
-- [ ] **T5.3 Dogfood: One Other MiYo Repo (Marcus selects)** `[activity: dogfood]` `[parallel: true]`
+- [x] **T5.3 Dogfood: One Other MiYo Repo (Marcus selects)** `[activity: dogfood]` `[parallel: true]`
 
   1. **Prime**: Marcus selects from MiYo: hashi / kokoro / seigyo / shuu / hakobi / satori. Pick the one with the most painful current docs state (via quick eyeball: README size, presence of `docs/` tree).
   2. **Test**: Same as T5.1 against the selected repo.
@@ -62,7 +62,7 @@ This phase delivers v1 readiness validation by running the skill against three r
      - [ ] Skill ran end-to-end against the selected MiYo repo
      - [ ] Reader-test final outcome PASS or documented gap-acceptance
 
-- [ ] **T5.4 Issue Triage and v2 Backlog Capture** `[activity: validate]`
+- [x] **T5.4 Issue Triage and v2 Backlog Capture** `[activity: validate]`
 
   1. **Prime**: Aggregate findings from T5.1, T5.2, T5.3.
   2. **Test**: Each issue from dogfood has a classification: (a) v1-blocker — must fix before declaring v1 done, (b) v2-backlog — captured for next iteration, (c) false-positive — no action. Verify each v1-blocker has a fix tracked in this phase or a follow-up commit.
@@ -75,7 +75,7 @@ This phase delivers v1 readiness validation by running the skill against three r
      - [ ] Zero unaddressed v1-blockers
      - [ ] All v2-backlog items recorded in spec README
 
-- [ ] **T5.5 Self-Reported v1 Retrospective** `[activity: validate]`
+- [x] **T5.5 Self-Reported v1 Retrospective** `[activity: validate]`
 
   - Marcus writes a brief retrospective in `~/.claude/projects/.../memory/` (or the project memory) covering:
     - Did the skill save time vs hand-authoring docs? (per PRD KPI "Self-reported value")
@@ -84,7 +84,7 @@ This phase delivers v1 readiness validation by running the skill against three r
     - What should v2 prioritise?
   - Cross-link the retrospective from spec README's decisions log.
 
-- [ ] **T5.6 Phase 5 Validation and v1 Sign-Off** `[activity: validate]`
+- [x] **T5.6 Phase 5 Validation and v1 Sign-Off** `[activity: validate]`
 
   - Verify all phases 1-5 closure criteria met.
   - Verify all PRD critical gates pass (per `requirements.md` validation checklist).
