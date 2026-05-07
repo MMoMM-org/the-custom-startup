@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.4.2] - 2026-05-07
+
+### Changed (breaking — slash command rename)
+
+- **3.4.1 rename reverted; `docs` skill renamed to `claude-docs` instead** — the 3.4.1 rename targeted the wrong skill. The `claude-docs` name belongs on the Claude-Code-documentation fetcher (formerly `/docs`), not on the user-facing-doc-authoring skill. Two corrective renames:
+  1. **`claude-docs` (the doc-authoring skill from 3.4.1) → `doc-product`** — restores the spec-010 name. The skill directory, `name:` frontmatter, active-skill announcement (`tcs-helper:claude-docs` → `tcs-helper:doc-product`), all `/claude-docs {plan|write|extract|review}` invocations across mode files, gap-report template, personas-default header, `lib-personas.sh` comment, and `write-mode.test.sh` assertions are reverted to `doc-product`.
+  2. **`docs` (the doc fetcher) → `claude-docs`** — the slot is now occupied by the skill that actually fetches Claude Code documentation. Updates: skill directory (`plugins/tcs-helper/skills/docs/` → `plugins/tcs-helper/skills/claude-docs/`), `name:` frontmatter, `tcs-helper:docs` → `tcs-helper:claude-docs`, and the `/docs {topic} --refresh` example in the cache header → `/claude-docs {topic} --refresh`.
+
+  The cache output directory `docs/ai/external/claude/` is **unchanged**. Spec ID `010-doc-product-skill` remains as a historical reference. Previous `/claude-docs {plan|write|extract|review}` invocation is gone — use `/doc-product {plan|write|extract|review}`. Previous `/docs` is gone — use `/claude-docs`.
+
 ## [3.4.1] - 2026-05-07
 
 ### Changed (breaking — slash command rename)

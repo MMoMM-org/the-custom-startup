@@ -1,9 +1,9 @@
 # `write` Mode — Section-by-Section Page Drafting
 
-**Invocation:** `/claude-docs write <page>`
+**Invocation:** `/doc-product write <page>`
 
-Examples: `/claude-docs write installation`, `/claude-docs write configuration`,
-`/claude-docs write usage`, `/claude-docs write troubleshooting`
+Examples: `/doc-product write installation`, `/doc-product write configuration`,
+`/doc-product write usage`, `/doc-product write troubleshooting`
 
 This mode guides the author through drafting a single documentation page one section at a
 time, using the section structure defined in `reference/conventions.md` as the source of
@@ -44,7 +44,7 @@ Before starting, verify the following. Stop and report any failure; do not proce
    Use the Read tool to verify it loads before proceeding.
 
    If the file is missing: `write mode requires reference/conventions.md — re-install
-   the claude-docs skill or check the reference/ directory.`
+   the doc-product skill or check the reference/ directory.`
 
 ---
 
@@ -88,8 +88,8 @@ When the placeholder is missing, route to plan mode and stop.
 docs/<page_name>.md does not exist.
 
 write mode requires a placeholder file to be present before drafting can begin.
-Run `/claude-docs plan` first to create the docs/ skeleton, which will produce
-the placeholder for <page_name>.md. Then return to `/claude-docs write <page_name>`.
+Run `/doc-product plan` first to create the docs/ skeleton, which will produce
+the placeholder for <page_name>.md. Then return to `/doc-product write <page_name>`.
 ```
 
 Stop. Do not proceed to Step 3.
@@ -344,8 +344,8 @@ Sections with [NEEDS] markers (facts outstanding):
   ## Verify — [NEEDS: minimum runtime version]
 
 Next steps:
-  - Fill in [NEEDS] markers before running /claude-docs review.
-  - Run /claude-docs review to test this page against reader personas.
+  - Fill in [NEEDS] markers before running /doc-product review.
+  - Run /doc-product review to test this page against reader personas.
 ```
 
 Adjust to reflect what was actually drafted, approved, removed, and left outstanding.
@@ -387,7 +387,7 @@ Adjust to reflect what was actually drafted, approved, removed, and left outstan
 
 ### Example 1: Empty installation placeholder
 
-**Invocation:** `/claude-docs write installation`
+**Invocation:** `/doc-product write installation`
 
 ```
 Current state of docs/installation.md:
@@ -435,7 +435,7 @@ Author provides answers. Mode drafts Prerequisites using only those answers.
 
 ### Example 2: Iterated section triggers the removal gate
 
-**Invocation:** `/claude-docs write troubleshooting`
+**Invocation:** `/doc-product write troubleshooting`
 
 After 3 iterations on `## Common errors` without substantive change:
 
@@ -450,14 +450,14 @@ Can anything be removed from this section to make it clearer or shorter?
 
 ### Example 3: Non-existent page
 
-**Invocation:** `/claude-docs write migration`
+**Invocation:** `/doc-product write migration`
 
 ```
 docs/migration.md does not exist.
 
 write mode requires a placeholder file to be present before drafting can begin.
-Run `/claude-docs plan` first to create the docs/ skeleton, which will produce
-the placeholder for migration.md. Then return to `/claude-docs write migration`.
+Run `/doc-product plan` first to create the docs/ skeleton, which will produce
+the placeholder for migration.md. Then return to `/doc-product write migration`.
 ```
 
 Mode stops. No files are written.
