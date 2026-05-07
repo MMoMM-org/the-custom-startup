@@ -58,6 +58,7 @@ DispatchResult {
 - `templates/gap-report-template.md` — Markdown structure for `review` output
 - `scripts/reader-test.sh` — orchestrates a single `claude -p` reader simulation
 - `scripts/parse-{ts-settings,jsonschema,pydantic}.sh` — settings source parsers
+- `scripts/update-readme-docs-section.sh` — refreshes the consumer repo's root README `## Documentation` section (called by `plan` Step 7 and `write` Step 10)
 - `reference/conventions.md` — page-type → section-structure conventions
 - `reference/claude-p-contract.md` — `claude -p` invocation contract
 
