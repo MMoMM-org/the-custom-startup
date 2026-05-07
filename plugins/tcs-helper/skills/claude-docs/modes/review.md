@@ -1,6 +1,6 @@
 # `review` Mode — Persona-Driven Reader Test Orchestrator
 
-**Invocation:** `/doc-product review [--page <name>] [--since <ref>]`
+**Invocation:** `/claude-docs review [--page <name>] [--since <ref>]`
 
 This mode runs parallel headless `claude -p` subprocesses against the project's documentation,
 aggregates findings per persona, and renders a Reader-Test Gap Report inline in this conversation.
@@ -196,7 +196,7 @@ If `outcome == "PASS"`:
 
 ### Example 1: PASS run
 
-**Invocation:** `/doc-product review`
+**Invocation:** `/claude-docs review`
 
 **Expected output (abridged):**
 
@@ -224,7 +224,7 @@ No `## Failing required findings` section (zero fails).
 
 ### Example 2: FAIL run
 
-**Invocation:** `/doc-product review`
+**Invocation:** `/claude-docs review`
 
 **Expected output (abridged):**
 
@@ -257,7 +257,7 @@ No `## Failing required findings` section (zero fails).
 **Unclear:** ["what errors can occur", "how to recover"]
 **Guessed:** []
 
-**Suggested fix (author):** Add a section answering this question to `docs/troubleshooting.md`. Re-run `/doc-product review`.
+**Suggested fix (author):** Add a section answering this question to `docs/troubleshooting.md`. Re-run `/claude-docs review`.
 ```
 
 ---

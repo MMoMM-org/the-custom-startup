@@ -1,6 +1,6 @@
 # `plan` Mode — Repo Detection, Skeleton Proposal, and `docs/` Placeholder Writes
 
-**Invocation:** `/doc-product plan`
+**Invocation:** `/claude-docs plan`
 
 This mode analyses the current repository to determine its type, selects the matching
 skeleton from `templates/`, proposes the resulting `docs/` tree to the author, diffs
@@ -51,11 +51,11 @@ Before starting, verify the following. Stop and report any failure; do not proce
    - `templates/skeleton-tcs-plugin.md`
    - `templates/skeleton-generic.md`
 
-   These files live in the `doc-product` skill's own `templates/` directory (not the
+   These files live in the `claude-docs` skill's own `templates/` directory (not the
    target repo). If any template is missing, stop:
 
    ```
-   plan mode requires templates/<name> — re-install the doc-product skill or check
+   plan mode requires templates/<name> — re-install the claude-docs skill or check
    the templates/ directory.
    ```
 
@@ -117,7 +117,7 @@ Wait for the author's response. Set `REPO_TYPE` to the chosen value, then contin
 
 ## Step 2: Select and Load Skeleton Template
 
-Map `REPO_TYPE` to the matching skeleton file in the `doc-product` skill's `templates/`
+Map `REPO_TYPE` to the matching skeleton file in the `claude-docs` skill's `templates/`
 directory:
 
 | `REPO_TYPE` | Template |
@@ -320,10 +320,10 @@ Files skipped (not in approved list):
   (none)
 
 Next steps:
-  - Run `/doc-product write <page>` to draft content for each placeholder page.
-  - Run `/doc-product extract` to auto-generate docs/configuration.md from your
+  - Run `/claude-docs write <page>` to draft content for each placeholder page.
+  - Run `/claude-docs extract` to auto-generate docs/configuration.md from your
     settings source.
-  - Run `/doc-product review` when the pages have content to test them against
+  - Run `/claude-docs review` when the pages have content to test them against
     reader personas.
 ```
 
@@ -363,7 +363,7 @@ Adjust the output to reflect what was actually written, kept, replaced, merged, 
 
 ### Example 1: Obsidian plugin — no existing `docs/`
 
-**Invocation:** `/doc-product plan` (repo contains `manifest.json`)
+**Invocation:** `/claude-docs plan` (repo contains `manifest.json`)
 
 ```
 Detected: obsidian repo (manifest.json present).
@@ -396,7 +396,7 @@ Confirm? (yes / no / edit the list)
 
 ### Example 2: Python repo — existing `docs/installation.md`
 
-**Invocation:** `/doc-product plan` (repo contains `pyproject.toml`; `docs/installation.md`
+**Invocation:** `/claude-docs plan` (repo contains `pyproject.toml`; `docs/installation.md`
 already exists)
 
 ```
@@ -412,7 +412,7 @@ docs/installation.md already exists. What would you like to do with it?
 
 ### Example 3: Unknown repo type
 
-**Invocation:** `/doc-product plan` (no manifest.json, plugin.json, or pyproject.toml)
+**Invocation:** `/claude-docs plan` (no manifest.json, plugin.json, or pyproject.toml)
 
 ```
 No recognised manifest file was found in this repository

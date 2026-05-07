@@ -5,7 +5,7 @@
 # These tests verify that the modes/write.md file:
 #   - exists and is non-trivial (>100 lines)
 #   - documents a prerequisites section
-#   - documents invocation /doc-product write <page> with example page names
+#   - documents invocation /claude-docs write <page> with example page names
 #   - references reference/conventions.md as the section-structure source
 #   - documents section-structure proposal then confirmation (propose + confirm)
 #   - documents per-section drafting (section 1 / first section / one section at a time)
@@ -93,10 +93,10 @@ assert_line_count_gt "A1: modes/write.md has >100 lines" 100
 assert_contains "A2: prerequisites section present" "Prerequisites"
 
 # ---------------------------------------------------------------------------
-# A3: Documents invocation /doc-product write <page> with example page names
+# A3: Documents invocation /claude-docs write <page> with example page names
 #     At least one of: installation, configuration, usage, troubleshooting
 # ---------------------------------------------------------------------------
-assert_contains "A3: invocation /doc-product write documented" "/doc-product write"
+assert_contains "A3: invocation /claude-docs write documented" "/claude-docs write"
 # At least one concrete page name example must appear
 if grep -qFe "installation" < "$WRITE_MODE" || \
    grep -qFe "configuration" < "$WRITE_MODE" || \

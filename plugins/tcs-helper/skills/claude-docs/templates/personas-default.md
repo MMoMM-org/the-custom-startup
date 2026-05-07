@@ -1,6 +1,6 @@
-# Default Personas — doc-product Skill
+# Default Personas — claude-docs Skill
 
-This file defines the built-in reader personas used by the `doc-product review` mode.
+This file defines the built-in reader personas used by the `claude-docs review` mode.
 Each persona drives a set of questions that are tested against the project's documentation
 via headless `claude -p` instances (one invocation per persona × question × pages set).
 
@@ -10,7 +10,7 @@ Projects may override these defaults by creating `.claude/doc-personas.md` at th
 The override file **replaces** this file entirely (clean override). To extend rather than replace,
 add `extends: defaults` as the first line of the override file's YAML body.
 
-See ADR-4 in the doc-product SDD for the full override mechanism rationale.
+See ADR-4 in the claude-docs SDD (spec 010-doc-product-skill) for the full override mechanism rationale.
 
 ## Usage Notes
 

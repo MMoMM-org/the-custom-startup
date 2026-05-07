@@ -11,7 +11,7 @@
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-# _skill_root: absolute path to the skills/doc-product directory.
+# _skill_root: absolute path to the skills/claude-docs directory.
 # Computed from BASH_SOURCE so it works regardless of CWD.
 _skill_root() {
   local src

@@ -103,4 +103,35 @@ This phase delivers v1 readiness validation by running the skill against three r
 
 ## Deviations
 
-(None yet.)
+### Deviation 1: rename skill `doc-product` → `claude-docs` (2026-05-07)
+
+**v1-blocker** found during initial dogfood. Marcus's feedback: the slash
+command `/doc-product` was unintuitive — `/claude-docs` reads more clearly
+as "documentation produced via Claude" and matches the broader naming
+pattern users expect when invoking a `claude` CLI ecosystem skill.
+
+**Fix:** rename the skill identity throughout while preserving the spec ID:
+- Skill directory: `plugins/tcs-helper/skills/doc-product/` →
+  `plugins/tcs-helper/skills/claude-docs/` (via `git mv` to preserve history)
+- `SKILL.md` frontmatter: `name: doc-product` → `name: claude-docs`
+- Active-skill announcement: `tcs-helper:doc-product` → `tcs-helper:claude-docs`
+- All `/doc-product {plan|write|extract|review}` slash command references in
+  the four mode files, gap-report template, lib-personas.sh, write-mode.test.sh
+- Prose references "the doc-product skill" in error messages and template
+  intros → "the claude-docs skill"
+- **Output directory `docs/` is unchanged** — the skill still writes user-
+  facing documentation to a target repo's `docs/` tree (no namespace change)
+- **Spec ID `010-doc-product-skill` preserved** as a stable historical
+  reference; the spec is *about* the skill formerly known as doc-product
+
+**Validation:** all 13 test files green (369 assertions, 0 failures, 2
+skipped on platforms without optional deps). Skill-author audit PASS on
+the renamed `SKILL.md`.
+
+**Spec body not retroactively rewritten.** PRD/SDD/per-phase plan files
+continue to refer to "doc-product" — they describe v1 as it was specified.
+This deviation note + the `tcs-helper` 3.4.1 CHANGELOG entry are the
+canonical record of the rename. Future spec readers should treat
+`/claude-docs` as the current invocation and `doc-product` as historical.
+
+- [x] T5.4 v1-blocker: rename skill `doc-product` → `claude-docs`

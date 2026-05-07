@@ -1,6 +1,6 @@
 # `extract` Mode — Settings Source → `docs/configuration.md`
 
-**Invocation:** `/doc-product extract [--source <path>] [--type <typescript|jsonschema|pydantic>]`
+**Invocation:** `/claude-docs extract [--source <path>] [--type <typescript|jsonschema|pydantic>]`
 
 This mode detects the project's settings source file (TypeScript interface, JSON Schema, or
 Pydantic / dataclass model), invokes the appropriate parser script to produce a TSV, renders
@@ -17,7 +17,7 @@ either writes `docs/configuration.md` directly (first run) or surfaces a diff fo
 
 ## Step 1a: Parse Flags
 
-Before anything else, parse the flags the user passed to `/doc-product extract`:
+Before anything else, parse the flags the user passed to `/claude-docs extract`:
 
 ```bash
 SOURCE_PATH=""
@@ -58,7 +58,7 @@ the message shown. Do not proceed to Step 2.
 
 ```bash
 SKILL_ROOT="$(dirname "$(realpath "$0" 2>/dev/null || echo "$0")")"
-# In practice Claude reads SKILL_ROOT as the skills/doc-product/ directory.
+# In practice Claude reads SKILL_ROOT as the skills/claude-docs/ directory.
 SCRIPTS_DIR="$SKILL_ROOT/scripts"
 
 for script in parse-ts-settings.sh parse-jsonschema.sh parse-pydantic.sh detect-source.sh; do
@@ -72,7 +72,7 @@ done
 If any parser is missing, output:
 
 ```
-extract mode requires scripts/<name> — re-install the doc-product skill or check the scripts/ directory
+extract mode requires scripts/<name> — re-install the claude-docs skill or check the scripts/ directory
 ```
 
 **Resolve REPO_ROOT:**
@@ -83,7 +83,7 @@ extract mode requires scripts/<name> — re-install the doc-product skill or che
 1. If the user passed `--source <path>`, `REPO_ROOT` is the directory containing that file
    (or the path itself if it is a directory).
 2. Otherwise, `REPO_ROOT` is the current working directory at invocation time — i.e. the
-   repo root the author has `cd`'d into when they called `/doc-product extract`.
+   repo root the author has `cd`'d into when they called `/claude-docs extract`.
 
 ```bash
 REPO_ROOT="$(pwd)"   # default — user's working directory
@@ -228,7 +228,7 @@ case "$SOURCE_TYPE" in
   pydantic)   parser_script="parse-pydantic.sh" ;;
   *) printf 'extract: unknown source type: %s\n' "$SOURCE_TYPE" >&2; exit 4 ;;
 esac
-tmpfile_stderr="$(mktemp "${TMPDIR:-/tmp}/doc-product-extract-err.XXXXXX")"
+tmpfile_stderr="$(mktemp "${TMPDIR:-/tmp}/claude-docs-extract-err.XXXXXX")"
 trap 'rm -f "$tmpfile_stderr"' EXIT
 ```
 
@@ -338,7 +338,7 @@ Tell the user: "Created `docs/configuration.md` — review the file and fill in 
 ```bash
 output_file="$REPO_ROOT/docs/configuration.md"
 existing_file="$output_file"
-new_file="$(mktemp "${TMPDIR:-/tmp}/doc-product-extract-new.XXXXXX.md")"
+new_file="$(mktemp "${TMPDIR:-/tmp}/claude-docs-extract-new.XXXXXX.md")"
 printf '%s\n' "$rendered_md" > "$new_file"
 
 diff_output="$(git diff --no-index "$existing_file" "$new_file" 2>&1 || true)"
@@ -456,7 +456,7 @@ These items are deferred to v2 and MUST NOT be implemented in v1:
 
 ### Example 1: First run — single TS source
 
-**Invocation:** `/doc-product extract` (from a repo with `src/settings.ts`)
+**Invocation:** `/claude-docs extract` (from a repo with `src/settings.ts`)
 
 ```
 Detected: typescript source at /path/to/repo/src/settings.ts
@@ -466,7 +466,7 @@ Created: docs/configuration.md — review the file and fill in any markers.
 
 ### Example 2: Re-run — stale docs/configuration.md
 
-**Invocation:** `/doc-product extract` (settings.ts has new field `tls: boolean`)
+**Invocation:** `/claude-docs extract` (settings.ts has new field `tls: boolean`)
 
 ```
 Detected: typescript source at /path/to/repo/src/settings.ts
@@ -490,7 +490,7 @@ How would you like to proceed?
 
 ### Example 3: Multi-source repo
 
-**Invocation:** `/doc-product extract` (repo has `src/settings.ts` and `config.py`)
+**Invocation:** `/claude-docs extract` (repo has `src/settings.ts` and `config.py`)
 
 ```
 Multiple settings sources detected in /path/to/repo:
@@ -503,7 +503,7 @@ Enter a number (1–2) or provide a different path and type:
 
 ### Example 4: No source found
 
-**Invocation:** `/doc-product extract` (repo has only README + plugin.json)
+**Invocation:** `/claude-docs extract` (repo has only README + plugin.json)
 
 ```
 No settings source detected in /path/to/repo.
@@ -517,7 +517,7 @@ Example: src/settings.ts, typescript
 
 ### Example 5: Missing python3 (Pydantic source)
 
-**Invocation:** `/doc-product extract` (repo has `config.py`, `python3` absent)
+**Invocation:** `/claude-docs extract` (repo has `config.py`, `python3` absent)
 
 ```
 Detected: pydantic source at /path/to/repo/config.py
