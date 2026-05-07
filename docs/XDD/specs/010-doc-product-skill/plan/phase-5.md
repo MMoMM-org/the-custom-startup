@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Dogfood and Validation"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 5
 ---
