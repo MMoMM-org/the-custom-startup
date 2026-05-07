@@ -38,7 +38,13 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 |-------|-------------|
 | `/git-worktree` | Manage git worktrees for parallel branch work |
 | `/finish-branch` | Branch completion — merge, PR, keep, or discard |
-| `/docs` | Fetch and cache current Claude Code documentation |
+
+### Documentation
+
+| Skill | Description |
+|-------|-------------|
+| `/claude-docs` | Fetch and cache current Claude Code documentation |
+| `/doc-product` | Author and review user-facing docs (plan, write, extract, review modes) |
 
 ## Hooks
 

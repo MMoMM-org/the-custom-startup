@@ -3,12 +3,19 @@
 # Bash 3.2 compatible.
 #
 # Strategy: a stub claude binary is written to a tempdir and prepended to PATH.
-# STUB_MODE env var controls stub behaviour:
-#   happy       — returns well-formed found:yes JSON
-#   bad         — returns well-formed found:no JSON with unclear items
-#   malformed   — returns non-JSON text
-#   hang        — sleeps indefinitely (triggers timeout)
-#   rate-limit  — exits 1 with stderr message
+# STUB_MODE env var controls stub behaviour. All success-path stubs emit the
+# real `claude -p --output-format json` wrapper shape:
+#   {"type":"result","subtype":"success","result":"<inner-JSON-string>",...}
+# The model's domain JSON (.found, .answer, …) is nested as a string under
+# .result; reader-test.sh is responsible for unwrapping.
+#
+# Modes:
+#   happy             — wrapper with inner found:yes JSON
+#   bad               — wrapper with inner found:no JSON and unclear items
+#   malformed         — returns non-JSON text (no wrapper at all)
+#   wrapper-no-inner  — wrapper present but .result missing (e.g. error_max_turns)
+#   hang              — sleeps indefinitely (triggers timeout)
+#   rate-limit        — exits 1 with stderr message
 #
 # REPO_ROOT_OVERRIDE and PERSONAS_FILE are set per-scenario to inject fixture data.
 #
@@ -133,15 +140,21 @@ _write_stub_claude() {
 # Ignores all args; prints canned output based on STUB_MODE.
 case "${STUB_MODE:-happy}" in
   happy)
-    printf '{"found":"yes","answer":"Install by running the setup script.","unclear":[],"guessed":[],"page_used":"README.md"}\n'
+    # Real claude -p --output-format json wrapper: inner JSON is a STRING under .result
+    printf '{"type":"result","subtype":"success","is_error":false,"duration_ms":1234,"result":"{\\"found\\":\\"yes\\",\\"answer\\":\\"Install by running the setup script.\\",\\"unclear\\":[],\\"guessed\\":[],\\"page_used\\":\\"README.md\\"}"}\n'
     exit 0
     ;;
   bad)
-    printf '{"found":"no","answer":"The document does not describe this.","unclear":["how to install","what OS is supported"],"guessed":[],"page_used":null}\n'
+    printf '{"type":"result","subtype":"success","is_error":false,"duration_ms":2345,"result":"{\\"found\\":\\"no\\",\\"answer\\":\\"The document does not describe this.\\",\\"unclear\\":[\\"how to install\\",\\"what OS is supported\\"],\\"guessed\\":[],\\"page_used\\":null}"}\n'
     exit 0
     ;;
   malformed)
     printf 'this is not json\n'
+    exit 0
+    ;;
+  wrapper-no-inner)
+    # Wrapper subtype where .result is missing (e.g. error_max_turns, error_during_execution)
+    printf '{"type":"result","subtype":"error_max_turns","is_error":true,"duration_ms":5000}\n'
     exit 0
     ;;
   hang)
@@ -406,6 +419,41 @@ scenario_7() {
 }
 
 # ---------------------------------------------------------------------------
+# Scenario 8: Wrapper present but .result missing (e.g. error_max_turns subtype)
+# Regression test for the parser bug where reader-test.sh used to run
+# `jq -e '.found'` against the OUTER wrapper instead of the nested .result
+# string. Any wrapper-shaped response without a parseable inner JSON must
+# resolve to error:unparseable_response.
+# ---------------------------------------------------------------------------
+scenario_8() {
+  printf '\n--- Scenario 8: Wrapper without .result — exit 0, error:unparseable_response ---\n'
+
+  local tmpdir stub_dir repo_dir
+  tmpdir="$(_make_tmpdir)"
+  stub_dir="${tmpdir}/bin"
+  repo_dir="${tmpdir}/repo"
+  mkdir -p "$stub_dir"
+  _setup_fixture_repo "$repo_dir"
+  _write_stub_claude "$stub_dir"
+
+  local output exit_code
+  exit_code=0
+  output="$(
+    export PATH="${stub_dir}:${PATH}"
+    export STUB_MODE=wrapper-no-inner
+    export REPO_ROOT_OVERRIDE="$repo_dir"
+    export PERSONAS_FILE="$PERSONAS_FIXTURE"
+    bash "$READER_TEST" test-reader what-is-it
+  )" || exit_code=$?
+
+  assert_exit_zero "S8: exit code is 0" "$exit_code"
+  assert_json_field "S8: error == unparseable_response" \
+    ".error" "unparseable_response" "$output"
+
+  rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all scenarios
 # ---------------------------------------------------------------------------
 scenario_1
@@ -415,6 +463,7 @@ scenario_4
 scenario_5
 scenario_6
 scenario_7
+scenario_8
 
 # ---------------------------------------------------------------------------
 # Summary

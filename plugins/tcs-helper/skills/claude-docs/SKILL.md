@@ -1,92 +1,125 @@
 ---
 name: claude-docs
-description: |
-  Use PROACTIVELY when authoring or reviewing user-facing documentation
-  (README, configuration, troubleshooting, FAQ pages). MUST BE USED when
-  the user asks to plan a docs/ tree, draft a doc page, extract a configuration
-  reference from settings code, or run a reader test against existing docs.
-  Trigger phrases: "plan docs", "write configuration page", "review my docs",
-  "extract settings into doc", "reader-test the README".
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion
+description: "Use when you need current Claude Code documentation on hooks, MCP, tools, permissions, settings, agents, or skills. Fetches and caches docs locally for up to 7 days."
+user-invocable: true
+argument-hint: "[topic: hooks | mcp | tools | permissions | settings | agents | skills | all] [--refresh]"
+allowed-tools: Bash, WebFetch, Read, Write
 ---
 
 ## Persona
 
 **Active skill: tcs-helper:claude-docs**
 
-Act as a user-facing-documentation co-author. Help plugin and tool authors produce a structured `docs/` tree with installation, configuration, troubleshooting, and topic pages — and verify the result via persona-driven reader testing.
-
-This skill is a Receptionist that routes incoming work to one of four modes. Each mode owns its own deeper workflow (in `modes/<mode>.md`); this entry point only dispatches.
-
-**Request**: $ARGUMENTS
+Fetch and cache Claude Code documentation, keeping it locally available for up to 7 days.
 
 ## Interface
 
-ModeRequest {
-  mode: "plan" | "write" | "extract" | "review"
-  flags: string[]                    // remaining $ARGUMENTS tokens after the mode token
+```
+TopicEntry {
+  name: string
+  url: string
+  cacheFile: string
 }
 
-DispatchResult {
-  selectedMode: string
-  modeFile: string                   // modes/<mode>.md
+State {
+  topic = $ARGUMENTS          // parsed topic name; "all" fetches every topic
+  refresh: boolean            // true when --refresh flag present
+  cacheDir: "docs/ai/external/claude"
+  cacheFile: string           // cacheDir + "/" + topic + ".md"
+  mcpServer: string | null    // result of MCP check
+  fresh: boolean              // cache younger than 7 days
 }
+```
+
+**In scope:** Fetching and caching the seven known Claude Code documentation topics listed below.
+
+**Out of scope:** Other Anthropic docs, third-party docs, or arbitrary URL fetching.
 
 ## Constraints
 
 **Always:**
-- Parse the leading token of $ARGUMENTS to select a mode. Match case-insensitively.
-- Route to exactly one mode per invocation. Mode bodies are loaded only when their mode is selected (progressive disclosure).
-- When $ARGUMENTS is empty or contains an unrecognised mode token, ask the user via AskUserQuestion — never silently fail or pick a default.
-- Pass any remaining flags after the mode token through to the selected mode unchanged.
-- Treat each mode as authoritative: this file does not duplicate mode logic.
+- Write a timestamp header to every cache file so staleness is visible at a glance.
+- List available topics and exit cleanly when the topic is unknown or missing.
+- Delegate to the MCP docs server when one is detected — do not duplicate the fetch.
 
 **Never:**
-- Implement mode logic in this file. Mode bodies live in `modes/`.
-- Auto-trigger a destructive operation. All file writes happen inside modes (plan / write / extract may write; review never does).
-- Bypass the mode-router for direct skill calls. There is no hidden default mode.
+- Fetch from the network when a fresh, valid cache exists (unless `--refresh` is set).
+- Create `docs/ai/external/` — it is already in `.gitignore`; just write the file.
 
 ## Reference Materials
 
-- `modes/plan.md` — repo analysis + `docs/` skeleton proposal
-- `modes/write.md` — section-by-section page drafting workflow
-- `modes/extract.md` — settings → configuration page generator
-- `modes/review.md` — persona-driven reader testing via `claude -p`
-- `templates/personas-default.md` — built-in persona library (overridable per project)
-- `templates/skeleton-{obsidian,python,tcs-plugin,generic}.md` — default `docs/` skeletons
-- `templates/configuration-template.md` — output structure for `extract`
-- `templates/gap-report-template.md` — Markdown structure for `review` output
-- `scripts/reader-test.sh` — orchestrates a single `claude -p` reader simulation
-- `scripts/parse-{ts-settings,jsonschema,pydantic}.sh` — settings source parsers
-- `reference/conventions.md` — page-type → section-structure conventions
-- `reference/claude-p-contract.md` — `claude -p` invocation contract
+| Topic | URL |
+|-------|-----|
+| hooks | https://docs.anthropic.com/en/docs/claude-code/hooks |
+| mcp | https://docs.anthropic.com/en/docs/claude-code/mcp |
+| tools | https://docs.anthropic.com/en/docs/claude-code/tools |
+| permissions | https://docs.anthropic.com/en/docs/claude-code/security |
+| settings | https://docs.anthropic.com/en/docs/claude-code/settings |
+| agents | https://docs.anthropic.com/en/docs/claude-code/agents |
+| skills | https://docs.anthropic.com/en/docs/claude-code/skills |
 
 ## Workflow
 
-### 1. Parse Mode
+### 1. Parse arguments
 
-Inspect `$ARGUMENTS`. Lowercase the leading token (everything before the first whitespace).
+Extract `topic` and `--refresh` flag from `$ARGUMENTS`:
+- Strip `--refresh` from the argument string; set `refresh: true` if present.
+- The remaining token is the topic name (lowercase, trimmed).
+- If topic is empty or not in the Topics Reference table → print the table above and exit.
 
-```text
-match (mode_token) {
-  "plan"    => Read modes/plan.md, follow its Workflow with the remaining args.
-  "write"   => Read modes/write.md, follow its Workflow with the remaining args.
-  "extract" => Read modes/extract.md, follow its Workflow with the remaining args.
-  "review"  => Read modes/review.md, follow its Workflow with the remaining args.
-  ""        => AskUserQuestion: "Which mode?" Options: plan / write / extract / review.
-  *         => Print recognised modes; AskUserQuestion to disambiguate. Never silently pick a default.
-}
+### 2. Check cache
+
+```bash
+CACHE_DIR="docs/ai/external/claude"
+CACHE_FILE="${CACHE_DIR}/${topic}.md"
+mkdir -p "$CACHE_DIR"
+
+# Fresh = file exists AND modified within the last 7 days
+if [ -f "$CACHE_FILE" ] && [ "$(find "$CACHE_FILE" -mtime -7 2>/dev/null)" ]; then
+  echo "fresh"
+fi
 ```
 
-### 2. Hand Off
+If fresh and `refresh` is false: Read the cache file and present its content. Exit.
 
-The selected mode file is the rest of the workflow. Do not re-implement mode logic here. Mode bodies own:
-- Their own pre-conditions and prerequisite checks.
-- Their own user interactions and confirmations.
-- Their own error handling and exit conditions.
+### 3. MCP check
 
-When the mode hands control back, this file ends — there is no post-processing step here.
+```bash
+MCP_DOCS=$(claude mcp list 2>/dev/null | grep -i "docs\|documentation" | head -1)
+```
 
-## Notes for Implementers
+If `$MCP_DOCS` is non-empty: delegate the request to that MCP docs server. Exit after delegation.
 
-This skill follows the **Receptionist pattern** documented in `docs/about/skill-and-agent-design.md`. The single `SKILL.md` entry point routes to mode bodies via progressive disclosure (mode bodies are loaded only when invoked). Per ADR-1 of spec 010-doc-product-skill, this design was chosen over an agent-with-skills variant or four sibling skills because the modes share the docs/ tree as domain context, are sequential not parallel, and benefit from a single description-driven trigger surface.
+### 4. Fetch and cache
+
+For the resolved topic URL (from the Topics Reference table):
+1. Use WebFetch to retrieve the page content.
+2. Prepend a timestamp header block:
+   ```
+   <!-- Cached: YYYY-MM-DD HH:MM UTC -->
+   <!-- Source: {url} -->
+   <!-- Refresh with: /claude-docs {topic} --refresh -->
+   ```
+3. Write the combined content to `$CACHE_FILE` using the Write tool.
+4. Present the fetched content.
+
+### 5. `all` topic
+
+When topic is `all`: iterate through every entry in the Topics Reference table sequentially, running Steps 2–4 for each. Report a summary table at the end:
+
+```
+Topic        Status        Cache File
+───────────  ────────────  ─────────────────────────────────
+hooks        fetched       docs/ai/external/claude/hooks.md
+mcp          cached        docs/ai/external/claude/mcp.md
+...
+```
+
+### Entry Point
+
+match (topic) {
+  "all"                  => steps 2–4 for each topic, then step 5 summary
+  known topic, fresh     => step 2 (serve cache)
+  known topic, stale     => step 3, then step 4
+  unknown / empty        => list topics and exit
+}
