@@ -1,0 +1,325 @@
+#!/bin/bash
+# tcs-git-helpers: v1.0.0
+# post-merge — tcs-git-helpers repo-side stale-branch surfacing hook
+#
+# Runs after `git pull` or `git merge`. Queries GitHub for merged PRs whose
+# headRefName matches a local branch, emits a suggestion list to stderr,
+# and updates the stale-branch cache atomically.
+#
+# Key behaviours:
+#   - Single batched `gh pr list` call — NEVER per-branch (O(n) network calls
+#     are explicitly forbidden per research/performance.md §3).
+#   - Suggestions go to STDERR only; STDOUT is always empty.
+#   - Exits 0 always — post-merge MUST NOT block a merge.
+#   - Worktree branches (M6 AC3) are excluded from the stale list.
+#   - Degrades silently when gh is absent or unauthenticated.
+#   - When CLAUDE_PLUGIN_DATA is unset, emits stderr suggestion but skips
+#     cache writes.
+#
+# Configuration:
+#   CLAUDE_PLUGIN_ROOT  — if set and lib/cache.sh exists, sources it
+#   CLAUDE_PLUGIN_DATA  — if set, writes cache to ${CLAUDE_PLUGIN_DATA}/cache/
+#
+# Install: git config core.hooksPath .githooks
+#
+# Spec refs:
+#   - PRD M6 AC1-AC3 — stale-branch surfacing
+#   - SDD §Repo-side .githooks/ Templates — post-merge
+#   - SDD §Cache Schemas (TSV+JSON dual-write)
+#   - ADR-4 — atomic dual-write (.tmp → mv)
+#   - research/performance.md §3 — single batched gh call
+
+set -uo pipefail
+
+# ---------------------------------------------------------------------------
+# Source lib/cache.sh if available (provides _write_stale_cache, _repo_hash)
+# ---------------------------------------------------------------------------
+
+_CACHE_LIB_LOADED=0
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && \
+   [ -f "${CLAUDE_PLUGIN_ROOT}/scripts/lib/cache.sh" ]; then
+  # shellcheck source=scripts/lib/cache.sh
+  # shellcheck disable=SC1091
+  . "${CLAUDE_PLUGIN_ROOT}/scripts/lib/cache.sh"
+  _CACHE_LIB_LOADED=1
+fi
+
+# ---------------------------------------------------------------------------
+# Inline helpers (used when lib/cache.sh is NOT loaded)
+# These mirror lib/cache.sh exactly for wire compatibility.
+# ---------------------------------------------------------------------------
+
+# Minimal JSON-string escape (branch names, paths, ISO timestamps).
+_inline_json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+# Derive 12-char repo hash: sha1 prefix of absolute repo top-level path.
+# Must match lib/cache.sh._repo_hash exactly.
+_inline_repo_hash() {
+  local repo_path
+  repo_path="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+  printf '%s' "$repo_path" | shasum 2>/dev/null | head -c 12
+}
+
+# Build the JSON stale-cache sibling. Pure printf (no jq dep on write path).
+# Args: $1=updated_iso $2=repo_path $3=default_branch $4=tsv-body (tab-sep rows)
+_inline_emit_stale_json() {
+  local updated_iso="$1"
+  local repo_path="$2"
+  local default_branch="$3"
+  local body="$4"
+  local first=1
+  local name pr_number merged_at
+
+  printf '{\n'
+  printf '  "version": 1,\n'
+  printf '  "updated_iso": "%s",\n' "$(_inline_json_escape "$updated_iso")"
+  printf '  "repo_path": "%s",\n'   "$(_inline_json_escape "$repo_path")"
+  printf '  "default_branch": "%s",\n' "$(_inline_json_escape "$default_branch")"
+  printf '  "stale_branches": ['
+
+  if [ -n "$body" ]; then
+    while IFS=$'\t' read -r name pr_number merged_at; do
+      [ -z "$name" ] && continue
+      if [ "$first" -eq 1 ]; then
+        printf '\n'
+        first=0
+      else
+        printf ',\n'
+      fi
+      case "$pr_number" in
+        ''|*[!0-9]*) pr_number=0 ;;
+      esac
+      printf '    {"name":"%s","pr_number":%s,"merged_at":"%s"}' \
+        "$(_inline_json_escape "$name")" \
+        "$pr_number" \
+        "$(_inline_json_escape "$merged_at")"
+    done <<EOF
+$body
+EOF
+    if [ "$first" -eq 0 ]; then
+      printf '\n  '
+    fi
+  fi
+  printf ']\n'
+  printf '}\n'
+}
+
+# Write TSV + JSON stale-branch cache atomically (inline fallback).
+# Reads rows from stdin: branch_name<TAB>pr_number<TAB>merged_at_iso
+# Args: $1=updated_iso $2=repo_path $3=default_branch
+_inline_write_stale_cache() {
+  local updated_iso="$1"
+  local repo_path="$2"
+  local default_branch="$3"
+
+  [ -n "${CLAUDE_PLUGIN_DATA:-}" ] || return 0
+
+  local hash
+  hash="$(_inline_repo_hash)" || return 0
+
+  local cache_dir="${CLAUDE_PLUGIN_DATA}/cache"
+  local tsv="${cache_dir}/${hash}-stale-cache.tsv"
+  local json="${cache_dir}/${hash}-stale-cache.json"
+
+  mkdir -p "$cache_dir" 2>/dev/null || return 0
+
+  local body
+  body="$(cat)"
+
+  # TSV atomic write.
+  {
+    printf '# tcs-git-helpers stale cache v1\n'
+    printf '# updated_iso=%s\n' "$updated_iso"
+    printf '# repo_path=%s\n' "$repo_path"
+    printf '# default_branch=%s\n' "$default_branch"
+    if [ -n "$body" ]; then
+      printf '%s\n' "$body"
+    fi
+  } > "${tsv}.tmp" && mv "${tsv}.tmp" "$tsv" || return 0
+
+  # JSON atomic write.
+  _inline_emit_stale_json "$updated_iso" "$repo_path" "$default_branch" "$body" \
+    > "${json}.tmp" && mv "${json}.tmp" "$json" || true
+}
+
+# ---------------------------------------------------------------------------
+# Cache dispatch
+# ---------------------------------------------------------------------------
+
+_do_write_stale_cache() {
+  local updated_iso="$1"
+  local repo_path="$2"
+  local default_branch="$3"
+  # stdin: tab-separated rows
+
+  if [ "$_CACHE_LIB_LOADED" -eq 1 ]; then
+    # lib/cache.sh expects stdin rows and three positional args.
+    _write_stale_cache "$updated_iso" "$repo_path" "$default_branch" 2>/dev/null || true
+  else
+    _inline_write_stale_cache "$updated_iso" "$repo_path" "$default_branch"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Main logic
+# ---------------------------------------------------------------------------
+
+# Always exit 0 — post-merge MUST NOT block a merge.
+_main() {
+  # 1. Ensure we're in a git repository.
+  local repo_path
+  repo_path="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+
+  # 2. Check gh is available; degrade silently if not.
+  if ! command -v gh >/dev/null 2>&1; then
+    return 0
+  fi
+
+  # 3. Gather local branches (for cross-reference).
+  local local_branches_raw
+  local_branches_raw="$(git for-each-ref refs/heads/ --format='%(refname:short)' 2>/dev/null)" || local_branches_raw=""
+
+  if [ -z "$local_branches_raw" ]; then
+    return 0
+  fi
+
+  # 4. Gather worktree branches (M6 AC3 exclusion).
+  local worktree_branches_raw
+  worktree_branches_raw="$(git worktree list --porcelain 2>/dev/null)" || worktree_branches_raw=""
+
+  # Extract branch names from worktree --porcelain output.
+  # Pattern: lines starting with "branch refs/heads/<name>"
+  local worktree_branches=""
+  if [ -n "$worktree_branches_raw" ]; then
+    worktree_branches="$(printf '%s\n' "$worktree_branches_raw" \
+      | grep '^branch refs/heads/' \
+      | sed 's|^branch refs/heads/||' 2>/dev/null)" || worktree_branches=""
+  fi
+
+  # 5. SINGLE batched gh call — the only network call in this hook.
+  local gh_out gh_exit
+  gh_exit=0
+  gh_out="$(gh pr list \
+    --state merged \
+    --json number,headRefName,mergedAt \
+    --limit 100 \
+    2>/dev/null)" || gh_exit=$?
+
+  # Degrade gracefully on auth error (exit 4) or any other failure.
+  if [ "$gh_exit" -eq 4 ]; then
+    printf 'tcs-git-helpers: gh auth missing — skipping stale-branch detection\n' >&2
+    return 0
+  fi
+  if [ "$gh_exit" -ne 0 ]; then
+    # "no GitHub remote" or other: silent fail-open.
+    case "$gh_out" in
+      *"no GitHub remote"*) return 0 ;;
+      *"not a git repository"*) return 0 ;;
+    esac
+    return 0
+  fi
+
+  # Guard: gh may return empty or non-JSON on some errors.
+  if [ -z "$gh_out" ] || [ "$gh_out" = "null" ]; then
+    return 0
+  fi
+
+  # 6. Parse gh output with jq. jq + set -uo pipefail: always 2>/dev/null || true.
+  if ! command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+
+  # Validate JSON before processing.
+  jq -e . <<< "$gh_out" >/dev/null 2>/dev/null || return 0
+
+  # Build a newline-delimited list of "headRefName<TAB>number<TAB>mergedAt"
+  # from the merged PR array.
+  local merged_list
+  merged_list="$(printf '%s' "$gh_out" \
+    | jq -r '.[] | [.headRefName, (.number | tostring), .mergedAt] | @tsv' \
+    2>/dev/null || true)"
+
+  if [ -z "$merged_list" ]; then
+    return 0
+  fi
+
+  # 7. Cross-reference: find local branches that appear in merged PRs,
+  #    excluding any checked out in a worktree.
+  local stale_rows=""
+  local stale_names=""
+
+  while IFS=$'\t' read -r ref_name pr_num merged_at; do
+    [ -z "$ref_name" ] && continue
+
+    # Is this branch a local branch?
+    # Use grep with fixed-string match on a line-by-line basis.
+    if ! printf '%s\n' "$local_branches_raw" | grep -qxF "$ref_name" 2>/dev/null; then
+      continue
+    fi
+
+    # Is this branch checked out in a worktree? If so, exclude (M6 AC3).
+    if [ -n "$worktree_branches" ] && \
+       printf '%s\n' "$worktree_branches" | grep -qxF "$ref_name" 2>/dev/null; then
+      continue
+    fi
+
+    # Accumulate stale rows (TSV format: name<TAB>pr_number<TAB>merged_at).
+    if [ -n "$stale_rows" ]; then
+      stale_rows="${stale_rows}
+${ref_name}	${pr_num}	${merged_at}"
+    else
+      stale_rows="${ref_name}	${pr_num}	${merged_at}"
+    fi
+
+    # Accumulate display names (for stderr suggestion).
+    if [ -n "$stale_names" ]; then
+      stale_names="${stale_names}, ${ref_name} (#${pr_num})"
+    else
+      stale_names="${ref_name} (#${pr_num})"
+    fi
+  done <<EOF
+$merged_list
+EOF
+
+  # 8. Emit stderr suggestion if any stale branches found (M6 AC1).
+  if [ -n "$stale_names" ]; then
+    local count=0
+    # Count the stale entries.
+    while IFS=$'\t' read -r name _pr _ma; do
+      [ -z "$name" ] && continue
+      count=$((count + 1))
+    done <<EOF2
+$stale_rows
+EOF2
+    printf 'tcs-git-helpers: %d stale branch(es) found: %s\n' \
+      "$count" "$stale_names" >&2
+    printf 'tcs-git-helpers: run /tcs-git-helpers:status --cleanup to review\n' >&2
+  fi
+
+  # 9. Update cache (only when CLAUDE_PLUGIN_DATA is set).
+  if [ -z "${CLAUDE_PLUGIN_DATA:-}" ]; then
+    return 0
+  fi
+
+  local default_branch
+  default_branch="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
+    | sed 's|refs/remotes/origin/||' 2>/dev/null)" || default_branch="main"
+  [ -n "$default_branch" ] || default_branch="main"
+
+  local updated_iso
+  updated_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  printf '%s\n' "$stale_rows" \
+    | _do_write_stale_cache "$updated_iso" "$repo_path" "$default_branch"
+}
+
+_main
+exit 0
