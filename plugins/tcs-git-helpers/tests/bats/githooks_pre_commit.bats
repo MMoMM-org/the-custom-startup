@@ -3,6 +3,7 @@
 # tests/bats/githooks_pre_commit.bats
 #
 # Coverage for templates/githooks/pre-commit
+# Test count: 24
 #
 # Spec references:
 #   - SDD §Repo-side .githooks/ Templates — pre-commit (generalized exclusion list)
@@ -56,7 +57,7 @@ setup() {
   git -C "$REPO" config user.name "$GIT_AUTHOR_NAME"
   git -C "$REPO" config user.email "$GIT_AUTHOR_EMAIL"
 
-  # Create an initial commit (needed for amend tests).
+  # Create an initial commit.
   printf 'initial\n' > "$REPO/README.md"
   git -C "$REPO" add README.md
   git -C "$REPO" commit -q -m "feat: initial commit"
@@ -71,7 +72,7 @@ setup() {
   unset TCS_PROTECTED_BRANCHES TCS_HOOK_EXCLUDE_PATHS_FILE \
         TCS_ALLOWED_COMMIT_TYPES TCS_REQUIRE_SCOPE \
         TCS_MAX_SUBJECT_LENGTH TCS_ENABLE_CONVENTIONAL_CHECK \
-        TCS_ENABLE_PR_PUSH_CHECK TCS_ALLOW_AMEND_ON_PROTECTED \
+        TCS_ENABLE_PR_PUSH_CHECK \
         CLAUDE_PLUGIN_ROOT GIT_REFLOG_ACTION
 }
 
@@ -92,42 +93,6 @@ _stage_file() {
   local file="$1" content="${2:-test content}"
   printf '%s\n' "$content" > "$REPO/$file"
   git -C "$REPO" add "$file"
-}
-
-# Run the pre-commit hook directly in the context of the test repo.
-# Sets GIT_DIR so the hook sees the right repo.
-_run_hook() {
-  run bash -c '
-    cd "$1"
-    export GIT_DIR="$1/.git"
-    export CLAUDE_PLUGIN_ROOT="${3:-}"
-    export GIT_REFLOG_ACTION="${4:-}"
-    bash "$2"
-  ' _ "$REPO" "$HOOK" "${CLAUDE_PLUGIN_ROOT:-}" "${GIT_REFLOG_ACTION:-}"
-}
-
-# Run the hook with a specific branch.
-# Switches to the branch in the repo before running.
-_switch_and_stage_and_run() {
-  local branch="$1" file="${2:-safe.txt}" content="${3:-safe content}"
-
-  # Create branch if it doesn't exist (except main which already exists).
-  case "$branch" in
-    main) ;;
-    *)
-      git -C "$REPO" checkout -q -b "$branch" 2>/dev/null || git -C "$REPO" checkout -q "$branch"
-      ;;
-  esac
-
-  _stage_file "$file" "$content"
-
-  run bash -c '
-    cd "$1"
-    export GIT_DIR="$1/.git"
-    export CLAUDE_PLUGIN_ROOT="${3:-}"
-    export GIT_REFLOG_ACTION="${4:-}"
-    bash "$2"
-  ' _ "$REPO" "$HOOK" "${CLAUDE_PLUGIN_ROOT:-}" "${GIT_REFLOG_ACTION:-}"
 }
 
 # ---------------------------------------------------------------------------
@@ -367,49 +332,7 @@ _switch_and_stage_and_run() {
 }
 
 # ---------------------------------------------------------------------------
-# 12. Amend on protected with TCS_ALLOW_AMEND_ON_PROTECTED=1 → allowed
-# ---------------------------------------------------------------------------
-
-@test "amend on protected branch with TCS_ALLOW_AMEND_ON_PROTECTED=1 is allowed" {
-  mkdir -p "$REPO/.githooks"
-  printf 'TCS_ALLOW_AMEND_ON_PROTECTED=1\n' > "$REPO/.githooks/.config"
-
-  # On main; stage a file; simulate amend via GIT_REFLOG_ACTION.
-  _stage_file "amend-file.txt"
-
-  run bash -c '
-    cd "$1"
-    export GIT_DIR="$1/.git"
-    export CLAUDE_PLUGIN_ROOT="$3"
-    export GIT_REFLOG_ACTION="commit (amend)"
-    bash "$2"
-  ' _ "$REPO" "$HOOK" "$PLUGIN_ROOT"
-
-  [ "$status" -eq 0 ]
-}
-
-# ---------------------------------------------------------------------------
-# 13. Amend on protected without override → blocked
-# ---------------------------------------------------------------------------
-
-@test "amend on protected branch without TCS_ALLOW_AMEND_ON_PROTECTED is blocked" {
-  # No .config (uses defaults — TCS_ALLOW_AMEND_ON_PROTECTED=0).
-  _stage_file "amend-file.txt"
-
-  run bash -c '
-    cd "$1"
-    export GIT_DIR="$1/.git"
-    export CLAUDE_PLUGIN_ROOT="$3"
-    export GIT_REFLOG_ACTION="commit (amend)"
-    bash "$2"
-  ' _ "$REPO" "$HOOK" "$PLUGIN_ROOT"
-
-  # Even though it's an amend, protected branch still blocks it.
-  [ "$status" -eq 1 ]
-}
-
-# ---------------------------------------------------------------------------
-# 14. Version marker present on line 2
+# 12. Version marker present on line 2
 # ---------------------------------------------------------------------------
 
 @test "version marker present as first comment line (line 2)" {
@@ -424,7 +347,7 @@ _switch_and_stage_and_run() {
 }
 
 # ---------------------------------------------------------------------------
-# 15. Performance: p99 ≤ 300ms over 100 invocations
+# 13. Performance: p99 ≤ 300ms over 100 invocations
 # ---------------------------------------------------------------------------
 
 @test "perf: p99 under 300ms over 100 invocations (passing case)" {
@@ -467,11 +390,11 @@ _switch_and_stage_and_run() {
 }
 
 # ---------------------------------------------------------------------------
-# 16. Standalone: works without CLAUDE_PLUGIN_ROOT (hard-coded defaults)
+# 14. Standalone: works without CLAUDE_PLUGIN_ROOT (hard-coded defaults)
 # ---------------------------------------------------------------------------
 
 @test "standalone without CLAUDE_PLUGIN_ROOT: blocks main, allows feat branch" {
-  # Test 16a: block on main (default protected).
+  # Test 14a: block on main (default protected).
   _stage_file "safe.txt"
 
   run bash -c '
@@ -483,7 +406,7 @@ _switch_and_stage_and_run() {
 
   [ "$status" -eq 1 ]
 
-  # Test 16b: allow on feat branch.
+  # Test 14b: allow on feat branch.
   git -C "$REPO" checkout -q -b feat/standalone-test
   _stage_file "safe2.txt"
 
@@ -495,4 +418,148 @@ _switch_and_stage_and_run() {
   ' _ "$REPO" "$HOOK"
 
   [ "$status" -eq 0 ]
+}
+
+# ---------------------------------------------------------------------------
+# W1: SSH key coverage — id_ed25519, id_ecdsa, id_dsa
+# ---------------------------------------------------------------------------
+
+@test "blocks staged id_ed25519 SSH key" {
+  git -C "$REPO" checkout -q -b feat/ssh-ed25519-test
+  _stage_file "id_ed25519" "-----BEGIN OPENSSH PRIVATE KEY-----"
+
+  run bash -c '
+    cd "$1"
+    export GIT_DIR="$1/.git"
+    unset CLAUDE_PLUGIN_ROOT GIT_REFLOG_ACTION
+    bash "$2" 2>&1
+  ' _ "$REPO" "$HOOK"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"id_ed25519"* ]]
+}
+
+@test "blocks staged id_ecdsa SSH key" {
+  git -C "$REPO" checkout -q -b feat/ssh-ecdsa-test
+  _stage_file "id_ecdsa" "-----BEGIN EC PRIVATE KEY-----"
+
+  run bash -c '
+    cd "$1"
+    export GIT_DIR="$1/.git"
+    unset CLAUDE_PLUGIN_ROOT GIT_REFLOG_ACTION
+    bash "$2" 2>&1
+  ' _ "$REPO" "$HOOK"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"id_ecdsa"* ]]
+}
+
+@test "blocks staged id_dsa SSH key" {
+  git -C "$REPO" checkout -q -b feat/ssh-dsa-test
+  _stage_file "id_dsa" "-----BEGIN DSA PRIVATE KEY-----"
+
+  run bash -c '
+    cd "$1"
+    export GIT_DIR="$1/.git"
+    unset CLAUDE_PLUGIN_ROOT GIT_REFLOG_ACTION
+    bash "$2" 2>&1
+  ' _ "$REPO" "$HOOK"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"id_dsa"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# W2: Secret-pattern coverage — .env.*, *.env, *.key, *.p12, *.pfx,
+#     *.credentials.json
+# ---------------------------------------------------------------------------
+
+@test "blocks staged .env.local file (.env.* pattern)" {
+  git -C "$REPO" checkout -q -b feat/env-local-test
+  _stage_file ".env.local" "DB_PASS=hunter2"
+
+  run bash -c '
+    cd "$1"
+    export GIT_DIR="$1/.git"
+    unset CLAUDE_PLUGIN_ROOT GIT_REFLOG_ACTION
+    bash "$2" 2>&1
+  ' _ "$REPO" "$HOOK"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *".env.local"* ]]
+}
+
+@test "blocks staged app.env file (*.env pattern)" {
+  git -C "$REPO" checkout -q -b feat/app-env-test
+  _stage_file "app.env" "API_SECRET=abc"
+
+  run bash -c '
+    cd "$1"
+    export GIT_DIR="$1/.git"
+    unset CLAUDE_PLUGIN_ROOT GIT_REFLOG_ACTION
+    bash "$2" 2>&1
+  ' _ "$REPO" "$HOOK"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"app.env"* ]]
+}
+
+@test "blocks staged server.key file (*.key pattern)" {
+  git -C "$REPO" checkout -q -b feat/server-key-test
+  _stage_file "server.key" "-----BEGIN PRIVATE KEY-----"
+
+  run bash -c '
+    cd "$1"
+    export GIT_DIR="$1/.git"
+    unset CLAUDE_PLUGIN_ROOT GIT_REFLOG_ACTION
+    bash "$2" 2>&1
+  ' _ "$REPO" "$HOOK"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"server.key"* ]]
+}
+
+@test "blocks staged cert.p12 file (*.p12 pattern)" {
+  git -C "$REPO" checkout -q -b feat/p12-test
+  _stage_file "cert.p12" "binary-cert-data"
+
+  run bash -c '
+    cd "$1"
+    export GIT_DIR="$1/.git"
+    unset CLAUDE_PLUGIN_ROOT GIT_REFLOG_ACTION
+    bash "$2" 2>&1
+  ' _ "$REPO" "$HOOK"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cert.p12"* ]]
+}
+
+@test "blocks staged cert.pfx file (*.pfx pattern)" {
+  git -C "$REPO" checkout -q -b feat/pfx-test
+  _stage_file "cert.pfx" "binary-cert-data"
+
+  run bash -c '
+    cd "$1"
+    export GIT_DIR="$1/.git"
+    unset CLAUDE_PLUGIN_ROOT GIT_REFLOG_ACTION
+    bash "$2" 2>&1
+  ' _ "$REPO" "$HOOK"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cert.pfx"* ]]
+}
+
+@test "blocks staged service.credentials.json file (*.credentials.json pattern)" {
+  git -C "$REPO" checkout -q -b feat/credentials-test
+  _stage_file "service.credentials.json" '{"token":"secret"}'
+
+  run bash -c '
+    cd "$1"
+    export GIT_DIR="$1/.git"
+    unset CLAUDE_PLUGIN_ROOT GIT_REFLOG_ACTION
+    bash "$2" 2>&1
+  ' _ "$REPO" "$HOOK"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"service.credentials.json"* ]]
 }

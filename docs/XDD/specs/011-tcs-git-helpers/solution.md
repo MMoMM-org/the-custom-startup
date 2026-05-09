@@ -689,7 +689,11 @@ TCS_REQUIRE_SCOPE              # 0|1; default 0
 TCS_MAX_SUBJECT_LENGTH         # integer 1-9999; default 90
 TCS_ENABLE_CONVENTIONAL_CHECK  # 0|1; default 1
 TCS_ENABLE_PR_PUSH_CHECK       # 0|1; default 1
-TCS_ALLOW_AMEND_ON_PROTECTED   # 0|1; default 0 (Boucle allows; we deny by default per integration research)
+# NOTE: TCS_ALLOW_AMEND_ON_PROTECTED was previously specified here but has been removed.
+# Amend exemption has moved to the Claude-side block-bad-git-ops.sh layer per deviation D1
+# (phase-4.md). The pre-commit hook cannot reliably detect --amend on git 2.50.1:
+# GIT_REFLOG_ACTION is empty, ORIG_HEAD absent, ps-tree fails. Repo-side hook is
+# intentionally strict (defense-in-depth): blocks ALL protected-branch commits.
 ```
 
 **Per-line grammar (regex):** `^[A-Z][A-Z0-9_]{0,63}=.{0,256}$` (key allowlist + 256-char value cap). Values quoted (`"..."` or `'...'`) have outer pair stripped. Each KEY's VALUE is validated against a key-specific regex (e.g., booleans `^[01]$`, integers `^[0-9]{1,4}$`).
@@ -1489,6 +1493,7 @@ Suggestions:
   - Rationale: Marcus is sole contributor across MiYo repos; review-required would block all PRs. Preset: `allow_force_pushes=false`, `allow_deletions=false`, `enforce_admins=false`, `required_status_checks` only if `.github/workflows/` present, NO `required_pull_request_reviews`.
   - Trade-offs: Less protection than a multi-contributor preset. Re-evaluate in v1.1 when multi-contributor mode lands.
   - User confirmed: **CONFIRMED** via PRD review OQ2 (Marcus answered "without the reviews.. like I said single coder")
+  - Amend handling: deferred to Claude-side `block-bad-git-ops.sh` (D1 — phase-4.md). Pre-commit hook cannot detect --amend; repo-side is intentionally strict.
 
 ## Quality Requirements
 

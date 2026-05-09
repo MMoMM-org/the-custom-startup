@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Repo-side .githooks/ Templates"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 4
 ---
@@ -84,6 +84,29 @@ This phase produces the four `.githooks/*` template files installed into target 
   - Performance budgets per SDD §Quality Requirements
 
   Success: All 4 templates standalone-functional; M5, M6, M11 fully met.
+
+---
+
+## Deviations
+
+### D1 — `TCS_ALLOW_AMEND_ON_PROTECTED` removed from `.githooks/pre-commit` template
+
+**Date:** 2026-05-09
+**Origin:** T4.1 implementation
+**Spec ref:** ADR-12 (solution.md), PRD M11/AC1
+
+**Rationale:** ADR-12 specifies `TCS_ALLOW_AMEND_ON_PROTECTED=1` as a config-file key allowing `--amend` on protected branches. Empirical verification with git 2.50.1 on macOS shows that pre-commit hooks have NO reliable signal to detect `--amend`:
+- `GIT_REFLOG_ACTION` is empty (not set by `git commit --amend`)
+- `ORIG_HEAD` is absent at pre-commit invocation time (written only AFTER hook success)
+- Process-tree walking via `ps` fails (git invokes the hook through a re-exec'd subprocess)
+
+Boucle-framework's `branch-guard` (cited as prior art) is a `PreToolUse:Bash` hook — it sees the literal command string and greps for `--amend` trivially. This is a different architectural layer than `.githooks/pre-commit`.
+
+**Resolution:** Amend-exemption logic moves to (and remains in) the Claude-side `block-bad-git-ops.sh` layer (T2.x), which DOES see the command string. The repo-side `.githooks/pre-commit` template is intentionally stricter (defense-in-depth): it blocks ALL commits to protected branches regardless of amend-ness. Users needing to amend on a protected branch must either (a) use the Claude-side override path, or (b) edit `.githooks/.config` to remove the branch from `TCS_PROTECTED_BRANCHES`, or (c) skip the hook with `git commit --no-verify` (which itself is blocked by block-bad-git-ops without override).
+
+**Updated ADR-12 wording (in solution.md):** Strike "TCS_ALLOW_AMEND_ON_PROTECTED" from the `.config` schema; add note that amend exemption is Claude-side only.
+
+**Approved-by:** Marcus (2026-05-09 in /implement orchestration)
 
 ---
 

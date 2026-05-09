@@ -9,19 +9,21 @@
 # Configuration (via .githooks/.config, parsed by lib/config_parser.sh):
 #   TCS_PROTECTED_BRANCHES     — |-separated branch names; default main|master|production|release
 #   TCS_HOOK_EXCLUDE_PATHS_FILE — path to exclusion list; default .githooks/exclude-paths
-#   TCS_ALLOW_AMEND_ON_PROTECTED — 0|1; if 1, allows `git commit --amend` on protected branches
 #
 # Install: git config core.hooksPath .githooks
 #
 # Spec refs:
 #   - SDD §Repo-side .githooks/ Templates — pre-commit (ADR-12, M5/AC1, M11/AC1)
-#   - ADR-12 — default protected branches; TCS_ALLOW_AMEND_ON_PROTECTED
+#   - ADR-12 — default protected branches
 #   - M11   — standalone mode: works without CLAUDE_PLUGIN_ROOT (hard-coded defaults)
 #
-# Amend detection:
-#   When `git commit --amend` runs, git sets GIT_REFLOG_ACTION to "commit (amend)".
-#   We check whether GIT_REFLOG_ACTION contains "amend" as a reliable, portable
-#   signal. This avoids fragile HEAD/MERGE_MSG tricks and works on bash 3.2.
+# Note on amend detection (deviation D1):
+#   Empirical testing with git 2.50.1 confirms that pre-commit hooks have NO
+#   reliable signal for --amend: GIT_REFLOG_ACTION is empty, ORIG_HEAD is absent
+#   at pre-commit time, and ps-tree walking fails (re-exec'd subprocess). Amend
+#   exemption is handled at the Claude-side block-bad-git-ops.sh layer (T2.x),
+#   which sees the literal command string. This hook is intentionally strict:
+#   it blocks ALL commits to protected branches (defense-in-depth).
 
 # Exit immediately on unhandled errors; pipefail catches pipeline failures.
 set -eo pipefail
@@ -31,7 +33,6 @@ set -eo pipefail
 # ---------------------------------------------------------------------------
 TCS_PROTECTED_BRANCHES="${TCS_PROTECTED_BRANCHES:-main|master|production|release}"
 TCS_HOOK_EXCLUDE_PATHS_FILE="${TCS_HOOK_EXCLUDE_PATHS_FILE:-.githooks/exclude-paths}"
-TCS_ALLOW_AMEND_ON_PROTECTED="${TCS_ALLOW_AMEND_ON_PROTECTED:-0}"
 
 # ---------------------------------------------------------------------------
 # Load config_parser.sh if CLAUDE_PLUGIN_ROOT is set and lib is present.
@@ -47,20 +48,12 @@ if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && \
   # Re-apply defaults for any key that config_parser left unset.
   TCS_PROTECTED_BRANCHES="${TCS_PROTECTED_BRANCHES:-main|master|production|release}"
   TCS_HOOK_EXCLUDE_PATHS_FILE="${TCS_HOOK_EXCLUDE_PATHS_FILE:-.githooks/exclude-paths}"
-  TCS_ALLOW_AMEND_ON_PROTECTED="${TCS_ALLOW_AMEND_ON_PROTECTED:-0}"
 fi
 
 # ---------------------------------------------------------------------------
 # Gather context
 # ---------------------------------------------------------------------------
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || printf '')"
-
-# Detect --amend: git sets GIT_REFLOG_ACTION to "commit (amend)" during amend.
-# We use a case match for bash 3.2 compatibility (no regex, no \s).
-IS_AMEND=0
-case "${GIT_REFLOG_ACTION:-}" in
-  *amend*) IS_AMEND=1 ;;
-esac
 
 STAGED="$(git diff --cached --name-only 2>/dev/null || true)"
 
@@ -72,7 +65,6 @@ STAGED="$(git diff --cached --name-only 2>/dev/null || true)"
 # Strategy: iterate over each protected branch and check for exact match.
 _is_protected_branch() {
   local branch="$1" list="$2"
-  local IFS_SAVE="$IFS"
   # Split on | manually (IFS-based split not safe on bash 3.2 with arbitrary chars).
   local item rest="$list"
   while [ -n "$rest" ]; do
@@ -87,29 +79,21 @@ _is_protected_branch() {
         ;;
     esac
     if [ "$branch" = "$item" ]; then
-      IFS="$IFS_SAVE"
       return 0
     fi
   done
-  IFS="$IFS_SAVE"
   return 1
 }
 
 if _is_protected_branch "$BRANCH" "$TCS_PROTECTED_BRANCHES"; then
-  # Check for amend exemption.
-  if [ "$TCS_ALLOW_AMEND_ON_PROTECTED" = "1" ] && [ "$IS_AMEND" = "1" ]; then
-    : # amend allowed — fall through to secret check
-  else
-    printf '\n' >&2
-    printf '  ✗ Direct commit to '\''%s'\'' is not allowed.\n' "$BRANCH" >&2
-    printf '    Create a feature branch first:\n' >&2
-    printf '      git checkout -b feat/your-feature\n' >&2
-    if [ "$IS_AMEND" = "1" ]; then
-      printf '    (To allow amend on protected branches: TCS_ALLOW_AMEND_ON_PROTECTED=1 in .githooks/.config)\n' >&2
-    fi
-    printf '\n' >&2
-    exit 1
-  fi
+  printf '\n' >&2
+  printf '  ✗ Direct commit to '\''%s'\'' is not allowed.\n' "$BRANCH" >&2
+  printf '    Create a feature branch first:\n' >&2
+  printf '      git checkout -b feat/your-change\n' >&2
+  printf '    To bypass at the Claude-side layer (when applicable), use CLAUDE_ALLOW_<RULE>=1.\n' >&2
+  printf '    The repo-side hook is intentionally strict and blocks all protected-branch commits.\n' >&2
+  printf '\n' >&2
+  exit 1
 fi
 
 # ---------------------------------------------------------------------------
