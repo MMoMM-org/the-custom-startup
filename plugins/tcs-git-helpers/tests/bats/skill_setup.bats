@@ -609,7 +609,7 @@ _make_gh_repo() {
   echo "$output" | grep -q 'gh-token-hygiene\.md'
 }
 
-@test "C34 with_branch_protection: warns on excessive 'admin:org' scope but proceeds with --yes" {
+@test "C34 with_branch_protection: warns on excessive 'admin:org' scope but proceeds with TCS_BP_ALLOW_EXCESS_SCOPES=1" {
   _make_gh_repo "$TEST_TMP/bp-admin-org"
   cd "$TEST_TMP/bp-admin-org"
   capture="$TEST_TMP/put-body.json"

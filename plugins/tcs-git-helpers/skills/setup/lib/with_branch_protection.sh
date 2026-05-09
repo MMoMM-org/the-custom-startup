@@ -94,7 +94,7 @@ _csv_has() {
 
 # Validate scopes per integration §9 / gh-token-hygiene.md:
 #   - missing `repo`             → block (exit 5)
-#   - excessive scopes present   → warn + (with --yes) proceed; (interactive) confirm
+#   - excessive scopes present   → warn + (TCS_BP_ALLOW_EXCESS_SCOPES=1) proceed; (interactive) confirm
 _check_scopes() {
   local csv excessive_found=""
   csv="$(_gh_scopes_csv)"

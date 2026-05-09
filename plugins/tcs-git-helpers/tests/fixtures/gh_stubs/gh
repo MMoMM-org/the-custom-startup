@@ -231,9 +231,9 @@ case "$1" in
             }')"
         cat <<EOF
 github.com
-  ✓ Logged in to github.com as test-user (oauth_token)
-  ✓ Token: gho_************************************
-  ✓ Token scopes: $scopes_quoted
+  - Logged in to github.com as test-user (oauth_token)
+  - Token: gho_************************************
+  - Token scopes: $scopes_quoted
 EOF
         exit 0
         ;;
