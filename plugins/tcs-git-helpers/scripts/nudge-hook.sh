@@ -77,9 +77,6 @@ if [[ "$INPUT" =~ \"exit_status\"[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
 # Then try tool_response.exit_code
 elif [[ "$INPUT" =~ \"exit_code\"[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
   EXIT_STATUS="${BASH_REMATCH[1]}"
-# Then try tool_response.exit_status (nested — second occurrence of key)
-elif [[ "$INPUT" =~ \"tool_response\"[^}]*\"exit_status\"[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
-  EXIT_STATUS="${BASH_REMATCH[1]}"
 fi
 # W3 fix: bare "status" field dropped — a tool_response.status with an HTTP
 # 200 code would match and suppress the nudge, inverting OQ10 fail-open.
