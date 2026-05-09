@@ -85,6 +85,12 @@ _no_match() {
   _match_command "cd foo && git clean -dfx"              "$PATTERN_CLEAN_FORCE"
 }
 
+@test "PATTERN_CLEAN_FORCE: positive — uppercase neighbours -fX / -Xf / -dXf" {
+  _match_command "git clean -fX"                         "$PATTERN_CLEAN_FORCE"
+  _match_command "git clean -Xf"                         "$PATTERN_CLEAN_FORCE"
+  _match_command "git clean -dXf ."                      "$PATTERN_CLEAN_FORCE"
+}
+
 @test "PATTERN_CLEAN_FORCE: negative — -n / -d alone do not match" {
   _no_match "git clean -n"     "$PATTERN_CLEAN_FORCE"
   _no_match "git clean -d"     "$PATTERN_CLEAN_FORCE"
@@ -128,6 +134,13 @@ _no_match() {
   _match_command $'git\trestore\t--staged\tfile.txt'               "$PATTERN_RESTORE_DESTRUCTIVE"
   _match_command "git    restore    --staged    src/foo.go"        "$PATTERN_RESTORE_DESTRUCTIVE"
   _match_command "cd foo && git restore --worktree --source=main ." "$PATTERN_RESTORE_DESTRUCTIVE"
+}
+
+@test "PATTERN_RESTORE_DESTRUCTIVE: positive — reversed --source then --worktree" {
+  # Git accepts flags in either order; both are equally destructive.
+  _match_command "git restore --source=HEAD~1 --worktree file.txt"  "$PATTERN_RESTORE_DESTRUCTIVE"
+  _match_command $'git\trestore\t--source=HEAD\t--worktree\tfoo'    "$PATTERN_RESTORE_DESTRUCTIVE"
+  _match_command "cd foo && git restore --source=main --worktree ." "$PATTERN_RESTORE_DESTRUCTIVE"
 }
 
 @test "PATTERN_RESTORE_DESTRUCTIVE: negative — bare git restore (no --staged/--worktree)" {
@@ -230,6 +243,14 @@ _no_match() {
   _no_match "cd foo && git push --force-with-lease origin HEAD" "$PATTERN_PUSH_FORCE"
 }
 
+@test "PATTERN_PUSH_FORCE: negative — --force-if-includes (git 2.30+) MUST NOT match" {
+  # --force-if-includes is the safer companion to --force-with-lease; neither
+  # should be flagged as a destructive --force.
+  _no_match "git push --force-if-includes"                          "$PATTERN_PUSH_FORCE"
+  _no_match "git push origin feat/foo --force-if-includes"          "$PATTERN_PUSH_FORCE"
+  _no_match "cd foo && git push --force-with-lease --force-if-includes" "$PATTERN_PUSH_FORCE"
+}
+
 # -- 12. PATTERN_PUSH_DELETE_FLAG ----------------------------------------------
 
 @test "PATTERN_PUSH_DELETE_FLAG: positive — --delete <branch>" {
@@ -237,6 +258,12 @@ _no_match() {
   _match_command $'git\tpush\torigin\t--delete\tfeat/foo'    "$PATTERN_PUSH_DELETE_FLAG"
   _match_command "git    push    origin    --delete    feat/foo" "$PATTERN_PUSH_DELETE_FLAG"
   _match_command "cd foo && git push origin --delete feat/foo" "$PATTERN_PUSH_DELETE_FLAG"
+}
+
+@test "PATTERN_PUSH_DELETE_FLAG: positive — --delete without explicit remote" {
+  # `git push --delete <branch>` (no remote) defaults to origin and is equally destructive.
+  _match_command "git push --delete feat/foo"                "$PATTERN_PUSH_DELETE_FLAG"
+  _match_command "cd foo && git push --delete feat/foo"      "$PATTERN_PUSH_DELETE_FLAG"
 }
 
 @test "PATTERN_PUSH_DELETE_FLAG: negative — plain push and --dry-run do not match" {

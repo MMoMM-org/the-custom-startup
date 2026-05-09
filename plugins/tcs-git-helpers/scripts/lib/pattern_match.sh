@@ -48,8 +48,11 @@
 # git reset --hard [<ref>]
 PATTERN_RESET_HARD='git[[:space:]]+reset[[:space:]]+--hard[[:>:]]'
 
-# git clean -f / -fx / -dfx / --force  (any flag combo containing f or x, or --force)
-PATTERN_CLEAN_FORCE='git[[:space:]]+clean[[:space:]]+(-[a-z]*f|-[a-z]*x|--force)'
+# git clean -f / -fx / -fX / -Xf / -dfx / --force  (any bundle containing f or x, --force)
+# `-[a-zA-Z]*[fx]` allows uppercase neighbours (e.g. `-fX`, `-Xf`) — `-X` removes
+# only ignored files which is destructive when combined with `-f`. Substring-match
+# means trailing `X` after a matched `-f` does not block the match.
+PATTERN_CLEAN_FORCE='git[[:space:]]+clean[[:space:]]+(-[a-zA-Z]*[fx]|--force)'
 
 # git checkout .   (require . to be its own argument: end-of-string or whitespace next)
 PATTERN_CHECKOUT_DOT='git[[:space:]]+checkout[[:space:]]+\.([[:space:]]|$)'
@@ -57,8 +60,10 @@ PATTERN_CHECKOUT_DOT='git[[:space:]]+checkout[[:space:]]+\.([[:space:]]|$)'
 # git checkout -- <path>
 PATTERN_CHECKOUT_PATH='git[[:space:]]+checkout[[:space:]]+--[[:space:]]+[^[:space:]]+'
 
-# git restore --worktree --source=<ref> ...   OR   git restore --staged ...
-PATTERN_RESTORE_DESTRUCTIVE='git[[:space:]]+restore[[:space:]]+(.*--worktree.*--source.*|.*--staged.*)'
+# git restore --worktree --source=<ref> ...   OR   --source=<ref> --worktree ...   OR   --staged ...
+# Both flag orderings of --worktree + --source are equally valid git invocations
+# and equally destructive — match either.
+PATTERN_RESTORE_DESTRUCTIVE='git[[:space:]]+restore[[:space:]]+(.*--worktree.*--source.*|.*--source.*--worktree.*|.*--staged.*)'
 
 # git branch -D <name>   (capital D = force delete; lowercase -d is the safe form)
 PATTERN_BRANCH_FORCE_DELETE='git[[:space:]]+branch[[:space:]]+-D[[:>:]]'
@@ -70,8 +75,12 @@ PATTERN_STASH_DESTROY='git[[:space:]]+stash[[:space:]]+(drop|clear)[[:>:]]'
 PATTERN_REFLOG_EXPIRE='git[[:space:]]+reflog[[:space:]]+expire[[:>:]]'
 
 # git commit ... --no-verify   |   git commit ... -n
-# (Note: bundled flags like `-nm` are NOT detected by [[:>:]] alone — accepted
-# trade-off; spec lists `-n` as discrete flag.)
+# Caveat: bundled-flag forms like `-nm "msg"` (shell-parsed as -n + -m) are NOT
+# detected — `[[:>:]]` requires a word→non-word transition, and `n` followed by
+# another word char (`m`) has none. Accepted trade-off: PRD M7 lists `-n` as the
+# canonical form. Widening to `-[a-zA-Z]*n` would also flag the discrete flag
+# bundle `-an` (= -a + -n) which is correct in spirit, but the design choice in
+# v1.0 is to stay specific to the canonical forms documented in the PRD.
 PATTERN_NO_VERIFY='git[[:space:]]+commit.*(--no-verify|-n[[:>:]])'
 
 # ---------------------------------------------------------------------------
