@@ -3,7 +3,7 @@
 # tests/bats/githooks_commit_msg.bats
 #
 # Coverage for templates/githooks/commit-msg
-# Test count: 31
+# Test count: 35
 #
 # Spec references:
 #   - PRD M5/AC1-AC4 — Conventional Commits enforcement

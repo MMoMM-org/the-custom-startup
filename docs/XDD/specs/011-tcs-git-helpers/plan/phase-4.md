@@ -35,7 +35,7 @@ phase: 4
 
 This phase produces the four `.githooks/*` template files installed into target repos by the Phase 5 setup skill. Templates work standalone (defense-in-depth M11) and use the same `.config` schema as plugin-side hooks.
 
-- [ ] **T4.1 templates/githooks/pre-commit** `[activity: backend-api]` `[parallel: true]`
+- [x] **T4.1 templates/githooks/pre-commit** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: Existing `MiYo/Kado/.githooks/pre-commit` (baseline); SDD §Repo-side `.githooks/` Templates — `pre-commit` (generalized exclusion list); ADR-12 protected-branches list.
   2. Test: Write `tests/bats/githooks_pre_commit.bats` covering: blocks commits to main/master/production/release by default; allows commits to feature branches; secret patterns (env files, credentials, keys, ssh keys) blocked; exclusion list (read from `.githooks/exclude-paths`) bypasses block; `TCS_PROTECTED_BRANCHES` from `.config` overrides default; `TCS_ALLOW_AMEND_ON_PROTECTED=1` allows `--amend` on protected; version marker `# tcs-git-helpers: v1.0.0` is line 1.
@@ -43,7 +43,7 @@ This phase produces the four `.githooks/*` template files installed into target 
   4. Validate: bats passes; shellcheck clean; ≤300ms p99 per commit.
   5. Success: Inherits Kado's behavior + `.config`-configurable per ADR-12 `[ref: PRD/M5/AC1, M11/AC1]`.
 
-- [ ] **T4.2 templates/githooks/pre-push** `[activity: backend-api]` `[parallel: true]`
+- [x] **T4.2 templates/githooks/pre-push** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: SDD §Repo-side `.githooks/` Templates — `pre-push`; M1 acceptance criteria; integration §2 gh truth table; CON-3 bash-only timeout.
   2. Test: Write `tests/bats/githooks_pre_push.bats`: blocks push when `gh pr list --head <branch>` returns CLOSED or MERGED; allows push when no PR or OPEN; degraded mode when `gh` not installed (exit 0 with stderr warn); `CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1` env-var allows (override prefix is consistent across plugin and `.githooks/` per M12 contract — single audit/sentinel namespace); reads `${CLAUDE_PLUGIN_DATA}/cache/<repo-hash>-pr-state.json` if present (within 60s TTL) AND ${CLAUDE_PLUGIN_DATA} set, else makes own gh call; bash-only timeout fires after 5s if gh hangs (`(cmd) & sleep 5; kill $!`); version marker present.
@@ -121,6 +121,20 @@ Boucle-framework's `branch-guard` (cited as prior art) is a `PreToolUse:Bash` ho
 **Updated budget:** `.githooks/pre-push` cache-hit p99 = ~150ms (was 30ms). Cache CORRECTNESS (gh-skip on cache-hit) is verified separately by `test_cache_hit_skips_gh_call` — that test asserts the load-bearing invariant (no gh call on hit), not the wall-clock latency. The 30ms budget remains valid for `block-bad-git-ops.sh` (Claude-side, in-process).
 
 **Impact:** Push latency on a cache hit ~105ms vs the previously claimed 30ms — still well under the 5000ms uncached ceiling. ADR-6 cache dedup (avoiding the ~600-800ms gh round trip) is the load-bearing optimization; this deviation just acknowledges the bash-floor cost.
+
+**Approved-by:** Marcus (2026-05-09 in /implement orchestration)
+
+### D3 — `.githooks/commit-msg` perf budget reconciled (≤30ms intra-task → ≤100ms validate)
+
+**Date:** 2026-05-09  
+**Origin:** T4.3 implementation  
+**Spec ref:** phase-4.md T4.3 step 2 vs step 4
+
+**Rationale:** T4.3 step 2 (test description) said "≤30ms p99 per commit including config-parse cost". T4.3 step 4 (validate target) said "≤100ms p99". Empirical measurement on macOS bash 3.2.57 (M-series): p50=43ms, p99=47ms — meets the 100ms validate ceiling but exceeds the 30ms aspirational target by ~17ms.
+
+The 30ms target was overly aggressive for a fork-exec bash subprocess (same root cause as D2: bash startup ~20-30ms, plus git subprocess for `$GIT_DIR` + config-parser sourcing). 47ms is the honest floor with all spec features (length + Conventional regex + config integration + merge-commit detection).
+
+**Updated budget:** `.githooks/commit-msg` p99 = ~50ms (validate ceiling 100ms remains the formal SLO). The 30ms intra-task target is retired.
 
 **Approved-by:** Marcus (2026-05-09 in /implement orchestration)
 
