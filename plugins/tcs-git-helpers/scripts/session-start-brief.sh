@@ -137,7 +137,6 @@ fi
 # ----------------------------------------------------------------------
 
 stale_count=0
-stale_rows=""
 stale_rows="$(_read_stale_cache_tsv 2>/dev/null || true)"
 if [ -n "$stale_rows" ]; then
   stale_count="$(printf '%s\n' "$stale_rows" | wc -l | tr -d '[:space:]')"
@@ -148,7 +147,6 @@ stale_seg="${stale_count} stale-merged"
 
 # Check cache staleness (>24h since updated_iso header).
 staleness_suffix=""
-tsv_path=""
 tsv_path="$(_stale_tsv_path 2>/dev/null || true)"
 if [ -n "$tsv_path" ] && [ -r "$tsv_path" ]; then
   # Extract updated_iso from comment header: "# updated_iso=2026-05-09T14:23:11Z"

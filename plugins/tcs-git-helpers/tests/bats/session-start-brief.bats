@@ -154,18 +154,6 @@ _run_hook() {
   run --separate-stderr bash -c 'cd "$1" && exec "$2"' _ "$TEST_REPO" "$HOOK"
 }
 
-# Helper: assert $stderr does NOT contain a pattern (safe mid-test assertion).
-# Returns 1 if the pattern IS found (test failure).
-_assert_no_match() {
-  local pattern="$1"
-  if printf '%s' "$stderr" | grep -q "$pattern"; then
-    printf 'FAIL: stderr should NOT contain pattern: %s\n' "$pattern" >&2
-    printf 'Actual stderr: %s\n' "$stderr" >&2
-    return 1
-  fi
-  return 0
-}
-
 # ----------------------------------------------------------------------
 # Test 1: Brief format matches SDD wireframe
 # ----------------------------------------------------------------------
@@ -403,8 +391,7 @@ STUB
     printf '%s\n' "$elapsed_ms" >> "$tmp_times"
   done
 
-  # Compute p99 (index 99 of sorted 100 values = position 99 in 1-indexed, i.e., the max).
-  # With 100 samples, p99 = the 99th value when sorted ascending (1 sample above).
+  # Compute p99: the 99th sample of 100 sorted ascending (1 sample exceeds it).
   local p99
   p99="$(sort -n "$tmp_times" | awk 'NR==99{print; exit}')"
   rm -f "$tmp_times"
@@ -435,4 +422,26 @@ STUB
 
   [ "$status" -eq 0 ]
   printf '%s' "$stderr" | grep -q "run /tcs-git-helpers:status --cleanup"
+}
+
+# ----------------------------------------------------------------------
+# Test 11: "no upstream" branch path (M4 fail-open coverage)
+# ----------------------------------------------------------------------
+
+@test "brief shows 'no upstream' when branch has no tracking" {
+  # Create a local branch with no upstream tracking configured.
+  git -C "$TEST_REPO" checkout -q -b local-only-branch 2>/dev/null
+
+  local now_iso
+  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  _write_test_cache "$now_iso"
+
+  _run_hook
+
+  [ "$status" -eq 0 ]
+  # The ahead/behind segment must say "no upstream".
+  printf '%s' "$stderr" | grep -q "no upstream"
+  # The canonical wireframe must still hold: branch • state • no upstream • stale-count.
+  printf '%s' "$stderr" \
+    | grep -qE '^\[tcs-git-helpers\] local-only-branch • [^•]+ • no upstream • [0-9]+ stale-merged'
 }
