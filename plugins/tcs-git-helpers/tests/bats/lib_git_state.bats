@@ -1,10 +1,12 @@
 #!/usr/bin/env bats
 # Tests for plugins/tcs-git-helpers/scripts/lib/git_state.sh
 #
-# Coverage per plan/phase-1.md T1.3:
-#   - _get_branch_state populates expected vars
-#   - _is_branch_squash_merged returns 0 for all-`-` cherry, 1 for mixed/all-`+`
-#   - _is_branch_dangerously_merged returns 1 (safe) for merge-commit, 0 (dangerous) for squash
+# Coverage per plan/phase-1.md T1.3 + review fixes (W1–W4):
+#   - _get_branch_state populates expected vars (clean / dirty / no-upstream)
+#   - _is_branch_squash_merged returns 0 for all-`-` cherry, 1 for mixed/all-`+`,
+#                                       2 on git error
+#   - _is_branch_dangerously_merged returns 1 (safe) for merge-commit,
+#                                          0 (dangerous) for squash, 2 on git error
 #   - _bypass_state_check returns 0 for {rebase, merge, cherry-pick, bisect, detached HEAD}
 #   - _detect_default_branch resolves origin/HEAD chain
 #   - git_safe passes through git output and exit codes
@@ -25,6 +27,7 @@ setup() {
   export GIT_COMMITTER_NAME="bats" GIT_COMMITTER_EMAIL="b@a.ts"
   export GIT_CONFIG_GLOBAL=/dev/null
   export GIT_CONFIG_SYSTEM=/dev/null
+  MADE_REPO_PATH=""
 }
 
 teardown() {
@@ -35,6 +38,10 @@ teardown() {
 }
 
 # Build a synthetic origin + clone in $TEST_DIR.
+# Sets MADE_REPO_PATH to the work-tree path; does NOT cd. Callers must `cd
+# "$MADE_REPO_PATH"` (or pass it via `-C`) before invoking lib functions —
+# the lib uses `git -C "$PWD"` for worktree-correctness.
+#
 # Modes:
 #   minimal       — main branch, one commit, pushed; no feat
 #   active        — feat with 2 unmerged commits, pushed (cherry → all `+`)
@@ -66,7 +73,7 @@ _make_repo() {
   git -C "$work" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
 
   if [ "$kind" = "minimal" ]; then
-    cd "$work" || return 1
+    MADE_REPO_PATH="$work"
     return 0
   fi
 
@@ -86,7 +93,7 @@ _make_repo() {
 
   case "$kind" in
     active)
-      # leave feat unmerged; checkout feat
+      # leave feat unmerged; feat is current branch
       :
       ;;
     squash)
@@ -125,11 +132,13 @@ _make_repo() {
       git -C "$work" checkout -q feat
       ;;
   esac
-  cd "$work" || return 1
+  MADE_REPO_PATH="$work"
+  return 0
 }
 
 @test "_detect_default_branch resolves main via origin/HEAD" {
   _make_repo minimal
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   run _detect_default_branch
   [ "$status" -eq 0 ]
@@ -138,7 +147,8 @@ _make_repo() {
 
 @test "_detect_default_branch falls back to local main when origin/HEAD missing" {
   _make_repo minimal
-  git update-ref -d refs/remotes/origin/HEAD 2>/dev/null || true
+  git -C "$MADE_REPO_PATH" update-ref -d refs/remotes/origin/HEAD 2>/dev/null || true
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   run _detect_default_branch
   [ "$status" -eq 0 ]
@@ -147,6 +157,7 @@ _make_repo() {
 
 @test "_is_branch_squash_merged returns 0 when all cherry lines are '-' (squash)" {
   _make_repo squash
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   run _is_branch_squash_merged feat main
   [ "$status" -eq 0 ]
@@ -154,6 +165,7 @@ _make_repo() {
 
 @test "_is_branch_squash_merged returns 1 when cherry output is mixed" {
   _make_repo mixed
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   run _is_branch_squash_merged feat main
   [ "$status" -eq 1 ]
@@ -161,13 +173,25 @@ _make_repo() {
 
 @test "_is_branch_squash_merged returns 1 when cherry output is all '+' (active)" {
   _make_repo active
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   run _is_branch_squash_merged feat main
   [ "$status" -eq 1 ]
 }
 
+@test "_is_branch_squash_merged returns 2 on git error (W1)" {
+  # Calling against a non-existent branch makes `git cherry` fail; the
+  # `|| return 2` guard must surface as exit status 2.
+  _make_repo minimal
+  cd "$MADE_REPO_PATH"
+  source "$LIB"
+  run _is_branch_squash_merged no-such-branch main
+  [ "$status" -eq 2 ]
+}
+
 @test "_is_branch_dangerously_merged returns 1 (safe) for merge-commit case" {
   _make_repo merge-commit
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   # branch tip IS ancestor of origin/main → safe to resume
   run _is_branch_dangerously_merged feat main
@@ -176,13 +200,24 @@ _make_repo() {
 
 @test "_is_branch_dangerously_merged returns 0 (dangerous) for squash case" {
   _make_repo squash
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   run _is_branch_dangerously_merged feat main
   [ "$status" -eq 0 ]
 }
 
+@test "_is_branch_dangerously_merged returns 2 on git error (W2)" {
+  # `git rev-parse <unknown-ref>` fails → `|| return 2` guard fires.
+  _make_repo minimal
+  cd "$MADE_REPO_PATH"
+  source "$LIB"
+  run _is_branch_dangerously_merged no-such-branch main
+  [ "$status" -eq 2 ]
+}
+
 @test "_get_branch_state populates all expected vars on a clean repo" {
   _make_repo minimal
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   _get_branch_state
   [ "$BRANCH_NAME" = "main" ]
@@ -201,16 +236,34 @@ _make_repo() {
 
 @test "_get_branch_state marks BRANCH_STATE=dirty when working tree has changes" {
   _make_repo minimal
-  printf 'modified\n' >> a.txt
+  printf 'modified\n' >> "$MADE_REPO_PATH/a.txt"
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   _get_branch_state
   [ "$BRANCH_STATE" = "dirty" ]
 }
 
+@test "_get_branch_state populates 0/0 when upstream not set (W3)" {
+  # A branch created with `checkout -b` from a local branch does NOT inherit
+  # tracking by default. `@{u}` is unresolvable; `git rev-list --left-right
+  # --count @{u}...HEAD` exits non-zero. The lib's `|| true` guard must keep
+  # _get_branch_state succeeding with AHEAD=0 / BEHIND=0.
+  _make_repo minimal
+  git -C "$MADE_REPO_PATH" checkout -q -b orphan
+  cd "$MADE_REPO_PATH"
+  source "$LIB"
+  _get_branch_state
+  [ "$BRANCH_NAME" = "orphan" ]
+  [ "$BRANCH_AHEAD" = "0" ]
+  [ "$BRANCH_BEHIND" = "0" ]
+  [ "$DETACHED_HEAD" = "0" ]
+}
+
 @test "_bypass_state_check returns 0 during rebase" {
   _make_repo minimal
-  mkdir -p .git/rebase-merge
-  printf 'main\n' > .git/rebase-merge/head-name
+  mkdir -p "$MADE_REPO_PATH/.git/rebase-merge"
+  printf 'main\n' > "$MADE_REPO_PATH/.git/rebase-merge/head-name"
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   _get_branch_state
   run _bypass_state_check
@@ -219,7 +272,8 @@ _make_repo() {
 
 @test "_bypass_state_check returns 0 during merge" {
   _make_repo minimal
-  printf '%s\n' "$(git rev-parse HEAD)" > .git/MERGE_HEAD
+  printf '%s\n' "$(git -C "$MADE_REPO_PATH" rev-parse HEAD)" > "$MADE_REPO_PATH/.git/MERGE_HEAD"
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   _get_branch_state
   run _bypass_state_check
@@ -228,7 +282,8 @@ _make_repo() {
 
 @test "_bypass_state_check returns 0 during cherry-pick" {
   _make_repo minimal
-  printf '%s\n' "$(git rev-parse HEAD)" > .git/CHERRY_PICK_HEAD
+  printf '%s\n' "$(git -C "$MADE_REPO_PATH" rev-parse HEAD)" > "$MADE_REPO_PATH/.git/CHERRY_PICK_HEAD"
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   _get_branch_state
   run _bypass_state_check
@@ -237,7 +292,8 @@ _make_repo() {
 
 @test "_bypass_state_check returns 0 during bisect" {
   _make_repo minimal
-  : > .git/BISECT_LOG
+  : > "$MADE_REPO_PATH/.git/BISECT_LOG"
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   _get_branch_state
   run _bypass_state_check
@@ -246,7 +302,8 @@ _make_repo() {
 
 @test "_bypass_state_check returns 0 with detached HEAD" {
   _make_repo minimal
-  git checkout -q --detach HEAD
+  git -C "$MADE_REPO_PATH" checkout -q --detach HEAD
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   _get_branch_state
   [ "$DETACHED_HEAD" = "1" ]
@@ -256,6 +313,7 @@ _make_repo() {
 
 @test "_bypass_state_check returns 1 in clean state" {
   _make_repo minimal
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   _get_branch_state
   run _bypass_state_check
@@ -264,6 +322,7 @@ _make_repo() {
 
 @test "git_safe passes through git output and exit code" {
   _make_repo minimal
+  cd "$MADE_REPO_PATH"
   source "$LIB"
   run git_safe rev-parse --abbrev-ref HEAD
   [ "$status" -eq 0 ]

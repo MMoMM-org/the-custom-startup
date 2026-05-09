@@ -132,7 +132,7 @@ _is_branch_squash_merged() {
   plus_count=$(printf '%s\n' "$lines" | grep -c '^+ ')
   minus_count=$(printf '%s\n' "$lines" | grep -c '^- ')
 
-  if [ "$plus_count" = "0" ] && [ "$minus_count" -gt 0 ]; then
+  if [ "$plus_count" -eq 0 ] && [ "$minus_count" -gt 0 ]; then
     return 0
   fi
   return 1
@@ -252,10 +252,13 @@ _get_branch_state() {
   local counts
   counts=$(git -C "$PWD" rev-list --left-right --count '@{u}...HEAD' 2>/dev/null || true)
   if [ -n "$counts" ]; then
-    # shellcheck disable=SC2034  # consumed by hook callers via sourced env
-    BRANCH_BEHIND=$(printf '%s' "$counts" | awk '{print $1+0}')
+    # `git rev-list --left-right --count A...B` emits "<behind>\t<ahead>".
+    # shellcheck disable=SC2034  # BRANCH_BEHIND / BRANCH_AHEAD consumed by hook callers
+    read -r BRANCH_BEHIND BRANCH_AHEAD <<<"$counts"
+    # Coerce to integers (defensive: empty fields would otherwise leak as "").
+    BRANCH_BEHIND=$((BRANCH_BEHIND + 0))
     # shellcheck disable=SC2034
-    BRANCH_AHEAD=$(printf '%s' "$counts" | awk '{print $2+0}')
+    BRANCH_AHEAD=$((BRANCH_AHEAD + 0))
   fi
 
   # Working-tree state heuristic. Hooks override this with finer-grained labels
