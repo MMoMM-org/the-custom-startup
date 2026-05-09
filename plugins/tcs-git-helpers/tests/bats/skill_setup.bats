@@ -613,10 +613,13 @@ _make_gh_repo() {
   _make_gh_repo "$TEST_TMP/bp-admin-org"
   cd "$TEST_TMP/bp-admin-org"
   capture="$TEST_TMP/put-body.json"
+  # S1 AC3: excessive-scope confirmation is a separate gate from the main
+  # ruleset prompt. Both bypasses are required for non-interactive use.
   run env \
     PATH="$GH_STUBS_DIR:$PATH" \
     GH_STUB_SCOPES="repo,admin:org" \
     GH_STUB_CAPTURE_PUT="$capture" \
+    TCS_BP_ALLOW_EXCESS_SCOPES=1 \
     TCS_BP_YES=1 \
     "$LIB_DIR/with_branch_protection.sh"
   [ "$status" -eq 0 ]
@@ -624,6 +627,27 @@ _make_gh_repo() {
   echo "$output" | grep -q 'gh-token-hygiene\.md'
   # The PUT was still issued.
   [ -s "$capture" ]
+}
+
+@test "C34a with_branch_protection: excessive scopes — TCS_BP_YES alone does NOT bypass scope gate (reply 'n' aborts)" {
+  # S1 AC3 spec compliance: the excessive-scope confirmation is independent
+  # from the main ruleset gate. Setting only TCS_BP_YES=1 must NOT bypass
+  # it; the helper must still read from stdin for the scope prompt. Here
+  # the user replies "n" → helper aborts non-zero with the scope-specific
+  # message, and no PUT is issued.
+  _make_gh_repo "$TEST_TMP/bp-scope-deny"
+  cd "$TEST_TMP/bp-scope-deny"
+  capture="$TEST_TMP/put-body.json"
+  run env \
+    PATH="$GH_STUBS_DIR:$PATH" \
+    GH_STUB_SCOPES="repo,admin:org,delete_repo" \
+    GH_STUB_CAPTURE_PUT="$capture" \
+    TCS_BP_YES=1 \
+    bash -c 'printf "n\n" | "'"$LIB_DIR"'/with_branch_protection.sh"'
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -qiE 'excessive token scopes not confirmed'
+  # No PUT was issued because the scope gate aborted before main flow.
+  [ ! -s "$capture" ]
 }
 
 @test "C35 with_branch_protection: PUTs single-coder preset body" {

@@ -21,7 +21,9 @@
 #   - Does NOT auto-commit; does NOT roll back unrelated parent-skill steps.
 #
 # Test hooks (consumed only by tests/bats/skill_setup.bats; ignore in prod):
-#   TCS_BP_YES=1                          skip the interactive y/N prompt.
+#   TCS_BP_YES=1                          skip the main ruleset y/N prompt.
+#   TCS_BP_ALLOW_EXCESS_SCOPES=1          skip the excessive-scope y/N prompt
+#                                         (S1 AC3 — distinct security gate).
 #   GH_STUB_*                             gh CLI mock — see tests/fixtures/gh_stubs/.
 
 set -euo pipefail
@@ -118,6 +120,22 @@ _check_scopes() {
     _warn "token has excessive scope(s): $excessive_found"
     _warn "branch-protection only needs 'repo'; rotate to a minimal token"
     _warn "see $REF_DOC and https://github.com/settings/tokens"
+    # S1 AC3: a distinct, security-relevant confirmation. NOT bypassable by
+    # TCS_BP_YES=1 — that flag covers only the main ruleset prompt below.
+    # An elevated-scope token is a real safety signal (Marcus may have it
+    # legitimately, or by accident via GitHub's UX) and deserves its own gate.
+    if [ "${TCS_BP_ALLOW_EXCESS_SCOPES:-0}" != "1" ]; then
+      printf '[tcs-git-helpers:setup] Proceed despite elevated token scopes? [y/N] ' >&2
+      local reply=""
+      if ! IFS= read -r reply; then reply=""; fi
+      case "$reply" in
+        y|Y|yes|YES|Yes) ;;
+        *)
+          _err "aborted: excessive token scopes not confirmed"
+          return 1
+          ;;
+      esac
+    fi
   fi
   return 0
 }
