@@ -106,11 +106,10 @@ _write_stale_cache() {
   local updated_iso="${1:-}"
   local repo_path="${2:-}"
   local default_branch="${3:-}"
-  local dir tsv json hash
-  hash="$(_repo_hash)" || return 1
+  local dir tsv json
+  tsv="$(_stale_tsv_path)"  || return 1
+  json="$(_stale_json_path)" || return 1
   dir="$(_cache_dir)"
-  tsv="$dir/${hash}-stale-cache.tsv"
-  json="$dir/${hash}-stale-cache.json"
 
   mkdir -p "$dir" 2>/dev/null || return 1
 

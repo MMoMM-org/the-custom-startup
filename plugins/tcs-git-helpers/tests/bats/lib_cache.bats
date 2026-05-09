@@ -283,7 +283,19 @@ teardown() {
   local stale_ts=$(( $(date +%s) - 600 ))
   printf '1:%s\n' "$stale_ts" > "$lock"
 
-  _acquire_lock
+  # Sanity: planted lock exists and is owned by PID 1 (the precondition we
+  # are testing reclaim against).
+  [ -f "$lock" ]
+  local planted planted_pid
+  planted="$(cat "$lock")"
+  planted_pid="${planted%%:*}"
+  [ "$planted_pid" = "1" ]
+
+  # Use a SHORT timeout so a regression that breaks reclaim fails in 1s,
+  # not by silently polling until a longer default timeout elapses.
+  run _acquire_lock 1
+  [ "$status" -eq 0 ]
+
   # New lock should belong to us (current shell)
   local content pid
   content="$(cat "$lock")"
@@ -319,8 +331,22 @@ teardown() {
   lock="$CLAUDE_PLUGIN_DATA/cache/${hash}.lock"
   printf 'gibberish\n' > "$lock"
 
-  _acquire_lock
+  # Sanity: precondition file exists and is malformed (no colon).
   [ -f "$lock" ]
+  local planted
+  planted="$(cat "$lock")"
+  [[ "$planted" != *":"* ]]
+
+  # Short timeout so a reclaim regression fails fast (1s) rather than
+  # silently waiting on the malformed file until the default 10s expires.
+  run _acquire_lock 1
+  [ "$status" -eq 0 ]
+
+  # Verify the resulting lock is owned by us, not the leftover gibberish.
+  local content pid
+  content="$(cat "$lock")"
+  pid="${content%%:*}"
+  [ "$pid" = "$$" ]
   _release_lock
 }
 
