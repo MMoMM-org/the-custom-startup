@@ -25,7 +25,7 @@ setup() {
         TCS_ALLOWED_COMMIT_TYPES TCS_REQUIRE_SCOPE \
         TCS_MAX_SUBJECT_LENGTH TCS_ENABLE_CONVENTIONAL_CHECK \
         TCS_ENABLE_PR_PUSH_CHECK TCS_ALLOW_AMEND_ON_PROTECTED \
-        EVIL
+        EVIL MALICIOUS
 }
 
 teardown() {
@@ -52,6 +52,7 @@ run_parser() {
     printf 'TCS_ENABLE_PR_PUSH_CHECK=%s\n' "${TCS_ENABLE_PR_PUSH_CHECK-<unset>}"
     printf 'TCS_ALLOW_AMEND_ON_PROTECTED=%s\n' "${TCS_ALLOW_AMEND_ON_PROTECTED-<unset>}"
     printf 'EVIL=%s\n' "${EVIL-<unset>}"
+    printf 'MALICIOUS=%s\n' "${MALICIOUS-<unset>}"
   )
 }
 
@@ -91,11 +92,16 @@ run_parser() {
 }
 
 @test "REJECT: newline injection (literal \\n in value)" {
-  # Literal backslash-n in value should still be rejected (contains '\')
+  # Literal backslash-n in value should still be rejected (contains '\').
+  # Defense-in-depth: even if a future relaxation let the line through, the
+  # second "key" past the \n must NOT be assigned. We assert positively that
+  # MALICIOUS stayed unset in the snapshot — the printed `MALICIOUS=<unset>`
+  # line is unconditionally emitted by run_parser, so this assertion has bite.
   printf '%s\n' 'TCS_PROTECTED_BRANCHES=main\nMALICIOUS=1' >"$CFG"
   run run_parser
   [[ "$output" == *"TCS_PROTECTED_BRANCHES=<unset>"* ]]
-  [[ "$output" == *"MALICIOUS"* ]] && false || true
+  [[ "$output" == *"MALICIOUS=<unset>"* ]]
+  [[ "$output" != *"MALICIOUS=1"* ]]
   grep -q "rejected\|invalid\|forbidden" "$STDERR"
 }
 
@@ -295,7 +301,11 @@ run_parser() {
 # ---------------------------------------------------------------------------
 
 @test "PERF: parser completes under 50ms (10x budget) for an 8-line config" {
-  # We use a 10x budget to keep the test stable on busy CI.
+  # SDD §Quality Requirements: ≤5ms per invocation. Empirical measurement on
+  # bash 3.2 / macOS / arm64 puts a single call at ~1.3ms (100-iteration
+  # average), so 50ms is a 10× headroom on the 5ms target — still tight
+  # enough to flag a real regression while tolerating CI jitter and the
+  # one-shot bats `run` overhead (subshell + .source + snapshot).
   {
     printf 'TCS_PROTECTED_BRANCHES=main|master\n'
     printf 'TCS_HOOK_EXCLUDE_PATHS_FILE=.githooks/exclude-paths\n'
@@ -311,6 +321,5 @@ run_parser() {
   end=$(perl -MTime::HiRes=time -e 'printf "%d\n", time()*1000')
   [ "$status" -eq 0 ]
   elapsed=$((end - start))
-  # Forge will fluctuate; 50ms is generous and still demonstrates the budget.
-  [ "$elapsed" -lt 500 ]
+  [ "$elapsed" -lt 50 ]
 }
