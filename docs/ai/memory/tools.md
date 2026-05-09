@@ -1,4 +1,10 @@
 # Tools — the-custom-startup
-<!-- CI, build pipeline, API clients, local dev setup. Updated: YYYY-MM-DD -->
+<!-- CI, build pipeline, API clients, local dev setup. Updated: 2026-05-09 -->
 <!-- What goes here: commands that are non-obvious, tool quirks, CI gotchas, env var names -->
 <!-- What does NOT go here: domain rules (→ domain.md), code style (→ general.md) -->
+
+<!-- 2026-05-09 -->
+- **Bash 3.2 regex (macOS default `/bin/bash`):** `\s` and `\b` are PCRE/Perl extensions and do **NOT** match in `[[ =~ ]]` (POSIX ERE). Empirically verified on bash 3.2.57. Use `[[:space:]]+` for whitespace and `[[:<:]]` / `[[:>:]]` for word boundaries (BSD POSIX). Quick test: `[[ "git push" =~ git\\s+push ]] && echo M || echo NM` prints `NM`; `[[ "git push" =~ git[[:space:]]+push ]]` prints `M`. Forget this and command-matching hooks silently never fire.
+- **`gh pr view --json mergeMethod` does NOT exist** (verified gh CLI 2.88.1) — returns `Unknown JSON field: "mergeMethod"`. To detect squash-vs-merge after the fact: `gh pr view <num> --json mergeCommit --jq '.mergeCommit.oid'` to get the merge SHA, then `git rev-list --parents -n 1 <sha> | awk '{print NF-1}'` — parent count `1` = squash/rebase, `2` = merge-commit. Primary squash detector should be `git cherry origin/<default> <branch>` (all `-` lines = patches already applied).
+- **Claude Code hook event blockability:** `PreToolUse:ExitWorktree` is a blockable native tool — supports `permissionDecision: deny` JSON. `WorktreeRemove` and `SessionEnd` are documented as non-blockable ("failures logged in debug mode only"). For worktree-exit data-loss guards, register on `PreToolUse:ExitWorktree`. Boucle-framework's `worktree-guard` confirms this pattern.
+- **Boucle-framework as prior art for git-safety hooks** — `github.com/Bande-a-Bonnot/Boucle-framework/tree/main/tools` has three relevant Claude-Code hook tools: `git-safe` (destructive-ops prevention with regex pattern set covering `--no-verify`, `reset --hard`, `clean -f`, `branch -D`, `stash drop/clear`, `reflog expire`, etc.), `branch-guard` (protected-branch commit blocking with `.branch-guard` config), `worktree-guard` (exit-time data-loss prevention with 4 checks via `git cherry`). Re-implement (not vendor) — patterns absorbed into `tcs-git-helpers` plugin.
