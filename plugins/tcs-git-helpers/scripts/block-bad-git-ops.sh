@@ -42,14 +42,22 @@
 set -uo pipefail
 
 # ---------------------------------------------------------------------------
-# Read hook envelope (stdin JSON)
+# Read hook envelope (stdin JSON) — fail-open on malformed input
 # ---------------------------------------------------------------------------
+#
+# `|| true` on each jq pipeline keeps a malformed-stdin parse error from
+# tripping the assignment's command-substitution exit status. Defense-in-
+# depth on top of `set -uo pipefail` (we deliberately drop -e), and mirrors
+# the T2.3 / T2.2 review-fix pattern (`fix(tcs-git-helpers): T2.3 jq
+# fail-open on malformed stdin`). A non-zero hook exit would unconditionally
+# block every Bash tool call — that's a fail-CLOSED bug, the opposite of
+# what we want for a defensive matcher.
 
 INPUT=$(cat)
-TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null)
+TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null || true)
 [ "$TOOL" = "Bash" ] || exit 0
 
-CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null)
+CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null || true)
 [ -z "$CMD" ] && exit 0
 
 # ---------------------------------------------------------------------------

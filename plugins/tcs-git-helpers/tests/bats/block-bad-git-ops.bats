@@ -147,6 +147,36 @@ _assert_allow() {
 }
 
 # ----------------------------------------------------------------------
+# Malformed-stdin fail-open (mirrors T2.3 review fix 1606411)
+# ----------------------------------------------------------------------
+# A non-zero hook exit would unconditionally block ALL Bash tool calls.
+# These tests pin the contract: malformed input → exit 0 + no deny.
+
+@test "malformed JSON stdin — exits 0, no deny (fail-open)" {
+  run bash -c 'printf "%s" "not-json{{{" | bash "$1"' _ "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "empty stdin — exits 0, no deny" {
+  run bash -c 'printf "" | bash "$1"' _ "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "missing tool_input — exits 0, no deny" {
+  run bash -c 'printf "%s" "{\"tool_name\":\"Bash\"}" | bash "$1"' _ "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "missing tool_name field — exits 0, no deny" {
+  run bash -c 'printf "%s" "{}" | bash "$1"' _ "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# ----------------------------------------------------------------------
 # Per-pattern positive matches (M7)
 # ----------------------------------------------------------------------
 
