@@ -200,48 +200,54 @@ assert not bad, f'third-party actions used: {bad}'
   [[ "$title" =~ $re ]]
 }
 
+@test "regex: matches 'feat!: breaking change without scope'" {
+  re="$(extract_regex)"
+  title='feat!: breaking change without scope'
+  [[ "$title" =~ $re ]]
+}
+
 # ---------------------------------------------------------------------------
 # Regex behavior — invalid PR titles MUST NOT match
+#
+# NOTE: Use the inline `[[ ]]` form (mirroring the positive tests above) and
+# fail explicitly when the regex matches. The earlier `run bash -c "$re"` form
+# was broken on bash 3.2 because unquoted regex metacharacters (`\(`, `?`, etc.)
+# triggered a syntax error → exit 2, which `[ "$status" -ne 0 ]` accepted as a
+# pass — silently masking any regression where a bad title actually matched.
 # ---------------------------------------------------------------------------
 
 @test "regex: rejects 'add foo' (no type)" {
   re="$(extract_regex)"
   title='add foo'
-  run bash -c "[[ \"$title\" =~ $re ]]"
-  [ "$status" -ne 0 ]
+  if [[ "$title" =~ $re ]]; then return 1; fi
 }
 
 @test "regex: rejects 'feat add foo' (no colon)" {
   re="$(extract_regex)"
   title='feat add foo'
-  run bash -c "[[ \"$title\" =~ $re ]]"
-  [ "$status" -ne 0 ]
+  if [[ "$title" =~ $re ]]; then return 1; fi
 }
 
 @test "regex: rejects 'random: stuff' (type not allowed)" {
   re="$(extract_regex)"
   title='random: stuff'
-  run bash -c "[[ \"$title\" =~ $re ]]"
-  [ "$status" -ne 0 ]
+  if [[ "$title" =~ $re ]]; then return 1; fi
 }
 
 @test "regex: rejects 'feat(): empty scope'" {
   re="$(extract_regex)"
   title='feat(): empty scope'
-  run bash -c "[[ \"$title\" =~ $re ]]"
-  [ "$status" -ne 0 ]
+  if [[ "$title" =~ $re ]]; then return 1; fi
 }
 
 @test "regex: rejects 'FEAT: uppercase type'" {
   re="$(extract_regex)"
   title='FEAT: uppercase type'
-  run bash -c "[[ \"$title\" =~ $re ]]"
-  [ "$status" -ne 0 ]
+  if [[ "$title" =~ $re ]]; then return 1; fi
 }
 
 @test "regex: rejects 'feat:' (no description)" {
   re="$(extract_regex)"
   title='feat:'
-  run bash -c "[[ \"$title\" =~ $re ]]"
-  [ "$status" -ne 0 ]
+  if [[ "$title" =~ $re ]]; then return 1; fi
 }
