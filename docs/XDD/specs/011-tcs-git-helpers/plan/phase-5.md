@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Skills + References + Optional Components"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 5
 ---
@@ -37,7 +37,7 @@ phase: 5
 
 This phase produces the user-facing slash-command skills, the reference knowledge base, and optional opt-in components (GHA, branch-protection).
 
-- [ ] **T5.1 skills/setup/SKILL.md** `[activity: backend-api]`
+- [x] **T5.1 skills/setup/SKILL.md** `[activity: backend-api]`
 
   1. Prime: SDD §Skills — `/tcs-git-helpers:setup` `/tcs-git-helpers:setup` workflow; M10 acceptance criteria; ADR-10 conflict-detection signatures; ADR-11 sentinel; ADR-12 single-coder BP preset.
   2. Test: Write `tests/bats/skill_setup.bats` covering: clean repo → fresh install with version markers, `core.hooksPath=.githooks`; existing `.githooks/` no marker → conflict mode (per-file diff prompt); existing matching version → "up to date"; existing older version → per-file diff; Husky detected → abort + reference `migrating-from-husky.md`; lefthook/pre-commit/simple-git-hooks → abort with respective references; non-`.sample` files in `.git/hooks/` → warn + confirm; concurrent setup → second call fails on `.setup.lock`; stale lock (>5min) reclaimed; submodules detected and listed; setup does NOT auto-commit; `TCS_GIT_HELPERS_SETUP_ACTIVE=1` exported in subshell during file-write phase; `--update` mode shows per-file diff; `--with-gha` copies GHA template; `--with-branch-protection` calls `gh api` (mocked in tests).
@@ -45,7 +45,7 @@ This phase produces the user-facing slash-command skills, the reference knowledg
   4. Validate: bats passes; manual: invoke `/tcs-git-helpers:setup` against `tests/fixtures/repos/clean-repo`, `…/with-husky`, `…/with-existing-hooks`; verify behaviors match acceptance criteria.
   5. Success: M10 AC1-AC6 all pass `[ref: PRD/M10]`; conflict policy matches ADR-10; sentinel scoping verified.
 
-- [ ] **T5.2 skills/status/SKILL.md** `[activity: backend-api]` `[parallel: true]`
+- [x] **T5.2 skills/status/SKILL.md** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: SDD §Skills — `/tcs-git-helpers:status` `/tcs-git-helpers:status`; PRD acceptance criteria for status modes.
   2. Test: Write `tests/bats/skill_status.bats`: default mode outputs structured sections (branch, PR state, stale branches, plugin version, suggestions); `--brief` outputs single-line; `--cleanup` interactive purge with worktree-checked-out exclusion; `--json` outputs valid JSON consumable by tooling; `--overrides` reads audit log and prints last N events; stale-cache warning when >24h; works when `.githooks/` not installed (notes "run /tcs-git-helpers:setup").
@@ -53,7 +53,7 @@ This phase produces the user-facing slash-command skills, the reference knowledg
   4. Validate: bats passes; manual: invoke each mode; verify output.
   5. Success: All 4 modes operational `[ref: SDD/§Skills 6.5.2]`; integration with audit log and cache verified.
 
-- [ ] **T5.3 references/INDEX.md + best-practices.md** `[activity: documentation]` `[parallel: true]`
+- [x] **T5.3 references/INDEX.md + best-practices.md** `[activity: documentation]` `[parallel: true]`
 
   1. Prime: SDD §References (Knowledge Base) — citation pattern; PRD §Feature M*; references content convention (5-part structure: What goes wrong / How to detect / Fix / Prevention / Why).
   2. Test: Manual review for completeness.
@@ -61,7 +61,7 @@ This phase produces the user-facing slash-command skills, the reference knowledg
   4. Validate: All inter-doc links resolve.
   5. Success: Knowledge base navigation works; INDEX surfaces by topic and by failure mode.
 
-- [ ] **T5.4 references/squash-merge-trap.md** `[activity: documentation]` `[parallel: true]`
+- [x] **T5.4 references/squash-merge-trap.md** `[activity: documentation]` `[parallel: true]`
 
   1. Prime: Marcus's existing finding text from brainstorm session (preserve verbatim where possible); Boucle worktree-guard documentation.
   2. Test: Manual review.
@@ -69,7 +69,7 @@ This phase produces the user-facing slash-command skills, the reference knowledg
   4. Validate: Marcus reviews; matches his original finding intent.
   5. Success: Cited from M3 denial messages `[ref: PRD/M3/AC1]`; recovery instructions are non-destructive only `[ref: research/security.md §8]`.
 
-- [ ] **T5.5 references/ — branch-lifecycle, conventional-commits, pr-vs-commit-messages, force-push-safety, rebase-vs-merge, stale-branch-cleanup, working-tree-hygiene** `[activity: documentation]` `[parallel: true]`
+- [x] **T5.5 references/ — branch-lifecycle, conventional-commits, pr-vs-commit-messages, force-push-safety, rebase-vs-merge, stale-branch-cleanup, working-tree-hygiene** `[activity: documentation]` `[parallel: true]`
 
   1. Prime: PRD §Feature M*, M5; existing best practices in `~/Kouzou/standards/git-conventions.md`; SDD §Cross-Cutting Concepts.
   2. Test: Manual review per file.
@@ -84,7 +84,7 @@ This phase produces the user-facing slash-command skills, the reference knowledg
   4. Validate: All 5-part structure honored; recovery snippets non-destructive.
   5. Success: All references cited from at least one denial or nudge `[ref: PRD/Feature M*]`.
 
-- [ ] **T5.6 references/ — destructive-ops, worktree-discipline, sandbox-and-git-config, migrating-from-husky, gh-token-hygiene** `[activity: documentation]` `[parallel: true]`
+- [x] **T5.6 references/ — destructive-ops, worktree-discipline, sandbox-and-git-config, migrating-from-husky, gh-token-hygiene** `[activity: documentation]` `[parallel: true]`
 
   1. Prime: research/security.md §5 (bypass surface for destructive-ops); Boucle worktree-guard limitations (worktree-discipline); user's earlier sandbox-and-.git/config feedback; integration §5 (Husky migration), §6 (gh token UX matrix).
   2. Test: Manual review.
@@ -97,7 +97,7 @@ This phase produces the user-facing slash-command skills, the reference knowledg
   4. Validate: All 5-part structure honored.
   5. Success: All 5 references cited from setup-skill conflict messages or destructive-ops denials `[ref: ADR-10, ADR-12]`.
 
-- [ ] **T5.7 templates/github-actions/pr-title-check.yml** `[activity: integration]` `[parallel: true]`
+- [x] **T5.7 templates/github-actions/pr-title-check.yml** `[activity: integration]` `[parallel: true]`
 
   1. Prime: PRD §Feature S2 (GHA opt-in); existing GHA examples (e.g. amannn/action-semantic-pull-request as a baseline reference, NOT included).
   2. Test: Write `tests/bats/gha_pr_title_check.bats` (lightweight syntax check; full GHA testing happens in Phase 6 via real PR).
@@ -105,7 +105,7 @@ This phase produces the user-facing slash-command skills, the reference knowledg
   4. Validate: YAML syntactically valid; regex matches commit-msg regex; runs in `pull_request` event.
   5. Success: S2 AC1-AC2 pass `[ref: PRD/S2]`.
 
-- [ ] **T5.8 Branch-protection preset implementation in setup skill** `[activity: integration]`
+- [x] **T5.8 Branch-protection preset implementation in setup skill** `[activity: integration]`
 
   1. Prime: ADR-12 single-coder preset; integration §2 GitHub API endpoints; PRD §Feature S1 acceptance criteria.
   2. Test: bats test stub: `--with-branch-protection` invokes `gh api -X PUT …/branches/<default>/protection` with the single-coder preset body (no `required_pull_request_reviews`, etc.); aborts when `repo` scope missing; warns on excessive scopes (e.g. `admin:org`); idempotent on re-run; failure mode test (mocked gh failure) does not roll back unrelated setup steps.
@@ -113,7 +113,7 @@ This phase produces the user-facing slash-command skills, the reference knowledg
   4. Validate: bats passes; manual: invoke `--with-branch-protection` against a test repo (Marcus owns); verify settings via `gh api …/protection`.
   5. Success: S1 AC1-AC7 pass `[ref: PRD/S1]`.
 
-- [ ] **T5.9 Phase 5 Validation** `[activity: validate]`
+- [x] **T5.9 Phase 5 Validation** `[activity: validate]`
 
   Run all Phase 5 tests (bats) + shellcheck + Markdown link check. Manual:
   - Run `/tcs-git-helpers:setup` in a fresh fixture repo
