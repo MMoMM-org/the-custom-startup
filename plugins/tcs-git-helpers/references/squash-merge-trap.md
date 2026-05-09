@@ -17,9 +17,22 @@ The trap is that the branch *looks* fine locally — it has commits, it has a na
 
 ## How to detect
 
-Two checks, run together. Neither alone is sufficient.
+Two checks, run together. The branch-tip ancestry check is the **primary reliable signal**; `git cherry` is a supplementary signal that's authoritative only in the single-commit case.
 
-**Primary check — `git cherry`:**
+**Primary check — branch-tip ancestry:**
+
+```bash
+git merge-base --is-ancestor "<branch_tip>" "origin/<default>"
+```
+
+This works regardless of how many commits the branch had or how it was merged.
+
+- Exit 0 (true) → branch tip **is** in default's history → merge-commit (`--no-ff`) case → SAFE to resume.
+- Exit 1 (false) → branch tip is orphan from default's history → squash-merge or rebase-merge case → DANGEROUS to resume.
+
+If the PR is known to be merged (e.g., via `gh pr view`) and this check returns false, the branch was squash-merged or rebase-merged — that's the trap.
+
+**Supplementary check — `git cherry`:**
 
 ```bash
 git cherry "origin/<default>" "<branch>"
@@ -30,26 +43,17 @@ Each output line is one of:
 - `+ <sha>` — patch is **not** yet applied to default
 - `- <sha>` — patch is **already** applied to default (possibly under a different SHA)
 
-`git cherry` compares **patch-IDs**, not SHAs, so it correctly identifies content that was reapplied via squash or rebase.
+`git cherry` compares **patch-IDs**, not SHAs. It is **authoritative when it returns all `-` lines on a single-commit branch**: every commit's content is in default, so resuming work is dangerous. On multi-commit branches it is **inconclusive**: a squash collapses N commits into one, and the squash commit's combined-diff patch-ID generally does not match any individual branch commit's patch-ID — so `git cherry` can return `+` lines and miss the squash. See "Why" below.
 
-Verdict from the output:
+Verdict from the output (single-commit branch only):
 
 - All `+` lines → branch has unmerged work; safe to resume.
 - All `-` lines → every patch is already in default; **DANGEROUS** to resume (squash-merge trap).
 - Mixed → some patches applied, some not; also dangerous (recovery via cherry-pick to fresh branch).
 
-**Cross-check — branch-tip ancestry:**
+For multi-commit branches, **always rely on the ancestry check** to decide.
 
-```bash
-git merge-base --is-ancestor "<branch_tip>" "origin/<default>"
-```
-
-This distinguishes squash/rebase merges from merge-commit (`--no-ff`) merges. Both produce all-`-` lines from `git cherry`, but only merge-commit preserves the original branch SHAs in default's history.
-
-- Exit 0 (true) → branch tip **is** in default's history → merge-commit case → SAFE to resume.
-- Exit 1 (false) → branch tip is orphan from default's history → squash/rebase case → DANGEROUS.
-
-A second cross-check — parent count of the merge commit — can be used as advisory confirmation when `gh` is available:
+**Advisory cross-check — parent count of the merge commit (when `gh` is available):**
 
 ```bash
 pr_num=$(gh pr list --head "<branch>" --state merged --json number --jq '.[0].number')
@@ -59,7 +63,7 @@ git rev-list --parents -n 1 "$merge_sha" | awk '{print NF-1}'
 # 2 parents → merge-commit
 ```
 
-This is advisory only. Decisions gate on `git cherry` + `merge-base --is-ancestor`, never on `gh` alone (it can be unauthenticated, rate-limited, or offline).
+Advisory only. Decisions gate on `merge-base --is-ancestor` (with `git cherry` corroborating in the single-commit case), never on `gh` alone (it can be unauthenticated, rate-limited, or offline).
 
 ## Fix
 
@@ -84,7 +88,12 @@ This is advisory only. Decisions gate on `git cherry` + `merge-base --is-ancesto
    git cherry-pick <sha-1> <sha-2> <sha-3>
    ```
 
-   Resolve any conflicts per cherry-pick. If a commit's content is already on default (the squash trap case), `git cherry-pick` will report "nothing to commit" — skip it with `git cherry-pick --skip`.
+   Resolve any conflicts per cherry-pick. If a commit's content is already on default (the squash trap case), `git cherry-pick` will report "nothing to commit" — skip it with:
+
+   ```bash
+   git cherry-pick --skip   # Git ≥ 2.32 (June 2021)
+   # On older Git (e.g., macOS system Git): git reset HEAD && git cherry-pick --continue
+   ```
 
 4. **Push the new branch and open a new PR:**
 
@@ -106,26 +115,37 @@ This is advisory only. Decisions gate on `git cherry` + `merge-base --is-ancesto
 
   Toggle via repo settings or `gh api -X PATCH repos/<owner>/<repo> -f delete_branch_on_merge=true`.
 - **Run `/tcs-git-helpers:status --cleanup`** to surface stale local branches whose PRs have already merged. The skill filters out branches checked out in worktrees so it never proposes a deletion that would error.
-- **Trust the hooks.** `block-bad-git-ops.sh` denies `git checkout <merged-branch>` when `git cherry` says all-`-` AND the branch tip is not an ancestor of default — exactly the squash-trap signal. The denial cites this document.
+- **Trust the hooks.** `block-bad-git-ops.sh` denies `git checkout <merged-branch>` when the branch tip is not an ancestor of default AND `git cherry` reports all-`-` — the canonical single-commit squash-trap signal. The denial cites this document. (Multi-commit squashes may evade the `git cherry` half of the check; the ancestry signal remains the primary reliable cross-check, and hooks are a backstop, not a full substitute for the post-merge cleanup discipline above.)
 
 ## Why
 
 Squash-merge collapses N branch commits into **one fresh commit** on the default branch. The new commit has:
 
 - A new SHA (it didn't exist before the merge).
-- Content identical to the sum of the N original branch commits.
-- A patch-ID computed from that content.
+- Content (combined diff) identical to the sum of the N original branch commits' diffs.
+- A patch-ID computed from **that combined diff**, not from any individual branch commit.
 
-Patch-IDs are content-addressed: the squash commit's patch-ID matches the sum of the original branch commits' patch-IDs taken together — but for the per-commit detection we care about, `git cherry` walks the branch's commits one by one and asks *"is this commit's patch-ID already represented in default's history?"*. For a squash-merged branch, the answer is yes for every commit, even though no original SHA appears in default. That's the detection signal: all `-` lines.
+`git cherry` walks the branch's commits one by one and asks, for each, *"is this commit's patch-ID already represented in default's history?"* What it finds depends on the commit count:
 
-Merge-commit merges (`--no-ff`) are different: they keep every original branch SHA in default's history (the merge commit has two parents, one of which is the branch tip). `git cherry` still reports all `-` lines (the patches are applied), but `git merge-base --is-ancestor <branch_tip> origin/<default>` returns true. That's the false-positive case the cross-check eliminates — without it, we'd wrongly flag every safely-merged branch as "dangerous".
+- **Single-commit branch (N = 1):** the squash commit's combined diff is identical to the sole branch commit's diff, so the patch-IDs match. `git cherry` returns `-` for that commit, and the all-`-` reading correctly flags the squash. This is the canonical signal — and the only case where `git cherry` is reliable for squash detection.
+- **Multi-commit branch (N > 1):** the squash commit's patch-ID is computed from the *combined* diff and generally does **not** match any individual branch commit's patch-ID. `git cherry` may report `+` lines for every branch commit, even though every line of their content is already on default under the squash. The all-`-` signal is therefore **not** a complete detector — it can miss multi-commit squashes entirely.
 
-In short: `git cherry` tells us *the patches are there*; `merge-base --is-ancestor` tells us *the SHAs are there too*. We deny only when the first is true and the second is false. That's exactly the squash/rebase case where reusing the branch causes the trap.
+That's why ancestry — `git merge-base --is-ancestor <branch_tip> origin/<default>` — is the primary signal. It works regardless of N:
+
+- Squash-merge or rebase-merge → branch tip is **not** an ancestor of default (the original SHAs were discarded; only their content survives, under new SHAs).
+- Merge-commit (`--no-ff`) merge → branch tip **is** an ancestor (the merge commit has two parents; one is the branch tip, so the original SHAs live on in default's history).
+
+Combined with PR-merged confirmation (e.g., `gh pr view --state merged`), a "branch tip not ancestor of default" reading on a merged branch is exactly the squash/rebase trap. `git cherry` corroborates in the single-commit case; for N > 1, the ancestry check stands on its own.
+
+In short: `merge-base --is-ancestor` tells us whether the original SHAs are in default's history; `git cherry` tells us whether the patches are there, but only reliably when N = 1. We deny resume-on-branch when ancestry is false on a merged branch — that's the squash/rebase case where reusing the branch causes the trap.
+
+The canonical detection logic is the `_is_branch_dangerously_merged` algorithm — see SDD `docs/XDD/specs/011-tcs-git-helpers/solution.md` lines 945-1020 for the bash implementation, traced walkthrough across the three branch scenarios (squashed / merge-committed / active), and the rationale for gating on ancestry rather than `git cherry` alone.
 
 ---
 
 ## See also
 
-- [`branch-lifecycle.md`](branch-lifecycle.md) — Cleanup section: post-merge branch hygiene.
+- [`branch-lifecycle.md`](branch-lifecycle.md) — post-merge branch hygiene.
 - [`pr-vs-commit-messages.md`](pr-vs-commit-messages.md) — squash-merge implication: PR title becomes the commit subject on default.
+- SDD `docs/XDD/specs/011-tcs-git-helpers/solution.md` lines 945-1020 — `_is_branch_dangerously_merged` algorithm, canonical source of detection logic.
 - Boucle-framework `worktree-guard` — origin of the `git cherry`-based detection used here: <https://github.com/Bande-a-Bonnot/Boucle-framework>
