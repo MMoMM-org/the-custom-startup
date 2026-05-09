@@ -53,14 +53,12 @@ fi
 [ "$TOOL" = "Bash" ] || exit 0
 
 # Extract tool_input.command — match through the tool_input block
+# W1 fix: single alternation [^"]|\\\" is a superset of [^"]*; the second
+# branch was dead (POSIX ERE leftmost-wins). BASH_REMATCH[1] handles both
+# plain and escaped-quote cases correctly.
 CMD=""
-if [[ "$INPUT" =~ \"command\"[[:space:]]*:[[:space:]]*\"(([^\"]|\\\")*)\"|\"command\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]]; then
-  # Prefer the simpler non-escaped capture first (BASH_REMATCH[3]), fall back to [1]
-  if [ -n "${BASH_REMATCH[3]}" ]; then
-    CMD="${BASH_REMATCH[3]}"
-  else
-    CMD="${BASH_REMATCH[1]}"
-  fi
+if [[ "$INPUT" =~ \"command\"[[:space:]]*:[[:space:]]*\"(([^\"]|\\\")*)\" ]]; then
+  CMD="${BASH_REMATCH[1]}"
 fi
 [ -z "$CMD" ] && exit 0
 
@@ -82,10 +80,11 @@ elif [[ "$INPUT" =~ \"exit_code\"[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
 # Then try tool_response.exit_status (nested — second occurrence of key)
 elif [[ "$INPUT" =~ \"tool_response\"[^}]*\"exit_status\"[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
   EXIT_STATUS="${BASH_REMATCH[1]}"
-# Then try tool_response.status
-elif [[ "$INPUT" =~ \"status\"[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
-  EXIT_STATUS="${BASH_REMATCH[1]}"
 fi
+# W3 fix: bare "status" field dropped — a tool_response.status with an HTTP
+# 200 code would match and suppress the nudge, inverting OQ10 fail-open.
+# The three arms above cover all known authoritatively-named exit-code fields.
+# Missing field → fire anyway (OQ10 fail-open).
 
 if [ -n "$EXIT_STATUS" ] && [ "$EXIT_STATUS" != "0" ]; then
   exit 0  # failed command — suppress nudge (M9 AC6)
@@ -204,7 +203,10 @@ if _match_command "$CMD" 'git[[:space:]]+(checkout[[:space:]]+-b|switch[[:space:
 fi
 
 # AC2a: gh pr create
-if _match_command "$CMD" 'gh[[:space:]]+pr[[:space:]]+create[[:>:]]'; then
+# S1 fix: ([[:space:]]|$) instead of [[:>:]] — avoids matching gh pr create-draft
+# (hypothetical non-standard subcommand); [[:>:]] matches before any non-word char
+# including '-', which would be a false positive.
+if _match_command "$CMD" 'gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
   _emit_nudge "verify-pr-title" \
     "confirm the PR title matches Conventional Commits (squash-merge implication)" \
     "pr-vs-commit-messages.md"
@@ -220,7 +222,8 @@ if _match_command "$CMD" 'git[[:space:]]+push[[:space:]]+(.*[[:space:]]+)?-u[[:s
 fi
 
 # AC3: gh pr merge — NO reference doc (PRD M9 AC3 intentional omission)
-if _match_command "$CMD" 'gh[[:space:]]+pr[[:space:]]+merge[[:>:]]'; then
+# S1 fix: ([[:space:]]|$) instead of [[:>:]] — avoids matching gh pr merge-queue.
+if _match_command "$CMD" 'gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; then
   _emit_nudge "cleanup-after-merge" \
     "PR merged — run /tcs-git-helpers:status --cleanup to surface stale branches"
   exit 0

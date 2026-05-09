@@ -196,6 +196,21 @@ _assert_stderr_empty() {
   _assert_stderr_empty
 }
 
+# W3 — unrelated tool_response.status (e.g. HTTP 200) must NOT suppress nudge (OQ10 fail-open)
+@test "test_unrelated_status_field_does_not_suppress_nudge" {
+  # A tool_response with status:200 (HTTP status, not a process exit code) must
+  # not be treated as an exit-code carrier. OQ10 fail-open: field missing or
+  # not an authoritatively-named exit field → fire the nudge anyway.
+  # With the old bare "status" arm, status:200 was treated as exit_status=200
+  # (nonzero) and the nudge was suppressed — incorrect.
+  local input
+  input=$(jq -n --arg c "git checkout -b feat/x" \
+    '{tool_name:"Bash", tool_input:{command:$c}, tool_response:{status:200}}')
+  run --separate-stderr bash -c 'printf "%s" "$1" | bash "$2"' _ "$input" "$HOOK"
+  [ "$status" -eq 0 ]
+  _assert_stderr_contains "verify the base is up-to-date"
+}
+
 # ----------------------------------------------------------------------
 # AC7 — 60s same-nudge dedup
 # ----------------------------------------------------------------------
@@ -326,7 +341,11 @@ STUB
   # 100 invocations of a trigger command; collect wall-clock times; assert p99 < 50ms.
   # Using perl HiRes for sub-millisecond precision (consistent with block-bad-git-ops perf test).
   # Budget: 50ms p99 per spec (SDD §Quality Requirements perf table; phase-3.md T3.3 step 4).
-  # Achieved via bash-regex JSON parsing (replaced jq subprocess forks): measured p99 ~33ms.
+  #
+  # W2 fix: dedup sentinel is cleared before each iteration so every run exercises
+  # the full trigger path (dedup-check → lib-source → rule-eval → emit).
+  # Without this, invocations #2-#100 hit the suppressed path (cheap 2-fork early
+  # exit) and produce a dishonestly low measurement.
   local cmd_json
   cmd_json=$(jq -n --arg c "git stash pop" \
     '{tool_name:"Bash",tool_input:{command:$c}}')
@@ -336,6 +355,9 @@ STUB
 
   local i
   for i in $(seq 1 100); do
+    # Clear dedup sentinels so each iteration takes the full trigger path.
+    rm -f "$CLAUDE_PLUGIN_DATA"/cache/*-nudge-* 2>/dev/null || true
+
     local t0 t1
     t0=$(perl -MTime::HiRes -e 'printf "%d", Time::HiRes::time()*1000')
     printf '%s' "$cmd_json" | bash "$HOOK" >/dev/null 2>&1 || true
