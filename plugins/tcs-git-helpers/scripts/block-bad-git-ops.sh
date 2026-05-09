@@ -185,7 +185,7 @@ _emit_permission_decision_deny() {
   for ((i = 0; i < n; i++)); do
     body="${body}"$'\n'"  - ${DENY_REASONS[$i]}"
   done
-  body="${body}"$'\n'"References: \${CLAUDE_PLUGIN_ROOT}/references/destructive-ops.md, \${CLAUDE_PLUGIN_ROOT}/references/force-push-safety.md"
+  body="${body}"$'\n'"References: \${CLAUDE_PLUGIN_ROOT}/references/destructive-ops.md, \${CLAUDE_PLUGIN_ROOT}/references/force-push-safety.md, \${CLAUDE_PLUGIN_ROOT}/references/sandbox-and-git-config.md"
   body="${body}"$'\n'"Master override: CLAUDE_ALLOW_GIT_BAD_OPS=1 (loud warn; granular preferred)"
 
   # Cap at 15 lines per SDD §Quality Requirements / EC1.
