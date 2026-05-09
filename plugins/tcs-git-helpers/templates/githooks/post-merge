@@ -13,8 +13,8 @@
 #   - Exits 0 always — post-merge MUST NOT block a merge.
 #   - Worktree branches (M6 AC3) are excluded from the stale list.
 #   - Degrades silently when gh is absent or unauthenticated.
-#   - When CLAUDE_PLUGIN_DATA is unset, emits stderr suggestion but skips
-#     cache writes.
+#   - When CLAUDE_PLUGIN_DATA is unset or lib/cache.sh is not loaded,
+#     emits stderr suggestion but skips cache writes.
 #
 # Configuration:
 #   CLAUDE_PLUGIN_ROOT  — if set and lib/cache.sh exists, sources it
@@ -45,112 +45,6 @@ if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && \
 fi
 
 # ---------------------------------------------------------------------------
-# Inline helpers (used when lib/cache.sh is NOT loaded)
-# These mirror lib/cache.sh exactly for wire compatibility.
-# ---------------------------------------------------------------------------
-
-# Minimal JSON-string escape (branch names, paths, ISO timestamps).
-_inline_json_escape() {
-  local s="$1"
-  s="${s//\\/\\\\}"
-  s="${s//\"/\\\"}"
-  s="${s//$'\n'/\\n}"
-  s="${s//$'\r'/\\r}"
-  s="${s//$'\t'/\\t}"
-  printf '%s' "$s"
-}
-
-# Derive 12-char repo hash: sha1 prefix of absolute repo top-level path.
-# Must match lib/cache.sh._repo_hash exactly.
-_inline_repo_hash() {
-  local repo_path
-  repo_path="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
-  printf '%s' "$repo_path" | shasum 2>/dev/null | head -c 12
-}
-
-# Build the JSON stale-cache sibling. Pure printf (no jq dep on write path).
-# Args: $1=updated_iso $2=repo_path $3=default_branch $4=tsv-body (tab-sep rows)
-_inline_emit_stale_json() {
-  local updated_iso="$1"
-  local repo_path="$2"
-  local default_branch="$3"
-  local body="$4"
-  local first=1
-  local name pr_number merged_at
-
-  printf '{\n'
-  printf '  "version": 1,\n'
-  printf '  "updated_iso": "%s",\n' "$(_inline_json_escape "$updated_iso")"
-  printf '  "repo_path": "%s",\n'   "$(_inline_json_escape "$repo_path")"
-  printf '  "default_branch": "%s",\n' "$(_inline_json_escape "$default_branch")"
-  printf '  "stale_branches": ['
-
-  if [ -n "$body" ]; then
-    while IFS=$'\t' read -r name pr_number merged_at; do
-      [ -z "$name" ] && continue
-      if [ "$first" -eq 1 ]; then
-        printf '\n'
-        first=0
-      else
-        printf ',\n'
-      fi
-      case "$pr_number" in
-        ''|*[!0-9]*) pr_number=0 ;;
-      esac
-      printf '    {"name":"%s","pr_number":%s,"merged_at":"%s"}' \
-        "$(_inline_json_escape "$name")" \
-        "$pr_number" \
-        "$(_inline_json_escape "$merged_at")"
-    done <<EOF
-$body
-EOF
-    if [ "$first" -eq 0 ]; then
-      printf '\n  '
-    fi
-  fi
-  printf ']\n'
-  printf '}\n'
-}
-
-# Write TSV + JSON stale-branch cache atomically (inline fallback).
-# Reads rows from stdin: branch_name<TAB>pr_number<TAB>merged_at_iso
-# Args: $1=updated_iso $2=repo_path $3=default_branch
-_inline_write_stale_cache() {
-  local updated_iso="$1"
-  local repo_path="$2"
-  local default_branch="$3"
-
-  [ -n "${CLAUDE_PLUGIN_DATA:-}" ] || return 0
-
-  local hash
-  hash="$(_inline_repo_hash)" || return 0
-
-  local cache_dir="${CLAUDE_PLUGIN_DATA}/cache"
-  local tsv="${cache_dir}/${hash}-stale-cache.tsv"
-  local json="${cache_dir}/${hash}-stale-cache.json"
-
-  mkdir -p "$cache_dir" 2>/dev/null || return 0
-
-  local body
-  body="$(cat)"
-
-  # TSV atomic write.
-  {
-    printf '# tcs-git-helpers stale cache v1\n'
-    printf '# updated_iso=%s\n' "$updated_iso"
-    printf '# repo_path=%s\n' "$repo_path"
-    printf '# default_branch=%s\n' "$default_branch"
-    if [ -n "$body" ]; then
-      printf '%s\n' "$body"
-    fi
-  } > "${tsv}.tmp" && mv "${tsv}.tmp" "$tsv" || return 0
-
-  # JSON atomic write.
-  _inline_emit_stale_json "$updated_iso" "$repo_path" "$default_branch" "$body" \
-    > "${json}.tmp" && mv "${json}.tmp" "$json" || true
-}
-
-# ---------------------------------------------------------------------------
 # Cache dispatch
 # ---------------------------------------------------------------------------
 
@@ -160,12 +54,15 @@ _do_write_stale_cache() {
   local default_branch="$3"
   # stdin: tab-separated rows
 
-  if [ "$_CACHE_LIB_LOADED" -eq 1 ]; then
-    # lib/cache.sh expects stdin rows and three positional args.
-    _write_stale_cache "$updated_iso" "$repo_path" "$default_branch" 2>/dev/null || true
-  else
-    _inline_write_stale_cache "$updated_iso" "$repo_path" "$default_branch"
+  # lib/cache.sh must be loaded; otherwise skip (spec: "else skip").
+  # Cache is consumed by SessionStart which only runs in plugin-installed
+  # context — a standalone write would never be read.
+  if [ "$_CACHE_LIB_LOADED" -ne 1 ]; then
+    return 0
   fi
+
+  # lib/cache.sh expects stdin rows and three positional args.
+  _write_stale_cache "$updated_iso" "$repo_path" "$default_branch" 2>/dev/null || true
 }
 
 # ---------------------------------------------------------------------------
