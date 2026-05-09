@@ -215,10 +215,25 @@ _run_hook() {
 
 # ---------- State bypass ----------
 
-@test "rebase in progress → exit 0 with bypass: state-rebase" {
+@test "rebase in progress (rebase-merge) → exit 0 with bypass: state-rebase" {
   _make_repo minimal
   mkdir -p "$MADE_REPO_PATH/.git/rebase-merge"
   printf 'main\n' > "$MADE_REPO_PATH/.git/rebase-merge/head-name"
+  cd "$MADE_REPO_PATH"
+  _run_hook "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$MADE_REPO_PATH/foo.txt\"}}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  printf '%s' "$stderr" | grep -q "bypass: state-rebase"
+}
+
+@test "rebase in progress (rebase-apply, am/legacy) → exit 0 with bypass: state-rebase" {
+  # `git am` and the legacy interactive-rebase backend leave a .git/rebase-apply/
+  # directory instead of rebase-merge/. The hook accepts EITHER as the
+  # rebase-in-progress signal — pin both code paths so a future `||→&&` typo
+  # is caught.
+  _make_repo minimal
+  mkdir -p "$MADE_REPO_PATH/.git/rebase-apply"
+  printf 'main\n' > "$MADE_REPO_PATH/.git/rebase-apply/head-name"
   cd "$MADE_REPO_PATH"
   _run_hook "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$MADE_REPO_PATH/foo.txt\"}}"
   [ "$status" -eq 0 ]
@@ -326,4 +341,30 @@ _run_hook() {
   run --separate-stderr bash -c 'printf "" | "$1"' _ "$HOOK"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
+}
+
+# ----------------------------------------------------------------------
+# Regression-trap: file_path with embedded tab MUST round-trip verbatim
+# through the hook into the deny reason. An earlier `@tsv` combined-jq
+# parse silently re-encoded tabs as the literal 2-char escape `\t`, which
+# corrupted both `git check-ignore` and the deny payload. Two separate
+# `jq -r` reads avoid that class of bug entirely.
+# ----------------------------------------------------------------------
+
+@test "file_path with embedded tab survives hook intact (deny reason has real tab)" {
+  _make_repo minimal
+  cd "$MADE_REPO_PATH"
+  TAB=$(printf '\t')
+  TARGET="${MADE_REPO_PATH}/foo${TAB}bar.txt"
+  # Build the JSON via jq so the tab is encoded as a real tab character
+  # inside the string (not as backslash-t).
+  INPUT_JSON=$(jq -nc --arg fp "$TARGET" '{tool_name:"Write",tool_input:{file_path:$fp}}')
+  _run_hook "$INPUT_JSON"
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
+  REASON=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+  # The reason must contain the literal tab-bearing relpath, NOT the
+  # backslash-t escape that @tsv would have produced.
+  printf '%s' "$REASON" | grep -qF "foo${TAB}bar.txt"
+  ! printf '%s' "$REASON" | grep -qF 'foo\tbar.txt'
 }

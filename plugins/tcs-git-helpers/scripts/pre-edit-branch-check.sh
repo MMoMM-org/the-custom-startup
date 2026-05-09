@@ -37,19 +37,21 @@ _LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd)"
 . "$_LIB_DIR/audit_log.sh"
 
 INPUT=$(cat)
-# Combine the two stdin jq reads into one fork (perf: ≤80ms p99). @tsv emits
-# tab-separated; use the first tab as the field break. tool_name and
-# file_path are validated downstream so empty results just fast-allow.
+# Two separate jq reads — NOT a combined `@tsv` filter. jq's @tsv encodes
+# embedded tabs/CRs/newlines/backslashes in field values as the literal
+# 2-char escapes `\t`/`\r`/`\n`/`\\`, which a downstream bash split has no
+# clean way to reverse without reintroducing escape-handling bugs. Two
+# reads cost one extra fork (~10ms) but preserve every byte of file_path
+# verbatim — important because file_path appears verbatim in the deny
+# reason and is used as a `git check-ignore` argument.
 #
-# `|| true` keeps the hook fail-open under `set -euo pipefail` if jq is
-# missing or stdin is malformed: PARSED becomes empty → TOOL empty → tool-gate
-# `case` falls through to `*) exit 0`. Hook contract guarantees exit 0 always;
+# `2>/dev/null || true` keeps the hook fail-open under `set -euo pipefail`
+# if jq is missing or stdin is malformed: empty TOOL/FILE_PATH falls through
+# the case blocks to exit 0. Hook contract guarantees exit 0 always;
 # blocking the user's edit because the hook itself crashed is worse than
-# letting it through (defense-in-depth: the user-global hook still fires too).
-PARSED=$(printf '%s' "$INPUT" | jq -r '[.tool_name // "", .tool_input.file_path // ""] | @tsv' 2>/dev/null || true)
-TOOL=${PARSED%%	*}
-FILE_PATH=${PARSED#*	}
-[ "$TOOL" = "$PARSED" ] && FILE_PATH=""  # no tab → no file_path field
+# letting it through (defense-in-depth: the user-global hook still fires).
+TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null || true)
+FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""' 2>/dev/null || true)
 
 # Only check editing tools; everything else is a fast-allow.
 case "$TOOL" in
