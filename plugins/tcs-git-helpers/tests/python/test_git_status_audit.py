@@ -21,7 +21,6 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
-import os
 import re
 import subprocess
 from pathlib import Path
@@ -94,28 +93,6 @@ STALE_ENTRIES = [
     {"name": "feat/old-thing", "pr_number": 38, "merged_at": "2026-04-12T10:00:00Z"},
     {"name": "fix/another-thing", "pr_number": 40, "merged_at": "2026-04-15T09:00:00Z"},
 ]
-
-# ---------------------------------------------------------------------------
-# Helper: make a synthetic git repo for worktree tests
-# ---------------------------------------------------------------------------
-
-def _make_git_repo(path: Path, branch: str = "feat/main-branch") -> None:
-    """Create a minimal git repo at path on the given branch."""
-    env = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"}
-    subprocess.run(["git", "init", "-b", branch, str(path)], check=True,
-                   capture_output=True, env=env)
-    subprocess.run(["git", "-C", str(path), "config", "user.email", "test@test.invalid"],
-                   check=True, capture_output=True, env=env)
-    subprocess.run(["git", "-C", str(path), "config", "user.name", "Test"], check=True,
-                   capture_output=True, env=env)
-    subprocess.run(["git", "-C", str(path), "config", "commit.gpgsign", "false"],
-                   check=True, capture_output=True, env=env)
-    (path / "README.md").write_text("hello\n")
-    subprocess.run(["git", "-C", str(path), "add", "."], check=True,
-                   capture_output=True, env=env)
-    subprocess.run(["git", "-C", str(path), "commit", "-m", "init"], check=True,
-                   capture_output=True, env=env)
-
 
 # ---------------------------------------------------------------------------
 # Subprocess result factory
@@ -668,3 +645,121 @@ class TestBatchedGhCall:
             f"gh call must use --state merged, got: {gh_cmd_str}"
         )
         assert "--limit" in gh_cmd_str, f"gh call must use --limit, got: {gh_cmd_str}"
+
+
+# ===========================================================================
+# Tests for _fetch_merged_prs failure branches (fail-open contract)
+# ===========================================================================
+
+class TestFetchMergedPRsFailures:
+    """Verify _fetch_merged_prs is fail-open under timeout, auth missing, and no GitHub remote."""
+
+    def _make_gh_error_result(self, returncode: int, stderr: str) -> MagicMock:
+        m = MagicMock()
+        m.returncode = returncode
+        m.stdout = ""
+        m.stderr = stderr
+        return m
+
+    def test_fetch_returns_empty_on_timeout(
+        self, gsa, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """
+        When subprocess.run raises TimeoutExpired, _fetch_merged_prs must return []
+        and cmd_cleanup must exit 0 (fail-open).
+        """
+        repo_path = "/fake/repo/timeout"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "gh":
+                raise subprocess.TimeoutExpired(cmd=[], timeout=5)
+            # git calls: succeed normally
+            if "symbolic-ref" in cmd:
+                return _git_result("feat/some-branch")
+            if "for-each-ref" in cmd:
+                return _git_result("feat/some-branch\nmain")
+            if "worktree" in cmd:
+                return _git_result("")
+            return _git_result("")
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        result = gsa._fetch_merged_prs(repo_path)
+        assert result == [], f"Expected [] on timeout, got {result!r}"
+
+        # Also verify cmd_cleanup is fail-open (no SystemExit)
+        _write_stale_cache(cache_dir, repo_path, "main", [])
+        output_lines: list[str] = []
+        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+        try:
+            gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
+        except SystemExit as exc:
+            pytest.fail(f"cmd_cleanup raised SystemExit({exc.code}) on timeout — must be fail-open")
+
+    def test_fetch_returns_empty_on_auth_missing(
+        self, gsa, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """
+        When gh exits with returncode=4 (auth missing), _fetch_merged_prs must return []
+        and cmd_cleanup must exit 0 (fail-open).
+        """
+        repo_path = "/fake/repo/auth-missing"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "gh":
+                return self._make_gh_error_result(returncode=4, stderr="gh auth login")
+            if "for-each-ref" in cmd:
+                return _git_result("feat/some-branch\nmain")
+            if "worktree" in cmd:
+                return _git_result("")
+            return _git_result("")
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        result = gsa._fetch_merged_prs(repo_path)
+        assert result == [], f"Expected [] on auth missing (rc=4), got {result!r}"
+
+        _write_stale_cache(cache_dir, repo_path, "main", [])
+        output_lines: list[str] = []
+        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+        try:
+            gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
+        except SystemExit as exc:
+            pytest.fail(f"cmd_cleanup raised SystemExit({exc.code}) on auth missing — must be fail-open")
+
+    def test_fetch_returns_empty_on_no_github_remote(
+        self, gsa, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """
+        When gh reports 'no GitHub remote', _fetch_merged_prs must silently return []
+        and cmd_cleanup must exit 0 (fail-open).
+        """
+        repo_path = "/fake/repo/no-remote"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "gh":
+                return self._make_gh_error_result(returncode=1, stderr="no GitHub remote")
+            if "for-each-ref" in cmd:
+                return _git_result("feat/some-branch\nmain")
+            if "worktree" in cmd:
+                return _git_result("")
+            return _git_result("")
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        result = gsa._fetch_merged_prs(repo_path)
+        assert result == [], f"Expected [] on no GitHub remote, got {result!r}"
+
+        _write_stale_cache(cache_dir, repo_path, "main", [])
+        output_lines: list[str] = []
+        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+        try:
+            gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
+        except SystemExit as exc:
+            pytest.fail(f"cmd_cleanup raised SystemExit({exc.code}) on no GitHub remote — must be fail-open")

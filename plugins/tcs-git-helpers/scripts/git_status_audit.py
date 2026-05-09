@@ -82,28 +82,34 @@ def _stale_json_path(cache_dir: Path, repo_path: str) -> Path:
 
 def _run_git(args: list[str], cwd: str | None = None) -> tuple[int, str, str]:
     """Run git with args; return (returncode, stdout, stderr). Never raises."""
-    result = subprocess.run(
-        ["git"] + args,
-        capture_output=True,
-        text=True,
-        timeout=2,
-        check=False,
-        cwd=cwd,
-    )
-    return result.returncode, result.stdout.strip(), result.stderr.strip()
+    try:
+        result = subprocess.run(
+            ["git"] + args,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+            cwd=cwd,
+        )
+        return result.returncode, result.stdout.strip(), result.stderr.strip()
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return 1, "", f"<error: {exc}>"
 
 
 def _run_gh(args: list[str], cwd: str | None = None) -> tuple[int, str, str]:
     """Run gh with args; return (returncode, stdout, stderr). Never raises."""
-    result = subprocess.run(
-        ["gh"] + args,
-        capture_output=True,
-        text=True,
-        timeout=5,
-        check=False,
-        cwd=cwd,
-    )
-    return result.returncode, result.stdout.strip(), result.stderr.strip()
+    try:
+        result = subprocess.run(
+            ["gh"] + args,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+            cwd=cwd,
+        )
+        return result.returncode, result.stdout.strip(), result.stderr.strip()
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return 1, "", f"<error: {exc}>"
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +408,7 @@ def cmd_brief(*, cache_dir: Path, repo_path: str) -> None:
         modified = sum(
             1
             for line in porcelain.splitlines()
-            if line and line[1] in ("M", "D", "A", "R", "C") or line[0] in ("M", "D", "A", "R", "C")
+            if line and (line[0] in ("M", "D", "A", "R", "C") or line[1] in ("M", "D", "A", "R", "C"))
         )
         state = f"dirty ({modified} modified)" if modified else "dirty"
 
