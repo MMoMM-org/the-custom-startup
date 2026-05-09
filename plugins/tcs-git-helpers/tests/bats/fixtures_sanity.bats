@@ -385,3 +385,9 @@ _assert_trailing_newline() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"no such host"* ]]
 }
+
+@test "gh_stubs/gh: GH_STUB_SCENARIO=timeout exits 124 (matches /usr/bin/timeout)" {
+  run env GH_STUB_SCENARIO=timeout "$GH_STUB" pr list --head feat/foo
+  [ "$status" -eq 124 ]
+  [[ "$output" == *"timeout"* ]]
+}

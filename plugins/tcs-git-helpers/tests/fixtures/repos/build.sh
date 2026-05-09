@@ -205,8 +205,10 @@ build_rebase_in_progress() {
   _commit "$repo" file.txt "main-version" "feat: main change"
 
   git -C "$repo" checkout -q feat/rebase
-  # Rebase will conflict on file.txt and pause; .git/rebase-merge/ or rebase-apply/ remains.
-  GIT_EDITOR=true git -C "$repo" rebase main >/dev/null 2>&1 || true
+  # Non-interactive rebase pauses on conflict; .git/rebase-merge/ (or
+  # rebase-apply/ on the legacy backend) remains. No editor involvement —
+  # we don't pass -i, so GIT_EDITOR/GIT_SEQUENCE_EDITOR are not needed.
+  git -C "$repo" rebase main >/dev/null 2>&1 || true
 }
 
 # --- Scenario 8: large-50-branches ---------------------------------------
