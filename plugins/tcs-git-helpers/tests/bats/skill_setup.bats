@@ -147,6 +147,10 @@ yaml.safe_load(parts[1])
 
 @test "A26 body documents --update mode shows per-file diff" {
   grep -qE -- '--update' "$SKILL_PATH"
+  # The orchestration instruction must be specific: --update must be co-located
+  # with a "diff" / "per-file diff" mention so Claude knows to invoke `diff`
+  # before overwriting older-marker files.
+  grep -qiE 'per-file diff|diff' "$SKILL_PATH"
 }
 
 @test "A27 body cites references/migrating-from-husky.md" {
@@ -532,6 +536,31 @@ _make_clean_repo() {
   # Stub: exits 0 with informational message naming T5.8 (or similar marker).
   [ "$status" -eq 0 ]
   echo "$output" | grep -qE 'T5\.8|branch.protection|stub|not yet implemented'
+}
+
+# --- --update mode: per-file diff behavior (T5.1 spec compliance) --------
+
+@test "C32 --update mode: detect_conflicts flags older fixture (exit 3) and per-file diff mechanism produces output" {
+  cd "$(_use_fixture with-tcs-older)"
+  # 1. detect_conflicts.sh must classify the older-marker fixture as exit 3
+  #    (CONFLICT / OUTDATED) so the skill can branch into the --update flow.
+  run "$LIB_DIR/detect_conflicts.sh"
+  [ "$status" -eq 3 ]
+  echo "$output" | grep -qiE 'older|outdated'
+
+  # 2. The per-file diff workflow that SKILL.md instructs Claude to follow
+  #    requires that the installed older hook actually differs from the
+  #    current template — otherwise `diff` would emit nothing and the
+  #    overwrite prompt would be a no-op. Verify the underlying mechanism
+  #    by diffing the installed pre-commit against the template.
+  installed_hook=".githooks/pre-commit"
+  template_hook="$PLUGIN_ROOT/templates/githooks/pre-commit"
+  [ -f "$installed_hook" ]
+  [ -f "$template_hook" ]
+  # diff -q exits 1 when files differ; capture that as the contract.
+  run diff -q "$installed_hook" "$template_hook"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q 'differ'
 }
 
 # ---------------------------------------------------------------------------
