@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Awareness Hooks + Status Backend"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 3
 ---
@@ -35,7 +35,7 @@ phase: 3
 
 This phase implements awareness (SessionStart brief), nudges (PostToolUse), and the on-demand status backend.
 
-- [ ] **T3.1 git_status_audit.py (Python skill backend)** `[activity: backend-api]`
+- [x] **T3.1 git_status_audit.py (Python skill backend)** `[activity: backend-api]`
 
   1. Prime: SDD §Building Block View — git_status_audit.py; SDD §Cache Schemas TSV+JSON formats; PRD M4, M6 acceptance criteria; research/integration.md §2 (gh CLI contract for batched query).
   2. Test: Write `tests/python/test_git_status_audit.py` covering: `--brief` mode outputs one-line format matching SDD wireframe; `--cleanup` mode lists stale branches with PR numbers; `--json` mode outputs valid JSON matching schema; `--overrides` mode reads `${CLAUDE_PLUGIN_DATA}/audit/overrides.jsonl` and prints last N events; cache-write produces valid TSV AND valid JSON sibling atomically; batched `gh pr list --state merged --limit 100` is used (NOT per-branch loop) per performance §3.
@@ -43,7 +43,7 @@ This phase implements awareness (SessionStart brief), nudges (PostToolUse), and 
   4. Validate: pytest passes; ruff clean; manual: invoke against synthetic repos; verify cache files schema-conformant.
   5. Success: All 4 modes work `[ref: PRD/§/tcs-git-helpers:status modes]`; batched gh call ≤2s p99 even on 50-branch repo `[ref: research/performance.md §7 scenario 9]`.
 
-- [ ] **T3.2 session-start-brief.sh** `[activity: backend-api]` `[parallel: true]`
+- [x] **T3.2 session-start-brief.sh** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: SDD §Runtime View Tertiary Flow trace; M4 acceptance criteria; ADR-4 TSV format with comment header.
   2. Test: Write `tests/bats/session-start-brief.bats`: brief renders in <300ms p99 across 100 invocations; one-line format matches SDD wireframe; warning marker on protected branch; staleness indicator when cache >24h old; "run /tcs-git-helpers:setup" hint when `.githooks/` absent; NO `gh` calls (mock gh stub fails the test if invoked); cache-empty case renders gracefully (empty stale count, no errors).
@@ -51,7 +51,7 @@ This phase implements awareness (SessionStart brief), nudges (PostToolUse), and 
   4. Validate: bats passes; performance assertion <300ms p99; shellcheck clean; pure bash (no python invocation).
   5. Success: Brief format matches `[ref: SDD/§UI Visualization Brief Layout]`; performance budget met `[ref: CON-2]`; M4 AC1-AC4 all pass.
 
-- [ ] **T3.3 nudge-hook.sh** `[activity: backend-api]` `[parallel: true]`
+- [x] **T3.3 nudge-hook.sh** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: SDD §Building Block View — nudge-hook; M9 acceptance criteria; PRD §Feature M9 trigger map.
   2. Test: Write `tests/bats/nudge-hook.bats`: trigger map cases (after `git checkout -b X` → "verify base"; after `gh pr create` → "verify PR title"; after `gh pr merge` → "/tcs-git-helpers:status --cleanup"; after `git rebase` → "verify history"; after `git stash pop` → "verify .orig cleanup"); nudge fires only on exit-status 0 (failed command → no nudge); 60s same-nudge dedup per repo via cache file `${CLAUDE_PLUGIN_DATA}/cache/<repo-hash>-nudge-<rule>` (timestamp-based); pure bash (NO git calls, NO gh calls); ≤50ms p99.

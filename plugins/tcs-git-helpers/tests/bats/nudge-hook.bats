@@ -133,9 +133,14 @@ _assert_stderr_empty() {
 # ----------------------------------------------------------------------
 
 @test "test_trigger_gh_pr_merge_emits_cleanup_nudge" {
+  # PRD M9 AC3: nudge suggests /tcs-git-helpers:status --cleanup.
+  # AC3 intentionally omits a reference doc citation — no "stale-branch-cleanup.md".
   run --separate-stderr _run_hook "gh pr merge --squash"
   [ "$status" -eq 0 ]
   _assert_stderr_contains "/tcs-git-helpers:status --cleanup"
+  # Confirm no reference doc suffix appears (AC3 intentional omission).
+  [[ "$stderr" != *"stale-branch-cleanup.md"* ]] \
+    || { echo "stderr must NOT contain stale-branch-cleanup.md (AC3 omits ref doc)" >&2; return 1; }
 }
 
 # ----------------------------------------------------------------------
@@ -318,9 +323,10 @@ STUB
 # ----------------------------------------------------------------------
 
 @test "test_perf_p99_under_50ms" {
-  # 100 invocations of a trigger command; collect wall-clock times; assert p99 < 80ms.
+  # 100 invocations of a trigger command; collect wall-clock times; assert p99 < 50ms.
   # Using perl HiRes for sub-millisecond precision (consistent with block-bad-git-ops perf test).
-  # Budget: 50ms p99 per spec; 80ms ceiling for CI per precedent.
+  # Budget: 50ms p99 per spec (SDD §Quality Requirements perf table; phase-3.md T3.3 step 4).
+  # Achieved via bash-regex JSON parsing (replaced jq subprocess forks): measured p99 ~33ms.
   local cmd_json
   cmd_json=$(jq -n --arg c "git stash pop" \
     '{tool_name:"Bash",tool_input:{command:$c}}')
@@ -343,8 +349,8 @@ STUB
   rm -f "$times_file"
 
   [ -n "$p99" ] || { echo "no timing data collected" >&2; return 1; }
-  [ "$p99" -lt 80 ] \
-    || { echo "p99=${p99}ms exceeds 80ms CI ceiling" >&2; return 1; }
+  [ "$p99" -lt 50 ] \
+    || { echo "p99=${p99}ms exceeds 50ms spec budget" >&2; return 1; }
 }
 
 # ----------------------------------------------------------------------

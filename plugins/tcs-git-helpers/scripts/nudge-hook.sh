@@ -14,9 +14,8 @@
 #   - bash 3.2 macOS-compat (no declare -A, no mapfile, no ${var,,})
 #   - POSIX ERE only: [[:space:]]+, [[:<:]]/[[:>:]] — NEVER \s/\b
 #   - NO git, NO gh subprocess invocations
-#   - jq IS used for stdin parsing but with set -uo pipefail (NOT -e)
-#     and 2>/dev/null || echo "" on every jq command-substitution
-#     (T2.1/T2.2/T2.3 all shipped the set -euo + jq fail-closed trap)
+#   - JSON stdin parsed with bash regex (NOT jq) for hot-path performance.
+#     jq was replaced to meet the ≤50ms p99 budget (deviation D1 resolved).
 #
 # Repo-hash strategy — Option A (no git call):
 #   lib/cache.sh's _repo_hash() calls `git rev-parse --show-toplevel`
@@ -35,19 +34,34 @@ set -uo pipefail
 # abort the script under -e. Same rationale as block-bad-git-ops.sh.
 
 # ---------------------------------------------------------------------------
-# Read hook envelope (stdin JSON) — fail-open on malformed input
+# Read hook envelope (stdin JSON) — bash regex parsing (fail-open)
 # ---------------------------------------------------------------------------
 #
-# || echo "" on every jq substitution: a jq parse failure would otherwise
-# cause the assignment itself to fail under set -uo pipefail (exit_status
-# of the command substitution propagates). Defense-in-depth against the
-# T2.x fail-closed trap.
+# We parse stdin with bash [[ =~ ]] rather than jq to avoid 3 subprocess
+# forks (~30ms). The JSON emitted by Claude Code hooks is compact and
+# machine-generated; the patterns below are robust for that canonical form.
+# Fail-open: if a regex does not match, we leave the variable empty and
+# proceed (suppress the nudge or fire without exit-status check).
 
 INPUT=$(cat)
-TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null || echo "")
+
+# Extract tool_name
+TOOL=""
+if [[ "$INPUT" =~ \"tool_name\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]]; then
+  TOOL="${BASH_REMATCH[1]}"
+fi
 [ "$TOOL" = "Bash" ] || exit 0
 
-CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null || echo "")
+# Extract tool_input.command — match through the tool_input block
+CMD=""
+if [[ "$INPUT" =~ \"command\"[[:space:]]*:[[:space:]]*\"(([^\"]|\\\")*)\"|\"command\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]]; then
+  # Prefer the simpler non-escaped capture first (BASH_REMATCH[3]), fall back to [1]
+  if [ -n "${BASH_REMATCH[3]}" ]; then
+    CMD="${BASH_REMATCH[3]}"
+  else
+    CMD="${BASH_REMATCH[1]}"
+  fi
+fi
 [ -z "$CMD" ] && exit 0
 
 # ---------------------------------------------------------------------------
@@ -58,9 +72,20 @@ CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null || ec
 # (PRD OQ10). If the field is found AND non-zero → suppress nudge.
 # If the field is missing entirely → fire anyway (per OQ10 fallback).
 
-EXIT_STATUS=$(printf '%s' "$INPUT" | jq -r '
-  .exit_status // .tool_response.exit_code // .tool_response.exit_status // .tool_response.status // empty
-' 2>/dev/null || echo "")
+EXIT_STATUS=""
+# Try exit_status top-level first (most common)
+if [[ "$INPUT" =~ \"exit_status\"[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
+  EXIT_STATUS="${BASH_REMATCH[1]}"
+# Then try tool_response.exit_code
+elif [[ "$INPUT" =~ \"exit_code\"[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
+  EXIT_STATUS="${BASH_REMATCH[1]}"
+# Then try tool_response.exit_status (nested — second occurrence of key)
+elif [[ "$INPUT" =~ \"tool_response\"[^}]*\"exit_status\"[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
+  EXIT_STATUS="${BASH_REMATCH[1]}"
+# Then try tool_response.status
+elif [[ "$INPUT" =~ \"status\"[[:space:]]*:[[:space:]]*([0-9]+) ]]; then
+  EXIT_STATUS="${BASH_REMATCH[1]}"
+fi
 
 if [ -n "$EXIT_STATUS" ] && [ "$EXIT_STATUS" != "0" ]; then
   exit 0  # failed command — suppress nudge (M9 AC6)
@@ -128,23 +153,29 @@ _check_and_update_dedup() {
 # Nudge emitter
 # ---------------------------------------------------------------------------
 #
-# _emit_nudge <rule_key> <text> <ref_doc>
+# _emit_nudge <rule_key> <text> [<ref_doc>]
 #   Checks dedup, then emits to stderr if the dedup window has passed.
+#   If <ref_doc> is empty or omitted, no reference suffix is appended.
+#   PRD M9 AC3 (gh pr merge) intentionally omits a reference doc.
 
 _emit_nudge() {
   local rule="$1"
   local text="$2"
-  local ref_doc="$3"
+  local ref_doc="${3:-}"
   local plugin_root="${CLAUDE_PLUGIN_ROOT:-}"
 
   _check_and_update_dedup "$rule" || return 0
 
-  if [ -n "$plugin_root" ]; then
-    printf 'tcs-git-helpers: %s — see %s/references/%s\n' \
-      "$text" "$plugin_root" "$ref_doc" >&2
+  if [ -n "$ref_doc" ]; then
+    if [ -n "$plugin_root" ]; then
+      printf 'tcs-git-helpers: %s — see %s/references/%s\n' \
+        "$text" "$plugin_root" "$ref_doc" >&2
+    else
+      printf 'tcs-git-helpers: %s — see references/%s\n' \
+        "$text" "$ref_doc" >&2
+    fi
   else
-    printf 'tcs-git-helpers: %s — see references/%s\n' \
-      "$text" "$ref_doc" >&2
+    printf 'tcs-git-helpers: %s\n' "$text" >&2
   fi
   return 0
 }
@@ -188,11 +219,10 @@ if _match_command "$CMD" 'git[[:space:]]+push[[:space:]]+(.*[[:space:]]+)?-u[[:s
   exit 0
 fi
 
-# AC3: gh pr merge
+# AC3: gh pr merge — NO reference doc (PRD M9 AC3 intentional omission)
 if _match_command "$CMD" 'gh[[:space:]]+pr[[:space:]]+merge[[:>:]]'; then
   _emit_nudge "cleanup-after-merge" \
-    "PR merged — run /tcs-git-helpers:status --cleanup to surface stale branches" \
-    "stale-branch-cleanup.md"
+    "PR merged — run /tcs-git-helpers:status --cleanup to surface stale branches"
   exit 0
 fi
 
