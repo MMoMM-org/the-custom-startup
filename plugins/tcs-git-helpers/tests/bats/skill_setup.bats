@@ -402,7 +402,9 @@ _make_clean_repo() {
   cd "$(_use_fixture with-tcs-current)"
   # Current matching version: detect_conflicts considers this informational, not
   # an abort. The skill body branches on the up-to-date marker independently.
+  # Exit 0 is load-bearing — SKILL.md gates "skip re-installation" on it.
   run "$LIB_DIR/detect_conflicts.sh"
+  [ "$status" -eq 0 ]
   echo "$output" | grep -qiE 'up to date|matching|already installed'
 }
 

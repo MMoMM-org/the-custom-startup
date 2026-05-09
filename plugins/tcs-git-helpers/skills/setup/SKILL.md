@@ -88,7 +88,7 @@ Spec refs:
 "${CLAUDE_PLUGIN_ROOT}/skills/setup/lib/lock.sh" acquire
 ```
 
-The helper writes `<repo>/.githooks/.setup.lock` containing `<pid>:<unix-timestamp>`. A second concurrent invocation fails fast (no waiting). Locks older than 5 minutes (or with dead PIDs) are reclaimed automatically.
+The helper writes `<repo>/.githooks/.setup.lock` containing `<pid>:<unix-timestamp>`. A second concurrent invocation will wait up to `TCS_LOCK_TIMEOUT` seconds (default 10 s) before failing; set `TCS_LOCK_TIMEOUT=0` to fail immediately. Locks older than 5 minutes (or with dead PIDs) are reclaimed automatically.
 
 If acquire fails, surface the error (`another setup run holds .githooks/.setup.lock`) and exit non-zero — do NOT force-remove a foreign lock.
 
