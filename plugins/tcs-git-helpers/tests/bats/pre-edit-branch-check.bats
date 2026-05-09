@@ -295,3 +295,35 @@ _run_hook() {
   [ -z "$output" ]
   ! printf '%s' "$stderr" | grep -q "WARNING"
 }
+
+# ----------------------------------------------------------------------
+# Robustness: malformed JSON stdin → fail-open (regression-trap for the
+# `|| true` guards on the jq pipelines). Without those guards, a parse
+# error under `set -euo pipefail` would propagate as a non-zero exit and
+# unconditionally block the underlying Edit/Write/NotebookEdit call.
+# Mirrors the canonical pattern from T2.3 (commit 1606411).
+# ----------------------------------------------------------------------
+
+@test "malformed JSON stdin → fail-open exit 0, no output" {
+  _make_repo minimal
+  cd "$MADE_REPO_PATH"
+  run --separate-stderr bash -c 'printf "%s" "not-json" | "$1"' _ "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "truncated JSON stdin → fail-open exit 0, no output" {
+  _make_repo minimal
+  cd "$MADE_REPO_PATH"
+  run --separate-stderr bash -c 'printf "%s" "{\"tool_name\":\"Write\"" | "$1"' _ "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "empty stdin → fail-open exit 0, no output" {
+  _make_repo minimal
+  cd "$MADE_REPO_PATH"
+  run --separate-stderr bash -c 'printf "" | "$1"' _ "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}

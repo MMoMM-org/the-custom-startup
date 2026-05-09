@@ -40,7 +40,13 @@ INPUT=$(cat)
 # Combine the two stdin jq reads into one fork (perf: ≤80ms p99). @tsv emits
 # tab-separated; use the first tab as the field break. tool_name and
 # file_path are validated downstream so empty results just fast-allow.
-PARSED=$(printf '%s' "$INPUT" | jq -r '[.tool_name // "", .tool_input.file_path // ""] | @tsv')
+#
+# `|| true` keeps the hook fail-open under `set -euo pipefail` if jq is
+# missing or stdin is malformed: PARSED becomes empty → TOOL empty → tool-gate
+# `case` falls through to `*) exit 0`. Hook contract guarantees exit 0 always;
+# blocking the user's edit because the hook itself crashed is worse than
+# letting it through (defense-in-depth: the user-global hook still fires too).
+PARSED=$(printf '%s' "$INPUT" | jq -r '[.tool_name // "", .tool_input.file_path // ""] | @tsv' 2>/dev/null || true)
 TOOL=${PARSED%%	*}
 FILE_PATH=${PARSED#*	}
 [ "$TOOL" = "$PARSED" ] && FILE_PATH=""  # no tab → no file_path field
@@ -110,13 +116,19 @@ case "$BRANCH" in
     main|master)
         REL_PATH="${FILE_PATH#"$REPO_DIR"/}"
         REASON="Refusing to ${TOOL} '${REL_PATH}' on '${BRANCH}'. Create a feature branch first (git checkout -b feat/<name>). Gitignored paths are exempt. Override for the whole session by relaunching Claude with CLAUDE_ALLOW_MAIN_EDITS=1."
+        # `|| true` keeps fail-open under `set -e` if jq fails to emit. The
+        # deny is dropped silently — Claude Code sees an exit-0 with no JSON
+        # and allows the edit. The user-global block-main-edits.sh runs
+        # alongside this hook and will still deny (M11 AC3 defense-in-depth),
+        # so a silent drop here is recoverable. Blocking the edit because
+        # OUR jq crashed would be a worse failure mode.
         jq -nc --arg reason "$REASON" '{
             hookSpecificOutput: {
                 hookEventName: "PreToolUse",
                 permissionDecision: "deny",
                 permissionDecisionReason: $reason
             }
-        }'
+        }' 2>/dev/null || true
         exit 0
         ;;
 esac
