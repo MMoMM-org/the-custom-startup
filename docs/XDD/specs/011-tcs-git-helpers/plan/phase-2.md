@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Claude-side PreToolUse Hooks"
-status: pending
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -37,7 +37,7 @@ phase: 2
 
 This phase implements the four PreToolUse hooks that constitute the inner-ring enforcement. Each script sources `lib/*` modules and emits `permissionDecision` JSON via stdout per Claude Code hook contract.
 
-- [ ] **T2.1 block-bad-git-ops.sh** `[activity: backend-api]`
+- [x] **T2.1 block-bad-git-ops.sh** `[activity: backend-api]`
 
   1. Prime: SDD §Implementation Examples block-bad-git-ops dispatcher; PRD M1, M2, M3, M7 acceptance criteria; SDD §Hook Decision Matrix (state bypass).
   2. Test: Write `tests/bats/block-bad-git-ops.bats` covering, for each of the 14+ destructive patterns: positive match → deny with permissionDecision JSON containing rule name + reference link + override env-var name; negative match → exit 0; with override env-var set → allow with audit-logged consumption; bypass-during-rebase/merge/cherry-pick/bisect/detached-HEAD → exit 0 with stderr bypass message; cascading denials when 2+ rules match → both reported in single denial response (EC2). Also: `gh` truth-table cases for push pattern (CLOSED → deny, OPEN → allow, no-PR → allow, exit 4 → fail-open with warning, timeout → fail-open).
@@ -45,7 +45,7 @@ This phase implements the four PreToolUse hooks that constitute the inner-ring e
   4. Validate: bats passes; shellcheck clean; performance check ≤80ms p99 for non-push patterns; ≤5000ms p99 with timeout for push.
   5. Success: All M7 patterns deny by default `[ref: PRD/M7/AC1]`; all granular overrides work single-shot `[ref: PRD/M7/AC2 + ADR-5]`; master override emits warning `[ref: PRD/M7/AC3]`; gh fail-open verified `[ref: SDD/§gh Exit Code Truth Table]`.
 
-- [ ] **T2.2 pre-edit-branch-check.sh** `[activity: backend-api]` `[parallel: true]`
+- [x] **T2.2 pre-edit-branch-check.sh** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: `~/.claude/hooks/block-main-edits.sh` (reference shape); SDD §Building Block View — pre-edit-branch-check; M11 AC3 (coexistence with user-global hook).
   2. Test: Write `tests/bats/pre-edit-branch-check.bats`: deny on edit to file on main/master (matches user-global hook semantics); gitignored paths exempt; `CLAUDE_ALLOW_MAIN_EDITS=1` env-var allows; squash-merge orphan detection emits warning (NOT deny — non-main edits are recoverable); state-bypass cases (rebase etc.) skip checks.
@@ -53,7 +53,7 @@ This phase implements the four PreToolUse hooks that constitute the inner-ring e
   4. Validate: bats passes; shellcheck clean; ≤80ms p99 (local-git only).
   5. Success: deny on main/master `[ref: PRD/M11/AC3]`; gitignore exempt; warning on orphan branch `[ref: SDD/§Building Block View — pre-edit-branch-check]`.
 
-- [ ] **T2.3 protect-git-internals.sh** `[activity: backend-api]` `[parallel: true]`
+- [x] **T2.3 protect-git-internals.sh** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: SDD §Implementation Examples ADR-11 sentinel logic; security.md §5 (block edits to .githooks/* etc.).
   2. Test: Write `tests/bats/protect-git-internals.bats`: edit to `<repo>/.githooks/pre-commit` denied when `TCS_GIT_HELPERS_SETUP_ACTIVE` unset; same edit allowed when set to `1`; edits to `.git/config`, `.git/hooks/foo`, `<repo>/.githooks/.config` follow same pattern; edits OUTSIDE these paths always allowed (hook returns exit 0 without touching tool_input).
@@ -61,7 +61,7 @@ This phase implements the four PreToolUse hooks that constitute the inner-ring e
   4. Validate: bats passes; shellcheck clean; ≤80ms p99.
   5. Success: All sensitive-path edits denied without sentinel `[ref: ADR-11]`; sentinel allows during setup `[ref: SDD/§Implementation Examples — Block edits to git internals]`.
 
-- [ ] **T2.4 worktree-exit-guard.sh** `[activity: backend-api]` `[parallel: true]`
+- [x] **T2.4 worktree-exit-guard.sh** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: SDD §Runtime View Secondary Flow worktree-exit; M8 acceptance criteria; ADR-1; research/integration.md §3.
   2. Test: Write `tests/bats/worktree-exit-guard.bats`: deny when working tree dirty (`git status --porcelain` non-empty); deny when untracked files present; deny when unmerged commits exist (`git cherry origin/<base> <branch>` has `+` lines); deny when unpushed commits exist; one denial response includes ALL four checks summary; `CLAUDE_ALLOW_WORKTREE_EXIT_WITH_CHANGES=1` allows once with override consumed; subsequent attempts re-deny.
@@ -69,7 +69,7 @@ This phase implements the four PreToolUse hooks that constitute the inner-ring e
   4. Validate: bats passes; shellcheck clean; ≤500ms p99 (allows for `git cherry` on typical branches).
   5. Success: All 4 checks fire `[ref: PRD/M8/AC1, AC2]`; override single-shot works `[ref: PRD/M8/AC3 + ADR-5]`.
 
-- [ ] **T2.5 Hook Registration Update** `[activity: integration]`
+- [x] **T2.5 Hook Registration Update** `[activity: integration]`
 
   1. Prime: SDD §Plugin Layout hooks/hooks.json shape; T1.1's stub hook registration.
   2. Test: bats test asserting `hooks.json` registers exactly 4 PreToolUse entries (Bash matcher → block-bad-git-ops.sh; Edit|Write|NotebookEdit matcher → pre-edit-branch-check.sh AND protect-git-internals.sh; ExitWorktree matcher → worktree-exit-guard.sh) and (Phase 3 stubs) one SessionStart and one PostToolUse:Bash.
@@ -77,7 +77,7 @@ This phase implements the four PreToolUse hooks that constitute the inner-ring e
   4. Validate: bats passes; `claude --plugin-dir` loads cleanly; `/reload-plugins` works.
   5. Success: All 4 PreToolUse hooks fire on respective tool invocations `[ref: SDD/§External Interfaces inbound]`.
 
-- [ ] **T2.6 Phase 2 Validation** `[activity: validate]`
+- [x] **T2.6 Phase 2 Validation** `[activity: validate]`
 
   Run all Phase 2 bats tests + shellcheck. Manual check via `claude --plugin-dir`:
   - Trigger each hook with synthetic repo from `tests/fixtures/repos/`
