@@ -22,10 +22,11 @@ Mode {
                                 before overwriting an older marker
   --with-gha                 → also copy templates/github-actions/pr-title-check.yml
                                 into <repo>/.github/workflows/
-  --with-branch-protection   → invoke the branch-protection helper (T5.8)
-                                applies the ADR-12 single-coder preset via
-                                `gh api`. T5.1 ships only a stub; T5.8 wires
-                                the actual gh-api call.
+  --with-branch-protection   → invoke the branch-protection helper; applies
+                                the ADR-12 single-coder preset via `gh api`.
+                                Idempotent (re-run is a no-op if protection
+                                already matches). Set `TCS_BP_YES=1` to skip
+                                the interactive confirm prompt.
 }
 
 ExitCode {
@@ -50,7 +51,7 @@ Sentinel {
 
 Spec refs:
 - PRD §Feature M10 — Plugin distribution + per-repo setup (AC1–AC6)
-- PRD §Feature S1 — `--with-branch-protection` (T5.8 implements; T5.1 stubs)
+- PRD §Feature S1 — `--with-branch-protection`
 - PRD §Feature S2 — `--with-gha`
 - SDD §Skills — `/tcs-git-helpers:setup` workflow
 - SDD §Cross-Cutting — UI Visualization Guide
@@ -67,7 +68,7 @@ Spec refs:
 - Wrap every filesystem write to `.githooks/*` and `.git/config` in a subshell that exports `TCS_GIT_HELPERS_SETUP_ACTIVE=1` (ADR-11). The skill's `lib/install_files.sh` already does this — call it directly rather than re-implementing.
 - Print a structured summary listing what was copied, the configured `core.hooksPath`, and any conflicts/warnings encountered (M10 AC1).
 - For `--with-gha`: call `lib/with_gha.sh` after the core install completes successfully.
-- For `--with-branch-protection`: call `lib/with_branch_protection.sh` (T5.1 stub; T5.8 fills in real `gh api` work).
+- For `--with-branch-protection`: call `lib/with_branch_protection.sh`. The helper is idempotent and can be re-run independently of the rest of setup.
 - Release the lock via `lib/lock.sh release` on exit, including error paths.
 - Cite `references/migrating-from-husky.md` whenever the skill aborts on Husky / lefthook / pre-commit / simple-git-hooks / custom-hooksPath.
 
@@ -78,7 +79,7 @@ Spec refs:
 - Bypass the lock. Two concurrent setup runs MUST serialize on `.githooks/.setup.lock`.
 - Recurse into submodules. List them in the summary but do not enter (M10 AC6).
 - Export `TCS_GIT_HELPERS_SETUP_ACTIVE` in the parent shell. Subshell only.
-- Run `gh api` directly from this skill's main flow. Branch-protection writes go through `lib/with_branch_protection.sh` (T5.8).
+- Run `gh api` directly from this skill's main flow. Branch-protection writes go through `lib/with_branch_protection.sh`.
 
 ## Workflow
 
@@ -144,11 +145,13 @@ Copies `templates/github-actions/pr-title-check.yml` into `<repo>/.github/workfl
 "${CLAUDE_PLUGIN_ROOT}/skills/setup/lib/with_branch_protection.sh"
 ```
 
-T5.1 ships this as a STUB that prints the planned single-coder ruleset (ADR-12) and exits 0. T5.8 will replace the stub with the real `gh api PUT …/branches/<default>/protection` call, including:
+Applies the ADR-12 single-coder branch-protection preset to the repo's default branch via `gh api PUT /repos/:owner/:repo/branches/<default>/protection`. Behavior:
 
-- Token scope pre-flight (`repo` required; warn on `admin:org`, `delete_repo`, etc. — see `references/gh-token-hygiene.md`).
-- Plan + confirm dialog before any write.
-- `required_status_checks` only when `<repo>/.github/workflows/` exists.
+- **Pre-flight scope check.** Requires `repo` scope; warns (but proceeds with confirm) on excessive scopes such as `admin:org` or `delete_repo`. Cites `references/gh-token-hygiene.md` in both the missing-scope abort and the excessive-scope warning.
+- **Plan + confirm.** Prints the planned ruleset and waits for `y`/`yes` before writing. Set `TCS_BP_YES=1` to skip the prompt for non-interactive use (e.g. scripted setup).
+- **Idempotent.** If the existing protection on the default branch already matches the preset, the helper exits 0 with an "already up to date" message and issues no `PUT`. Re-running is safe.
+- **Best-effort `delete_branch_on_merge`.** PATCHes the repo setting to enable auto-delete on merge; failure is non-fatal (logged, helper continues).
+- **Failure mode.** If `gh api` fails (network error, auth error, rate-limit, 422), the helper exits non-zero. The surrounding setup state — installed `.githooks/*` files, `core.hooksPath = .githooks`, and any `--with-gha` workflow already copied — is **not** rolled back. Marcus reviews the error, fixes the underlying issue (re-auth, scope upgrade, network), and re-runs `--with-branch-protection` on its own.
 
 ### 7. Print summary + release lock
 
