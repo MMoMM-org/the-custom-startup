@@ -1,0 +1,6 @@
+[
+  {"number":38,"headRefName":"feat/stale-a","mergedAt":"2026-04-12T10:00:00Z"},
+  {"number":40,"headRefName":"fix/stale-b","mergedAt":"2026-04-15T09:00:00Z"},
+  {"number":42,"headRefName":"chore/stale-c","mergedAt":"2026-04-20T14:30:00Z"},
+  {"number":99,"headRefName":"feat/not-local","mergedAt":"2026-04-25T08:00:00Z"}
+]
