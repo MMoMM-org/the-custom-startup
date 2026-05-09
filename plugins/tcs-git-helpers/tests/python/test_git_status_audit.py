@@ -24,10 +24,8 @@ import json
 import os
 import re
 import subprocess
-import sys
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -190,9 +188,16 @@ class TestBriefMode:
         gsa.cmd_brief(cache_dir=cache_dir, repo_path=repo_path)
 
         assert len(lines) == 1, f"Expected exactly 1 line, got: {lines}"
-        pattern = r"^\[tcs-git-helpers\] .+ • .+ • .+"
-        assert re.match(pattern, lines[0]), (
-            f"Brief line did not match wireframe pattern.\nGot: {lines[0]!r}"
+        brief_line = lines[0]
+        assert brief_line.startswith("[tcs-git-helpers] "), (
+            f"expected SDD prefix, got: {brief_line!r}"
+        )
+        assert brief_line.count(" • ") >= 3, (
+            f"expected ≥4 segments (3 separators), got: {brief_line!r}"
+        )
+        parts = brief_line.split(" • ")
+        assert re.search(r"\d+ stale-merged", parts[3]), (
+            f"4th segment must contain stale-merged count, got: {parts[3]!r}"
         )
 
     def test_brief_mode_warning_marker_on_protected_branch(
@@ -476,13 +481,13 @@ class TestOverridesMode:
         gsa.cmd_overrides(repo_path=repo_path, limit=3, plugin_data_dir=plugin_data)
 
         # Filter to non-empty output lines
-        non_empty = [l for l in output_lines if l.strip()]
+        non_empty = [line for line in output_lines if line.strip()]
 
         # Must include a header/summary line + at most 3 event lines
         # Count event lines: lines referencing the branch names of the last 3
         event_count = sum(
-            1 for l in non_empty
-            if any(f"feat/branch-{i}" in l for i in range(2, 5))
+            1 for line in non_empty
+            if any(f"feat/branch-{i}" in line for i in range(2, 5))
         )
         assert event_count == 3, (
             f"Expected 3 event lines for last-3 events, got {event_count}.\n"
