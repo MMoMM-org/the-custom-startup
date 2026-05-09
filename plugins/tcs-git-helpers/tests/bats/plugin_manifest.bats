@@ -23,7 +23,7 @@ setup() {
 }
 
 @test "plugin.json is valid JSON" {
-  jq -e . "${PLUGIN_ROOT}/.claude-plugin/plugin.json" >/dev/null
+  jq -e . "${PLUGIN_ROOT}/.claude-plugin/plugin.json"
 }
 
 @test "plugin.json has name 'tcs-git-helpers'" {
@@ -65,7 +65,7 @@ setup() {
 }
 
 @test "hooks.json is valid JSON" {
-  jq -e . "${PLUGIN_ROOT}/hooks/hooks.json" >/dev/null
+  jq -e . "${PLUGIN_ROOT}/hooks/hooks.json"
 }
 
 @test "hooks.json has top-level 'hooks' key (level 1)" {
@@ -100,6 +100,12 @@ setup() {
 @test "hooks.json registers SessionStart event" {
   run jq -e '.hooks.SessionStart | length > 0' "${PLUGIN_ROOT}/hooks/hooks.json"
   [ "$status" -eq 0 ]
+}
+
+@test "SessionStart has matcher 'startup|resume|clear|compact'" {
+  run jq -r '[.hooks.SessionStart[].matcher] | index("startup|resume|clear|compact")' "${PLUGIN_ROOT}/hooks/hooks.json"
+  [ "$status" -eq 0 ]
+  [ "$output" != "null" ]
 }
 
 # ---------------------------------------------------------------------------
