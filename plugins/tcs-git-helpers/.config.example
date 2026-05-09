@@ -1,0 +1,37 @@
+# tcs-git-helpers .config example — copy to `.githooks/.config` and edit.
+#
+# Format: KEY=value (one per line). Comments start with `#`. Trailing inline
+# comments (`KEY=value # note`) are stripped. Outer matching quotes (`"..."`
+# or `'...'`) on the value are stripped.
+#
+# Parser: scripts/lib/config_parser.sh (strict allowlist; printf -v; NO eval).
+# Unknown keys are ignored with a stderr warning. Type-invalid values are
+# rejected. See docs/XDD/specs/011-tcs-git-helpers/research/security.md §4.
+
+# |-separated list of branches that hooks treat as "protected" (block
+# direct edits, force-pushes, amends, etc.). Default: main|master|production|release
+TCS_PROTECTED_BRANCHES=main|master|production|release
+
+# Path (repo-relative) to a file listing exclude globs for hook-driven path
+# checks. Default: .githooks/exclude-paths
+TCS_HOOK_EXCLUDE_PATHS_FILE=.githooks/exclude-paths
+
+# Space-separated allowlist of conventional-commit `type:` tokens.
+# Default: feat fix docs style refactor test chore perf revert build ci
+TCS_ALLOWED_COMMIT_TYPES=feat fix docs style refactor test chore perf revert build ci
+
+# Require a scope `(name)` after the type. 0=optional, 1=required. Default: 0
+TCS_REQUIRE_SCOPE=0
+
+# Maximum subject-line length (header before the blank line). Default: 90
+TCS_MAX_SUBJECT_LENGTH=90
+
+# Enable conventional-commit subject regex check. 0=off, 1=on. Default: 1
+TCS_ENABLE_CONVENTIONAL_CHECK=1
+
+# Enable the pre-push PR/branch-state guard. 0=off, 1=on. Default: 1
+TCS_ENABLE_PR_PUSH_CHECK=1
+
+# Allow `git commit --amend` on a protected branch. 0=deny, 1=allow.
+# Default: 0 (we deny by default; recovery via reflog is straightforward).
+TCS_ALLOW_AMEND_ON_PROTECTED=0
