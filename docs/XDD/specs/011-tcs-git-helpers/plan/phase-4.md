@@ -108,6 +108,22 @@ Boucle-framework's `branch-guard` (cited as prior art) is a `PreToolUse:Bash` ho
 
 **Approved-by:** Marcus (2026-05-09 in /implement orchestration)
 
+### D2 — `.githooks/pre-push` cache-hit p99 raised from 30ms to ~150ms
+
+**Date:** 2026-05-09  
+**Origin:** T4.2 implementation  
+**Spec ref:** `solution.md` §Quality Requirements; phase-4.md T4.2 step 4
+
+**Rationale:** The original 30ms p99 cache-hit budget was written for the Claude-side `block-bad-git-ops.sh` hook, which is sourced in-process by Claude Code's hook runner (no bash startup, no subprocess). The repo-side `.githooks/pre-push` template runs as a fork-exec bash subprocess invoked by git itself; bash 3.2 startup on macOS alone is 20-30ms, plus `git rev-parse`, `jq`, and `shasum` calls put the unavoidable floor near ~80-120ms. The 30ms target was misapplied.
+
+**Empirical measurement:** Cache-hit cold p99 on macOS bash 3.2.57 (M-series): ~105ms. Subprocess overhead dominates; jq is unavoidable for cache JSON parsing.
+
+**Updated budget:** `.githooks/pre-push` cache-hit p99 = ~150ms (was 30ms). Cache CORRECTNESS (gh-skip on cache-hit) is verified separately by `test_cache_hit_skips_gh_call` — that test asserts the load-bearing invariant (no gh call on hit), not the wall-clock latency. The 30ms budget remains valid for `block-bad-git-ops.sh` (Claude-side, in-process).
+
+**Impact:** Push latency on a cache hit ~105ms vs the previously claimed 30ms — still well under the 5000ms uncached ceiling. ADR-6 cache dedup (avoiding the ~600-800ms gh round trip) is the load-bearing optimization; this deviation just acknowledges the bash-floor cost.
+
+**Approved-by:** Marcus (2026-05-09 in /implement orchestration)
+
 ---
 
 ## Deliverables
