@@ -101,13 +101,15 @@ UNTRACKED_NAMES=""
 if [ -n "$PORCELAIN" ]; then
   # Heredoc keeps the loop in the current shell — bash 3.2 has no `lastpipe`,
   # so piping into `while` would discard increments to the counters.
+  # Both branches strip the porcelain v1 3-char prefix ("XY ") via `${line:3}`
+  # for consistency — works for both untracked ("?? path") and tracked
+  # ("XY path") lines.
   while IFS= read -r line; do
     [ -z "$line" ] && continue
+    name="${line:3}"
     case "$line" in
       '??'*)
         UNTRACKED_COUNT=$((UNTRACKED_COUNT + 1))
-        # Porcelain v1 untracked: "?? <path>" — strip 3-char prefix.
-        name="${line#?? }"
         if [ -z "$UNTRACKED_NAMES" ]; then
           UNTRACKED_NAMES="$name"
         else
@@ -116,8 +118,6 @@ if [ -n "$PORCELAIN" ]; then
         ;;
       *)
         MODIFIED_COUNT=$((MODIFIED_COUNT + 1))
-        # Porcelain v1 tracked: 2-char status + space + path → strip 3 chars.
-        name="${line:3}"
         if [ -z "$MODIFIED_NAMES" ]; then
           MODIFIED_NAMES="$name"
         else
@@ -161,13 +161,24 @@ EOF
 fi
 
 # Check 4: unpushed commits — branch has commits not on its upstream tracking
-# ref. `_get_branch_state` populates BRANCH_AHEAD via `rev-list --left-right
-# --count @{u}...HEAD` and falls back to 0 when no upstream is configured.
-_get_branch_state >/dev/null 2>&1 || true
-UNPUSHED_COUNT="${BRANCH_AHEAD:-0}"
-case "$UNPUSHED_COUNT" in
-  ''|*[!0-9]*) UNPUSHED_COUNT=0 ;;
-esac
+# ref. We inline `git rev-list --left-right --count @{u}...HEAD` here rather
+# than calling `_get_branch_state` because that helper also invokes
+# `_get_pr_state` → `gh pr list` (a 5-second-timeout network call) which
+# would blow the SDD §Quality Requirements ≤500ms p99 budget for this hook.
+# `@{u}` resolves to the branch's upstream tracking ref; falls back to 0
+# when no upstream is configured (detached HEAD, fresh local branch).
+UNPUSHED_COUNT=0
+counts="$(git rev-list --left-right --count '@{u}...HEAD' 2>/dev/null || true)"
+if [ -n "$counts" ]; then
+  # Output is "<behind>\t<ahead>" — only the ahead count matters here.
+  read -r _behind _ahead <<EOF
+$counts
+EOF
+  case "${_ahead:-}" in
+    ''|*[!0-9]*) UNPUSHED_COUNT=0 ;;
+    *)           UNPUSHED_COUNT="$((_ahead + 0))" ;;
+  esac
+fi
 
 # --------------------------------------------------------------------------
 # Aggregate

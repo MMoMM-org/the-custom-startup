@@ -157,6 +157,17 @@ _invoke_hook() {
   [ -z "$output" ]
 }
 
+@test "exits 0 silently when worktree_path is a real but non-git directory" {
+  # Pure directory with no .git — guards `git rev-parse --git-dir` exit-zero
+  # path. Without `git init`, every git command would fall through to the
+  # parent .git of $PWD or fail; the hook must short-circuit before that.
+  non_git_dir="$TEST_DIR/not-a-repo"
+  mkdir -p "$non_git_dir"
+  run _invoke_hook "$non_git_dir"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "allows clean worktree (all 4 checks pass)" {
   _make_repo clean
   run _invoke_hook "$MADE_REPO_PATH"
