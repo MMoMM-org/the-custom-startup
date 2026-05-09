@@ -1,0 +1,53 @@
+# tcs-git-helpers bypass-attempt corpus (T1.9)
+# Tests Claude-side regex evasion patterns. Per SDD §Implementation Gotchas:
+# regex on full command-string catches `bash -c`, `sh -c`, `eval`, subshells.
+# Aliases and shell functions are NOT caught Claude-side; .githooks/ pre-push
+# is the catch-all for those (documented limitation in destructive-ops.md).
+#
+# Format: <decision>\t<rule>\t<command>
+#   decision = deny | allow
+#   rule     = matched M7 rule (deny) | DOCUMENTED_LIMITATION | NEGATIVE
+#
+# Lines starting with # and blank lines ignored.
+
+# === Subshell wrappers (CAUGHT — regex sees full string) ==================
+deny	RESET_HARD	bash -c "git reset --hard"
+deny	RESET_HARD	bash -c 'git reset --hard origin/main'
+deny	FORCE_PUSH	sh -c "git push --force"
+deny	FORCE_PUSH	zsh -c 'git push -f'
+deny	RESET_HARD	eval "git reset --hard"
+deny	RESET_HARD	eval 'git reset --hard'
+deny	RESET_HARD	(git reset --hard)
+deny	FORCE_PUSH	(cd /tmp && git push --force)
+deny	RESET_HARD	$(echo git) reset --hard
+
+# === Compound chains (CAUGHT — both branches scanned) =====================
+deny	RESET_HARD	cd repo && git reset --hard
+deny	FORCE_PUSH	git status; git push --force
+deny	CLEAN_FORCE	git status || git clean -f
+deny	REFLOG_EXPIRE	cd /tmp ; git reflog expire --all
+
+# === Backgrounded / piped (CAUGHT — substring match) =====================
+deny	FORCE_PUSH	git push --force &
+deny	NO_VERIFY	echo "fix" | git commit --no-verify -F -
+
+# === DOCUMENTED LIMITATIONS (NOT CAUGHT Claude-side) ======================
+# Aliases that the user has configured outside the command string.
+# These cannot be matched without expanding aliases (which the hook does NOT do).
+# `.githooks/pre-push` catches these git-side as defense-in-depth.
+allow	DOCUMENTED_LIMITATION	g push --force
+allow	DOCUMENTED_LIMITATION	gp -f
+allow	DOCUMENTED_LIMITATION	gpush
+
+# Functions defined elsewhere — same story; not caught Claude-side.
+allow	DOCUMENTED_LIMITATION	dangerous_push
+allow	DOCUMENTED_LIMITATION	my_reset
+
+# Different binary name (e.g. user named a script "git-stuff")
+allow	DOCUMENTED_LIMITATION	git-stuff reset --hard
+
+# === True negatives (legitimate commands containing destructive substrings)
+allow	NEGATIVE	echo "git reset --hard is dangerous"
+allow	NEGATIVE	cat README.md | grep "force-push"
+allow	NEGATIVE	man git-reset
+allow	NEGATIVE	git help reset

@@ -1,0 +1,122 @@
+#!/bin/bash
+# Mock `gh` CLI for offline testing of tcs-git-helpers (T1.9).
+#
+# Selects a canned response set via $GH_STUB_SCENARIO (default: "default").
+# Real-gh wire format is preserved: `gh pr list --json …` returns an ARRAY
+# (`[…]` even when empty, never `null`); `gh pr view --json mergeCommit`
+# returns an OBJECT (`{"mergeCommit": {"oid": "…"}}` or `{"mergeCommit": null}`).
+#
+# Per project-memory feedback "test-stubs-mirror-real-wire-format":
+# stubs MUST mirror the real envelope, or production-only bugs slip past green tests.
+#
+# Usage from tests:
+#   PATH="$FIXTURE_DIR/gh_stubs:$PATH" GH_STUB_SCENARIO=closed-pr  gh pr list ...
+#
+# Scenarios documented in README.md (sibling file).
+#
+# Exit codes mirror real gh:
+#   0  success
+#   1  generic failure / no PR found JSON-empty (some flows)
+#   4  authentication error / rate limited
+# When a scenario maps to a non-zero exit, the wrapper exits accordingly
+# AFTER emitting the canned stderr message.
+
+set -u
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RESP_DIR="$SCRIPT_DIR/responses"
+SCENARIO="${GH_STUB_SCENARIO:-default}"
+
+# --- Lookup helpers -------------------------------------------------------
+
+_emit_response() {
+  # $1 = operation key (e.g. "pr-list", "pr-view", "api"); prints canned JSON.
+  # File path: $RESP_DIR/$SCENARIO/$op.json
+  local op="$1"
+  local f="$RESP_DIR/$SCENARIO/$op.json"
+  if [ -f "$f" ]; then
+    cat "$f"
+    return 0
+  fi
+  # Fallback for scenarios that omit a particular op
+  local fallback="$RESP_DIR/default/$op.json"
+  if [ -f "$fallback" ]; then
+    cat "$fallback"
+    return 0
+  fi
+  printf 'gh-stub: no response file for scenario=%s op=%s\n' \
+    "$SCENARIO" "$op" >&2
+  return 1
+}
+
+_emit_failure() {
+  # $1 = exit code; $2 = stderr message
+  printf '%s\n' "$2" >&2
+  exit "$1"
+}
+
+# --- Failure scenarios (no JSON; non-zero exit) ---------------------------
+
+case "$SCENARIO" in
+  no-auth)
+    _emit_failure 4 "error: not authenticated. Run: gh auth login"
+    ;;
+  rate-limited)
+    _emit_failure 4 "error: GraphQL: API rate limit exceeded for installation"
+    ;;
+  network-fail)
+    _emit_failure 1 "error: dial tcp: lookup api.github.com: no such host"
+    ;;
+  timeout)
+    # Simulate a hang the calling timeout wrapper must terminate.
+    # For deterministic tests: just exit 124 (matches /usr/bin/timeout).
+    _emit_failure 124 "gh-stub: simulated timeout"
+    ;;
+esac
+
+# --- Subcommand dispatch --------------------------------------------------
+
+if [ "$#" -eq 0 ]; then
+  printf 'gh version 2.88.0 (stub-tcs-git-helpers)\n'
+  exit 0
+fi
+
+case "$1" in
+  --version)
+    printf 'gh version 2.88.0 (stub-tcs-git-helpers)\n'
+    exit 0
+    ;;
+  pr)
+    case "${2:-}" in
+      list)
+        _emit_response pr-list
+        ;;
+      view)
+        _emit_response pr-view
+        ;;
+      *)
+        printf 'gh-stub: unsupported pr subcommand: %s\n' "${2:-<empty>}" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  api)
+    _emit_response api
+    ;;
+  auth)
+    case "${2:-}" in
+      status)
+        printf 'github.com\n  Logged in to github.com as test-user (oauth_token)\n'
+        exit 0
+        ;;
+      *)
+        printf 'gh-stub: unsupported auth subcommand: %s\n' "${2:-<empty>}" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  *)
+    printf 'gh-stub: unsupported command: %s\n' "$1" >&2
+    exit 2
+    ;;
+esac

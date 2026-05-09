@@ -1,0 +1,127 @@
+# tcs-git-helpers destructive command corpus (T1.9)
+# Drives lib_pattern_match.bats (T1.5) and block-bad-git-ops.bats (Phase 2).
+#
+# Format: <decision>\t<rule>\t<command>
+#   decision = deny | allow
+#   rule     = M7 rule name (e.g. RESET_HARD); NEGATIVE for allow lines
+#   command  = exact bash command string
+#
+# Patterns are POSIX ERE (bash 3.2). All matchers MUST use [[:space:]]+
+# (NEVER \s+) and [[:<:]]/[[:>:]] (NEVER \b) per CON-9.
+#
+# Lines starting with # and blank lines are ignored by parsers.
+
+# === RESET_HARD ===========================================================
+deny	RESET_HARD	git reset --hard
+deny	RESET_HARD	git reset --hard origin/main
+deny	RESET_HARD	git reset --hard HEAD~3
+deny	RESET_HARD	git	reset	--hard
+deny	RESET_HARD	git  reset  --hard
+deny	RESET_HARD	cd foo && git reset --hard
+deny	RESET_HARD	cd /tmp && git reset --hard origin/main
+allow	NEGATIVE	git reset --soft HEAD~1
+allow	NEGATIVE	git reset HEAD~1
+allow	NEGATIVE	git reset --mixed
+allow	NEGATIVE	git reset
+
+# === CLEAN_FORCE ==========================================================
+deny	CLEAN_FORCE	git clean -f
+deny	CLEAN_FORCE	git clean -fx
+deny	CLEAN_FORCE	git clean -fd
+deny	CLEAN_FORCE	git clean -fdx
+deny	CLEAN_FORCE	git clean --force
+deny	CLEAN_FORCE	git	clean	-f
+deny	CLEAN_FORCE	git  clean  -f
+deny	CLEAN_FORCE	cd repo && git clean -f
+allow	NEGATIVE	git clean -n
+allow	NEGATIVE	git clean -ndx
+allow	NEGATIVE	git clean --dry-run
+
+# === DESTRUCTIVE_CHECKOUT (git checkout . | -- <path>) ====================
+deny	DESTRUCTIVE_CHECKOUT	git checkout .
+deny	DESTRUCTIVE_CHECKOUT	git checkout -- src/file.txt
+deny	DESTRUCTIVE_CHECKOUT	git checkout -- src/
+deny	DESTRUCTIVE_CHECKOUT	git	checkout	.
+deny	DESTRUCTIVE_CHECKOUT	cd foo && git checkout .
+allow	NEGATIVE	git checkout main
+allow	NEGATIVE	git checkout -b feat/new
+allow	NEGATIVE	git checkout HEAD~1
+allow	NEGATIVE	git checkout origin/main
+
+# === DESTRUCTIVE_RESTORE (git restore --worktree --source | --staged) =====
+deny	DESTRUCTIVE_RESTORE	git restore --worktree --source=HEAD~1 src/
+deny	DESTRUCTIVE_RESTORE	git restore --staged src/
+deny	DESTRUCTIVE_RESTORE	git restore --staged file.txt
+deny	DESTRUCTIVE_RESTORE	git	restore	--staged	file.txt
+deny	DESTRUCTIVE_RESTORE	cd foo && git restore --staged file.txt
+allow	NEGATIVE	git restore --source=main file.txt
+allow	NEGATIVE	git restore file.txt
+
+# === FORCE_BRANCH_DELETE (git branch -D) ==================================
+deny	FORCE_BRANCH_DELETE	git branch -D feat/old
+deny	FORCE_BRANCH_DELETE	git branch -D feat/old feat/older
+deny	FORCE_BRANCH_DELETE	git	branch	-D	feat/old
+deny	FORCE_BRANCH_DELETE	cd repo && git branch -D feat/old
+allow	NEGATIVE	git branch -d feat/old
+allow	NEGATIVE	git branch --list
+allow	NEGATIVE	git branch -a
+
+# === STASH_DESTROY (git stash drop | clear) ===============================
+deny	STASH_DESTROY	git stash drop
+deny	STASH_DESTROY	git stash clear
+deny	STASH_DESTROY	git stash drop stash@{1}
+deny	STASH_DESTROY	git	stash	drop
+deny	STASH_DESTROY	cd repo && git stash drop
+allow	NEGATIVE	git stash pop
+allow	NEGATIVE	git stash list
+allow	NEGATIVE	git stash apply
+allow	NEGATIVE	git stash show
+
+# === REFLOG_EXPIRE (git reflog expire) ====================================
+deny	REFLOG_EXPIRE	git reflog expire
+deny	REFLOG_EXPIRE	git reflog expire --expire=now --all
+deny	REFLOG_EXPIRE	git	reflog	expire
+deny	REFLOG_EXPIRE	cd repo && git reflog expire
+allow	NEGATIVE	git reflog
+allow	NEGATIVE	git reflog show
+allow	NEGATIVE	git reflog show feat/foo
+
+# === NO_VERIFY (git commit --no-verify | -n) ==============================
+deny	NO_VERIFY	git commit --no-verify
+deny	NO_VERIFY	git commit -m "fix" --no-verify
+deny	NO_VERIFY	git commit -n -m "fix"
+deny	NO_VERIFY	git	commit	--no-verify
+deny	NO_VERIFY	cd repo && git commit --no-verify
+allow	NEGATIVE	git commit -m "fix"
+allow	NEGATIVE	git commit --amend
+allow	NEGATIVE	git commit -a -m "msg"
+
+# === FORCE_PUSH (git push --force, NOT --force-with-lease) ================
+deny	FORCE_PUSH	git push --force
+deny	FORCE_PUSH	git push -f
+deny	FORCE_PUSH	git push --force origin main
+deny	FORCE_PUSH	git push origin main --force
+deny	FORCE_PUSH	git	push	--force
+deny	FORCE_PUSH	cd repo && git push --force
+# Critical false-positive guard:
+allow	NEGATIVE	git push --force-with-lease
+allow	NEGATIVE	git push --force-with-lease origin feat/foo
+allow	NEGATIVE	git push --force-with-lease=feat/foo:abc123
+
+# === REMOTE_BRANCH_DELETE (git push --delete | git push remote :branch) ===
+deny	REMOTE_BRANCH_DELETE	git push origin --delete feat/old
+deny	REMOTE_BRANCH_DELETE	git push --delete origin feat/old
+deny	REMOTE_BRANCH_DELETE	git push origin :feat/old
+deny	REMOTE_BRANCH_DELETE	git	push	origin	:feat/old
+allow	NEGATIVE	git push origin feat/old
+allow	NEGATIVE	git push origin main:main
+
+# === HOOKSPATH_OVERRIDE (subverting .githooks/) ===========================
+deny	HOOKSPATH_OVERRIDE	git -c core.hooksPath=/dev/null commit
+deny	HOOKSPATH_OVERRIDE	git -c core.hooksPath=/tmp/empty status
+deny	HOOKSPATH_OVERRIDE	git config core.hooksPath /tmp
+deny	HOOKSPATH_OVERRIDE	git config --global core.hooksPath /tmp
+deny	HOOKSPATH_OVERRIDE	git	-c	core.hooksPath=/dev/null	commit
+allow	NEGATIVE	git config user.email me@example.com
+allow	NEGATIVE	git config core.editor vim
+allow	NEGATIVE	git -c user.name=foo commit -m bar
