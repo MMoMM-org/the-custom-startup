@@ -161,5 +161,9 @@ fi
 printf '    Allowed types: %s\n' "$TCS_ALLOWED_COMMIT_TYPES" >&2
 printf '    Type not in allowlist or missing/malformed scope.\n' >&2
 printf '    To bypass: include [skip-format-check] in the subject.\n' >&2
+# Cite the Conventional Commits reference doc. The hook may run outside a
+# Claude session (plain `git commit` in a terminal), in which case
+# CLAUDE_PLUGIN_ROOT is unset — parameter expansion picks the relative path.
+printf '    See: %sreferences/conventional-commits.md\n' "${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/}" >&2
 printf '\n' >&2
 exit 1

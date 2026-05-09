@@ -429,10 +429,10 @@ _run_hook_with_root() {
 }
 
 # ---------------------------------------------------------------------------
-# 17. Performance: p99 < 100ms over 100 invocations
+# 17. Performance: p99 < 150ms over 100 invocations (D3: .githooks/ subprocess floor)
 # ---------------------------------------------------------------------------
 
-@test "perf: p99 under 100ms over 100 invocations (passing case)" {
+@test "perf: p99 under 150ms over 100 invocations (passing case)" {
   _write_msg "feat: passing performance test subject"
 
   local times_file
@@ -462,5 +462,6 @@ _run_hook_with_root() {
 
   echo "# perf p50=${p50}ms p99=${p99}ms" >&3
 
-  [ "$p99" -lt 100 ]
+  # D3: budget raised from 100ms to 150ms — see plan/phase-5.md § Deviations
+  [ "$p99" -lt 150 ]
 }

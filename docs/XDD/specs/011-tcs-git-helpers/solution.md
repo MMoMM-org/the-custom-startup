@@ -1504,7 +1504,7 @@ Suggestions:
   - PreToolUse:Edit/Write/NotebookEdit p99 ≤80ms
   - PostToolUse:Bash nudge p99 ≤50ms (pure bash, NO git/gh)
   - PreToolUse:ExitWorktree p99 ≤500ms
-  - `.githooks/pre-commit` p99 ≤300ms; `commit-msg` p99 ≤100ms; `post-merge` p99 ≤10000ms (background tolerable)
+  - `.githooks/pre-commit` p99 ≤300ms; `commit-msg` p99 ≤150ms (.githooks/ subprocess floor; D3); `post-merge` p99 ≤10000ms (background tolerable)
   - `.githooks/pre-push` p99 ≤5000ms (timeout); cache-hit p99 ≤150ms (.githooks/ subprocess floor; D2)
   - `.config` parse cost <5ms per invocation
 

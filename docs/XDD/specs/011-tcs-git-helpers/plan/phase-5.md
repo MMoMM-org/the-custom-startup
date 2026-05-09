@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Skills + References + Optional Components"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 5
 ---
@@ -122,6 +122,30 @@ This phase produces the user-facing slash-command skills, the reference knowledg
   - Verify `--with-gha` and `--with-branch-protection` modes (idempotent re-runs)
 
   Success: M10, S1, S2 all met; references knowledge base ready; skills shippable.
+
+---
+
+## Deviations
+
+### D3 — `commit-msg` p99 raised from 100ms to ~150ms
+
+**Date:** 2026-05-09
+**Origin:** T5.5 implementation (citation additions surfaced the gap; root cause pre-existing)
+**Spec ref:** `solution.md` §Quality Requirements; `tests/bats/githooks_commit_msg.bats:465`
+
+**Rationale:** The original 100ms p99 budget for `templates/githooks/commit-msg` is unreachable for the same reason as D2: the hook runs as a fork-exec bash subprocess invoked by git itself, and bash 3.2 startup on macOS plus minimal regex evaluation already puts the floor near ~80-120ms p50, with p99 routinely landing 130-235ms across runs (pure environment noise — same machine, same hook, same input). The 100ms target was misapplied: it implicitly assumed an in-process hook (like Claude-side `block-bad-git-ops.sh`) but was assigned to a `.githooks/` subprocess.
+
+**Empirical measurement:** macOS bash 3.2.57 (M-series), success path (`feat: passing performance test subject`):
+- HEAD prior to T5.5 (no citation block): p50=104ms p99=140ms — already over budget.
+- After T5.5 + Option-A optimization (single `printf` with `${CLAUDE_PLUGIN_ROOT:+...}` parameter expansion replacing if/then/else+printf): p50=93-95ms p99=118-235ms — same range, dominated by `bash -c` startup in the harness loop.
+
+The citation edit only affects the **format-fail path** (lines 152-173 of the hook). The perf test exercises the **success path** (`feat: ...` accepted), which the citation edit does not touch. The regression report tied test failure to T5.5, but baseline measurement shows HEAD also fails — this is pre-existing flakiness exposed by review, not introduced by T5.5.
+
+**Updated budget:** `commit-msg` p99 = ~150ms (was 100ms). Subprocess overhead dominates; no further optimization within the hook itself can reclaim it. The Option-A printf consolidation lands regardless as good citizenship (matches the four neighbouring printfs above it and avoids an unnecessary branch).
+
+**Impact:** Commit-time latency on the success path ~95-150ms vs the previously claimed 100ms — imperceptible to humans (<1 frame at 60Hz over the floor). The fail path (citation block) only fires when a commit message is invalid, which is rare and already a user-facing error path. Format-correctness tests (T34: empty subject, T23: 91-char subject, T12: invalid type, T15: scope required) all still pass and are the load-bearing assertions for commit-msg behaviour.
+
+**Approved-by:** Marcus (2026-05-09 in /implement orchestration; precedent set by D2 in phase-4)
 
 ---
 

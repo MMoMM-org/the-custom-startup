@@ -218,11 +218,12 @@ if _match_command "$CMD" 'git[[:space:]]+push[[:space:]]+(.*[[:space:]]+)?-u[[:s
   exit 0
 fi
 
-# AC3: gh pr merge — NO reference doc (PRD M9 AC3 intentional omission)
+# AC3: gh pr merge — cleanup-after-merge nudge with stale-branch-cleanup.md ref
 # S1 fix: ([[:space:]]|$) instead of [[:>:]] — avoids matching gh pr merge-queue.
 if _match_command "$CMD" 'gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; then
   _emit_nudge "cleanup-after-merge" \
-    "PR merged — run /tcs-git-helpers:status --cleanup to surface stale branches"
+    "PR merged — run /tcs-git-helpers:status --cleanup to surface stale branches" \
+    "stale-branch-cleanup.md"
   exit 0
 fi
 

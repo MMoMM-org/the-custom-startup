@@ -134,13 +134,11 @@ _assert_stderr_empty() {
 
 @test "test_trigger_gh_pr_merge_emits_cleanup_nudge" {
   # PRD M9 AC3: nudge suggests /tcs-git-helpers:status --cleanup.
-  # AC3 intentionally omits a reference doc citation — no "stale-branch-cleanup.md".
+  # T5.5 spec compliance: nudge now cites stale-branch-cleanup.md reference doc.
   run --separate-stderr _run_hook "gh pr merge --squash"
   [ "$status" -eq 0 ]
   _assert_stderr_contains "/tcs-git-helpers:status --cleanup"
-  # Confirm no reference doc suffix appears (AC3 intentional omission).
-  [[ "$stderr" != *"stale-branch-cleanup.md"* ]] \
-    || { echo "stderr must NOT contain stale-branch-cleanup.md (AC3 omits ref doc)" >&2; return 1; }
+  _assert_stderr_contains "stale-branch-cleanup.md"
 }
 
 # ----------------------------------------------------------------------
