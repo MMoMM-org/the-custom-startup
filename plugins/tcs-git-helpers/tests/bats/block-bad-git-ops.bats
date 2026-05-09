@@ -98,7 +98,9 @@ _run_hook_with_cmd() {
 }
 
 # Run the hook and assert: exit 0, stdout contains a deny JSON, deny reason
-# mentions the supplied rule name. Use `run --separate-stderr` outside.
+# mentions the supplied rule name AND a `references/` link (per SDD/PRD —
+# every deny carries rule + reference + override hint). Use
+# `run --separate-stderr` outside if you need stderr separately.
 _assert_deny_for_rule() {
   local rule="$1"
   [ "$status" -eq 0 ]
@@ -106,6 +108,8 @@ _assert_deny_for_rule() {
     || { echo "expected deny JSON, got: $output" >&2; return 1; }
   [[ "$output" == *"$rule"* ]] \
     || { echo "expected rule $rule in reason, got: $output" >&2; return 1; }
+  [[ "$output" == *"references/"* ]] \
+    || { echo "expected reference-doc link in reason, got: $output" >&2; return 1; }
   return 0
 }
 
@@ -205,9 +209,26 @@ _assert_allow() {
   _assert_deny_for_rule "DESTRUCTIVE_CHECKOUT"
 }
 
+@test "CHECKOUT_DOT: negative — git checkout main is allowed" {
+  # Plain branch checkout — does not match PATTERN_CHECKOUT_DOT (which
+  # requires `.` as its own argument). Note this hits PATTERN_BRANCH_RESUME
+  # too; in non-fixture cwd the target ref doesn't exist locally so the
+  # M3 squash-merge handler bails out → ALLOW.
+  run _run_hook_with_cmd "git checkout main"
+  _assert_allow
+}
+
 @test "DESTRUCTIVE_CHECKOUT: positive — git checkout -- <path> denies" {
   run _run_hook_with_cmd "git checkout -- src/file.ts"
   _assert_deny_for_rule "DESTRUCTIVE_CHECKOUT"
+}
+
+@test "CHECKOUT_PATH: negative — git checkout without -- separator is allowed" {
+  # No `--` between checkout and the arg — bare-branch form, not pathspec.
+  # Does not match PATTERN_CHECKOUT_PATH (which requires the literal `--`
+  # separator). The same caveat as CHECKOUT_DOT applies re: PATTERN_BRANCH_RESUME.
+  run _run_hook_with_cmd "git checkout feat/some-branch"
+  _assert_allow
 }
 
 @test "DESTRUCTIVE_RESTORE: positive — --worktree --source denies" {
@@ -218,6 +239,14 @@ _assert_allow() {
 @test "DESTRUCTIVE_RESTORE: positive — --staged denies" {
   run _run_hook_with_cmd "git restore --staged src/file.ts"
   _assert_deny_for_rule "DESTRUCTIVE_RESTORE"
+}
+
+@test "DESTRUCTIVE_RESTORE: negative — bare git restore <path> is allowed" {
+  # Plain `git restore <path>` (no --staged, no --worktree+--source) is the
+  # safe form: it only restores tracked changes from the index, which is
+  # recoverable via the index. Does not match PATTERN_RESTORE_DESTRUCTIVE.
+  run _run_hook_with_cmd "git restore src/file.ts"
+  _assert_allow
 }
 
 @test "FORCE_BRANCH_DELETE: positive — git branch -D denies" {
@@ -250,6 +279,12 @@ _assert_allow() {
   _assert_deny_for_rule "REFLOG_EXPIRE"
 }
 
+@test "REFLOG_EXPIRE: negative — git reflog show is allowed" {
+  # Read-only reflog subcommands (show/list) do not match PATTERN_REFLOG_EXPIRE.
+  run _run_hook_with_cmd "git reflog show"
+  _assert_allow
+}
+
 @test "NO_VERIFY: positive — git commit --no-verify denies" {
   run _run_hook_with_cmd 'git commit --no-verify -m "msg"'
   _assert_deny_for_rule "NO_VERIFY"
@@ -258,6 +293,12 @@ _assert_allow() {
 @test "NO_VERIFY: positive — git commit -n denies" {
   run _run_hook_with_cmd 'git commit -n -m "msg"'
   _assert_deny_for_rule "NO_VERIFY"
+}
+
+@test "NO_VERIFY: negative — git commit -m without --no-verify is allowed" {
+  # Plain commit without the bypass flag — does not match PATTERN_NO_VERIFY.
+  run _run_hook_with_cmd 'git commit -m "msg"'
+  _assert_allow
 }
 
 @test "FORCE_PUSH: positive — git push --force denies" {
@@ -276,14 +317,37 @@ _assert_allow() {
   _assert_deny_for_rule "REMOTE_BRANCH_DELETE"
 }
 
+@test "PUSH_DELETE_FLAG: negative — regular git push origin main is allowed" {
+  # Plain push has no --delete flag → does not match PATTERN_PUSH_DELETE_FLAG.
+  # PATTERN_PUSH still matches and the push-to-closed-PR check fires; with
+  # default gh stub returning `[]` (NO_PR), the check allows.
+  run _run_hook_with_cmd "git push origin main"
+  _assert_allow
+}
+
 @test "REMOTE_BRANCH_DELETE: positive — refspec :branch denies" {
   run _run_hook_with_cmd "git push origin :feat/old"
   _assert_deny_for_rule "REMOTE_BRANCH_DELETE"
 }
 
+@test "PUSH_COLON_DELETE: negative — refspec main:main (no leading colon) is allowed" {
+  # `<src>:<dst>` is a normal refspec pair, not a delete. PATTERN_PUSH_COLON_DELETE
+  # requires `:<branch>` immediately after the remote — i.e., empty src
+  # (which `main:main` does not have).
+  run _run_hook_with_cmd "git push origin main:main"
+  _assert_allow
+}
+
 @test "HOOKSPATH_OVERRIDE: -c inline denies" {
   run _run_hook_with_cmd "git -c core.hooksPath=/dev/null commit -m m"
   _assert_deny_for_rule "HOOKSPATH_OVERRIDE"
+}
+
+@test "HOOKSPATH_INLINE: negative — other -c flags are allowed" {
+  # Only `-c core.hooksPath=…` is sensitive; other config-key overrides
+  # like user.email are routine and must not trigger the hook.
+  run _run_hook_with_cmd "git -c user.email=x@y.z log --oneline"
+  _assert_allow
 }
 
 @test "HOOKSPATH_OVERRIDE: git config core.hooksPath denies outside setup" {
@@ -372,7 +436,13 @@ _assert_allow() {
   export CLAUDE_ALLOW_GIT_BAD_OPS=1
   run --separate-stderr _run_hook_with_cmd "git reset --hard"
   _assert_allow
-  [[ "$stderr" == *"MASTER OVERRIDE"* ]]
+  # PRD M7 AC3 verbatim — backticks around `CLAUDE_ALLOW_<X>=1` ARE part of
+  # the user-facing contract (not markdown), so pin the exact byte sequence
+  # end-to-end through the dispatcher. lib_override.bats already pins this
+  # at the lib boundary; this test pins it at the hook boundary, which is
+  # what Claude actually sees on stderr.
+  [[ "$stderr" == *'⚠ MASTER OVERRIDE — strongly prefer granular `CLAUDE_ALLOW_<X>=1`'* ]] \
+    || { echo "expected verbatim PRD M7 AC3 master-override warning, got: $stderr" >&2; return 1; }
   [ -f "$AUDIT_FILE" ]
   run jq -r '.master' "$AUDIT_FILE"
   [ "$output" = "true" ]
