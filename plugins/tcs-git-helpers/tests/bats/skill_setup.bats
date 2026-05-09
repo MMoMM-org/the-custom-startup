@@ -564,6 +564,139 @@ _make_clean_repo() {
 }
 
 # ---------------------------------------------------------------------------
+# Group C (continued) — with_branch_protection.sh (T5.8)
+# ---------------------------------------------------------------------------
+#
+# These tests exercise the real `lib/with_branch_protection.sh` helper that
+# implements ADR-12's single-coder branch-protection preset. The gh CLI is
+# stubbed via PATH override (tests/fixtures/gh_stubs/gh) and configured per
+# scenario via env vars:
+#   - GH_STUB_SCOPES         token scopes returned by `gh auth status`
+#                            (default: "repo")
+#   - GH_STUB_CAPTURE_PUT    file path to capture the JSON body of any
+#                            `gh api -X PUT` invocation (so tests can assert
+#                            the single-coder preset shape).
+#   - GH_STUB_PUT_FAIL       when 1, `gh api -X PUT` exits non-zero with a
+#                            simulated 422 stderr message (failure-mode test).
+#   - GH_STUB_PROTECTION_MATCHES when 1, `gh api .../protection` GET returns
+#                            a body that matches the preset (idempotent path).
+
+GH_STUBS_DIR="${PLUGIN_ROOT}/tests/fixtures/gh_stubs"
+
+# Helper: prep a clean git repo with a github.com remote so the helper can
+# parse owner/repo from `git remote get-url origin`.
+_make_gh_repo() {
+  local repo="$1"
+  _make_clean_repo "$repo"
+  git -C "$repo" remote add origin "https://github.com/test-user/test-repo.git"
+}
+
+@test "C33 with_branch_protection: aborts when 'repo' scope is missing" {
+  _make_gh_repo "$TEST_TMP/bp-no-scope"
+  cd "$TEST_TMP/bp-no-scope"
+  run env \
+    PATH="$GH_STUBS_DIR:$PATH" \
+    GH_STUB_SCOPES="read:org,gist" \
+    TCS_BP_YES=1 \
+    "$LIB_DIR/with_branch_protection.sh"
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -qE "repo[[:space:]]+scope|missing.*repo"
+  echo "$output" | grep -q 'gh-token-hygiene\.md'
+}
+
+@test "C34 with_branch_protection: warns on excessive 'admin:org' scope but proceeds with --yes" {
+  _make_gh_repo "$TEST_TMP/bp-admin-org"
+  cd "$TEST_TMP/bp-admin-org"
+  capture="$TEST_TMP/put-body.json"
+  run env \
+    PATH="$GH_STUBS_DIR:$PATH" \
+    GH_STUB_SCOPES="repo,admin:org" \
+    GH_STUB_CAPTURE_PUT="$capture" \
+    TCS_BP_YES=1 \
+    "$LIB_DIR/with_branch_protection.sh"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qiE 'admin:org|excessive scope'
+  echo "$output" | grep -q 'gh-token-hygiene\.md'
+  # The PUT was still issued.
+  [ -s "$capture" ]
+}
+
+@test "C35 with_branch_protection: PUTs single-coder preset body" {
+  _make_gh_repo "$TEST_TMP/bp-preset"
+  cd "$TEST_TMP/bp-preset"
+  capture="$TEST_TMP/put-body.json"
+  run env \
+    PATH="$GH_STUBS_DIR:$PATH" \
+    GH_STUB_SCOPES="repo" \
+    GH_STUB_CAPTURE_PUT="$capture" \
+    TCS_BP_YES=1 \
+    "$LIB_DIR/with_branch_protection.sh"
+  [ "$status" -eq 0 ]
+  [ -s "$capture" ]
+  # Single-coder preset (ADR-12): no PR-review-required, no force-push,
+  # no deletions, no admin enforcement.
+  if command -v jq >/dev/null; then
+    [ "$(jq -r '.required_pull_request_reviews' "$capture")" = "null" ]
+    [ "$(jq -r '.allow_force_pushes' "$capture")" = "false" ]
+    [ "$(jq -r '.allow_deletions' "$capture")" = "false" ]
+    [ "$(jq -r '.enforce_admins' "$capture")" = "false" ]
+    [ "$(jq -r '.restrictions' "$capture")" = "null" ]
+  else
+    grep -q '"required_pull_request_reviews":[[:space:]]*null' "$capture"
+    grep -q '"allow_force_pushes":[[:space:]]*false' "$capture"
+    grep -q '"allow_deletions":[[:space:]]*false' "$capture"
+    grep -q '"enforce_admins":[[:space:]]*false' "$capture"
+  fi
+}
+
+@test "C36 with_branch_protection: idempotent when protection already matches preset" {
+  _make_gh_repo "$TEST_TMP/bp-idem"
+  cd "$TEST_TMP/bp-idem"
+  capture="$TEST_TMP/put-body.json"
+  run env \
+    PATH="$GH_STUBS_DIR:$PATH" \
+    GH_STUB_SCOPES="repo" \
+    GH_STUB_PROTECTION_MATCHES=1 \
+    GH_STUB_CAPTURE_PUT="$capture" \
+    TCS_BP_YES=1 \
+    "$LIB_DIR/with_branch_protection.sh"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qiE 'already up to date|already matches|no changes'
+  # Idempotent: no PUT body should have been captured because the helper
+  # short-circuited.
+  [ ! -s "$capture" ] || ! grep -q '"allow_force_pushes"' "$capture"
+
+  # Re-run yields the same behavior.
+  run env \
+    PATH="$GH_STUBS_DIR:$PATH" \
+    GH_STUB_SCOPES="repo" \
+    GH_STUB_PROTECTION_MATCHES=1 \
+    GH_STUB_CAPTURE_PUT="$capture" \
+    TCS_BP_YES=1 \
+    "$LIB_DIR/with_branch_protection.sh"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qiE 'already up to date|already matches|no changes'
+}
+
+@test "C37 with_branch_protection: gh PUT failure exits non-zero, no rollback of unrelated steps" {
+  _make_gh_repo "$TEST_TMP/bp-fail"
+  cd "$TEST_TMP/bp-fail"
+  # Marker representing parent-skill state from a prior step (e.g. install_files).
+  mkdir -p .githooks
+  touch .githooks/.test-marker
+  run env \
+    PATH="$GH_STUBS_DIR:$PATH" \
+    GH_STUB_SCOPES="repo" \
+    GH_STUB_PUT_FAIL=1 \
+    TCS_BP_YES=1 \
+    "$LIB_DIR/with_branch_protection.sh"
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q 'gh-token-hygiene\.md'
+  # The helper must NOT roll back unrelated parent-skill side effects.
+  [ -f .githooks/.test-marker ]
+}
+
+# ---------------------------------------------------------------------------
 # Group D — bats test sanity (shellcheck-style)
 # ---------------------------------------------------------------------------
 
