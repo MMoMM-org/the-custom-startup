@@ -41,14 +41,25 @@
 #     it degrades double-tap protection gracefully (CON: graceful degradation
 #     over false-deny, per SDD §Error Handling and plan T1.6 constraint).
 #   - audit_log failure (or audit_log.sh not sourced) MUST NOT block
-#     consumption (M12 AC5). The function tolerates `_audit_log` being
-#     absent or returning non-zero.
+#     consumption (M12 AC5). audit_log.sh is consumed via a
+#     `command -v _audit_log` guard so override.sh stays non-blocking when
+#     the audit lib isn't sourced or the call fails — defense-in-depth on
+#     top of `_audit_log`'s own always-return-0 contract.
 
-# Resolve the sentinel path for a given env-var name.
+# Source cache.sh for `_cache_dir` so the cache directory layout is owned
+# in exactly one place (DRY). Re-sourcing is harmless: cache.sh defines
+# functions only, with no side effects at source time.
+_OVERRIDE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=./cache.sh
+# shellcheck disable=SC1091
+. "$_OVERRIDE_LIB_DIR/cache.sh"
+
+# Resolve the sentinel path for a given env-var name. Lives under the
+# canonical cache directory from cache.sh.
 _override_sentinel_path() {
   local env_var="$1"
-  local data_dir="${CLAUDE_PLUGIN_DATA:-${HOME}/.claude/plugin-data}"
-  printf '%s/cache/override-consumed-%s' "$data_dir" "$env_var"
+  printf '%s/override-consumed-%s' "$(_cache_dir)" "$env_var"
 }
 
 # Public entry point. Returns 0 on consumption, 1 otherwise.
@@ -126,7 +137,11 @@ _check_and_consume_override() {
   fi
 
   if [ "$OVERRIDE_MASTER" = "1" ]; then
-    printf '⚠ MASTER OVERRIDE — strongly prefer granular CLAUDE_ALLOW_<X>=1\n' >&2
+    # PRD M7 AC3 verbatim — the backticks around `CLAUDE_ALLOW_<X>=1` ARE
+    # part of the contract, not markdown. Single-quoted format keeps them
+    # literal (backticks would otherwise be command substitution).
+    # shellcheck disable=SC2016  # backticks are intentionally LITERAL output
+    printf '⚠ MASTER OVERRIDE — strongly prefer granular `CLAUDE_ALLOW_<X>=1`\n' >&2
   fi
   printf 'tcs-git-helpers: override consumed: %s\n' "$OVERRIDE_VAR" >&2
 

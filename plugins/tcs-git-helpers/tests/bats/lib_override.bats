@@ -204,6 +204,18 @@ teardown() {
   [[ "$stderr" == *"granular"* ]]
 }
 
+@test "master override stderr matches PRD M7 AC3 VERBATIM (incl. backticks)" {
+  # Pin the exact AC3 string — the backticks around `CLAUDE_ALLOW_<X>=1` are
+  # part of the contract per requirements.md line 192. Don't relax this
+  # assertion: the looser "granular" / "MASTER OVERRIDE" matches above let
+  # backticks regress silently.
+  export CLAUDE_ALLOW_GIT_BAD_OPS=1
+  run --separate-stderr _check_and_consume_override RESET_HARD
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *'`CLAUDE_ALLOW_<X>=1`'* ]]
+  [[ "$stderr" == *'⚠ MASTER OVERRIDE — strongly prefer granular `CLAUDE_ALLOW_<X>=1`'* ]]
+}
+
 @test "master override audit line has master:true" {
   export CLAUDE_ALLOW_GIT_BAD_OPS=1
   _check_and_consume_override RESET_HARD
