@@ -2,6 +2,8 @@
 # Tests for scripts/lib/audit_log.sh
 # Spec: SDD §Audit Log Schema (overrides.jsonl), ADR-7 rotation policy, M12 AC3-AC5.
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   PLUGIN_ROOT="$(cd "${BATS_TEST_FILENAME%/*}/../.." && pwd)"
   LIB="$PLUGIN_ROOT/scripts/lib/audit_log.sh"
@@ -60,6 +62,25 @@ teardown() {
   local keys
   keys="$(jq -c 'keys_unsorted' "$AUDIT_FILE")"
   [ "$keys" = '["ts","repo","branch","hook","env_var","master","command","pattern","tool_input_truncated"]' ]
+}
+
+@test "printf fallback emits canonical field order on disk (jq masked)" {
+  # Mask jq with a function that returns non-zero with no output. The lib's
+  # `command -v jq` succeeds (functions are visible), but the empty result
+  # forces the printf fallback path. We then assert the raw on-disk line —
+  # NOT a jq-parsed AST — to verify the printf path itself freezes order.
+  jq() { return 127; }
+  export -f jq
+
+  _audit_log hook=H env_var=E master=true command=cmd pattern=pat tool_input_truncated=false
+
+  unset -f jq
+
+  run head -n 1 "$AUDIT_FILE"
+  [ "$status" -eq 0 ]
+  # Strict regex: all 9 keys present in canonical order, master/trunc as
+  # JSON booleans (no quotes), caller fields literal.
+  [[ "$output" =~ ^\{\"ts\":\"[^\"]+\",\"repo\":\"[^\"]+\",\"branch\":\"[^\"]+\",\"hook\":\"H\",\"env_var\":\"E\",\"master\":true,\"command\":\"cmd\",\"pattern\":\"pat\",\"tool_input_truncated\":false\}$ ]]
 }
 
 @test "master and tool_input_truncated are JSON booleans (not strings)" {
@@ -172,12 +193,17 @@ teardown() {
   : > "$AUDIT_FILE"
   chmod 000 "$AUDIT_FILE"
 
-  local stderr_file="$WORK_DIR/stderr.log"
-  _audit_log hook=H env_var=E master=false command=c pattern=p tool_input_truncated=false 2>"$stderr_file"
-  rc=$?
-  [ "$rc" -eq 0 ]
-  [ -s "$stderr_file" ]
-  grep -qi "audit_log" "$stderr_file"
+  # bats `run --separate-stderr` records exit status into $status reliably
+  # AND splits stderr into $stderr — so we test both halves of M12 AC5
+  # (non-blocking exit + stderr surfaced) without a manual `rc=$?` capture
+  # that would mask any future regression where _audit_log forgets to
+  # `return 0` after a write failure.
+  run --separate-stderr _audit_log hook=H env_var=E master=false \
+                                   command=c pattern=p \
+                                   tool_input_truncated=false
+  [ "$status" -eq 0 ]
+  [ -n "$stderr" ]
+  [[ "$stderr" == *audit_log* ]]
 }
 
 @test "_audit_log returns 0 when audit directory cannot be created" {

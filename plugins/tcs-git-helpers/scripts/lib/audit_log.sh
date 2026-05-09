@@ -153,14 +153,17 @@ _audit_log() {
 
   local line=""
   if command -v jq >/dev/null 2>&1; then
+    # `|| true` keeps a jq failure (non-zero exit, mocked binary, etc.) from
+    # tripping a caller's `set -e` via the assignment's command-substitution
+    # exit status. We fall through to the printf path on empty output.
     line="$(_audit_log_build_jq \
       "$ts" "$repo" "$branch" "$hook" "$env_var" \
-      "$master" "$command" "$pattern" "$trunc" 2>/dev/null)"
+      "$master" "$command" "$pattern" "$trunc" 2>/dev/null || true)"
   fi
   if [ -z "$line" ]; then
     line="$(_audit_log_build_printf \
       "$ts" "$repo" "$branch" "$hook" "$env_var" \
-      "$master" "$command" "$pattern" "$trunc")"
+      "$master" "$command" "$pattern" "$trunc" || true)"
   fi
 
   if ! printf '%s\n' "$line" >>"$audit_file" 2>/dev/null; then
