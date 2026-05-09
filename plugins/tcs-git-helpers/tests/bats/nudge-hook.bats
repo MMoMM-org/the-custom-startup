@@ -196,6 +196,16 @@ _assert_stderr_empty() {
   _assert_stderr_empty
 }
 
+# Also probe tool_response.exit_status (nested arm — third field variant per PRD OQ10)
+@test "test_no_nudge_when_tool_response_exit_status_nonzero" {
+  local input
+  input=$(jq -n --arg c "git checkout -b feat/fail" \
+    '{tool_name:"Bash", tool_input:{command:$c}, tool_response:{exit_status:1}}')
+  run --separate-stderr bash -c 'printf "%s" "$1" | bash "$2"' _ "$input" "$HOOK"
+  [ "$status" -eq 0 ]
+  _assert_stderr_empty
+}
+
 # W3 — unrelated tool_response.status (e.g. HTTP 200) must NOT suppress nudge (OQ10 fail-open)
 @test "test_unrelated_status_field_does_not_suppress_nudge" {
   # A tool_response with status:200 (HTTP status, not a process exit code) must
@@ -334,7 +344,7 @@ STUB
 }
 
 # ----------------------------------------------------------------------
-# Performance — p99 < 50ms (80ms ceiling on CI)
+# Performance — p99 < 50ms (spec budget per SDD §Quality Requirements)
 # ----------------------------------------------------------------------
 
 @test "test_perf_p99_under_50ms" {
