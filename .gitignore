@@ -30,3 +30,4 @@ modules/satori/.satori/
 
 # Local scratch / handoff buffers
 tmp/
+origin.git/
