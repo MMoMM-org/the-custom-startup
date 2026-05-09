@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Repo-side .githooks/ Templates"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 4
 ---
@@ -51,7 +51,7 @@ This phase produces the four `.githooks/*` template files installed into target 
   4. Validate: bats passes; shellcheck clean; ≤5000ms p99 (timeout); cache-hit case ≤30ms.
   5. Success: M1 AC1-AC5 all pass `[ref: PRD/M1]`; ADR-6 cache dedup works; CON-3 satisfied.
 
-- [ ] **T4.3 templates/githooks/commit-msg** `[activity: backend-api]` `[parallel: true]`
+- [x] **T4.3 templates/githooks/commit-msg** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: Existing `MiYo/Kado/.githooks/commit-msg` (length-only baseline); SDD §Repo-side `.githooks/` Templates — `commit-msg`; M5 acceptance criteria; ADR-3 config parser.
   2. Test: Write `tests/bats/githooks_commit_msg.bats`: enforces Conventional Commits regex `^(feat|fix|docs|style|refactor|test|chore|perf|revert|build|ci)(\([a-z0-9._-]+\))?!?: .+`; type allowlist from `TCS_ALLOWED_COMMIT_TYPES`; `TCS_REQUIRE_SCOPE=1` makes scope mandatory; merge commits excluded (`MERGE_HEAD` exists OR subject begins `Merge branch …` / `Merge pull request …`); `[skip-format-check]` in subject allows; existing length validation preserved (`TCS_MAX_SUBJECT_LENGTH` default 90); ≤30ms p99 per commit including config-parse cost.
@@ -59,7 +59,7 @@ This phase produces the four `.githooks/*` template files installed into target 
   4. Validate: bats passes; shellcheck clean; ≤100ms p99.
   5. Success: M5 AC1-AC4 all pass `[ref: PRD/M5]`; merge-commit exclusion correct; override visible in `git log` per AC4.
 
-- [ ] **T4.4 templates/githooks/post-merge** `[activity: backend-api]` `[parallel: true]`
+- [x] **T4.4 templates/githooks/post-merge** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: SDD §Repo-side `.githooks/` Templates — `post-merge`; M6 acceptance criteria; research/performance.md §3 (batched gh call mandate).
   2. Test: Write `tests/bats/githooks_post_merge.bats`: after `git pull` or merge, queries `gh pr list --state merged --head <each-branch>` BUT BATCHED (single call with `--limit 100`); outputs suggestion list to stderr (NOT stdout, NOT blocking); updates `${CLAUDE_PLUGIN_DATA}/cache/<repo-hash>-stale-cache.tsv`+`.json` atomically; if `gh` unavailable, exits 0 silently (degraded mode); does NOT iterate per-branch with separate gh calls; works whether `${CLAUDE_PLUGIN_DATA}` set (plugin) or not (degraded — only outputs to stderr, no cache); ≤10s p99 even on 50-branch repo.
@@ -67,7 +67,7 @@ This phase produces the four `.githooks/*` template files installed into target 
   4. Validate: bats passes; shellcheck clean; ≤10s p99 on 50-branch fixture.
   5. Success: M6 AC1-AC3 all pass `[ref: PRD/M6]`; batching honored per performance research; cache-update integration with brief works.
 
-- [ ] **T4.5 templates/githooks/.config.example + exclude-paths** `[activity: documentation]` `[parallel: true]`
+- [x] **T4.5 templates/githooks/.config.example + exclude-paths** `[activity: documentation]` `[parallel: true]`
 
   1. Prime: SDD §.githooks/.config Schema; ADR-3 allowed keys.
   2. Test: Manual check (no automated test for examples).
@@ -75,7 +75,7 @@ This phase produces the four `.githooks/*` template files installed into target 
   4. Validate: Manual review; uncommenting each key produces a valid `.config` that parses.
   5. Success: Examples explain each key clearly; new repos can copy-rename to start configuring `[ref: SDD/§.githooks/.config Schema]`.
 
-- [ ] **T4.6 Phase 4 Validation** `[activity: validate]`
+- [x] **T4.6 Phase 4 Validation** `[activity: validate]`
 
   Run all Phase 4 bats tests + shellcheck. Verify standalone behavior:
   - Set `${CLAUDE_PLUGIN_ROOT}` to empty; run each template — confirms defense-in-depth M11 (templates work without plugin)
