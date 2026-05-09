@@ -190,13 +190,19 @@ _assert_no_match() {
   _run_hook
 
   [ "$status" -eq 0 ]
-  # Brief must contain: branch name, clean, ahead count, stale count.
-  printf '%s' "$stderr" | grep -q "feat/foo"
-  printf '%s' "$stderr" | grep -q "clean"
-  printf '%s' "$stderr" | grep -q "2 ahead"
-  printf '%s' "$stderr" | grep -q "3 stale-merged"
+  # Anchor the canonical SDD wireframe: order + bullet separators are mandatory.
+  # A single ERE pinning all four segments in order catches any transposition regression.
+  # Use a subshell grep directly (not `run`) to avoid clobbering bats $stderr.
+  local brief_output="$stderr"
+  printf '%s' "$brief_output" \
+    | grep -qE '^\[tcs-git-helpers\] feat/foo • clean • 2 ahead • 3 stale-merged'
+  # Supplementary individual-segment assertions (kept for diagnostic clarity).
+  printf '%s' "$brief_output" | grep -q "feat/foo"
+  printf '%s' "$brief_output" | grep -q "clean"
+  printf '%s' "$brief_output" | grep -q "2 ahead"
+  printf '%s' "$brief_output" | grep -q "3 stale-merged"
   # Must start with the prefix (no ⚠ for feat branch).
-  printf '%s' "$stderr" | grep -q "^\[tcs-git-helpers\]"
+  printf '%s' "$brief_output" | grep -q "^\[tcs-git-helpers\]"
 }
 
 # ----------------------------------------------------------------------
