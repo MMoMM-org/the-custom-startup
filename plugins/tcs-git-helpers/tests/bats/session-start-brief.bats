@@ -84,8 +84,15 @@ setup() {
   git -C "$TEST_REPO" checkout -q -b feat/foo 2>/dev/null || true
   git -C "$TEST_REPO" push -q -u origin feat/foo 2>/dev/null || true
 
-  # Compute repo hash (same as cache.sh: sha1 of repo top-level path)
-  REPO_HASH="$(printf '%s' "$TEST_REPO" | shasum 2>/dev/null | head -c 12)"
+  # Compute repo hash using EXACTLY the same method as lib/cache.sh _repo_hash:
+  #   printf '%s' "$repo_path" | shasum | head -c 12
+  # Key subtleties:
+  #   - `git rev-parse --show-toplevel` is used (not the mktemp path) because on
+  #     macOS /tmp is a symlink to /private/tmp — git resolves the real path.
+  #   - `printf '%s'` is used (not a pipe from git) because git output includes a
+  #     trailing newline which changes the sha1 hash.
+  _real_top="$(git -C "$TEST_REPO" rev-parse --show-toplevel 2>/dev/null)"
+  REPO_HASH="$(printf '%s' "$_real_top" | shasum 2>/dev/null | head -c 12)"
   export REPO_HASH
   export CACHE_DIR
 
