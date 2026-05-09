@@ -200,7 +200,9 @@ yaml.safe_load(parts[1])
 
 @test "B07 all helpers use set -euo pipefail" {
   for f in "$LIB_DIR"/*.sh; do
-    head -n 5 "$f" | grep -q 'set -euo pipefail' \
+    # Search the prologue (first 40 lines) — header comments may push the
+    # `set` line below the first 5 lines.
+    head -n 40 "$f" | grep -q 'set -euo pipefail' \
       || { echo "missing set -euo pipefail in $f"; return 1; }
   done
 }
@@ -228,6 +230,21 @@ yaml.safe_load(parts[1])
 # behavior. CLAUDE_PLUGIN_DATA is stubbed via $TMPDIR so locks land in a
 # sandbox-writable path.
 
+setup_file() {
+  # Build all fixture scenarios ONCE per file run. Tests copy the relevant
+  # scenario into their own tempdir to avoid mutating the cached source.
+  command -v git >/dev/null || skip "git required"
+  FIXTURE_CACHE="$(mktemp -d "${TMPDIR:-/tmp}/tcs-skill-setup-fixcache.XXXXXX")"
+  export FIXTURE_CACHE
+  bash "$FIXTURE_BUILD" "$FIXTURE_CACHE" >/dev/null
+}
+
+teardown_file() {
+  if [ -n "${FIXTURE_CACHE:-}" ] && [ -d "$FIXTURE_CACHE" ]; then
+    rm -rf "$FIXTURE_CACHE"
+  fi
+}
+
 setup() {
   TEST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/tcs-skill-setup.XXXXXX")"
   CLAUDE_PLUGIN_DATA="$TEST_TMP/plugin-data"
@@ -244,9 +261,20 @@ teardown() {
   fi
 }
 
-# Helper: build the fixture repos into the per-test tempdir.
+# Build fixtures into TEST_TMP/fixtures/. Backwards-compat: the C01-C10
+# tests want the entire fixture set; later tests work on a single scenario.
+# We resolve this by symlinking the cache instead of rebuilding.
 _build_fixtures() {
-  bash "$FIXTURE_BUILD" "$TEST_TMP/fixtures" >/dev/null
+  ln -s "$FIXTURE_CACHE" "$TEST_TMP/fixtures"
+}
+
+# Copy a single fixture scenario into TEST_TMP/<scenario>/ so the test owns
+# a mutable working tree. Returns the path on stdout.
+_use_fixture() {
+  local scenario="$1"
+  local dst="$TEST_TMP/$scenario"
+  cp -R "$FIXTURE_CACHE/$scenario" "$dst"
+  printf '%s\n' "$dst"
 }
 
 # Helper: build a clean repo (init + one commit) at $1.
@@ -321,8 +349,7 @@ _make_clean_repo() {
 # --- detect_conflicts.sh against each scenario ---
 
 @test "C11 detect_conflicts on clean-repo emits NO conflicts (exit 0)" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/clean-repo"
+  cd "$(_use_fixture clean-repo)"
   run "$LIB_DIR/detect_conflicts.sh"
   [ "$status" -eq 0 ]
   # Output should NOT contain ABORT or any conflict tag.
@@ -330,8 +357,7 @@ _make_clean_repo() {
 }
 
 @test "C12 detect_conflicts on with-husky aborts with husky reference" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/with-husky"
+  cd "$(_use_fixture with-husky)"
   run "$LIB_DIR/detect_conflicts.sh"
   [ "$status" -ne 0 ]
   echo "$output" | grep -qi 'husky'
@@ -339,32 +365,28 @@ _make_clean_repo() {
 }
 
 @test "C13 detect_conflicts on with-lefthook aborts" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/with-lefthook"
+  cd "$(_use_fixture with-lefthook)"
   run "$LIB_DIR/detect_conflicts.sh"
   [ "$status" -ne 0 ]
   echo "$output" | grep -qi 'lefthook'
 }
 
 @test "C14 detect_conflicts on with-pre-commit aborts" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/with-pre-commit"
+  cd "$(_use_fixture with-pre-commit)"
   run "$LIB_DIR/detect_conflicts.sh"
   [ "$status" -ne 0 ]
   echo "$output" | grep -qi 'pre-commit'
 }
 
 @test "C15 detect_conflicts on with-simple-git-hooks aborts" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/with-simple-git-hooks"
+  cd "$(_use_fixture with-simple-git-hooks)"
   run "$LIB_DIR/detect_conflicts.sh"
   [ "$status" -ne 0 ]
   echo "$output" | grep -qi 'simple-git-hooks'
 }
 
 @test "C16 detect_conflicts on with-existing-hooks emits CONFLICT (no marker)" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/with-existing-hooks"
+  cd "$(_use_fixture with-existing-hooks)"
   run "$LIB_DIR/detect_conflicts.sh"
   # Existing-hooks-no-marker is a CONFLICT (status non-zero) so the skill can
   # branch into per-file diff mode. The output names the condition.
@@ -373,8 +395,7 @@ _make_clean_repo() {
 }
 
 @test "C17 detect_conflicts on with-tcs-current emits up-to-date" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/with-tcs-current"
+  cd "$(_use_fixture with-tcs-current)"
   # Current matching version: detect_conflicts considers this informational, not
   # an abort. The skill body branches on the up-to-date marker independently.
   run "$LIB_DIR/detect_conflicts.sh"
@@ -382,22 +403,19 @@ _make_clean_repo() {
 }
 
 @test "C18 detect_conflicts on with-tcs-older emits older-version notice" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/with-tcs-older"
+  cd "$(_use_fixture with-tcs-older)"
   run "$LIB_DIR/detect_conflicts.sh"
   echo "$output" | grep -qiE 'older|outdated|update|v0\.'
 }
 
 @test "C19 detect_conflicts on with-non-sample-hooks emits warn" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/with-non-sample-hooks"
+  cd "$(_use_fixture with-non-sample-hooks)"
   run "$LIB_DIR/detect_conflicts.sh"
   echo "$output" | grep -qiE 'warn|non-sample|.git/hooks'
 }
 
 @test "C20 detect_conflicts on with-submodules lists submodules" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/with-submodules"
+  cd "$(_use_fixture with-submodules)"
   run "$LIB_DIR/detect_conflicts.sh"
   echo "$output" | grep -qi 'submodule'
 }
@@ -405,8 +423,7 @@ _make_clean_repo() {
 # --- install_files.sh on a clean repo ---
 
 @test "C21 install_files on clean repo writes .githooks/* with markers" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/clean-repo"
+  cd "$(_use_fixture clean-repo)"
   run "$LIB_DIR/install_files.sh"
   [ "$status" -eq 0 ]
   [ -f .githooks/pre-commit ]
@@ -417,23 +434,20 @@ _make_clean_repo() {
 }
 
 @test "C22 install_files sets core.hooksPath=.githooks" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/clean-repo"
+  cd "$(_use_fixture clean-repo)"
   "$LIB_DIR/install_files.sh"
   [ "$(git config core.hooksPath)" = ".githooks" ]
 }
 
 @test "C23 install_files writes .config.example and exclude-paths.example" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/clean-repo"
+  cd "$(_use_fixture clean-repo)"
   "$LIB_DIR/install_files.sh"
   [ -f .githooks/.config.example ]
   [ -f .githooks/exclude-paths.example ]
 }
 
 @test "C24 install_files makes hook files executable" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/clean-repo"
+  cd "$(_use_fixture clean-repo)"
   "$LIB_DIR/install_files.sh"
   [ -x .githooks/pre-commit ]
   [ -x .githooks/pre-push ]
@@ -442,8 +456,7 @@ _make_clean_repo() {
 }
 
 @test "C25 install_files does NOT auto-commit (M10 AC5)" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/clean-repo"
+  cd "$(_use_fixture clean-repo)"
   before_log=$(git log --oneline | wc -l)
   "$LIB_DIR/install_files.sh"
   after_log=$(git log --oneline | wc -l)
@@ -455,8 +468,7 @@ _make_clean_repo() {
 # --- subshell sentinel scope (ADR-11) ---
 
 @test "C26 install_files exports TCS_GIT_HELPERS_SETUP_ACTIVE only inside subshell" {
-  _build_fixtures
-  cd "$TEST_TMP/fixtures/clean-repo"
+  cd "$(_use_fixture clean-repo)"
   # Force unset; if helper leaks the var, test will fail.
   unset TCS_GIT_HELPERS_SETUP_ACTIVE
   "$LIB_DIR/install_files.sh" >/dev/null
@@ -477,11 +489,15 @@ _make_clean_repo() {
 @test "C28 lock.sh: second concurrent acquire fails while first holds" {
   _make_clean_repo "$TEST_TMP/lockrepo"
   cd "$TEST_TMP/lockrepo"
-  "$LIB_DIR/lock.sh" acquire
-  # Try to acquire again from a fresh subshell with very short timeout.
+  # Hand-write the lock file with the bats process's own PID and a fresh
+  # timestamp. The bats test runner is alive (so kill -0 succeeds) and the
+  # timestamp is recent (so the 5-min stale TTL does not reclaim).
+  mkdir -p .githooks
+  printf '%s:%s\n' "$$" "$(date +%s)" > .githooks/.setup.lock
+  # Now a fresh acquire must observe live PID + recent timestamp → fail.
   run env TCS_LOCK_TIMEOUT=1 "$LIB_DIR/lock.sh" acquire
   [ "$status" -ne 0 ]
-  "$LIB_DIR/lock.sh" release
+  rm -f .githooks/.setup.lock
 }
 
 @test "C29 lock.sh: stale lock (>5min, dead PID) is reclaimed" {

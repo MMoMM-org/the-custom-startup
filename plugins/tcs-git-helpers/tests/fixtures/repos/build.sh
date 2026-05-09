@@ -239,6 +239,161 @@ build_long_1000_commits() {
   done
 }
 
+# --- Scenarios for skill_setup (T5.1) ------------------------------------
+
+# clean-repo: bare git init + one commit. No .githooks, no remote.
+build_clean_repo() {
+  local repo="$OUT_DIR/clean-repo"
+  _init_repo "$repo"
+  _commit "$repo" README.md "clean repo" "feat: init"
+}
+
+# with-husky: .husky/ directory + package.json with "husky" key.
+build_with_husky() {
+  local repo="$OUT_DIR/with-husky"
+  _init_repo "$repo"
+  _commit "$repo" README.md "husky repo" "feat: init"
+  mkdir -p "$repo/.husky/_"
+  printf '#!/bin/sh\nnpm test\n' > "$repo/.husky/pre-commit"
+  chmod +x "$repo/.husky/pre-commit"
+  cat > "$repo/package.json" <<'EOF'
+{
+  "name": "with-husky",
+  "version": "1.0.0",
+  "scripts": {
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "husky": "^9.0.0"
+  }
+}
+EOF
+  git -C "$repo" add . >/dev/null
+  git -C "$repo" commit -q -m "chore: add husky"
+}
+
+# with-lefthook: lefthook.yml at root.
+build_with_lefthook() {
+  local repo="$OUT_DIR/with-lefthook"
+  _init_repo "$repo"
+  _commit "$repo" README.md "lefthook repo" "feat: init"
+  cat > "$repo/lefthook.yml" <<'EOF'
+pre-commit:
+  commands:
+    lint:
+      run: npm run lint
+EOF
+  git -C "$repo" add lefthook.yml >/dev/null
+  git -C "$repo" commit -q -m "chore: add lefthook"
+}
+
+# with-pre-commit: .pre-commit-config.yaml at root.
+build_with_pre_commit() {
+  local repo="$OUT_DIR/with-pre-commit"
+  _init_repo "$repo"
+  _commit "$repo" README.md "pre-commit repo" "feat: init"
+  cat > "$repo/.pre-commit-config.yaml" <<'EOF'
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+EOF
+  git -C "$repo" add .pre-commit-config.yaml >/dev/null
+  git -C "$repo" commit -q -m "chore: add pre-commit framework"
+}
+
+# with-simple-git-hooks: package.json with "simple-git-hooks" key.
+build_with_simple_git_hooks() {
+  local repo="$OUT_DIR/with-simple-git-hooks"
+  _init_repo "$repo"
+  _commit "$repo" README.md "sgh repo" "feat: init"
+  cat > "$repo/package.json" <<'EOF'
+{
+  "name": "with-simple-git-hooks",
+  "version": "1.0.0",
+  "simple-git-hooks": {
+    "pre-commit": "npm test"
+  }
+}
+EOF
+  git -C "$repo" add package.json >/dev/null
+  git -C "$repo" commit -q -m "chore: add simple-git-hooks"
+}
+
+# with-existing-hooks: .githooks/* WITHOUT a tcs-git-helpers marker.
+build_with_existing_hooks() {
+  local repo="$OUT_DIR/with-existing-hooks"
+  _init_repo "$repo"
+  _commit "$repo" README.md "existing hooks" "feat: init"
+  mkdir -p "$repo/.githooks"
+  printf '#!/bin/sh\n# repo-local pre-commit (not tcs-git-helpers)\nexit 0\n' \
+    > "$repo/.githooks/pre-commit"
+  chmod +x "$repo/.githooks/pre-commit"
+  git -C "$repo" add .githooks >/dev/null
+  git -C "$repo" commit -q -m "chore: add custom .githooks"
+}
+
+# with-tcs-current: .githooks/* WITH matching v1.0.0 marker.
+build_with_tcs_current() {
+  local repo="$OUT_DIR/with-tcs-current"
+  _init_repo "$repo"
+  _commit "$repo" README.md "tcs current" "feat: init"
+  mkdir -p "$repo/.githooks"
+  printf '#!/bin/bash\n# tcs-git-helpers: v1.0.0\nexit 0\n' \
+    > "$repo/.githooks/pre-commit"
+  chmod +x "$repo/.githooks/pre-commit"
+  git -C "$repo" add .githooks >/dev/null
+  git -C "$repo" commit -q -m "chore: install tcs-git-helpers v1.0.0"
+}
+
+# with-tcs-older: .githooks/* WITH older v0.9.0 marker.
+build_with_tcs_older() {
+  local repo="$OUT_DIR/with-tcs-older"
+  _init_repo "$repo"
+  _commit "$repo" README.md "tcs older" "feat: init"
+  mkdir -p "$repo/.githooks"
+  printf '#!/bin/bash\n# tcs-git-helpers: v0.9.0\nexit 0\n' \
+    > "$repo/.githooks/pre-commit"
+  chmod +x "$repo/.githooks/pre-commit"
+  git -C "$repo" add .githooks >/dev/null
+  git -C "$repo" commit -q -m "chore: install tcs-git-helpers v0.9.0"
+}
+
+# with-non-sample-hooks: .git/hooks/ contains non-.sample files.
+build_with_non_sample_hooks() {
+  local repo="$OUT_DIR/with-non-sample-hooks"
+  _init_repo "$repo"
+  _commit "$repo" README.md "non-sample hooks" "feat: init"
+  printf '#!/bin/sh\necho "legacy pre-commit"\nexit 0\n' \
+    > "$repo/.git/hooks/pre-commit"
+  chmod +x "$repo/.git/hooks/pre-commit"
+}
+
+# with-submodules: .gitmodules present.
+build_with_submodules() {
+  local repo="$OUT_DIR/with-submodules"
+  local sub_origin="$OUT_DIR/with-submodules.sub.git"
+
+  _init_bare "$sub_origin"
+  # Seed the bare repo with one commit so add can succeed without network.
+  # The seeder must NOT live under $OUT_DIR/ (fixtures_sanity.bats iterates
+  # every `*/` and runs fsck). Use $TMPDIR instead, then drop it.
+  local seeder
+  seeder="$(mktemp -d "${TMPDIR:-/tmp}/tcs-sub-seed.XXXXXX")"
+  _init_repo "$seeder"
+  _commit "$seeder" sub.txt "sub content" "feat: sub init"
+  git -C "$seeder" remote add origin "$sub_origin"
+  git -C "$seeder" push -q -u origin main
+  rm -rf "$seeder"
+
+  _init_repo "$repo"
+  _commit "$repo" README.md "with submodules" "feat: init"
+  # Allow `file://` submodules (off by default since git 2.38) for tests.
+  git -C "$repo" -c protocol.file.allow=always submodule add -q "$sub_origin" libs/sub
+  git -C "$repo" commit -q -m "chore: add submodule"
+}
+
 # --- Driver ---------------------------------------------------------------
 
 build_clean_unmerged
@@ -250,5 +405,17 @@ build_detached_head
 build_rebase_in_progress
 build_large_50_branches
 build_long_1000_commits
+
+# T5.1 setup-skill scenarios
+build_clean_repo
+build_with_husky
+build_with_lefthook
+build_with_pre_commit
+build_with_simple_git_hooks
+build_with_existing_hooks
+build_with_tcs_current
+build_with_tcs_older
+build_with_non_sample_hooks
+build_with_submodules
 
 printf '%s\n' "$OUT_DIR"
