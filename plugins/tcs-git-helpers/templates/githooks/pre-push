@@ -33,7 +33,6 @@ set -uo pipefail
 # Constants
 # ---------------------------------------------------------------------------
 
-_HOOK_NAME="pre-push"
 _TIMEOUT="${TCS_PUSH_TIMEOUT:-5}"
 
 # ---------------------------------------------------------------------------
@@ -177,7 +176,8 @@ _write_pr_state() {
 # ---------------------------------------------------------------------------
 
 # Run gh with a pure-bash timeout. If gh hangs past $timeout_secs, kill it
-# and return 124. On success, prints gh output to stdout and returns gh's exit.
+# with SIGTERM and return 143 (128+15) on timeout. On success, prints gh
+# output to stdout and returns gh's exit code.
 _gh_with_timeout() {
   local timeout_secs="$1"; shift
   local out_file
@@ -230,14 +230,8 @@ _query_gh_pr_state() {
     return 0
   fi
 
-  # Exit 124 = timeout (fail-open with warning).
-  if [ "$gh_exit" -eq 124 ]; then
-    printf 'tcs-git-helpers: gh timed out after %ss, allowing push (fail-open)\n' "$_TIMEOUT" >&2
-    printf 'SKIP 0\n'
-    return 0
-  fi
-
   # Exit 1 — check stderr content.
+  # Note: timeout (SIGTERM) yields exit 143 (128+15), handled by the catch-all below.
   if [ "$gh_exit" -ne 0 ]; then
     # "no GitHub remote" is a silent fail-open (common case: non-GitHub repo).
     case "$gh_out" in

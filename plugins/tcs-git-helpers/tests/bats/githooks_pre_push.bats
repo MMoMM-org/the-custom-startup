@@ -114,16 +114,6 @@ teardown() {
   fi
 }
 
-# ---------------------------------------------------------------------------
-# Helper: run the hook with standard args + stdin inside the test repo.
-# Sets $status, $output (combined stdout+stderr via run).
-# ---------------------------------------------------------------------------
-_run_hook() {
-  local extra_env="${1:-}"
-  run bash "$HOOK" origin "git@github.com:test/repo.git" \
-    <<< "$PUSH_STDIN"
-}
-
 # Compute the repo hash the same way cache.sh does.
 # Uses REPO_CANONICAL (symlink-resolved path) to match what the hook computes
 # when it calls `git rev-parse --show-toplevel` from within the repo directory.
@@ -273,13 +263,11 @@ STUB
     <<< "$PUSH_STDIN"
   rm -rf "$stub_dir"
   [ "$status" -eq 0 ]
-  # Output must NOT contain a warning (silent fail-open).
-  if echo "$output" | grep -qi "warn\|tcs-git"; then
-    # Allow the "no GitHub remote" silent case — check it's not a blocking warn.
-    # The hook may print nothing, or print only the silence message.
-    # What we must not see is a warning that would confuse the user.
-    true
-  fi
+  # Output must NOT contain a warning (M1 AC3 + integration §2.1: "no GitHub remote"
+  # is the common case for non-GitHub repos and must exit 0 silently, no spam).
+  # Use a helper to avoid the bats `! cmd` mid-test trap.
+  _no_warn() { ! echo "$1" | grep -qi "tcs-git-helpers:\|warn\|allowing"; }
+  _no_warn "$output"
 }
 
 # ---------------------------------------------------------------------------
@@ -321,10 +309,13 @@ STUB
     <<< "$PUSH_STDIN"
   local hook_status="$status"
 
+  # Capture sentinel state BEFORE cleanup so the assertion is not vacuously true.
+  local was_called=0
+  [ -f "$sentinel_file" ] && was_called=1
   rm -rf "$sentinel_dir"
 
-  # gh must NOT have been called.
-  [ ! -f "$sentinel_file" ]
+  # gh must NOT have been called (cache hit path must not invoke gh).
+  [ "$was_called" -eq 0 ]
   # Hook must exit 0 (OPEN state from cache).
   [ "$hook_status" -eq 0 ]
 }
