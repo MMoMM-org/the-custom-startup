@@ -200,6 +200,15 @@ _run_hook_with_root() {
   [[ "$output" == *"type not in allowlist"* ]] || [[ "$output" == *"Conventional"* ]] || [[ "$output" == *"format"* ]]
 }
 
+@test "format failure cites references/conventional-commits.md" {
+  # Spec compliance (T5.5): error output must point user to the reference doc.
+  _write_msg "random: not allowed type"
+  _run_hook
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"conventional-commits.md"* ]] \
+    || { echo "expected conventional-commits.md citation, got: $output" >&2; return 1; }
+}
+
 # ---------------------------------------------------------------------------
 # 3. Scoped commit → accept
 # ---------------------------------------------------------------------------

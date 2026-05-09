@@ -152,7 +152,7 @@ _check_and_update_dedup() {
 # _emit_nudge <rule_key> <text> [<ref_doc>]
 #   Checks dedup, then emits to stderr if the dedup window has passed.
 #   If <ref_doc> is empty or omitted, no reference suffix is appended.
-#   PRD M9 AC3 (gh pr merge) intentionally omits a reference doc.
+#   PRD M9 AC3 (gh pr merge) now cites stale-branch-cleanup.md (T5.5 spec compliance fix).
 
 _emit_nudge() {
   local rule="$1"

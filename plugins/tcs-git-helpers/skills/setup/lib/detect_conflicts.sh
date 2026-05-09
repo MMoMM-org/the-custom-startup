@@ -93,8 +93,11 @@ for f in lefthook.yml lefthook.yaml .lefthook.yml; do
 done
 
 # --- 3. pre-commit (Python framework) -------------------------------------
-if [ -f ".pre-commit-config.yaml" ] || [ -f ".pre-commit-config.yml" ]; then
-  _emit "ABORT" "pre-commit framework detected (.pre-commit-config.yaml)."
+PCF=""
+[ -f ".pre-commit-config.yaml" ] && PCF=".pre-commit-config.yaml"
+[ -z "$PCF" ] && [ -f ".pre-commit-config.yml" ] && PCF=".pre-commit-config.yml"
+if [ -n "$PCF" ]; then
+  _emit "ABORT" "pre-commit framework detected ($PCF)."
   _emit "REF"   "See plugins/tcs-git-helpers/references/migrating-from-husky.md"
   _bump 2
 fi
