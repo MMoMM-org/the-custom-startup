@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Awareness Hooks + Status Backend"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -59,7 +59,7 @@ This phase implements awareness (SessionStart brief), nudges (PostToolUse), and 
   4. Validate: bats passes; performance assertion <50ms p99; shellcheck clean; verify NO `git` or `gh` invocations.
   5. Success: All trigger map entries verified `[ref: PRD/§Feature M9]`; dedup window prevents spam `[ref: PRD OQ9]`; failed-command nudge suppression works `[ref: PRD/M9/AC4]`.
 
-- [ ] **T3.4 Hook Registration Update for Phase 3** `[activity: integration]`
+- [x] **T3.4 Hook Registration Update for Phase 3** `[activity: integration]`
 
   1. Prime: T2.5 hooks.json (Phase 2 registrations); SDD §Plugin Layout.
   2. Test: bats test asserting hooks.json now includes SessionStart matcher `startup|resume|clear|compact` → session-start-brief.sh; PostToolUse:Bash → nudge-hook.sh; existing Phase 2 entries preserved.
@@ -67,7 +67,7 @@ This phase implements awareness (SessionStart brief), nudges (PostToolUse), and 
   4. Validate: bats passes; `claude --plugin-dir` loads; manual: SessionStart brief appears at session boot.
   5. Success: SessionStart and PostToolUse fire `[ref: SDD/§External Interfaces inbound]`.
 
-- [ ] **T3.5 Phase 3 Validation** `[activity: validate]`
+- [x] **T3.5 Phase 3 Validation** `[activity: validate]`
 
   Run all Phase 3 tests (bats + pytest) + shellcheck + ruff. Manual check:
   - Open `claude --plugin-dir` in a fresh repo; verify brief appears <300ms
