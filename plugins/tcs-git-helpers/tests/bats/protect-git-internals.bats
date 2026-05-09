@@ -236,3 +236,48 @@ _invoke_hook() {
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"'
 }
+
+# ----------------------------------------------------------------------
+# Robustness: malformed JSON stdin → fail-open (regression-trap for the
+# `|| true` guards on the jq pipelines). Without those guards, a parse
+# error under `set -euo pipefail` would propagate as a non-zero exit and
+# unconditionally block the underlying Edit/Write/NotebookEdit call.
+# ----------------------------------------------------------------------
+
+@test "malformed JSON stdin → fail-open exit 0, no output" {
+  run bash -c 'printf "%s" "not-json" | "$1"' _ "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "truncated JSON stdin → fail-open exit 0, no output" {
+  run bash -c 'printf "%s" "{\"tool_name\":\"Edit\"" | "$1"' _ "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "empty stdin → fail-open exit 0, no output" {
+  run bash -c 'printf "" | "$1"' _ "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# ----------------------------------------------------------------------
+# Documented fail-open: case-globs require a leading `*/` segment, so a
+# bare relative path (`.git/config`, `.githooks/pre-commit`) is NOT
+# matched and falls through to allow. Claude Code passes absolute paths
+# in practice, so this is intentional — but pinning it prevents an
+# accidental future tightening from silently breaking the hook contract.
+# ----------------------------------------------------------------------
+
+@test "relative path .git/config → allowed silently (no leading dirs)" {
+  run _invoke_hook Edit ".git/config"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "relative path .githooks/pre-commit → allowed silently" {
+  run _invoke_hook Edit ".githooks/pre-commit"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}

@@ -43,14 +43,20 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && p
 
 INPUT=$(cat)
 
+# `|| true` on each jq pipeline keeps a malformed-stdin parse error from
+# tripping `set -e` on the command-substitution exit status. Mirrors the
+# fail-open pattern in lib/audit_log.sh: empty TOOL/FILE_PATH → fall through
+# the `case` blocks → exit 0. This is critical: a non-zero exit from this
+# hook would unconditionally block the underlying Edit/Write/NotebookEdit.
+#
 # Only Edit/Write/NotebookEdit carry a meaningful tool_input.file_path.
-TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""')
+TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null || true)
 case "$TOOL" in
   Edit|Write|NotebookEdit) ;;
   *) exit 0 ;;
 esac
 
-FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""')
+FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""' 2>/dev/null || true)
 [ -z "$FILE_PATH" ] && exit 0
 
 # Match sensitive-path patterns. bash `case` glob — POSIX-clean, bash-3.2-safe.
@@ -73,6 +79,10 @@ if [ "${TCS_GIT_HELPERS_SETUP_ACTIVE:-0}" = "1" ]; then
 fi
 
 # Deny. Audit first (best-effort; never blocks), then emit decision JSON.
+# master=false: the audit-schema `master` flag distinguishes master-override
+# consumption (CLAUDE_ALLOW_GIT_BAD_OPS) from granular env-var consumption.
+# This hook's gate is a granular setup sentinel (TCS_GIT_HELPERS_SETUP_ACTIVE),
+# not a master override — so master is always false on this row.
 _audit_log \
   hook=protect-git-internals \
   env_var=TCS_GIT_HELPERS_SETUP_ACTIVE \
