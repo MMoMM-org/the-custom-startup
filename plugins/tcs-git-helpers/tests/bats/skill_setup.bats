@@ -529,15 +529,18 @@ _make_clean_repo() {
   head -3 .github/workflows/pr-title-check.yml | grep -q 'tcs-git-helpers'
 }
 
-# --- with_branch_protection stub (T5.8 placeholder) ---
+# --- with_branch_protection (T5.8 implementation; details in C33-C37) ---
 
-@test "C31 with_branch_protection.sh runs as a stub and signals T5.8 ownership" {
+@test "C31 with_branch_protection.sh aborts when origin is not a GitHub remote" {
+  # T5.8 replaces the T5.1 stub with the real helper. Sanity test: when no
+  # GitHub remote is configured, the helper aborts non-zero (per integration
+  # §6 "Repo not on GitHub: --with-branch-protection aborts"). Detailed
+  # behavior is exercised in C33-C37.
   _make_clean_repo "$TEST_TMP/bprepo"
   cd "$TEST_TMP/bprepo"
   run "$LIB_DIR/with_branch_protection.sh"
-  # Stub: exits 0 with informational message naming T5.8 (or similar marker).
-  [ "$status" -eq 0 ]
-  echo "$output" | grep -qE 'T5\.8|branch.protection|stub|not yet implemented'
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -qE 'origin|GitHub|gh-token-hygiene'
 }
 
 # --- --update mode: per-file diff behavior (T5.1 spec compliance) --------

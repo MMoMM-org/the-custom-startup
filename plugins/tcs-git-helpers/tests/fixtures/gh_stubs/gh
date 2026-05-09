@@ -20,6 +20,15 @@
 #   4  authentication error / rate limited
 # When a scenario maps to a non-zero exit, the wrapper exits accordingly
 # AFTER emitting the canned stderr message.
+#
+# T5.8 extensions for branch-protection:
+#   - `gh auth status` echoes a `Token scopes:` line driven by $GH_STUB_SCOPES
+#     (csv, default `repo`).
+#   - `gh api -X PUT` captures its body to $GH_STUB_CAPTURE_PUT and either
+#     succeeds or fails per $GH_STUB_PUT_FAIL.
+#   - `gh api .../branches/<b>/protection` GET returns the preset envelope
+#     when $GH_STUB_PROTECTION_MATCHES=1; otherwise simulates 404.
+#   - `gh api repos/<o>/<r> --jq .default_branch` returns "main".
 
 set -u
 
@@ -101,12 +110,131 @@ case "$1" in
     esac
     ;;
   api)
-    _emit_response api
+    # Method/endpoint-aware dispatch for the branch-protection helper (T5.8).
+    method="GET"
+    endpoint=""
+    have_jq_default_branch=0
+    body_args=()
+    use_stdin=0
+    shift  # drop the literal `api`
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        -X|--method)
+          method="${2:-GET}"; shift 2 ;;
+        -X*)
+          method="${1#-X}"; shift ;;
+        --method=*)
+          method="${1#--method=}"; shift ;;
+        -f|--raw-field|-F|--field)
+          # Capture `-f key=value` pairs to reconstruct a JSON body on PUT.
+          body_args+=("${2:-}"); shift 2 ;;
+        --input)
+          if [ "${2:-}" = "-" ]; then use_stdin=1; fi
+          shift 2 ;;
+        --jq)
+          if [ "${2:-}" = ".default_branch" ]; then have_jq_default_branch=1; fi
+          shift 2 ;;
+        -H|--hostname)
+          shift 2 ;;
+        --) shift; break ;;
+        -*)
+          # Unknown flag — skip silently to stay forward-compatible.
+          shift ;;
+        *)
+          if [ -z "$endpoint" ]; then endpoint="$1"; fi
+          shift ;;
+      esac
+    done
+    case "$method" in
+      PUT)
+        # Capture the request body (stdin or `-f` pairs) for test assertions.
+        if [ -n "${GH_STUB_CAPTURE_PUT:-}" ]; then
+          if [ "$use_stdin" -eq 1 ]; then
+            cat > "$GH_STUB_CAPTURE_PUT"
+          else
+            # Reconstruct a minimal JSON object from `-f key=value` pairs.
+            # `null`/`true`/`false`/numbers stay unquoted; everything else
+            # becomes a JSON string.
+            {
+              printf '{'
+              i=0
+              for kv in "${body_args[@]}"; do
+                k="${kv%%=*}"
+                v="${kv#*=}"
+                if [ "$i" -gt 0 ]; then printf ','; fi
+                printf '"%s":' "$k"
+                case "$v" in
+                  null|true|false) printf '%s' "$v" ;;
+                  ''|*[!0-9]*)     printf '"%s"' "$v" ;;
+                  *)               printf '%s' "$v" ;;
+                esac
+                i=$((i + 1))
+              done
+              printf '}\n'
+            } > "$GH_STUB_CAPTURE_PUT"
+          fi
+        elif [ "$use_stdin" -eq 1 ]; then
+          cat >/dev/null
+        fi
+        if [ "${GH_STUB_PUT_FAIL:-0}" = "1" ]; then
+          printf 'HTTP 422: Validation Failed (stub)\n' >&2
+          exit 1
+        fi
+        printf '{"url":"https://api.github.com/repos/test-user/test-repo/branches/main/protection"}\n'
+        exit 0
+        ;;
+      PATCH)
+        if [ "$use_stdin" -eq 1 ]; then cat >/dev/null; fi
+        printf '{"delete_branch_on_merge":true}\n'
+        exit 0
+        ;;
+      GET|*)
+        case "$endpoint" in
+          *"/branches/"*"/protection"*)
+            if [ "${GH_STUB_PROTECTION_MATCHES:-0}" = "1" ]; then
+              printf '%s\n' '{"required_status_checks":null,"enforce_admins":{"enabled":false},"required_pull_request_reviews":null,"restrictions":null,"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false},"required_linear_history":{"enabled":false},"required_conversation_resolution":{"enabled":false}}'
+              exit 0
+            fi
+            printf 'gh: Branch not protected (HTTP 404)\n' >&2
+            exit 1
+            ;;
+          repos/*)
+            if [ "$have_jq_default_branch" -eq 1 ]; then
+              printf 'main\n'
+              exit 0
+            fi
+            printf '{"default_branch":"main","name":"test-repo","owner":{"login":"test-user"}}\n'
+            exit 0
+            ;;
+          *)
+            _emit_response api
+            ;;
+        esac
+        ;;
+    esac
     ;;
   auth)
     case "${2:-}" in
       status)
-        printf 'github.com\n  Logged in to github.com as test-user (oauth_token)\n'
+        # Mirror `gh auth status` output, including a `Token scopes:` line
+        # built from $GH_STUB_SCOPES (csv, default `repo`). The
+        # branch-protection helper parses this line per integration §9.
+        scopes_csv="${GH_STUB_SCOPES:-repo}"
+        scopes_quoted="$(printf '%s' "$scopes_csv" \
+          | awk -F',' '{
+              out = "";
+              for (i = 1; i <= NF; i++) {
+                if (i > 1) out = out ", ";
+                out = out "'\''" $i "'\''";
+              }
+              print out;
+            }')"
+        cat <<EOF
+github.com
+  ✓ Logged in to github.com as test-user (oauth_token)
+  ✓ Token: gho_************************************
+  ✓ Token scopes: $scopes_quoted
+EOF
         exit 0
         ;;
       *)
