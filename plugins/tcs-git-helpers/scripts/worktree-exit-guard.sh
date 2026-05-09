@@ -231,7 +231,8 @@ if [ "$UNPUSHED_COUNT" -gt 0 ]; then
   - $UNPUSHED_COUNT unpushed $noun"
 fi
 REASON="$REASON
-Options: commit & push, stash, OR set CLAUDE_ALLOW_WORKTREE_EXIT_WITH_CHANGES=1"
+Options: commit & push, stash, OR set CLAUDE_ALLOW_WORKTREE_EXIT_WITH_CHANGES=1
+References: \${CLAUDE_PLUGIN_ROOT}/references/worktree-discipline.md"
 
 # Emit JSON via jq; literal newlines in $REASON become \n in the output.
 jq -c -n \

@@ -355,6 +355,15 @@ _assert_allow() {
   _assert_deny_for_rule "HOOKSPATH_OVERRIDE"
 }
 
+@test "HOOKSPATH_OVERRIDE: denial cites references/sandbox-and-git-config.md (T5.6)" {
+  # T5.6 spec compliance: HOOKSPATH_OVERRIDE explains the .git/config sandbox
+  # interaction (CON-7), so the denial body must cite sandbox-and-git-config.md.
+  run _run_hook_with_cmd "git config core.hooksPath .githooks"
+  _assert_deny_for_rule "HOOKSPATH_OVERRIDE"
+  [[ "$output" == *"sandbox-and-git-config.md"* ]] \
+    || { echo "expected sandbox-and-git-config.md citation, got: $output" >&2; return 1; }
+}
+
 @test "HOOKSPATH_OVERRIDE: git config core.hooksPath ALLOWED with setup sentinel" {
   export TCS_GIT_HELPERS_SETUP_ACTIVE=1
   run _run_hook_with_cmd "git config core.hooksPath .githooks"

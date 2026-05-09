@@ -233,6 +233,15 @@ _invoke_hook() {
   printf '%s' "$output" | grep -q 'CLAUDE_ALLOW_WORKTREE_EXIT_WITH_CHANGES'
 }
 
+@test "denial response cites references/worktree-discipline.md (T5.6)" {
+  # T5.6 spec compliance: every denial body must cite the relevant reference
+  # doc so the user has a self-contained pointer to the rationale.
+  _make_repo modified
+  run _invoke_hook "$MADE_REPO_PATH"
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | grep -q 'worktree-discipline.md'
+}
+
 @test "denial reason fits within 15 lines (EC1)" {
   _make_repo all-four
   run _invoke_hook "$MADE_REPO_PATH"
