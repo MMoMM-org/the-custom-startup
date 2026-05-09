@@ -146,6 +146,16 @@ yaml.safe_load(parts[1])
   grep -q -- '--overrides' "$SKILL_PATH"
 }
 
+@test "body documents default-mode structured sections (branch / PR / stale / version / suggestions)" {
+  # Spec compliance: default mode outputs structured sections
+  # (branch, PR state, stale branches, plugin version, suggestions).
+  grep -qiE 'branch'                  "$SKILL_PATH"
+  grep -qiE 'PR[[:space:]]*state|PR'  "$SKILL_PATH"
+  grep -qiE 'stale'                   "$SKILL_PATH"
+  grep -qiE 'plugin version|version'  "$SKILL_PATH"
+  grep -qiE 'suggestion'              "$SKILL_PATH"
+}
+
 # ---------------------------------------------------------------------------
 # Constraints — specific guarantees
 # ---------------------------------------------------------------------------
