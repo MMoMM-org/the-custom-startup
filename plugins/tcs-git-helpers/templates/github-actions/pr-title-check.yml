@@ -1,0 +1,59 @@
+# tcs-git-helpers: v1.0.0
+# pr-title-check.yml — Validate PR title follows Conventional Commits format.
+#
+# Mirrors the regex from templates/githooks/commit-msg so squash-merged PRs
+# land clean Conventional Commit messages on the default branch (where the
+# PR title becomes the commit subject).
+#
+# Install: copy to .github/workflows/pr-title-check.yml in your repo.
+# (The /tcs-git-helpers:setup skill does this when --with-gha is passed.)
+#
+# Spec refs:
+#   - PRD §Feature S2 — GHA opt-in, self-contained (no third-party actions)
+#   - SDD §GitHub Actions Templates
+#   - Mirrors regex contract from templates/githooks/commit-msg (lines 130-150)
+
+name: PR Title Check (Conventional Commits)
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # Allowed types match the commit-msg hook defaults:
+          #   feat fix docs style refactor test chore perf revert build ci
+          # Scope char class:  [a-z0-9._-]+   (lowercase alnum + . _ -)
+          # Optional `!` for breaking changes.
+          # Description: at least one character after ": ".
+          regex='^(feat|fix|docs|style|refactor|test|chore|perf|revert|build|ci)(\([a-z0-9._-]+\))?!?: .+'
+
+          if [[ "$PR_TITLE" =~ $regex ]]; then
+            echo "PR title matches Conventional Commits format: $PR_TITLE"
+            exit 0
+          fi
+
+          {
+            echo ""
+            echo "PR title does not match Conventional Commits format."
+            echo "  Got:      $PR_TITLE"
+            echo "  Expected: <type>(<scope>)?!?: <description>"
+            echo "  Allowed types: feat fix docs style refactor test chore perf revert build ci"
+            echo "  Examples:"
+            echo "    feat(api): add user endpoint"
+            echo "    fix: handle null in token parser"
+            echo "    feat(api)!: breaking change"
+            echo ""
+          } >&2
+          exit 1
