@@ -76,7 +76,7 @@ This phase validates the plugin end-to-end against real repos and real-world sce
   4. Validate: Each repo's existing tests/CI pass; no spurious denials; SessionStart brief renders correctly per repo.
   5. Success: 8/8 repos (TCS + 7 MiYo) have plugin enabled per PRD adoption KPI `[ref: PRD/§Cross-Repo Rollout]`.
 
-- [ ] **T6.5 Documentation Polish + CHANGELOG Finalization** `[activity: documentation]` `[parallel: true]`
+- [x] **T6.5 Documentation Polish + CHANGELOG Finalization** `[activity: documentation]` `[parallel: true]`
 
   1. Prime: Phases 1-5 deliverables; PRD §Vision; SDD §Glossary.
   2. Test: Manual review.
