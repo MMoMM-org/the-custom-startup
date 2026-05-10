@@ -730,6 +730,7 @@ _make_gh_repo() {
 # ---------------------------------------------------------------------------
 
 @test "C38 detect_conflicts treats absolute-path .git/hooks as default-equivalent" {
+  command -v python3 >/dev/null 2>&1 || skip "python3 required"
   # VS Code (and other tools) sometimes set core.hooksPath to the absolute
   # path of git's default hooks directory (e.g. /repo/.git/hooks), which is
   # functionally equivalent to an unset value. The detector must NOT ABORT

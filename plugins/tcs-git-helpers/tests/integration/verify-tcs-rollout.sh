@@ -39,6 +39,10 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --repo-path)
       shift
+      if [ "$#" -eq 0 ]; then
+        printf 'Error: --repo-path requires a PATH argument\n' >&2
+        exit 2
+      fi
       REPO_PATH="$1"
       ;;
     --repo-path=*)
