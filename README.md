@@ -59,7 +59,7 @@
 curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/install.sh | bash
 ```
 
-The interactive wizard lets you choose: install target (global / repo / custom path) · which plugins ([workflow](#workflow-plugin-tcs-workflow--core-workflow) / [team](#team-plugin-tcs-team--specialist-agents) / [helper](#helper-plugin-tcs-helper--skill-authoring--memory-bank-optional) / [patterns](#patterns-plugin-tcs-patterns--domain-pattern-skills-optional)) · output style · multi-AI templates · statusline variant · optional [Satori](docs/about/concepts.md#satori--mcp-gateway-optional) MCP gateway.
+The interactive wizard lets you choose: install target (global / repo / custom path) · which plugins ([workflow](#workflow-plugin-tcs-workflow--core-workflow) / [team](#team-plugin-tcs-team--specialist-agents) / [helper](#helper-plugin-tcs-helper--skill-authoring--memory-bank-optional) / [git-helpers](#git-helpers-plugin-tcs-git-helpers--git-workflow-discipline-optional) / [patterns](#patterns-plugin-tcs-patterns--domain-pattern-skills-optional)) · output style · multi-AI templates · statusline variant · optional [Satori](docs/about/concepts.md#satori--mcp-gateway-optional) MCP gateway.
 
 To uninstall:
 
