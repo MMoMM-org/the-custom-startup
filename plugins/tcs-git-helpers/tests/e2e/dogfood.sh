@@ -63,7 +63,6 @@ TOTAL_RUN=0
 TOTAL_PASS=0
 TOTAL_FAIL=0
 TOTAL_SKIP=0
-RESULT_LINES=""           # newline-joined; printed verbatim in the summary
 PERF_VIOLATIONS=""        # "scenario|budget|measured" lines
 START_EPOCH_S=$(date +%s)
 
@@ -196,8 +195,6 @@ _emit_result() {
       "$n" "$name" "$status" "$elapsed" "$over")
   fi
   printf '%s\n' "$line"
-  RESULT_LINES="${RESULT_LINES}${line}
-"
 }
 
 # ---------------------------------------------------------------------------
@@ -498,8 +495,8 @@ _scenario_4() {
     _run_bash_hook "$SCRIPTS_DIR/block-bad-git-ops.sh" \
       "git checkout feat/merge-commit"
     if _is_deny "$HOOK_STDOUT"; then
-      _contains "$HOOK_STDOUT" "RESUME_MERGED_BRANCH" \
-        && { echo "S4 part-B: merge-commit branch wrongly flagged"; exit 1; }
+      echo "S4 part-B: merge-commit branch wrongly denied: $HOOK_STDOUT"
+      exit 1
     fi
 
     exit 0
