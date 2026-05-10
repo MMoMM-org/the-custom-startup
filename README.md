@@ -146,6 +146,22 @@ Skill authoring tools, a layered **[Memory Bank](docs/about/concepts.md#memory-b
 | `/git-worktree` · `/finish-branch` | Git workflow management — isolated workspaces, branch completion |
 | `/docs` | Fetch and cache current Claude Code documentation on demand |
 
+### Git Helpers Plugin (`tcs-git-helpers`) — Git Workflow Discipline *(optional)*
+
+Machine-enforces the recurring git mistakes Claude makes across repos: pushes to closed PRs, branching off unfinished work, squash-merge resume, destructive ops, worktree-exit data loss, and more. Runs invisibly via hooks; you notice it only on a denial or a SessionStart brief.
+
+| Component | Purpose |
+|-----------|---------|
+| `/tcs-git-helpers:setup` | Per-repo install — writes `.githooks/`, sets `core.hooksPath`, detects and aborts on Husky/lefthook/pre-commit/simple-git-hooks conflicts |
+| `/tcs-git-helpers:status` | Per-repo health check — branch state, stale branches, override audit; `--cleanup` to delete stale, `--overrides` to review consumption log |
+| `PreToolUse` hooks | Bash/Edit/Write/ExitWorktree denials for 14+ destructive patterns, closed-PR pushes, squash-merge resume, unfinished-branch creation, worktree exit with uncommitted work |
+| `PostToolUse` hooks | Soft nudges after `git checkout -b`, `gh pr create`, `gh pr merge`, `git rebase`, `git stash pop` |
+| `SessionStart` hook | One-line branch awareness brief — branch, dirty/clean, ahead/behind, stale-merged count (cache-only, ≤300ms, no `gh` calls) |
+| `.githooks/` templates | Defense-in-depth: same deny rules enforced even when the plugin is disabled (`core.hooksPath` set at setup time) |
+| Override audit | `${CLAUDE_PLUGIN_DATA}/audit/overrides.jsonl` — append-only log of every `CLAUDE_ALLOW_*` env-var consumption |
+
+Optional: `setup --with-branch-protection` (GitHub single-coder branch protection preset) · `setup --with-gha` (GHA PR-title check workflow).
+
 ### Patterns Plugin (`tcs-patterns`) — Domain Pattern Skills *(optional)*
 
 **17 pattern skills** covering architecture, testing, languages, and platform. Install only what you need — they activate on trigger terms. Agents from `tcs-team` automatically use relevant pattern skills when delegating specialist work.

@@ -87,13 +87,23 @@ External:
 - [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
 - [GitHub Branch Protection API](https://docs.github.com/rest/branches/branch-protection)
 
-Internal (plugin-local; cited from denial messages — coming in later phases):
-- `references/squash-merge-trap.md` (coming in Phase 5)
-- `references/branch-lifecycle.md` (coming in Phase 5)
-- `references/conventional-commits.md` (coming in Phase 5)
-- `references/destructive-ops.md` (coming in Phase 5)
-- `references/worktree-discipline.md` (coming in Phase 5)
-- `references/migrating-from-husky.md` (coming in Phase 5)
+Internal (plugin-local; cited from denial messages by absolute plugin path):
+- `references/squash-merge-trap.md` — push-to-closed-PR, squash-merge fingerprint, cherry-pick recovery
+- `references/branch-lifecycle.md` — full branch Create → Work → PR → Merge → Cleanup loop
+- `references/conventional-commits.md` — format spec, allowlisted types, skip-format-check escape
+- `references/destructive-ops.md` — full destructive-op set and granular overrides
+- `references/worktree-discipline.md` — worktree usage, four-check exit guard, recovery
+- `references/migrating-from-husky.md` — removal procedures for Husky, lefthook, pre-commit, simple-git-hooks
+- `references/force-push-safety.md` — `--force` vs `--force-with-lease`, protected-branch behaviour
+- `references/rebase-vs-merge.md` — when each is appropriate, what each rewrites, post-rebase verification
+- `references/stale-branch-cleanup.md` — how stale branches accumulate and how `--cleanup` surfaces them
+- `references/working-tree-hygiene.md` — clean-tree discipline, stash vs branch, `.orig` leak detection
+- `references/pr-vs-commit-messages.md` — why PR title becomes the commit on squash-merge
+- `references/sandbox-and-git-config.md` — Claude Code sandbox interactions, `core.hooksPath` deny semantics
+- `references/gh-token-hygiene.md` — required scopes for `--with-branch-protection`, excessive-scope detection
+- `references/best-practices.md` — overview philosophy and four core principles
+
+See [references/INDEX.md](references/INDEX.md) for the full by-topic and by-failure-mode index.
 
 ## License
 

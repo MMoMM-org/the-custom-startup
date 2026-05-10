@@ -1,6 +1,6 @@
 ---
 title: "Phase 6: Integration, Rollout & E2E Validation"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 6
 ---
@@ -34,7 +34,7 @@ phase: 6
 
 This phase validates the plugin end-to-end against real repos and real-world scenarios.
 
-- [ ] **T6.1 E2E Test Suite (synthetic-repo dogfood)** `[activity: validate]`
+- [x] **T6.1 E2E Test Suite (synthetic-repo dogfood)** `[activity: validate]`
 
   1. Prime: research/performance.md §7 worst-case scenarios; SDD §Risks Implementation Gotchas; PRD §Feature M1-M12 acceptance criteria.
   2. Test: This task IS the test creation — write `tests/e2e/dogfood.sh` shell script driving `claude --plugin-dir plugins/tcs-git-helpers` through scripted flows:
@@ -52,7 +52,7 @@ This phase validates the plugin end-to-end against real repos and real-world sce
   4. Validate: All 10 scenarios pass; performance budgets honored; cascading-denial scenarios show all matched rules.
   5. Success: All M1-M12 + S1, S2 AC verified end-to-end; performance regressions caught.
 
-- [ ] **T6.2 TCS Itself — Phase 1 Rollout** `[activity: integration]`
+- [x] **T6.2 TCS Itself — Phase 1 Rollout** `[activity: integration]`
 
   1. Prime: PRD §Cross-Repo Rollout Wave 1; SDD §Implementation Boundaries (must-preserve list); current state of TCS repo.
   2. Test: Run `/tcs-git-helpers:setup` against TCS itself (this very repo); verify all 4 `.githooks/*` files written with markers; `core.hooksPath` set; no Husky/lefthook/etc. conflicts present (clean install).

@@ -28,7 +28,9 @@
 
   **Distribution & rollout:**
 
-  - Plugin layout per SDD §Building Block View: `hooks/` registration, `scripts/lib/*` shared helpers (git_state, config_parser, pattern_match, override, cache, audit_log), `scripts/*` six entry-point hooks, `templates/githooks/*` repo-installable scripts, `templates/github-actions/pr-title-check.yml`, `references/*` knowledge base, `skills/{setup,status}/SKILL.md`.
-  - macOS-first: bash 3.2.57 compatible (no `${var,,}`, no `mapfile`, no `declare -A`, POSIX ERE only — `[[:space:]]+` not `\s+`, `[[:<:]]`/`[[:>:]]` not `\b`).
+  - Plugin layout per SDD §Building Block View: `hooks/` registration, `scripts/lib/*` shared helpers (git_state, config_parser, pattern_match, override, cache, audit_log), `scripts/*` six entry-point hooks, `templates/githooks/*` repo-installable scripts, `templates/github-actions/pr-title-check.yml`, `references/*` knowledge base (14 docs), `skills/{setup,status}/SKILL.md`.
+  - macOS-first (CON-1): bash 3.2.57 compatible (no `${var,,}`, no `mapfile`, no `declare -A`, POSIX ERE only — `[[:space:]]+` not `\s+`, `[[:<:]]`/`[[:>:]]` not `\b`).
   - Zero-install: pure-bash `(cmd) & sleep 5; kill $!` timeout pattern (no `coreutils timeout` dependency).
+  - `gh` calls fail-open (CON-4): hooks never block on network or rate-limit failure; allow with stderr warning when state is indeterminate.
   - Existing user-global `~/.claude/hooks/block-main-edits.sh` retained as universal baseline; not retired.
+  - 12 Architecture Decision Records (ADR-1 through ADR-12) resolved: hook type selection, bash/Python hot/cold split, config parser strategy, cache format, override single-shot sentinel, push-state cache, audit log rotation, test framework, squash-merge detection, setup-conflict abort, setup-active sentinel, and single-coder branch-protection preset.
