@@ -105,9 +105,25 @@ fi
 # --- 4. Custom core.hooksPath (≠ .githooks) -------------------------------
 HOOKS_PATH="$(git config --get core.hooksPath 2>/dev/null || true)"
 if [ -n "$HOOKS_PATH" ] && [ "$HOOKS_PATH" != ".githooks" ]; then
-  _emit "ABORT" "core.hooksPath is set to '$HOOKS_PATH' (not '.githooks')."
-  _emit "REF"   "See plugins/tcs-git-helpers/references/migrating-from-husky.md"
-  _bump 2
+  # Normalize: VS Code (and other tools) may set hooksPath to the absolute
+  # path of git's own default hooks directory (e.g. /repo/.git/hooks), which
+  # is functionally equivalent to unset. Detect this by canonicalizing both
+  # HOOKS_PATH and <repo-root>/.git/hooks via python3 realpath (bash 3.2-safe;
+  # avoids GNU coreutils dep; python3 is ubiquitous on macOS/Linux).
+  if command -v python3 >/dev/null 2>&1; then
+    _resolved_hooks="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$HOOKS_PATH" 2>/dev/null || true)"
+    _git_default_hooks="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$ROOT/.git/hooks" 2>/dev/null || true)"
+    if [ -n "$_resolved_hooks" ] && [ "$_resolved_hooks" = "$_git_default_hooks" ]; then
+      _emit "INFO" "custom hooksPath resolves to git default (.git/hooks); treating as default-equivalent"
+      HOOKS_PATH=""
+    fi
+    unset _resolved_hooks _git_default_hooks
+  fi
+  if [ -n "$HOOKS_PATH" ]; then
+    _emit "ABORT" "core.hooksPath is set to '$HOOKS_PATH' (not '.githooks')."
+    _emit "REF"   "See plugins/tcs-git-helpers/references/migrating-from-husky.md"
+    _bump 2
+  fi
 fi
 
 # --- 5. Existing .githooks/ marker check ----------------------------------

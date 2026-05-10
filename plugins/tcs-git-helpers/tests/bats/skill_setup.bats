@@ -729,6 +729,26 @@ _make_gh_repo() {
 # Group D — bats test sanity (shellcheck-style)
 # ---------------------------------------------------------------------------
 
+@test "C38 detect_conflicts treats absolute-path .git/hooks as default-equivalent" {
+  # VS Code (and other tools) sometimes set core.hooksPath to the absolute
+  # path of git's default hooks directory (e.g. /repo/.git/hooks), which is
+  # functionally equivalent to an unset value. The detector must NOT ABORT
+  # in this case — it should emit an INFO message and exit 0.
+  _make_clean_repo "$TEST_TMP/abs-hookspath"
+  cd "$TEST_TMP/abs-hookspath"
+  # Set hooksPath to the absolute canonical path of .git/hooks (VS Code style).
+  git config core.hooksPath "$TEST_TMP/abs-hookspath/.git/hooks"
+  run "$LIB_DIR/detect_conflicts.sh"
+  # Must NOT abort (exit 0, not 2).
+  [ "$status" -eq 0 ]
+  # Must emit an INFO message indicating it recognized the default-equivalent.
+  echo "$output" | grep -qiE 'INFO.*default|default.*equivalent|resolves.*\.git/hooks'
+}
+
+# ---------------------------------------------------------------------------
+# Group D — bats test sanity (shellcheck-style)
+# ---------------------------------------------------------------------------
+
 @test "D01 SKILL.md has no tab characters in body (markdown convention)" {
   ! grep -P '\t' "$SKILL_PATH" 2>/dev/null || skip "grep -P unsupported on this host"
 }
