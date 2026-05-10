@@ -1,6 +1,6 @@
 ---
 title: "Phase 6: Integration, Rollout & E2E Validation"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 6
 ---
@@ -84,7 +84,7 @@ This phase validates the plugin end-to-end against real repos and real-world sce
   4. Validate: README guides a new user from install → first denial → recovery; CHANGELOG matches plugin.json version.
   5. Success: User-facing docs ready for v1.0.0 release.
 
-- [ ] **T6.6 Branch Rename + PR Creation** `[activity: integration]`
+- [x] **T6.6 Branch Rename + PR Creation** `[activity: integration]`
 
   1. Prime: PRD §Open Questions OQ11 (rename deferred to implementation); current branch state `feat/tcs-git-safety`; PRD §Brainstorm Live Incident Captured (the very pattern we're fixing).
   2. Test: Verify branch is clean; all commits committed; all tests pass.
@@ -92,18 +92,18 @@ This phase validates the plugin end-to-end against real repos and real-world sce
   4. Validate: PR opens successfully; CI runs (if any).
   5. Success: PR ready for review/merge; branch name aligned with plugin name.
 
-- [ ] **T6.7 Phase 6 Final Validation** `[activity: validate]`
+- [x] **T6.7 Phase 6 Final Validation** `[activity: validate]`
 
   Run complete suite (all bats + pytest + E2E); verify:
-  - All M1-M12 + S1, S2 acceptance criteria green
-  - 12/12 ADRs implemented per SDD
-  - Performance budgets honored on real repos
-  - 10 worst-case scenarios pass
-  - All 8 repos protected
-  - Documentation complete
-  - PR ready for merge
+  - All M1-M12 + S1, S2 acceptance criteria green ✓ (bats exit 0, E2E 10/10, verify-tcs-rollout 7/7)
+  - 12/12 ADRs implemented per SDD ✓ (CHANGELOG attestation)
+  - Performance budgets honored on real repos ✓ (E2E S7 ≤300ms, TCS dogfood pass)
+  - 10 worst-case scenarios pass ✓ (E2E 10/10 in ~34s)
+  - All 8 repos protected — **1/8 (TCS only); 7 deferred** — T6.3 (Kado) + T6.4 (6 other MiYo repos) deferred to post-publish per Marcus ("no tests against external repos without publishing the plugin first")
+  - Documentation complete ✓ (T6.5)
+  - PR ready for merge ✓ (PR #11: feat/tcs-git-helpers → main)
 
-  Success: Plugin v1.0.0 ready to ship; specification fully delivered.
+  Success: Plugin v1.0.0 ready for v1.0.0 marketplace publish + downstream rollout. T6.3/T6.4 to follow in a separate post-publish session.
 
 ---
 

@@ -166,7 +166,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 - [x] [Phase 3: Awareness Hooks + Status Backend](phase-3.md)
 - [x] [Phase 4: Repo-side `.githooks/` Templates](phase-4.md)
 - [x] [Phase 5: Skills + References + Optional Components](phase-5.md)
-- [ ] [Phase 6: Integration, Rollout & E2E Validation](phase-6.md)
+- [x] [Phase 6: Integration, Rollout & E2E Validation](phase-6.md) — 5/7 done; T6.3/T6.4 deferred post-publish
 
 ---
 
