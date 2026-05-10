@@ -1,6 +1,6 @@
 ---
 name: obsidian-plugin
-description: "Use when building or reviewing Obsidian plugins — covers lifecycle subtleties, listener and timer cleanup, mobile compatibility, settings reactivity, vault write and event discipline, real-vault testing patterns, and common API gotchas (normalizePath, vault.process vs vault.modify, processFrontMatter, popout-window globals, layout-ready timing, Sync-aware persistence)."
+description: "Use when building or reviewing Obsidian plugins — covers lifecycle, listener/timer cleanup, mobile compatibility, settings reactivity, vault write/event discipline, XSS-safe DOM, SecretStorage for keys, requestUrl over fetch, sentence-case UI text, and common API gotchas (normalizePath, vault.process vs modify, processFrontMatter, popout-window globals, layout-ready timing, Sync-aware persistence, platform CSS body classes)."
 user-invocable: true
 argument-hint: "[plugin source path to audit]"
 allowed-tools: Read, Bash, Grep, Glob
@@ -15,7 +15,7 @@ Act as an Obsidian plugin developer. Respect the plugin lifecycle. Never leak li
 ## Interface
 
 ObsidianViolation {
-  kind: LISTENER_LEAK | DOM_BYPASS | MOBILE_INCOMPATIBLE | LIFECYCLE_VIOLATION | VAULT_WRITE_UNGUARDED | LINT_RULE_DISABLED
+  kind: LISTENER_LEAK | DOM_BYPASS | MOBILE_INCOMPATIBLE | LIFECYCLE_VIOLATION | VAULT_WRITE_UNGUARDED | LINT_RULE_DISABLED | XSS_DOM_INJECTION | GLOBAL_APP | DEFAULT_HOTKEY | INLINE_STYLE | ACTIVE_LEAF | VIEW_REF_LEAK | INEFFICIENT_FILE_LOOKUP | RAW_FETCH | SETTINGS_HEADING_RAW
   file: string
   line?: number
   fix: string
@@ -44,6 +44,12 @@ State {
 - Use `app.fileManager.processFrontMatter(file, fm => { ... })` for frontmatter mutations.
 - Use `app.fileManager.trashFile(file)` for deletes — honors the user's trash preference.
 - Surface validation errors inline next to the offending input — never silently drop a value in `onChange`.
+- Use `requestUrl` (from `obsidian`) over `fetch` for HTTP — handles desktop/mobile CORS uniformly. Mark `// allow-fetch` on the rare line that genuinely needs `fetch` (e.g. streaming responses).
+- For settings section headings, use `new Setting(containerEl).setName("…").setHeading()` — never raw `<h2>` / `createEl('h2', …)`. Same goes for `<h1>`–`<h6>` inside settings tabs.
+- Pick the right command callback: `callback` (unconditional), `checkCallback(checking)` (conditional — return `boolean` for availability when `checking` is true; execute when false), `editorCallback(editor, view)` (needs an active editor). The wrong choice breaks command-palette filtering and visibility.
+- For API keys, tokens, passwords use `SecretStorage` / `SecretComponent` (Obsidian 1.11.4+). Persist the **secret ID** (lowercase alphanumeric + dashes) in `data.json`, never the secret value — this is the proper resolution to the Sync-replication concern (see Settings Reactivity → Hybrid Storage and the Secrets section in `reference/obsidian-api.md`).
+- Use sentence case for all UI text (commands, settings names, headings, buttons). "Template folder location", not "Template Folder Location".
+- Drop redundant "settings" from settings-tab headings. "Advanced", not "Advanced settings".
 
 **Never:**
 - Use `document.addEventListener` directly — always use `registerDomEvent`.
@@ -56,11 +62,20 @@ State {
 - Pass `typedArray.buffer` to a binary write call without verifying it's the exact slice — `subarray()` results expose the entire backing ArrayBuffer.
 - Pass an OS-absolute path through `normalizePath` — it strips leading `/` and silently re-roots inside the vault.
 - Persist credentials or per-device state in `data.json` — Obsidian Sync replicates `data.json` byte-for-byte.
+- Use `el.innerHTML = ...`, `el.outerHTML = ...`, or `insertAdjacentHTML(...)` — XSS risk and bypasses Obsidian's DOM helpers. Use `containerEl.createDiv/createEl/createSpan` for construction and `el.empty()` to clear.
+- Use the global `app` / `window.app` — always `this.app` from the Plugin instance. The global is debug-only and may be removed in a future Obsidian version.
+- Set default `hotkeys: [...]` in `addCommand({...})` — they conflict with other plugins and override the user's mapping. Let users assign their own via Settings → Hotkeys.
+- Set inline hardcoded styles (`el.style.color = ...`, `el.style.backgroundColor = ...`) on plugin-rendered DOM — forces themes into `!important` overrides. Use prefixed CSS classes in `styles.css` with Obsidian variables (`var(--text-normal)`, `var(--background-modifier-error)`, `var(--radius-s)`, etc.).
+- Read `app.workspace.activeLeaf` directly — use `app.workspace.getActiveViewOfType(MarkdownView)` for the markdown view, or `app.workspace.activeEditor?.editor` for the active editor.
+- Store references to custom views (`this.view = new MyView()` inside `registerView`) — leaks across plugin reloads. Use `(leaf) => new MyView(leaf)` and access live instances via `app.workspace.getLeavesOfType(VIEW_TYPE)`.
+- Detach leaves in `onunload` (`workspace.detachLeavesOfType(VIEW_TYPE)`) — leaves should reinitialize at their original position when the user updates the plugin. Closing them on every update is hostile UX.
+- Iterate `vault.getFiles().find(f => f.path === path)` for path lookup — O(n) per call. Use `vault.getFileByPath` / `vault.getFolderByPath` / `vault.getAbstractFileByPath` (constant-time).
 - Disable **any** ESLint rule — no `// eslint-disable`, no `// eslint-disable-line`, no `// eslint-disable-next-line`, no `'rule': 'off'` entries in `.eslintrc*`. The Obsidian community-plugin reviewer bot (`obsidianmd/obsidian-releases`) scans submission PRs for disabled rules and **rejects the plugin from official registration** if any are found. This applies to every rule the project's ESLint config loads — `obsidianmd/*`, `@typescript-eslint/*`, base `eslint:recommended`, and any other plugin. If a rule conflicts with the code, **change the code, not the rule**. Document the workaround in a code comment when the alternative is non-obvious.
 
 ## Reference Materials
 
 - `reference/obsidian-api.md` — API patterns, lifecycle/DOM/settings/vault subtleties, misc gotchas, concurrency, anti-pattern catalog
+- `reference/ui-conventions.md` — settings-tab heading style, sentence-case copy, `SettingGroup` (1.11.0+), `SecretStorage` / `SecretComponent` for keys (1.11.4+) — load when designing or auditing settings-tab UI or secret persistence
 - `reference/testing-patterns.md` — Vitest setup, mock parity, live-test discipline, hot-reload, `obsidianmd/*` lint rationale
 - `reference/architectural-patterns.md` — adapter layout, permission/trust boundaries, audit log shape, UI patterns, build/bundle/release (load when designing structure beyond a few hundred LOC)
 - `reference/path-sanitization.md` — deterministic 10-step pipeline for OS-FS writes outside the vault
@@ -103,12 +118,14 @@ accordingly: `outfile: "main.js"`.
 In onload, register everything through Obsidian's APIs:
 - Settings: `await this.loadSettings()` first
 - Setting tab: `this.addSettingTab(...)`
-- Commands: `this.addCommand(...)` for each user action
+- Commands: `this.addCommand(...)` for each user action — pick the right callback type (`callback` / `checkCallback` / `editorCallback`)
 - Events: `this.registerEvent(...)` for vault/workspace events
 - DOM events: `this.registerDomEvent(...)` — never raw addEventListener
 - Intervals: `this.registerInterval(...)` — never raw setInterval
-- Views: `this.registerView(...)` if using custom leaves
+- Views: `this.registerView(TYPE, leaf => new MyView(leaf))` if using custom leaves — never store the instance on `this`
 - Ribbon: `this.addRibbonIcon(...)` if applicable
+- HTTP: use `requestUrl(...)` from `obsidian` — never `fetch`
+- Secrets: use `SecretStorage` / `SecretComponent` for keys/tokens/passwords — never put the value in `data.json`
 
 ### 3. Mobile Compatibility Pass
 
@@ -191,7 +208,46 @@ grep -rn -E "['\"][a-z@/-]+['\"]\s*:\s*['\"]?off['\"]?" "$TARGET" --include=".es
 
 Flag **every match** as CRITICAL with kind `LINT_RULE_DISABLED`. The Obsidian community-plugin reviewer bot (`obsidianmd/obsidian-releases`) scans submission PRs for disabled rules and rejects plugins with any disabled rule — `obsidianmd/*`, `@typescript-eslint/*`, or otherwise. There is no "justified disable" exception at the bot. Fix: change the code to satisfy the rule. If the rule is genuinely wrong for the project, raise it upstream — do not disable locally.
 
-### 12. Report
+### 12. Scan for Plugin-Guideline Violations (Submission Blockers + Theme/UX Hygiene)
+
+```bash
+# innerHTML / outerHTML / insertAdjacentHTML — XSS_DOM_INJECTION (CRITICAL)
+grep -rn -E "\.innerHTML\s*=|\.outerHTML\s*=|insertAdjacentHTML\s*\(" "$TARGET" --include="*.ts" --include="*.tsx" 2>/dev/null
+
+# Global app / window.app — GLOBAL_APP (HIGH); excludes `this.app` lines
+grep -rn -E "(^|[^.])\bapp\.(workspace|vault|fileManager|metadataCache)\b|window\.app\b" "$TARGET" --include="*.ts" --include="*.tsx" 2>/dev/null | grep -v "this\.app"
+
+# Default hotkeys in addCommand — DEFAULT_HOTKEY (MEDIUM); single-line form only
+grep -rn -E "addCommand\s*\(\s*\{[^}]*\bhotkeys\s*:" "$TARGET" --include="*.ts" --include="*.tsx" 2>/dev/null
+
+# Inline hardcoded styles — INLINE_STYLE (HIGH)
+grep -rn -E "\.style\.(color|backgroundColor|background|borderColor|fontFamily|fontSize)\s*=\s*['\"]" "$TARGET" --include="*.ts" --include="*.tsx" 2>/dev/null
+
+# Direct workspace.activeLeaf access — ACTIVE_LEAF (HIGH)
+grep -rn -E "workspace\.activeLeaf\b" "$TARGET" --include="*.ts" --include="*.tsx" 2>/dev/null
+
+# Stored view reference (zero-arg arrow in registerView) — VIEW_REF_LEAK (MEDIUM)
+grep -rn -E "registerView\s*\([^,]+,\s*\(\s*\)\s*=>" "$TARGET" --include="*.ts" --include="*.tsx" 2>/dev/null
+
+# Inefficient file lookup via getFiles().find/filter — INEFFICIENT_FILE_LOOKUP (MEDIUM)
+grep -rn -E "vault\.getFiles\s*\(\s*\)\.(find|filter)\s*\(" "$TARGET" --include="*.ts" --include="*.tsx" 2>/dev/null
+
+# fetch() instead of requestUrl — RAW_FETCH (LOW); allow opt-out via // allow-fetch
+grep -rn -E "(^|[^.])\bfetch\s*\(" "$TARGET" --include="*.ts" --include="*.tsx" 2>/dev/null | grep -v "// allow-fetch"
+
+# Raw <h1>–<h6> in settings/UI — SETTINGS_HEADING_RAW (LOW)
+grep -rn -E "createEl\s*\(\s*['\"]h[1-6]['\"]" "$TARGET" --include="*.ts" --include="*.tsx" 2>/dev/null
+```
+
+Severity mapping:
+- `XSS_DOM_INJECTION` (innerHTML/outerHTML/insertAdjacentHTML) → CRITICAL — submission-blocker, security risk.
+- `INLINE_STYLE`, `ACTIVE_LEAF`, `GLOBAL_APP` → HIGH — theme-incompatibility / future-removal / API divergence.
+- `DEFAULT_HOTKEY`, `VIEW_REF_LEAK`, `INEFFICIENT_FILE_LOOKUP` → MEDIUM.
+- `RAW_FETCH`, `SETTINGS_HEADING_RAW` → LOW.
+
+Notes on the greps: the default-hotkey check is single-line; multi-line `addCommand({ ... \n hotkeys: ... })` calls won't match (use a manual scan for any `addCommand` blocks with `hotkeys:` if the audit warrants it). The global-app check excludes lines that contain `this.app` — comment-only mentions of `app.foo` may yield benign hits.
+
+### 13. Report
 
 Group by violation kind. Include concrete Obsidian API replacement for each.
 

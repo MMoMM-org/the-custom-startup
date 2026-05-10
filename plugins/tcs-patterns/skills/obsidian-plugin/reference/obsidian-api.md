@@ -103,6 +103,60 @@ createDiv({ cls: "my-row" });
 
 **Per-modal aria IDs use `crypto.randomUUID()`, not module-scoped counters.** A pattern like `let nextId = 0; const id = "modal-" + (++nextId);` survives plugin disable/enable because the module is cached — the counter accumulates indefinitely and can collide across plugins. `crypto.randomUUID()` is reload-safe and conflict-proof.
 
+**Never use `innerHTML` / `outerHTML` / `insertAdjacentHTML`.** These are XSS-prone when any operand is user-derived (note text, frontmatter, search results, settings input) and they bypass Obsidian's DOM helpers entirely. Use the prototype helpers:
+
+```typescript
+// Wrong — XSS risk + framework bypass
+containerEl.innerHTML = `<div class="row">${userText}</div>`;
+el.insertAdjacentHTML("beforeend", `<span>${count}</span>`);
+
+// Right — composable, escapes by default
+const row = containerEl.createDiv({ cls: "row" });
+row.setText(userText);
+const badge = el.createSpan({ text: String(count) });
+```
+
+To clear an element, use `el.empty()` — never `el.innerHTML = ""` (the assignment-form is still a runtime hazard if a tool later mistakes it for safe set-and-clear). The community-plugin reviewer bot rejects submissions with these patterns.
+
+**Never use the global `app` / `window.app`.** The global is debug-only and Obsidian has signalled it may be removed in a future build. Always reach the app via `this.app` from the plugin instance, or via the explicit `App` argument that Obsidian passes to `PluginSettingTab`, `Modal`, `ItemView`, `SuggestModal`, etc. constructors.
+
+```typescript
+// Wrong — relies on a debug global
+const file = app.vault.getFileByPath("foo.md");
+
+// Right — use the plugin's app reference
+const file = this.app.vault.getFileByPath("foo.md");
+
+// Right — inside a Modal/View/SettingTab, the App is in scope
+class MyModal extends Modal {
+  onOpen() { this.app.workspace.openLinkText(...); }
+}
+```
+
+**Never set inline hardcoded styles on plugin DOM.** `el.style.color = "red"` and friends force theme authors into `!important` overrides and break theme compatibility entirely for color/background/border properties that themes are expected to control. Put styling in `styles.css` with a prefixed class and reference Obsidian CSS variables:
+
+```css
+/* styles.css */
+.myplugin-warning {
+  color: var(--text-error);
+  background-color: var(--background-modifier-error);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: var(--size-2-3);
+}
+```
+
+```typescript
+// Wrong
+el.style.color = "white";
+el.style.backgroundColor = "red";
+
+// Right
+el.addClass("myplugin-warning");
+```
+
+Reserve direct `el.style.X = ...` writes for layout-arithmetic that genuinely depends on runtime values (computed positions, drag offsets, animated transforms). For static appearance, always go through CSS.
+
 ### Accessibility Minima
 
 - Dynamic-update regions (recovery banners, filter-result counts, status text) need `aria-live="polite"`.
@@ -185,7 +239,7 @@ await this.app.vault.adapter.write(sidecar, JSON.stringify(deviceState));
 
 Whether new state synced from a peer device should be enabled by default on the receiving device is a plugin-design decision — both default-on and default-off are legitimate. Document the choice for users so the behaviour is predictable.
 
-Credentials are a special case: do not put them in `data.json`. Sync would replicate them across devices, including ones the user does not control.
+Credentials are a special case: do not put them in `data.json`. Sync would replicate them across devices, including ones the user does not control. Use `SecretStorage` / `SecretComponent` instead — see `reference/ui-conventions.md` → Secrets and Sensitive Data.
 
 ### Notice Lifetime Conventions
 
@@ -352,6 +406,40 @@ this.addCommand({
 });
 ```
 
+### Three Callback Types — Pick Deliberately
+
+Obsidian's `addCommand` accepts exactly one callback shape per command. Picking the wrong one breaks the command palette's filtering and visibility:
+
+| Shape | When to pick | Effect on palette |
+|---|---|---|
+| `callback: () => void` | Command always runs (no preconditions) | Always visible |
+| `checkCallback: (checking: boolean) => boolean \| void` | Conditional — depends on workspace state | Hidden when `checking=true` returns `false` |
+| `editorCallback: (editor: Editor, view: MarkdownView) => void` | Needs an active markdown editor | Auto-hidden when no markdown view is active |
+
+`checkCallback` is the trickiest: Obsidian invokes it twice. First with `checking=true` to ask "is this command available right now?" — return `true`/`false` to control palette visibility. Then if true and the user actually invokes it, with `checking=false` to execute. The execute branch can return nothing.
+
+```typescript
+this.addCommand({
+  id: "summarise-selection",
+  name: "Summarise selection",
+  checkCallback: (checking) => {
+    const editor = this.app.workspace.activeEditor?.editor;
+    if (!editor || !editor.somethingSelected()) return false;
+    if (checking) return true;
+    this.summarise(editor.getSelection());
+  },
+});
+```
+
+Common mistakes:
+- Using `callback` for editor-dependent commands → command always shows but throws when no editor.
+- Using `checkCallback` but always returning `true` regardless of state → no filtering, defeats the point.
+- Using `editorCallback` for commands that work with any leaf type → command vanishes for users in other view types.
+
+### Default Hotkeys — Don't
+
+The `hotkeys: [...]` field is a **suggestion** Obsidian applies on first install. Setting it conflicts with other plugins and overrides any mapping the user already configured for that key. Omit it entirely; users can assign hotkeys via Settings → Hotkeys after install. The exception: shipping a plugin meant exclusively for personal use where you control all installs.
+
 ---
 
 ## Settings
@@ -416,6 +504,10 @@ class MySettingTab extends PluginSettingTab {
 }
 ```
 
+### See Also: UI Conventions
+
+Settings-tab heading style (`Setting.setHeading()` over raw `<h2>`), sentence-case copy, the `SettingGroup` API (Obsidian 1.11.0+), and the `SecretStorage` / `SecretComponent` flow for keys and tokens (1.11.4+) are documented in `reference/ui-conventions.md`. Load that file when designing or auditing the user-facing surface of a settings tab or any code path that persists secrets.
+
 ---
 
 ## Vault Operations
@@ -446,6 +538,22 @@ const files = this.app.vault.getMarkdownFiles();
 // NEVER: require("fs") — bypasses Obsidian cache and sync
 ```
 
+### Don't Iterate for Path Lookup
+
+`vault.getFileByPath` / `getFolderByPath` / `getAbstractFileByPath` are constant-time lookups against an in-memory index. `vault.getFiles().find(f => f.path === path)` is O(n) — every call walks the whole vault. At 10k+ notes the difference is several ms per call, which compounds quickly inside change listeners or batched ops.
+
+```typescript
+// Wrong — linear scan per call
+const file = this.app.vault.getFiles().find((f) => f.path === path);
+
+// Right — indexed lookup
+const file = this.app.vault.getFileByPath(path);                  // TFile | null
+const folder = this.app.vault.getFolderByPath(path);              // TFolder | null
+const af = this.app.vault.getAbstractFileByPath(path);            // TFile | TFolder | null
+```
+
+The same applies to filtered enumerations: if you need "all PDFs," prefer `getFiles()` once and filter once, not `getFiles().filter` in a hot loop.
+
 ---
 
 ## Workspace API
@@ -472,6 +580,25 @@ if (view) {
   editor.setLine(line, "new content");
 }
 ```
+
+### Avoid `workspace.activeLeaf`
+
+`workspace.activeLeaf` exists but is unreliable: it can be `null`, can point at a non-markdown view (canvas, base, custom plugin view), and its identity is the framework's, not yours — using it as a key for "the user's working file" is wrong. Two safer entry points cover almost all real cases:
+
+```typescript
+// "I want the active markdown view" — typed, null-safe
+const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+if (!view) return;
+
+// "I want whatever editor is active right now" — works in Markdown + Canvas etc.
+const editor = this.app.workspace.activeEditor?.editor;
+if (!editor) return;
+
+// "I want the active file" — also works without an editor (e.g. PDF view)
+const file = this.app.workspace.getActiveFile();
+```
+
+`getActiveViewOfType(T)` accepts any view subclass. Pass your own `ItemView` subclass to scope to your plugin's leaves. If you find yourself reaching for `activeLeaf` to inspect leaf identity for layout work, the right tool is usually `getLeavesOfType(VIEW_TYPE)` (see Custom Views).
 
 ---
 
@@ -509,6 +636,52 @@ async activateView() {
   workspace.revealLeaf(leaf);
 }
 ```
+
+### Don't Store View References on the Plugin
+
+A common bug: capturing the view instance in the `registerView` factory so the plugin can "talk to" it later.
+
+```typescript
+// Wrong — leaks across reloads, breaks multi-leaf usage
+this.registerView(VIEW_TYPE, () => {
+  this.view = new MyView(/* leaf? — not in scope */);
+  return this.view;
+});
+
+// Right — factory takes the leaf, plugin doesn't hold the reference
+this.registerView(VIEW_TYPE, (leaf) => new MyView(leaf));
+```
+
+Two distinct problems with the wrong form:
+1. **Memory leak across plugin reload.** Disabling the plugin clears Obsidian's leaf references but the plugin instance's `this.view` keeps the view alive (along with its DOM, listeners, and any state it captured). On re-enable, a new instance is created and the old one is now unreachable garbage.
+2. **Wrong with multiple leaves.** Users can split a leaf or drag the same view into multiple panes. `this.view` only ever holds the most recent one; mutations against it desync the others.
+
+The right access pattern is to ask the workspace for live instances when you need them:
+
+```typescript
+for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+  if (leaf.view instanceof MyView) {
+    leaf.view.refresh();
+  }
+}
+```
+
+### Don't `detachLeavesOfType` in `onunload`
+
+A frequent pattern in older sample plugins:
+
+```typescript
+// Wrong — closes the user's leaves on every plugin update
+onunload() {
+  this.app.workspace.detachLeavesOfType(VIEW_TYPE);
+}
+```
+
+Plugin updates trigger an unload + reload cycle. If `onunload` detaches all leaves of your view type, every plugin update silently closes whatever the user had open in your view, costing them their place in any session-state the view was holding. Obsidian's leaf-restoration mechanism can re-create leaves at their last known position when the plugin re-registers the view type — but only if you don't actively detach them.
+
+The right behaviour: `onunload` cleans up resources you manage manually (timers, file handles, websocket connections) and lets Obsidian handle leaf cleanup. The view's own `onClose()` is where per-leaf teardown lives.
+
+The exception is when the user explicitly disables the plugin (not when it's auto-reloaded for an update). There's no API surface that distinguishes these cleanly, so the safe default is: never detach.
 
 ---
 
@@ -559,6 +732,49 @@ if (Platform.isDesktop) {
 ```
 
 Set `isDesktopOnly: true` in manifest.json ONLY if you have unguarded Node.js API usage.
+
+### Body Classes for CSS Styling
+
+Obsidian sets classes on `<body>` describing the platform — use them in `styles.css` instead of running JS feature-checks:
+
+| Class | Set when |
+|---|---|
+| `.is-mobile` | Any mobile device (iOS or Android) |
+| `.is-tablet` | Mobile device with tablet form factor |
+| `.is-phone` | Mobile device with phone form factor |
+| `.is-ios` | iOS specifically (combines with `.is-mobile`) |
+| `.mod-windows` | Desktop on Windows |
+| `.mod-macos` | Desktop on macOS |
+| `.mod-linux` | Desktop on Linux |
+
+**Two critical absences:**
+- **There is no `.is-desktop` class.** Target desktop with `:not(.is-mobile)`.
+- **There is no `.mod-ios` or `.mod-android`.** For iOS use `.is-ios`. For Android use `.is-mobile:not(.is-ios)`.
+
+```css
+/* Desktop-only sidebar width */
+body:not(.is-mobile) .myplugin-sidebar { width: 320px; }
+
+/* Mobile: full-width, fixed */
+.is-mobile .myplugin-sidebar { width: 100%; position: fixed; }
+
+/* iOS-specific scroll fix */
+.is-mobile.is-ios .myplugin-pane { -webkit-overflow-scrolling: touch; }
+
+/* Android-specific (no .is-android exists) */
+.is-mobile:not(.is-ios) .myplugin-pane { /* ... */ }
+
+/* macOS traffic-light gutter */
+.mod-macos .myplugin-titlebar { padding-left: 80px; }
+```
+
+### Touch Target Minima
+
+On mobile, interactive elements (buttons, ribbon icons, list-row tap targets) need a minimum hit area of **44×44 px**. Below that, mistapping rates climb sharply on phone-form-factor screens. Use padding and `min-width` / `min-height` on the *interactive element*, not its child text/icon. Hover states aren't reliable on touch — provide a clear non-hover affordance (color change, ripple, immediate state transition) for any tap-driven action.
+
+### `addStatusBarItem` Is Desktop-Only
+
+`this.addStatusBarItem()` is a no-op on mobile — Obsidian Mobile has no status bar. If status-bar text is the *only* surface a feature uses, the feature is silently absent on mobile. Either provide a parallel mobile surface (a ribbon icon, a command, a small floating UI), gate the feature with `Platform.isMobile`, or document that this feature is desktop-only.
 
 ---
 
@@ -696,6 +912,29 @@ Either path keeps every ESLint rule enabled.
 
 Passing an OS-absolute path silently re-roots it inside the vault and finds nothing. Convert to vault-relative first; for files outside the vault, fall back to a Notice surfacing the absolute path so the user can navigate manually.
 
+### `requestUrl` Over `fetch`
+
+For HTTP from a plugin, use `requestUrl` from `obsidian` rather than the global `fetch`. `fetch` runs through the renderer's CORS layer, which differs across desktop and mobile and bites cross-origin endpoints that work fine in a node-side test but fail in the running plugin. `requestUrl` bypasses CORS entirely (the request is made by the host, not the renderer), so behaviour is uniform across platforms.
+
+```typescript
+import { requestUrl } from "obsidian";
+
+const res = await requestUrl({
+  url: "https://api.example.com/v1/things",
+  method: "POST",
+  headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+  body: JSON.stringify({ q: "search term" }),
+  throw: false,                       // do not throw on non-2xx — inspect res.status
+});
+if (res.status >= 200 && res.status < 300) {
+  const data = res.json;              // already parsed
+}
+```
+
+`requestUrl` returns `{ status, headers, text, json, arrayBuffer }`. The body forms are lazy properties — read whichever you need.
+
+The rare case for keeping `fetch`: streaming responses (server-sent events, large file streams) — `requestUrl` buffers the full body. Mark such call sites with a `// allow-fetch` comment so the audit grep skips them.
+
 ### Asset URLs Need `getResourcePath`
 
 Plugin DOM rendering has no notion of "where the plugin is installed." For `<img>`, `<video>`, `<audio>` `src` attributes pointing at files inside the plugin install dir:
@@ -808,3 +1047,16 @@ One-line check beats `AbortController` plumbing for this case.
 | `<img src="assets/x.png">` from plugin DOM | No notion of plugin install dir | `app.vault.adapter.getResourcePath(pluginDir + "/" + rel)` |
 | Module-scoped state for cross-instance pattern | Survives plugin disable/enable; accumulates ghost handlers | Field-scoped on plugin instance with explicit teardown |
 | Bundling `electron` or `@electron/remote` | Bundle bloat; runtime mismatch with Electron host | Mark both as `external` in esbuild |
+| `el.innerHTML = userText` / `insertAdjacentHTML(...)` | XSS risk; bypasses Obsidian's DOM helpers | `el.createDiv/createEl/createSpan(opts)` + `el.empty()` to clear |
+| Global `app` or `window.app` | Debug-only; may be removed in future Obsidian builds | `this.app` from the plugin instance, or the `App` arg passed to Modal/View/SettingTab |
+| `addCommand({ ..., hotkeys: [...] })` | Conflicts with other plugins; overrides user mapping | Omit; let users assign via Settings → Hotkeys |
+| `el.style.color = "red"` on plugin DOM | Forces theme authors into `!important` overrides | CSS class with `var(--text-error)` etc. in `styles.css` |
+| `workspace.activeLeaf` direct access | Unreliable null + non-markdown leaf types | `getActiveViewOfType(MarkdownView)` / `activeEditor?.editor` / `getActiveFile()` |
+| `registerView(TYPE, () => new View())` capturing on `this` | Memory leak on reload + breaks multi-leaf | `registerView(TYPE, leaf => new View(leaf))` + `getLeavesOfType(TYPE)` for access |
+| `workspace.detachLeavesOfType(TYPE)` in `onunload` | Closes user's leaves on every plugin update | Don't detach; let Obsidian restore leaves on re-register |
+| `getFiles().find(f => f.path === path)` | O(n) per call — slow on large vaults | `getFileByPath` / `getFolderByPath` / `getAbstractFileByPath` |
+| `fetch(url)` from a plugin | CORS divergence across desktop/mobile renderers | `requestUrl({ url, ... })` from `obsidian` (renderer bypass; uniform behaviour) |
+| `containerEl.createEl("h2", { text })` for settings sections | Document-level styling — themes can't target it | `new Setting(containerEl).setName("...").setHeading()` |
+| Title Case in UI text ("Template Folder Location") | Off-house-style; visually inconsistent with native UI | Sentence case ("Template folder location") |
+| "Advanced settings" / "Connection settings" headings | Redundant — everything in the tab is a setting | "Advanced" / "Connection" |
+| API key / token persisted in `data.json` | Replicated to every Sync-paired device | `SecretStorage` + `SecretComponent`; persist secret ID, not value |
