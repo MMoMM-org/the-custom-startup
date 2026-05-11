@@ -127,7 +127,7 @@ Internally this opens a `(subshell)`, exports `TCS_GIT_HELPERS_SETUP_ACTIVE=1`, 
 
 After this step, the repo has:
 
-- `<repo>/.githooks/{pre-commit,pre-push,commit-msg,post-merge}` (executable, version-banner v1.0.0)
+- `<repo>/.githooks/{pre-commit,pre-push,commit-msg,post-merge}` (executable, version banner substituted from `plugin.json` at install time — see ADR-13)
 - `<repo>/.githooks/.config.example` and `<repo>/.githooks/exclude-paths.example`
 - `<repo>/.git/config` with `[core] hooksPath = .githooks`
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tcs-git-helpers: v2.0.0
+# tcs-git-helpers: v2.0.1
 # skills/git-setup/lib/detect_conflicts.sh — Conflict detection for setup.
 #
 # Examines the current repo (cwd or git toplevel) for hook-tooling collisions
@@ -163,7 +163,7 @@ if [ -d ".githooks" ]; then
       _emit "OK" "Existing .githooks/ already at matching version $WANT_VERSION (up to date)."
       # status stays 0 (or whatever was set by other checks)
     else
-      _emit "OUTDATED" "Existing .githooks/ at $found_version (older than $WANT_VERSION); update mode recommended."
+      _emit "OUTDATED" "Existing .githooks/ at $found_version (does not match expected $WANT_VERSION); update mode recommended."
       _bump 3
     fi
   fi

@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.1] - 2026-05-11
+
+### Fixed
+
+- **Hook version markers now track `plugin.json` automatically.** Previously, installed hooks were stamped with a hardcoded `# tcs-git-helpers: v1.0.0` banner that didn't change when the plugin minor/major-bumped. Users seeing `v1.0.0` after pulling v2.0.0 reasonably suspected the update didn't take. Fixed:
+
+  - Templates (`templates/githooks/{pre-commit,pre-push,commit-msg,post-merge,.config.example,exclude-paths.example}` and `templates/github-actions/pr-title-check.yml`) now contain a `__TCS_GIT_HELPERS_VERSION__` placeholder instead of a literal version.
+  - `install_files.sh` and `with_gha.sh` read the version from `.claude-plugin/plugin.json` at install time and substitute the placeholder via `sed`, so installed files always carry a marker matching the installed plugin.
+  - `detect_conflicts.sh` reads the same source for `WANT_VERSION`, so the OK / OUTDATED / CONFLICT decision tracks `plugin.json` automatically — no more manual sync at release time.
+  - The integration verifier and dogfood scripts switched their hardcoded `v1.0.0` checks to a `v[0-9]+\.[0-9]+\.[0-9]+` semver pattern.
+  - The `with-tcs-current` test fixture builds with the live `plugin.json` version (not a stale literal), so the "matching version → OK" path stays correctly exercised across future bumps.
+  - Detector's `OUTDATED` message no longer claims "older than" — markers can now legitimately be newer than expected too, so the wording is "does not match expected".
+  - Dogfood `.githooks/*` markers in this repo bumped to `v2.0.1` to stay in sync with `plugin.json` (the one manual sync that remains — installed copies in user repos are substituted automatically on `--update`).
+
+  **Effect for users:** after a plugin upgrade, running `/tcs-git-helpers:git-setup --update` restamps the installed `.githooks/*` with the new version. The conflict detector reports `OK` once markers match.
+
 ## [2.0.0] - 2026-05-11
 
 ### Changed (BREAKING)
@@ -11,18 +27,6 @@
   Source directories renamed (`plugins/tcs-git-helpers/skills/{setup,status}/` → `{git-setup,git-audit}/`). Test files renamed accordingly (`skill_setup.bats` → `skill_git_setup.bats`, `skill_status.bats` → `skill_git_audit.bats`). All cross-references in scripts, hook templates, references, and audit-log nudges updated.
 
   **User-visible impact:** anyone who scripted invocations of `/tcs-git-helpers:setup` or `/tcs-git-helpers:status` must update to the new names. Tab-completion via the `/` menu picks up the new names automatically on next plugin refresh.
-
-### Changed
-
-- **Hook version markers now track `plugin.json` automatically.** Previously, installed hooks were stamped with a hardcoded `# tcs-git-helpers: v1.0.0` banner that didn't change when the plugin minor/major-bumped. Users seeing `v1.0.0` after pulling v2.0.0 reasonably suspected the update didn't take. Fixed:
-
-  - Templates (`templates/githooks/{pre-commit,pre-push,commit-msg,post-merge,.config.example,exclude-paths.example}` and `templates/github-actions/pr-title-check.yml`) now contain a `__TCS_GIT_HELPERS_VERSION__` placeholder instead of a literal version.
-  - `install_files.sh` and `with_gha.sh` read the version from `.claude-plugin/plugin.json` at install time and substitute the placeholder via `sed`, so installed files always carry a marker matching the installed plugin.
-  - `detect_conflicts.sh` reads the same source for `WANT_VERSION`, so the OK / OUTDATED / CONFLICT decision tracks `plugin.json` automatically — no more manual sync at release time.
-  - The integration verifier and dogfood scripts switched their hardcoded `v1.0.0` checks to a `v[0-9]+\.[0-9]+\.[0-9]+` semver pattern.
-  - The `with-tcs-current` test fixture builds with the live `plugin.json` version (not a stale literal), so the "matching version → OK" path stays correctly exercised across future bumps.
-
-  **Effect for users:** after a plugin upgrade, running `/tcs-git-helpers:git-setup` (with `--update` or `--with-gha` as needed) restamps the installed `.githooks/*` with the new version. The conflict detector reports `OK` once markers match, `OUTDATED` while they don't.
 
 ## [1.0.0] - 2026-05-09
 
