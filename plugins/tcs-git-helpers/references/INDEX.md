@@ -1,7 +1,7 @@
 # tcs-git-helpers — References Index
 
 This is the `tcs-git-helpers` references library — the same docs that hook denial
-messages and the `/tcs-git-helpers:status` skill cite by relative path. Each
+messages and the `/tcs-git-helpers:git-audit` skill cite by relative path. Each
 entry is a self-contained markdown file that follows a five-part structure:
 *What goes wrong → How to detect → Fix → Prevention → Why*. The prose is aimed
 at Claude (the agent reading the denial), not at the human terminal user, but

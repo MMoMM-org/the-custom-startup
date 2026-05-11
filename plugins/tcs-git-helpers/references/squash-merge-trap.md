@@ -114,7 +114,7 @@ Advisory only. Decisions gate on `merge-base --is-ancestor` (with `git cherry` c
   ```
 
   Toggle via repo settings or `gh api -X PATCH repos/<owner>/<repo> -f delete_branch_on_merge=true`.
-- **Run `/tcs-git-helpers:status --cleanup`** to surface stale local branches whose PRs have already merged. The skill filters out branches checked out in worktrees so it never proposes a deletion that would error.
+- **Run `/tcs-git-helpers:git-audit --cleanup`** to surface stale local branches whose PRs have already merged. The skill filters out branches checked out in worktrees so it never proposes a deletion that would error.
 - **Trust the hooks.** `block-bad-git-ops.sh` denies `git checkout <merged-branch>` when the branch tip is not an ancestor of default AND `git cherry` reports all-`-` — the canonical single-commit squash-trap signal. The denial cites this document. (Multi-commit squashes may evade the `git cherry` half of the check; the ancestry signal remains the primary reliable cross-check, and hooks are a backstop, not a full substitute for the post-merge cleanup discipline above.)
 
 ## Why

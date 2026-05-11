@@ -96,7 +96,7 @@ permission prompt, with the `TCS_GIT_HELPERS_SETUP_ACTIVE=1` sentinel
 (ADR-11) bounding the write to the setup subshell:
 
 ```
-/tcs-git-helpers:setup
+/tcs-git-helpers:git-setup
 ```
 
 The skill executes the equivalent of:
@@ -119,7 +119,7 @@ elsewhere. Clear it:
 git config --unset core.hooksPath
 ```
 
-…then re-run `/tcs-git-helpers:setup`. See
+…then re-run `/tcs-git-helpers:git-setup`. See
 [`migrating-from-husky.md`](migrating-from-husky.md) for the full
 removal of competing tooling.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-git_status_audit.py — backend for /tcs-git-helpers:status
+git_status_audit.py — backend for /tcs-git-helpers:git-audit
 
 Four modes:
   --brief      One-line repo state summary (no gh calls; reads cache + git).
@@ -439,7 +439,7 @@ def cmd_brief(*, cache_dir: Path, repo_path: str) -> None:
 
     # Suggest cleanup if stale branches present
     if stale_count > 0:
-        parts.append("run /tcs-git-helpers:status --cleanup")
+        parts.append("run /tcs-git-helpers:git-audit --cleanup")
 
     line = " • ".join(parts)
 

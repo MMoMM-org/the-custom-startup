@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
-# T5.2 — skills/status/SKILL.md contract test
-# Validates the markdown contract for /tcs-git-helpers:status.
+# T5.2 — skills/git-audit/SKILL.md contract test
+# Validates the markdown contract for /tcs-git-helpers:git-audit.
 # This is a static contract test against SKILL.md text — it does NOT execute
 # the skill (Claude Code runtime invokes the skill; the python backend is
 # tested separately in Phase 3).
@@ -17,18 +17,18 @@
 #   - Graceful degradation when .githooks/ not installed
 
 PLUGIN_ROOT="${BATS_TEST_DIRNAME}/../.."
-SKILL_PATH="${PLUGIN_ROOT}/skills/status/SKILL.md"
+SKILL_PATH="${PLUGIN_ROOT}/skills/git-audit/SKILL.md"
 
 # ---------------------------------------------------------------------------
 # File existence + structure
 # ---------------------------------------------------------------------------
 
-@test "SKILL.md exists at plugins/tcs-git-helpers/skills/status/SKILL.md" {
+@test "SKILL.md exists at plugins/tcs-git-helpers/skills/git-audit/SKILL.md" {
   [ -f "$SKILL_PATH" ]
 }
 
-@test "skills/status is a directory (not a flat skill file)" {
-  [ -d "${PLUGIN_ROOT}/skills/status" ]
+@test "skills/git-audit is a directory (not a flat skill file)" {
+  [ -d "${PLUGIN_ROOT}/skills/git-audit" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -43,16 +43,16 @@ SKILL_PATH="${PLUGIN_ROOT}/skills/status/SKILL.md"
   awk '/^---$/{c++; next} c==1' "$SKILL_PATH" | grep -qE '^name:[[:space:]]'
 }
 
-@test "frontmatter name is 'status'" {
-  awk '/^---$/{c++; next} c==1' "$SKILL_PATH" | grep -E '^name:' | grep -qE 'status'
+@test "frontmatter name is 'git-audit'" {
+  awk '/^---$/{c++; next} c==1' "$SKILL_PATH" | grep -E '^name:' | grep -qE 'git-audit'
 }
 
 @test "frontmatter has description field" {
   awk '/^---$/{c++; next} c==1' "$SKILL_PATH" | grep -qE '^description:[[:space:]]'
 }
 
-@test "frontmatter description mentions 'status' for auto-discovery" {
-  awk '/^---$/{c++; next} c==1' "$SKILL_PATH" | grep -E '^description:' | grep -qiE 'status'
+@test "frontmatter description mentions 'audit' for auto-discovery" {
+  awk '/^---$/{c++; next} c==1' "$SKILL_PATH" | grep -E '^description:' | grep -qiE 'audit'
 }
 
 @test "frontmatter description mentions trigger keywords (stale|cleanup|override|branch)" {
@@ -171,7 +171,7 @@ yaml.safe_load(parts[1])
 
 @test "body notes graceful degradation when .githooks/ not installed" {
   # Body should mention either "tcs-git-helpers not installed" or pointer to setup skill.
-  grep -qiE 'not installed|tcs-git-helpers:setup|run.*setup' "$SKILL_PATH"
+  grep -qiE 'not installed|tcs-git-helpers:git-setup|run.*setup' "$SKILL_PATH"
 }
 
 # ---------------------------------------------------------------------------

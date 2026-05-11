@@ -1,9 +1,9 @@
 #!/usr/bin/env bats
-# T5.1 — skills/setup/SKILL.md contract + helper integration tests.
+# T5.1 — skills/git-setup/SKILL.md contract + helper integration tests.
 #
 # This file covers four groups:
 #   A. SKILL.md static contract (frontmatter, body sections, references)
-#   B. Helper scripts under skills/setup/lib/ (shellcheck + behavior)
+#   B. Helper scripts under skills/git-setup/lib/ (shellcheck + behavior)
 #   C. Integration via fixture repos (clean / Husky / lefthook / pre-commit /
 #      simple-git-hooks / existing-hooks no-marker / matching-version /
 #      older-version / non-sample hooks / submodules / concurrent + stale lock)
@@ -11,7 +11,7 @@
 #
 # Spec refs:
 #   - PRD M10 AC1-AC6, S1, S2
-#   - SDD §Skills — /tcs-git-helpers:setup
+#   - SDD §Skills — /tcs-git-helpers:git-setup
 #   - ADR-10 (conflict abort policy)
 #   - ADR-11 (TCS_GIT_HELPERS_SETUP_ACTIVE subshell sentinel)
 #   - ADR-12 (single-coder branch-protection preset — T5.8 scope)
@@ -22,7 +22,7 @@
 #   - No network calls; gh is stubbed via PATH override
 
 PLUGIN_ROOT="${BATS_TEST_DIRNAME}/../.."
-SKILL_DIR="${PLUGIN_ROOT}/skills/setup"
+SKILL_DIR="${PLUGIN_ROOT}/skills/git-setup"
 SKILL_PATH="${SKILL_DIR}/SKILL.md"
 LIB_DIR="${SKILL_DIR}/lib"
 FIXTURE_BUILD="${PLUGIN_ROOT}/tests/fixtures/repos/build.sh"
@@ -31,11 +31,11 @@ FIXTURE_BUILD="${PLUGIN_ROOT}/tests/fixtures/repos/build.sh"
 # Group A — SKILL.md contract
 # ---------------------------------------------------------------------------
 
-@test "A01 SKILL.md exists at plugins/tcs-git-helpers/skills/setup/SKILL.md" {
+@test "A01 SKILL.md exists at plugins/tcs-git-helpers/skills/git-setup/SKILL.md" {
   [ -f "$SKILL_PATH" ]
 }
 
-@test "A02 skills/setup is a directory (not a flat skill file)" {
+@test "A02 skills/git-setup is a directory (not a flat skill file)" {
   [ -d "$SKILL_DIR" ]
 }
 
@@ -43,14 +43,14 @@ FIXTURE_BUILD="${PLUGIN_ROOT}/tests/fixtures/repos/build.sh"
   head -n 1 "$SKILL_PATH" | grep -qE '^---$'
 }
 
-@test "A04 frontmatter name is 'setup'" {
-  awk '/^---$/{c++; next} c==1' "$SKILL_PATH" | grep -qE '^name:[[:space:]]*setup'
+@test "A04 frontmatter name is 'git-setup'" {
+  awk '/^---$/{c++; next} c==1' "$SKILL_PATH" | grep -qE '^name:[[:space:]]*git-setup'
 }
 
 @test "A05 frontmatter has description with auto-discovery triggers" {
   desc=$(awk '/^---$/{c++; next} c==1' "$SKILL_PATH" | grep -E '^description:')
   [ -n "$desc" ]
-  [[ "$desc" == *setup* ]] || [[ "$desc" == *install* ]]
+  [[ "$desc" == *git-setup* ]] || [[ "$desc" == *install* ]]
 }
 
 @test "A06 description references conflict-detection trigger keywords" {

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # tcs-git-helpers: v1.0.0
-# skills/setup/lib/install_files.sh — Copy templates into target repo.
+# skills/git-setup/lib/install_files.sh — Copy templates into target repo.
 #
-# Performs the actual filesystem writes for /tcs-git-helpers:setup:
+# Performs the actual filesystem writes for /tcs-git-helpers:git-setup:
 #   1. Copies templates/githooks/{pre-commit,pre-push,commit-msg,post-merge}
 #      to <repo>/.githooks/ (preserving the version banner).
 #   2. Copies .config.example and exclude-paths.example.
@@ -17,7 +17,7 @@
 # Spec refs:
 #   - PRD M10 AC1 (clean repo install: .githooks/* + version markers + core.hooksPath + summary)
 #   - PRD M10 AC5 (no auto-commit)
-#   - SDD §Skills — /tcs-git-helpers:setup workflow step 4
+#   - SDD §Skills — /tcs-git-helpers:git-setup workflow step 4
 #   - ADR-11 (TCS_GIT_HELPERS_SETUP_ACTIVE subshell sentinel)
 #
 # Constraints:
@@ -30,7 +30,7 @@
 set -euo pipefail
 
 # Plugin root: $CLAUDE_PLUGIN_ROOT when invoked under Claude Code, otherwise
-# resolved relative to this file (plugins/tcs-git-helpers/skills/setup/lib/).
+# resolved relative to this file (plugins/tcs-git-helpers/skills/git-setup/lib/).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 
@@ -42,13 +42,13 @@ _repo_root() {
   if git rev-parse --show-toplevel 2>/dev/null; then
     return 0
   fi
-  printf '[tcs-git-helpers:setup] ERROR: not inside a git repository\n' >&2
+  printf '[tcs-git-helpers:git-setup] ERROR: not inside a git repository\n' >&2
   return 1
 }
 
 ROOT="$(_repo_root)"
 [ -d "$TEMPLATES" ] || {
-  printf '[tcs-git-helpers:setup] ERROR: templates dir not found: %s\n' "$TEMPLATES" >&2
+  printf '[tcs-git-helpers:git-setup] ERROR: templates dir not found: %s\n' "$TEMPLATES" >&2
   exit 1
 }
 
@@ -84,7 +84,7 @@ ROOT="$(_repo_root)"
 )
 # --- End subshell ---------------------------------------------------------
 
-printf '[tcs-git-helpers:setup] Installed .githooks/* into %s\n' "$ROOT"
-printf '[tcs-git-helpers:setup] core.hooksPath=.githooks (per-repo)\n'
+printf '[tcs-git-helpers:git-setup] Installed .githooks/* into %s\n' "$ROOT"
+printf '[tcs-git-helpers:git-setup] core.hooksPath=.githooks (per-repo)\n'
 # shellcheck disable=SC2016 # backticks are intentional prose
-printf '[tcs-git-helpers:setup] Setup did NOT auto-commit. Review with `git status` and commit when ready.\n'
+printf '[tcs-git-helpers:git-setup] Setup did NOT auto-commit. Review with `git status` and commit when ready.\n'

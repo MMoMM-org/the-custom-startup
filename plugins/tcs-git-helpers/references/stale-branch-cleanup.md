@@ -50,7 +50,7 @@ The post-merge hook (Feature M6) automates this after each `git pull`:
   feat/old-thing       (PR #38 merged 2026-04-12)
   fix/another-thing    (PR #40 merged 2026-04-15)
   ...
-Run /tcs-git-helpers:status --cleanup to delete interactively.
+Run /tcs-git-helpers:git-audit --cleanup to delete interactively.
 ```
 
 The SessionStart brief (Feature M4) includes the count:
@@ -67,7 +67,7 @@ refuse to act on unmerged or worktree-bound branches.
 **Interactive cleanup via the status skill (preferred):**
 
 ```bash
-/tcs-git-helpers:status --cleanup
+/tcs-git-helpers:git-audit --cleanup
 # Lists each stale-merged branch; prompts y/n per branch; excludes any
 # branch currently checked out in a worktree (M6 acceptance criterion).
 ```
@@ -115,7 +115,7 @@ git push origin --delete <branch>     # denied by M7; use after confirming merge
 gh api -X DELETE /repos/:owner/:repo/git/refs/heads/<branch>
 ```
 
-The S1 branch-protection setup (`/tcs-git-helpers:setup
+The S1 branch-protection setup (`/tcs-git-helpers:git-setup
 --with-branch-protection`) sets `delete_branch_on_merge=true`, which makes
 GitHub auto-delete the head branch after each squash-merge. Local cleanup
 is still needed.
@@ -136,7 +136,7 @@ local branches or commits.
 
 **Cleanup-by-default:**
 
-1. **Run `/tcs-git-helpers:status --cleanup` after every PR merge.** Or:
+1. **Run `/tcs-git-helpers:git-audit --cleanup` after every PR merge.** Or:
    the post-merge hook surfaces the candidate list automatically; act on it.
 2. **Enable `delete_branch_on_merge=true`** on each repo (the S1 setup does
    this). Removes the remote-cleanup step entirely.

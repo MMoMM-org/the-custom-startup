@@ -50,12 +50,12 @@ M4 kann parallel zu späteren M2-Phasen beginnen wenn M2 Phase 1-3 stabil ist.
 - [x] Phase 2: Hooks (`capture_learning.py`, `session_start_reminder.py`, `check_learnings.py`, `post_commit_reminder.py`)
 - [x] Phase 3: `memory-add` Routing-Logik
 - [x] Phase 4: `memory-sync`, `memory-cleanup`, `memory-promote`
-- [x] Phase 5: `tcs-helper:setup` (Onboarding-Wizard + Templates)
+- [x] Phase 5: `tcs-helper:memory-setup` (Onboarding-Wizard + Templates)
 - [x] Phase 6: Integration & Validierung (23 tests pass)
 
 ### Nach M2
 
-- [x] `tcs-helper:setup` → tcs-patterns als optionalen Install-Schritt einbauen
+- [x] `tcs-helper:memory-setup` → tcs-patterns als optionalen Install-Schritt einbauen
 - [x] AGENTS.md / README: tcs-patterns dokumentieren
 - [x] tcs-patterns `reference/` Stubs befüllen (citypaul/.dotfiles als Quelle) — 2026-03-27
 - [x] `testing` + `test-design-reviewer` Skills zu tcs-patterns hinzufügen (17 total) — 2026-03-27

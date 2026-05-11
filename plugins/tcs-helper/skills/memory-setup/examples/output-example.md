@@ -1,4 +1,4 @@
-# /tcs-helper:setup — Example Output
+# /tcs-helper:memory-setup — Example Output
 
 ## Input
 Running setup on a new TypeScript repo at `/Volumes/Moon/Coding/my-api/` with no existing
@@ -7,7 +7,7 @@ Running setup on a new TypeScript repo at `/Volumes/Moon/Coding/my-api/` with no
 ## Output
 
 ```
-🚀 tcs-helper:setup — Provisioning memory hierarchy for my-api
+🚀 tcs-helper:memory-setup — Provisioning memory hierarchy for my-api
 
 Detecting stack... TypeScript (found tsconfig.json + package.json)
 

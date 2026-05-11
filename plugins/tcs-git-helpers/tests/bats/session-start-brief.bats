@@ -288,7 +288,7 @@ _run_hook() {
   _run_hook
 
   [ "$status" -eq 0 ]
-  printf '%s' "$stderr" | grep -q "run /tcs-git-helpers:setup"
+  printf '%s' "$stderr" | grep -q "run /tcs-git-helpers:git-setup"
 }
 
 # ----------------------------------------------------------------------
@@ -421,7 +421,7 @@ STUB
   _run_hook
 
   [ "$status" -eq 0 ]
-  printf '%s' "$stderr" | grep -q "run /tcs-git-helpers:status --cleanup"
+  printf '%s' "$stderr" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
 }
 
 # ----------------------------------------------------------------------

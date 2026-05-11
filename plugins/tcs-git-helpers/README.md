@@ -19,7 +19,7 @@ The 12 PRD Goals (M1–M12) covered by this plugin:
 - M3 — Block resume of squash-merged branches (`git cherry` detection; cherry-pick recovery)
 - M4 — Pre-flight branch awareness brief at SessionStart and after `post-merge` (≤300ms p99, no `gh` calls)
 - M5 — Conventional Commits enforcement in `commit-msg` (allowlisted types; merge commits exempted)
-- M6 — Stale local branch surfacing after `post-merge` and via `/tcs-git-helpers:status --cleanup`
+- M6 — Stale local branch surfacing after `post-merge` and via `/tcs-git-helpers:git-audit --cleanup`
 - M7 — Block destructive git operations (`reset --hard`, `clean -f`, `branch -D`, `--force`, `--no-verify`, …)
 - M8 — Worktree exit data-loss guard (uncommitted/untracked/unmerged/unpushed four-check)
 - M9 — Soft nudges after key git ops (PR title, base freshness, rebase verification, stash hygiene)
@@ -39,7 +39,7 @@ Two Should-Have features (S1 optional GitHub branch protection, S2 optional GHA 
 Then, in each repo where you want the `.githooks/` defense-in-depth layer:
 
 ```bash
-/tcs-git-helpers:setup
+/tcs-git-helpers:git-setup
 ```
 
 The setup skill detects existing tooling (Husky, lefthook, pre-commit framework, simple-git-hooks) and aborts with a migration reference rather than silently coexisting. It does NOT auto-commit — review the `.githooks/` diff and commit manually.
@@ -62,10 +62,10 @@ The plugin runs invisibly via Claude Code hooks. You will only notice it when:
 3. **A PostToolUse nudge appears** — one-line reminder after `git checkout -b`, `gh pr create`, `gh pr merge`, `git rebase`, `git stash pop`.
 
 4. **You run a slash command:**
-   - `/tcs-git-helpers:setup` — install/update `.githooks/` in the current repo
-   - `/tcs-git-helpers:status` — show repo state, stale branches, override audit
-   - `/tcs-git-helpers:status --cleanup` — interactively delete stale-merged branches
-   - `/tcs-git-helpers:status --overrides` — review recent override consumption events
+   - `/tcs-git-helpers:git-setup` — install/update `.githooks/` in the current repo
+   - `/tcs-git-helpers:git-audit` — show repo state, stale branches, override audit
+   - `/tcs-git-helpers:git-audit --cleanup` — interactively delete stale-merged branches
+   - `/tcs-git-helpers:git-audit --overrides` — review recent override consumption events
 
 ### Overrides
 

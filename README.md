@@ -152,8 +152,8 @@ Machine-enforces the recurring git mistakes Claude makes across repos: pushes to
 
 | Component | Purpose |
 |-----------|---------|
-| `/tcs-git-helpers:setup` | Per-repo install — writes `.githooks/`, sets `core.hooksPath`, detects and aborts on Husky/lefthook/pre-commit/simple-git-hooks conflicts |
-| `/tcs-git-helpers:status` | Per-repo health check — branch state, stale branches, override audit; `--cleanup` to delete stale, `--overrides` to review consumption log |
+| `/tcs-git-helpers:git-setup` | Per-repo install — writes `.githooks/`, sets `core.hooksPath`, detects and aborts on Husky/lefthook/pre-commit/simple-git-hooks conflicts |
+| `/tcs-git-helpers:git-audit` | Per-repo health check — branch state, stale branches, override audit; `--cleanup` to delete stale, `--overrides` to review consumption log |
 | `PreToolUse` hooks | Bash/Edit/Write/ExitWorktree denials for 14+ destructive patterns, closed-PR pushes, squash-merge resume, unfinished-branch creation, worktree exit with uncommitted work |
 | `PostToolUse` hooks | Soft nudges after `git checkout -b`, `gh pr create`, `gh pr merge`, `git rebase`, `git stash pop` |
 | `SessionStart` hook | One-line branch awareness brief — branch, dirty/clean, ahead/behind, stale-merged count (cache-only, ≤300ms, no `gh` calls) |

@@ -133,11 +133,11 @@ _assert_stderr_empty() {
 # ----------------------------------------------------------------------
 
 @test "test_trigger_gh_pr_merge_emits_cleanup_nudge" {
-  # PRD M9 AC3: nudge suggests /tcs-git-helpers:status --cleanup.
+  # PRD M9 AC3: nudge suggests /tcs-git-helpers:git-audit --cleanup.
   # T5.5 spec compliance: nudge now cites stale-branch-cleanup.md reference doc.
   run --separate-stderr _run_hook "gh pr merge --squash"
   [ "$status" -eq 0 ]
-  _assert_stderr_contains "/tcs-git-helpers:status --cleanup"
+  _assert_stderr_contains "/tcs-git-helpers:git-audit --cleanup"
   _assert_stderr_contains "stale-branch-cleanup.md"
 }
 

@@ -1,6 +1,6 @@
 ---
-name: setup
-description: "Use when installing or updating tcs-git-helpers in a target repo. MUST BE USED whenever the user says install hooks, install tcs-git-helpers, run setup, update hooks, or hook conflicts (Husky, lefthook, pre-commit, simple-git-hooks). Triggers on: setup, install, update hooks, conflicts."
+name: git-setup
+description: "Use when installing or updating tcs-git-helpers in a target repo. MUST BE USED whenever the user says install hooks, install tcs-git-helpers, run git-setup, update hooks, or hook conflicts (Husky, lefthook, pre-commit, simple-git-hooks). Triggers on: git-setup, install hooks, update hooks, conflicts."
 user-invocable: true
 argument-hint: "[--update | --with-gha | --with-branch-protection]"
 allowed-tools: Bash, Read, Write, Edit
@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Write, Edit
 
 ## Persona
 
-**Active skill: tcs-git-helpers:setup**
+**Active skill: tcs-git-helpers:git-setup**
 
 Idempotent per-repo installer for the `tcs-git-helpers` plugin. Orchestrates conflict detection, file copies, `core.hooksPath` configuration, and optional GitHub Actions / branch-protection setup. Does NOT auto-commit — Marcus reviews and commits the resulting changes.
 
@@ -53,7 +53,7 @@ Spec refs:
 - PRD §Feature M10 — Plugin distribution + per-repo setup (AC1–AC6)
 - PRD §Feature S1 — `--with-branch-protection`
 - PRD §Feature S2 — `--with-gha`
-- SDD §Skills — `/tcs-git-helpers:setup` workflow
+- SDD §Skills — `/tcs-git-helpers:git-setup` workflow
 - SDD §Cross-Cutting — UI Visualization Guide
 - ADR-10 (conflict abort policy: Husky/lefthook/pre-commit/simple-git-hooks)
 - ADR-11 (`TCS_GIT_HELPERS_SETUP_ACTIVE` subshell sentinel)
@@ -86,7 +86,7 @@ Spec refs:
 ### 1. Acquire the per-repo setup lock
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/skills/setup/lib/lock.sh" acquire
+"${CLAUDE_PLUGIN_ROOT}/skills/git-setup/lib/lock.sh" acquire
 ```
 
 The helper writes `<repo>/.githooks/.setup.lock` containing `<pid>:<unix-timestamp>`. A second concurrent invocation will wait up to `TCS_LOCK_TIMEOUT` seconds (default 10 s) before failing; set `TCS_LOCK_TIMEOUT=0` to fail immediately. Locks older than 5 minutes (or with dead PIDs) are reclaimed automatically.
@@ -96,7 +96,7 @@ If acquire fails, surface the error (`another setup run holds .githooks/.setup.l
 ### 2. Detect conflicts
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/skills/setup/lib/detect_conflicts.sh"
+"${CLAUDE_PLUGIN_ROOT}/skills/git-setup/lib/detect_conflicts.sh"
 ```
 
 Branch on the exit code:
@@ -120,10 +120,10 @@ Per ADR-10 + sandbox-and-git-config.md:
 ### 4. (Subshell) install hooks
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/skills/setup/lib/install_files.sh"
+"${CLAUDE_PLUGIN_ROOT}/skills/git-setup/lib/install_files.sh"
 ```
 
-Internally this opens a `(subshell)`, exports `TCS_GIT_HELPERS_SETUP_ACTIVE=1`, copies templates, `chmod +x`s hook scripts, runs `git config core.hooksPath .githooks`, and exits the subshell so the sentinel does NOT leak into the parent. Verified by `tests/bats/skill_setup.bats::C26`.
+Internally this opens a `(subshell)`, exports `TCS_GIT_HELPERS_SETUP_ACTIVE=1`, copies templates, `chmod +x`s hook scripts, runs `git config core.hooksPath .githooks`, and exits the subshell so the sentinel does NOT leak into the parent. Verified by `tests/bats/skill_git_setup.bats::C26`.
 
 After this step, the repo has:
 
@@ -134,7 +134,7 @@ After this step, the repo has:
 ### 5. (Optional) `--with-gha`
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/skills/setup/lib/with_gha.sh"
+"${CLAUDE_PLUGIN_ROOT}/skills/git-setup/lib/with_gha.sh"
 ```
 
 Copies `templates/github-actions/pr-title-check.yml` into `<repo>/.github/workflows/`. Idempotent: an existing tcs-git-helpers-managed workflow is refreshed silently; a foreign workflow is left alone with a warning (override via `TCS_GHA_FORCE=1`).
@@ -142,7 +142,7 @@ Copies `templates/github-actions/pr-title-check.yml` into `<repo>/.github/workfl
 ### 6. (Optional) `--with-branch-protection`
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/skills/setup/lib/with_branch_protection.sh"
+"${CLAUDE_PLUGIN_ROOT}/skills/git-setup/lib/with_branch_protection.sh"
 ```
 
 Applies the ADR-12 single-coder branch-protection preset to the repo's default branch via `gh api PUT /repos/:owner/:repo/branches/<default>/protection`. Behavior:
@@ -166,7 +166,7 @@ Always print a structured summary listing:
 Release the lock:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/skills/setup/lib/lock.sh" release
+"${CLAUDE_PLUGIN_ROOT}/skills/git-setup/lib/lock.sh" release
 ```
 
 Even on error paths — release in a `trap` if you'd otherwise leak the lock.

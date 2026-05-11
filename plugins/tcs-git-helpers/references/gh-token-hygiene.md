@@ -6,7 +6,7 @@
 ## What goes wrong
 
 The `gh` CLI authenticates with a token that carries a set of OAuth
-scopes. When `/tcs-git-helpers:setup --with-branch-protection` runs, it
+scopes. When `/tcs-git-helpers:git-setup --with-branch-protection` runs, it
 calls `gh api -X PUT …/protection` and `gh api -X PATCH …
 delete_branch_on_merge=true`. Both endpoints require the `repo` scope.
 
