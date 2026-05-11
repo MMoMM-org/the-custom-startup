@@ -2,14 +2,7 @@
 
 Helper tools for The Custom Agentic Startup — memory system, skill authoring, and project onboarding.
 
-## Version 3.0.0
-
-### Breaking Changes
-
-- `merge_hooks.py` removed — hooks now load natively from `hooks/hooks.json` via Claude Code's plugin system. No manual hook installation needed.
-- Hook scripts read `cwd` from JSON stdin instead of `${PWD}` CLI argument.
-
-See [CHANGELOG.md](CHANGELOG.md) for full details.
+See [CHANGELOG.md](CHANGELOG.md) for version history. Hooks load natively from `hooks/hooks.json` via Claude Code's plugin system — no manual installation step.
 
 ## Skills
 
@@ -17,18 +10,19 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 | Skill | Description |
 |-------|-------------|
-| `/setup` | Provision `docs/ai/memory/` + CLAUDE.md hierarchy in a new repo |
+| `/memory-setup` | Provision `docs/ai/memory/` + CLAUDE.md hierarchy in a new repo |
 | `/memory-add` | Capture session learnings and route to the correct scope and category file |
 | `/memory-sync` | Keep `@imports` and memory index in sync |
 | `/memory-cleanup` | Archive resolved issues, prune stale entries |
 | `/memory-promote` | Promote domain patterns from memory files to reusable skills |
 | `/memory-claude-md-optimize` | Audit, score, and migrate flat CLAUDE.md into Memory Bank |
 
-### Skill Authoring
+### Skill & Agent Authoring
 
 | Skill | Description |
 |-------|-------------|
 | `/skill-author` | Create, audit, or convert Claude Code skills |
+| `/agent-author` | Create, audit, or fix Claude Code subagents |
 | `/skill-evaluate` | Evaluate skill quality before importing |
 | `/skill-import` | Fetch a single skill from any GitHub repo |
 
@@ -46,6 +40,12 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 | `/claude-docs` | Fetch and cache current Claude Code documentation |
 | `/doc-product` | Author and review user-facing docs (plan, write, extract, review modes) |
 
+### Session Continuity
+
+| Skill | Description |
+|-------|-------------|
+| `/context-bridge` | Snapshot session state before `/clear` or `/compact` so the SessionStart hook can auto-restore continuity in the next session |
+
 ## Hooks
 
 Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the plugin is enabled. No installation step required.
@@ -54,6 +54,7 @@ Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the pl
 |-------|--------|---------|
 | `UserPromptSubmit` | `capture_learning.py` | Detect corrections/learnings via regex (English + CJK), queue them |
 | `SessionStart` | `session_start_reminder.py` | Show pending queue count at session open |
+| `SessionStart` | `session_start_context_bridge.py` | Restore `/context-bridge` checkpoint when `source` is `clear` or `compact` |
 | `PreCompact` | `check_learnings.py` | Back up queue before context compaction |
 | `PostToolUse(Bash)` | `post_commit_reminder.py` | Remind to run `/memory-add` after git commit; capture persistent tool errors |
 
@@ -89,7 +90,7 @@ Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the pl
 
 ```bash
 source venv/bin/activate && python3 -m pytest tests/tcs-helper/ -v
-# 161 tests, ~1s
+# 168 tests, ~2s
 ```
 
 ## Attribution

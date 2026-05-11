@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.1.0] - 2026-05-11
+
+### Added
+
+- **`context-bridge` skill + `SessionStart` hook integration.** Bridges session continuity across `/clear` and `/compact` resets.
+  - **Skill (`tcs-helper:context-bridge`)** — invoked by the user before running `/clear` or `/compact`. Introspects current session state (open TODOs, branch, in-flight specs under `docs/XDD/specs/`, recently active files, recent decisions, next steps), classifies whether `/clear` or `/compact` better fits the planned next work, and writes a structured Markdown checkpoint to `.claude/.session-checkpoint.md` (repo-local, gitignored). The skill announces the recommended slash command but does not invoke it — the user runs it.
+  - **Hook (`scripts/session_start_context_bridge.py`)** — registered as a second `SessionStart` handler alongside the existing `session_start_reminder.py`. Fires after every session start; acts only when `source` is `clear` or `compact`. Reads the checkpoint, prints it to stdout (Claude Code injects it as additional context for the new session's first response), then renames the file to `.session-checkpoint.consumed-<timestamp>.md` so it cannot be re-injected on subsequent session starts. Silent no-op when no checkpoint exists or when source is `startup`/`resume`.
+  - **Why:** large multi-turn sessions accumulate noise that compaction can mask, and `/clear` discards everything — losing the user's place. The bridge lets the user reset context aggressively without losing the thread.
+  - **Discovery:** verified against the official Claude Code hooks reference (https://code.claude.com/docs/en/hooks.md) — `SessionStart` payload includes `source ∈ {startup, resume, clear, compact}`, and stdout from the hook is injected as additional context for the new session.
+
 ## [4.0.0] - 2026-05-11
 
 ### Changed (BREAKING)
