@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Comprehensive agentic framework for Claude Code",
-    "version": "4.0.0",
+    "version": "4.1.0",
     "homepage": "https://github.com/MMoMM-org/the-custom-startup"
   },
   "plugins": [
@@ -28,6 +28,11 @@
       "name": "tcs-patterns",
       "source": "./plugins/tcs-patterns",
       "description": "Domain pattern skills for TCS projects — install only the patterns relevant to your stack"
+    },
+    {
+      "name": "tcs-git-helpers",
+      "source": "./plugins/tcs-git-helpers",
+      "description": "Git workflow discipline for Claude Code — destructive-op blocks, worktree-exit guard, session brief, and per-repo .githooks/ setup"
     }
   ]
 }
