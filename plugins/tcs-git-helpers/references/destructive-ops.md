@@ -70,7 +70,7 @@ negative (allow) test cases.
 To audit historical override usage:
 
 ```bash
-/tcs-git-helpers:status --overrides
+/tcs-git-helpers:git-audit --overrides
 ```
 
 The skill reads `${CLAUDE_PLUGIN_DATA}/audit/overrides.jsonl` and prints
@@ -200,7 +200,7 @@ remote-ref deletion bypasses that trail.
   a tripwire; the granular `CLAUDE_ALLOW_<RULE>=1` overrides exist for
   exactly the case where you have thought about it. The master form
   emits a loud stderr warning every time it's consumed.
-- **Audit overrides monthly.** `/tcs-git-helpers:status --overrides`. If
+- **Audit overrides monthly.** `/tcs-git-helpers:git-audit --overrides`. If
   the same granular override appears repeatedly, the lesson is in the
   corresponding reference doc, not in the override.
 - **`~/.gitconfig` aliases that wrap denied commands are a gap.** The

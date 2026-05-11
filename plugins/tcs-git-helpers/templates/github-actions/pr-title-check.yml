@@ -6,7 +6,7 @@
 # PR title becomes the commit subject).
 #
 # Install: copy to .github/workflows/pr-title-check.yml in your repo.
-# (The /tcs-git-helpers:setup skill does this when --with-gha is passed.)
+# (The /tcs-git-helpers:git-setup skill does this when --with-gha is passed.)
 #
 # Spec refs:
 #   - PRD §Feature S2 — GHA opt-in, self-contained (no third-party actions)

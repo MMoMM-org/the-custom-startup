@@ -198,7 +198,7 @@ $stale_rows
 EOF2
     printf 'tcs-git-helpers: %d stale branch(es) found: %s\n' \
       "$count" "$stale_names" >&2
-    printf 'tcs-git-helpers: run /tcs-git-helpers:status --cleanup to review\n' >&2
+    printf 'tcs-git-helpers: run /tcs-git-helpers:git-audit --cleanup to review\n' >&2
   fi
 
   # 9. Update cache (only when CLAUDE_PLUGIN_DATA is set).

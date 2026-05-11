@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tcs-git-helpers: v1.0.0
-# skills/setup/lib/with_branch_protection.sh — apply the ADR-12 single-coder
+# skills/git-setup/lib/with_branch_protection.sh — apply the ADR-12 single-coder
 # branch-protection preset on the target repo's default branch.
 #
 # Spec refs:
@@ -20,7 +20,7 @@
 #   - Fail-CLOSED on gh failure (this is NOT a hot-path hook).
 #   - Does NOT auto-commit; does NOT roll back unrelated parent-skill steps.
 #
-# Test hooks (consumed only by tests/bats/skill_setup.bats; ignore in prod):
+# Test hooks (consumed only by tests/bats/skill_git_setup.bats; ignore in prod):
 #   TCS_BP_YES=1                          skip the main ruleset y/N prompt.
 #   TCS_BP_ALLOW_EXCESS_SCOPES=1          skip the excessive-scope y/N prompt
 #                                         (S1 AC3 — distinct security gate).
@@ -31,9 +31,9 @@ set -euo pipefail
 REF_DOC="references/gh-token-hygiene.md"
 PRESET_VERSION="adr-12-single-coder"
 
-_log()  { printf '[tcs-git-helpers:setup] %s\n' "$*"; }
-_warn() { printf '[tcs-git-helpers:setup] WARN: %s\n' "$*" >&2; }
-_err()  { printf '[tcs-git-helpers:setup] ERROR: %s\n' "$*" >&2; }
+_log()  { printf '[tcs-git-helpers:git-setup] %s\n' "$*"; }
+_warn() { printf '[tcs-git-helpers:git-setup] WARN: %s\n' "$*" >&2; }
+_err()  { printf '[tcs-git-helpers:git-setup] ERROR: %s\n' "$*" >&2; }
 
 # --- pre-flight: git repo + GitHub remote ----------------------------------
 
@@ -125,7 +125,7 @@ _check_scopes() {
     # An elevated-scope token is a real safety signal (Marcus may have it
     # legitimately, or by accident via GitHub's UX) and deserves its own gate.
     if [ "${TCS_BP_ALLOW_EXCESS_SCOPES:-0}" != "1" ]; then
-      printf '[tcs-git-helpers:setup] Proceed despite elevated token scopes? [y/N] ' >&2
+      printf '[tcs-git-helpers:git-setup] Proceed despite elevated token scopes? [y/N] ' >&2
       local reply=""
       if ! IFS= read -r reply; then reply=""; fi
       case "$reply" in
@@ -269,7 +269,7 @@ main() {
 
   # Confirmation gate (S1 AC1): prompt before any write unless --yes / TCS_BP_YES=1.
   if [ "${TCS_BP_YES:-0}" != "1" ]; then
-    printf '[tcs-git-helpers:setup] Apply this branch-protection ruleset? [y/N] ' >&2
+    printf '[tcs-git-helpers:git-setup] Apply this branch-protection ruleset? [y/N] ' >&2
     local reply=""
     if ! IFS= read -r reply; then reply=""; fi
     case "$reply" in

@@ -43,8 +43,8 @@ gh pr list --head "$(git branch --show-current)" --state merged --json number,st
 The status skill automates this view:
 
 ```bash
-/tcs-git-helpers:status            # full report
-/tcs-git-helpers:status --brief    # one-line summary
+/tcs-git-helpers:git-audit            # full report
+/tcs-git-helpers:git-audit --brief    # one-line summary
 ```
 
 The hook surface raises the same signal: the M2 denial reason names the
@@ -121,7 +121,7 @@ trade-offs.
 5. **Merge** via squash on GitHub (default for single-coder workflow)
 6. **Cleanup** locally and on remote — see [stale-branch-cleanup.md](stale-branch-cleanup.md)
 
-**Tooling:** running `/tcs-git-helpers:setup` installs the hooks that block
+**Tooling:** running `/tcs-git-helpers:git-setup` installs the hooks that block
 branch-from-unfinished-work (M2) and surface stale branches after each pull
 (M6). Once installed, the most common slip — `git checkout -b` while a
 previous branch is unmerged — is denied with a recovery citation.

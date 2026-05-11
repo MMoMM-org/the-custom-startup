@@ -313,7 +313,7 @@ _scenario_sandbox_env() {
 # Scenario 1: clean repo, install plugin (simulated), verify .githooks/ files
 # ---------------------------------------------------------------------------
 #
-# We don't drive the full /tcs-git-helpers:setup skill (that requires a
+# We don't drive the full /tcs-git-helpers:git-setup skill (that requires a
 # Claude session). Instead, we replicate its core file-copy + hooksPath
 # semantics: copy templates into the repo, set core.hooksPath, verify that
 # the version markers landed and `git config core.hooksPath` returns the

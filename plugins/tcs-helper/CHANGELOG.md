@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.0.0] - 2026-05-11
+
+### Changed (BREAKING)
+
+- **`setup` → `memory-setup` rename.** The skill that provisions the memory bank (`docs/ai/memory/` + CLAUDE.md hierarchy) is renamed for two reasons:
+  - It collided with `tcs-git-helpers:setup` (bare name `setup` in the `/` menu was ambiguous).
+  - The new name slots into the existing `memory-*` skill family (`memory-add`, `memory-cleanup`, `memory-promote`, `memory-sync`, `memory-claude-md-optimize`).
+
+  Source directory renamed (`plugins/tcs-helper/skills/setup/` → `skills/memory-setup/`). Frontmatter `name:` field, persona announcement string, and the two consumer templates (`templates/claude-root.md`, `templates/stacks/generic.md`) updated to reference the new name.
+
+  **User-visible impact:** anyone who scripted `/tcs-helper:setup` must update to `/tcs-helper:memory-setup`. The skill's behaviour, output, and templates are unchanged — name only.
+
 ## [3.5.0] - 2026-05-07
 
 ### Added

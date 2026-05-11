@@ -1,12 +1,12 @@
 # Migrating from Husky (and lefthook, pre-commit, simple-git-hooks)
 
 > Why setup aborts when another hook tool is detected, and the per-tool
-> removal sequence that lets `/tcs-git-helpers:setup` proceed cleanly.
+> removal sequence that lets `/tcs-git-helpers:git-setup` proceed cleanly.
 
 ## What goes wrong
 
 The repo already has Husky (or lefthook, or pre-commit, or
-simple-git-hooks) installed. `/tcs-git-helpers:setup` detects the
+simple-git-hooks) installed. `/tcs-git-helpers:git-setup` detects the
 conflict and aborts before doing anything, citing this document.
 
 The root cause: every popular git-hook manager works by setting
@@ -90,7 +90,7 @@ about migration.
 
 ## Fix
 
-Remove the existing hook tool, then run `/tcs-git-helpers:setup`. The
+Remove the existing hook tool, then run `/tcs-git-helpers:git-setup`. The
 sequences below are non-destructive — they all leave the underlying
 hook *content* in commit history (so it can be ported), they only
 remove the *installation* of the tool.
@@ -120,7 +120,7 @@ git config --get core.hooksPath    # → empty
 ls .husky 2>/dev/null              # → no such directory
 
 # 6. Now run setup
-/tcs-git-helpers:setup
+/tcs-git-helpers:git-setup
 ```
 
 ### Husky v4
@@ -144,7 +144,7 @@ rm .git/hooks/pre-commit .git/hooks/commit-msg   # adjust to actual list
 git config --get core.hooksPath    # → empty (v4 didn't set it)
 
 # 5. Run setup
-/tcs-git-helpers:setup
+/tcs-git-helpers:git-setup
 ```
 
 ### lefthook
@@ -166,7 +166,7 @@ git rm lefthook.yml      # adjust to actual filename
 git config --unset core.hooksPath
 
 # 5. Run setup
-/tcs-git-helpers:setup
+/tcs-git-helpers:git-setup
 ```
 
 ### pre-commit (Python)
@@ -188,7 +188,7 @@ rm -rf .venv-pre-commit  # or wherever the env was
 git config --unset core.hooksPath
 
 # 6. Run setup
-/tcs-git-helpers:setup
+/tcs-git-helpers:git-setup
 ```
 
 ### simple-git-hooks
@@ -208,7 +208,7 @@ ls .git/hooks/
 # rm <relevant files>
 
 # 4. Run setup
-/tcs-git-helpers:setup
+/tcs-git-helpers:git-setup
 ```
 
 ### Porting custom hook content
@@ -231,7 +231,7 @@ your custom logic by:
 
 - **Don't install Husky / lefthook / pre-commit in repos you also want
   the plugin to manage.** New projects should adopt
-  `tcs-git-helpers` from day one via `/tcs-git-helpers:setup`.
+  `tcs-git-helpers` from day one via `/tcs-git-helpers:git-setup`.
 - **For shared / multi-contributor repos** (rare in Marcus's
   single-coder workflow, CON-8), pick *one* hook manager and stick with
   it. Document the choice in the repo's `README` or `CONTRIBUTING`.

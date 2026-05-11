@@ -8,7 +8,7 @@
 #
 # Files (under ${CLAUDE_PLUGIN_DATA}/cache/):
 #   <repo-hash>-stale-cache.tsv   Hot-path read by SessionStart (ADR-4).
-#   <repo-hash>-stale-cache.json  Sibling consumed by /tcs-git-helpers:status --json.
+#   <repo-hash>-stale-cache.json  Sibling consumed by /tcs-git-helpers:git-audit --json.
 #   <repo-hash>-pr-state.json     60s TTL push-state cache.
 #   <repo-hash>.lock              PID:TIMESTAMP — reclaimed if PID dead or
 #                                 timestamp older than 5 minutes.

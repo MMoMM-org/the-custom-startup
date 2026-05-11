@@ -163,7 +163,7 @@ _maybe_deny() {
 }
 
 # Variant for git config core.hooksPath: allowed silently when the
-# /tcs-git-helpers:setup skill has set the sentinel env-var; otherwise
+# /tcs-git-helpers:git-setup skill has set the sentinel env-var; otherwise
 # fall through to standard override / deny semantics.
 _maybe_check_setup_sentinel() {
   local rule="$1" msg="$2"
@@ -377,7 +377,7 @@ _match_command "$CMD" "$PATTERN_BRANCH_RESUME"       && _check_resume_squash_mer
 
 # === core.hooksPath subversion ===
 _match_command "$CMD" "$PATTERN_HOOKSPATH_INLINE"    && _maybe_deny HOOKSPATH_OVERRIDE    "git -c core.hooksPath=… disables .githooks/"
-_match_command "$CMD" "$PATTERN_HOOKSPATH_CONFIG"    && _maybe_check_setup_sentinel HOOKSPATH_OVERRIDE  "git config core.hooksPath only allowed during /tcs-git-helpers:setup (set TCS_GIT_HELPERS_SETUP_ACTIVE=1)"
+_match_command "$CMD" "$PATTERN_HOOKSPATH_CONFIG"    && _maybe_check_setup_sentinel HOOKSPATH_OVERRIDE  "git config core.hooksPath only allowed during /tcs-git-helpers:git-setup (set TCS_GIT_HELPERS_SETUP_ACTIVE=1)"
 
 # ---------------------------------------------------------------------------
 # Aggregate decision — emit cascading denial if anything matched

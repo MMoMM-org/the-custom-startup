@@ -91,7 +91,7 @@ _audit_log \
   pattern="$PATTERN" \
   tool_input_truncated=false || true
 
-REASON="Refusing to ${TOOL} '${FILE_PATH}': edits to git-internal paths (matched ${PATTERN}) are blocked outside the setup skill. To allow during /tcs-git-helpers:setup, the skill exports TCS_GIT_HELPERS_SETUP_ACTIVE=1 in a bounded subshell (per ADR-11)."
+REASON="Refusing to ${TOOL} '${FILE_PATH}': edits to git-internal paths (matched ${PATTERN}) are blocked outside the setup skill. To allow during /tcs-git-helpers:git-setup, the skill exports TCS_GIT_HELPERS_SETUP_ACTIVE=1 in a bounded subshell (per ADR-11)."
 
 jq -nc --arg reason "$REASON" '{
   hookSpecificOutput: {

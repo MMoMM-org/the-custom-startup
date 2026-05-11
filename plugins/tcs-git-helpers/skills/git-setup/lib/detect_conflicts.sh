@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tcs-git-helpers: v1.0.0
-# skills/setup/lib/detect_conflicts.sh — Conflict detection for setup.
+# skills/git-setup/lib/detect_conflicts.sh — Conflict detection for setup.
 #
 # Examines the current repo (cwd or git toplevel) for hook-tooling collisions
 # and prints a human-readable summary. Exit code signals the action the skill
@@ -36,7 +36,7 @@ _repo_root() {
 
 _emit() {
   # $1 = severity tag, $2 = message
-  printf '[tcs-git-helpers:setup] %s: %s\n' "$1" "$2"
+  printf '[tcs-git-helpers:git-setup] %s: %s\n' "$1" "$2"
 }
 
 ROOT="$(_repo_root)"

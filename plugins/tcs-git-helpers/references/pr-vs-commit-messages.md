@@ -101,7 +101,7 @@ to communicate during PR review and for your own reflog navigation; do not
 agonize over them.
 
 **Enable the PR-title check workflow.** Run
-`/tcs-git-helpers:setup --with-gha` to install
+`/tcs-git-helpers:git-setup --with-gha` to install
 `templates/github-actions/pr-title-check.yml`. The workflow fails on any PR
 whose title does not match the Conventional Commits regex, surfacing the
 problem before merge instead of after.

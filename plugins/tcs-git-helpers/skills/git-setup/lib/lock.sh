@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tcs-git-helpers: v1.0.0
-# skills/setup/lib/lock.sh — PID-file lock for /tcs-git-helpers:setup.
+# skills/git-setup/lib/lock.sh — PID-file lock for /tcs-git-helpers:git-setup.
 #
 # Uses the repo's .githooks/.setup.lock (NOT the plugin-data lock under
 # ${CLAUDE_PLUGIN_DATA}/cache) so two concurrent setup runs against the same
@@ -79,7 +79,7 @@ _acquire() {
   local lock_file
   lock_file="$(_lock_path)"
   mkdir -p "$(dirname "$lock_file")" 2>/dev/null || {
-    printf '[tcs-git-helpers:setup] ERROR: cannot create %s\n' "$(dirname "$lock_file")" >&2
+    printf '[tcs-git-helpers:git-setup] ERROR: cannot create %s\n' "$(dirname "$lock_file")" >&2
     return 1
   }
 
@@ -94,7 +94,7 @@ _acquire() {
     sleep 0.1
     i=$((i + 1))
   done
-  printf '[tcs-git-helpers:setup] ERROR: another setup run holds %s\n' "$lock_file" >&2
+  printf '[tcs-git-helpers:git-setup] ERROR: another setup run holds %s\n' "$lock_file" >&2
   return 1
 }
 

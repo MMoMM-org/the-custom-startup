@@ -127,7 +127,7 @@ emits a loud stderr warning recommending the granular form on every use.
 Every override consumption is appended to
 `${CLAUDE_PLUGIN_DATA}/audit/overrides.jsonl` with branch, repo, hook,
 env-var, and the original command. Marcus reviews this log via
-`/tcs-git-helpers:status --overrides`. The audit is the discipline layer:
+`/tcs-git-helpers:git-audit --overrides`. The audit is the discipline layer:
 overrides are allowed, but not invisible.
 
 If you find yourself reaching for the master override or for the same

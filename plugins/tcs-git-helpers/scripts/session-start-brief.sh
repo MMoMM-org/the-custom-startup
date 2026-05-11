@@ -181,7 +181,7 @@ stale_seg="${stale_seg}${staleness_suffix}"
 
 cleanup_seg=""
 if [ "$stale_count" -gt 0 ]; then
-  cleanup_seg=" • run /tcs-git-helpers:status --cleanup"
+  cleanup_seg=" • run /tcs-git-helpers:git-audit --cleanup"
 fi
 
 # ----------------------------------------------------------------------
@@ -191,7 +191,7 @@ fi
 setup_seg=""
 repo_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -n "$repo_top" ] && [ ! -d "$repo_top/.githooks" ]; then
-  setup_seg=" • run /tcs-git-helpers:setup"
+  setup_seg=" • run /tcs-git-helpers:git-setup"
 fi
 
 # ----------------------------------------------------------------------

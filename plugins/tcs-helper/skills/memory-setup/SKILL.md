@@ -1,6 +1,6 @@
 ---
-name: setup
-description: "Use when setting up a new TCS repo, adding the memory system to an existing project, or re-running onboarding to repair a missing docs/ai/memory/ structure or CLAUDE.md hierarchy."
+name: memory-setup
+description: "Use when setting up a new TCS repo, adding the memory system to an existing project, or re-running memory-setup to repair a missing docs/ai/memory/ structure or CLAUDE.md hierarchy. Triggers on: memory-setup, TCS onboarding, install memory system."
 user-invocable: true
 argument-hint: ""
 allowed-tools: Read, Write, Edit, Bash
@@ -8,7 +8,7 @@ allowed-tools: Read, Write, Edit, Bash
 
 ## Persona
 
-**Active skill: tcs-helper:setup**
+**Active skill: tcs-helper:memory-setup**
 
 Provision the TCS memory system for this repo.
 

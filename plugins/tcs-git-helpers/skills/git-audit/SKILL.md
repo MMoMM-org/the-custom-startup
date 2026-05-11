@@ -1,6 +1,6 @@
 ---
-name: status
-description: "Use when checking repo state — branch, PR state, stale-merged branches, override audit events, or running interactive cleanup of merged branches. Triggers on: status, stale branches, branch cleanup, override audit, repo health."
+name: git-audit
+description: "Use when auditing repo state — branch hygiene, PR state, stale-merged branches, override audit events, or running interactive cleanup of merged branches. Triggers on: git-audit, stale branches, branch cleanup, override audit, repo health."
 user-invocable: true
 argument-hint: "[--brief | --cleanup | --json | --overrides]"
 allowed-tools: Bash
@@ -8,7 +8,7 @@ allowed-tools: Bash
 
 ## Persona
 
-**Active skill: tcs-git-helpers:status**
+**Active skill: tcs-git-helpers:git-audit**
 
 Report repo state for the current git repository: branch, PR status, stale-merged
 branches, plugin version, recent overrides, and suggested next actions. All
@@ -43,7 +43,7 @@ Spec refs:
 - Surface stderr on non-zero exit; do not swallow errors.
 - Surface the `(cache Nh old)` warning verbatim when mtime exceeds the 24h stale-branch TTL.
 - For `--cleanup`: rely on the script's interactive prompts; the script consults `git worktree list` and EXCLUDES branches checked out in any worktree.
-- When the script reports `tcs-git-helpers not installed in this repo`, surface the message and suggest the user run `/tcs-git-helpers:setup`. The git/PR state still renders; only the post-merge cache refresh is missing.
+- When the script reports `tcs-git-helpers not installed in this repo`, surface the message and suggest the user run `/tcs-git-helpers:git-setup`. The git/PR state still renders; only the post-merge cache refresh is missing.
 
 **Never:**
 - Re-implement git state queries (`git rev-parse`, `git status`, `gh pr list`, etc.) inline — the markdown body is intentionally state-free.
@@ -109,11 +109,11 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/git_status_audit.py" --overrides --limit 
 
 ### 4. Cache-staleness handling
 
-The script self-detects cache age and prepends `(cache Nh old)` to the brief / status output when mtime > 24h. Surface this verbatim — do not strip the warning. If the user asks why the cache is stale, point them at `git fetch && /tcs-git-helpers:status --cleanup` to refresh.
+The script self-detects cache age and prepends `(cache Nh old)` to the brief / status output when mtime > 24h. Surface this verbatim — do not strip the warning. If the user asks why the cache is stale, point them at `git fetch && /tcs-git-helpers:git-audit --cleanup` to refresh.
 
 ### 5. Setup degradation
 
-If the script reports `tcs-git-helpers not installed in this repo`, surface the message and suggest the user run `/tcs-git-helpers:setup`. The status report still renders — the missing githooks only affect post-merge cache refresh, not the live git/PR queries.
+If the script reports `tcs-git-helpers not installed in this repo`, surface the message and suggest the user run `/tcs-git-helpers:git-setup`. The status report still renders — the missing githooks only affect post-merge cache refresh, not the live git/PR queries.
 
 ### 6. Error handling
 
