@@ -2,10 +2,10 @@
 # verify-tcs-rollout.sh — Integration acceptance harness for tcs-git-helpers rollout.
 #
 # Verifies that a target repo has the plugin correctly installed:
-#   1. .githooks/pre-commit      exists, executable, v1.0.0 marker in lines 1-3
-#   2. .githooks/pre-push        exists, executable, v1.0.0 marker in lines 1-3
-#   3. .githooks/commit-msg      exists, executable, v1.0.0 marker in lines 1-3
-#   4. .githooks/post-merge      exists, executable, v1.0.0 marker in lines 1-3
+#   1. .githooks/pre-commit      exists, executable, tcs-git-helpers semver marker in lines 1-3
+#   2. .githooks/pre-push        exists, executable, tcs-git-helpers semver marker in lines 1-3
+#   3. .githooks/commit-msg      exists, executable, tcs-git-helpers semver marker in lines 1-3
+#   4. .githooks/post-merge      exists, executable, tcs-git-helpers semver marker in lines 1-3
 #   5. core.hooksPath == .githooks
 #   6. Setup did NOT auto-stage any .githooks/* files
 #   7. No conflicting hook tool artifacts present
@@ -80,7 +80,7 @@ _fail() {
 }
 
 # ---------------------------------------------------------------------------
-# Check: hook file has v1.0.0 marker in lines 1-3
+# Check: hook file has a tcs-git-helpers semver marker in lines 1-3
 # ---------------------------------------------------------------------------
 _assert_hook_marker() {
   local name="$1"
@@ -98,10 +98,10 @@ _assert_hook_marker() {
 
   # Check lines 1-3 for marker (bash 3.2: use head + grep, no mapfile)
   local marker_line
-  marker_line="$(head -3 "$hook_file" | grep -E '^#[[:space:]]*tcs-git-helpers:[[:space:]]*v1\.0\.0' || true)"
+  marker_line="$(head -3 "$hook_file" | grep -E '^#[[:space:]]*tcs-git-helpers:[[:space:]]*v[0-9]+\.[0-9]+\.[0-9]+' || true)"
 
   if [ -z "$marker_line" ]; then
-    _fail "marker_${name}" ".githooks/$name has no '# tcs-git-helpers: v1.0.0' marker in lines 1-3"
+    _fail "marker_${name}" ".githooks/$name has no '# tcs-git-helpers: vX.Y.Z' marker in lines 1-3"
     return 1
   fi
 

@@ -331,7 +331,10 @@ _make_clean_repo() {
 @test "C07 fixture build.sh produces with-tcs-current scenario (matching marker)" {
   _build_fixtures
   [ -f "$TEST_TMP/fixtures/with-tcs-current/.githooks/pre-commit" ]
-  head -3 "$TEST_TMP/fixtures/with-tcs-current/.githooks/pre-commit" | grep -q 'tcs-git-helpers: v1.0.0'
+  # Marker must be a valid semver matching the current plugin.json — the
+  # fixture builder reads that dynamically, so we pattern-match here. The
+  # detector's "matching version → OK" semantic is covered in C08+.
+  head -3 "$TEST_TMP/fixtures/with-tcs-current/.githooks/pre-commit" | grep -qE 'tcs-git-helpers: v[0-9]+\.[0-9]+\.[0-9]+'
 }
 
 @test "C08 fixture build.sh produces with-tcs-older scenario (older marker)" {

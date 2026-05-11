@@ -344,7 +344,7 @@ _scenario_1() {
     export TCS_GIT_HELPERS_SETUP_ACTIVE=1
     git config core.hooksPath .githooks
 
-    # Verify the four hook files have the v1.0.0 marker.
+    # Verify the four hook files have a tcs-git-helpers semver marker.
     for h in pre-commit commit-msg pre-push post-merge; do
       grep -q "tcs-git-helpers: v" ".githooks/$h" \
         || { echo "S1: marker missing in .githooks/$h"; exit 1; }

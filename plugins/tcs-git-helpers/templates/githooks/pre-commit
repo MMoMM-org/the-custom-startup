@@ -1,5 +1,5 @@
 #!/bin/bash
-# tcs-git-helpers: v1.0.0
+# tcs-git-helpers: __TCS_GIT_HELPERS_VERSION__
 # pre-commit — tcs-git-helpers repo-side safety hook
 #
 # Blocks:

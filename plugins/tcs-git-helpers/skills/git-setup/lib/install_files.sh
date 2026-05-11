@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tcs-git-helpers: v1.0.0
+# tcs-git-helpers: v2.0.0
 # skills/git-setup/lib/install_files.sh — Copy templates into target repo.
 #
 # Performs the actual filesystem writes for /tcs-git-helpers:git-setup:
@@ -38,6 +38,24 @@ TEMPLATES="$PLUGIN_ROOT/templates/githooks"
 HOOK_FILES="pre-commit pre-push commit-msg post-merge"
 EXAMPLE_FILES=".config.example exclude-paths.example"
 
+# Read the plugin's semantic version from .claude-plugin/plugin.json so the
+# version banner stamped into installed hooks always matches plugin.json. This
+# removes the manual-sync trap where a plugin minor/major bump leaves stale
+# `# tcs-git-helpers: vX.Y.Z` markers in users' repos and makes the conflict
+# detector report OUTDATED falsely. Substituted into the placeholder
+# `__TCS_GIT_HELPERS_VERSION__` in each template at install time.
+_read_plugin_version() {
+  local manifest="$PLUGIN_ROOT/.claude-plugin/plugin.json"
+  if [ ! -f "$manifest" ]; then
+    printf '0.0.0'
+    return 0
+  fi
+  grep -E '"version"[[:space:]]*:' "$manifest" \
+    | head -1 \
+    | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/'
+}
+PLUGIN_VERSION="$(_read_plugin_version)"
+
 _repo_root() {
   if git rev-parse --show-toplevel 2>/dev/null; then
     return 0
@@ -60,22 +78,23 @@ ROOT="$(_repo_root)"
 
   mkdir -p "$ROOT/.githooks"
 
-  # Copy hook scripts.
+  # Copy hook scripts, substituting the version placeholder so the installed
+  # `# tcs-git-helpers: vX.Y.Z` banner always reflects plugin.json.
   for h in $HOOK_FILES; do
     src="$TEMPLATES/$h"
     dst="$ROOT/.githooks/$h"
     if [ -f "$src" ]; then
-      cp "$src" "$dst"
+      sed "s/__TCS_GIT_HELPERS_VERSION__/${PLUGIN_VERSION}/g" "$src" > "$dst"
       chmod +x "$dst"
     fi
   done
 
-  # Copy *.example files (kept as -example, not renamed).
+  # Copy *.example files (kept as -example, not renamed). Same substitution.
   for ex in $EXAMPLE_FILES; do
     src="$TEMPLATES/$ex"
     dst="$ROOT/.githooks/$ex"
     if [ -f "$src" ]; then
-      cp "$src" "$dst"
+      sed "s/__TCS_GIT_HELPERS_VERSION__/${PLUGIN_VERSION}/g" "$src" > "$dst"
     fi
   done
 

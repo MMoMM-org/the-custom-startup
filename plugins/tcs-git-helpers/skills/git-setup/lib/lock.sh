@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tcs-git-helpers: v1.0.0
+# tcs-git-helpers: v2.0.0
 # skills/git-setup/lib/lock.sh — PID-file lock for /tcs-git-helpers:git-setup.
 #
 # Uses the repo's .githooks/.setup.lock (NOT the plugin-data lock under

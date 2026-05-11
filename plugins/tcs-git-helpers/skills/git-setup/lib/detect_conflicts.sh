@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tcs-git-helpers: v1.0.0
+# tcs-git-helpers: v2.0.0
 # skills/git-setup/lib/detect_conflicts.sh — Conflict detection for setup.
 #
 # Examines the current repo (cwd or git toplevel) for hook-tooling collisions
@@ -42,7 +42,20 @@ _emit() {
 ROOT="$(_repo_root)"
 cd "$ROOT" 2>/dev/null || true
 
-WANT_VERSION="v1.0.0"
+# Read the expected version from .claude-plugin/plugin.json so the detector
+# stays in sync with the plugin's own version when minor/major bumps happen.
+# Falls back to a literal if the manifest can't be read.
+_read_plugin_version() {
+  local manifest="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}/.claude-plugin/plugin.json"
+  if [ ! -f "$manifest" ]; then
+    printf '0.0.0'
+    return 0
+  fi
+  grep -E '"version"[[:space:]]*:' "$manifest" \
+    | head -1 \
+    | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/'
+}
+WANT_VERSION="v$(_read_plugin_version)"
 
 # Highest-severity exit so far; bash arithmetic max.
 STATUS=0

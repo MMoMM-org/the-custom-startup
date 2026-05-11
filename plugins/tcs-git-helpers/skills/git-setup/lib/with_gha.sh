@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tcs-git-helpers: v1.0.0
+# tcs-git-helpers: v2.0.0
 # skills/git-setup/lib/with_gha.sh — Install the PR-title-check GitHub Actions
 # workflow into the target repo's .github/workflows/.
 #
@@ -21,6 +21,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 
 TEMPLATE_SRC="$PLUGIN_ROOT/templates/github-actions/pr-title-check.yml"
+
+# Read plugin.json version so the installed workflow's version banner matches
+# the plugin release (avoids the "did this even update?" confusion when a user
+# pulls v2.0.0 but their checked-in workflow still says v1.0.0).
+_read_plugin_version() {
+  local manifest="$PLUGIN_ROOT/.claude-plugin/plugin.json"
+  if [ ! -f "$manifest" ]; then
+    printf '0.0.0'
+    return 0
+  fi
+  grep -E '"version"[[:space:]]*:' "$manifest" \
+    | head -1 \
+    | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/'
+}
+PLUGIN_VERSION="$(_read_plugin_version)"
 
 _repo_root() {
   if git rev-parse --show-toplevel 2>/dev/null; then
@@ -46,7 +61,7 @@ if [ -f "$DST" ] && [ "${TCS_GHA_FORCE:-0}" != "1" ]; then
   # Idempotent: if existing file already comes from this plugin, overwrite
   # silently (template versioned). Otherwise warn and leave alone.
   if head -3 "$DST" | grep -q 'tcs-git-helpers'; then
-    cp "$TEMPLATE_SRC" "$DST"
+    sed "s/__TCS_GIT_HELPERS_VERSION__/${PLUGIN_VERSION}/g" "$TEMPLATE_SRC" > "$DST"
     printf '[tcs-git-helpers:git-setup] Refreshed existing GHA workflow at %s\n' "$DST"
   else
     printf '[tcs-git-helpers:git-setup] WARN: %s exists and is not from tcs-git-helpers; not overwriting.\n' "$DST" >&2
@@ -54,7 +69,7 @@ if [ -f "$DST" ] && [ "${TCS_GHA_FORCE:-0}" != "1" ]; then
     exit 0
   fi
 else
-  cp "$TEMPLATE_SRC" "$DST"
+  sed "s/__TCS_GIT_HELPERS_VERSION__/${PLUGIN_VERSION}/g" "$TEMPLATE_SRC" > "$DST"
   printf '[tcs-git-helpers:git-setup] Installed GHA workflow at %s\n' "$DST"
 fi
 

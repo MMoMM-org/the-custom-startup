@@ -334,17 +334,29 @@ build_with_existing_hooks() {
   git -C "$repo" commit -q -m "chore: add custom .githooks"
 }
 
-# with-tcs-current: .githooks/* WITH matching v1.0.0 marker.
+# with-tcs-current: .githooks/* WITH marker matching the CURRENT plugin
+# version (read from plugin.json at fixture-build time so the detector's
+# OK path is exercised against the real WANT_VERSION, not a stale literal).
 build_with_tcs_current() {
   local repo="$OUT_DIR/with-tcs-current"
   _init_repo "$repo"
   _commit "$repo" README.md "tcs current" "feat: init"
   mkdir -p "$repo/.githooks"
-  printf '#!/bin/bash\n# tcs-git-helpers: v1.0.0\nexit 0\n' \
+  local plugin_root manifest version
+  plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+  manifest="$plugin_root/.claude-plugin/plugin.json"
+  if [ -f "$manifest" ]; then
+    version="$(grep -E '"version"[[:space:]]*:' "$manifest" \
+      | head -1 \
+      | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+  else
+    version="0.0.0"
+  fi
+  printf '#!/bin/bash\n# tcs-git-helpers: v%s\nexit 0\n' "$version" \
     > "$repo/.githooks/pre-commit"
   chmod +x "$repo/.githooks/pre-commit"
   git -C "$repo" add .githooks >/dev/null
-  git -C "$repo" commit -q -m "chore: install tcs-git-helpers v1.0.0"
+  git -C "$repo" commit -q -m "chore: install tcs-git-helpers v$version"
 }
 
 # with-tcs-older: .githooks/* WITH older v0.9.0 marker.
