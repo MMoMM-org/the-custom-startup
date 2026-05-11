@@ -7,8 +7,12 @@
     }],
     "SessionStart": [{
       "matcher": "",
-      "hooks": [{"type": "command",
-        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start_reminder.py\""}]
+      "hooks": [
+        {"type": "command",
+          "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start_reminder.py\""},
+        {"type": "command",
+          "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start_context_bridge.py\""}
+      ]
     }],
     "PreCompact": [{
       "matcher": "",
