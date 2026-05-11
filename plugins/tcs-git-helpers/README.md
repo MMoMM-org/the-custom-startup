@@ -2,32 +2,87 @@
 
 Git workflow discipline for Claude Code — machine-enforces the recurring git mistakes Claude makes across repos: pushes to closed PRs, branches off unfinished work, squash-merge resume, destructive ops, worktree-exit data loss, and more.
 
-## Version 1.0.0
-
-First release. Ships a coherent set of `PreToolUse` / `PostToolUse` / `SessionStart` hooks plus a per-repo `.githooks/` template set, a `setup` skill, and a `status` skill. Defense-in-depth: hooks installed via `core.hooksPath` keep enforcing rules even when the plugin is disabled.
-
-See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-## Overview
+See [CHANGELOG.md](CHANGELOG.md) for version history. Hooks load natively from `hooks/hooks.json` via Claude Code's plugin system — no manual installation step.
 
 Claude has no persistent memory across sessions and reflexively reproduces a small set of expensive git mistakes. This plugin closes that loop with structured `permissionDecision: deny` denials, granular single-shot overrides, audit logging, and reference docs cited from the denial messages themselves.
 
-The 12 PRD Goals (M1–M12) covered by this plugin:
+## Skills
 
-- M1 — Block pushes to closed/merged PRs (cite PR state; cite squash-merge trap reference)
-- M2 — Block branch creation from unfinished work (clean-but-unmerged OR dirty tree)
-- M3 — Block resume of squash-merged branches (`git cherry` detection; cherry-pick recovery)
-- M4 — Pre-flight branch awareness brief at SessionStart and after `post-merge` (≤300ms p99, no `gh` calls)
-- M5 — Conventional Commits enforcement in `commit-msg` (allowlisted types; merge commits exempted)
-- M6 — Stale local branch surfacing after `post-merge` and via `/tcs-git-helpers:git-audit --cleanup`
-- M7 — Block destructive git operations (`reset --hard`, `clean -f`, `branch -D`, `--force`, `--no-verify`, …)
-- M8 — Worktree exit data-loss guard (uncommitted/untracked/unmerged/unpushed four-check)
-- M9 — Soft nudges after key git ops (PR title, base freshness, rebase verification, stash hygiene)
-- M10 — Plugin distribution and per-repo setup (idempotent, conflict-detecting, lock-serialized)
-- M11 — Defense in depth — `.githooks/` enforces the same rules with the plugin disabled
-- M12 — Override discipline — single-shot env-var overrides + JSONL audit trail
+| Skill | Description |
+|-------|-------------|
+| `/tcs-git-helpers:git-setup` | Per-repo install — writes `.githooks/`, sets `core.hooksPath`, detects and aborts on Husky/lefthook/pre-commit/simple-git-hooks conflicts. Optional `--with-branch-protection` (GitHub single-coder preset) and `--with-gha` (PR-title check workflow). |
+| `/tcs-git-helpers:git-audit` | Per-repo health check — branch state, stale-merged branches, override audit. `--cleanup` to interactively delete stale branches; `--overrides` to review recent override consumption events. |
 
-Two Should-Have features (S1 optional GitHub branch protection, S2 optional GHA PR-title check) are opt-in via `setup --with-branch-protection` and `setup --with-gha`.
+## Hooks
+
+Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the plugin is enabled. No installation step required.
+
+| Event | Script | Purpose |
+|-------|--------|---------|
+| `PreToolUse(Bash)` | `block-bad-git-ops.sh` | Deny 14+ destructive git/gh patterns: push to closed PR, branch from unfinished work, squash-merge resume, `reset --hard`, `clean -f`, `branch -D`, `--force` (without `--force-with-lease`), `--no-verify`, `stash drop/clear`, `reflog expire`, `checkout .`, `restore --worktree`, `push --delete`, `core.hooksPath` overrides |
+| `PreToolUse(Edit\|Write\|NotebookEdit)` | `pre-edit-branch-check.sh` | Block edits to `main`/`master` unless the path is in `.gitignore` |
+| `PreToolUse(Edit\|Write\|NotebookEdit)` | `protect-git-internals.sh` | Block edits to `.git/` internals |
+| `PreToolUse(ExitWorktree)` | `worktree-exit-guard.sh` | Four-check guard before worktree exit — uncommitted, untracked, unmerged, unpushed |
+| `PostToolUse(Bash)` | `nudge-hook.sh` | Soft, success-only nudges after `git checkout -b`, `gh pr create`, first `git push -u`, `gh pr merge`, `git rebase`, `git stash pop` (60s same-nudge dedup) |
+| `SessionStart` | `session-start-brief.sh` | One-line branch awareness brief — branch, working-tree state, ahead/behind, stale-merged count (cache-only, ≤300ms p99, no `gh` calls) |
+
+## Defense in Depth
+
+`/tcs-git-helpers:git-setup` copies `templates/githooks/*` into the target repo's `.githooks/` and points `core.hooksPath` at it. The shell hooks enforce the same rules **even when the plugin is disabled**:
+
+| Hook | Enforces |
+|------|----------|
+| `pre-commit` | Working-tree hygiene, `.orig` leak detection |
+| `pre-push` | Push-to-closed-PR, force-push to protected branch |
+| `commit-msg` | Conventional Commits format (allowlisted types; merge commits exempt; `[skip-format-check]` escape; optional `TCS_REQUIRE_SCOPE=1`) |
+| `post-merge` | Stale-merged branch surfacing + branch awareness brief |
+
+Installed templates carry a `# tcs-git-helpers: vX.Y.Z` marker stamped from `.claude-plugin/plugin.json` at install time; `git-setup --update` restamps them after a plugin upgrade.
+
+## Overrides
+
+Every safety rule has a single-shot env-var override. Set the env-var, run the command once, and the override is consumed automatically (5-second sentinel prevents double-tap):
+
+```bash
+CLAUDE_ALLOW_RESET_HARD=1 git reset --hard origin/main
+CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push
+CLAUDE_ALLOW_BRANCH_FROM_UNFINISHED=1 git checkout -b feat/new
+CLAUDE_ALLOW_WORKTREE_EXIT_WITH_CHANGES=1   # exit worktree with dirty tree
+```
+
+The master override `CLAUDE_ALLOW_GIT_BAD_OPS=1` exists as a tripwire-style escape but emits a loud stderr warning recommending the granular form. All consumption events are appended to `${CLAUDE_PLUGIN_DATA}/audit/overrides.jsonl` (rotated at 1MB). Audit-write failures NEVER block hook decisions.
+
+## References
+
+Cited from denial messages by absolute plugin path. See [references/INDEX.md](references/INDEX.md) for the full by-topic and by-failure-mode index.
+
+| Reference | Topic |
+|-----------|-------|
+| `squash-merge-trap.md` | Push-to-closed-PR, squash-merge fingerprint, cherry-pick recovery |
+| `branch-lifecycle.md` | Full branch Create → Work → PR → Merge → Cleanup loop |
+| `conventional-commits.md` | Format spec, allowlisted types, skip-format-check escape |
+| `destructive-ops.md` | Full destructive-op set and granular overrides |
+| `worktree-discipline.md` | Worktree usage, four-check exit guard, recovery |
+| `migrating-from-husky.md` | Removal procedures for Husky, lefthook, pre-commit-framework, simple-git-hooks |
+| `force-push-safety.md` | `--force` vs `--force-with-lease`, protected-branch behaviour |
+| `rebase-vs-merge.md` | When each is appropriate, what each rewrites, post-rebase verification |
+| `stale-branch-cleanup.md` | How stale branches accumulate and how `--cleanup` surfaces them |
+| `working-tree-hygiene.md` | Clean-tree discipline, stash vs branch, `.orig` leak detection |
+| `pr-vs-commit-messages.md` | Why PR title becomes the commit on squash-merge |
+| `sandbox-and-git-config.md` | Claude Code sandbox interactions, `core.hooksPath` deny semantics |
+| `gh-token-hygiene.md` | Required scopes for `--with-branch-protection`, excessive-scope detection |
+| `best-practices.md` | Overview philosophy and four core principles |
+
+## Tests
+
+```bash
+bats plugins/tcs-git-helpers/tests/bats/
+plugins/tcs-git-helpers/tests/e2e/dogfood.sh
+```
+
+## Attribution
+
+Patterns absorbed via re-implementation from [Boucle-framework](https://github.com/Bande-a-Bonnot/Boucle-framework) (`git-safe`, `branch-guard`, `worktree-guard`). Conventional Commits per the [1.0.0 spec](https://www.conventionalcommits.org/en/v1.0.0/). GitHub branch protection via the [Branch Protection API](https://docs.github.com/rest/branches/branch-protection).
 
 ## Installation
 
@@ -43,67 +98,6 @@ Then, in each repo where you want the `.githooks/` defense-in-depth layer:
 ```
 
 The setup skill detects existing tooling (Husky, lefthook, pre-commit framework, simple-git-hooks) and aborts with a migration reference rather than silently coexisting. It does NOT auto-commit — review the `.githooks/` diff and commit manually.
-
-## Basic Usage
-
-The plugin runs invisibly via Claude Code hooks. You will only notice it when:
-
-1. **Claude tries something risky** — the operation is denied with a structured message naming the rule, the override env-var, and a reference doc path. Example:
-
-   ```
-   [tcs-git-helpers] DENIED: push to closed PR #42 (state=CLOSED)
-   Recovery: open a fresh branch and PR, or cherry-pick onto main.
-   See: references/squash-merge-trap.md
-   Override (single-shot): CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1
-   ```
-
-2. **A SessionStart brief appears** — one line summarizing branch, working-tree state, ahead/behind counts, and stale-merged branch count.
-
-3. **A PostToolUse nudge appears** — one-line reminder after `git checkout -b`, `gh pr create`, `gh pr merge`, `git rebase`, `git stash pop`.
-
-4. **You run a slash command:**
-   - `/tcs-git-helpers:git-setup` — install/update `.githooks/` in the current repo
-   - `/tcs-git-helpers:git-audit` — show repo state, stale branches, override audit
-   - `/tcs-git-helpers:git-audit --cleanup` — interactively delete stale-merged branches
-   - `/tcs-git-helpers:git-audit --overrides` — review recent override consumption events
-
-### Overrides
-
-Every safety rule has a single-shot env-var override. Set the env-var, run the command once, and the override is consumed automatically. Examples:
-
-```bash
-CLAUDE_ALLOW_RESET_HARD=1 git reset --hard origin/main
-CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push
-CLAUDE_ALLOW_BRANCH_FROM_UNFINISHED=1 git checkout -b feat/new
-```
-
-The master override `CLAUDE_ALLOW_GIT_BAD_OPS=1` exists as a tripwire-style escape but emits a loud stderr warning recommending the granular form. All consumption events are appended to `${CLAUDE_PLUGIN_DATA}/audit/overrides.jsonl` (rotated at 1MB).
-
-## References
-
-External:
-- [the-custom-startup marketplace](https://github.com/MMoMM-org/the-custom-startup)
-- [Boucle-framework prior art](https://github.com/Bande-a-Bonnot/Boucle-framework) — `git-safe`, `branch-guard`, `worktree-guard` patterns absorbed via re-implementation
-- [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
-- [GitHub Branch Protection API](https://docs.github.com/rest/branches/branch-protection)
-
-Internal (plugin-local; cited from denial messages by absolute plugin path):
-- `references/squash-merge-trap.md` — push-to-closed-PR, squash-merge fingerprint, cherry-pick recovery
-- `references/branch-lifecycle.md` — full branch Create → Work → PR → Merge → Cleanup loop
-- `references/conventional-commits.md` — format spec, allowlisted types, skip-format-check escape
-- `references/destructive-ops.md` — full destructive-op set and granular overrides
-- `references/worktree-discipline.md` — worktree usage, four-check exit guard, recovery
-- `references/migrating-from-husky.md` — removal procedures for Husky, lefthook, pre-commit, simple-git-hooks
-- `references/force-push-safety.md` — `--force` vs `--force-with-lease`, protected-branch behaviour
-- `references/rebase-vs-merge.md` — when each is appropriate, what each rewrites, post-rebase verification
-- `references/stale-branch-cleanup.md` — how stale branches accumulate and how `--cleanup` surfaces them
-- `references/working-tree-hygiene.md` — clean-tree discipline, stash vs branch, `.orig` leak detection
-- `references/pr-vs-commit-messages.md` — why PR title becomes the commit on squash-merge
-- `references/sandbox-and-git-config.md` — Claude Code sandbox interactions, `core.hooksPath` deny semantics
-- `references/gh-token-hygiene.md` — required scopes for `--with-branch-protection`, excessive-scope detection
-- `references/best-practices.md` — overview philosophy and four core principles
-
-See [references/INDEX.md](references/INDEX.md) for the full by-topic and by-failure-mode index.
 
 ## License
 
