@@ -41,7 +41,7 @@
 - **[eXtended Design & Development (XDD)](docs/reference/xdd.md)** — PRD → SDD → Plan → Implement → Validate back. Full spec-first workflow with 6 dedicated XDD skills and backward validation to catch drift.
 - **[TDD Enforcement](docs/about/concepts.md#tdd--sdd-integration)** — RED → GREEN → REFACTOR iron law. The `tdd-guardian` agent blocks production code until a failing test exists — no exceptions.
 - **[Parallel Agent Execution](docs/reference/agents.md)** — Multiple specialist agents work simultaneously within each implementation phase.
-- **[Memory Bank](docs/about/concepts.md#memory-bank)** — Layered memory system (global / project / repo) with progressive disclosure. Keeps context usage low while maintaining project knowledge across sessions. Run `/setup` to provision.
+- **[Memory Bank](docs/about/concepts.md#memory-bank)** — Layered memory system (global / project / repo) with progressive disclosure. Keeps context usage low while maintaining project knowledge across sessions. Run `/memory-setup` to provision.
 - **[Multi-AI Workflow](docs/guides/multi-ai-workflow.md)** — Export specs as prompts for Claude.ai or Perplexity, import the results back as PRD or SDD.
 - **[Quality Gates](docs/getting-started/workflow.md#step-3-validate-before-implementation)** — Built-in validation at every stage: before you build, while you build, and before you ship.
 - **[Satori Integration](docs/about/concepts.md#satori--mcp-gateway-optional)** *(optional)* — MCP gateway that captures session activity and serves compact summaries, further reducing context consumption.
@@ -120,31 +120,31 @@ Then start building:
 
 ### Team Plugin (`tcs-team`) — Specialist Agents
 
-**15 activity-based agents across 8 roles.** These activate automatically when the workflow needs specialist expertise — you don't invoke them directly. → [Full agent reference](docs/reference/agents.md)
+**15 agents across 7 roles** (the-chief + 14 activity-based). These activate automatically when the workflow needs specialist expertise — you don't invoke them directly. → [Full agent reference](docs/reference/agents.md)
 
 | Role | Focus |
 |------|-------|
 | **The Chief** | Complexity assessment, routing, parallel coordination |
 | **The Analyst** | Requirements, prioritization, product research |
-| **The Architect** | System design, security, robustness, compatibility review |
+| **The Architect** | System design, ADRs, security, robustness, compatibility review |
 | **The Developer** | Feature implementation, performance optimization |
 | **The Tester** | Test strategy, load testing, coverage |
 | **The Designer** | User research, interaction design, accessibility |
 | **The DevOps** | Infrastructure, CI/CD, monitoring |
-| **The Meta Agent** | Agent design and generation |
 
 ### Helper Plugin (`tcs-helper`) — Skill Authoring + Memory Bank *(optional)*
 
-Skill authoring tools, a layered **[Memory Bank](docs/about/concepts.md#memory-bank)** for structured learning and context minimization, and git workflow helpers. Install to add persistent project knowledge to your repos or to extend the framework.
+Skill and agent authoring tools, a layered **[Memory Bank](docs/about/concepts.md#memory-bank)** for structured learning and context minimization, git workflow helpers, session continuity, and documentation tooling. Install to add persistent project knowledge to your repos or to extend the framework.
 
 | Skill | Purpose |
 |-------|---------|
-| `/skill-author` · `/skill-evaluate` · `/skill-import` | Create, audit, and fetch Claude Code skills |
-| `/setup` | Provision `docs/ai/memory/` + CLAUDE.md hierarchy; install learning-capture hooks |
+| `/skill-author` · `/agent-author` · `/skill-evaluate` · `/skill-import` | Create, audit, and fetch Claude Code skills and subagents |
+| `/memory-setup` | Provision `docs/ai/memory/` + CLAUDE.md hierarchy; install learning-capture hooks |
 | `/memory-add` · `/memory-sync` · `/memory-cleanup` · `/memory-promote` | Capture and maintain session learnings across scopes |
 | `/memory-claude-md-optimize` | Audit, score, and migrate flat CLAUDE.md files into Memory Bank structure |
 | `/git-worktree` · `/finish-branch` | Git workflow management — isolated workspaces, branch completion |
-| `/docs` | Fetch and cache current Claude Code documentation on demand |
+| `/context-bridge` | Snapshot session state before `/clear` or `/compact` so the SessionStart hook can auto-restore continuity in the next session |
+| `/claude-docs` · `/doc-product` | Fetch Claude Code docs on demand; plan, draft, and reader-test user-facing documentation |
 
 ### Git Helpers Plugin (`tcs-git-helpers`) — Git Workflow Discipline *(optional)*
 
