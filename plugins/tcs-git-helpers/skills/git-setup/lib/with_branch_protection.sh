@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tcs-git-helpers: v1.0.0
+# tcs-git-helpers: v2.0.0
 # skills/git-setup/lib/with_branch_protection.sh — apply the ADR-12 single-coder
 # branch-protection preset on the target repo's default branch.
 #
