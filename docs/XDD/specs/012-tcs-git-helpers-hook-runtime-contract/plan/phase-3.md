@@ -47,7 +47,7 @@ phase: 3
      - [ ] Maintainer contract enforced mechanically `[ref: PRD/AC-F6.3, CON-4]`
      - [ ] False positive on no-op diffs is acceptable per SDD trade-off `[ref: SDD/ADR-7 trade-offs]`
 
-- [ ] **T3.2 Wire CI gate into a PR workflow** `[activity: build-platform]`
+- [x] **T3.2 Wire CI gate into a PR workflow** `[activity: build-platform]`
 
   1. **Prime**: Read `.github/workflows/release.yml` to understand the existing workflow shape. Note that it triggers on `push: tags` not on PRs — this is why a new file is needed rather than amending it.
   2. **Test**: Write a smoke test asserting the workflow file is valid YAML and references the gate script. (Tested implicitly by GitHub Actions on the first PR; no local test infrastructure required.)
@@ -68,7 +68,7 @@ phase: 3
   5. **Success**:
      - [ ] PRs that violate the contract are blocked from merging `[ref: PRD/AC-F6.3]`
 
-- [ ] **T3.3 End-to-end test: install → merge → cleanup** `[activity: test-strategy]`
+- [x] **T3.3 End-to-end test: install → merge → cleanup** `[activity: test-strategy]`
 
   1. **Prime**: Read `plugins/tcs-git-helpers/tests/e2e/` to inventory existing E2E patterns. Read SDD `[ref: SDD/Runtime View / Primary Flow: stale-cache write on post-merge]` and `[ref: SDD/Runtime View / Primary Flow: skill drift-check on --cleanup]`.
   2. **Test design** (this task IS the test):
