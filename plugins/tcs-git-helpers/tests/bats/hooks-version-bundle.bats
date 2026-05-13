@@ -32,9 +32,8 @@ setup() {
   # This exercises the same enforcement expression used on the real version file:
   # [ "$(grep -c '' <file>)" -eq 1 ]
   local tmp_file
-  tmp_file="${BATS_TEST_TMPDIR:-/tmp}/multi-line-version.$$"
+  tmp_file="${BATS_TEST_TMPDIR}/multi-line-version"
   printf 'h1\nh2\n' > "$tmp_file"
-  run bash -c "[ \"\$(grep -c '' \"$tmp_file\")\" -eq 1 ]"
-  rm -f "$tmp_file"
+  run env TMP_FILE="$tmp_file" bash -c '[ "$(grep -c "" "$TMP_FILE")" -eq 1 ]'
   [ "$status" -ne 0 ]
 }
