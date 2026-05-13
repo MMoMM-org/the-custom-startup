@@ -114,6 +114,8 @@ _run_install() {
 
 @test "IF2 installed pre-commit contains no __HOOK_BUNDLE_VERSION__ placeholder" {
   _run_install
+  [ "$status" -eq 0 ]
+  [ -f "$REPO/.githooks/pre-commit" ]
   run grep -c '__HOOK_BUNDLE_VERSION__' "$REPO/.githooks/pre-commit"
   # grep -c returns 0 lines matching; exit code 1 means no match (what we want)
   [ "$status" -ne 0 ] || [ "$output" = "0" ]
@@ -121,18 +123,24 @@ _run_install() {
 
 @test "IF2 installed pre-push contains no __HOOK_BUNDLE_VERSION__ placeholder" {
   _run_install
+  [ "$status" -eq 0 ]
+  [ -f "$REPO/.githooks/pre-push" ]
   run grep -c '__HOOK_BUNDLE_VERSION__' "$REPO/.githooks/pre-push"
   [ "$status" -ne 0 ] || [ "$output" = "0" ]
 }
 
 @test "IF2 installed commit-msg contains no __HOOK_BUNDLE_VERSION__ placeholder" {
   _run_install
+  [ "$status" -eq 0 ]
+  [ -f "$REPO/.githooks/commit-msg" ]
   run grep -c '__HOOK_BUNDLE_VERSION__' "$REPO/.githooks/commit-msg"
   [ "$status" -ne 0 ] || [ "$output" = "0" ]
 }
 
 @test "IF2 installed post-merge contains no __HOOK_BUNDLE_VERSION__ placeholder" {
   _run_install
+  [ "$status" -eq 0 ]
+  [ -f "$REPO/.githooks/post-merge" ]
   run grep -c '__HOOK_BUNDLE_VERSION__' "$REPO/.githooks/post-merge"
   [ "$status" -ne 0 ] || [ "$output" = "0" ]
 }

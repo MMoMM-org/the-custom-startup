@@ -37,7 +37,7 @@ phase: 1
 
 ## Tasks
 
-- [ ] **T1.1 `lib-bundle.sh` template with helpers** `[activity: build-platform]`
+- [x] **T1.1 `lib-bundle.sh` template with helpers** `[activity: build-platform]`
 
   1. **Prime**: Read SDD `[ref: SDD/Implementation Examples / hook resolves its data dir]`, SDD `[ref: SDD/ADR-6]` for stderr format, and the existing `plugins/tcs-git-helpers/scripts/nudge-hook.sh:108-110` defensive pattern (the working analog).
   2. **Test**: Write `plugins/tcs-git-helpers/tests/bats/lib-bundle.bats` covering:
@@ -52,7 +52,7 @@ phase: 1
      - [ ] `_resolve_data_dir` produces the same path that harness-spawned `nudge-hook.sh` already writes to (so post-merge and nudge-hook share the cache dir) `[ref: SDD/Building Block View]`
      - [ ] Structured stderr format matches SDD `[ref: SDD/ADR-6]` exactly so future log-greppers can rely on it
 
-- [ ] **T1.2 Refactor four hook templates to self-contained, env-var-independent form** `[activity: build-platform]`
+- [x] **T1.2 Refactor four hook templates to self-contained, env-var-independent form** `[activity: build-platform]`
 
   1. **Prime**: Read existing `plugins/tcs-git-helpers/templates/githooks/{post-merge,pre-commit,commit-msg,pre-push}` to inventory every `${CLAUDE_PLUGIN_*}` usage and every silent `return 0`. Read SDD `[ref: SDD/Runtime View / Primary Flow: stale-cache write on post-merge]` and `[ref: SDD/Error Handling]` table.
   2. **Test**: Write `plugins/tcs-git-helpers/tests/bats/hooks-runtime-contract.bats` with one test per hook asserting:
@@ -68,7 +68,7 @@ phase: 1
      - [ ] Every guard path emits exactly one stderr line per the structured format `[ref: PRD/AC-F5.1]`
      - [ ] Stdout remains empty in all paths `[ref: PRD/AC-F5.2]`
 
-- [ ] **T1.3 `tcs-git-helpers-version` source file** `[activity: build-platform]` `[parallel: true]`
+- [x] **T1.3 `tcs-git-helpers-version` source file** `[activity: build-platform]` `[parallel: true]`
 
   1. **Prime**: Read SDD `[ref: SDD/ADR-2]`.
   2. **Test**: Write a one-line bats assertion in `tests/bats/hooks-version-bundle.bats`: the file `plugins/tcs-git-helpers/templates/githooks/tcs-git-helpers-version` exists and contains a single non-empty trimmed line matching `^[a-z0-9-]+$`.
