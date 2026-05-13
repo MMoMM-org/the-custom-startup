@@ -38,7 +38,7 @@ phase: 2
 
 ## Tasks
 
-- [ ] **T2.1 Bash drift-check helper `drift_check.sh`** `[activity: build-platform]` `[parallel: true]`
+- [x] **T2.1 Bash drift-check helper `drift_check.sh`** `[activity: build-platform]` `[parallel: true]`
 
   1. **Prime**: Read SDD `[ref: SDD/Implementation Examples / drift-check helper (bash)]` and `[ref: SDD/Internal API Changes / function: drift_check_hook_bundle]`.
   2. **Test**: Write `plugins/tcs-git-helpers/tests/bats/drift-check-sh.bats` covering:
@@ -54,7 +54,7 @@ phase: 2
      - [ ] Three-state contract observed exactly `[ref: SDD/Internal API Changes]`
      - [ ] No side effects (read-only verified by test)
 
-- [ ] **T2.2 Python drift-check helper `drift_check.py`** `[activity: build-platform]` `[parallel: true]`
+- [x] **T2.2 Python drift-check helper `drift_check.py`** `[activity: build-platform]` `[parallel: true]`
 
   1. **Prime**: Read SDD `[ref: SDD/Internal API Changes / function: check_hook_bundle]` and the bash helper from T2.1 for behavior parity.
   2. **Test**: Write `plugins/tcs-git-helpers/tests/python/test_drift_check.py` covering the same three cases (`OK`, `MISSING`, `DRIFT`), plus a parity check that the python helper produces the same classification as the bash helper for the same `(repo_path, expected_version)` inputs across a 10-row table of fixtures.
@@ -95,7 +95,7 @@ phase: 2
      - [ ] Skill modes that do not depend on hook state do not perform the check `[ref: PRD/AC-F4.3]`
      - [ ] Happy path is silent (no drift output when OK) `[ref: PRD/AC-F4.2]`
 
-- [ ] **T2.5 Soften `session-start-brief.sh` for missing-cache case** `[activity: build-platform]` `[parallel: true]`
+- [x] **T2.5 Soften `session-start-brief.sh` for missing-cache case** `[activity: build-platform]` `[parallel: true]`
 
   1. **Prime**: Read existing `plugins/tcs-git-helpers/scripts/session-start-brief.sh:130-180` (stale-count + cleanup-suggestion blocks). Confirm it does not currently prompt about drift.
   2. **Test**: Extend `tests/bats/session-start-brief.bats` to cover:

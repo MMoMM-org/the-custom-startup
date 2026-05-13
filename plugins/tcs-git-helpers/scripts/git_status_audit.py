@@ -69,9 +69,31 @@ def _load_drift_check():
     return mod
 
 
-_drift_check_mod = _load_drift_check()
-check_hook_bundle = _drift_check_mod.check_hook_bundle
-DriftStatus = _drift_check_mod.DriftStatus
+_drift_check_mod = None
+check_hook_bundle = None
+DriftStatus = None
+
+
+def _ensure_drift_check_loaded() -> None:
+    """Load drift_check.py module on demand. Raise SystemExit with a clear message
+    if the file is missing or fails to load, since drift-dependent commands cannot
+    function without it."""
+    global _drift_check_mod, check_hook_bundle, DriftStatus
+    if _drift_check_mod is not None:
+        return
+    # check_hook_bundle may already be set (e.g. patched by tests) — respect that.
+    if check_hook_bundle is not None:
+        return
+    try:
+        _drift_check_mod = _load_drift_check()
+        check_hook_bundle = _drift_check_mod.check_hook_bundle
+        DriftStatus = _drift_check_mod.DriftStatus
+    except FileNotFoundError as e:
+        print(
+            f"[tcs-git-helpers] ERROR: drift_check.py not found ({e}). Reinstall plugin.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +167,7 @@ def _run_gh(args: list[str], cwd: str | None = None) -> tuple[int, str, str]:
         return 1, "", f"<error: {exc}>"
 
 
-def gh_available() -> bool:
+def _gh_available() -> bool:
     """Return True if the gh CLI is installed (exits 0 on --version)."""
     rc, _, _ = _run_gh(["--version"])
     return rc == 0
@@ -505,6 +527,7 @@ def cmd_cleanup(*, cache_dir: Path, repo_path: str, interactive: bool = True) ->
     M6 AC3: branches checked out in a worktree are excluded.
     T2.3: drift gate first; live refresh before cache read (PRD/AC-F2.1).
     """
+    _ensure_drift_check_loaded()
     # --- Drift gate (T2.3) ---
     drift = check_hook_bundle(Path(repo_path), EXPECTED_HOOK_BUNDLE_VERSION)
     if drift.status.value == "MISSING":
@@ -524,7 +547,7 @@ def cmd_cleanup(*, cache_dir: Path, repo_path: str, interactive: bool = True) ->
 
     # --- Live refresh (T2.3, Bug 1 fix) ---
     default_branch = _read_stale_cache(cache_dir, repo_path).get("default_branch", "main")
-    if not gh_available():
+    if not _gh_available():
         print(
             "tcs-git-helpers: gh CLI not found — "
             "falling back to cached state (may be stale).",

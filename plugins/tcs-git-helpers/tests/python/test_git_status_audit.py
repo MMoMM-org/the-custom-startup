@@ -984,6 +984,9 @@ class TestCleanupDriftGate:
             # gh is "available": `gh --version` returns exit 0
             if cmd[0] == "gh" and "--version" in cmd:
                 return _git_result("gh version 2.0.0")
+            # gh is authenticated: `gh auth status` returns exit 0
+            if cmd[0] == "gh" and "auth" in cmd and "status" in cmd:
+                return _git_result("", returncode=0)
             return _git_result("")
 
         monkeypatch.setattr(gsa, "check_hook_bundle", fake_check_hook_bundle)
@@ -1162,6 +1165,8 @@ class TestCleanupDriftGate:
                 m.stdout = "gh version 2.0.0"
                 m.stderr = ""
                 return m
+            if cmd[0] == "gh" and "auth" in cmd and "status" in cmd:
+                return _git_result("", returncode=0)
             if cmd[0] == "git":
                 if "for-each-ref" in cmd:
                     return _git_result("feat/old-thing\nfix/another-thing\nmain")
@@ -1189,3 +1194,96 @@ class TestCleanupDriftGate:
         assert len(git_delete_calls) >= 1, (
             f"Expected at least one 'git branch -d' call, got: {git_delete_calls}"
         )
+
+
+# ===========================================================================
+# Tests for lazy drift_check loading (Critical fix)
+# ===========================================================================
+
+class TestLazyDriftCheckLoad:
+    """
+    Verify that cmd_brief, cmd_json, and cmd_overrides all succeed when
+    drift_check.py is missing (i.e. _load_drift_check raises FileNotFoundError).
+    Only cmd_cleanup needs drift_check; the other commands must not trigger the load.
+    """
+
+    def _make_module_with_broken_load(self, monkeypatch):
+        """
+        Return a freshly loaded gsa module with _load_drift_check patched to
+        raise FileNotFoundError — simulating a missing drift_check.py.
+
+        Because the module-level globals are set to None (lazy), and none of
+        cmd_brief/cmd_json/cmd_overrides call _ensure_drift_check_loaded(),
+        the commands must complete without ever reaching the error path.
+        """
+        import importlib
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("git_status_audit_lazy", _MODULE_PATH)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        # Patch _load_drift_check on the freshly loaded module to always fail
+        def broken_load():
+            raise FileNotFoundError("drift_check.py not found (simulated)")
+
+        monkeypatch.setattr(mod, "_load_drift_check", broken_load)
+        # Reset lazy state so any _ensure_drift_check_loaded() call would attempt to load
+        mod._drift_check_mod = None
+        mod.check_hook_bundle = None
+        mod.DriftStatus = None
+        return mod
+
+    def test_cmd_brief_succeeds_without_drift_check(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """cmd_brief must complete normally when drift_check.py is absent."""
+        mod = self._make_module_with_broken_load(monkeypatch)
+        repo_path = "/fake/repo/lazy-brief"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        _write_stale_cache(cache_dir, repo_path, "main", [])
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "git":
+                if "symbolic-ref" in cmd:
+                    return _git_result("feat/some-branch")
+                if "status" in cmd and "--porcelain" in cmd:
+                    return _git_result("")
+                if "rev-list" in cmd:
+                    return _git_result("0\n0")
+            return _git_result("")
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+        monkeypatch.setattr("builtins.print", lambda s="", **_: None)
+
+        # Must not raise SystemExit or any exception
+        mod.cmd_brief(cache_dir=cache_dir, repo_path=repo_path)
+
+    def test_cmd_json_succeeds_without_drift_check(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """cmd_json must complete normally when drift_check.py is absent."""
+        mod = self._make_module_with_broken_load(monkeypatch)
+        repo_path = "/fake/repo/lazy-json"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        _write_stale_cache(cache_dir, repo_path, "main", STALE_ENTRIES)
+
+        monkeypatch.setattr("builtins.print", lambda s="", **_: None)
+
+        mod.cmd_json(cache_dir=cache_dir, repo_path=repo_path)
+
+    def test_cmd_overrides_succeeds_without_drift_check(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """cmd_overrides must complete normally when drift_check.py is absent."""
+        mod = self._make_module_with_broken_load(monkeypatch)
+        repo_path = "/fake/repo/lazy-overrides"
+        plugin_data = tmp_path / "plugin_data"
+        (plugin_data / "audit").mkdir(parents=True)
+        # No overrides.jsonl — exercises the "no overrides recorded yet" path
+
+        monkeypatch.setattr("builtins.print", lambda s="", **_: None)
+
+        mod.cmd_overrides(repo_path=repo_path, limit=20, plugin_data_dir=plugin_data)
