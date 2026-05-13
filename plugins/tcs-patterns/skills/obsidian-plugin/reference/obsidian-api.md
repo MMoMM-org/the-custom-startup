@@ -837,7 +837,7 @@ const isLivePreview = editorView.state.field(editorLivePreviewField);
 
 ### Field-by-Field Submission Rules
 
-The community-plugin reviewer bot (`obsidianmd/obsidian-releases`) enforces these on every submission PR. Failing rules surface as **errors** (block submission) or **warnings** (do not block but the reviewer may still require fixes).
+The community-plugin reviewer enforces these on every submission. The **primary path** is now the [community.obsidian.md](https://community.obsidian.md/account/plugins) portal (manual submission per the official docs). The `obsidianmd/obsidian-releases` PR bot remains active as a **legacy/parallel path** — same rule set, different intake. Failing rules surface as **errors** (block submission) or **warnings** (do not block but the reviewer may still require fixes).
 
 **`id`** (required)
 - kebab-case, lowercase, unique across all published plugins.
@@ -856,7 +856,7 @@ The community-plugin reviewer bot (`obsidianmd/obsidian-releases`) enforces thes
 
 **`description`** (required) — most-rejected field
 - ≤ 250 characters.
-- MUST end with `.` / `!` / `?` (bot warning if missing).
+- MUST end with `.` / `!` / `?` / `)` (bot warning if missing).
 - MUST NOT contain the word "Obsidian" (redundant in the Community Plugins context, and trademark hygiene).
 - MUST NOT contain emoji or special characters.
 - MUST NOT start with "This is a plugin" (redundant — every entry in the directory is a plugin).
@@ -891,7 +891,7 @@ Submissions derived from the sample-plugin template ship with placeholder names 
 
 ### Pre-Submission Checklist
 
-Before opening the submission PR against `obsidianmd/obsidian-releases`:
+Before submitting via the [community.obsidian.md](https://community.obsidian.md/account/plugins) portal (primary, manual) — or opening a submission PR against `obsidianmd/obsidian-releases` (legacy/parallel path):
 
 - [ ] `manifest.json` validates against every field rule above.
 - [ ] `README.md` exists at repo root and explains purpose + usage.
@@ -907,6 +907,57 @@ Before opening the submission PR against `obsidianmd/obsidian-releases`:
 - [ ] Plugin tested on the `minAppVersion` declared.
 - [ ] GitHub release with `main.js`, `manifest.json`, and optional `styles.css` as **binary attachments** — release tag MUST match `manifest.version` exactly (no `v` prefix).
 - [ ] `manifest.json` at the HEAD of the default branch is the version the directory will read on submission — commit it before submitting.
+- [ ] *Recommended*: attach a GitHub artifact attestation to `main.js` (and `styles.css` if shipped). The reviewer surfaces a non-blocking **Recommendation** when assets lack attestations — see "Release Asset Attestations" below.
+
+### Release Asset Attestations (Recommended)
+
+The community-plugin reviewer surfaces a non-blocking **Recommendation** when release assets (`main.js`, `styles.css`) have no GitHub artifact attestation:
+
+> *The `main.js` release asset does not have a GitHub artifact attestation. Artifact attestations let users cryptographically verify the provenance of the release assets, proving they were built from the source repository.*
+
+Attestations are not a submission blocker today, but they're cheap to add and the reviewer is actively recommending them — expect this to harden over time.
+
+**How to add them.** Use the GitHub-supplied [`actions/attest-build-provenance`](https://github.com/actions/attest-build-provenance) action in your release workflow, after the build step produces `main.js` and `styles.css`. Minimal sketch:
+
+```yaml
+# .github/workflows/release.yml
+permissions:
+  id-token: write        # required to mint the attestation
+  attestations: write    # required to upload it
+  contents: write        # to attach assets to the GitHub Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm run build   # produces main.js (+ styles.css if applicable)
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            styles.css       # omit if your plugin doesn't ship one
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            main.js
+            manifest.json
+            styles.css
+```
+
+Key constraints:
+- The workflow runs on a public repo (or with the appropriate permissions on private repos) — attestations are publicly verifiable.
+- `subject-path` must point at the **same binary file** that is uploaded as the release asset; building twice (e.g. once for attestation, once for upload) produces a hash mismatch and the attestation won't verify.
+- The release tag MUST still match `manifest.version` exactly (no `v` prefix) — attestation does not relax that rule.
+
+Users can verify with `gh attestation verify main.js --owner <your-org>` once installed. Full reference: <https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds>.
 
 ---
 
@@ -924,7 +975,7 @@ this.addCommand({ id: "myplugin:run-import", name: "Run Import" });
 
 ### `console.debug`, Not `console.log`
 
-The Obsidian community-plugin reviewer bot enforces `console.debug` over `console.log` on PRs to the obsidian-releases repo. User-facing impact: DevTools hides the Verbose level by default. Document the toggle in support docs (a screenshot of the DevTools log-level dropdown showing Verbose enabled lets users self-diagnose "no debug output" reports).
+The Obsidian community-plugin reviewer enforces `console.debug` over `console.log` — whether submission goes through the primary [community.obsidian.md](https://community.obsidian.md/account/plugins) portal (manual) or the legacy/parallel `obsidianmd/obsidian-releases` PR bot. User-facing impact: DevTools hides the Verbose level by default. Document the toggle in support docs (a screenshot of the DevTools log-level dropdown showing Verbose enabled lets users self-diagnose "no debug output" reports).
 
 ### Native Dialogs via `@electron/remote`
 
@@ -1128,7 +1179,7 @@ One-line check beats `AbortController` plumbing for this case.
 | "Advanced settings" / "Connection settings" headings | Redundant — everything in the tab is a setting | "Advanced" / "Connection" |
 | API key / token persisted in `data.json` | Replicated to every Sync-paired device | `SecretStorage` + `SecretComponent`; persist secret ID, not value |
 | `"author": "Name <email@…>"` in manifest | Submission bot rejects — email forbidden in `author` | `"author": "Name"` + `"authorUrl": "https://…"` |
-| Manifest `description` missing terminal punctuation | Bot warning — must end with `.` / `!` / `?` | End the sentence with `.` |
+| Manifest `description` missing terminal punctuation | Bot warning — must end with `.` / `!` / `?` / `)` | End the sentence with `.` |
 | Manifest `description` contains "Obsidian" | Bot warning — redundant in directory context + trademark hygiene | Reword without the word |
 | Manifest `description` longer than 250 chars | Bot warning | Shorten to one action-led sentence |
 | Manifest `description` contains emoji / special chars | Bot warning | ASCII-only prose |
