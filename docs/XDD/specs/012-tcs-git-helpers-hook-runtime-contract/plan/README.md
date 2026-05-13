@@ -112,7 +112,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 > **Tracking Principle**: Track logical units that produce verifiable outcomes. The TDD cycle is the method, not separate tracked items.
 
 - [x] [Phase 1: Self-contained hook bundle](phase-1.md)
-- [ ] [Phase 2: Skill-side drift check + cmd_cleanup refresh](phase-2.md)
+- [x] [Phase 2: Skill-side drift check + cmd_cleanup refresh](phase-2.md)
 - [ ] [Phase 3: CI maintainer-contract gate + E2E lockdown](phase-3.md)
 
 ---

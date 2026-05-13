@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Skill-side drift check + cmd_cleanup refresh"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -81,7 +81,7 @@ phase: 2
      - [ ] Drift `MISSING` and `DRIFT` paths produce distinct, actionable stderr messages `[ref: PRD/AC-F4.1, F4.4]`
      - [ ] Graceful degradation on no-gh / no-auth produces stderr explanation, never silent "none" `[ref: PRD/AC-F2.3]`
 
-- [ ] **T2.4 Wire drift check into other audit modes** `[activity: build-feature]`
+- [x] **T2.4 Wire drift check into other audit modes** `[activity: build-feature]`
 
   1. **Prime**: Read `cmd_default`, `cmd_brief`, `cmd_json`, and `cmd_overrides` in `git_status_audit.py`. Identify which modes consume the stale-branch cache (default, brief, json — yes; overrides — no).
   2. **Test**: Add cases to `tests/python/test_git_status_audit.py`:
@@ -108,7 +108,7 @@ phase: 2
      - [ ] SessionStart brief never prompts about drift `[ref: PRD/Q5 resolution; CON-5]`
      - [ ] Brief degrades silently on missing cache / version `[ref: PRD/AC-F5.2 — exit 0 always]`
 
-- [ ] **T2.6 Phase 2 validation + Bug 1 closure** `[activity: validate]`
+- [x] **T2.6 Phase 2 validation + Bug 1 closure** `[activity: validate]`
 
   1. **Run** `bats plugins/tcs-git-helpers/tests/bats/` and `pytest plugins/tcs-git-helpers/tests/python/` — both green.
   2. **Run** an end-to-end check on a real repo:
