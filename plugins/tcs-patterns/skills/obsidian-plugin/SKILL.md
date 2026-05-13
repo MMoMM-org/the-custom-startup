@@ -1,6 +1,6 @@
 ---
 name: obsidian-plugin
-description: "Use PROACTIVELY when building or reviewing Obsidian plugins, or MUST BE USED when preparing a plugin for community-directory submission. Covers lifecycle, listener/timer cleanup, mobile compatibility, settings reactivity, vault write/event discipline, XSS-safe DOM, SecretStorage for keys, requestUrl over fetch, sentence-case UI text, manifest submission rules (author email, description punctuation, plugin id naming, fundingUrl), sample-plugin residue, console.log vs console.debug, and common API gotchas (normalizePath, vault.process vs modify, processFrontMatter, popout-window globals, layout-ready timing, Sync-aware persistence, platform CSS body classes). Trigger phrases: \"obsidian plugin\", \"manifest.json\", \"community plugin submission\", \"obsidianmd/obsidian-releases\", \"obsidian audit\"."
+description: "Use PROACTIVELY when building or reviewing Obsidian plugins, or MUST BE USED when preparing a plugin for community-directory submission. Covers lifecycle, listener/timer cleanup, mobile compatibility, settings reactivity, vault write/event discipline, XSS-safe DOM, SecretStorage for keys, requestUrl over fetch, sentence-case UI text, manifest submission rules (author email, description punctuation, plugin id naming, fundingUrl), release asset attestations, sample-plugin residue, console.log vs console.debug, and common API gotchas (normalizePath, vault.process vs modify, processFrontMatter, popout-window globals, layout-ready timing, Sync-aware persistence, platform CSS body classes). Trigger phrases: \"obsidian plugin\", \"manifest.json\", \"community plugin submission\", \"community.obsidian.md\", \"obsidianmd/obsidian-releases\", \"obsidian audit\"."
 user-invocable: true
 argument-hint: "[plugin source path to audit]"
 allowed-tools: Read, Bash, Grep, Glob
@@ -53,7 +53,7 @@ State {
 - Drop redundant "settings" from settings-tab headings. "Advanced", not "Advanced settings".
 - For edits to the **active** note, prefer the `Editor` API (`editor.replaceSelection`, `editor.setLine`, etc. via `getActiveViewOfType(MarkdownView)`) — `vault.modify` loses cursor, selection, and folded ranges. Use `vault.process` for background files only.
 - In `addCommand`, use a bare `id` (e.g. `"run-import"`) — Obsidian prefixes with the plugin ID automatically. Prefixing yourself produces "MyPlugin: MyPlugin: Run Import" in the palette.
-- Use `console.debug(...)`, never `console.log(...)`. The `obsidianmd/obsidian-releases` reviewer bot rejects `console.log`. Document the DevTools Verbose-level toggle in support docs so users can self-diagnose "no debug output".
+- Use `console.debug(...)`, never `console.log(...)`. The community-plugin reviewer rejects `console.log` — whether submission goes through the primary [community.obsidian.md](https://community.obsidian.md/account/plugins) portal (manual) or the legacy/parallel `obsidianmd/obsidian-releases` PR bot. Document the DevTools Verbose-level toggle in support docs so users can self-diagnose "no debug output".
 
 **Never:**
 - Use `document.addEventListener` directly — always use `registerDomEvent`.
@@ -74,9 +74,9 @@ State {
 - Store references to custom views (`this.view = new MyView()` inside `registerView`) — leaks across plugin reloads. Use `(leaf) => new MyView(leaf)` and access live instances via `app.workspace.getLeavesOfType(VIEW_TYPE)`.
 - Detach leaves in `onunload` (`workspace.detachLeavesOfType(VIEW_TYPE)`) — leaves should reinitialize at their original position when the user updates the plugin. Closing them on every update is hostile UX.
 - Iterate `vault.getFiles().find(f => f.path === path)` for path lookup — O(n) per call. Use `vault.getFileByPath` / `vault.getFolderByPath` / `vault.getAbstractFileByPath` (constant-time).
-- Disable **any** ESLint rule — no `// eslint-disable`, no `// eslint-disable-line`, no `// eslint-disable-next-line`, no `'rule': 'off'` entries in `.eslintrc*`. The Obsidian community-plugin reviewer bot (`obsidianmd/obsidian-releases`) scans submission PRs for disabled rules and **rejects the plugin from official registration** if any are found. This applies to every rule the project's ESLint config loads — `obsidianmd/*`, `@typescript-eslint/*`, base `eslint:recommended`, and any other plugin. If a rule conflicts with the code, **change the code, not the rule**. Document the workaround in a code comment when the alternative is non-obvious.
+- Disable **any** ESLint rule — no `// eslint-disable`, no `// eslint-disable-line`, no `// eslint-disable-next-line`, no `'rule': 'off'` entries in `.eslintrc*`. The Obsidian community-plugin reviewer (primary path: the [community.obsidian.md](https://community.obsidian.md/account/plugins) portal, manual submission; legacy/parallel path: the `obsidianmd/obsidian-releases` PR bot) scans submissions for disabled rules and **rejects the plugin from official registration** if any are found. This applies to every rule the project's ESLint config loads — `obsidianmd/*`, `@typescript-eslint/*`, base `eslint:recommended`, and any other plugin. If a rule conflicts with the code, **change the code, not the rule**. Document the workaround in a code comment when the alternative is non-obvious.
 - Put an email address in the manifest `author` field — the submission bot **rejects** it. Use `authorUrl` for a contact / homepage link instead.
-- Ship a manifest `description` that violates any of these submission-bot rules: longer than 250 characters; missing terminal punctuation (`.` / `!` / `?`); containing the word "Obsidian"; containing emoji or special characters; starting with "This is a plugin". The "Obsidian" word check exists for both redundancy (every entry is in the Obsidian directory) and trademark hygiene under the Developer policy.
+- Ship a manifest `description` that violates any of these submission-bot rules: longer than 250 characters; missing terminal punctuation (`.` / `!` / `?` / `)`); containing the word "Obsidian"; containing emoji or special characters; starting with "This is a plugin". The "Obsidian" word check exists for both redundancy (every entry is in the Obsidian directory) and trademark hygiene under the Developer policy.
 - Use `obsidian` anywhere in the manifest `id` — the directory **rejects** it. Pick a unique kebab-case identifier that omits the word entirely.
 - Set `fundingUrl` without actually accepting financial support — the submission-requirements doc requires removing the field if you don't take donations.
 - Ship sample-plugin placeholder names (`MyPlugin`, `MyPluginSettings`, `SampleSettingTab`) or unmodified sample code (ribbon icon, command, modal) from the template plugin — the reviewer flags these as residue. Rename to your plugin's identity and delete what you don't use.
@@ -215,7 +215,7 @@ grep -rn -E "eslint-disable|/\*\s*eslint-disable" "$TARGET" --include="*.ts" --i
 grep -rn -E "['\"][a-z@/-]+['\"]\s*:\s*['\"]?off['\"]?" "$TARGET" --include=".eslintrc*" --include="eslint.config*" 2>/dev/null
 ```
 
-Flag **every match** as CRITICAL with kind `LINT_RULE_DISABLED`. The Obsidian community-plugin reviewer bot (`obsidianmd/obsidian-releases`) scans submission PRs for disabled rules and rejects plugins with any disabled rule — `obsidianmd/*`, `@typescript-eslint/*`, or otherwise. There is no "justified disable" exception at the bot. Fix: change the code to satisfy the rule. If the rule is genuinely wrong for the project, raise it upstream — do not disable locally.
+Flag **every match** as CRITICAL with kind `LINT_RULE_DISABLED`. The Obsidian community-plugin reviewer (primary path: the [community.obsidian.md](https://community.obsidian.md/account/plugins) portal, manual submission; legacy/parallel path: the `obsidianmd/obsidian-releases` PR bot) scans submissions for disabled rules and rejects plugins with any disabled rule — `obsidianmd/*`, `@typescript-eslint/*`, or otherwise. There is no "justified disable" exception. Fix: change the code to satisfy the rule. If the rule is genuinely wrong for the project, raise it upstream — do not disable locally.
 
 ### 12. Scan for Plugin-Guideline Violations (Submission Blockers + Theme/UX Hygiene)
 
@@ -272,7 +272,7 @@ jq -r '.id' "$MANIFEST" 2>/dev/null | grep -i 'obsidian' && echo "MANIFEST_INVAL
 # description rules — HIGH (bot warnings, reviewer may require fixes)
 DESC=$(jq -r '.description' "$MANIFEST" 2>/dev/null)
 [ ${#DESC} -gt 250 ] && echo "MANIFEST_INVALID: description > 250 chars (${#DESC})"
-echo "$DESC" | grep -qE '[.!?]$' || echo "MANIFEST_INVALID: description missing terminal . ! ?"
+echo "$DESC" | grep -qE '[.!?)]$' || echo "MANIFEST_INVALID: description missing terminal . ! ? )"
 echo "$DESC" | grep -qi 'obsidian' && echo "MANIFEST_INVALID: description contains the word 'Obsidian'"
 echo "$DESC" | grep -qE '[^[:print:][:space:]]|[^\x00-\x7F]' && echo "MANIFEST_INVALID: description contains emoji/non-ASCII"
 echo "$DESC" | grep -qiE '^this is a plugin' && echo "MANIFEST_INVALID: description starts with 'This is a plugin'"

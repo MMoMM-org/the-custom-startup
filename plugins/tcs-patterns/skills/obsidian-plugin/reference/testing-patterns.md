@@ -110,7 +110,7 @@ Pattern: each test mutates → asserts → explicitly restores its own changes. 
 
 ### Fake Timers vs `prefer-active-window-timers`
 
-`vi.useFakeTimers()` only intercepts global `setInterval` / `setTimeout`. The `obsidianmd/prefer-active-window-timers` lint rule prefers `activeWindow.setInterval`. The two patterns conflict — but the resolution is **not** to disable the lint rule. Disabling any `obsidianmd/*` rule (or any ESLint rule at all) blocks community-plugin submission via `obsidianmd/obsidian-releases` (see "Why These Rules Matter" below).
+`vi.useFakeTimers()` only intercepts global `setInterval` / `setTimeout`. The `obsidianmd/prefer-active-window-timers` lint rule prefers `activeWindow.setInterval`. The two patterns conflict — but the resolution is **not** to disable the lint rule. Disabling any `obsidianmd/*` rule (or any ESLint rule at all) blocks community-plugin submission (see "Why These Rules Matter" below).
 
 The correct resolution is on the test side, not the production side. Production code uses `activeWindow.setInterval` (or `this.registerInterval(window.setInterval(...))`) unconditionally. Tests stub the active-window timer functions directly with `vi.spyOn`:
 
@@ -201,7 +201,9 @@ The `eslint-plugin-obsidianmd` package ships a recommended config — leave it e
 
 ### Community-Plugin Submission Gate
 
-The Obsidian community-plugin reviewer bot at `obsidianmd/obsidian-releases` scans every submission PR for disabled ESLint rules and **rejects the plugin from official registration if any rule is disabled** — whether via line-level `// eslint-disable*` comments, file-level disables, or `'rule': 'off'` entries in `.eslintrc*`. This applies to **every rule the project's ESLint config loads**, not only `obsidianmd/*` — `@typescript-eslint/*`, base `eslint:recommended`, and any other plugin's rules are equally in-scope.
+The Obsidian community-plugin reviewer scans every submission for disabled ESLint rules and **rejects the plugin from official registration if any rule is disabled** — whether via line-level `// eslint-disable*` comments, file-level disables, or `'rule': 'off'` entries in `.eslintrc*`. This applies to **every rule the project's ESLint config loads**, not only `obsidianmd/*` — `@typescript-eslint/*`, base `eslint:recommended`, and any other plugin's rules are equally in-scope.
+
+Primary submission path: the [community.obsidian.md](https://community.obsidian.md/account/plugins) portal (manual). The `obsidianmd/obsidian-releases` PR bot remains active as a legacy/parallel path; both apply the same rule set.
 
 The submission gate has no "justified disable" exception. If a rule conflicts with the code, the only acceptable resolution is to **change the code**, not the rule. If the rule is genuinely wrong for all consumers, raise it upstream with the relevant ESLint plugin maintainers.
 
