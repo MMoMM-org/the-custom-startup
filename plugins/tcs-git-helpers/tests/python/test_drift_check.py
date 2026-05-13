@@ -28,15 +28,23 @@ import pytest
 # Dynamic import of drift_check (not installed; loaded by path)
 # ---------------------------------------------------------------------------
 
-_REPO_ROOT = Path(__file__).parent.parent.parent.parent  # the-custom-startup/
-_LIB_PATH = _REPO_ROOT / "plugins" / "tcs-git-helpers" / "scripts" / "lib" / "drift_check.py"
-_BASH_HELPER = _REPO_ROOT / "plugins" / "tcs-git-helpers" / "scripts" / "lib" / "drift_check.sh"
+_PLUGIN_ROOT = Path(__file__).parent.parent.parent  # plugins/tcs-git-helpers/
+_LIB_PATH = _PLUGIN_ROOT / "scripts" / "lib" / "drift_check.py"
+_BASH_HELPER = _PLUGIN_ROOT / "scripts" / "lib" / "drift_check.sh"
 
 
 def _load_module():
+    import sys
     spec = importlib.util.spec_from_file_location("drift_check", _LIB_PATH)
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # Register before exec so @dataclass can resolve forward-reference annotations
+    # (Python 3.14 + from __future__ import annotations requires module in sys.modules)
+    sys.modules["drift_check"] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        del sys.modules["drift_check"]
+        raise
     return mod
 
 
