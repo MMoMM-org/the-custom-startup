@@ -128,6 +128,11 @@ PATTERN_HOOKSPATH_INLINE='git[[:space:]]+-c[[:space:]]+core\.hooksPath'
 # git config [--global|--local|--system|...] core.hooksPath ...
 PATTERN_HOOKSPATH_CONFIG='git[[:space:]]+config[[:space:]]+(--[^[:space:]]+[[:space:]]+)?core\.hooksPath'
 
+# Read-only forms (--get, --get-all, --get-regexp). These never mutate state
+# so they bypass the HOOKSPATH_OVERRIDE check, allowing debugging like
+# `git config --get core.hooksPath` without setting TCS_GIT_HELPERS_SETUP_ACTIVE.
+PATTERN_HOOKSPATH_CONFIG_READ='git[[:space:]]+config[[:space:]]+(--get|--get-all|--get-regexp)([[:space:]]+--[^[:space:]]+)*[[:space:]]+core\.hooksPath'
+
 # Export pattern constants so child shells (e.g. when sourced from a hook
 # script that re-execs in a subshell) see them too.
 export \
@@ -147,7 +152,8 @@ export \
   PATTERN_BRANCH_CREATE \
   PATTERN_BRANCH_RESUME \
   PATTERN_HOOKSPATH_INLINE \
-  PATTERN_HOOKSPATH_CONFIG
+  PATTERN_HOOKSPATH_CONFIG \
+  PATTERN_HOOKSPATH_CONFIG_READ
 
 # ---------------------------------------------------------------------------
 # Helper

@@ -370,6 +370,37 @@ _assert_allow() {
   _assert_allow
 }
 
+@test "HOOKSPATH_OVERRIDE: read-only --get core.hooksPath is allowed without sentinel" {
+  # `git config --get core.hooksPath` is read-only — debugging, never mutating.
+  # Must not trigger HOOKSPATH_OVERRIDE even when TCS_GIT_HELPERS_SETUP_ACTIVE is unset.
+  run _run_hook_with_cmd "git config --get core.hooksPath"
+  _assert_allow
+}
+
+@test "HOOKSPATH_OVERRIDE: read-only --get-all core.hooksPath is allowed" {
+  run _run_hook_with_cmd "git config --get-all core.hooksPath"
+  _assert_allow
+}
+
+@test "HOOKSPATH_OVERRIDE: read-only --get-regexp core\\.hooksPath is allowed" {
+  run _run_hook_with_cmd "git config --get-regexp core\\.hooksPath"
+  _assert_allow
+}
+
+@test "HOOKSPATH_OVERRIDE: --get with --show-scope still allowed (multi-flag read)" {
+  # Some debugging chains use multiple read flags. Ensure the multi-flag form
+  # still classifies as read.
+  run _run_hook_with_cmd "git config --get-all --show-scope core.hooksPath"
+  _assert_allow
+}
+
+@test "HOOKSPATH_OVERRIDE: --unset still denied (write disguised as flag)" {
+  # `--unset` mutates, so the deny path must still fire — regression test
+  # that the read-form exclusion didn't accidentally allow --unset.
+  run _run_hook_with_cmd "git config --unset core.hooksPath"
+  _assert_deny_for_rule "HOOKSPATH_OVERRIDE"
+}
+
 # ----------------------------------------------------------------------
 # Compound / bypass-evasion (CAUGHT — substring match on full command)
 # ----------------------------------------------------------------------
