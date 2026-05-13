@@ -1,0 +1,12 @@
+name: Hook bundle version check
+
+on: [pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: plugins/tcs-git-helpers/scripts/ci/check-hook-bundle-version.sh "origin/${{ github.base_ref }}..HEAD"
