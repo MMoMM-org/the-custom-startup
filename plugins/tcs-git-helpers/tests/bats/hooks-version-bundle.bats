@@ -29,7 +29,12 @@ setup() {
 
 @test "tcs-git-helpers-version rejects multi-line content (negative test)" {
   # Verify that the line-count assertion correctly rejects multi-line content.
-  # This proves the contract enforcement works end-to-end.
-  run bash -c "[ \"\$(printf 'h1\nh2\n' | grep -c '')\" -eq 1 ]"
+  # This exercises the same enforcement expression used on the real version file:
+  # [ "$(grep -c '' <file>)" -eq 1 ]
+  local tmp_file
+  tmp_file="${BATS_TEST_TMPDIR:-/tmp}/multi-line-version.$$"
+  printf 'h1\nh2\n' > "$tmp_file"
+  run bash -c "[ \"\$(grep -c '' \"$tmp_file\")\" -eq 1 ]"
+  rm -f "$tmp_file"
   [ "$status" -ne 0 ]
 }
