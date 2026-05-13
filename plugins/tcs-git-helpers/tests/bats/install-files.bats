@@ -191,11 +191,3 @@ _run_install() {
   run diff "$TEMPLATES/lib-bundle.sh" "$REPO/.githooks/lib-bundle.sh"
   [ "$status" -eq 0 ]
 }
-
-@test "IF4 lib-bundle.sh in .githooks/ retains __HOOK_BUNDLE_VERSION__ placeholder (not substituted)" {
-  # lib-bundle.sh in the template has the banner in a comment; after byte-equal
-  # copy the placeholder MUST still be present — substitution must not touch it.
-  _run_install
-  run grep '__HOOK_BUNDLE_VERSION__' "$REPO/.githooks/lib-bundle.sh"
-  [ "$status" -eq 0 ]
-}

@@ -1,6 +1,6 @@
 #!/bin/bash
-# tcs-git-helpers: __HOOK_BUNDLE_VERSION__
-# lib-bundle.sh — shared helper library for tcs-git-helpers installed hooks
+# tcs-git-helpers — shared bundle library for installed hooks
+# lib-bundle.sh — sourced by the four installed hook files via relative path
 #
 # Sourced by the four installed hook files via relative path:
 #   source "$(dirname "$0")/lib-bundle.sh"
