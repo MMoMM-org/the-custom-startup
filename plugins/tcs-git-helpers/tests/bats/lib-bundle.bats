@@ -268,3 +268,25 @@ _make_git_repo() {
   "
   [ "$status" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# _guard_gh: absence check
+# ---------------------------------------------------------------------------
+
+@test "_guard_gh returns non-zero and emits structured skip line when gh is absent" {
+  # Use PATH=/bin so bash is reachable but gh (typically in /usr/local/bin or
+  # /opt/homebrew/bin) is not.
+  run env -i HOME="$HOME" PATH="/bin:/usr/bin" \
+    /bin/bash -c "source \"$LIB\"; _guard_gh 'my-action' 2>&1"
+  [ "$status" -ne 0 ]
+  [[ "$output" == "tcs-git-helpers: my-action skipped — gh CLI not installed."* ]]
+}
+
+@test "_guard_jq returns non-zero and emits structured skip line when jq is absent" {
+  # Use PATH=/bin only so bash is reachable but jq (in /usr/bin or
+  # /opt/homebrew/bin) is not.
+  run env -i HOME="$HOME" PATH="/bin" \
+    /bin/bash -c "source \"$LIB\"; _guard_jq 'my-action' 2>&1"
+  [ "$status" -ne 0 ]
+  [[ "$output" == "tcs-git-helpers: my-action skipped — jq not installed."* ]]
+}

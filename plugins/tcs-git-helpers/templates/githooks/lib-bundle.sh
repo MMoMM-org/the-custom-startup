@@ -15,7 +15,7 @@
 # Public API:
 #   _resolve_data_dir     — print the cache dir path; return 1 if not in a git repo
 #   _emit_skip            — write one structured stderr line; return 0
-#   _guard_gh             — return 0 if gh is available and authenticated
+#   _guard_gh             — return 0 if gh CLI is on PATH; otherwise emit a skip and return 1
 #   _guard_jq             — return 0 if jq is available
 #
 # Spec refs:
