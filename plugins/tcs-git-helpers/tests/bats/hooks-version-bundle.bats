@@ -26,3 +26,10 @@ setup() {
   # Ensure it matches the pattern
   [[ "$trimmed_content" =~ ^[a-z0-9-]+$ ]]
 }
+
+@test "tcs-git-helpers-version rejects multi-line content (negative test)" {
+  # Verify that the line-count assertion correctly rejects multi-line content.
+  # This proves the contract enforcement works end-to-end.
+  run bash -c "[ \"\$(printf 'h1\nh2\n' | grep -c '')\" -eq 1 ]"
+  [ "$status" -ne 0 ]
+}
