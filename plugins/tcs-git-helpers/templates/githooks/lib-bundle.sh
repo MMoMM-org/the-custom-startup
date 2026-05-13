@@ -209,6 +209,6 @@ _emit_stale_json() {
       version: 1,
       updated_iso: $updated,
       default_branch: $default_branch,
-      entries: $entries
+      stale_branches: $entries
     }' 2>/dev/null
 }

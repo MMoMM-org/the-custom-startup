@@ -340,7 +340,7 @@ _make_git_repo() {
   grep -q "feat/my-branch" "$TEST_DIR/cache/${repo_hash}-stale-cache.tsv"
 }
 
-@test "_write_stale_cache JSON is valid and contains entries array" {
+@test "_write_stale_cache JSON is valid and contains stale_branches array" {
   _make_git_repo "$TEST_DIR/repo"
   cd "$TEST_DIR/repo"
 
@@ -362,12 +362,12 @@ _make_git_repo() {
   run jq -e . "$json_file"
   [ "$status" -eq 0 ]
 
-  # Must contain entries array.
-  run jq -e '.entries | type == "array"' "$json_file"
+  # Must contain stale_branches array (NOT entries — that was the T1.2 bug).
+  run jq -e '.stale_branches | type == "array"' "$json_file"
   [ "$status" -eq 0 ]
 
   # Entry must have correct name.
-  run jq -r '.entries[0].name' "$json_file"
+  run jq -r '.stale_branches[0].name' "$json_file"
   [ "$output" = "feat/alpha" ]
 }
 
@@ -443,7 +443,7 @@ _make_git_repo() {
 # _emit_stale_json: JSON output format
 # ---------------------------------------------------------------------------
 
-@test "_emit_stale_json produces valid JSON with correct version and entries" {
+@test "_emit_stale_json produces valid JSON with correct version and stale_branches" {
   _make_git_repo "$TEST_DIR/repo"
   cd "$TEST_DIR/repo"
 
@@ -464,13 +464,13 @@ fix/stale-b	40	2026-04-15T09:00:00Z"
   version="$(printf '%s\n' "$output" | jq '.version')"
   [ "$version" = "1" ]
 
-  # entries must have both branches.
+  # stale_branches must have both branches.
   local count
-  count="$(printf '%s\n' "$output" | jq '.entries | length')"
+  count="$(printf '%s\n' "$output" | jq '.stale_branches | length')"
   [ "$count" = "2" ]
 }
 
-@test "_emit_stale_json entries contain name and pr_number fields" {
+@test "_emit_stale_json stale_branches entries contain name and pr_number fields" {
   _make_git_repo "$TEST_DIR/repo"
   cd "$TEST_DIR/repo"
 
@@ -485,16 +485,16 @@ fix/stale-b	40	2026-04-15T09:00:00Z"
 
   # name must match.
   local name
-  name="$(printf '%s\n' "$json_out" | jq -r '.entries[0].name')"
+  name="$(printf '%s\n' "$json_out" | jq -r '.stale_branches[0].name')"
   [ "$name" = "my-branch" ]
 
   # pr_number must be 42.
   local pr_number
-  pr_number="$(printf '%s\n' "$json_out" | jq '.entries[0].pr_number')"
+  pr_number="$(printf '%s\n' "$json_out" | jq '.stale_branches[0].pr_number')"
   [ "$pr_number" = "42" ]
 }
 
-@test "_emit_stale_json: empty TSV produces entries: []" {
+@test "_emit_stale_json: empty TSV produces stale_branches: []" {
   _make_git_repo "$TEST_DIR/repo"
   cd "$TEST_DIR/repo"
 
@@ -502,6 +502,30 @@ fix/stale-b	40	2026-04-15T09:00:00Z"
   json_out="$(bash -c "source \"$LIB\"; _emit_stale_json '' '2026-05-13T12:00:00Z' 'main'")"
 
   local count
-  count="$(printf '%s\n' "$json_out" | jq '.entries | length')"
+  count="$(printf '%s\n' "$json_out" | jq '.stale_branches | length')"
   [ "$count" = "0" ]
+}
+
+@test "_emit_stale_json uses 'stale_branches' key not 'entries' (schema lock)" {
+  # This test was added to lock the JSON schema contract after the T1.2 regression
+  # where the bundle copy used 'entries' instead of 'stale_branches', making the
+  # cache invisible to git_status_audit.py._read_stale_cache.
+  _make_git_repo "$TEST_DIR/repo"
+  cd "$TEST_DIR/repo"
+
+  local tsv_file="$TEST_DIR/input.tsv"
+  printf 'feat/lock-test\t7\t2026-05-01T00:00:00Z\n' > "$tsv_file"
+  local tsv_rows
+  tsv_rows="$(cat "$tsv_file")"
+
+  local json_out
+  json_out="$(bash -c "source \"$LIB\"; _emit_stale_json \"\$1\" '2026-05-13T12:00:00Z' 'main'" -- "$tsv_rows")"
+
+  # Must contain 'stale_branches' key.
+  run bash -c "printf '%s\n' '$json_out' | jq -e 'has(\"stale_branches\")'"
+  [ "$status" -eq 0 ]
+
+  # Must NOT contain legacy 'entries' key.
+  run bash -c "printf '%s\n' '$json_out' | jq -e 'has(\"entries\") | not'"
+  [ "$status" -eq 0 ]
 }

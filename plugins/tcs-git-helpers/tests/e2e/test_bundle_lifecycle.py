@@ -248,15 +248,24 @@ def test_post_merge_hook_writes_stale_cache(bundle_repo):
         f"TSV content:\n{tsv_content}"
     )
 
-    # JSON must be parseable. The hook writes `entries` key (lib-bundle.sh format).
+    # JSON must be parseable. Both lib-bundle.sh and scripts/lib/cache.sh write
+    # `stale_branches` — the T1.2 regression used `entries`, which was invisible
+    # to git_status_audit.py._read_stale_cache. T3.3 exposed and fixed this.
     json_content = json.loads(json_path.read_text())
     assert isinstance(json_content, dict), "JSON cache root must be an object"
-    # lib-bundle.sh _emit_stale_json uses `entries` key (not `stale_branches`)
-    entries = json_content.get("entries", [])
+    assert "stale_branches" in json_content, (
+        f"JSON cache missing 'stale_branches' key (found keys: {list(json_content.keys())}). "
+        f"The bundle writer must use 'stale_branches' to match the reader contract."
+    )
+    assert "entries" not in json_content, (
+        f"JSON cache contains legacy 'entries' key — this is the T1.2 regression. "
+        f"Use 'stale_branches' instead."
+    )
+    entries = json_content.get("stale_branches", [])
     entry_names = [e.get("name") for e in entries]
     assert any(name in entry_names for name in stale_branch_names), (
-        f"JSON entries do not contain expected stale branch.\n"
-        f"entries: {entries}"
+        f"JSON stale_branches do not contain expected stale branch.\n"
+        f"stale_branches: {entries}"
     )
 
 
