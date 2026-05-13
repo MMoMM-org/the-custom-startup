@@ -1491,7 +1491,8 @@ class TestDriftGateAllModes:
         monkeypatch.setattr("subprocess.run", fake_run)
 
         output_lines: list[str] = []
-        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+        stderr_lines: list[str] = []
+        self._capture_print(monkeypatch, output_lines, stderr_lines)
 
         # Must not raise SystemExit
         try:
@@ -1545,7 +1546,8 @@ class TestDriftGateAllModes:
         monkeypatch.setattr("subprocess.run", fake_run)
 
         output_lines: list[str] = []
-        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+        stderr_lines: list[str] = []
+        self._capture_print(monkeypatch, output_lines, stderr_lines)
 
         # Must not raise SystemExit
         try:
