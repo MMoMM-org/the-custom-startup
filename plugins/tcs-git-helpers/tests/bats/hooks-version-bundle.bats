@@ -17,6 +17,9 @@ setup() {
   content="$(cat "$VERSION_FILE")"
   trimmed_content="$(echo "$content" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
 
+  # Ensure file has exactly one line (per SDD/ADR-2)
+  [ "$(grep -c '' "$VERSION_FILE")" -eq 1 ]
+
   # Ensure it's not empty
   [ -n "$trimmed_content" ]
 
