@@ -174,6 +174,7 @@ class TestBriefMode:
             return _git_result("")
 
         monkeypatch.setattr("subprocess.run", fake_run)
+        monkeypatch.setattr(gsa, "check_hook_bundle", _ok_drift)
 
         lines: list[str] = []
 
@@ -227,6 +228,7 @@ class TestBriefMode:
             return _git_result("")
 
         monkeypatch.setattr("subprocess.run", fake_run)
+        monkeypatch.setattr(gsa, "check_hook_bundle", _ok_drift)
 
         lines: list[str] = []
         monkeypatch.setattr("builtins.print", lambda s="", **_: lines.append(s))
@@ -1444,7 +1446,8 @@ class TestDriftGateAllModes:
         monkeypatch.setattr("subprocess.run", fake_run)
 
         output_lines: list[str] = []
-        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+        stderr_lines: list[str] = []
+        self._capture_print(monkeypatch, output_lines, stderr_lines)
 
         gsa.cmd_default(cache_dir=cache_dir, repo_path=repo_path)
 
@@ -1502,6 +1505,60 @@ class TestDriftGateAllModes:
         assert len(parts) >= 4, f"Expected ≥4 segments, got: {brief_line!r}"
         assert "0 stale-merged" in parts[3], (
             f"On MISSING drift, stale-count segment must be '0 stale-merged', got: {parts[3]!r}"
+        )
+
+    def test_cmd_brief_drift_falls_open_shows_zero_stale(
+        self, gsa, dc, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """
+        cmd_brief with DRIFT status must NOT exit. CON-5: SessionStart is not
+        the drift surface. The stale-count segment must show '0 stale-merged'
+        when drift is not OK (fall-open / safe default).
+
+        Mirrors test_cmd_brief_missing_falls_open_shows_zero_stale but uses
+        DRIFT status, locking in that drift_ok = drift.status.value == "OK"
+        and both MISSING and DRIFT share the same fall-open code path.
+        """
+        repo_path = "/fake/repo/brief-drift"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        # Cache has entries but drift is DRIFT → stale count must be 0
+        _write_stale_cache(cache_dir, repo_path, "main", STALE_ENTRIES)
+
+        drift_result = self._make_drift_result(dc, "DRIFT", "h0")
+        monkeypatch.setattr(gsa, "check_hook_bundle", lambda rp, ver: drift_result)
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "git":
+                if "symbolic-ref" in cmd:
+                    return _git_result("feat/my-feature")
+                if "status" in cmd and "--porcelain" in cmd:
+                    return _git_result("")
+                if "rev-list" in cmd:
+                    return _git_result("0\n0")
+                if "for-each-ref" in cmd:
+                    return _git_result("feat/my-feature\nmain")
+                if "worktree" in cmd:
+                    return _git_result("")
+            return _git_result("")
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        output_lines: list[str] = []
+        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+
+        # Must not raise SystemExit
+        try:
+            gsa.cmd_brief(cache_dir=cache_dir, repo_path=repo_path)
+        except SystemExit as exc:
+            pytest.fail(f"cmd_brief raised SystemExit({exc.code}) on DRIFT status — must fall open per CON-5")
+
+        assert output_lines, "cmd_brief must still produce output on DRIFT status"
+        brief_line = output_lines[0]
+        parts = brief_line.split(" • ")
+        assert len(parts) >= 4, f"Expected ≥4 segments, got: {brief_line!r}"
+        assert "0 stale-merged" in parts[3], (
+            f"On DRIFT status, stale-count segment must be '0 stale-merged', got: {parts[3]!r}"
         )
 
     def test_cmd_brief_ok_shows_real_stale_count(

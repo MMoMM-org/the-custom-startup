@@ -64,7 +64,7 @@ phase: 2
      - [ ] Same three-state contract as the bash helper `[ref: SDD/ADR-4]`
      - [ ] Parity table passes (no divergence between bash/python implementations)
 
-- [ ] **T2.3 Wire drift check + live refresh into `cmd_cleanup`** `[activity: build-feature]`
+- [x] **T2.3 Wire drift check + live refresh into `cmd_cleanup`** `[activity: build-feature]`
 
   1. **Prime**: Read existing `plugins/tcs-git-helpers/scripts/git_status_audit.py:454-520` (`cmd_cleanup`). Read SDD `[ref: SDD/Implementation Examples / cmd_cleanup refresh (Bug 1 fix)]`.
   2. **Test**: Extend `tests/python/test_git_status_audit.py` covering `cmd_cleanup`:
