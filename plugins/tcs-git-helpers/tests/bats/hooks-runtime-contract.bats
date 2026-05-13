@@ -259,6 +259,13 @@ _default_data_dir() {
   git -C "$TEST_DIR/myproject" branch fix/stale-b
   git -C "$TEST_DIR/myproject" branch chore/stale-c
 
+  # Create a feature branch with one commit so git merge --no-ff has something to merge.
+  git -C "$TEST_DIR/myproject" checkout -b feat/trigger-merge
+  printf 'trigger\n' > "$TEST_DIR/myproject/trigger.txt"
+  git -C "$TEST_DIR/myproject" add trigger.txt
+  git -C "$TEST_DIR/myproject" commit -q -m "chore: trigger merge"
+  git -C "$TEST_DIR/myproject" checkout main
+
   # Resolve canonical repo path (macOS /tmp -> /private/tmp).
   local repo_canonical
   repo_canonical="$(cd "$TEST_DIR/myproject" && git rev-parse --show-toplevel)"
@@ -275,8 +282,10 @@ _default_data_dir() {
   GH_STUB_SCENARIO="stale-3-branches"
   export GH_STUB_SCENARIO
 
+  # Fire the post-merge hook via git's actual hook plumbing (core.hooksPath).
+  # This validates the hook is wired correctly for the git merge --no-ff path.
   run env -u CLAUDE_PLUGIN_ROOT -u CLAUDE_PLUGIN_DATA \
-    bash -c "HOME='$fake_home' cd '$TEST_DIR/myproject' && HOME='$fake_home' bash .githooks/post-merge"
+    bash -c "cd '$TEST_DIR/myproject' && HOME='$fake_home' git merge --no-ff feat/trigger-merge -m 'Merge feat/trigger-merge'"
 
   [ "$status" -eq 0 ]
 
@@ -364,8 +373,10 @@ _default_data_dir() {
 
   [ "$status" -eq 0 ]
 
-  # Must emit at least one structured line; no stdout allowed.
-  [[ "$output" == *"tcs-git-helpers:"* ]]
+  # Must emit exactly one structured stderr line per degraded path.
+  local line_count
+  line_count="$(printf '%s\n' "$output" | grep -c '^tcs-git-helpers:' || true)"
+  [ "$line_count" -eq 1 ]
 }
 
 @test "post-merge: jq absent — hook exits 0 (CON-9 never-block contract)" {
