@@ -175,10 +175,11 @@ _default_data_dir() {
   _install_hooks_in_repo "$TEST_DIR/repo"
   git -C "$TEST_DIR/repo" checkout -b feat/some-feature
 
-  # pre-push reads stdin for refs; provide a stub ref line.
+  # Provide a ref line on stdin (V1 ignores stdin; branch is read from git rev-parse).
+  cd "$TEST_DIR/repo" || return 1
   run env -u CLAUDE_PLUGIN_ROOT -u CLAUDE_PLUGIN_DATA \
     bash -c "printf 'refs/heads/feat/some-feature abc123 refs/heads/feat/some-feature 0000000\n' \
-      | cd '$TEST_DIR/repo' && bash .githooks/pre-push origin 'https://github.com/example/repo.git'"
+      | bash '$TEST_DIR/repo/.githooks/pre-push' origin 'https://github.com/example/repo.git'"
 
   [ "$status" -eq 0 ]
 }
@@ -645,4 +646,53 @@ STUB
   run grep 'lib-bundle.sh' "$HOOK_POST_MERGE"
   [ "$status" -eq 0 ]
   [[ "$output" == *'dirname'* ]] || [[ "$output" == *'$(dirname'* ]]
+}
+
+@test "pre-commit template: sources lib-bundle.sh via dirname-relative path" {
+  run grep 'lib-bundle.sh' "$HOOK_PRE_COMMIT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'dirname'* ]] || [[ "$output" == *'$(dirname'* ]]
+}
+
+@test "commit-msg template: sources lib-bundle.sh via dirname-relative path" {
+  run grep 'lib-bundle.sh' "$HOOK_COMMIT_MSG"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'dirname'* ]] || [[ "$output" == *'$(dirname'* ]]
+}
+
+@test "pre-push template: sources lib-bundle.sh via dirname-relative path" {
+  run grep 'lib-bundle.sh' "$HOOK_PRE_PUSH"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'dirname'* ]] || [[ "$output" == *'$(dirname'* ]]
+}
+
+# ---------------------------------------------------------------------------
+# Section 11: Missing lib-bundle.sh — hooks with hard exit-0 guard
+# ---------------------------------------------------------------------------
+
+@test "post-merge: lib-bundle.sh missing — exits 0 and emits missing-lib stderr" {
+  _make_git_repo "$TEST_DIR/repo"
+  _install_hooks_in_repo "$TEST_DIR/repo"
+  rm -f "$TEST_DIR/repo/.githooks/lib-bundle.sh"
+
+  run env -u CLAUDE_PLUGIN_ROOT -u CLAUDE_PLUGIN_DATA \
+    bash -c "cd '$TEST_DIR/repo' && bash .githooks/post-merge 2>&1 1>/dev/null"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"lib-bundle.sh missing"* ]]
+}
+
+@test "pre-push: lib-bundle.sh missing — exits 0 and emits missing-lib stderr" {
+  _make_git_repo "$TEST_DIR/repo"
+  _install_hooks_in_repo "$TEST_DIR/repo"
+  git -C "$TEST_DIR/repo" checkout -b feat/some-feature
+  rm -f "$TEST_DIR/repo/.githooks/lib-bundle.sh"
+
+  cd "$TEST_DIR/repo" || return 1
+  run env -u CLAUDE_PLUGIN_ROOT -u CLAUDE_PLUGIN_DATA \
+    bash -c "printf 'refs/heads/feat/some-feature abc123 refs/heads/feat/some-feature 0000000\n' \
+      | bash '$TEST_DIR/repo/.githooks/pre-push' origin 'https://github.com/example/repo.git' 2>&1 1>/dev/null"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"lib-bundle.sh missing"* ]]
 }
