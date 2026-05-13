@@ -290,3 +290,218 @@ _make_git_repo() {
   [ "$status" -ne 0 ]
   [[ "$output" == "tcs-git-helpers: my-action skipped — jq not installed."* ]]
 }
+
+# ---------------------------------------------------------------------------
+# _write_stale_cache: atomic TSV+JSON dual-write
+# ---------------------------------------------------------------------------
+
+@test "_write_stale_cache writes TSV and JSON files under the resolved data dir" {
+  _make_git_repo "$TEST_DIR/repo"
+  cd "$TEST_DIR/repo"
+
+  local data_dir="$TEST_DIR/cache-out"
+  local repo_path
+  repo_path="$(git rev-parse --show-toplevel)"
+  local repo_hash
+  repo_hash="$(printf '%s' "$repo_path" | shasum | head -c 12)"
+  local updated_iso="2026-05-13T12:00:00Z"
+
+  run bash -c "
+    export CLAUDE_PLUGIN_DATA='$TEST_DIR'
+    source \"$LIB\"
+    printf 'feat/stale-a\t38\t2026-04-12T10:00:00Z\nfix/stale-b\t40\t2026-04-15T09:00:00Z\n' \
+      | _write_stale_cache '$updated_iso' '$repo_path' 'main'
+  "
+  [ "$status" -eq 0 ]
+
+  # Both files must exist.
+  local cache_dir="$TEST_DIR/cache"
+  [ -f "$cache_dir/${repo_hash}-stale-cache.tsv" ]
+  [ -f "$cache_dir/${repo_hash}-stale-cache.json" ]
+}
+
+@test "_write_stale_cache TSV contains input branch names verbatim" {
+  _make_git_repo "$TEST_DIR/repo"
+  cd "$TEST_DIR/repo"
+
+  local repo_path
+  repo_path="$(git rev-parse --show-toplevel)"
+  local repo_hash
+  repo_hash="$(printf '%s' "$repo_path" | shasum | head -c 12)"
+
+  run bash -c "
+    export CLAUDE_PLUGIN_DATA='$TEST_DIR'
+    source \"$LIB\"
+    printf 'feat/my-branch\t99\t2026-01-01T00:00:00Z\n' \
+      | _write_stale_cache '2026-05-13T12:00:00Z' '$repo_path' 'main'
+  "
+  [ "$status" -eq 0 ]
+
+  grep -q "feat/my-branch" "$TEST_DIR/cache/${repo_hash}-stale-cache.tsv"
+}
+
+@test "_write_stale_cache JSON is valid and contains entries array" {
+  _make_git_repo "$TEST_DIR/repo"
+  cd "$TEST_DIR/repo"
+
+  local repo_path
+  repo_path="$(git rev-parse --show-toplevel)"
+  local repo_hash
+  repo_hash="$(printf '%s' "$repo_path" | shasum | head -c 12)"
+
+  run bash -c "
+    export CLAUDE_PLUGIN_DATA='$TEST_DIR'
+    source \"$LIB\"
+    printf 'feat/alpha\t1\t2026-04-01T00:00:00Z\n' \
+      | _write_stale_cache '2026-05-13T12:00:00Z' '$repo_path' 'main'
+  "
+  [ "$status" -eq 0 ]
+
+  local json_file="$TEST_DIR/cache/${repo_hash}-stale-cache.json"
+  # Must be valid JSON.
+  run jq -e . "$json_file"
+  [ "$status" -eq 0 ]
+
+  # Must contain entries array.
+  run jq -e '.entries | type == "array"' "$json_file"
+  [ "$status" -eq 0 ]
+
+  # Entry must have correct name.
+  run jq -r '.entries[0].name' "$json_file"
+  [ "$output" = "feat/alpha" ]
+}
+
+@test "_write_stale_cache JSON version field is 1" {
+  _make_git_repo "$TEST_DIR/repo"
+  cd "$TEST_DIR/repo"
+
+  local repo_path
+  repo_path="$(git rev-parse --show-toplevel)"
+  local repo_hash
+  repo_hash="$(printf '%s' "$repo_path" | shasum | head -c 12)"
+
+  run bash -c "
+    export CLAUDE_PLUGIN_DATA='$TEST_DIR'
+    source \"$LIB\"
+    printf 'x\t1\t2026-01-01T00:00:00Z\n' \
+      | _write_stale_cache '2026-05-13T12:00:00Z' '$repo_path' 'main'
+  "
+  [ "$status" -eq 0 ]
+
+  run jq '.version' "$TEST_DIR/cache/${repo_hash}-stale-cache.json"
+  [ "$output" = "1" ]
+}
+
+@test "_write_stale_cache writes atomically via .tmp+mv (no partial writes)" {
+  # Verify no .tmp file is left behind after a successful write.
+  _make_git_repo "$TEST_DIR/repo"
+  cd "$TEST_DIR/repo"
+
+  local repo_path
+  repo_path="$(git rev-parse --show-toplevel)"
+  local repo_hash
+  repo_hash="$(printf '%s' "$repo_path" | shasum | head -c 12)"
+
+  run bash -c "
+    export CLAUDE_PLUGIN_DATA='$TEST_DIR'
+    source \"$LIB\"
+    printf 'feat/x\t1\t2026-01-01T00:00:00Z\n' \
+      | _write_stale_cache '2026-05-13T12:00:00Z' '$repo_path' 'main'
+  "
+  [ "$status" -eq 0 ]
+
+  # No .tmp remnant files.
+  local tmp_count
+  tmp_count="$(find "$TEST_DIR/cache" -name '*.tmp' 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$tmp_count" -eq 0 ]
+}
+
+@test "_write_stale_cache exits 0 even when cache dir creation fails" {
+  _make_git_repo "$TEST_DIR/repo"
+  cd "$TEST_DIR/repo"
+
+  local repo_path
+  repo_path="$(git rev-parse --show-toplevel)"
+
+  # Create a non-writable file at the cache dir path to make mkdir fail.
+  local custom_data="$TEST_DIR/ro-data"
+  mkdir -p "$custom_data"
+  touch "$custom_data/cache"
+  chmod 444 "$custom_data/cache"
+
+  run bash -c "
+    export CLAUDE_PLUGIN_DATA='$custom_data'
+    source \"$LIB\"
+    printf 'feat/x\t1\t2026-01-01T00:00:00Z\n' \
+      | _write_stale_cache '2026-05-13T12:00:00Z' '$repo_path' 'main'
+  "
+  # Must exit 0 — cache failure must never block a merge.
+  [ "$status" -eq 0 ]
+}
+
+# ---------------------------------------------------------------------------
+# _emit_stale_json: JSON output format
+# ---------------------------------------------------------------------------
+
+@test "_emit_stale_json produces valid JSON with correct version and entries" {
+  _make_git_repo "$TEST_DIR/repo"
+  cd "$TEST_DIR/repo"
+
+  local tsv_rows="feat/stale-a	38	2026-04-12T10:00:00Z
+fix/stale-b	40	2026-04-15T09:00:00Z"
+
+  run bash -c "
+    source \"$LIB\"
+    _emit_stale_json '$tsv_rows' '2026-05-13T12:00:00Z' 'main'
+  "
+  [ "$status" -eq 0 ]
+
+  # Output must be valid JSON.
+  printf '%s\n' "$output" | jq -e . >/dev/null
+
+  # version must be 1.
+  local version
+  version="$(printf '%s\n' "$output" | jq '.version')"
+  [ "$version" = "1" ]
+
+  # entries must have both branches.
+  local count
+  count="$(printf '%s\n' "$output" | jq '.entries | length')"
+  [ "$count" = "2" ]
+}
+
+@test "_emit_stale_json entries contain name and pr_number fields" {
+  _make_git_repo "$TEST_DIR/repo"
+  cd "$TEST_DIR/repo"
+
+  # Write TSV data to a temp file to avoid quoting issues with tabs.
+  local tsv_file="$TEST_DIR/input.tsv"
+  printf 'my-branch\t42\t2026-03-01T00:00:00Z\n' > "$tsv_file"
+  local tsv_rows
+  tsv_rows="$(cat "$tsv_file")"
+
+  local json_out
+  json_out="$(bash -c "source \"$LIB\"; _emit_stale_json \"\$1\" '2026-05-13T12:00:00Z' 'main'" -- "$tsv_rows")"
+
+  # name must match.
+  local name
+  name="$(printf '%s\n' "$json_out" | jq -r '.entries[0].name')"
+  [ "$name" = "my-branch" ]
+
+  # pr_number must be 42.
+  local pr_number
+  pr_number="$(printf '%s\n' "$json_out" | jq '.entries[0].pr_number')"
+  [ "$pr_number" = "42" ]
+}
+
+@test "_emit_stale_json: empty TSV produces entries: []" {
+  _make_git_repo "$TEST_DIR/repo"
+  cd "$TEST_DIR/repo"
+
+  local json_out
+  json_out="$(bash -c "source \"$LIB\"; _emit_stale_json '' '2026-05-13T12:00:00Z' 'main'")"
+
+  local count
+  count="$(printf '%s\n' "$json_out" | jq '.entries | length')"
+  [ "$count" = "0" ]
+}
