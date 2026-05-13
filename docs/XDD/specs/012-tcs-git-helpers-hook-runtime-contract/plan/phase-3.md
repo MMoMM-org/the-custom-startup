@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: CI maintainer-contract gate + E2E lockdown"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 3
 ---
