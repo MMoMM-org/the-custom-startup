@@ -1,5 +1,6 @@
 #!/bin/bash
 # tcs-git-helpers: __TCS_GIT_HELPERS_VERSION__
+# tcs-git-helpers-bundle: __HOOK_BUNDLE_VERSION__
 # pre-push — tcs-git-helpers repo-side safety hook
 #
 # Blocks pushes to branches whose GitHub PR is CLOSED or MERGED.
