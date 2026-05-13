@@ -94,6 +94,26 @@ STALE_ENTRIES = [
     {"name": "fix/another-thing", "pr_number": 40, "merged_at": "2026-04-15T09:00:00Z"},
 ]
 
+
+# ---------------------------------------------------------------------------
+# Drift-check stub for tests that call cmd_cleanup but don't test drift logic
+# ---------------------------------------------------------------------------
+
+class _OKStatus:
+    """Minimal status stub whose .value compares equal to "OK"."""
+    value = "OK"
+
+
+class _OKDriftResult:
+    """Stub DriftResult that passes the drift gate in cmd_cleanup."""
+    status = _OKStatus()
+    installed_version = "h1"
+
+
+def _ok_drift(*_args, **_kwargs) -> _OKDriftResult:
+    """Drop-in replacement for check_hook_bundle that always returns OK."""
+    return _OKDriftResult()
+
 # ---------------------------------------------------------------------------
 # Subprocess result factory
 # ---------------------------------------------------------------------------
@@ -236,6 +256,7 @@ class TestCleanupMode:
         _write_stale_cache(cache_dir, repo_path, "main", STALE_ENTRIES)
 
         monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+        monkeypatch.setattr(gsa, "check_hook_bundle", _ok_drift)
 
         def fake_run(cmd, **kwargs):
             if cmd[0] == "git":
@@ -297,6 +318,8 @@ class TestCleanupMode:
             "HEAD def456\n"
             "branch refs/heads/feat/old-thing\n"
         )
+
+        monkeypatch.setattr(gsa, "check_hook_bundle", _ok_drift)
 
         def fake_run(cmd, **kwargs):
             if cmd[0] == "git":
@@ -691,6 +714,7 @@ class TestFetchMergedPRsFailures:
 
         # Also verify cmd_cleanup is fail-open (no SystemExit)
         _write_stale_cache(cache_dir, repo_path, "main", [])
+        monkeypatch.setattr(gsa, "check_hook_bundle", _ok_drift)
         output_lines: list[str] = []
         monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
         try:
@@ -724,6 +748,7 @@ class TestFetchMergedPRsFailures:
         assert result == [], f"Expected [] on auth missing (rc=4), got {result!r}"
 
         _write_stale_cache(cache_dir, repo_path, "main", [])
+        monkeypatch.setattr(gsa, "check_hook_bundle", _ok_drift)
         output_lines: list[str] = []
         monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
         try:
@@ -757,6 +782,7 @@ class TestFetchMergedPRsFailures:
         assert result == [], f"Expected [] on no GitHub remote, got {result!r}"
 
         _write_stale_cache(cache_dir, repo_path, "main", [])
+        monkeypatch.setattr(gsa, "check_hook_bundle", _ok_drift)
         output_lines: list[str] = []
         monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
         try:
@@ -785,6 +811,23 @@ class TestCleanupDriftGate:
         """Build a DriftResult using the drift_check module's types."""
         status = dc_mod.DriftStatus[status_name]
         return dc_mod.DriftResult(status=status, installed_version=installed)
+
+    def _capture_print(self, monkeypatch, output_lines, stderr_lines):
+        """
+        Patch builtins.print to route file=sys.stderr calls to stderr_lines
+        and all other calls to output_lines. Avoids the silent-capture issue
+        where file=sys.stderr is swallowed into output_lines by a naive lambda.
+        """
+        import sys as _sys
+
+        def _fake_print(*args, sep=" ", end="\n", file=None, flush=False):
+            s = sep.join(str(a) for a in args)
+            if file is _sys.stderr:
+                stderr_lines.append(s)
+            else:
+                output_lines.append(s)
+
+        monkeypatch.setattr("builtins.print", _fake_print)
 
     # ------------------------------------------------------------------
     # Helper: load drift_check module for building fixture objects
@@ -835,11 +878,9 @@ class TestCleanupDriftGate:
         monkeypatch.setattr(gsa, "check_hook_bundle", fake_check_hook_bundle)
         monkeypatch.setattr("subprocess.run", fake_run)
 
+        output_lines: list[str] = []
         stderr_lines: list[str] = []
-        monkeypatch.setattr(
-            "sys.stderr",
-            type("FakeStderr", (), {"write": lambda self, s: stderr_lines.append(s), "flush": lambda self: None})(),
-        )
+        self._capture_print(monkeypatch, output_lines, stderr_lines)
 
         with pytest.raises(SystemExit) as exc_info:
             gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
@@ -847,7 +888,7 @@ class TestCleanupDriftGate:
         assert exc_info.value.code == 1, (
             f"Expected exit 1 for MISSING drift, got {exc_info.value.code}"
         )
-        combined_stderr = "".join(stderr_lines)
+        combined_stderr = "\n".join(stderr_lines)
         assert "hooks not installed" in combined_stderr, (
             f"Expected 'hooks not installed' in stderr, got:\n{combined_stderr}"
         )
@@ -886,11 +927,9 @@ class TestCleanupDriftGate:
         monkeypatch.setattr(gsa, "check_hook_bundle", fake_check_hook_bundle)
         monkeypatch.setattr("subprocess.run", fake_run)
 
+        output_lines: list[str] = []
         stderr_lines: list[str] = []
-        monkeypatch.setattr(
-            "sys.stderr",
-            type("FakeStderr", (), {"write": lambda self, s: stderr_lines.append(s), "flush": lambda self: None})(),
-        )
+        self._capture_print(monkeypatch, output_lines, stderr_lines)
 
         with pytest.raises(SystemExit) as exc_info:
             gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
@@ -898,7 +937,7 @@ class TestCleanupDriftGate:
         assert exc_info.value.code == 1, (
             f"Expected exit 1 for DRIFT, got {exc_info.value.code}"
         )
-        combined_stderr = "".join(stderr_lines)
+        combined_stderr = "\n".join(stderr_lines)
         assert "h0" in combined_stderr, (
             f"Expected installed version 'h0' in stderr:\n{combined_stderr}"
         )
@@ -986,12 +1025,14 @@ class TestCleanupDriftGate:
                     m.stdout = "gh version 2.0.0"
                     m.stderr = ""
                     return m
-                # pr list returns auth error
-                m = MagicMock()
-                m.returncode = 4
-                m.stdout = ""
-                m.stderr = "gh auth login"
-                return m
+                if "auth" in cmd and "status" in cmd:
+                    # gh auth status returns non-zero when unauthenticated
+                    m = MagicMock()
+                    m.returncode = 1
+                    m.stdout = ""
+                    m.stderr = "You are not logged in"
+                    return m
+                return _git_result("")
             if cmd[0] == "git":
                 if "for-each-ref" in cmd:
                     return _git_result("feat/old-thing\nfix/another-thing\nmain")
@@ -1004,11 +1045,7 @@ class TestCleanupDriftGate:
 
         output_lines: list[str] = []
         stderr_lines: list[str] = []
-        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
-        monkeypatch.setattr(
-            "sys.stderr",
-            type("FakeStderr", (), {"write": lambda self, s: stderr_lines.append(s), "flush": lambda self: None})(),
-        )
+        self._capture_print(monkeypatch, output_lines, stderr_lines)
 
         # Must not raise SystemExit
         try:
@@ -1016,7 +1053,7 @@ class TestCleanupDriftGate:
         except SystemExit as exc:
             pytest.fail(f"cmd_cleanup raised SystemExit({exc.code}) on unauthenticated gh — must be fail-open")
 
-        combined_stderr = "".join(stderr_lines)
+        combined_stderr = "\n".join(stderr_lines)
         assert "unauthenticated" in combined_stderr.lower() or "falling back" in combined_stderr.lower(), (
             f"Expected unauthenticated/fallback explanation in stderr:\n{combined_stderr}"
         )
@@ -1062,18 +1099,14 @@ class TestCleanupDriftGate:
 
         output_lines: list[str] = []
         stderr_lines: list[str] = []
-        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
-        monkeypatch.setattr(
-            "sys.stderr",
-            type("FakeStderr", (), {"write": lambda self, s: stderr_lines.append(s), "flush": lambda self: None})(),
-        )
+        self._capture_print(monkeypatch, output_lines, stderr_lines)
 
         try:
             gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
         except SystemExit as exc:
             pytest.fail(f"cmd_cleanup raised SystemExit({exc.code}) on gh-not-installed — must be fail-open")
 
-        combined_stderr = "".join(stderr_lines)
+        combined_stderr = "\n".join(stderr_lines)
         assert "gh" in combined_stderr.lower() or "not installed" in combined_stderr.lower() or "not found" in combined_stderr.lower(), (
             f"Expected gh-not-installed explanation in stderr:\n{combined_stderr}"
         )
@@ -1105,18 +1138,15 @@ class TestCleanupDriftGate:
         def fake_check_hook_bundle(rp, ver):
             return ok_result
 
+        def fake_refresh(*, cache_dir, repo_path, default_branch="main"):
+            # No-op: do not overwrite cache; candidates from pre-seeded cache
+            pass
+
         def fake_run(cmd, **kwargs):
-            if cmd[0] == "gh":
-                if "--version" in cmd:
-                    m = MagicMock()
-                    m.returncode = 0
-                    m.stdout = "gh version 2.0.0"
-                    m.stderr = ""
-                    return m
-                # pr list: empty (no new stale branches found)
+            if cmd[0] == "gh" and "--version" in cmd:
                 m = MagicMock()
                 m.returncode = 0
-                m.stdout = "[]"
+                m.stdout = "gh version 2.0.0"
                 m.stderr = ""
                 return m
             if cmd[0] == "git":
@@ -1130,6 +1160,7 @@ class TestCleanupDriftGate:
             return _git_result("")
 
         monkeypatch.setattr(gsa, "check_hook_bundle", fake_check_hook_bundle)
+        monkeypatch.setattr(gsa, "refresh_stale_cache", fake_refresh)
         monkeypatch.setattr("subprocess.run", fake_run)
 
         # Simulate user answering 'y' to first branch, 'n' to second

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -39,6 +40,38 @@ from pathlib import Path
 # The bash hot-path reads from .githooks/.config TCS_PROTECTED_BRANCHES;
 # for Python we use a hardcoded default. (ADR decision: simpler for v1.)
 PROTECTED_BRANCHES: frozenset[str] = frozenset(["main", "master", "production", "release"])
+
+# Expected hook bundle version — single source of truth (ADR-2).
+# Read from the plugin's own template file at module startup.
+_VERSION_FILE = (
+    Path(__file__).parent.parent / "templates" / "githooks" / "tcs-git-helpers-version"
+)
+EXPECTED_HOOK_BUNDLE_VERSION: str = (
+    _VERSION_FILE.read_text().strip() if _VERSION_FILE.exists() else "h1"
+)
+
+
+# ---------------------------------------------------------------------------
+# drift_check module — loaded dynamically (not installed as a package)
+# ---------------------------------------------------------------------------
+
+def _load_drift_check():
+    """Load scripts/lib/drift_check.py via importlib. Returns the module."""
+    lib_path = Path(__file__).parent / "lib" / "drift_check.py"
+    spec = importlib.util.spec_from_file_location("_tcs_drift_check", lib_path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["_tcs_drift_check"] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        del sys.modules["_tcs_drift_check"]
+        raise
+    return mod
+
+
+_drift_check_mod = _load_drift_check()
+check_hook_bundle = _drift_check_mod.check_hook_bundle
+DriftStatus = _drift_check_mod.DriftStatus
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +143,18 @@ def _run_gh(args: list[str], cwd: str | None = None) -> tuple[int, str, str]:
         return result.returncode, result.stdout.strip(), result.stderr.strip()
     except (subprocess.TimeoutExpired, OSError) as exc:
         return 1, "", f"<error: {exc}>"
+
+
+def gh_available() -> bool:
+    """Return True if the gh CLI is installed (exits 0 on --version)."""
+    rc, _, _ = _run_gh(["--version"])
+    return rc == 0
+
+
+def _gh_authenticated() -> bool:
+    """Return True if gh is installed and authenticated (exits 0 on auth status)."""
+    rc, _, _ = _run_gh(["auth", "status"])
+    return rc == 0
 
 
 # ---------------------------------------------------------------------------
@@ -458,8 +503,47 @@ def cmd_cleanup(*, cache_dir: Path, repo_path: str, interactive: bool = True) ->
     """
     List stale-merged local branches and (interactively) prompt for deletion.
     M6 AC3: branches checked out in a worktree are excluded.
+    T2.3: drift gate first; live refresh before cache read (PRD/AC-F2.1).
     """
-    # Use cache; a richer flow could refresh first but cache is the source of truth here
+    # --- Drift gate (T2.3) ---
+    drift = check_hook_bundle(Path(repo_path), EXPECTED_HOOK_BUNDLE_VERSION)
+    if drift.status.value == "MISSING":
+        print(
+            "tcs-git-helpers: hooks not installed. Run /tcs-git-helpers:git-setup.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if drift.status.value == "DRIFT":
+        print(
+            f"tcs-git-helpers: installed hooks are {drift.installed_version}; "
+            f"this command needs {EXPECTED_HOOK_BUNDLE_VERSION}. "
+            "Run /tcs-git-helpers:git-setup.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # --- Live refresh (T2.3, Bug 1 fix) ---
+    default_branch = _read_stale_cache(cache_dir, repo_path).get("default_branch", "main")
+    if not gh_available():
+        print(
+            "tcs-git-helpers: gh CLI not found — "
+            "falling back to cached state (may be stale).",
+            file=sys.stderr,
+        )
+    elif not _gh_authenticated():
+        print(
+            "tcs-git-helpers: gh CLI unauthenticated — "
+            "falling back to cached state (may be stale).",
+            file=sys.stderr,
+        )
+    else:
+        refresh_stale_cache(
+            cache_dir=cache_dir,
+            repo_path=repo_path,
+            default_branch=default_branch,
+        )
+
+    # --- Read refreshed (or fallback) cache ---
     cache_data = _read_stale_cache(cache_dir, repo_path)
     stale_entries = cache_data.get("stale_branches", [])
 
