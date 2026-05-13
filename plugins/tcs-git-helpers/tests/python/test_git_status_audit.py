@@ -370,6 +370,7 @@ class TestJsonMode:
     ):
         """
         --json must output a valid JSON object with the required schema fields.
+        Drift gate is patched to OK so this test stays focused on the schema.
         """
         repo_path = "/fake/repo/path"
         cache_dir = tmp_path / "cache"
@@ -377,6 +378,8 @@ class TestJsonMode:
         _write_stale_cache(cache_dir, repo_path, "main", STALE_ENTRIES)
 
         monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+        # Patch drift check to OK so this test focuses on JSON schema, not drift
+        monkeypatch.setattr(gsa, "check_hook_bundle", _ok_drift)
 
         def fake_run(cmd, **kwargs):
             if cmd[0] == "git":
@@ -1197,24 +1200,23 @@ class TestCleanupDriftGate:
 
 
 # ===========================================================================
-# Tests for lazy drift_check loading (Critical fix)
+# Tests for lazy drift_check loading (updated for T2.4)
 # ===========================================================================
 
 class TestLazyDriftCheckLoad:
     """
-    Verify that cmd_brief, cmd_json, and cmd_overrides all succeed when
-    drift_check.py is missing (i.e. _load_drift_check raises FileNotFoundError).
-    Only cmd_cleanup needs drift_check; the other commands must not trigger the load.
+    Verify lazy drift_check loading behavior after T2.4 wiring.
+
+    Post-T2.4 contract:
+    - cmd_brief, cmd_json: NOW call _ensure_drift_check_loaded via _drift_gate.
+      When drift_check.py is absent they exit(2) with a clear message.
+    - cmd_overrides: still does NOT load drift_check — must succeed when absent.
     """
 
     def _make_module_with_broken_load(self, monkeypatch):
         """
         Return a freshly loaded gsa module with _load_drift_check patched to
         raise FileNotFoundError — simulating a missing drift_check.py.
-
-        Because the module-level globals are set to None (lazy), and none of
-        cmd_brief/cmd_json/cmd_overrides call _ensure_drift_check_loaded(),
-        the commands must complete without ever reaching the error path.
         """
         import importlib
         import importlib.util
@@ -1234,56 +1236,65 @@ class TestLazyDriftCheckLoad:
         mod.DriftStatus = None
         return mod
 
-    def test_cmd_brief_succeeds_without_drift_check(
+    def test_cmd_brief_exits_2_when_drift_check_missing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        """cmd_brief must complete normally when drift_check.py is absent."""
+        """
+        cmd_brief calls _ensure_drift_check_loaded (via _drift_gate silent).
+        When drift_check.py is absent the module must exit(2) with a clear
+        error message — not silently succeed. This guards against accidental
+        removal of the drift dependency.
+        """
         mod = self._make_module_with_broken_load(monkeypatch)
         repo_path = "/fake/repo/lazy-brief"
         cache_dir = tmp_path / "cache"
         cache_dir.mkdir()
         _write_stale_cache(cache_dir, repo_path, "main", [])
 
-        def fake_run(cmd, **kwargs):
-            if cmd[0] == "git":
-                if "symbolic-ref" in cmd:
-                    return _git_result("feat/some-branch")
-                if "status" in cmd and "--porcelain" in cmd:
-                    return _git_result("")
-                if "rev-list" in cmd:
-                    return _git_result("0\n0")
-            return _git_result("")
+        stderr_lines: list[str] = []
 
-        # Patch on the freshly loaded module's subprocess reference, not the
-        # global subprocess module, so the patch is scoped to this test instance.
-        monkeypatch.setattr(mod.subprocess, "run", fake_run)
-        monkeypatch.setattr("builtins.print", lambda s="", **_: None)
+        import sys as _sys
 
-        # Must not raise SystemExit or any exception. If a future change
-        # accidentally calls _ensure_drift_check_loaded(), the broken_load
-        # patch would raise FileNotFoundError → SystemExit(2), failing here.
-        mod.cmd_brief(cache_dir=cache_dir, repo_path=repo_path)
+        def _fake_print(*args, sep=" ", end="\n", file=None, flush=False):
+            s = sep.join(str(a) for a in args)
+            if file is _sys.stderr:
+                stderr_lines.append(s)
 
-    def test_cmd_json_succeeds_without_drift_check(
+        monkeypatch.setattr("builtins.print", _fake_print)
+        monkeypatch.setattr(mod.subprocess, "run", lambda cmd, **kw: _git_result(""))
+
+        with pytest.raises(SystemExit) as exc_info:
+            mod.cmd_brief(cache_dir=cache_dir, repo_path=repo_path)
+
+        assert exc_info.value.code == 2, (
+            f"Expected exit(2) when drift_check.py is missing, got {exc_info.value.code}"
+        )
+        combined_stderr = "\n".join(stderr_lines)
+        assert "drift_check.py" in combined_stderr or "Reinstall" in combined_stderr, (
+            f"Expected clear error message, got: {combined_stderr!r}"
+        )
+
+    def test_cmd_json_exits_2_when_drift_check_missing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
-        """cmd_json must complete normally when drift_check.py is absent."""
+        """
+        cmd_json calls _ensure_drift_check_loaded (via _drift_gate non-silent).
+        When drift_check.py is absent the module must exit(2).
+        """
         mod = self._make_module_with_broken_load(monkeypatch)
         repo_path = "/fake/repo/lazy-json"
         cache_dir = tmp_path / "cache"
         cache_dir.mkdir()
         _write_stale_cache(cache_dir, repo_path, "main", STALE_ENTRIES)
 
-        output: list[str] = []
-        monkeypatch.setattr("builtins.print", lambda s="", **_: output.append(s))
+        monkeypatch.setattr("builtins.print", lambda *a, **kw: None)
 
-        mod.cmd_json(cache_dir=cache_dir, repo_path=repo_path)
+        with pytest.raises(SystemExit) as exc_info:
+            mod.cmd_json(cache_dir=cache_dir, repo_path=repo_path)
 
-        # Output must be present and valid JSON; if a future change wired
-        # _ensure_drift_check_loaded() into cmd_json, SystemExit(2) would fire
-        # before any output, and json.loads would raise.
-        assert output, "cmd_json must produce output"
-        json.loads("\n".join(output))
+        assert exc_info.value.code == 2, (
+            f"Expected exit(2) when drift_check.py is missing, got {exc_info.value.code}"
+        )
 
     def test_cmd_overrides_succeeds_without_drift_check(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
