@@ -77,7 +77,7 @@ phase: 1
   5. **Success**:
      - [ ] File exists, is single-line, content `h1` `[ref: SDD/ADR-2]`
 
-- [ ] **T1.4 `install_files.sh` substitutes + copies + writes version file** `[activity: build-platform]`
+- [x] **T1.4 `install_files.sh` substitutes + copies + writes version file** `[activity: build-platform]`
 
   1. **Prime**: Read existing `plugins/tcs-git-helpers/skills/git-setup/lib/install_files.sh:40-100` (the version-banner substitution pattern). Read SDD `[ref: SDD/Directory Map / Repo install state]`.
   2. **Test**: Extend `tests/bats/install-files.bats` (or create new) covering:

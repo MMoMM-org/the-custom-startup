@@ -109,6 +109,13 @@ ROOT="$(_repo_root)"
     cp "$TEMPLATES/lib-bundle.sh" "$ROOT/.githooks/lib-bundle.sh"
   fi
 
+  # Copy lib-config-parser.sh verbatim (byte-equal; substitution must NOT apply).
+  # Installed as lib-config-parser.sh so hooks can source it without any
+  # env-var dependency (CON-2 + ADR-1 sibling layout).
+  if [ -f "$TEMPLATES/lib-config-parser.sh" ]; then
+    cp "$TEMPLATES/lib-config-parser.sh" "$ROOT/.githooks/lib-config-parser.sh"
+  fi
+
   # Write tcs-git-helpers-version atomically (.tmp -> mv).
   printf '%s\n' "$HOOK_BUNDLE_VERSION" > "$ROOT/.githooks/tcs-git-helpers-version.tmp"
   mv "$ROOT/.githooks/tcs-git-helpers-version.tmp" "$ROOT/.githooks/tcs-git-helpers-version"

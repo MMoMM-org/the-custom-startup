@@ -41,6 +41,19 @@ if [ -f "$_LIB" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Source sibling lib-config-parser.sh and load .githooks/.config overrides.
+# Soft-source: hook keeps working if the parser file is missing.
+# ---------------------------------------------------------------------------
+_PARSER="$(dirname "$0")/lib-config-parser.sh"
+if [ -f "$_PARSER" ]; then
+  # shellcheck source=lib-config-parser.sh
+  # shellcheck disable=SC1091
+  . "$_PARSER"
+  _repo_top="$(git rev-parse --show-toplevel 2>/dev/null)" || _repo_top=""
+  parse_tcs_config "${_repo_top}/.githooks/.config" 2>/dev/null || true
+fi
+
+# ---------------------------------------------------------------------------
 # Defaults (applied when config file is absent or key is unset)
 # ---------------------------------------------------------------------------
 TCS_ALLOWED_COMMIT_TYPES="${TCS_ALLOWED_COMMIT_TYPES:-feat fix docs style refactor test chore perf revert build ci}"

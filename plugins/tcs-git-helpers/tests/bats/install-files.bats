@@ -199,3 +199,19 @@ _run_install() {
   run diff "$TEMPLATES/lib-bundle.sh" "$REPO/.githooks/lib-bundle.sh"
   [ "$status" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# IF5: lib-config-parser.sh is copied byte-equal to scripts/lib/config_parser.sh
+# ---------------------------------------------------------------------------
+
+@test "IF5 install writes lib-config-parser.sh into .githooks/" {
+  _run_install
+  [ "$status" -eq 0 ]
+  [ -f "$REPO/.githooks/lib-config-parser.sh" ]
+}
+
+@test "IF5 installed lib-config-parser.sh is byte-equal to template source" {
+  _run_install
+  run diff "$TEMPLATES/lib-config-parser.sh" "$REPO/.githooks/lib-config-parser.sh"
+  [ "$status" -eq 0 ]
+}

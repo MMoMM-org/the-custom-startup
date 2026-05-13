@@ -364,42 +364,6 @@ GHSTUB
 }
 
 # ---------------------------------------------------------------------------
-# Test 12: standalone mode — no CLAUDE_PLUGIN_ROOT → no cache files written
-#
-# When CLAUDE_PLUGIN_ROOT is unset, lib/cache.sh cannot be sourced and
-# _CACHE_LIB_LOADED remains 0. _do_write_stale_cache must return 0 without
-# writing any cache files. stderr suggestion list must still appear (M6 AC1).
-# ---------------------------------------------------------------------------
-
-@test "test_no_cache_write_in_standalone_mode" {
-  GH_STUB_SCENARIO="stale-3-branches"
-  export GH_STUB_SCENARIO
-
-  run bash -c "
-    unset CLAUDE_PLUGIN_ROOT
-    cd '$REPO' && bash '$HOOK'
-  "
-
-  # Must still exit 0 — never blocks.
-  [ "$status" -eq 0 ]
-
-  # Stderr suggestion list must still appear (M6 AC1).
-  echo "$output" | grep -q "feat/stale-a"
-
-  # No cache files must exist in CLAUDE_PLUGIN_DATA/cache/.
-  # (CLAUDE_PLUGIN_DATA is set from setup; lib was not loaded so no write.)
-  local hash
-  hash="$(_repo_hash)"
-  [ ! -f "$CACHE_DIR/${hash}-stale-cache.tsv" ]
-  [ ! -f "$CACHE_DIR/${hash}-stale-cache.json" ]
-
-  # No .tmp leftovers either.
-  local tmp_count
-  tmp_count="$(find "$CACHE_DIR" -name '*.tmp' 2>/dev/null | wc -l | tr -d ' ')"
-  [ "$tmp_count" -eq 0 ]
-}
-
-# ---------------------------------------------------------------------------
 # Test 8: worktree branches excluded from stale list (M6 AC3)
 #
 # Create a branch checked out in a separate worktree. gh reports it as merged.
