@@ -69,6 +69,7 @@ def _call_bash_helper(repo_path: Path, expected_version: str) -> str:
     Subprocess-call the bash helper: source drift_check.sh and call
     drift_check_hook_bundle <repo_path> <expected_version>.
     Returns stripped stdout.
+    Raises subprocess.CalledProcessError if the bash helper exits non-zero.
     """
     result = subprocess.run(
         [
@@ -80,6 +81,7 @@ def _call_bash_helper(repo_path: Path, expected_version: str) -> str:
         text=True,
         timeout=10,
     )
+    result.check_returncode()
     return result.stdout.strip()
 
 
@@ -185,6 +187,7 @@ _PARITY_TABLE: list[tuple[Optional[str], str, str]] = [
     ("h1\n",        "h1",    "OK"),
     ("h7\r\n",      "h7",    "OK"),
     ("  h7  \n",    "h7",    "OK"),
+    ("h 7\n",       "h7",    "OK"),  # internal space removed by tr -d '[:space:]'
     # DRIFT cases (file exists but content != expected)
     ("h1\n",        "h7",    "DRIFT:h1"),
     ("h5\n",        "h7",    "DRIFT:h5"),
@@ -213,6 +216,7 @@ def _status_to_bash_wire(dc, result) -> str:
         "ok-h1",
         "ok-h7-crlf",
         "ok-h7-spaces",
+        "ok-h7-internal-space",
         "drift-h1-vs-h7",
         "drift-h5-vs-h7",
         "drift-h3-spaces-crlf",
