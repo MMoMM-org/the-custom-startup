@@ -56,6 +56,18 @@ _read_plugin_version() {
 }
 PLUGIN_VERSION="$(_read_plugin_version)"
 
+# Read the hook bundle version from templates/githooks/tcs-git-helpers-version.
+# Trimmed via tr to strip any trailing newline or whitespace.
+_read_hook_bundle_version() {
+  local version_file="$TEMPLATES/tcs-git-helpers-version"
+  if [ ! -f "$version_file" ]; then
+    printf 'unknown'
+    return 0
+  fi
+  tr -d '[:space:]' < "$version_file"
+}
+HOOK_BUNDLE_VERSION="$(_read_hook_bundle_version)"
+
 _repo_root() {
   if git rev-parse --show-toplevel 2>/dev/null; then
     return 0
@@ -78,16 +90,28 @@ ROOT="$(_repo_root)"
 
   mkdir -p "$ROOT/.githooks"
 
-  # Copy hook scripts, substituting the version placeholder so the installed
-  # `# tcs-git-helpers: vX.Y.Z` banner always reflects plugin.json.
+  # Copy hook scripts, substituting both version placeholders so the installed
+  # banners always reflect plugin.json and the bundle version file.
   for h in $HOOK_FILES; do
     src="$TEMPLATES/$h"
     dst="$ROOT/.githooks/$h"
     if [ -f "$src" ]; then
-      sed "s/__TCS_GIT_HELPERS_VERSION__/${PLUGIN_VERSION}/g" "$src" > "$dst"
+      sed \
+        -e "s/__TCS_GIT_HELPERS_VERSION__/${PLUGIN_VERSION}/g" \
+        -e "s/__HOOK_BUNDLE_VERSION__/${HOOK_BUNDLE_VERSION}/g" \
+        "$src" > "$dst"
       chmod +x "$dst"
     fi
   done
+
+  # Copy lib-bundle.sh verbatim (byte-equal; substitution must NOT apply).
+  if [ -f "$TEMPLATES/lib-bundle.sh" ]; then
+    cp "$TEMPLATES/lib-bundle.sh" "$ROOT/.githooks/lib-bundle.sh"
+  fi
+
+  # Write tcs-git-helpers-version atomically (.tmp -> mv).
+  printf '%s\n' "$HOOK_BUNDLE_VERSION" > "$ROOT/.githooks/tcs-git-helpers-version.tmp"
+  mv "$ROOT/.githooks/tcs-git-helpers-version.tmp" "$ROOT/.githooks/tcs-git-helpers-version"
 
   # Copy *.example files (kept as -example, not renamed). Same substitution.
   for ex in $EXAMPLE_FILES; do
