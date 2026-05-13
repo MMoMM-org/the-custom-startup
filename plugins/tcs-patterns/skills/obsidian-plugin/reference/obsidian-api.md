@@ -828,18 +828,85 @@ const isLivePreview = editorView.state.field(editorLivePreviewField);
   "name": "My Plugin",
   "version": "1.0.0",
   "minAppVersion": "1.0.0",
-  "description": "One sentence describing what the plugin does.",
+  "description": "Translate selected text into multiple languages.",
   "author": "Your Name",
   "authorUrl": "https://github.com/yourname",
   "isDesktopOnly": false
 }
 ```
 
-Rules:
-- id: kebab-case, lowercase, unique in community plugins list
-- minAppVersion: test against actual minimum — do not set artificially low
-- isDesktopOnly: true only if Node.js APIs used without Platform.isDesktop guard
-- version: semver — Obsidian enforces this on updates
+### Field-by-Field Submission Rules
+
+The community-plugin reviewer bot (`obsidianmd/obsidian-releases`) enforces these on every submission PR. Failing rules surface as **errors** (block submission) or **warnings** (do not block but the reviewer may still require fixes).
+
+**`id`** (required)
+- kebab-case, lowercase, unique across all published plugins.
+- MUST NOT contain `obsidian` — the directory rejects it (trademark + namespace collision).
+- For local development, the `id` should match the plugin's folder name; otherwise some lifecycle hooks like `onExternalSettingsChange` won't fire.
+
+**`name`** (required)
+- Display name shown in Community Plugins. Title Case is fine here — it's a product name.
+- Avoid the literal word "Obsidian" inside the name — risks trademark confusion under the Developer policy ("don't use the Obsidian trademark in a way that could confuse users into thinking your plugin is a first-party creation").
+
+**`version`** (required)
+- Strict semver `x.y.z` — no `v` prefix, no pre-release tags. Obsidian enforces this on updates.
+
+**`minAppVersion`** (required)
+- The minimum Obsidian version your plugin actually works on. Test against it. If unsure, use the latest stable Obsidian version at submission time. Do not set artificially low.
+
+**`description`** (required) — most-rejected field
+- ≤ 250 characters.
+- MUST end with `.` / `!` / `?` (bot warning if missing).
+- MUST NOT contain the word "Obsidian" (redundant in the Community Plugins context, and trademark hygiene).
+- MUST NOT contain emoji or special characters.
+- MUST NOT start with "This is a plugin" (redundant — every entry in the directory is a plugin).
+- SHOULD start with an action verb: "Translate…", "Generate…", "Import…", "Sync…", "Open…".
+- Use correct capitalization for trademarks and acronyms: "Markdown", "PDF", "GitHub", "API".
+
+**`author`** (required)
+- The author's name. MUST NOT contain an email address — the bot rejects it.
+- Use `authorUrl` for a contact / homepage link instead.
+
+**`authorUrl`** (optional)
+- URL to the author's website or GitHub profile. This is the right place to expose contact info that was wrongly placed in `author`.
+
+**`fundingUrl`** (optional)
+- Single URL or an object map `{ "Label": "url", ... }` for multiple sponsorship destinations.
+- Only set if you actually accept financial support (Buy Me A Coffee, GitHub Sponsors, Patreon, etc.). Remove the field entirely otherwise — the submission-requirements doc is explicit.
+
+**`isDesktopOnly`** (required, plugin-only)
+- `true` ONLY if the plugin uses Node.js/Electron APIs (`fs`, `path`, `child_process`, `crypto`, `os`, `@electron/remote`) without a `Platform.isDesktop` guard. Setting this hides the plugin from mobile users — only true when there is no mobile-safe path.
+
+### Sample-Plugin Residue
+
+Submissions derived from the sample-plugin template ship with placeholder names that the bot and reviewer flag. Rename before submission:
+
+| Placeholder | Replace with |
+|---|---|
+| `MyPlugin` (class) | The plugin's actual class name (e.g. `TranslatorPlugin`) |
+| `MyPluginSettings` (interface) | `TranslatorSettings` |
+| `SampleSettingTab` (class) | `TranslatorSettingTab` |
+| Sample `addRibbonIcon`, sample `addCommand`, sample modal | Remove — they exist only to demonstrate the API |
+| `console.log` calls left over from the sample | Replace with `console.debug` or remove entirely |
+
+### Pre-Submission Checklist
+
+Before opening the submission PR against `obsidianmd/obsidian-releases`:
+
+- [ ] `manifest.json` validates against every field rule above.
+- [ ] `README.md` exists at repo root and explains purpose + usage.
+- [ ] `LICENSE` exists at repo root with a clear license.
+- [ ] No `eslint-disable` anywhere in the codebase (see SKILL.md → `LINT_RULE_DISABLED`).
+- [ ] No `console.log` — use `console.debug` (bot rejects `console.log`; DevTools Verbose level shows debug output).
+- [ ] No global `app` / `window.app` — always `this.app`.
+- [ ] No `innerHTML` / `outerHTML` / `insertAdjacentHTML`.
+- [ ] No inline style writes (`el.style.color = ...`) on plugin-rendered DOM.
+- [ ] No default `hotkeys: [...]` in `addCommand`.
+- [ ] No plugin-id prefix in `addCommand` IDs — Obsidian prefixes automatically.
+- [ ] Sample-plugin class names renamed.
+- [ ] Plugin tested on the `minAppVersion` declared.
+- [ ] GitHub release with `main.js`, `manifest.json`, and optional `styles.css` as **binary attachments** — release tag MUST match `manifest.version` exactly (no `v` prefix).
+- [ ] `manifest.json` at the HEAD of the default branch is the version the directory will read on submission — commit it before submitting.
 
 ---
 
@@ -1060,3 +1127,13 @@ One-line check beats `AbortController` plumbing for this case.
 | Title Case in UI text ("Template Folder Location") | Off-house-style; visually inconsistent with native UI | Sentence case ("Template folder location") |
 | "Advanced settings" / "Connection settings" headings | Redundant — everything in the tab is a setting | "Advanced" / "Connection" |
 | API key / token persisted in `data.json` | Replicated to every Sync-paired device | `SecretStorage` + `SecretComponent`; persist secret ID, not value |
+| `"author": "Name <email@…>"` in manifest | Submission bot rejects — email forbidden in `author` | `"author": "Name"` + `"authorUrl": "https://…"` |
+| Manifest `description` missing terminal punctuation | Bot warning — must end with `.` / `!` / `?` | End the sentence with `.` |
+| Manifest `description` contains "Obsidian" | Bot warning — redundant in directory context + trademark hygiene | Reword without the word |
+| Manifest `description` longer than 250 chars | Bot warning | Shorten to one action-led sentence |
+| Manifest `description` contains emoji / special chars | Bot warning | ASCII-only prose |
+| Manifest `description` starts with "This is a plugin" | Bot warning — redundant | Lead with an action verb ("Translate…", "Import…") |
+| Manifest `id` contains `obsidian` | Directory rejects | Pick a unique kebab-case id without the word |
+| `fundingUrl` set without accepting donations | Policy violation — must remove | Delete the field entirely |
+| `MyPlugin` / `SampleSettingTab` / `MyPluginSettings` class names | Sample-plugin residue — reviewer flags | Rename to the plugin's actual identity |
+| `vault.modify(activeFile, content)` for the current note | Loses cursor, selection, folded ranges | `editor.replaceSelection` / `editor.setLine` via `getActiveViewOfType(MarkdownView)` |
