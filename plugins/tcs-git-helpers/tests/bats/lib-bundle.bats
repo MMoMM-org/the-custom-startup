@@ -276,7 +276,7 @@ _make_git_repo() {
 @test "_guard_gh returns non-zero and emits structured skip line when gh is absent" {
   # Use PATH=/bin so bash is reachable but gh (typically in /usr/local/bin or
   # /opt/homebrew/bin) is not.
-  run env -i HOME="$HOME" PATH="/bin:/usr/bin" \
+  run env -i HOME="$HOME" PATH="/bin" \
     /bin/bash -c "source \"$LIB\"; _guard_gh 'my-action' 2>&1"
   [ "$status" -ne 0 ]
   [[ "$output" == "tcs-git-helpers: my-action skipped — gh CLI not installed."* ]]
