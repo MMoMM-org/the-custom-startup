@@ -6,8 +6,8 @@
 #   1. Direct commits to protected branches (default: main|master|production|release)
 #   2. Staged files that look like secrets (env files, credentials, keys, SSH keys)
 #
-# Configuration (via .githooks/.config, parsed by lib/config_parser.sh):
-#   TCS_PROTECTED_BRANCHES     — |-separated branch names; default main|master|production|release
+# Configuration (via .githooks/.config):
+#   TCS_PROTECTED_BRANCHES      — |-separated branch names; default main|master|production|release
 #   TCS_HOOK_EXCLUDE_PATHS_FILE — path to exclusion list; default .githooks/exclude-paths
 #
 # Install: git config core.hooksPath .githooks
@@ -15,7 +15,8 @@
 # Spec refs:
 #   - SDD §Repo-side .githooks/ Templates — pre-commit (ADR-12, M5/AC1, M11/AC1)
 #   - ADR-12 — default protected branches
-#   - M11   — standalone mode: works without CLAUDE_PLUGIN_ROOT (hard-coded defaults)
+#   - M11   — standalone mode: works without any external env vars
+#   - SDD CON-1 — plugin env vars must not be required at git-hook time
 #
 # Note on amend detection (deviation D1):
 #   Empirical testing with git 2.50.1 confirms that pre-commit hooks have NO
@@ -29,26 +30,23 @@
 set -eo pipefail
 
 # ---------------------------------------------------------------------------
+# Source sibling lib-bundle.sh (self-contained install; no env-var deps).
+# lib-bundle.sh provides _emit_skip and other shared helpers.
+# If missing, hook still works — lib functions are only used for degraded paths.
+# ---------------------------------------------------------------------------
+
+_LIB="$(dirname "$0")/lib-bundle.sh"
+if [ -f "$_LIB" ]; then
+  # shellcheck source=lib-bundle.sh
+  # shellcheck disable=SC1091
+  . "$_LIB"
+fi
+
+# ---------------------------------------------------------------------------
 # Defaults (applied when config file is absent or key is unset)
 # ---------------------------------------------------------------------------
 TCS_PROTECTED_BRANCHES="${TCS_PROTECTED_BRANCHES:-main|master|production|release}"
 TCS_HOOK_EXCLUDE_PATHS_FILE="${TCS_HOOK_EXCLUDE_PATHS_FILE:-.githooks/exclude-paths}"
-
-# ---------------------------------------------------------------------------
-# Load config_parser.sh if CLAUDE_PLUGIN_ROOT is set and lib is present.
-# Overrides default TCS_* variables with values from .githooks/.config.
-# M11: hook MUST work standalone when CLAUDE_PLUGIN_ROOT is unset.
-# ---------------------------------------------------------------------------
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && \
-   [ -f "${CLAUDE_PLUGIN_ROOT}/scripts/lib/config_parser.sh" ]; then
-  # shellcheck source=scripts/lib/config_parser.sh
-  # shellcheck disable=SC1091
-  . "${CLAUDE_PLUGIN_ROOT}/scripts/lib/config_parser.sh"
-  parse_tcs_config ".githooks/.config"
-  # Re-apply defaults for any key that config_parser left unset.
-  TCS_PROTECTED_BRANCHES="${TCS_PROTECTED_BRANCHES:-main|master|production|release}"
-  TCS_HOOK_EXCLUDE_PATHS_FILE="${TCS_HOOK_EXCLUDE_PATHS_FILE:-.githooks/exclude-paths}"
-fi
 
 # ---------------------------------------------------------------------------
 # Gather context

@@ -11,7 +11,7 @@
 #   - MERGE_HEAD file present in GIT_DIR
 #   - Subject contains literal "[skip-format-check]"
 #
-# Configuration (via .githooks/.config, parsed by lib/config_parser.sh):
+# Configuration (via .githooks/.config):
 #   TCS_ALLOWED_COMMIT_TYPES      — space-separated; default "feat fix docs style refactor test chore perf revert build ci"
 #   TCS_REQUIRE_SCOPE             — 0|1; default 0
 #   TCS_MAX_SUBJECT_LENGTH        — integer 1-9999; default 90
@@ -22,11 +22,22 @@
 # Spec refs:
 #   - PRD M5/AC1-AC4 — Conventional Commits enforcement
 #   - SDD §Repo-side .githooks/ Templates — commit-msg
-#   - ADR-3 — config parser (lib/config_parser.sh)
-#   - PRD M11/AC1 — standalone mode: works without CLAUDE_PLUGIN_ROOT
+#   - PRD M11/AC1 — standalone mode: works without any external env vars
+#   - SDD CON-1 — plugin env vars must not be required at git-hook time
 
 # Exit immediately on unhandled errors; pipefail catches pipeline failures.
 set -eo pipefail
+
+# ---------------------------------------------------------------------------
+# Source sibling lib-bundle.sh (self-contained install; no env-var deps).
+# ---------------------------------------------------------------------------
+
+_LIB="$(dirname "$0")/lib-bundle.sh"
+if [ -f "$_LIB" ]; then
+  # shellcheck source=lib-bundle.sh
+  # shellcheck disable=SC1091
+  . "$_LIB"
+fi
 
 # ---------------------------------------------------------------------------
 # Defaults (applied when config file is absent or key is unset)
@@ -35,24 +46,6 @@ TCS_ALLOWED_COMMIT_TYPES="${TCS_ALLOWED_COMMIT_TYPES:-feat fix docs style refact
 TCS_REQUIRE_SCOPE="${TCS_REQUIRE_SCOPE:-0}"
 TCS_MAX_SUBJECT_LENGTH="${TCS_MAX_SUBJECT_LENGTH:-90}"
 TCS_ENABLE_CONVENTIONAL_CHECK="${TCS_ENABLE_CONVENTIONAL_CHECK:-1}"
-
-# ---------------------------------------------------------------------------
-# Load config_parser.sh if CLAUDE_PLUGIN_ROOT is set and lib is present.
-# Overrides default TCS_* variables with values from .githooks/.config.
-# M11: hook MUST work standalone when CLAUDE_PLUGIN_ROOT is unset.
-# ---------------------------------------------------------------------------
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && \
-   [ -f "${CLAUDE_PLUGIN_ROOT}/scripts/lib/config_parser.sh" ]; then
-  # shellcheck source=scripts/lib/config_parser.sh
-  # shellcheck disable=SC1091
-  . "${CLAUDE_PLUGIN_ROOT}/scripts/lib/config_parser.sh"
-  parse_tcs_config ".githooks/.config"
-  # Re-apply defaults for any key that config_parser left unset.
-  TCS_ALLOWED_COMMIT_TYPES="${TCS_ALLOWED_COMMIT_TYPES:-feat fix docs style refactor test chore perf revert build ci}"
-  TCS_REQUIRE_SCOPE="${TCS_REQUIRE_SCOPE:-0}"
-  TCS_MAX_SUBJECT_LENGTH="${TCS_MAX_SUBJECT_LENGTH:-90}"
-  TCS_ENABLE_CONVENTIONAL_CHECK="${TCS_ENABLE_CONVENTIONAL_CHECK:-1}"
-fi
 
 # ---------------------------------------------------------------------------
 # Read commit message
@@ -161,9 +154,6 @@ fi
 printf '    Allowed types: %s\n' "$TCS_ALLOWED_COMMIT_TYPES" >&2
 printf '    Type not in allowlist or missing/malformed scope.\n' >&2
 printf '    To bypass: include [skip-format-check] in the subject.\n' >&2
-# Cite the Conventional Commits reference doc. The hook may run outside a
-# Claude session (plain `git commit` in a terminal), in which case
-# CLAUDE_PLUGIN_ROOT is unset — parameter expansion picks the relative path.
-printf '    See: %sreferences/conventional-commits.md\n' "${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/}" >&2
+printf '    See: references/conventional-commits.md\n' >&2
 printf '\n' >&2
 exit 1

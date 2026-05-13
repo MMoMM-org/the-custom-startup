@@ -105,3 +105,110 @@ _guard_jq() {
     return 1
   fi
 }
+
+# ---------------------------------------------------------------------------
+# _write_stale_cache <updated_iso> <repo_path> <default_branch>
+#
+# Reads TSV rows from stdin (name<TAB>pr_number<TAB>merged_at) and writes
+# both cache files atomically (.tmp → mv):
+#   <data_dir>/<repo_hash>-stale-cache.tsv
+#   <data_dir>/<repo_hash>-stale-cache.json
+#
+# Resolves the data dir via _resolve_data_dir (which itself respects
+# CLAUDE_PLUGIN_DATA when set, otherwise derives from $HOME + repo name).
+#
+# Returns:
+#   0  — files written successfully (or silently skipped on error)
+#   0  — always; cache failure must never block a merge
+# ---------------------------------------------------------------------------
+
+_write_stale_cache() {
+  local updated_iso="$1"
+  local repo_path="$2"
+  local default_branch="$3"
+  # stdin: TSV rows
+
+  # Resolve (or derive) the cache directory.
+  local data_dir
+  data_dir="$(_resolve_data_dir)" || {
+    _emit_skip "cache-write" \
+      "not in a git repository" \
+      "Ensure the hook is installed inside a git repo"
+    return 0
+  }
+
+  # Create the cache dir atomically; fail gracefully if not writable.
+  mkdir -p "$data_dir" 2>/dev/null || {
+    _emit_skip "cache-write" \
+      "cache directory could not be created" \
+      "Check write permissions on $data_dir"
+    return 0
+  }
+
+  # Compute the 12-char repo hash (sha1 prefix of the repo top-level path).
+  local repo_hash
+  repo_hash="$(printf '%s' "$repo_path" | shasum 2>/dev/null | head -c 12)"
+
+  # Slurp stdin into a variable so we can write both files from the same data.
+  local tsv_rows
+  tsv_rows="$(cat)"
+
+  local tsv_file="${data_dir}/${repo_hash}-stale-cache.tsv"
+  local json_file="${data_dir}/${repo_hash}-stale-cache.json"
+
+  # Write TSV atomically.
+  printf '%s\n' "$tsv_rows" > "${tsv_file}.tmp" 2>/dev/null || {
+    _emit_skip "cache-write" \
+      "TSV write failed" \
+      "Check write permissions on $data_dir"
+    return 0
+  }
+  mv "${tsv_file}.tmp" "$tsv_file" 2>/dev/null || true
+
+  # Build JSON array from TSV rows and write atomically.
+  _emit_stale_json "$tsv_rows" "$updated_iso" "$default_branch" \
+    > "${json_file}.tmp" 2>/dev/null || {
+    rm -f "${json_file}.tmp" 2>/dev/null || true
+    return 0
+  }
+  mv "${json_file}.tmp" "$json_file" 2>/dev/null || true
+
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# _emit_stale_json <tsv_rows> <updated_iso> <default_branch>
+#
+# Writes a JSON object to stdout in the cache schema format.
+# TSV rows: name<TAB>pr_number<TAB>merged_at (one per line).
+# Requires jq on PATH (caller must guard with _guard_jq first).
+# ---------------------------------------------------------------------------
+
+_emit_stale_json() {
+  local tsv_rows="$1"
+  local updated_iso="$2"
+  local default_branch="$3"
+
+  # Build the entries array via jq from the TSV data.
+  # Each row: name<TAB>pr_num<TAB>merged_at
+  local entries_json
+  entries_json="$(printf '%s\n' "$tsv_rows" \
+    | awk -F'\t' 'NF>=3 && $1!="" {
+        printf "{\"name\":\"%s\",\"pr_number\":%s,\"merged_at\":\"%s\"}\n",
+               $1, $2, $3
+      }' \
+    | jq -s '.' 2>/dev/null)" || entries_json="[]"
+
+  [ -n "$entries_json" ] || entries_json="[]"
+
+  jq -n \
+    --arg updated "$updated_iso" \
+    --arg default_branch "$default_branch" \
+    --argjson entries "$entries_json" \
+    '{
+      version: 1,
+      updated_iso: $updated,
+      default_branch: $default_branch,
+      entries: $entries
+    }' 2>/dev/null
+}
