@@ -1254,10 +1254,14 @@ class TestLazyDriftCheckLoad:
                     return _git_result("0\n0")
             return _git_result("")
 
-        monkeypatch.setattr("subprocess.run", fake_run)
+        # Patch on the freshly loaded module's subprocess reference, not the
+        # global subprocess module, so the patch is scoped to this test instance.
+        monkeypatch.setattr(mod.subprocess, "run", fake_run)
         monkeypatch.setattr("builtins.print", lambda s="", **_: None)
 
-        # Must not raise SystemExit or any exception
+        # Must not raise SystemExit or any exception. If a future change
+        # accidentally calls _ensure_drift_check_loaded(), the broken_load
+        # patch would raise FileNotFoundError → SystemExit(2), failing here.
         mod.cmd_brief(cache_dir=cache_dir, repo_path=repo_path)
 
     def test_cmd_json_succeeds_without_drift_check(
@@ -1270,9 +1274,16 @@ class TestLazyDriftCheckLoad:
         cache_dir.mkdir()
         _write_stale_cache(cache_dir, repo_path, "main", STALE_ENTRIES)
 
-        monkeypatch.setattr("builtins.print", lambda s="", **_: None)
+        output: list[str] = []
+        monkeypatch.setattr("builtins.print", lambda s="", **_: output.append(s))
 
         mod.cmd_json(cache_dir=cache_dir, repo_path=repo_path)
+
+        # Output must be present and valid JSON; if a future change wired
+        # _ensure_drift_check_loaded() into cmd_json, SystemExit(2) would fire
+        # before any output, and json.loads would raise.
+        assert output, "cmd_json must produce output"
+        json.loads("\n".join(output))
 
     def test_cmd_overrides_succeeds_without_drift_check(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
