@@ -23,6 +23,7 @@ Spec: SDD/Internal API Changes / function: check_hook_bundle
 from __future__ import annotations
 
 import enum
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -62,7 +63,8 @@ def check_hook_bundle(repo_path: Path, expected_version: str) -> DriftResult:
     if not version_file.exists():
         return DriftResult(status=DriftStatus.MISSING, installed_version=None)
 
-    installed = version_file.read_text().split("\n")[0].strip()
+    # Match bash `tr -d '[:space:]'` — remove ALL whitespace including internal
+    installed = re.sub(r'\s+', '', version_file.read_text().split("\n")[0])
 
     if installed == expected_version:
         return DriftResult(status=DriftStatus.OK, installed_version=installed)

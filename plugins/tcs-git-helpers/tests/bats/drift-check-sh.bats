@@ -102,18 +102,18 @@ teardown() {
 
 @test "does not write to stderr" {
   echo "h7" > "$GITHOOKS_DIR/tcs-git-helpers-version"
-  run drift_check_hook_bundle "$REPO_TMP" "h7"
+  run --separate-stderr drift_check_hook_bundle "$REPO_TMP" "h7"
   [ -z "$stderr" ] || [ "$stderr" = "" ]
 }
 
 @test "does not write to stderr on MISSING" {
-  run drift_check_hook_bundle "$REPO_TMP" "h7"
+  run --separate-stderr drift_check_hook_bundle "$REPO_TMP" "h7"
   [ -z "$stderr" ] || [ "$stderr" = "" ]
 }
 
 @test "does not write to stderr on DRIFT" {
   echo "h1" > "$GITHOOKS_DIR/tcs-git-helpers-version"
-  run drift_check_hook_bundle "$REPO_TMP" "h7"
+  run --separate-stderr drift_check_hook_bundle "$REPO_TMP" "h7"
   [ -z "$stderr" ] || [ "$stderr" = "" ]
 }
 

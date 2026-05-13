@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # scripts/lib/drift_check.sh — drift detection for installed hook bundle
 # Spec: SDD §Internal API Changes / function: drift_check_hook_bundle
 #
