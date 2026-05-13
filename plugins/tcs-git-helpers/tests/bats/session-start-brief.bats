@@ -445,3 +445,54 @@ STUB
   printf '%s' "$stderr" \
     | grep -qE '^\[tcs-git-helpers\] local-only-branch • [^•]+ • no upstream • [0-9]+ stale-merged'
 }
+
+# ----------------------------------------------------------------------
+# Test 12: Missing .githooks/tcs-git-helpers-version does not break brief
+# (per CON-5: SessionStart is not the drift surface)
+# ----------------------------------------------------------------------
+
+@test "missing .githooks/tcs-git-helpers-version renders brief with 0 stale-merged, no error" {
+  # Ensure no .githooks dir exists (default state in setup).
+  [ ! -d "$TEST_REPO/.githooks" ]
+
+  # Cache exists but version file will not (we never create it).
+  local now_iso
+  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  _write_test_cache "$now_iso" \
+    "feat/old-thing	38	2026-04-12T10:00:00Z"
+
+  _run_hook
+
+  [ "$status" -eq 0 ]
+  # Brief must emit successfully.
+  [ -n "$stderr" ]
+  # Must show stale-count from cache, not error.
+  printf '%s' "$stderr" | grep -q "1 stale-merged"
+  # No drift prompt lines in the output.
+  ! printf '%s' "$stderr" | grep -qE "drift|DRIFT|version"
+  # Cleanup suggestion should be present (stale-count > 0).
+  printf '%s' "$stderr" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
+  # No error output.
+  [ -z "$output" ]
+}
+
+# ----------------------------------------------------------------------
+# Test 13: Missing cache file does not break brief
+# (per CON-5: brief fails open on missing inputs)
+# ----------------------------------------------------------------------
+
+@test "missing cache file renders brief with 0 stale-merged, no error" {
+  # Ensure cache file does not exist.
+  local tsv_path="$CACHE_DIR/${REPO_HASH}-stale-cache.tsv"
+  [ ! -f "$tsv_path" ]
+
+  _run_hook
+
+  [ "$status" -eq 0 ]
+  # Brief must emit successfully with no stale entries reported.
+  printf '%s' "$stderr" | grep -q "0 stale-merged"
+  # No error output.
+  [ -z "$output" ]
+  # No cleanup suggestion when stale-count == 0.
+  ! printf '%s' "$stderr" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
+}
