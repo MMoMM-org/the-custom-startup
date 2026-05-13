@@ -941,6 +941,9 @@ class TestCleanupDriftGate:
         assert "h0" in combined_stderr, (
             f"Expected installed version 'h0' in stderr:\n{combined_stderr}"
         )
+        assert "h1" in combined_stderr, (
+            f"Expected expected version 'h1' in stderr:\n{combined_stderr}"
+        )
         assert "/tcs-git-helpers:git-setup" in combined_stderr, (
             f"Expected /tcs-git-helpers:git-setup suggestion in stderr:\n{combined_stderr}"
         )
@@ -1013,9 +1016,13 @@ class TestCleanupDriftGate:
         self._setup_cache(cache_dir, repo_path)
 
         ok_result = self._make_drift_result(dc, "OK", "h1")
+        refresh_calls: list = []
 
         def fake_check_hook_bundle(rp, ver):
             return ok_result
+
+        def fake_refresh(*, cache_dir, repo_path, default_branch="main"):
+            refresh_calls.append((cache_dir, repo_path))
 
         def fake_run(cmd, **kwargs):
             if cmd[0] == "gh":
@@ -1041,6 +1048,7 @@ class TestCleanupDriftGate:
             return _git_result("")
 
         monkeypatch.setattr(gsa, "check_hook_bundle", fake_check_hook_bundle)
+        monkeypatch.setattr(gsa, "refresh_stale_cache", fake_refresh)
         monkeypatch.setattr("subprocess.run", fake_run)
 
         output_lines: list[str] = []
@@ -1052,6 +1060,11 @@ class TestCleanupDriftGate:
             gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
         except SystemExit as exc:
             pytest.fail(f"cmd_cleanup raised SystemExit({exc.code}) on unauthenticated gh — must be fail-open")
+
+        # Preflight contract: refresh_stale_cache must NOT be called when gh is unauthenticated
+        assert len(refresh_calls) == 0, (
+            f"Expected preflight to gate refresh (not called), but got {len(refresh_calls)} calls"
+        )
 
         combined_stderr = "\n".join(stderr_lines)
         assert "unauthenticated" in combined_stderr.lower() or "falling back" in combined_stderr.lower(), (
