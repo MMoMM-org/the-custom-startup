@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Self-contained hook bundle"
-status: pending
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -92,7 +92,7 @@ phase: 1
      - [ ] All hooks carry the same version banner `[ref: PRD/AC-F6.2]`
      - [ ] `tcs-git-helpers-version` byte-equal to plugin source `[ref: SDD/Quality Requirements/Reliability]`
 
-- [ ] **T1.5 Phase 1 validation** `[activity: validate]`
+- [x] **T1.5 Phase 1 validation** `[activity: validate]`
 
   1. **Run** the full bash test suite for the plugin: `bats plugins/tcs-git-helpers/tests/bats/`.
   2. **Run** `shellcheck` across every modified or new shell file.
