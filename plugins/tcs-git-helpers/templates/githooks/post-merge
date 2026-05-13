@@ -1,5 +1,6 @@
 #!/bin/bash
 # tcs-git-helpers: __TCS_GIT_HELPERS_VERSION__
+# tcs-git-helpers-bundle: __HOOK_BUNDLE_VERSION__
 # post-merge — tcs-git-helpers repo-side stale-branch surfacing hook
 #
 # Runs after `git pull` or `git merge`. Queries GitHub for merged PRs whose
@@ -12,13 +13,8 @@
 #   - Suggestions go to STDERR only; STDOUT is always empty.
 #   - Exits 0 always — post-merge MUST NOT block a merge.
 #   - Worktree branches (M6 AC3) are excluded from the stale list.
-#   - Degrades silently when gh is absent or unauthenticated.
-#   - When CLAUDE_PLUGIN_DATA is unset or lib/cache.sh is not loaded,
-#     emits stderr suggestion but skips cache writes.
-#
-# Configuration:
-#   CLAUDE_PLUGIN_ROOT  — if set and lib/cache.sh exists, sources it
-#   CLAUDE_PLUGIN_DATA  — if set, writes cache to ${CLAUDE_PLUGIN_DATA}/cache/
+#   - Degrades gracefully (emits one structured stderr line) when gh or jq
+#     are absent or when the cache write fails.
 #
 # Install: git config core.hooksPath .githooks
 #
@@ -26,44 +22,25 @@
 #   - PRD M6 AC1-AC3 — stale-branch surfacing
 #   - SDD §Repo-side .githooks/ Templates — post-merge
 #   - SDD §Cache Schemas (TSV+JSON dual-write)
+#   - SDD §Error Handling Table — structured skip messages
 #   - ADR-4 — atomic dual-write (.tmp → mv)
 #   - research/performance.md §3 — single batched gh call
 
 set -uo pipefail
 
 # ---------------------------------------------------------------------------
-# Source lib/cache.sh if available (provides _write_stale_cache, _repo_hash)
+# Source sibling lib-bundle.sh (self-contained install; no env-var deps).
+# If the lib is missing, emit a structured message and exit 0.
 # ---------------------------------------------------------------------------
 
-_CACHE_LIB_LOADED=0
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && \
-   [ -f "${CLAUDE_PLUGIN_ROOT}/scripts/lib/cache.sh" ]; then
-  # shellcheck source=scripts/lib/cache.sh
-  # shellcheck disable=SC1091
-  . "${CLAUDE_PLUGIN_ROOT}/scripts/lib/cache.sh"
-  _CACHE_LIB_LOADED=1
+_LIB="$(dirname "$0")/lib-bundle.sh"
+if [ ! -f "$_LIB" ]; then
+  printf 'tcs-git-helpers: lib-bundle.sh missing in .githooks/ — re-run /tcs-git-helpers:git-setup.\n' >&2
+  exit 0
 fi
-
-# ---------------------------------------------------------------------------
-# Cache dispatch
-# ---------------------------------------------------------------------------
-
-_do_write_stale_cache() {
-  local updated_iso="$1"
-  local repo_path="$2"
-  local default_branch="$3"
-  # stdin: tab-separated rows
-
-  # lib/cache.sh must be loaded; otherwise skip (spec: "else skip").
-  # Cache is consumed by SessionStart which only runs in plugin-installed
-  # context — a standalone write would never be read.
-  if [ "$_CACHE_LIB_LOADED" -ne 1 ]; then
-    return 0
-  fi
-
-  # lib/cache.sh expects stdin rows and three positional args.
-  _write_stale_cache "$updated_iso" "$repo_path" "$default_branch" 2>/dev/null || true
-}
+# shellcheck source=lib-bundle.sh
+# shellcheck disable=SC1091
+. "$_LIB"
 
 # ---------------------------------------------------------------------------
 # Main logic
@@ -73,12 +50,15 @@ _do_write_stale_cache() {
 _main() {
   # 1. Ensure we're in a git repository.
   local repo_path
-  repo_path="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
-
-  # 2. Check gh is available; degrade silently if not.
-  if ! command -v gh >/dev/null 2>&1; then
+  repo_path="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+    _emit_skip "post-merge" \
+      "not inside a git repository" \
+      "Ensure the hook is installed inside a git repo"
     return 0
-  fi
+  }
+
+  # 2. Check gh is available; emit structured skip if not.
+  _guard_gh "stale-branch-refresh" || return 0
 
   # 3. Gather local branches (for cross-reference).
   local local_branches_raw
@@ -110,9 +90,11 @@ _main() {
     --limit 100 \
     2>/dev/null)" || gh_exit=$?
 
-  # Degrade gracefully on auth error (exit 4) or any other failure.
+  # Degrade gracefully on auth error (exit 4).
   if [ "$gh_exit" -eq 4 ]; then
-    printf 'tcs-git-helpers: gh auth missing — skipping stale-branch detection\n' >&2
+    _emit_skip "stale-branch-refresh" \
+      "gh CLI unauthenticated" \
+      "Run \`gh auth login\`"
     return 0
   fi
   if [ "$gh_exit" -ne 0 ]; then
@@ -129,10 +111,8 @@ _main() {
     return 0
   fi
 
-  # 6. Parse gh output with jq. jq + set -uo pipefail: always 2>/dev/null || true.
-  if ! command -v jq >/dev/null 2>&1; then
-    return 0
-  fi
+  # 6. Check jq is available; emit structured skip if not.
+  _guard_jq "stale-branch-refresh" || return 0
 
   # Validate JSON before processing.
   jq -e . <<< "$gh_out" >/dev/null 2>/dev/null || return 0
@@ -157,7 +137,6 @@ _main() {
     [ -z "$ref_name" ] && continue
 
     # Is this branch a local branch?
-    # Use grep with fixed-string match on a line-by-line basis.
     if ! printf '%s\n' "$local_branches_raw" | grep -qxF "$ref_name" 2>/dev/null; then
       continue
     fi
@@ -189,7 +168,6 @@ EOF
   # 8. Emit stderr suggestion if any stale branches found (M6 AC1).
   if [ -n "$stale_names" ]; then
     local count=0
-    # Count the stale entries.
     while IFS=$'\t' read -r name _pr _ma; do
       [ -z "$name" ] && continue
       count=$((count + 1))
@@ -201,21 +179,19 @@ EOF2
     printf 'tcs-git-helpers: run /tcs-git-helpers:git-audit --cleanup to review\n' >&2
   fi
 
-  # 9. Update cache (only when CLAUDE_PLUGIN_DATA is set).
-  if [ -z "${CLAUDE_PLUGIN_DATA:-}" ]; then
-    return 0
+  # 9. Update stale-branch cache atomically via lib-bundle.sh.
+  if [ -n "$stale_rows" ]; then
+    local default_branch
+    default_branch="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
+      | sed 's|refs/remotes/origin/||' 2>/dev/null)" || default_branch="main"
+    [ -n "$default_branch" ] || default_branch="main"
+
+    local updated_iso
+    updated_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+    printf '%s\n' "$stale_rows" \
+      | _write_stale_cache "$updated_iso" "$repo_path" "$default_branch"
   fi
-
-  local default_branch
-  default_branch="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
-    | sed 's|refs/remotes/origin/||' 2>/dev/null)" || default_branch="main"
-  [ -n "$default_branch" ] || default_branch="main"
-
-  local updated_iso
-  updated_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-  printf '%s\n' "$stale_rows" \
-    | _do_write_stale_cache "$updated_iso" "$repo_path" "$default_branch"
 }
 
 _main

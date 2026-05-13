@@ -26,9 +26,18 @@ Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the pl
 | `PostToolUse(Bash)` | `nudge-hook.sh` | Soft, success-only nudges after `git checkout -b`, `gh pr create`, first `git push -u`, `gh pr merge`, `git rebase`, `git stash pop` (60s same-nudge dedup) |
 | `SessionStart` | `session-start-brief.sh` | One-line branch awareness brief — branch, working-tree state, ahead/behind, stale-merged count (cache-only, ≤300ms p99, no `gh` calls) |
 
+## How It Works
+
+`/tcs-git-helpers:git-setup` installs a self-contained bundle into `.githooks/` that works independently of the Claude Code plugin:
+
+- **Self-contained install:** Four hooks (`pre-commit`, `pre-push`, `commit-msg`, `post-merge`) plus two shared libraries (`lib-bundle.sh`, `lib-config-parser.sh`) are copied directly into the target repo's `.githooks/` directory. The hooks require no environment variables from the harness and work in any shell.
+- **Bundle versioning:** A version marker file `.githooks/tcs-git-helpers-version` (e.g., `h1`) tracks the bundle's code version independently of the plugin's semantic version. This allows users to stay on older plugin versions while receiving hook improvements.
+- **Drift detection:** When you run hook-dependent skills (`/tcs-git-helpers:git-audit --cleanup`, `--default`, or `--json`), the skill checks if the installed bundle matches its expectations. If the versions differ, a prompt informs you to re-run `/tcs-git-helpers:git-setup` to update the hooks. This check fires at skill invocation time, not at session start, keeping your SessionStart brief silent.
+- **Updates:** Run `/tcs-git-helpers:git-setup` again to refresh all four hooks and the version marker atomically.
+
 ## Defense in Depth
 
-`/tcs-git-helpers:git-setup` copies `templates/githooks/*` into the target repo's `.githooks/` and points `core.hooksPath` at it. The shell hooks enforce the same rules **even when the plugin is disabled**:
+The installed hooks enforce their rules **even when the Claude Code plugin is disabled**:
 
 | Hook | Enforces |
 |------|----------|
@@ -37,7 +46,7 @@ Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the pl
 | `commit-msg` | Conventional Commits format (allowlisted types; merge commits exempt; `[skip-format-check]` escape; optional `TCS_REQUIRE_SCOPE=1`) |
 | `post-merge` | Stale-merged branch surfacing + branch awareness brief |
 
-Installed templates carry a `# tcs-git-helpers: vX.Y.Z` marker stamped from `.claude-plugin/plugin.json` at install time; `git-setup --update` restamps them after a plugin upgrade.
+Each hook carries a banner comment identifying its bundle version (e.g., `# tcs-git-helpers: h1`); `/tcs-git-helpers:git-setup` stamps the banner at install time.
 
 ## Overrides
 
@@ -79,6 +88,14 @@ Cited from denial messages by absolute plugin path. See [references/INDEX.md](re
 bats plugins/tcs-git-helpers/tests/bats/
 plugins/tcs-git-helpers/tests/e2e/dogfood.sh
 ```
+
+## Maintenance
+
+**Hook bundle version contract:** Any change to files under `templates/githooks/` (the four hook scripts, shared libraries, or the version marker file) MUST be accompanied by a bump to `templates/githooks/tcs-git-helpers-version`. The CI check at `scripts/ci/check-hook-bundle-version.sh` enforces this and fails the build on mismatch.
+
+The rationale: hook bundles are installed into user repos independently and are versioned separately from the plugin's semantic version. Without this strict contract, drift between what a user has installed and what the plugin expects can silently accumulate. The version marker lets skills detect and surface outdated bundles at runtime.
+
+**GitHub branch-protection rule requirement:** The `Hook bundle version check` CI gate must be marked as a required status for PR merge. This cannot be automated in code — it must be configured in the repository's GitHub branch-protection settings under Settings → Branches → Branch protection rules. Without it, changes to hook code can bypass the version-bump check.
 
 ## Attribution
 

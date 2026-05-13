@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -39,6 +40,93 @@ from pathlib import Path
 # The bash hot-path reads from .githooks/.config TCS_PROTECTED_BRANCHES;
 # for Python we use a hardcoded default. (ADR decision: simpler for v1.)
 PROTECTED_BRANCHES: frozenset[str] = frozenset(["main", "master", "production", "release"])
+
+# Expected hook bundle version — single source of truth (ADR-2).
+# Read from the plugin's own template file at module startup.
+_VERSION_FILE = (
+    Path(__file__).parent.parent / "templates" / "githooks" / "tcs-git-helpers-version"
+)
+EXPECTED_HOOK_BUNDLE_VERSION: str = (
+    _VERSION_FILE.read_text().strip() if _VERSION_FILE.exists() else "h1"
+)
+
+
+# ---------------------------------------------------------------------------
+# drift_check module — loaded dynamically (not installed as a package)
+# ---------------------------------------------------------------------------
+
+def _load_drift_check():
+    """Load scripts/lib/drift_check.py via importlib. Returns the module."""
+    lib_path = Path(__file__).parent / "lib" / "drift_check.py"
+    spec = importlib.util.spec_from_file_location("_tcs_drift_check", lib_path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["_tcs_drift_check"] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        del sys.modules["_tcs_drift_check"]
+        raise
+    return mod
+
+
+_drift_check_mod = None
+check_hook_bundle = None
+DriftStatus = None
+
+
+def _drift_gate(repo_path: str, *, silent: bool):
+    """
+    Centralized drift check for hook-state-dependent commands.
+
+    When silent=False (default for user-invoked commands): print stderr
+    drift message and sys.exit(1) on MISSING/DRIFT; otherwise return result.
+
+    When silent=True (used by cmd_brief — CON-5: SessionStart is not the
+    drift surface): return the result without printing or exiting. Caller
+    handles fall-open behavior.
+    """
+    _ensure_drift_check_loaded()
+    drift = check_hook_bundle(Path(repo_path), EXPECTED_HOOK_BUNDLE_VERSION)
+    if silent:
+        return drift
+    if drift.status.value == "MISSING":
+        print(
+            "tcs-git-helpers: hooks not installed in this repo. "
+            "Run /tcs-git-helpers:git-setup to install.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if drift.status.value == "DRIFT":
+        print(
+            f"tcs-git-helpers: installed hooks are {drift.installed_version}; "
+            f"this command needs {EXPECTED_HOOK_BUNDLE_VERSION}. "
+            "Run /tcs-git-helpers:git-setup to update.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return drift
+
+
+def _ensure_drift_check_loaded() -> None:
+    """Load drift_check.py module on demand. Raise SystemExit with a clear message
+    if the file is missing or fails to load, since drift-dependent commands cannot
+    function without it."""
+    global _drift_check_mod, check_hook_bundle, DriftStatus
+    if _drift_check_mod is not None:
+        return
+    # check_hook_bundle may already be set (e.g. patched by tests) — respect that.
+    if check_hook_bundle is not None:
+        return
+    try:
+        _drift_check_mod = _load_drift_check()
+        check_hook_bundle = _drift_check_mod.check_hook_bundle
+        DriftStatus = _drift_check_mod.DriftStatus
+    except FileNotFoundError as e:
+        print(
+            f"[tcs-git-helpers] ERROR: drift_check.py not found ({e}). Reinstall plugin.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +198,18 @@ def _run_gh(args: list[str], cwd: str | None = None) -> tuple[int, str, str]:
         return result.returncode, result.stdout.strip(), result.stderr.strip()
     except (subprocess.TimeoutExpired, OSError) as exc:
         return 1, "", f"<error: {exc}>"
+
+
+def _gh_available() -> bool:
+    """Return True if the gh CLI is installed (exits 0 on --version)."""
+    rc, _, _ = _run_gh(["--version"])
+    return rc == 0
+
+
+def _gh_authenticated() -> bool:
+    """Return True if gh is installed and authenticated (exits 0 on auth status)."""
+    rc, _, _ = _run_gh(["auth", "status"])
+    return rc == 0
 
 
 # ---------------------------------------------------------------------------
@@ -390,10 +490,15 @@ def refresh_stale_cache(
 # Mode: --brief
 # ---------------------------------------------------------------------------
 
-def cmd_brief(*, cache_dir: Path, repo_path: str) -> None:
+def _brief_output(*, cache_dir: Path, repo_path: str, drift_ok: bool) -> None:
     """
     Emit one line matching the SDD wireframe:
       [tcs-git-helpers] <branch> • <state> • <ahead/behind> • <stale-count> [• <staleness>] [• <suggestion>]
+
+    When drift_ok=False (silent drift, CON-5 fall-open): stale-count is shown
+    as '0 stale-merged' regardless of cache content, and cleanup suggestion
+    is suppressed. This avoids exposing a potentially stale cache to the user
+    when hooks are in an unknown state.
 
     Does NOT call gh (M4 AC4 — hot path is gh-free; python --brief is on-demand
     but we keep it consistent with the bash session-start-brief.sh contract).
@@ -423,22 +528,25 @@ def cmd_brief(*, cache_dir: Path, repo_path: str) -> None:
     else:
         ab_str = f"{ahead} ahead, {behind} behind"
 
-    # Stale count (from cache — no gh)
-    tsv_path = _stale_tsv_path(cache_dir, repo_path)
-    cache_data = _read_stale_cache(cache_dir, repo_path)
-    stale_count = len(cache_data.get("stale_branches", []))
-    stale_str = f"{stale_count} stale-merged"
+    # Stale count — fall open to 0 when drift is not OK (CON-5)
+    if drift_ok:
+        tsv_path = _stale_tsv_path(cache_dir, repo_path)
+        cache_data = _read_stale_cache(cache_dir, repo_path)
+        stale_count = len(cache_data.get("stale_branches", []))
+        age_hours = _get_cache_age_hours(tsv_path)
+    else:
+        stale_count = 0
+        age_hours = None
 
-    # Staleness indicator
-    age_hours = _get_cache_age_hours(tsv_path)
+    stale_str = f"{stale_count} stale-merged"
     parts = [f"[tcs-git-helpers] {branch}", state, ab_str, stale_str]
 
     if age_hours is not None and age_hours > 24:
         h = int(age_hours)
         parts.append(f"cache {h}h old")
 
-    # Suggest cleanup if stale branches present
-    if stale_count > 0:
+    # Suggest cleanup only when drift is OK and stale branches present
+    if drift_ok and stale_count > 0:
         parts.append("run /tcs-git-helpers:git-audit --cleanup")
 
     line = " • ".join(parts)
@@ -450,6 +558,26 @@ def cmd_brief(*, cache_dir: Path, repo_path: str) -> None:
     print(line)
 
 
+def cmd_default(*, cache_dir: Path, repo_path: str) -> None:
+    """
+    Default mode (no --flag): emit brief output after a non-silent drift gate.
+    Exits 1 if hooks are MISSING or DRIFT (user-invoked, drift surface).
+    """
+    _drift_gate(repo_path, silent=False)
+    _brief_output(cache_dir=cache_dir, repo_path=repo_path, drift_ok=True)
+
+
+def cmd_brief(*, cache_dir: Path, repo_path: str) -> None:
+    """
+    --brief mode: emit brief output with a silent drift gate (CON-5 fall-open).
+    SessionStart callers must not be blocked by drift; stale count shows 0 on
+    MISSING/DRIFT to avoid surfacing unreliable data.
+    """
+    drift = _drift_gate(repo_path, silent=True)
+    drift_ok = drift.status.value == "OK"
+    _brief_output(cache_dir=cache_dir, repo_path=repo_path, drift_ok=drift_ok)
+
+
 # ---------------------------------------------------------------------------
 # Mode: --cleanup
 # ---------------------------------------------------------------------------
@@ -458,8 +586,33 @@ def cmd_cleanup(*, cache_dir: Path, repo_path: str, interactive: bool = True) ->
     """
     List stale-merged local branches and (interactively) prompt for deletion.
     M6 AC3: branches checked out in a worktree are excluded.
+    T2.3: drift gate first; live refresh before cache read (PRD/AC-F2.1).
+    T2.4: refactored to use _drift_gate for consistency with other modes.
     """
-    # Use cache; a richer flow could refresh first but cache is the source of truth here
+    _drift_gate(repo_path, silent=False)
+
+    # --- Live refresh (T2.3, Bug 1 fix) ---
+    default_branch = _read_stale_cache(cache_dir, repo_path).get("default_branch", "main")
+    if not _gh_available():
+        print(
+            "tcs-git-helpers: gh CLI not found — "
+            "falling back to cached state (may be stale).",
+            file=sys.stderr,
+        )
+    elif not _gh_authenticated():
+        print(
+            "tcs-git-helpers: gh CLI unauthenticated — "
+            "falling back to cached state (may be stale).",
+            file=sys.stderr,
+        )
+    else:
+        refresh_stale_cache(
+            cache_dir=cache_dir,
+            repo_path=repo_path,
+            default_branch=default_branch,
+        )
+
+    # --- Read refreshed (or fallback) cache ---
     cache_data = _read_stale_cache(cache_dir, repo_path)
     stale_entries = cache_data.get("stale_branches", [])
 
@@ -526,7 +679,9 @@ def cmd_cleanup(*, cache_dir: Path, repo_path: str, interactive: bool = True) ->
 def cmd_json(*, cache_dir: Path, repo_path: str) -> None:
     """
     Emit the stale-branch cache as JSON to stdout.
+    T2.4: guarded by non-silent drift gate — user-invoked, drift surface.
     """
+    _drift_gate(repo_path, silent=False)
     data = _read_stale_cache(cache_dir, repo_path)
     print(json.dumps(data, indent=2))
 
@@ -678,9 +833,9 @@ def main(argv: list[str] | None = None) -> None:
         cmd_overrides(repo_path=repo_path, limit=args.limit, plugin_data_dir=pd)
 
     else:
-        # No mode flag — default to brief
+        # No mode flag — user-invoked default; applies non-silent drift gate
         cd, repo_path = _resolve_context()
-        cmd_brief(cache_dir=cd, repo_path=repo_path)
+        cmd_default(cache_dir=cd, repo_path=repo_path)
 
 
 if __name__ == "__main__":

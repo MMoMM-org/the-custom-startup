@@ -1,5 +1,6 @@
 #!/bin/bash
 # tcs-git-helpers: __TCS_GIT_HELPERS_VERSION__
+# tcs-git-helpers-bundle: __HOOK_BUNDLE_VERSION__
 # pre-push — tcs-git-helpers repo-side safety hook
 #
 # Blocks pushes to branches whose GitHub PR is CLOSED or MERGED.
@@ -15,8 +16,6 @@
 # Configuration:
 #   CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1  — override; allows push once, logs to audit
 #   TCS_PUSH_TIMEOUT                  — gh timeout in seconds (default 5)
-#   CLAUDE_PLUGIN_ROOT                — if set + lib/cache.sh present, sources it
-#   CLAUDE_PLUGIN_DATA                — if set, uses cache dir for 60s TTL reads
 #
 # Install: git config core.hooksPath .githooks
 #
@@ -25,9 +24,24 @@
 #   - SDD §Repo-side .githooks/ Templates — pre-push
 #   - ADR-6 — 60s TTL PR-state cache (shared with block-bad-git-ops.sh)
 #   - CON-3 — bash-only timeout (no coreutils timeout dependency)
-#   - M11   — standalone mode: works without CLAUDE_PLUGIN_ROOT/DATA
+#   - M11   — standalone mode: works without any external env vars
+#   - SDD CON-1 — plugin env vars must not be required at git-hook time
 
 set -uo pipefail
+
+# ---------------------------------------------------------------------------
+# Source sibling lib-bundle.sh (self-contained install; no env-var deps).
+# Provides _resolve_data_dir, _emit_skip, _guard_gh.
+# ---------------------------------------------------------------------------
+
+_LIB="$(dirname "$0")/lib-bundle.sh"
+if [ ! -f "$_LIB" ]; then
+  printf 'tcs-git-helpers: lib-bundle.sh missing in .githooks/ — re-run /tcs-git-helpers:git-setup.\n' >&2
+  exit 0
+fi
+# shellcheck source=lib-bundle.sh
+# shellcheck disable=SC1091
+. "$_LIB"
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -36,36 +50,11 @@ set -uo pipefail
 _TIMEOUT="${TCS_PUSH_TIMEOUT:-5}"
 
 # ---------------------------------------------------------------------------
-# Source lib/cache.sh if plugin root is available (ADR-6 / M11)
-# When not sourced, inline equivalents are used below.
-# ---------------------------------------------------------------------------
-
-_CACHE_LIB_LOADED=0
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && \
-   [ -f "${CLAUDE_PLUGIN_ROOT}/scripts/lib/cache.sh" ]; then
-  # shellcheck source=scripts/lib/cache.sh
-  # shellcheck disable=SC1091
-  . "${CLAUDE_PLUGIN_ROOT}/scripts/lib/cache.sh"
-  _CACHE_LIB_LOADED=1
-fi
-
-# Source audit_log.sh if available (for override audit).
-_AUDIT_LIB_LOADED=0
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && \
-   [ -f "${CLAUDE_PLUGIN_ROOT}/scripts/lib/audit_log.sh" ]; then
-  # shellcheck source=scripts/lib/audit_log.sh
-  # shellcheck disable=SC1091
-  . "${CLAUDE_PLUGIN_ROOT}/scripts/lib/audit_log.sh"
-  _AUDIT_LIB_LOADED=1
-fi
-
-# ---------------------------------------------------------------------------
-# Inline cache helpers (used when lib/cache.sh is NOT loaded)
-# These mirror the lib implementations exactly for ADR-6 wire compatibility.
+# Inline cache helpers (60s TTL PR-state cache)
+# These operate on the data dir resolved via _resolve_data_dir from lib-bundle.sh.
 # ---------------------------------------------------------------------------
 
 # Derive a 12-char repo hash: sha1 prefix of the repo top-level path.
-# Must match lib/cache.sh._repo_hash exactly.
 _inline_repo_hash() {
   local repo_path
   repo_path="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
@@ -85,11 +74,14 @@ _inline_iso_to_epoch() {
 # Outputs bare state ("OPEN", "MERGED", "CLOSED", "NO_PR") or empty on miss/expired.
 _inline_read_pr_state_cache() {
   local branch="$1"
-  [ -n "${CLAUDE_PLUGIN_DATA:-}" ] || return 0
+
+  local data_dir
+  data_dir="$(_resolve_data_dir 2>/dev/null)" || return 0
+  [ -n "$data_dir" ] || return 0
 
   local hash
   hash="$(_inline_repo_hash)" || return 0
-  local cache_file="${CLAUDE_PLUGIN_DATA}/cache/${hash}-pr-state.json"
+  local cache_file="${data_dir}/${hash}-pr-state.json"
   [ -r "$cache_file" ] || return 0
   command -v jq >/dev/null 2>&1 || return 0
 
@@ -115,16 +107,18 @@ _inline_read_pr_state_cache() {
 # Write PR state for one branch into the cache (best-effort; errors are silent).
 _inline_write_pr_state_cache() {
   local branch="$1" state="$2" pr_number="${3:-0}"
-  [ -n "${CLAUDE_PLUGIN_DATA:-}" ] || return 0
   command -v jq >/dev/null 2>&1 || return 0
+
+  local data_dir
+  data_dir="$(_resolve_data_dir 2>/dev/null)" || return 0
+  [ -n "$data_dir" ] || return 0
 
   local hash
   hash="$(_inline_repo_hash)" || return 0
-  local cache_dir="${CLAUDE_PLUGIN_DATA}/cache"
-  local cache_file="${cache_dir}/${hash}-pr-state.json"
+  local cache_file="${data_dir}/${hash}-pr-state.json"
   local now_iso
   now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  mkdir -p "$cache_dir" 2>/dev/null || return 0
+  mkdir -p "$data_dir" 2>/dev/null || return 0
 
   local current
   if [ -r "$cache_file" ] && jq -e . "$cache_file" >/dev/null 2>&1; then
@@ -150,25 +144,17 @@ _inline_write_pr_state_cache() {
 }
 
 # ---------------------------------------------------------------------------
-# Cache dispatch: use lib functions if loaded, else inline fallback
+# Cache dispatch
 # ---------------------------------------------------------------------------
 
 _read_pr_state() {
   local branch="$1"
-  if [ "$_CACHE_LIB_LOADED" -eq 1 ]; then
-    _read_pr_state_cache "$branch" 2>/dev/null || true
-  else
-    _inline_read_pr_state_cache "$branch"
-  fi
+  _inline_read_pr_state_cache "$branch"
 }
 
 _write_pr_state() {
   local branch="$1" state="$2" pr_number="${3:-0}"
-  if [ "$_CACHE_LIB_LOADED" -eq 1 ]; then
-    _write_pr_state_cache "$branch" "$state" "$pr_number" 2>/dev/null || true
-  else
-    _inline_write_pr_state_cache "$branch" "$state" "$pr_number"
-  fi
+  _inline_write_pr_state_cache "$branch" "$state" "$pr_number"
 }
 
 # ---------------------------------------------------------------------------
@@ -213,19 +199,23 @@ _query_gh_pr_state() {
   local gh_out gh_exit
 
   if ! command -v gh >/dev/null 2>&1; then
-    printf 'tcs-git-helpers: gh not found, allowing push (fail-open)\n' >&2
+    _emit_skip "pre-push" \
+      "gh CLI not installed" \
+      "Install gh to enable push blocking on closed PRs"
     printf 'SKIP 0\n'
     return 0
   fi
 
   # Capture output + exit code in a subshell so set -uo pipefail doesn't bite us.
+  gh_exit=0
   gh_out="$(_gh_with_timeout "$_TIMEOUT" \
     gh pr list --head "$branch" --json state,number,mergedAt --limit 1 2>/dev/null)" || gh_exit=$?
-  gh_exit="${gh_exit:-0}"
 
   # Exit 4 = auth error (fail-open with warning).
   if [ "$gh_exit" -eq 4 ]; then
-    printf 'tcs-git-helpers: gh unauthenticated/rate-limited, allowing push (fail-open)\n' >&2
+    _emit_skip "pre-push" \
+      "gh CLI unauthenticated" \
+      "Run \`gh auth login\` to enable push blocking on closed PRs"
     printf 'SKIP 0\n'
     return 0
   fi
@@ -241,7 +231,9 @@ _query_gh_pr_state() {
         ;;
     esac
     # Other errors: warn + fail-open.
-    printf 'tcs-git-helpers: gh error (exit %s), allowing push (fail-open)\n' "$gh_exit" >&2
+    _emit_skip "pre-push" \
+      "gh error (exit ${gh_exit})" \
+      "Push allowed; check gh CLI status"
     printf 'SKIP 0\n'
     return 0
   fi
@@ -273,13 +265,6 @@ _query_gh_pr_state() {
 _check_override() {
   if [ "${CLAUDE_ALLOW_PUSH_TO_CLOSED_PR:-}" = "1" ]; then
     printf 'tcs-git-helpers: override consumed: CLAUDE_ALLOW_PUSH_TO_CLOSED_PR\n' >&2
-    # Audit log if available.
-    if [ "$_AUDIT_LIB_LOADED" -eq 1 ]; then
-      _audit_log \
-        hook="pre-push" \
-        env_var="CLAUDE_ALLOW_PUSH_TO_CLOSED_PR" \
-        master="false" 2>/dev/null || true
-    fi
     return 0  # 0 = override is active
   fi
   return 1  # 1 = no override
@@ -309,11 +294,12 @@ if [ -n "$CACHED_STATE" ]; then
   STATE="$CACHED_STATE"
   PR_NUMBER="0"
   # Try to recover PR number from cache for better error messages.
-  if [ "$_CACHE_LIB_LOADED" -eq 1 ]; then
-    _PR_CACHE_PATH="$(_pr_state_path 2>/dev/null)" || _PR_CACHE_PATH=""
+  _DATA_DIR="$(_resolve_data_dir 2>/dev/null)" || _DATA_DIR=""
+  if [ -n "$_DATA_DIR" ]; then
+    _HASH="$(_inline_repo_hash 2>/dev/null)" || _HASH=""
+    _PR_CACHE_PATH="${_DATA_DIR}/${_HASH}-pr-state.json"
   else
-    _inline_hash="$(_inline_repo_hash 2>/dev/null)" || _inline_hash=""
-    _PR_CACHE_PATH="${CLAUDE_PLUGIN_DATA:+${CLAUDE_PLUGIN_DATA}/cache/${_inline_hash}-pr-state.json}"
+    _PR_CACHE_PATH=""
   fi
   if [ -n "${_PR_CACHE_PATH:-}" ] && [ -r "$_PR_CACHE_PATH" ] && command -v jq >/dev/null 2>&1; then
     PR_NUMBER="$(jq -r --arg b "$BRANCH" '.branch_state[$b].number // 0' "$_PR_CACHE_PATH" 2>/dev/null || true)"
@@ -354,7 +340,7 @@ case "$STATE" in
     printf 'tcs-git-helpers: push BLOCKED — PR #%s is MERGED\n' "$PR_NUMBER" >&2
     printf '  Branch: %s\n' "$BRANCH" >&2
     printf '  This branch has already been merged. Pushing again risks duplicate history.\n' >&2
-    printf '  See: %s/references/squash-merge-trap.md\n' "${CLAUDE_PLUGIN_ROOT:-<plugin-root>}" >&2
+    printf '  See: references/squash-merge-trap.md\n' >&2
     printf '  To override: CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push\n' >&2
     printf '\n' >&2
     exit 1

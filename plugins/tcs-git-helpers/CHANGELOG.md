@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.1.0] - 2026-05-13
+
+### Added
+
+- **Self-contained hook bundle with independent versioning.** The installed `.githooks/` hooks now depend on zero environment variables and can be versioned independently of the plugin's semantic version, allowing users to stay on older plugin versions while receiving bug fixes to hooks. Implementation:
+
+  - All hooks and their shared libraries are now copied into `.githooks/` at install time (no runtime references to `~/.claude/plugins/cache/...`).
+  - Four installed files form an atomic bundle: `pre-commit`, `pre-push`, `commit-msg`, `post-merge`, plus two shared libs (`lib-bundle.sh`, `lib-config-parser.sh`).
+  - Bundle versioning uses a new marker file `<repo>/.githooks/tcs-git-helpers-version` (e.g., `h1`), separate from the plugin's semantic version.
+  - `/tcs-git-helpers:git-setup` installs the marker at bundle-version time; `--update` refreshes all four hooks and the marker together.
+  - Drift detection (when installed bundle is older than skills expect) fires at skill-invocation time (`/tcs-git-helpers:git-audit --cleanup`, `--default`, `--json`), not SessionStart (CON-5 — keeps sessions silent).
+
+- **Bug fix: `--cleanup` now refreshes stale-branch cache against live GitHub.** Previously, `cmd_cleanup` read a cached list that could be stale by hours. Now it calls `gh pr list` on every invocation (when possible) to surface recently-merged PRs before prompting for deletion. If `gh` fails or times out, the function falls back to the last-good cache gracefully.
+
+### Changed
+
+- **Maintainer contract: hook-bundle version bumps are CI-gated.** The CI check at `scripts/ci/check-hook-bundle-version.sh` now fails the build if any file under `templates/githooks/` or `templates/lib/` changes without a corresponding bump to `templates/githooks/tcs-git-helpers-version`. This ensures the bundle-version marker stays in sync with actual hook code, preventing drift between what users have installed and what the plugin expects.
+
 ## [2.0.1] - 2026-05-11
 
 ### Fixed
