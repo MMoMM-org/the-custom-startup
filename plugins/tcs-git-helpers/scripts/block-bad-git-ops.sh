@@ -185,7 +185,8 @@ _emit_permission_decision_deny() {
   for ((i = 0; i < n; i++)); do
     body="${body}"$'\n'"  - ${DENY_REASONS[$i]}"
   done
-  body="${body}"$'\n'"References: \${CLAUDE_PLUGIN_ROOT}/references/destructive-ops.md, \${CLAUDE_PLUGIN_ROOT}/references/force-push-safety.md, \${CLAUDE_PLUGIN_ROOT}/references/sandbox-and-git-config.md"
+  local plugin_root="${CLAUDE_PLUGIN_ROOT:-tcs-git-helpers}"
+  body="${body}"$'\n'"References: ${plugin_root}/references/destructive-ops.md, ${plugin_root}/references/force-push-safety.md, ${plugin_root}/references/sandbox-and-git-config.md"
   body="${body}"$'\n'"Master override: CLAUDE_ALLOW_GIT_BAD_OPS=1 (loud warn; granular preferred)"
 
   # Cap at 15 lines per SDD §Quality Requirements / EC1.
@@ -253,7 +254,7 @@ _check_push_to_closed_pr() {
         return 0
       fi
       _record_deny "$rule" \
-        "PR for branch '${branch}' is ${state}. See \${CLAUDE_PLUGIN_ROOT}/references/squash-merge-trap.md"
+        "PR for branch '${branch}' is ${state}. See ${CLAUDE_PLUGIN_ROOT:-tcs-git-helpers}/references/squash-merge-trap.md"
       ;;
     UNKNOWN)
       printf 'tcs-git-helpers: gh state UNKNOWN — push allowed (fail-open)\n' >&2
@@ -342,7 +343,7 @@ _check_resume_squash_merged() {
       return 0
     fi
     _record_deny "$rule" \
-      "Branch '${target}' was squash-merged. See \${CLAUDE_PLUGIN_ROOT}/references/squash-merge-trap.md"
+      "Branch '${target}' was squash-merged. See ${CLAUDE_PLUGIN_ROOT:-tcs-git-helpers}/references/squash-merge-trap.md"
   fi
   return 0
 }
