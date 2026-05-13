@@ -185,7 +185,9 @@ def bundle_repo(tmp_path_factory: pytest.TempPathFactory):
     )
 
     # Compute the repo_hash for asserting cache file names.
-    repo_path_str = str(repo_dir)
+    # Use resolved path so it matches what `git rev-parse --show-toplevel`
+    # returns inside the hook (macOS /tmp → /private/tmp symlink resolution).
+    repo_path_str = str(repo_dir.resolve())
     # shasum produces hex; lib-bundle.sh uses: printf '%s' | shasum | head -c 12
     # shasum on macOS outputs "<hash>  -\n"; head -c 12 gets first 12 chars of hash.
     shasum_result = _run(
@@ -343,3 +345,57 @@ def test_cleanup_detects_version_drift(bundle_repo):
     finally:
         # Restore version so subsequent test runs don't see stale state.
         version_file.write_text(original_version + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Test 4: --cleanup falls back to post-merge cache when gh is unauthenticated
+# ---------------------------------------------------------------------------
+
+def test_cleanup_falls_back_to_post_merge_cache_when_gh_unauth(bundle_repo):
+    """
+    When gh reports 'not authenticated' (exit 4), --cleanup must fall back to
+    the hook-written stale-cache and still list stale branch names.
+
+    This exercises the hook→reader pipeline directly: the live refresh path is
+    skipped, so the output comes solely from the cache written by post-merge.
+
+    Validates SDD Fallback Flow: unauthenticated gh → cached state served.
+
+    W1 coverage gap: the 3 authenticated tests always overwrite the cache via
+    refresh_stale_cache, hiding whether the hook-written cache is readable.
+    This test proves the contract without the refresh intermediary.
+    """
+    ctx = bundle_repo
+
+    # Override GH_STUB_SCENARIO to no-auth so gh auth status returns exit 4.
+    no_auth_env = ctx["base_env"].copy()
+    no_auth_env["GH_STUB_SCENARIO"] = "no-auth"
+
+    result = _run(
+        [sys.executable, str(_AUDIT_SCRIPT), "--cleanup"],
+        cwd=ctx["repo_dir"],
+        env=no_auth_env,
+    )
+
+    # --cleanup exits 0 (fallback path, not a drift error).
+    assert result.returncode == 0, (
+        f"--cleanup (no-auth) exited {result.returncode}.\n"
+        f"stdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
+    )
+
+    # A fallback warning must appear on stderr (either "gh CLI not found" or
+    # "unauthenticated" — the no-auth stub exits 4 on all invocations including
+    # `gh --version`, so _gh_available() returns False and "not found" is emitted).
+    assert "falling back to cached state" in result.stderr, (
+        f"Expected fallback warning in stderr.\n"
+        f"stderr: {result.stderr}"
+    )
+
+    # Stale branches from the hook-written cache must appear in stdout.
+    stale_branch_names = ("feat/stale-a", "fix/stale-b", "chore/stale-c")
+    assert any(name in result.stdout for name in stale_branch_names), (
+        f"--cleanup (no-auth) stdout does not list any stale branch from cache.\n"
+        f"stdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
+    )

@@ -32,7 +32,7 @@ phase: 3
 
 ## Tasks
 
-- [ ] **T3.1 CI gate script `check-hook-bundle-version.sh`** `[activity: build-platform]`
+- [x] **T3.1 CI gate script `check-hook-bundle-version.sh`** `[activity: build-platform]`
 
   1. **Prime**: Read SDD `[ref: SDD/ADR-7]`. Inventory the file patterns that count as "hook bundle code": `plugins/tcs-git-helpers/templates/githooks/**` (recursively). Note that the version file itself lives at that path — the rule is "if any file in this dir changed AND the version file did not bump in the same range, fail."
   2. **Test**: Write `plugins/tcs-git-helpers/tests/bats/ci-bundle-gate.bats` covering:
@@ -87,7 +87,7 @@ phase: 3
      - [ ] Full install → merge → cleanup loop demonstrably works `[ref: PRD/AC-F1, F2, F3, F4]`
      - [ ] Drift scenario produces the right behavior end-to-end `[ref: PRD/AC-F4.1]`
 
-- [ ] **T3.4 Documentation: CHANGELOG + README + branch-protection note** `[activity: design-system]` `[parallel: true]`
+- [x] **T3.4 Documentation: CHANGELOG + README + branch-protection note** `[activity: design-system]` `[parallel: true]`
 
   1. **Prime**: Read `plugins/tcs-git-helpers/CHANGELOG.md` for entry format. Read `plugins/tcs-git-helpers/README.md` to find sections that describe install behavior or version model.
   2. **Test**: A maintenance script (or manual review) verifies CHANGELOG entry exists for the new bundle version.
