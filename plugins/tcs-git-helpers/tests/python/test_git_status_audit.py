@@ -763,3 +763,385 @@ class TestFetchMergedPRsFailures:
             gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
         except SystemExit as exc:
             pytest.fail(f"cmd_cleanup raised SystemExit({exc.code}) on no GitHub remote — must be fail-open")
+
+
+# ===========================================================================
+# Tests for T2.3: cmd_cleanup drift gate + live refresh
+# ===========================================================================
+
+class TestCleanupDriftGate:
+    """
+    Verify that cmd_cleanup performs drift check first, then refresh_stale_cache
+    on OK, with correct error paths and fallback behavior.
+
+    T2.3 spec: PRD/AC-F2.1 — --cleanup must reflect live git/gh reality.
+    """
+
+    def _setup_cache(self, cache_dir: Path, repo_path: str) -> None:
+        """Seed a non-empty cache so fallback tests can verify it is used."""
+        _write_stale_cache(cache_dir, repo_path, "main", STALE_ENTRIES)
+
+    def _make_drift_result(self, dc_mod, status_name: str, installed: str | None):
+        """Build a DriftResult using the drift_check module's types."""
+        status = dc_mod.DriftStatus[status_name]
+        return dc_mod.DriftResult(status=status, installed_version=installed)
+
+    # ------------------------------------------------------------------
+    # Helper: load drift_check module for building fixture objects
+    # ------------------------------------------------------------------
+    @pytest.fixture(scope="class")
+    def dc(self):
+        import sys
+        _LIB_PATH = Path(__file__).parent.parent.parent / "scripts" / "lib" / "drift_check.py"
+        spec = importlib.util.spec_from_file_location("drift_check_t23", _LIB_PATH)
+        mod = importlib.util.module_from_spec(spec)
+        # Register before exec so @dataclass can resolve forward-reference annotations
+        # (Python 3.14 + from __future__ import annotations requires module in sys.modules)
+        sys.modules["drift_check_t23"] = mod
+        try:
+            spec.loader.exec_module(mod)
+        except Exception:
+            del sys.modules["drift_check_t23"]
+            raise
+        return mod
+
+    # ------------------------------------------------------------------
+    # 1. MISSING — version file absent → exit 1, no gh call
+    # ------------------------------------------------------------------
+    def test_drift_missing_exits_1_no_gh_call(
+        self, gsa, dc, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """
+        When hook bundle version file is absent, cmd_cleanup must exit 1
+        with a stderr message containing 'hooks not installed', and must NOT
+        invoke any gh command.
+        """
+        repo_path = "/fake/repo/drift-missing"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        self._setup_cache(cache_dir, repo_path)
+
+        missing_result = self._make_drift_result(dc, "MISSING", None)
+        gh_calls: list = []
+
+        def fake_check_hook_bundle(rp, ver):
+            return missing_result
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "gh":
+                gh_calls.append(cmd)
+            return _git_result("")
+
+        monkeypatch.setattr(gsa, "check_hook_bundle", fake_check_hook_bundle)
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        stderr_lines: list[str] = []
+        monkeypatch.setattr(
+            "sys.stderr",
+            type("FakeStderr", (), {"write": lambda self, s: stderr_lines.append(s), "flush": lambda self: None})(),
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
+
+        assert exc_info.value.code == 1, (
+            f"Expected exit 1 for MISSING drift, got {exc_info.value.code}"
+        )
+        combined_stderr = "".join(stderr_lines)
+        assert "hooks not installed" in combined_stderr, (
+            f"Expected 'hooks not installed' in stderr, got:\n{combined_stderr}"
+        )
+        assert gh_calls == [], (
+            f"Expected no gh calls on MISSING drift, got: {gh_calls}"
+        )
+
+    # ------------------------------------------------------------------
+    # 2. DRIFT — installed != expected → exit 1, both versions in stderr
+    # ------------------------------------------------------------------
+    def test_drift_version_mismatch_exits_1_no_gh_call(
+        self, gsa, dc, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """
+        When installed version != expected, cmd_cleanup must exit 1.
+        stderr must contain both the installed and expected version strings,
+        and a /tcs-git-helpers:git-setup suggestion.
+        No gh call must be attempted.
+        """
+        repo_path = "/fake/repo/drift-version"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        self._setup_cache(cache_dir, repo_path)
+
+        drift_result = self._make_drift_result(dc, "DRIFT", "h0")
+        gh_calls: list = []
+
+        def fake_check_hook_bundle(rp, ver):
+            return drift_result
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "gh":
+                gh_calls.append(cmd)
+            return _git_result("")
+
+        monkeypatch.setattr(gsa, "check_hook_bundle", fake_check_hook_bundle)
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        stderr_lines: list[str] = []
+        monkeypatch.setattr(
+            "sys.stderr",
+            type("FakeStderr", (), {"write": lambda self, s: stderr_lines.append(s), "flush": lambda self: None})(),
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
+
+        assert exc_info.value.code == 1, (
+            f"Expected exit 1 for DRIFT, got {exc_info.value.code}"
+        )
+        combined_stderr = "".join(stderr_lines)
+        assert "h0" in combined_stderr, (
+            f"Expected installed version 'h0' in stderr:\n{combined_stderr}"
+        )
+        assert "/tcs-git-helpers:git-setup" in combined_stderr, (
+            f"Expected /tcs-git-helpers:git-setup suggestion in stderr:\n{combined_stderr}"
+        )
+        assert gh_calls == [], (
+            f"Expected no gh calls on DRIFT, got: {gh_calls}"
+        )
+
+    # ------------------------------------------------------------------
+    # 3. OK — refresh_stale_cache called exactly once before cache read
+    # ------------------------------------------------------------------
+    def test_ok_drift_calls_refresh_exactly_once(
+        self, gsa, dc, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """
+        When drift check returns OK and gh is available, refresh_stale_cache
+        must be called exactly once before the cache read.
+        """
+        repo_path = "/fake/repo/drift-ok"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        self._setup_cache(cache_dir, repo_path)
+
+        ok_result = self._make_drift_result(dc, "OK", "h1")
+        refresh_calls: list = []
+
+        def fake_check_hook_bundle(rp, ver):
+            return ok_result
+
+        def fake_refresh(*, cache_dir, repo_path, default_branch="main"):
+            refresh_calls.append((cache_dir, repo_path))
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "git":
+                if "for-each-ref" in cmd:
+                    return _git_result("feat/old-thing\nfix/another-thing\nmain")
+                if "worktree" in cmd and "list" in cmd:
+                    return _git_result("")
+            # gh is "available": `gh --version` returns exit 0
+            if cmd[0] == "gh" and "--version" in cmd:
+                return _git_result("gh version 2.0.0")
+            return _git_result("")
+
+        monkeypatch.setattr(gsa, "check_hook_bundle", fake_check_hook_bundle)
+        monkeypatch.setattr(gsa, "refresh_stale_cache", fake_refresh)
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        output_lines: list[str] = []
+        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+
+        gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
+
+        assert len(refresh_calls) == 1, (
+            f"Expected refresh_stale_cache called once, got {len(refresh_calls)} calls"
+        )
+
+    # ------------------------------------------------------------------
+    # 4. OK + gh unauthenticated → graceful fallback to existing cache
+    # ------------------------------------------------------------------
+    def test_ok_drift_gh_unauthenticated_falls_back_to_cache(
+        self, gsa, dc, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """
+        When drift=OK but gh is unauthenticated (rc=4 on the gh pr list call),
+        refresh is attempted, fails gracefully, stderr explains, and the
+        existing cache content is used (candidates are listed, not "none").
+        """
+        repo_path = "/fake/repo/drift-ok-auth"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        self._setup_cache(cache_dir, repo_path)
+
+        ok_result = self._make_drift_result(dc, "OK", "h1")
+
+        def fake_check_hook_bundle(rp, ver):
+            return ok_result
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "gh":
+                if "--version" in cmd:
+                    m = MagicMock()
+                    m.returncode = 0
+                    m.stdout = "gh version 2.0.0"
+                    m.stderr = ""
+                    return m
+                # pr list returns auth error
+                m = MagicMock()
+                m.returncode = 4
+                m.stdout = ""
+                m.stderr = "gh auth login"
+                return m
+            if cmd[0] == "git":
+                if "for-each-ref" in cmd:
+                    return _git_result("feat/old-thing\nfix/another-thing\nmain")
+                if "worktree" in cmd and "list" in cmd:
+                    return _git_result("")
+            return _git_result("")
+
+        monkeypatch.setattr(gsa, "check_hook_bundle", fake_check_hook_bundle)
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        output_lines: list[str] = []
+        stderr_lines: list[str] = []
+        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+        monkeypatch.setattr(
+            "sys.stderr",
+            type("FakeStderr", (), {"write": lambda self, s: stderr_lines.append(s), "flush": lambda self: None})(),
+        )
+
+        # Must not raise SystemExit
+        try:
+            gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
+        except SystemExit as exc:
+            pytest.fail(f"cmd_cleanup raised SystemExit({exc.code}) on unauthenticated gh — must be fail-open")
+
+        combined_stderr = "".join(stderr_lines)
+        assert "unauthenticated" in combined_stderr.lower() or "falling back" in combined_stderr.lower(), (
+            f"Expected unauthenticated/fallback explanation in stderr:\n{combined_stderr}"
+        )
+
+        # Cache content must still be shown (not silent "none")
+        combined_output = "\n".join(output_lines)
+        assert "feat/old-thing" in combined_output or "fix/another-thing" in combined_output, (
+            f"Expected cached candidates in output on fallback, got:\n{combined_output}"
+        )
+
+    # ------------------------------------------------------------------
+    # 5. OK + gh not installed → graceful fallback to existing cache
+    # ------------------------------------------------------------------
+    def test_ok_drift_gh_not_installed_falls_back_to_cache(
+        self, gsa, dc, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """
+        When drift=OK but gh is not installed (OSError on subprocess.run),
+        refresh is skipped, stderr explains, and existing cache content is used.
+        """
+        repo_path = "/fake/repo/drift-ok-nogh"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        self._setup_cache(cache_dir, repo_path)
+
+        ok_result = self._make_drift_result(dc, "OK", "h1")
+
+        def fake_check_hook_bundle(rp, ver):
+            return ok_result
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "gh":
+                raise OSError("gh not found")
+            if cmd[0] == "git":
+                if "for-each-ref" in cmd:
+                    return _git_result("feat/old-thing\nfix/another-thing\nmain")
+                if "worktree" in cmd and "list" in cmd:
+                    return _git_result("")
+            return _git_result("")
+
+        monkeypatch.setattr(gsa, "check_hook_bundle", fake_check_hook_bundle)
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        output_lines: list[str] = []
+        stderr_lines: list[str] = []
+        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+        monkeypatch.setattr(
+            "sys.stderr",
+            type("FakeStderr", (), {"write": lambda self, s: stderr_lines.append(s), "flush": lambda self: None})(),
+        )
+
+        try:
+            gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
+        except SystemExit as exc:
+            pytest.fail(f"cmd_cleanup raised SystemExit({exc.code}) on gh-not-installed — must be fail-open")
+
+        combined_stderr = "".join(stderr_lines)
+        assert "gh" in combined_stderr.lower() or "not installed" in combined_stderr.lower() or "not found" in combined_stderr.lower(), (
+            f"Expected gh-not-installed explanation in stderr:\n{combined_stderr}"
+        )
+
+        # Cache content must still be shown
+        combined_output = "\n".join(output_lines)
+        assert "feat/old-thing" in combined_output or "fix/another-thing" in combined_output, (
+            f"Expected cached candidates in output on fallback, got:\n{combined_output}"
+        )
+
+    # ------------------------------------------------------------------
+    # 6. Pre-existing interactive prompt + delete path preserved end-to-end
+    # ------------------------------------------------------------------
+    def test_ok_drift_interactive_prompt_preserved(
+        self, gsa, dc, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """
+        With drift=OK and a non-empty cache, the interactive prompt + delete
+        path must be preserved. When user answers 'y', git branch -d is called.
+        """
+        repo_path = "/fake/repo/drift-ok-interactive"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        self._setup_cache(cache_dir, repo_path)
+
+        ok_result = self._make_drift_result(dc, "OK", "h1")
+        git_delete_calls: list = []
+
+        def fake_check_hook_bundle(rp, ver):
+            return ok_result
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "gh":
+                if "--version" in cmd:
+                    m = MagicMock()
+                    m.returncode = 0
+                    m.stdout = "gh version 2.0.0"
+                    m.stderr = ""
+                    return m
+                # pr list: empty (no new stale branches found)
+                m = MagicMock()
+                m.returncode = 0
+                m.stdout = "[]"
+                m.stderr = ""
+                return m
+            if cmd[0] == "git":
+                if "for-each-ref" in cmd:
+                    return _git_result("feat/old-thing\nfix/another-thing\nmain")
+                if "worktree" in cmd and "list" in cmd:
+                    return _git_result("")
+                if "branch" in cmd and "-d" in cmd:
+                    git_delete_calls.append(cmd)
+                    return _git_result("")
+            return _git_result("")
+
+        monkeypatch.setattr(gsa, "check_hook_bundle", fake_check_hook_bundle)
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        # Simulate user answering 'y' to first branch, 'n' to second
+        answers = iter(["y", "n"])
+        monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+
+        output_lines: list[str] = []
+        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+
+        gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=True)
+
+        # git branch -d must have been called for the 'y' answer
+        assert len(git_delete_calls) >= 1, (
+            f"Expected at least one 'git branch -d' call, got: {git_delete_calls}"
+        )
