@@ -378,7 +378,11 @@ _match_command "$CMD" "$PATTERN_BRANCH_RESUME"       && _check_resume_squash_mer
 
 # === core.hooksPath subversion ===
 _match_command "$CMD" "$PATTERN_HOOKSPATH_INLINE"    && _maybe_deny HOOKSPATH_OVERRIDE    "git -c core.hooksPath=… disables .githooks/"
-_match_command "$CMD" "$PATTERN_HOOKSPATH_CONFIG"    && _maybe_check_setup_sentinel HOOKSPATH_OVERRIDE  "git config core.hooksPath only allowed during /tcs-git-helpers:git-setup (set TCS_GIT_HELPERS_SETUP_ACTIVE=1)"
+# Read-only --get/--get-all/--get-regexp forms short-circuit before the write check.
+# `git config --get core.hooksPath` and friends mutate nothing, so they should
+# never trigger the sentinel-gated denial.
+_match_command "$CMD" "$PATTERN_HOOKSPATH_CONFIG_READ" || \
+  { _match_command "$CMD" "$PATTERN_HOOKSPATH_CONFIG" && _maybe_check_setup_sentinel HOOKSPATH_OVERRIDE  "git config core.hooksPath only allowed during /tcs-git-helpers:git-setup (set TCS_GIT_HELPERS_SETUP_ACTIVE=1)"; }
 
 # ---------------------------------------------------------------------------
 # Aggregate decision — emit cascading denial if anything matched
