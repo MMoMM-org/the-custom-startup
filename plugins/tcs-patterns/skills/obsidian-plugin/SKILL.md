@@ -1,6 +1,6 @@
 ---
 name: obsidian-plugin
-description: "Use when building or reviewing Obsidian plugins — covers lifecycle, listener/timer cleanup, mobile compatibility, settings reactivity, vault write/event discipline, XSS-safe DOM, SecretStorage for keys, requestUrl over fetch, sentence-case UI text, and common API gotchas (normalizePath, vault.process vs modify, processFrontMatter, popout-window globals, layout-ready timing, Sync-aware persistence, platform CSS body classes)."
+description: "Use PROACTIVELY when building or reviewing Obsidian plugins, or MUST BE USED when preparing a plugin for community-directory submission. Covers lifecycle, listener/timer cleanup, mobile compatibility, settings reactivity, vault write/event discipline, XSS-safe DOM, SecretStorage for keys, requestUrl over fetch, sentence-case UI text, manifest submission rules (author email, description punctuation, plugin id naming, fundingUrl), sample-plugin residue, console.log vs console.debug, and common API gotchas (normalizePath, vault.process vs modify, processFrontMatter, popout-window globals, layout-ready timing, Sync-aware persistence, platform CSS body classes). Trigger phrases: \"obsidian plugin\", \"manifest.json\", \"community plugin submission\", \"obsidianmd/obsidian-releases\", \"obsidian audit\"."
 user-invocable: true
 argument-hint: "[plugin source path to audit]"
 allowed-tools: Read, Bash, Grep, Glob
@@ -15,7 +15,8 @@ Act as an Obsidian plugin developer. Respect the plugin lifecycle. Never leak li
 ## Interface
 
 ObsidianViolation {
-  kind: LISTENER_LEAK | DOM_BYPASS | MOBILE_INCOMPATIBLE | LIFECYCLE_VIOLATION | VAULT_WRITE_UNGUARDED | LINT_RULE_DISABLED | XSS_DOM_INJECTION | GLOBAL_APP | DEFAULT_HOTKEY | INLINE_STYLE | ACTIVE_LEAF | VIEW_REF_LEAK | INEFFICIENT_FILE_LOOKUP | RAW_FETCH | SETTINGS_HEADING_RAW
+  kind: LISTENER_LEAK | DOM_BYPASS | MOBILE_INCOMPATIBLE | LIFECYCLE_VIOLATION | VAULT_WRITE_UNGUARDED | LINT_RULE_DISABLED | XSS_DOM_INJECTION | GLOBAL_APP | DEFAULT_HOTKEY | INLINE_STYLE | ACTIVE_LEAF | VIEW_REF_LEAK | INEFFICIENT_FILE_LOOKUP | RAW_FETCH | SETTINGS_HEADING_RAW | MANIFEST_INVALID | SAMPLE_PLACEHOLDER | CONSOLE_LOG | COMMAND_ID_PREFIXED | VAULT_MODIFY_ACTIVE
+  severity: CRITICAL | HIGH | MEDIUM | LOW
   file: string
   line?: number
   fix: string
@@ -50,6 +51,9 @@ State {
 - For API keys, tokens, passwords use `SecretStorage` / `SecretComponent` (Obsidian 1.11.4+). Persist the **secret ID** (lowercase alphanumeric + dashes) in `data.json`, never the secret value — this is the proper resolution to the Sync-replication concern (see Settings Reactivity → Hybrid Storage and the Secrets section in `reference/obsidian-api.md`).
 - Use sentence case for all UI text (commands, settings names, headings, buttons). "Template folder location", not "Template Folder Location".
 - Drop redundant "settings" from settings-tab headings. "Advanced", not "Advanced settings".
+- For edits to the **active** note, prefer the `Editor` API (`editor.replaceSelection`, `editor.setLine`, etc. via `getActiveViewOfType(MarkdownView)`) — `vault.modify` loses cursor, selection, and folded ranges. Use `vault.process` for background files only.
+- In `addCommand`, use a bare `id` (e.g. `"run-import"`) — Obsidian prefixes with the plugin ID automatically. Prefixing yourself produces "MyPlugin: MyPlugin: Run Import" in the palette.
+- Use `console.debug(...)`, never `console.log(...)`. The `obsidianmd/obsidian-releases` reviewer bot rejects `console.log`. Document the DevTools Verbose-level toggle in support docs so users can self-diagnose "no debug output".
 
 **Never:**
 - Use `document.addEventListener` directly — always use `registerDomEvent`.
@@ -71,6 +75,11 @@ State {
 - Detach leaves in `onunload` (`workspace.detachLeavesOfType(VIEW_TYPE)`) — leaves should reinitialize at their original position when the user updates the plugin. Closing them on every update is hostile UX.
 - Iterate `vault.getFiles().find(f => f.path === path)` for path lookup — O(n) per call. Use `vault.getFileByPath` / `vault.getFolderByPath` / `vault.getAbstractFileByPath` (constant-time).
 - Disable **any** ESLint rule — no `// eslint-disable`, no `// eslint-disable-line`, no `// eslint-disable-next-line`, no `'rule': 'off'` entries in `.eslintrc*`. The Obsidian community-plugin reviewer bot (`obsidianmd/obsidian-releases`) scans submission PRs for disabled rules and **rejects the plugin from official registration** if any are found. This applies to every rule the project's ESLint config loads — `obsidianmd/*`, `@typescript-eslint/*`, base `eslint:recommended`, and any other plugin. If a rule conflicts with the code, **change the code, not the rule**. Document the workaround in a code comment when the alternative is non-obvious.
+- Put an email address in the manifest `author` field — the submission bot **rejects** it. Use `authorUrl` for a contact / homepage link instead.
+- Ship a manifest `description` that violates any of these submission-bot rules: longer than 250 characters; missing terminal punctuation (`.` / `!` / `?`); containing the word "Obsidian"; containing emoji or special characters; starting with "This is a plugin". The "Obsidian" word check exists for both redundancy (every entry is in the Obsidian directory) and trademark hygiene under the Developer policy.
+- Use `obsidian` anywhere in the manifest `id` — the directory **rejects** it. Pick a unique kebab-case identifier that omits the word entirely.
+- Set `fundingUrl` without actually accepting financial support — the submission-requirements doc requires removing the field if you don't take donations.
+- Ship sample-plugin placeholder names (`MyPlugin`, `MyPluginSettings`, `SampleSettingTab`) or unmodified sample code (ribbon icon, command, modal) from the template plugin — the reviewer flags these as residue. Rename to your plugin's identity and delete what you don't use.
 
 ## Reference Materials
 
@@ -247,8 +256,100 @@ Severity mapping:
 
 Notes on the greps: the default-hotkey check is single-line; multi-line `addCommand({ ... \n hotkeys: ... })` calls won't match (use a manual scan for any `addCommand` blocks with `hotkeys:` if the audit warrants it). The global-app check excludes lines that contain `this.app` — comment-only mentions of `app.foo` may yield benign hits.
 
-### 13. Report
+### 13. Scan Manifest and Sample-Code Residue (Community-Plugin Submission Blockers)
 
-Group by violation kind. Include concrete Obsidian API replacement for each.
+Read `reference/obsidian-api.md` → `## manifest.json` → "Field-by-Field Submission Rules" for the full rule set. Then run the manifest checks against the target's `manifest.json` (use `jq` when available, otherwise grep). Every failing rule is a `MANIFEST_INVALID` violation.
+
+```bash
+MANIFEST="$TARGET/manifest.json"
+
+# author email — CRITICAL (bot rejects)
+jq -r '.author' "$MANIFEST" 2>/dev/null | grep -E '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' && echo "MANIFEST_INVALID: author contains email"
+
+# id contains "obsidian" — CRITICAL (directory rejects)
+jq -r '.id' "$MANIFEST" 2>/dev/null | grep -i 'obsidian' && echo "MANIFEST_INVALID: id contains 'obsidian'"
+
+# description rules — HIGH (bot warnings, reviewer may require fixes)
+DESC=$(jq -r '.description' "$MANIFEST" 2>/dev/null)
+[ ${#DESC} -gt 250 ] && echo "MANIFEST_INVALID: description > 250 chars (${#DESC})"
+echo "$DESC" | grep -qE '[.!?]$' || echo "MANIFEST_INVALID: description missing terminal . ! ?"
+echo "$DESC" | grep -qi 'obsidian' && echo "MANIFEST_INVALID: description contains the word 'Obsidian'"
+echo "$DESC" | grep -qE '[^[:print:][:space:]]|[^\x00-\x7F]' && echo "MANIFEST_INVALID: description contains emoji/non-ASCII"
+echo "$DESC" | grep -qiE '^this is a plugin' && echo "MANIFEST_INVALID: description starts with 'This is a plugin'"
+
+# fundingUrl present — MEDIUM (verify manually that donations are actually accepted)
+jq -e '.fundingUrl' "$MANIFEST" >/dev/null 2>&1 && echo "MANIFEST_REVIEW: fundingUrl is set — confirm donations are actually accepted; otherwise remove"
+```
+
+Then scan for sample-plugin residue — every match is a `SAMPLE_PLACEHOLDER` violation:
+
+```bash
+# Sample-plugin class/interface names — HIGH (bot/reviewer flags)
+grep -rnE '\b(MyPlugin|MyPluginSettings|SampleSettingTab|SampleModal)\b' "$TARGET/src" --include="*.ts" --include="*.tsx" 2>/dev/null
+
+# Sample manifest text — HIGH
+jq -r '.name, .description' "$MANIFEST" 2>/dev/null | grep -iE 'sample plugin|my plugin'
+```
+
+And scan for `console.log` — every match is a `CONSOLE_LOG` violation (CRITICAL, bot rejects):
+
+```bash
+grep -rnE '\bconsole\.log\s*\(' "$TARGET" --include="*.ts" --include="*.tsx" --include="*.js" 2>/dev/null
+```
+
+And scan for plugin-id-prefixed command IDs — every match is a `COMMAND_ID_PREFIXED` violation (MEDIUM):
+
+```bash
+PLUGIN_ID=$(jq -r '.id' "$MANIFEST" 2>/dev/null)
+grep -rnE "addCommand\s*\(\s*\{[^}]*\bid\s*:\s*['\"]${PLUGIN_ID}[:-]" "$TARGET" --include="*.ts" --include="*.tsx" 2>/dev/null
+```
+
+And scan for `vault.modify` against the active file — `VAULT_MODIFY_ACTIVE` violation (MEDIUM, UX regression):
+
+```bash
+# heuristic: vault.modify near a getActiveFile() / activeEditor reference
+grep -rnB2 -A2 -E "vault\.modify\s*\(" "$TARGET" --include="*.ts" --include="*.tsx" 2>/dev/null | grep -E "getActiveFile|activeEditor|activeView"
+```
+
+### 14. Report
+
+Output format — produce exactly these sections, in this order:
+
+```
+## Obsidian Plugin Audit — <plugin-id or target path>
+
+### Submission-Blockers (CRITICAL)
+- <kind>: <file>:<line?> — <one-line fix referencing Obsidian API>
+
+### High-severity (HIGH)
+- ...
+
+### Medium-severity (MEDIUM)
+- ...
+
+### Low-severity (LOW)
+- ...
+
+### Files checked
+<list>
+
+### Recommended next step
+<one sentence — typically "fix CRITICAL items before opening the submission PR">
+```
+
+Rules:
+- Group strictly by severity (CRITICAL → LOW), then by `kind` inside each group.
+- Every finding cites file + line (or "manifest.json" for manifest issues).
+- Every finding ends with a concrete Obsidian API replacement (e.g. "use `app.fileManager.trashFile(file)`").
+- If no findings at a severity level, write "- None" rather than omitting the section.
+
+Severity defaults across the catalog:
+
+| Severity | Kinds |
+|---|---|
+| CRITICAL | `LINT_RULE_DISABLED`, `XSS_DOM_INJECTION`, `LISTENER_LEAK` (where unregistered), `MANIFEST_INVALID` (author email, id contains "obsidian"), `CONSOLE_LOG` |
+| HIGH | `MOBILE_INCOMPATIBLE`, `VAULT_WRITE_UNGUARDED`, `GLOBAL_APP`, `INLINE_STYLE`, `ACTIVE_LEAF`, `MANIFEST_INVALID` (description rules), `SAMPLE_PLACEHOLDER` |
+| MEDIUM | `DEFAULT_HOTKEY`, `VIEW_REF_LEAK`, `INEFFICIENT_FILE_LOOKUP`, `COMMAND_ID_PREFIXED`, `VAULT_MODIFY_ACTIVE`, `MANIFEST_INVALID` (`fundingUrl` review) |
+| LOW | `RAW_FETCH`, `SETTINGS_HEADING_RAW` |
 
 Read `reference/obsidian-api.md` for the full API/anti-pattern mapping. Read `reference/testing-patterns.md` for test-side issues.
