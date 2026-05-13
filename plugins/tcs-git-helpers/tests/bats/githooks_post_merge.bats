@@ -3,7 +3,7 @@
 # tests/bats/githooks_post_merge.bats
 #
 # Coverage for templates/githooks/post-merge
-# Test count: 12
+# Test count: 11
 #
 # Spec references:
 #   - PRD M6 AC1-AC3 — stale-branch surfacing after merge

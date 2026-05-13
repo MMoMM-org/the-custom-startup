@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# scripts/lib/config_parser.sh — strict-allowlist KV parser for .githooks/.config
+# templates/githooks/lib-config-parser.sh — strict-allowlist KV parser for .githooks/.config
 #
 # Spec refs:
 #   - SDD §Implementation Examples — Bash parser sketch (ADR-3)

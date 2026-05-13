@@ -3,17 +3,19 @@
 # tests/bats/install-files.bats
 #
 # Integration tests for skills/git-setup/lib/install_files.sh.
-# Focuses on the T1.4 additions: lib-bundle.sh copy and tcs-git-helpers-version
-# file write, alongside the existing hook-copy behaviour.
+# Focuses on the T1.4 + T1.5 additions: lib-bundle.sh copy, lib-config-parser.sh
+# copy, and tcs-git-helpers-version file write, alongside the existing hook-copy
+# behaviour.
 #
 # Assertions:
 #   IF1  After install, .githooks/ contains all four hooks + lib-bundle.sh +
-#        tcs-git-helpers-version
+#        lib-config-parser.sh + tcs-git-helpers-version
 #   IF2  Every installed hook carries the substituted bundle-version banner
 #        (no __HOOK_BUNDLE_VERSION__ placeholder remaining)
 #   IF3  Installed .githooks/tcs-git-helpers-version equals plugin's
 #        templates/githooks/tcs-git-helpers-version byte-for-byte (after trim)
 #   IF4  lib-bundle.sh is copied byte-equal (no substitution applied)
+#   IF5  lib-config-parser.sh is copied byte-equal to template source
 #
 # Spec refs:
 #   - SDD §Directory Map — Repo install state (after /tcs-git-helpers:git-setup)
