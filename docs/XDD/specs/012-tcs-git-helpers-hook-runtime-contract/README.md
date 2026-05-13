@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-05-13 |
-| **Current Phase** | PRD |
+| **Current Phase** | PLAN-ready |
 | **Last Updated** | 2026-05-13 |
 
 ## Documents
@@ -13,7 +13,7 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | All 5 open questions resolved; ready for SDD handoff |
-| solution.md | pending | SDD evaluates Options A/B/C trade-offs once PRD is approved |
+| solution.md | completed | 8 ADRs confirmed 2026-05-13 (incl. version-file renamed from generic `VERSION` to `tcs-git-helpers-version` to avoid collisions in user repos) |
 | plan/ | pending | — |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
@@ -27,6 +27,7 @@
 | 2026-05-13 | Q5 + Q1 resolved at PRD time | Drift check fires at **skill invocation time**, not SessionStart. Each skill that depends on hook-produced state compares installed hook banner to its required hook version and prompts the user on mismatch. SessionStart noise gets ignored; in-context prompts at the moment of dependency are the only signal that lands. This also locks Q1 — fail-loud-prompt-reinstall is the update model, scoped to skill invocations. New Feature 4 added to PRD to capture the acceptance criteria. |
 | 2026-05-13 | Q2 + Q3 + Q4 resolved at PRD time | Q2: installed hook code is self-contained per-repo, no plugin-cache reference at runtime. SDD picks layout (single-file inline vs hook+lib siblings in `.githooks/`). Q3: Option D — independent `HOOK_BUNDLE_VERSION`, load-bearing. Q4: broader pattern — all four installed hooks + their shared lib are ONE versioned unit; bumping the bundle version re-installs everything together. Maintainer constraint codified: any change to installed-hook templates or shared lib MUST bump `HOOK_BUNDLE_VERSION`, enforced by CI. Feature 6 promoted to Must Have to reflect the atomic-unit framing. |
 | 2026-05-13 | All 5 PRD open questions closed | Ready for SDD handoff. No remaining ambiguity at the requirements level; SDD chooses concrete implementation shapes within these constraints. |
+| 2026-05-13 | SDD complete, 8 ADRs confirmed | All 8 ADRs (sibling layout, version-file source-of-truth, skill-side `.githooks/tcs-git-helpers-version` read, shared drift-check helper, live-refresh in cmd_cleanup, structured stderr one-liners, CI-enforced maintainer contract, pre-bundle installs treated as MISSING) approved with one refinement: version-marker file renamed from generic `VERSION` to plugin-namespaced `tcs-git-helpers-version` to avoid collisions in user repos. Ready for PLAN. |
 
 ## Context
 
