@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: CI maintainer-contract gate + E2E lockdown"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -101,7 +101,7 @@ phase: 3
      - [ ] User-facing changes documented `[ref: PRD/Open Questions Q1 + Q5 resolutions]`
      - [ ] Maintainer contract documented `[ref: PRD/CON-4]`
 
-- [ ] **T3.5 Plugin version bump + Phase 3 validation** `[activity: validate]`
+- [x] **T3.5 Plugin version bump + Phase 3 validation** `[activity: validate]`
 
   1. **Bump** `plugins/tcs-git-helpers/.claude-plugin/plugin.json` from 2.0.1 to 2.1.0 (minor — new install-state behavior). The `HOOK_BUNDLE_VERSION` (`tcs-git-helpers-version`) stays at `h1` from T1.3 since this is the inaugural bundled release — subsequent hook changes will bump it.
   2. **Run** all test suites:

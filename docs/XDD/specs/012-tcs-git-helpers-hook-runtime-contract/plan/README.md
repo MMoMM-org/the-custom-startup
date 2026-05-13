@@ -113,7 +113,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 
 - [x] [Phase 1: Self-contained hook bundle](phase-1.md)
 - [x] [Phase 2: Skill-side drift check + cmd_cleanup refresh](phase-2.md)
-- [ ] [Phase 3: CI maintainer-contract gate + E2E lockdown](phase-3.md)
+- [x] [Phase 3: CI maintainer-contract gate + E2E lockdown](phase-3.md)
 
 ---
 
