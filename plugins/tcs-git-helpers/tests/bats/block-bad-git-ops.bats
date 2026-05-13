@@ -659,6 +659,47 @@ _assert_allow() {
 }
 
 # ----------------------------------------------------------------------
+# Reference-doc path resolution — CLAUDE_PLUGIN_ROOT is expanded, not
+# emitted as literal text (so users can paste the path into `cat`).
+# ----------------------------------------------------------------------
+
+@test "denial References footer resolves \$CLAUDE_PLUGIN_ROOT to its value" {
+  export CLAUDE_PLUGIN_ROOT="/sentinel/plugin/root"
+  run _run_hook_with_cmd "git reset --hard"
+  [ "$status" -eq 0 ]
+  # Resolved path appears
+  [[ "$output" == *"/sentinel/plugin/root/references/destructive-ops.md"* ]] \
+    || { echo "expected resolved References path, got: $output" >&2; return 1; }
+  # And the unresolved literal does NOT
+  [[ "$output" != *'${CLAUDE_PLUGIN_ROOT}'* ]] \
+    || { echo "found unresolved \${CLAUDE_PLUGIN_ROOT} in output: $output" >&2; return 1; }
+}
+
+@test "denial References footer falls back to 'tcs-git-helpers' when CLAUDE_PLUGIN_ROOT unset" {
+  unset CLAUDE_PLUGIN_ROOT
+  run _run_hook_with_cmd "git reset --hard"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tcs-git-helpers/references/destructive-ops.md"* ]] \
+    || { echo "expected fallback path, got: $output" >&2; return 1; }
+  [[ "$output" != *'${CLAUDE_PLUGIN_ROOT}'* ]] \
+    || { echo "found unresolved \${CLAUDE_PLUGIN_ROOT} in output: $output" >&2; return 1; }
+}
+
+@test "M3 squash-merge-trap reference resolves \$CLAUDE_PLUGIN_ROOT" {
+  export CLAUDE_PLUGIN_ROOT="/sentinel/plugin/root"
+  cd "$REPOS_ROOT/squash-merged"
+  # Switch to main first so the branch-resume regex fires (mirrors M3 fixture
+  # test convention at line 614).
+  git checkout -q main
+  run _run_hook_with_cmd "git checkout feat/squashed"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"/sentinel/plugin/root/references/squash-merge-trap.md"* ]] \
+    || { echo "expected resolved squash-merge-trap path, got: $output" >&2; return 1; }
+  [[ "$output" != *'${CLAUDE_PLUGIN_ROOT}'* ]] \
+    || { echo "found unresolved literal in output: $output" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
 # Performance smoke — non-push ≤ 80ms p99 budget (loose check, single run)
 # ----------------------------------------------------------------------
 
