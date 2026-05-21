@@ -57,9 +57,9 @@ This phase delivers the **`/enforce-rule` triage skill** — the user-invocable 
   2. **Test (RED)**: Write a parser assertion (Python): given `reference/mechanism-matrix.md`, parser returns a dict `{(q3, q4): mechanism}` covering all 7 Q3 options × 3 Q4 options = 21 entries.
   3. **Implement (GREEN)**:
      - Create `plugins/tcs-helper/skills/rule-enforcer/reference/mechanism-matrix.md` (~80 lines): one `## Q3 = <intervention point>` section per Q3 option, each containing a `| Q4 | Mechanism |` table with 3 rows (Block, Auto-fix, Nudge)
-     - 7 Q3 options: Before tool call, After tool call, User submits prompt, Session start, Local git op, PR/merge, In coding patterns, Genuine judgment
-     - Actually 7 mechanism-mappable intervention points + judgment-fallback = 7 sections + 1 fallback note
-     - Map each (Q3, Q4) to one of: PreToolUse hook | PostToolUse hook | UserPromptSubmit hook | SessionStart/End hook | git pre-push hook | CI workflow | Skill w/ discipline language | Memory rule
+     - 7 Q3 options (each labeled with a recognizable case so user can pick): Before tool call (e.g. block bad git ops), After tool call (e.g. nudge after editing skills/), User submits prompt (e.g. recurrence-signal injection), Session start (e.g. restore context), Local git push (e.g. block before pushing if docs missing), PR/merge (e.g. auto-bump versions on merge), In coding patterns (e.g. TDD discipline)
+     - Plus 1 fallback note: Genuine judgment call → Memory rule
+     - Map each (Q3, Q4) to one of: PreToolUse hook | PostToolUse hook | UserPromptSubmit hook | SessionStart/End hook | git pre-push hook (bundle-integrated per revised ADR-2) | CI workflow | Skill w/ discipline language | Memory rule
   4. **Validate**: Parser assertion passes; markdown renders correctly. Cross-check against PRD M4 AC examples — they must produce expected mechanisms.
   5. **Success**:
      - [ ] All 21 (Q3, Q4) combinations have a mechanism mapping `[ref: PRD/M4 AC-1..AC-8]`
@@ -84,17 +84,17 @@ This phase delivers the **`/enforce-rule` triage skill** — the user-invocable 
 - [ ] **T2.3 4-question triage workflow (Steps 1–7 in SKILL.md)** `[activity: skill-authoring]` `[parallel: false]`
 
   1. **Prime**: Reload T2.1 SKILL.md skeleton. Read T2.2 matrix file format. Read PRD M3 short-circuit logic carefully (Q1=1× and Q2=judgment short-circuit to Memory).
-  2. **Test (RED)**: Manual scenario test plan (recorded in `examples/output-example.md`): 4 scenarios exercising different paths through the workflow:
-     - Scenario A: Q1=1× → short-circuit to Memory (Q2-Q4 skipped)
-     - Scenario B: Q1=2+×, Q2=No-judgment → short-circuit to Memory with strong-language
-     - Scenario C: Q1=2+×, Q2=Yes, Q3=PR/merge, Q4=Auto-fix → CI workflow
-     - Scenario D: Q1=2+×, Q2=Yes, Q3=Local git op, Q4=Block → git pre-push hook
-  3. **Implement (GREEN)**: Expand SKILL.md Workflow section with 7 numbered steps:
+  2. **Test (RED)**: Manual scenario test plan (recorded in `examples/output-example.md`): 4 scenarios exercising different paths through the revised memory-first workflow:
+     - Scenario A: Q1=`First time` → defer to `/memory-add`, exit (Q2-Q4 skipped)
+     - Scenario B: Q1=`Recurring`, Q2=`No-judgment` → short-circuit to Memory with strong-language
+     - Scenario C: Q1=`Recurring`, Q2=`Yes`, Q3=`PR/merge`, Q4=`Auto-fix` → CI workflow
+     - Scenario D: Q1=`Recurring`, Q2=`Yes`, Q3=`Local git push`, Q4=`Block` → git pre-push hook (per revised ADR-2: bundle-integrated)
+  3. **Implement (GREEN)**: Expand SKILL.md Workflow section with 7 numbered steps (per revised PRD M3 — memory-first + example-guided):
      - Step 1: Echo rule description + confirm with user
-     - Step 2: Q1 AskUserQuestion {1×, 2+×, Cross-cutting} → short-circuit if 1×
-     - Step 3: Q2 AskUserQuestion {Yes, No-judgment-only} → short-circuit if No
-     - Step 4: Q3 AskUserQuestion {7 intervention options}
-     - Step 5: Q4 AskUserQuestion {Block, Auto-fix, Nudge}
+     - Step 2: Q1 AskUserQuestion `{First time — no memory yet, Recurring — memory exists but was ignored, Cross-cutting}` → if `First time`: defer to `Skill(tcs-helper:memory-add)` (skip Q2-Q4); if `Cross-cutting`: proceed regardless of frequency
+     - Step 3: Q2 AskUserQuestion `{Yes, No — judgment only}` with **concrete example per option** (per PRD M3 design constraint — option description includes "like 'missing CHANGELOG detectable by grep'" vs "like 'is this code too verbose'") → if `No`: short-circuit to Memory with strong-language template
+     - Step 4: Q3 AskUserQuestion {7 intervention options} with **concrete example per option** (e.g., `Local git push (e.g. block before pushing if CHANGELOG missing)` instead of bare `Local git operation`)
+     - Step 5: Q4 AskUserQuestion {Block, Auto-fix, Nudge} with behavior preview per option
      - Step 6: Read reference/mechanism-matrix.md, look up (Q3, Q4), compute mechanism
      - Step 7: Present recommendation with rationale via AskUserQuestion {Accept, Override, Explain}
   4. **Validate**: Manual scenario test (4 paths) in a Claude Code session after restart — each scenario produces the expected mechanism recommendation.

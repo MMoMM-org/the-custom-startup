@@ -65,6 +65,10 @@ For each candidate rule, the skill walks 4 triage questions (frequency, mechanic
 
 **Outcome:** fewer ignored memories, more enforced automation, fewer reactive catch-up PRs.
 
+### Graceful Degradation
+
+When a hand-off target skill is NOT installed (e.g., `plugin-dev:hook-development` missing for a Claude-hook recommendation), the enforcer does NOT crash and does NOT silently fail. It surfaces the gap via `AskUserQuestion {Install plugin, Use Memory instead, Cancel}` so the user can pick a recoverable next step. See SDD Error Handling.
+
 ---
 
 ## User Personas
@@ -97,6 +101,16 @@ For each candidate rule, the skill walks 4 triage questions (frequency, mechanic
 
 Marcus has a half-formed thought *"I wonder if we should automate the way we tag commits"* — not a "I keep forgetting" phrase. He runs `/enforce-rule "tag commits by phase"` directly. Skill performs triage as in the primary journey, may recommend Memory (Q2 = judgment-only) or a git commit-msg hook (Q2 = mechanical).
 
+### Tertiary User Journey: Memory-First Default (Marcus refinement 2026-05-21)
+
+`memory-add` remains the **primary first response** for any new "I should remember X" pattern. The enforcer is **escalation**: invoked when memory has already been written for this pattern and the rule was violated anyway (i.e., the memory failed its recall-and-apply job).
+
+1. **Trigger phrase detected:** Intercept hook suggests EITHER `/memory-add` (if Marcus is encountering this for the first time) OR `/enforce-rule` (if a memory already exists for this pattern) — single suggestion line offers both, Marcus picks.
+2. **First-time path:** Marcus runs `/memory-add`, captures the rule as a memory. Done. Skill exits. Memory becomes the layer-1 defense.
+3. **Repeat-violation path:** When Marcus encounters the same pattern again (i.e., the memory was ignored), the intercept hook suggests `/enforce-rule`. This is the only path where the enforcer's triage applies — Q1 first option ("First time, no memory yet") is a fallback safety net that re-routes to `/memory-add`.
+
+This preserves the memory system as the lightweight, judgment-friendly first layer. The enforcer only adds value when memory has empirically failed.
+
 ---
 
 ## Feature Requirements
@@ -105,7 +119,10 @@ Marcus has a half-formed thought *"I wonder if we should automate the way we tag
 
 #### Feature M1: UserPromptSubmit Intercept Hook
 
-- **User Story:** As Marcus, I want the system to notice when I say "I keep forgetting" so that I don't have to remember to triage every potential automation opportunity myself.
+- **User Story:** As Marcus, I want the system to notice **any speaker** (Marcus or Claude) saying recurrence-signal phrases — "I keep forgetting", "you keep forgetting", "we keep forgetting", "vergessen wieder", "schon wieder" — so neither I nor Claude has to remember to manually triage every automation opportunity.
+
+  *Design implication:* trigger-phrases reference (`reference/trigger-phrases.md`) must cover **all grammatical persons** (1st/2nd/3rd) in both supported languages, and the intercept hook does not care who's speaking — every prompt is regex-scanned regardless of source.
+
 - **Acceptance Criteria:**
   - [ ] Given user submits a prompt containing any trigger phrase from `reference/trigger-phrases.md`, When `UserPromptSubmit` hook fires, Then a single-line system reminder is prepended suggesting `/enforce-rule`
   - [ ] Given user submits a prompt with no trigger phrase, When the hook fires, Then no reminder is injected (no noise)
@@ -120,15 +137,19 @@ Marcus has a half-formed thought *"I wonder if we should automate the way we tag
   - [ ] Given user runs `/enforce-rule` with no description, When the skill loads, Then it asks for a description via AskUserQuestion (or accepts free-text follow-up)
   - [ ] Given the skill is invoked, When the active-skill announcement fires, Then it announces `tcs-helper:rule-enforcer`
 
-#### Feature M3: 4-Question Triage Logic
+#### Feature M3: 4-Question Triage Logic (memory-first, example-guided)
 
-- **User Story:** As Marcus, I want a deterministic triage workflow so that the same rule always gets the same mechanism recommendation.
+- **User Story:** As Marcus, I want a deterministic triage workflow so that the same rule always gets the same mechanism recommendation, with **memory as the default first response** and mechanization as the escalation when memory has empirically failed. Each question option MUST include concrete examples so I (or any user) can pick correctly without knowing implementation jargon.
+- **Design constraint (UX):** Q2 (mechanical detectability) and Q3 (intervention point) are technical concepts a non-implementer can't reliably answer in the abstract. Every AskUserQuestion option for Q2/Q3 MUST include a concrete example from the user's actual repo or from the worked examples library — so Marcus picks "Yes, mechanically detectable" by recognizing his rule looks like example case Y, not by judging an abstract property.
 - **Acceptance Criteria:**
-  - [ ] Given triage begins, When Q1 (frequency) is asked, Then options are {1×, 2+×, Cross-cutting}
-  - [ ] Given Q1 answer is `1×`, When the skill proceeds, Then Memory fallback is recommended without asking Q2–Q4 (skill suggests revisiting if rule is violated again)
-  - [ ] Given Q1 answer is `2+×` or `Cross-cutting`, When the skill proceeds, Then Q2 (mechanical detectability) is asked
-  - [ ] Given Q2 answer is `No — judgment only`, When the skill proceeds, Then Memory fallback is recommended (skip Q3, Q4)
-  - [ ] Given Q2 answer is `Yes`, When the skill proceeds, Then Q3 (earliest intervention) and Q4 (block/auto-fix/nudge) are asked in sequence
+  - [ ] Given triage begins, When Q1 (frequency) is asked, Then options are `{First time — no memory yet, Recurring — memory exists but was ignored, Cross-cutting}`
+  - [ ] Given Q1 answer is `First time`, When the skill proceeds, Then it **defers to `/memory-add`** (skips Q2–Q4) — memory is the lightweight first defense
+  - [ ] Given Q1 answer is `Recurring`, When the skill proceeds, Then Q2 (mechanical detectability) is asked with example-driven options
+  - [ ] Given Q1 answer is `Cross-cutting`, When the skill proceeds, Then Q2 is asked regardless of frequency
+  - [ ] Given Q2 is asked, When AskUserQuestion is rendered, Then each option includes a 1-sentence concrete example (e.g., `Yes — like "missing CHANGELOG entry detectable by grep on PR diff"` vs `No (judgment) — like "is this code too verbose"`)
+  - [ ] Given Q2 answer is `No — judgment only`, When the skill proceeds, Then Memory fallback is recommended with strong-language template (skip Q3, Q4)
+  - [ ] Given Q2 answer is `Yes`, When the skill proceeds, Then Q3 (earliest intervention) is asked with example-driven options (each Q3 option labeled with a recognizable case — `Local git push (e.g. "block before pushing if CHANGELOG missing")` rather than abstract `Local git operation`)
+  - [ ] Given Q3 is answered, When the skill proceeds, Then Q4 (block / auto-fix / nudge) is asked with concrete behavior preview per option
 
 #### Feature M4: Mechanism Matrix Routing
 
@@ -157,7 +178,7 @@ Marcus has a half-formed thought *"I wonder if we should automate the way we tag
 - **User Story:** As Marcus, I want the two patterns we already proved this session (auto-bump CI, pre-push docs gate) to be inline-scaffoldable, not hand-off-only — they're common enough to template.
 - **Acceptance Criteria:**
   - [ ] Given mechanism = `CI workflow` AND template hint = `auto-bump-style patch`, When the skill scaffolds, Then it produces `.github/workflows/<name>.yml` + `scripts/ci/<name>.sh` based on the PR #29 pattern with the new rule's detection logic
-  - [ ] Given mechanism = `git pre-push hook` AND template hint = `docs-gate-style`, When the skill scaffolds, Then it proposes a `.githooks/pre-push` snippet that detects the violation pattern and prints a block message
+  - [ ] Given mechanism = `git pre-push hook` AND template hint = `docs-gate-style`, When the skill scaffolds, Then it proposes a `.githooks/pre-push` snippet that detects the violation pattern; the snippet's response style is driven by **Q4 answer** — `Nudge` (default for docs gates: print warning, exit 0, let push through) OR `Block` (exit 1, refuse push). Marcus refinement 2026-05-21: nudge is the realistic default for docs gates because block-with-`--no-verify`-bypass becomes ignore-with-extra-step; nudge with clear message is honest about what enforcement we can actually achieve.
   - [ ] Given the user wants neither template, When asked, Then the skill falls back to hand-off (Feature M5)
 
 #### Feature M7: Skill Self-Test Against This Session's Violations
@@ -202,7 +223,7 @@ Marcus has a half-formed thought *"I wonder if we should automate the way we tag
 
 - **W1:** Automatic hook installation — every scaffold proposal requires user confirmation before writing files
 - **W2:** Cross-repo enforcement — TCS-internal only; downstream consumers can adopt the resulting hooks/CI but the enforcer skill itself stays here
-- **W3:** ML-based phrase detection — keyword/regex on `reference/trigger-phrases.md` is sufficient
+- **W3:** ML-based phrase detection — keyword/regex on `reference/trigger-phrases.md` is sufficient. **Multi-language IS in scope:** the reference file structure (per ADR-5) supports per-language sections, and v1 ships with German + English (Marcus uses both daily). What's deferred is **semantic / ML-based** detection (embedding similarity, intent classification) — regex is enough for v1. The `C1 audit-memory` and `C2 scan-git` Could-Have features remain English-leaning since memory entries and commit messages skew English, but the intercept hook is fully multi-language from day 1.
 - **W4:** Rewriting or removing existing memory entries — the enforcer only ADDS mechanisms; memory cleanup is `tcs-helper:memory-cleanup`'s job
 - **W5:** Per-repo trigger phrase customization in v1 — single global config in the plugin; per-repo override deferred
 
@@ -316,8 +337,8 @@ Tracking is optional in v1 (per `Won't Have W2-equivalent assumption: no telemet
 ### Deferred to SDD
 
 - [ ] **Q5 — Mechanism-matrix location:** `reference/mechanism-matrix.md` (token-cheap lazy load) vs inline in SKILL.md. **Decision criterion:** SKILL.md token budget after Workflow section is sized.
-- [ ] **Q10 — Pre-push hook integration:** Produce snippet directly for repo's `.githooks/`, vs integrate with `tcs-git-helpers` bundle (which has version-controlled hook templates + bundle versioning gates). **Decision criterion:** does the rule-enforcer-produced hook need bundle-style upgrades?
-- [ ] **Q11 — Override memory:** When user overrides recommended mechanism, remember it per-rule-class for next time, or always re-ask. **Decision criterion:** session-log persistence model in SDD.
+- [x] **Q10 — Pre-push hook integration: USE the tcs-git-helpers bundle versioning pattern** (Marcus 2026-05-21). Rule-enforcer-produced pre-push hooks WILL have bugs and need cross-repo coordinated upgrades — same reason the bundle pattern was built for tcs-git-helpers in spec-012. Hooks ship from `plugins/tcs-helper/templates/githooks/` with a sibling `tcs-helper-rule-enforcer-version` marker; drift-check skill detects mismatch and prompts re-install. **Reverses SDD ADR-2 direction — see SDD revision.**
+- [x] **Q11 — No override-persistence in v1** (Marcus 2026-05-21). Per-rule-class persistence might be too finicky (analogous to Bash allowlist UX: allow `/foo/*` once, still asks for `/bar/*` next time — same UX trap). Wait until pattern demands it. SDD ADR-3 holds.
 
 ---
 

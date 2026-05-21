@@ -109,7 +109,7 @@ echo '{"prompt":"I keep forgetting X","cwd":"'$PWD'"}' \
 
 - [ ] [Phase 1: Intercept Hook Foundation](phase-1.md)
 - [ ] [Phase 2: Triage Skill + Hand-offs](phase-2.md)
-- [ ] [Phase 3: Inline Templates + Self-Test + Docs](phase-3.md)
+- [ ] [Phase 3: Inline Templates + Bundle-Versioning + Self-Test + Docs](phase-3.md)
 
 ---
 
