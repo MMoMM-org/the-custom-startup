@@ -22,17 +22,17 @@
     {
       "name": "tcs-helper",
       "source": "./plugins/tcs-helper",
-      "description": "Helper tools \u2014 skill authoring, memory system, and project onboarding"
+      "description": "Helper tools — skill authoring, memory system, and project onboarding"
     },
     {
       "name": "tcs-patterns",
       "source": "./plugins/tcs-patterns",
-      "description": "Domain pattern skills for TCS projects \u2014 install only the patterns relevant to your stack"
+      "description": "Domain pattern skills for TCS projects — install only the patterns relevant to your stack"
     },
     {
       "name": "tcs-git-helpers",
       "source": "./plugins/tcs-git-helpers",
-      "description": "Git workflow discipline for Claude Code \u2014 destructive-op blocks, worktree-exit guard, session brief, and per-repo .githooks/ setup"
+      "description": "Git workflow discipline for Claude Code — destructive-op blocks, worktree-exit guard, session brief, and per-repo .githooks/ setup"
     }
   ]
 }

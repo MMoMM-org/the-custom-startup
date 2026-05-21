@@ -133,7 +133,11 @@ except ValueError:
 target[key_path[-1]] = new
 
 with open(manifest_path, 'w') as f:
-    json.dump(data, f, indent=2)
+    # ensure_ascii=False preserves non-ASCII characters (em-dashes, etc.)
+    # in plugin descriptions. Without it, json.dump escapes them to \uXXXX
+    # and silently rewrites unrelated lines on every bump (bug from PR #31
+    # auto-bump-versions live test on 2026-05-21).
+    json.dump(data, f, indent=2, ensure_ascii=False)
     f.write('\n')
 
 print(f'{manifest_path}: {current} -> {new}')
