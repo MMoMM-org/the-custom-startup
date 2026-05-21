@@ -31,6 +31,7 @@ discipline makes implementation predictable and eliminates mid-build clarificati
         v
 4. /implement    — execute the plan phase by phase, task by task
         |            each task: tdd-guardian → RED → GREEN → REFACTOR → /verify
+        |            on completion: Finalize closes spec README (Current Phase → Implemented)
         |
         v
 5. /validate     — validate implementation BACK against spec (drift detection)
@@ -83,10 +84,12 @@ confirmations between phases.
 
 **Name:** `xdd-meta`
 
-**Description:** Scaffold, status-check, and manage specification directories under
-`docs/XDD/` (configurable via `.claude/startup.toml`). Handles auto-incrementing IDs,
-README tracking, phase transitions, and decision logging. Used by both xdd and implement
-workflows.
+**Description:** Scaffold, status-check, finalize, and manage specification directories
+under `docs/XDD/` (configurable via `.claude/startup.toml`). Handles auto-incrementing IDs,
+README tracking, phase transitions, decision logging, and the implementation-complete
+close-out (Step 5 "Finalize" — transitions `Current Phase` to `Implemented` and appends a
+shipping note to the Decisions Log, idempotent on already-finalized specs). Used by both
+xdd and implement workflows.
 
 **When to use it:** Called internally by `xdd` and `implement`. Invoke directly when you
 need to check the status of an existing spec (`/xdd-meta 003`), scaffold a new spec
