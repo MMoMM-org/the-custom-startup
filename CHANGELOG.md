@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.3.0] - 2026-05-21
+
+### Added
+
+- **`tcs-workflow:xdd-meta` Finalize step (PR #27)** — `xdd-meta` skill gained Step 5 "Finalize" with a new `Implemented` phase enum and verb-dispatch entry point. Closes the spec README atomically when implementation completes (sets `Current Phase` to `Implemented`, appends a shipping note to the Decisions Log). Idempotent — safe to call on an already-finalized spec.
+- **`tcs-workflow:implement` Step 7 auto-closes spec (PR #27)** — `implement` now invokes `xdd-meta finalize <specId>` before the commit/PR prompt. Fixes the bug where shipped specs stayed stuck on `Ready (implement-ready)` because no workflow step transitioned the spec-level README.
+- **Auto-bump CI workflow** (`.github/workflows/auto-bump-versions.yml`, PR #29) — patch-bumps `plugins/<X>/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` on push to `main` whenever plugin code changes without a matching manifest bump. Plugin-aware, no-op when nothing under `plugins/` changed, escape hatch for manual minor/major bumps (CI sees the diff and skips). `[skip ci]` in commit message prevents recursive trigger. Bash 3.2 + python3 helper at `scripts/ci/auto-bump-versions.sh`.
+
+### Fixed
+
+- 9 of 12 specs (005–011) were stuck on `Ready` despite shipping (PR #30 retroactive close-out). The Finalize step prevents recurrence; this fixed the existing stale spec READMEs in one batch.
+
+### Internal
+
+- `plugins/tcs-workflow/.claude-plugin/plugin.json`: `4.2.0 → 4.3.0` (PR #28 catch-up for PR #27).
+- `.claude-plugin/marketplace.json` `metadata.version`: `4.2.1 → 4.3.0`.
+
+---
+
 ## [4.0.0] - 2026-03-28
 
 > For full history see `git log`.

@@ -94,7 +94,7 @@ Execute implementation plans phase-by-phase with parallel specialist agents and 
 <details>
 <summary><strong>View Details</strong></summary>
 
-Reads plan/README.md to discover phases, then executes phase-by-phase with approval gates between phases. Each phase is loaded individually from plan/phase-N.md for context efficiency. Multiple specialist agents work in parallel within each phase when tasks are independent. Phase status is tracked in frontmatter and the manifest checkbox. Supports resuming from partially-completed plans.
+Reads plan/README.md to discover phases, then executes phase-by-phase with approval gates between phases. Each phase is loaded individually from plan/phase-N.md for context efficiency. Multiple specialist agents work in parallel within each phase when tasks are independent. Phase status is tracked in frontmatter and the manifest checkbox. Supports resuming from partially-completed plans. On completion, Step 7 invokes `xdd-meta finalize` to close the spec README (Current Phase → Implemented, shipping note appended to Decisions Log) — runs regardless of the user's commit/PR choice.
 
 ```mermaid
 flowchart TD
@@ -577,7 +577,7 @@ The `start` plugin includes five autonomous skills that activate automatically b
 
 | Skill | Purpose |
 |-------|---------|
-| `xdd-meta` | Spec directory creation, README tracking, phase transitions |
+| `xdd-meta` | Spec directory creation, README tracking, phase transitions, implementation finalize (close-out) |
 | `xdd-prd` | PRD template, validation, requirements gathering |
 | `xdd-sdd` | SDD template, architecture design, ADR management |
 | `xdd-plan` | PLAN template, task sequencing, dependency mapping |
