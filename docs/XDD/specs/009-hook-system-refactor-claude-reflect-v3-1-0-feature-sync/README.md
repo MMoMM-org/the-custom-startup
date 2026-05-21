@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-03-29 |
-| **Current Phase** | Ready |
-| **Last Updated** | 2026-03-29 |
+| **Current Phase** | Implemented |
+| **Last Updated** | 2026-05-21 |
 
 ## Documents
 
@@ -29,6 +29,7 @@
 | 2026-03-29 | ADR-3: Port patterns from original, adapt | Fastest path, well-tested upstream |
 | 2026-03-29 | M1 simplified: no migration logic | Single-user context, stale hooks already cleaned manually |
 | 2026-03-29 | Spec finalized: PRD + SDD + PLAN approved | Ready for implementation |
+| 2026-05-21 | Implementation complete (retroactive close-out) | All 5 phases complete; M1 (eliminate merge_hooks.py) + M2 (hook input contract — cwd from JSON) shipped in commit 115aa14 refactor(tcs-helper); merge_hooks.py file no longer exists in repo; M3/S1/S2/C1/C2 phases also checked complete in plan/README.md. |
 
 ## Context
 

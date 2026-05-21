@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-05-08 |
-| **Current Phase** | Spec COMPLETE (PRD + SDD + PLAN, validated, all findings addressed); READY for implementation |
-| **Last Updated** | 2026-05-09 |
+| **Current Phase** | Implemented |
+| **Last Updated** | 2026-05-21 |
 
 ## Documents
 
@@ -32,6 +32,7 @@
 | 2026-05-09 | ADR-5/6/7/11 confirmed by Marcus | All 4 pending ADRs accepted recommended options: env-var+5s sentinel single-shot; 60s shared push-state cache; 1MB→.1/.2 audit rotation; TCS_GIT_HELPERS_SETUP_ACTIVE in subshell. SDD COMPLETE. |
 | 2026-05-09 | PLAN complete (6 phases, 43 tasks) | Phase 1 Foundation+Libs (10 tasks, 8 parallel); Phase 2 PreToolUse Hooks (6/3); Phase 3 Awareness+Status backend (5/2); Phase 4 .githooks Templates (6/5); Phase 5 Skills+References+Optional (9/6); Phase 6 Integration+Rollout+E2E (7/2). All tasks linked to PRD AC and SDD components via [ref:] tags. |
 | 2026-05-09 | Spec validation pass | Validator found 6 HIGH + 8 MEDIUM + 6 LOW findings. ALL 20 addressed: bash 3.2 regex bug fixed (`\s+`/`\b` → `[[:space:]]+`/`[[:>:]]` empirically verified), TCS_/CLAUDE_ env-var prefix consistency, numerical SDD refs replaced with descriptive headers, PRD §Cross-Repo Rollout section added, EC1-EC8 enumerated, S1/S2 EARS added, M3 override criterion added, "PENDING" residue removed from ADRs, parallel count corrected, M11 "equivalently" tightened. Spec READY for implementation. |
+| 2026-05-21 | Implementation complete (retroactive close-out) | tcs-git-helpers plugin shipped via PR #11 (2026-05-10 feat); follow-up fixes in PRs #13 (marketplace add), #14 (skill rename), #15 (version markers), #17 (README sync); plugin extended by spec-012 / PR #19 (hook runtime contract + bundle versioning, bumped to 2.1.0). Plugin present at plugins/tcs-git-helpers/. |
 
 ## Context
 
