@@ -1,0 +1,36 @@
+name: Auto-bump plugin versions
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 2
+
+      - name: Auto-bump plugin and marketplace versions
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: bash scripts/ci/auto-bump-versions.sh "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Commit and push if anything was bumped
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add .claude-plugin/marketplace.json 'plugins/*/.claude-plugin/plugin.json' 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "No version bumps needed."
+          else
+            git commit -m "chore(release): auto-bump plugin versions [skip ci]"
+            git push
+          fi
