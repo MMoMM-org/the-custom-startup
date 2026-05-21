@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-05-13 |
-| **Current Phase** | Ready (implement-ready) |
-| **Last Updated** | 2026-05-13 |
+| **Current Phase** | Implemented |
+| **Last Updated** | 2026-05-21 |
 
 ## Documents
 
@@ -29,6 +29,7 @@
 | 2026-05-13 | All 5 PRD open questions closed | Ready for SDD handoff. No remaining ambiguity at the requirements level; SDD chooses concrete implementation shapes within these constraints. |
 | 2026-05-13 | SDD complete, 8 ADRs confirmed | All 8 ADRs (sibling layout, version-file source-of-truth, skill-side `.githooks/tcs-git-helpers-version` read, shared drift-check helper, live-refresh in cmd_cleanup, structured stderr one-liners, CI-enforced maintainer contract, pre-bundle installs treated as MISSING) approved with one refinement: version-marker file renamed from generic `VERSION` to plugin-namespaced `tcs-git-helpers-version` to avoid collisions in user repos. Ready for PLAN. |
 | 2026-05-13 | PLAN approved | 16 tasks across 3 phases (P1: hook bundle / P2: drift check + cmd_cleanup / P3: CI gate + E2E). Every PRD acceptance criterion mapped to at least one task. Parallelization opportunities flagged. Spec is implement-ready. |
+| 2026-05-21 | Implementation complete | All 3 phases shipped via PR #19 (merge `b647228`); `tcs-git-helpers` bumped to 2.1.0; CHANGELOG, README, and maintainer contract updated in T3.4; CI gate enforcing hook-bundle version bump landed in T3.1–T3.2; E2E bundle-lifecycle test in T3.3. Follow-ups tracked separately in PR #22 (docs index of open items). |
 
 ## Context
 

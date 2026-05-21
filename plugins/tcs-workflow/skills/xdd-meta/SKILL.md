@@ -17,7 +17,7 @@ SpecStatus {
   id: string               // 3-digit zero-padded (001, 002, ...)
   name: string
   directory: string         // resolved via Path Resolution priority chain
-  phase: Initialization | PRD | SDD | PLAN | Ready
+  phase: Initialization | PRD | SDD | PLAN | Ready | Implemented
   documents: {
     name: string
     status: pending | in_progress | completed | skipped
@@ -27,7 +27,7 @@ SpecStatus {
 
 State {
   specId = ""
-  currentPhase: Initialization | PRD | SDD | PLAN | Ready
+  currentPhase: Initialization | PRD | SDD | PLAN | Ready | Implemented
   documents: []
 }
 
@@ -66,11 +66,13 @@ TCS_IDEAS_DIR="${TCS_DOCS_BASE}/ideas"
 - Create README.md from template.md when scaffolding new specs.
 - Log all significant decisions with date, decision, and rationale.
 - Confirm next steps with user before phase transitions.
+- Treat Finalize as idempotent — re-finalizing an already-Implemented spec is a no-op, not an error.
 
 **Never:**
 - Create spec directories manually — always use spec.py.
 - Transition phases without updating README.md.
 - Skip decision logging when user makes workflow choices.
+- Leave a fully implemented spec stuck on `Ready` — implement Step 7 MUST call Finalize before completion.
 
 ## Reference Materials
 
@@ -122,9 +124,28 @@ match (phase) {
 
 Append a row to the README.md Decisions Log table. Update the Last Updated field.
 
+### 5. Finalize
+
+Close out a spec after its implementation has shipped. Updates the spec README to reflect the final state and logs the closure as a decision. **Idempotent**: if `Current Phase` is already `Implemented`, this step is a no-op and reports so.
+
+Required inputs (passed by the caller, typically the `implement` skill):
+- `specId` — 3-digit spec ID
+- `shippingNotes` — free text (PR number, version bump, merged branch, key artifacts)
+
+1. Resolve `<spec-dir>` via Path Resolution and read `<spec-dir>/README.md`.
+2. If `Current Phase` is already `Implemented`:
+   - Report `Finalize: no-op (already Implemented)` and return.
+3. Edit the Status table:
+   - `Current Phase` → `Implemented`
+   - `Last Updated` → today's date (`YYYY-MM-DD`)
+4. Append to Decisions Log:
+   `| <today> | Implementation complete | <shippingNotes> |`
+5. Report the close-out (one line) with the spec ID and the new phase.
+
 ### Entry Point
 
 match ($ARGUMENTS) {
-  featureName (new)   => execute step 1 (Scaffold)
-  specId (existing)   => execute steps 2, 3, and 4 in order
+  featureName (new)              => execute step 1 (Scaffold)
+  "finalize <specId> -- <notes>" => execute step 5 (Finalize)
+  specId (existing)              => execute steps 2, 3, and 4 in order
 }
