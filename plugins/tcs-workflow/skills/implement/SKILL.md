@@ -68,6 +68,7 @@ State {
 - Start code quality review (4g) before spec compliance (4f) passes.
 - Dispatch implementer when tdd-guardian returns BLOCK (unless YOLO=true).
 - Pass session history to implementer subagents — scene-setting only.
+- Skip Finalize on completion — a spec stuck on `Ready` after shipping is the bug this skill exists to prevent. Step 7 runs Finalize regardless of the user's commit/PR choice.
 
 ## Reference Materials
 
@@ -273,7 +274,12 @@ AskUserQuestion: Continue to next phase | Review output | Pause | Address issues
 ### 7. Complete
 
 1. Run Skill(tcs-workflow:validate) for final validation (comparison mode).
-2. Read reference/output-format.md and present completion summary accordingly.
+2. **Finalize the spec.** Build shippingNotes as a one-line summary:
+   - If git integration is active: list the merge commit / PR # (if known) and any version bumps detected in the diff.
+   - Otherwise: list the headline deliverables (files added/modified, tests added).
+   Invoke `Skill(tcs-workflow:xdd-meta)` with `finalize <specId> -- <shippingNotes>`.
+   The Finalize step is idempotent — safe to call even on a previously-finalized spec.
+3. Read reference/output-format.md and present completion summary accordingly. Include the Finalize result (new phase, decision-log row) so the user sees the spec is closed.
 
 match (git integration) {
   active => AskUserQuestion: Commit + PR | Commit only | Skip
