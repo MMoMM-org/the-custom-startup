@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-03-29 |
-| **Current Phase** | Ready |
-| **Last Updated** | 2026-03-29 |
+| **Current Phase** | Implemented |
+| **Last Updated** | 2026-05-21 |
 
 
 ## Documents
@@ -36,6 +36,7 @@
 | 2026-03-29 | PLAN complete: 3 phases, 15 tasks | Phase 1: refs (parallel), Phase 2: SKILL.md, Phase 3: validation |
 | 2026-03-29 | Discovery also follows descriptive references | If CLAUDE.md already uses lazy refs (prose with paths), include those files in analysis too |
 | 2026-03-29 | Only standard AGENTS.md, no variants | FOR-AGENTS.md and similar not handled — keep scope narrow |
+| 2026-05-21 | Implementation complete (retroactive close-out) | All 3 phases complete; memory-claude-md-optimize skill shipped in tcs-helper plugin (feat merge 50218c1, SKILL.md commit c371a3c, test merge 5ee1537). Skill present at plugins/tcs-helper/skills/memory-claude-md-optimize/. |
 
 ## Context
 
