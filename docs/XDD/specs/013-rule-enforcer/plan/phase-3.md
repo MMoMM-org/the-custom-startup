@@ -32,7 +32,7 @@ phase: 3
 
 This phase delivers the **inline scaffolding for the 2 established templates**, **self-test validation** against the 3 session violation patterns, and **documentation updates** (CHANGELOG + plugin README mention). PRD Features M6 + M7.
 
-- [ ] **T3.1 CI auto-bump-style template** `[activity: template-authoring]` `[parallel: true]`
+- [x] **T3.1 CI auto-bump-style template** `[activity: template-authoring]` `[parallel: true]`
 
   1. **Prime**: Read `.github/workflows/auto-bump-versions.yml` and `scripts/ci/auto-bump-versions.sh` end-to-end — these are the gold-standard templates from PR #29.
   2. **Test (RED)**: Write a fixture-rendering assertion (bash + python): given the template + a sample rule definition (e.g., "CHANGELOG must be touched when feat: commits land"), the renderer produces valid YAML + valid bash 3.2 script that lints clean (`shellcheck`).
@@ -53,11 +53,11 @@ This phase delivers the **inline scaffolding for the 2 established templates**, 
      - Add SKILL.md Workflow Step 8 match arm: `mechanism = CI workflow → render templates + preview + AskUserQuestion {Write, Refine, Cancel} → Write tool`
   4. **Validate**: Renderer assertion passes; shellcheck on rendered .sh clean; YAML validates with `python3 -c "import yaml; yaml.safe_load(open(...))"`.
   5. **Success**:
-     - [ ] Rendered CI workflow YAML is valid and structurally mirrors PR #29 `[ref: PRD/M6 AC-1]`
-     - [ ] Rendered companion bash script is shellcheck clean `[ref: SDD/Quality Requirements — Reliability]`
-     - [ ] User sees preview + confirms before any file write `[ref: SDD/ADR-7]`
+     - [x] Rendered CI workflow YAML is valid and structurally mirrors PR #29 `[ref: PRD/M6 AC-1]`
+     - [x] Rendered companion bash script is shellcheck clean `[ref: SDD/Quality Requirements — Reliability]`
+     - [x] User sees preview + confirms before any file write `[ref: SDD/ADR-7]`
 
-- [ ] **T3.2 Pre-push template + bundle-versioning integration (per revised ADR-2)** `[activity: template-authoring]` `[parallel: false — coordinates with T3.2a]`
+- [x] **T3.2 Pre-push template + bundle-versioning integration (per revised ADR-2)** `[activity: template-authoring]` `[parallel: false — coordinates with T3.2a]`
 
   1. **Prime**: Read `plugins/tcs-git-helpers/templates/githooks/pre-push` AND `plugins/tcs-git-helpers/templates/githooks/tcs-git-helpers-version` end-to-end. Re-read spec-012 SDD ADR-1..ADR-4 sections about the bundle-version pattern. Understand the drift-check skill flow (tcs-git-helpers cmd_cleanup invokes `_drift_gate`).
   2. **Test (RED)**: Write 2 assertions:
@@ -79,10 +79,10 @@ This phase delivers the **inline scaffolding for the 2 established templates**, 
        - collision check: if `.githooks/<name>.sh` exists with DIFFERENT version marker → suggest re-install; same version → suggest append-vs-replace
   4. **Validate**: Both assertions pass. Manual test: scaffold a hook, verify version marker landed in target repo's `.githooks/`. Push a commit that triggers the rule — hook blocks; push with `--no-verify` — bypass works.
   5. **Success**:
-     - [ ] Rendered pre-push hook is bash 3.2 + shellcheck clean `[ref: PRD/M6 AC-2]`
-     - [ ] Hook blocks push when rule violated; allows when not `[ref: SDD/Acceptance Criteria — Main Flow M6]`
-     - [ ] `tcs-helper-rule-enforcer-version` marker lands alongside the hook in target repo `[ref: SDD/ADR-2 revised]` `[ref: PRD/Q10]`
-     - [ ] Filename collision handled with version-aware re-install prompt `[ref: SDD/ADR-2 revised]`
+     - [x] Rendered pre-push hook is bash 3.2 + shellcheck clean `[ref: PRD/M6 AC-2]`
+     - [x] Hook blocks push when rule violated; allows when not `[ref: SDD/Acceptance Criteria — Main Flow M6]`
+     - [x] `tcs-helper-rule-enforcer-version` marker lands alongside the hook in target repo `[ref: SDD/ADR-2 revised]` `[ref: PRD/Q10]`
+     - [x] Filename collision handled with version-aware re-install prompt `[ref: SDD/ADR-2 revised]`
 
 - [ ] **T3.2a Drift-check integration for rule-enforcer-produced hooks** `[activity: integration]` `[parallel: false — extends T3.2]`
 
@@ -124,7 +124,7 @@ This phase delivers the **inline scaffolding for the 2 established templates**, 
      - [ ] Primary journey end-to-end works `[ref: PRD/User Journey Maps — Primary]`
      - [ ] Secondary journey end-to-end works `[ref: PRD/User Journey Maps — Secondary]`
 
-- [ ] **T3.5 Docs update (CHANGELOG + plugin README + main marketplace)** `[activity: documentation]` `[parallel: true]`
+- [x] **T3.5 Docs update (CHANGELOG + plugin README + main marketplace)** `[activity: documentation]` `[parallel: true]`
 
   1. **Prime**: Read `CHANGELOG.md` (root) and `plugins/tcs-helper/README.md` for current structure.
   2. **Test (RED)**: Grep assertion: `grep -q "rule-enforcer" CHANGELOG.md` AND `grep -q "rule-enforcer" plugins/tcs-helper/README.md` must return 0 after the edit.
@@ -134,8 +134,8 @@ This phase delivers the **inline scaffolding for the 2 established templates**, 
      - Note: auto-bumper will handle the plugin.json + marketplace.json bumps on merge (no manual bump needed since the spec lives entirely under `plugins/tcs-helper/` which is non-manifest-only — bumper triggers on PR merge)
   4. **Validate**: Grep assertions pass. Manual review: CHANGELOG entry mentions all 3 session violations as the trigger that led to this spec.
   5. **Success**:
-     - [ ] CHANGELOG entry exists and references the trigger context `[ref: SDD/Risks — Implementation Boundaries]`
-     - [ ] plugin README mentions rule-enforcer `[ref: PRD/Vision — discoverability]`
+     - [x] CHANGELOG entry exists and references the trigger context `[ref: SDD/Risks — Implementation Boundaries]`
+     - [x] plugin README mentions rule-enforcer `[ref: PRD/Vision — discoverability]`
 
 - [ ] **T3.6 Phase 3 Validation** `[activity: validate]`
 

@@ -191,9 +191,34 @@ rule context formatted as `$ARGUMENTS` so the target skill receives it as its
      - `Cancel` → exit with no files written
 
 - Any mechanism starting with `git pre-push hook` →
-  Defer to Phase 3 (T3.2 will scaffold the pre-push hook template).
-  Acknowledge: "Hand-off to git pre-push hook is not yet available. Phase 3 will add it."
-  Offer Memory rule as interim: `Skill(tcs-helper:memory-add)` with strong-language hint.
+    1. Read template file:
+       `plugins/tcs-helper/templates/githooks/pre-push-rule-enforcer.sh.j2`
+    2. Determine `response_style` from `triage.q4`:
+       - `Block` → response_style = `Block`
+       - `Nudge` or `Auto-fix` → response_style = `Nudge`
+    3. Author `detection_pattern` (bash conditional using `$commits_file` / `$diff_file`) and
+       `warning_message` from the rule description and Q4 style.
+    4. Render the template via string substitution, replacing all four placeholders:
+       `{{rule_description}}`, `{{detection_pattern}}`, `{{response_style}}`, `{{warning_message}}`.
+    5. Compute target filename: `.githooks/pre-push-rule-enforcer-<slug>.sh`
+       where slug = kebab-case derived from the rule description.
+    6. **Collision check**: read `.githooks/tcs-helper-rule-enforcer-version` if it exists;
+       compare to the plugin's current marker (read from
+       `plugins/tcs-helper/templates/githooks/tcs-helper-rule-enforcer-version`).
+       - Marker missing → fresh install: proceed.
+       - Marker matches → AskUserQuestion: append a new hook vs replace existing.
+       - Marker differs → AskUserQuestion: suggest re-install
+         (offer `Skill(tcs-git-helpers:git-setup)` hand-off for full bundle refresh).
+    7. Present the rendered `.sh` as a PREVIEW — do not write any files yet.
+    8. AskUserQuestion `{Write — install hook, Refine — show changes I want to make, Cancel — abort}`:
+       - `Write` →
+         - Write rendered script to `.githooks/pre-push-rule-enforcer-<slug>.sh`
+         - Copy `plugins/tcs-helper/templates/githooks/tcs-helper-rule-enforcer-version`
+           to `.githooks/tcs-helper-rule-enforcer-version` (sibling marker)
+         - `chmod +x .githooks/pre-push-rule-enforcer-<slug>.sh`
+         - Remind user to run `git config core.hooksPath .githooks` if not already configured
+       - `Refine` → prompt user for specific changes, regenerate, return to step 7
+       - `Cancel` → exit with no files written
 
 **Fallback (target plugin not installed):**
 
