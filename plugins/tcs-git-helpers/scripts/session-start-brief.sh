@@ -3,7 +3,7 @@
 #
 # tcs-git-helpers — SessionStart brief renderer (T3.2, M4).
 #
-# Emits a one-line branch-state brief to stderr on every SessionStart event.
+# Emits a one-line branch-state brief to stdout on every SessionStart event.
 # Pure bash 3.2. NO jq. NO gh. NO python. Reads only local git + TSV cache.
 #
 # Output format (SDD §UI Visualization Brief Layout):
@@ -21,8 +21,10 @@
 #
 # SessionStart hook contract:
 #   - stdin: JSON event payload (ignored — no data needed)
-#   - stdout: empty (hook output goes to stderr)
-#   - stderr: the brief line
+#   - stdout: the brief line (Claude Code surfaces stdout in the session UI;
+#     stderr is silently dropped for SessionStart, so the brief must go to
+#     stdout or it never reaches the user)
+#   - stderr: empty
 #   - exit: always 0 (fail-open)
 #
 # shellcheck shell=bash
@@ -65,7 +67,7 @@ fi
 branch="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
 if [ -z "$branch" ]; then
   # Detached HEAD — emit minimal notice and bail.
-  printf '[tcs-git-helpers] <detached HEAD>\n' >&2
+  printf '[tcs-git-helpers] <detached HEAD>\n'
   exit 0
 fi
 
@@ -241,6 +243,6 @@ fi
 
 brief="${warn_prefix}[tcs-git-helpers] ${branch} • ${state_seg} • ${ab_seg} • ${stale_seg}${cleanup_seg}${drift_seg}${setup_seg}"
 
-printf '%s\n' "$brief" >&2
+printf '%s\n' "$brief"
 
 exit 0
