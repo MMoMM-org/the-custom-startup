@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Inline Templates + Self-Test + Docs"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 3
 ---

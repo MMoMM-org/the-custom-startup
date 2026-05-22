@@ -172,9 +172,23 @@ rule context formatted as `$ARGUMENTS` so the target skill receives it as its
   prepend the rule with `MUST`, `NEVER`, or `ALWAYS` to maximise enforcement weight.
 
 - Any mechanism starting with `CI workflow` →
-  Defer to Phase 3 (T3.1 will scaffold the CI workflow template).
-  Acknowledge: "Hand-off to CI workflow is not yet available. Phase 3 will add it."
-  Offer Memory rule as interim: `Skill(tcs-helper:memory-add)` with strong-language hint.
+  1. Read both template files:
+     `plugins/tcs-helper/skills/rule-enforcer/templates/ci-auto-bump-style.yml.j2`
+     `plugins/tcs-helper/skills/rule-enforcer/templates/ci-auto-bump-style.sh.j2`
+  2. Compute `workflow_name` and `script_name` as kebab-case slugs derived from the rule
+     (e.g., "CHANGELOG must be touched when feat: commits land" → `enforce-changelog`).
+  3. Generate the `detection_logic` bash block and `remediation_logic` bash block
+     for the specific rule — Claude authors these from the rule description and Q4 style.
+  4. Render both templates via string substitution, replacing all five placeholders:
+     `{{rule_description}}`, `{{workflow_name}}`, `{{script_name}}`,
+     `{{detection_logic}}`, `{{remediation_logic}}`.
+  5. Present the rendered YAML and rendered .sh as a PREVIEW to the user — do not
+     write any files yet.
+  6. AskUserQuestion `{Write — commit the workflow + script, Refine — show changes I want to make, Cancel — abort}`:
+     - `Write` → Write the rendered YAML to `.github/workflows/{{workflow_name}}.yml`
+       AND the rendered .sh to `scripts/ci/{{script_name}}.sh`
+     - `Refine` → prompt the user for specific changes, regenerate, and return to step 5
+     - `Cancel` → exit with no files written
 
 - Any mechanism starting with `git pre-push hook` →
   Defer to Phase 3 (T3.2 will scaffold the pre-push hook template).
