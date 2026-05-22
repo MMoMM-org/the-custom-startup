@@ -34,7 +34,7 @@ version: "1.0"
 | ID | Constraint |
 |----|-----------|
 | **CON-1** | Lives in `plugins/tcs-helper/skills/rule-enforcer/` (Meta-Tools cluster alongside skill-author, agent-author, memory-add) |
-| **CON-2** | Hook p95 latency ≤ 50ms (UserPromptSubmit runs on every prompt) |
+| **CON-2** | intercept_rule_recurrence.py p95 ≤ 50ms in isolation; full UserPromptSubmit chain (capture_learning.py + intercept_rule_recurrence.py) ≤ 100ms p95 |
 | **CON-3** | Pure Python 3 + bash 3.2 — no new runtime dependencies (Python is already available per `capture_learning.py` precedent) |
 | **CON-4** | Hook MUST exit 0 on errors — never block the user's prompt (graceful degradation, per `capture_learning.py` `except Exception: pass` pattern) |
 | **CON-5** | Trigger-phrase config data-driven (markdown reference file, not code-baked) so user can extend without plugin reinstall |
@@ -330,7 +330,8 @@ hook:
     0 always — even on internal errors (per CON-4, never block user prompt)
 
   performance budget:
-    p95 ≤ 50ms (CON-2)
+    p95 ≤ 50ms when measured in isolation (CON-2);
+    full UserPromptSubmit chain (capture_learning.py + intercept_rule_recurrence.py running sequentially) budget: p95 ≤ 100ms
 ```
 
 #### Skill Contract
@@ -484,7 +485,7 @@ NB: Q1=1× and Q2=judgment-only short-circuit BEFORE reaching ComputeMechanism
 - **Environment:** Runs in user's local Claude Code session (no remote component)
 - **Configuration:** Hook is on by default after plugin install (ADR-4 = Q8 from PRD)
 - **Dependencies:** Python 3 (already required by `capture_learning.py`); no new dependencies
-- **Performance:** Hook p95 ≤ 50ms (CON-2); skill response time bounded by user AskUserQuestion latency, not skill logic
+- **Performance:** intercept_rule_recurrence.py p95 ≤ 50ms in isolation (CON-2); full UserPromptSubmit chain p95 ≤ 100ms; skill response time bounded by user AskUserQuestion latency, not skill logic
 
 ## Cross-Cutting Concepts
 
@@ -560,7 +561,7 @@ NB: Q1=1× and Q2=judgment-only short-circuit BEFORE reaching ComputeMechanism
 
 | Dimension | Target | Measurement |
 |-----------|--------|-------------|
-| Performance | Hook p95 latency ≤ 50ms | `time` 100 invocations; histogram p95 |
+| Performance | intercept_rule_recurrence.py p95 ≤ 50ms in isolation; chain p95 ≤ 100ms | `time` 100 invocations in isolation + with capture_learning.py; histogram p95 |
 | Performance | Skill triage end-to-end ≤ 30s (user-answer-bound) | session-time observation |
 | Usability | False-positive trigger rate ≤ 10% of fired hooks | Manual audit over 30 days |
 | Reliability | Hook never blocks user prompt | exit code = 0 on all error paths (CON-4); unit test asserts this |
@@ -575,7 +576,7 @@ EARS-format mapping to PRD acceptance criteria:
 **Main Flow (PRD M1 — Intercept hook):**
 - [ ] WHEN a user prompt contains any regex in `reference/trigger-phrases.md`, THE SYSTEM SHALL inject a single-line suggestion via stdout
 - [ ] WHEN a user prompt contains no trigger phrase, THE SYSTEM SHALL exit 0 with empty stdout
-- [ ] THE SYSTEM SHALL keep hook p95 latency ≤ 50ms (measured over 100 invocations)
+- [ ] THE SYSTEM SHALL keep intercept_rule_recurrence.py p95 latency ≤ 50ms when measured in isolation (over 100 invocations); full UserPromptSubmit chain ≤ 100ms p95
 
 **Main Flow (PRD M2 — Slash command):**
 - [ ] WHEN user runs `/enforce-rule <description>`, THE SYSTEM SHALL announce active state and begin triage with description as context
