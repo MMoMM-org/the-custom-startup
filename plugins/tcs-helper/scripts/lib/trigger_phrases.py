@@ -27,7 +27,7 @@ def load(path: str) -> list:
     """
     try:
         text = Path(path).read_text(encoding='utf-8')
-    except (OSError, IOError):
+    except (OSError, UnicodeDecodeError):
         return []
 
     return _parse_patterns(text)
@@ -70,11 +70,14 @@ def _parse_patterns(text: str) -> list:
             continue
 
         if stripped.startswith('```'):
-            if after_heading:
-                in_fence = not in_fence
+            if after_heading and not in_fence:
+                in_fence = True
+                after_heading = False
+            elif in_fence:
+                in_fence = False
             continue
 
-        if in_fence and after_heading and stripped:
+        if in_fence and stripped:
             try:
                 patterns.append(re.compile(stripped, re.IGNORECASE))
             except re.error:

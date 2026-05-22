@@ -111,6 +111,48 @@ class TestLoad(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_load_ignores_fences_outside_headings(self):
+        """Code fences in prose (not under a ## heading) are not collected."""
+        content = (
+            "## English\n"
+            "```\n"
+            "pattern one\n"
+            "```\n"
+            "\n"
+            "Some prose paragraph:\n"
+            "```\n"
+            "not a pattern\n"
+            "```\n"
+        )
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False,
+                                        encoding='utf-8') as f:
+            f.write(content)
+            path = f.name
+        try:
+            patterns = trigger_phrases.load(path)
+            texts = [p.pattern for p in patterns]
+            self.assertTrue(
+                any('pattern one' in t for t in texts),
+                "Expected 'pattern one' to be loaded from the ## section fence",
+            )
+            self.assertFalse(
+                any('not a pattern' in t for t in texts),
+                "Expected prose-fence content 'not a pattern' to be ignored",
+            )
+        finally:
+            os.unlink(path)
+
+    def test_load_binary_file_returns_empty_list(self):
+        """Binary (non-UTF-8) file returns [] without raising (CON-4)."""
+        with tempfile.NamedTemporaryFile(suffix='.md', delete=False) as f:
+            f.write(b'\xff\xfe binary content \x00\x01\x02')
+            path = f.name
+        try:
+            result = trigger_phrases.load(path)
+            self.assertEqual(result, [])
+        finally:
+            os.unlink(path)
+
 
 class TestMatch(unittest.TestCase):
 
