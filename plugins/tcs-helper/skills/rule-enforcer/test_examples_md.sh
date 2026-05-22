@@ -67,6 +67,29 @@ else
   check "Example 3 mechanism mentions PostToolUse" 1
 fi
 
+# A7: Rationale present in all examples (>= 17 occurrences)
+rationale_count=$(grep -c "Rationale" "$EXAMPLES_FILE" 2>/dev/null || echo 0)
+if [ "$rationale_count" -ge 17 ]; then
+  check "rationale present in all examples (found $rationale_count)" 0
+else
+  check "rationale present in all examples (found $rationale_count)" 1
+fi
+
+# A8: Hand-off present per example (>= 5 occurrences)
+handoff_count=$(grep -c "Hand-off" "$EXAMPLES_FILE" 2>/dev/null || echo 0)
+if [ "$handoff_count" -ge 5 ]; then
+  check "hand-off documented per example (found $handoff_count)" 0
+else
+  check "hand-off documented per example (found $handoff_count)" 1
+fi
+
+# A9: Example 5 demonstrates Q1 short-circuit with 'skipped' markers
+if grep -A 10 "^### Example 5" "$EXAMPLES_FILE" 2>/dev/null | grep -q "skipped"; then
+  check "example 5 demonstrates Q1 short-circuit" 0
+else
+  check "example 5 demonstrates Q1 short-circuit" 1
+fi
+
 echo ""
 echo "Results: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
