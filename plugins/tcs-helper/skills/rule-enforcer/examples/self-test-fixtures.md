@@ -59,7 +59,7 @@ No files are written until the user selects "Write".
 
 ## Fixture 2: pre-push warn (Local git push, Nudge)
 
-**Rule**: `"I keep forgetting to update CHANGELOG/README after shipping a feature"`
+**Rule**: `"I keep forgetting to update CHANGELOG/README after shipping"`
 
 ### Triage trace
 
@@ -106,7 +106,7 @@ into `.githooks/`.
 
 ## Fixture 3: PostToolUse hook (After Claude calls a tool, Nudge)
 
-**Rule**: `"I keep forgetting to run skill-author after editing skills"`
+**Rule**: `"I keep forgetting to run skill-author after editing skills/"`
 
 ### Triage trace
 
