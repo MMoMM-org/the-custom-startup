@@ -98,7 +98,9 @@ Options — each label includes a concrete example (verify labels match `referen
 - `PR/merge to main (e.g. CI auto-bump versions)`
 - `In repeated coding patterns (e.g. TDD discipline)`
 
-Set `triage.q3` to the chosen option and proceed to Step 5.
+Set `triage.q3` to the **bare label** of the chosen option — strip the parenthetical suffix starting at ` (e.g.`. For example, `Before Claude calls a tool (e.g. block --break-system-packages)` becomes `Before Claude calls a tool`. This ensures Step 6's matrix lookup finds the correct section heading in `reference/mechanism-matrix.md`.
+
+Then proceed to Step 5.
 
 ### 5. Q4 — Enforcement style
 
@@ -116,6 +118,8 @@ Set `triage.q4` and proceed to Step 6.
 Read `reference/mechanism-matrix.md` now (lazy load per ADR-1 — do not read earlier).
 
 Find the section `## Q3 = [triage.q3]` and look up the row where `Q4 = [triage.q4]`. Extract the mechanism name from the `Mechanism` column. Set `triage.mechanism`.
+
+**Lookup key format**: `## Q3 = {triage.q3}` where `triage.q3` is the bare label from Step 4. For example, if the user chose `Before Claude calls a tool (e.g. block --break-system-packages)` in Step 4, the lookup key is `## Q3 = Before Claude calls a tool` (the normalized bare label from that option).
 
 Do not hard-code any (Q3, Q4) → mechanism mapping in this workflow — the mechanism-matrix file is the single source of truth.
 
