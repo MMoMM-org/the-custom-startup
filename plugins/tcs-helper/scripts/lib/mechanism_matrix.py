@@ -52,9 +52,13 @@ def _parse_matrix(text: str) -> dict:
     for line in text.splitlines():
         stripped = line.strip()
 
-        m = q3_pattern.match(stripped)
-        if m:
-            current_q3 = m.group(1).strip()
+        if stripped.startswith('## '):
+            q3_match = q3_pattern.match(stripped)
+            if q3_match:
+                current_q3 = q3_match.group(1).strip()
+            else:
+                # Non-Q3 heading (e.g. ## Fallback) — exit any active section
+                current_q3 = None
             continue
 
         if current_q3 is None:

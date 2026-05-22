@@ -177,6 +177,12 @@ rule context formatted as `$ARGUMENTS` so the target skill receives it as its
      `plugins/tcs-helper/skills/rule-enforcer/templates/ci-auto-bump-style.sh.j2`
   2. Compute `workflow_name` and `script_name` as kebab-case slugs derived from the rule
      (e.g., "CHANGELOG must be touched when feat: commits land" → `enforce-changelog`).
+
+  **Slug validation gate**: Before any Write, assert both computed slugs match the regex
+  `^[a-z0-9][a-z0-9-]{0,62}$`. If either does not (contains `/`, `.`, `..`, special chars, or
+  exceeds 63 chars): abort the hand-off via AskUserQuestion `{Edit slug manually / Cancel}`.
+  This prevents path-traversal via crafted rule descriptions.
+
   3. Generate the `detection_logic` bash block and `remediation_logic` bash block
      for the specific rule — Claude authors these from the rule description and Q4 style.
   4. Render both templates via string substitution, replacing all five placeholders:
@@ -202,6 +208,12 @@ rule context formatted as `$ARGUMENTS` so the target skill receives it as its
        `{{rule_description}}`, `{{detection_pattern}}`, `{{response_style}}`, `{{warning_message}}`.
     5. Compute target filename: `.githooks/pre-push-rule-enforcer-<slug>.sh`
        where slug = kebab-case derived from the rule description.
+
+  **Slug validation gate**: Before any Write, assert the computed slug matches the regex
+  `^[a-z0-9][a-z0-9-]{0,62}$`. If it does not (contains `/`, `.`, `..`, special chars, or
+  exceeds 63 chars): abort the hand-off via AskUserQuestion `{Edit slug manually / Cancel}`.
+  This prevents path-traversal via crafted rule descriptions.
+
     6. **Collision check**: read `.githooks/tcs-helper-rule-enforcer-version` if it exists;
        compare to the plugin's current marker (read from
        `plugins/tcs-helper/templates/githooks/tcs-helper-rule-enforcer-version`).

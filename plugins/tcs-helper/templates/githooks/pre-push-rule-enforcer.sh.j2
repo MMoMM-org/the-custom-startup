@@ -79,8 +79,9 @@ fi
 
 HOOK_STYLE="{{response_style}}"
 
+_WARN_MSG="{{warning_message}}"
 printf '\n' >&2
-printf 'rule-enforcer [%s]: %s\n' "$HOOK_STYLE" "{{warning_message}}" >&2
+printf 'rule-enforcer [%s]: %s\n' "$HOOK_STYLE" "$_WARN_MSG" >&2
 printf '\n' >&2
 
 if [ "$HOOK_STYLE" = "Block" ]; then

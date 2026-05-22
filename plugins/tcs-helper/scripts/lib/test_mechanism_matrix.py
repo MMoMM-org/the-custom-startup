@@ -243,6 +243,72 @@ class TestParserLogic(unittest.TestCase):
         result = mechanism_matrix._parse_matrix("")
         self.assertEqual(result, {})
 
+    def test_fallback_heading_resets_current_q3(self):
+        """R4: rows under a ## Fallback: ... heading must NOT bleed into the last Q3 section.
+
+        Reproduces the reviewer scenario: a valid Q3 section is followed by a
+        ## Fallback: Genuine judgment call heading with its own pipe-table.
+        The Fallback rows must NOT overwrite the last Q3's entries in the dict.
+        """
+        fixture = """\
+# Mechanism Matrix
+
+## Q3 = In repeated coding patterns
+| Q4 | Mechanism |
+|----|-----------|
+| Block | Skill with discipline language (Block) |
+| Auto-fix | Skill with discipline language (Auto-fix) |
+| Nudge | Skill with discipline language (Nudge) |
+
+## Fallback: Genuine judgment call
+| Q4 | Mechanism |
+|----|-----------|
+| Block | FALLBACK_BLOCK_SHOULD_NOT_APPEAR |
+| Auto-fix | FALLBACK_AUTOFIX_SHOULD_NOT_APPEAR |
+| Nudge | FALLBACK_NUDGE_SHOULD_NOT_APPEAR |
+"""
+        result = mechanism_matrix._parse_matrix(fixture)
+
+        # Only the 3 Q3 rows should be in the dict — Fallback rows must be excluded
+        self.assertEqual(
+            len(result),
+            3,
+            msg=(
+                f"Expected 3 entries (Q3 section only), got {len(result)}. "
+                f"Fallback section leaked: {result}"
+            ),
+        )
+
+        # Original Q3 values must be intact (not overwritten by Fallback rows)
+        self.assertEqual(
+            result.get(("In repeated coding patterns", "Block")),
+            "Skill with discipline language (Block)",
+            msg="Block entry was overwritten by Fallback section row",
+        )
+        self.assertEqual(
+            result.get(("In repeated coding patterns", "Auto-fix")),
+            "Skill with discipline language (Auto-fix)",
+            msg="Auto-fix entry was overwritten by Fallback section row",
+        )
+        self.assertEqual(
+            result.get(("In repeated coding patterns", "Nudge")),
+            "Skill with discipline language (Nudge)",
+            msg="Nudge entry was overwritten by Fallback section row",
+        )
+
+        # Fallback sentinel values must not appear anywhere in the dict
+        all_values = list(result.values())
+        for sentinel in (
+            "FALLBACK_BLOCK_SHOULD_NOT_APPEAR",
+            "FALLBACK_AUTOFIX_SHOULD_NOT_APPEAR",
+            "FALLBACK_NUDGE_SHOULD_NOT_APPEAR",
+        ):
+            self.assertNotIn(
+                sentinel,
+                all_values,
+                msg=f"Fallback sentinel '{sentinel}' leaked into matrix dict",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

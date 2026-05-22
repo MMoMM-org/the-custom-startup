@@ -278,6 +278,52 @@ def test_new_branch_push_noop_when_no_violation(template_text):
         shutil.rmtree(repo_dir, ignore_errors=True)
 
 
+def test_warning_message_shell_injection_safe(template_text):
+    """R2: warning_message containing command substitution must be stored in a variable.
+
+    Asserts:
+      - The rendered file contains the _WARN_MSG= assignment pattern.
+      - The literal $(echo PWNED) appears as data inside a quoted string, not as a
+        bare statement that would be evaluated by the shell.
+    """
+    injection_payload = "$(echo PWNED)"
+    context = {
+        "{{rule_description}}": "test rule",
+        "{{detection_pattern}}": "false",
+        "{{response_style}}": "Block",
+        "{{warning_message}}": injection_payload,
+    }
+    rendered = render(template_text, context)
+
+    # Must assign to a variable first (R2 fix)
+    if '_WARN_MSG=' not in rendered:
+        print("FAIL shell_injection_safe: rendered script missing '_WARN_MSG=' assignment")
+        return False
+
+    # The payload must appear inside a quoted string assignment, not as a bare statement
+    expected_assignment = f'_WARN_MSG="{injection_payload}"'
+    if expected_assignment not in rendered:
+        print(
+            f"FAIL shell_injection_safe: expected quoted assignment "
+            f"'{expected_assignment}' not found in rendered script"
+        )
+        return False
+
+    # The printf must reference $_ WARN_MSG variable, not the raw payload
+    if f'printf \'rule-enforcer [%s]: %s\\n\' "$HOOK_STYLE" "{injection_payload}"' in rendered:
+        print(
+            "FAIL shell_injection_safe: raw payload appears unquoted in printf — "
+            "variable indirection not applied"
+        )
+        return False
+
+    print(
+        "PASS shell_injection_safe: warning_message with command-sub stored in "
+        "_WARN_MSG variable, not passed directly to printf"
+    )
+    return True
+
+
 def run_tests():
     """Run all tests. Return exit 0 on GREEN, exit 1 on RED."""
     print("=" * 60)
@@ -317,6 +363,9 @@ def run_tests():
     # New-branch push: REMOTE_SHA=zeros must not bypass detection
     results.append(test_new_branch_push_fires_block(template_text))
     results.append(test_new_branch_push_noop_when_no_violation(template_text))
+
+    # R2: shell injection via warning_message must be neutralised by variable indirection
+    results.append(test_warning_message_shell_injection_safe(template_text))
 
     passed = sum(1 for r in results if r)
     total = len(results)
