@@ -12,7 +12,6 @@ Run:
 import pathlib
 import sys
 import tempfile
-import types
 import unittest
 
 # Resolve the lib directory so we can import without install
@@ -67,7 +66,7 @@ class TestLoadMissingFile(unittest.TestCase):
             f.write("# No sections here\nJust random text\n")
             path = f.name
         result = mechanism_matrix.load(path)
-        self.assertIsInstance(result, dict)
+        self.assertEqual(result, {})
 
     def test_unicode_decode_error_handled(self):
         """Binary garbage file must return {} without raising (lesson from T1.1)."""
@@ -101,6 +100,21 @@ class TestLoadRealMatrix(unittest.TestCase):
             missing,
             [],
             msg=f"Missing {len(missing)} cells:\n" + "\n".join(f"  {q3!r} × {q4!r}" for q3, q4 in missing),
+        )
+
+    def test_bound_check_no_fallback_leakage(self):
+        """Guard against Fallback section leakage.
+
+        The markdown contains a ## Fallback: Genuine judgment call section with no
+        Q3 heading. If a future editor adds a table under it, the parser would
+        silently absorb rows into the last current_q3. This test ensures the dict
+        has exactly 21 entries (7 Q3 options × 3 Q4 options).
+        """
+        self.assertEqual(
+            len(self.matrix),
+            TOTAL_CELLS,
+            msg=f"Expected {TOTAL_CELLS} cells, got {len(self.matrix)}. "
+            "Fallback section may have leaked into the matrix.",
         )
 
     def test_no_empty_mechanism_values(self):
