@@ -3,7 +3,9 @@
     "UserPromptSubmit": [{
       "matcher": "",
       "hooks": [{"type": "command",
-        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/capture_learning.py\""}]
+        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/capture_learning.py\""},
+        {"type": "command",
+        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/intercept_rule_recurrence.py\""}]
     }],
     "SessionStart": [{
       "matcher": "",
