@@ -169,9 +169,9 @@ assert_check "Step 8 mentions plugin-dev:hook-development" \
 assert_check "Step 8 mentions tcs-helper:memory-add" \
   bash -c 'awk "/^### 8\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "tcs-helper:memory-add"' _ "$SKILL_FILE"
 
-# A35: Step 8 mentions deferral to Phase 3 (CI / pre-push)
-assert_check "Step 8 mentions deferral to Phase 3" \
-  bash -c 'awk "/^### 8\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "Phase 3"' _ "$SKILL_FILE"
+# A35: Step 8 wires up both CI and pre-push routing (not deferred)
+assert_check "Step 8 wires up CI and pre-push routing (references .github/workflows and .githooks)" \
+  bash -c 'step_content=$(awk "/^### 8\./{found=1; next} found && /^### /{exit} found" "$1"); echo "$step_content" | grep -q "\.github/workflows" && echo "$step_content" | grep -q "\.githooks"' _ "$SKILL_FILE"
 
 # A36: Step 8 has a fallback path (Install plugin or fallback or missing)
 assert_check "Step 8 has a fallback path (Install plugin / fallback / missing)" \
