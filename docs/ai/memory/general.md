@@ -1,7 +1,10 @@
 # General — the-custom-startup
-<!-- Conventions, naming rules, code style, git workflow. Updated: 2026-05-09 -->
+<!-- Conventions, naming rules, code style, git workflow. Updated: 2026-05-22 -->
 <!-- What goes here: how files are named, folder structure, style choices, branch conventions -->
 <!-- What does NOT go here: tool-specific quirks (→ tools.md), domain rules (→ domain.md) -->
+
+<!-- 2026-05-22 -->
+- **SKILL.md multi-task placeholder pattern** — when authoring a SKILL.md across multiple tasks (e.g. T2.1 scaffolds structure, T2.3 fills Workflow Steps 1-7, T2.4 fills Step 8), use `<!-- T2.X will populate -->` HTML-comment placeholders inside the section bodies during scaffold. Each later task can grep-and-replace its own placeholder without touching siblings. Test assertion `grep -c "<!-- T2.X will populate -->"` cleanly tracks RED→GREEN over the multi-task evolution (zero remaining = GREEN). Pattern proven in spec-013 rule-enforcer SKILL.md across T2.1 → T2.3 → T2.4.
 
 <!-- 2026-05-09 -->
 - **Parallel-team git staging race** — when multiple teammates work on the same branch simultaneously (Agent Team mode), they share the git index. Even with explicit `git add path1 path2`, an in-flight `git add` from a sibling teammate can be picked up by the next `git commit`. Symptom: spec-011 T1.4 (config_parser.sh) ended up bundled into T1.7 (cache.sh)'s commit `58f24c6` because impl-t14 staged between impl-t17's add and commit. Mitigations: (a) accept commit-bundling as inevitable and review per-file inside the bundled commit, (b) serialize commits via team-lead, or (c) `git worktree add` per teammate. Per-file review with explicit "ignore other teammate's files" scoping works reliably.
