@@ -25,6 +25,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history. Hooks load natively from `
 | `/agent-author` | Create, audit, or fix Claude Code subagents |
 | `/skill-evaluate` | Evaluate skill quality before importing |
 | `/skill-import` | Fetch a single skill from any GitHub repo |
+| `/rule-enforcer` | Triage a recurrence rule via 4 questions and route to the right enforcement mechanism (CI / git hook / Claude hook / Memory). |
 
 ### Git Workflow
 

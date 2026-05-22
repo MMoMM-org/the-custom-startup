@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — spec-013
+
+### Added
+
+- **rule-enforcer skill** (`plugins/tcs-helper/skills/rule-enforcer/`) — user-invocable triage skill for converting recurrence rules into concrete enforcement mechanisms via a 4-question workflow (Q1: scope, Q2: durable-state?, Q3: automation type, Q4: decision gate). Routes to CI workflows, git hooks, Claude PostToolUse hooks, or memory capture.
+- **intercept-rule-recurrence hook** (`plugins/tcs-helper/scripts/intercept_rule_recurrence.py`) — UserPromptSubmit hook that watches prompts for recurrence trigger phrases (English: "always", "every", "remember to"; German: "immer", "jedes Mal", "erinnern") and suggests `/rule-enforcer` when detected.
+- **Mechanism matrix** (`plugins/tcs-helper/skills/rule-enforcer/reference/mechanism-matrix.md`) — 7 × 3 decision matrix (scope × automation-type × mechanism) documenting 21 (Q3, Q4) → mechanism routes (CI, pre-push, PostToolUse, memory).
+- **3 session-violation fixtures** (`tests/fixtures/`) documenting motivating rule violations from 2026-04 → 05-21: (a) forgot to bump marketplace.json after plugin changes (PR #29), (b) forgot to update CHANGELOG/README after shipping a feature, (c) forgot to run skill-author after editing skills.
+
+### Context
+
+This spec was motivated by a pattern of session violations. Recurring mental load of remembering to (1) bump marketplace.json on plugin edits, (2) update CHANGELOG + README after shipping, (3) run skill-author post-edit, led to the rule-enforcer: a single triage entry point that routes recurrence rules to durable enforcement mechanisms rather than relying on ad-hoc memory.
+
+---
+
 ## [4.3.0] - 2026-05-21
 
 ### Added
