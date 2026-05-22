@@ -66,7 +66,7 @@ This phase delivers the **UserPromptSubmit intercept hook** that watches every u
   3. **Implement (GREEN)**:
      - Create `plugins/tcs-helper/scripts/intercept_rule_recurrence.py` (~50 lines): parse stdin JSON, load trigger phrases via lib, regex-match prompt, write single-line suggestion to stdout if matched, exit 0
      - Suggestion format (per SDD): `[rule-enforcer] Recurrence signal detected ('<matched-phrase-snippet>'). Consider /enforce-rule "<rule>" to triage.`
-  4. **Validate**: All test assertions pass. Manual test: `echo '{"prompt":"vergessen wieder die Doku"}' | python3 plugins/tcs-helper/scripts/intercept_rule_recurrence.py` produces expected output. Module compiles clean.
+  4. **Validate**: All test assertions pass. Manual test: `echo '{"prompt":"ich vergesse immer die Doku"}' | python3 plugins/tcs-helper/scripts/intercept_rule_recurrence.py` produces expected `[rule-enforcer]` suggestion line (matches Deutsch pattern `vergesse(n) immer`). Module compiles clean.
   5. **Success**:
      - [x] Hook injects suggestion only when trigger phrase matches `[ref: PRD/M1 AC-1, AC-2]`
      - [x] Hook exits 0 on all error paths `[ref: PRD/M1 AC-4]` `[ref: SDD/CON-4]`
