@@ -84,15 +84,17 @@ This phase delivers the **inline scaffolding for the 2 established templates**, 
      - [x] `tcs-helper-rule-enforcer-version` marker lands alongside the hook in target repo `[ref: SDD/ADR-2 revised]` `[ref: PRD/Q10]`
      - [x] Filename collision handled with version-aware re-install prompt `[ref: SDD/ADR-2 revised]`
 
-- [ ] **T3.2a Drift-check integration for rule-enforcer-produced hooks** `[activity: integration]` `[parallel: false — extends T3.2]`
+- [x] **T3.2a Drift-check integration for rule-enforcer-produced hooks** `[activity: integration]` `[parallel: false — extends T3.2]`
 
   1. **Prime**: Read `plugins/tcs-git-helpers/scripts/lib/drift_check.{sh,py}` to understand the existing drift mechanism. Decide: (option A) extend the existing drift_check to also cover `tcs-helper-rule-enforcer-version`, OR (option B) add a parallel `rule_enforcer_drift_check.py` in `plugins/tcs-helper/scripts/`.
   2. **Test (RED)**: Write a unit test asserting: given a target repo with `.githooks/tcs-helper-rule-enforcer-version` = X and plugin template version = Y (Y > X), drift_check returns "outdated" with a re-install prompt suggestion.
   3. **Implement (GREEN)**: Pick option A or B based on T3.2a Prime outcome. Document the choice in PLAN as Deviation Note. Implement the chosen drift extension.
   4. **Validate**: Unit test passes. Manual scenario: install hook from plugin version 1.0.0, bump plugin to 1.0.1, run drift-check, verify it surfaces the mismatch.
   5. **Success**:
-     - [ ] Drift-check detects rule-enforcer hook version mismatch `[ref: SDD/ADR-2 revised]` `[ref: PRD/Q10 — bug-fix propagation]`
-     - [ ] Re-install prompt offered when mismatch detected `[ref: SDD/Acceptance Criteria — Error Handling]`
+     - [x] Drift-check detects rule-enforcer hook version mismatch `[ref: SDD/ADR-2 revised]` `[ref: PRD/Q10 — bug-fix propagation]`
+     - [x] Re-install prompt offered when mismatch detected `[ref: SDD/Acceptance Criteria — Error Handling]`
+
+  **Deviation Note (T3.2a)**: Chose Option A (extend existing `drift_check.py` with optional `version_filename` param) over Option B (parallel module in tcs-helper). Rationale: 1-parameter addition preserves backward compatibility and avoids code duplication; the drift-check function is generic enough to handle any single-line bundle marker file.
 
 - [ ] **T3.3 Self-test fixtures (3 session violations)** `[activity: testing]` `[parallel: false]`
 

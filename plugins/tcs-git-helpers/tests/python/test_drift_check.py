@@ -14,6 +14,12 @@ Plus a 10-row parity table asserting the python helper produces the
 same classification as the bash helper (scripts/lib/drift_check.sh)
 for identical inputs. If the bash helper is not present yet the parity
 tests are skipped via pytest.skip (T2.1 may land after T2.2).
+
+T3.2a extension — optional version_filename parameter:
+  4. BACKWARD_COMPAT — omitting version_filename still works on tcs-git-helpers-version
+  5. CUSTOM_MISSING   — custom filename absent → MISSING
+  6. CUSTOM_OK        — custom filename present with matching content → OK
+  7. CUSTOM_DRIFT     — custom filename present with different content → DRIFT
 """
 from __future__ import annotations
 
@@ -62,6 +68,12 @@ def _write_version_file(repo_path: Path, content: str) -> None:
     githooks = repo_path / ".githooks"
     githooks.mkdir(parents=True, exist_ok=True)
     (githooks / "tcs-git-helpers-version").write_text(content)
+
+
+def _write_custom_version_file(repo_path: Path, filename: str, content: str) -> None:
+    githooks = repo_path / ".githooks"
+    githooks.mkdir(parents=True, exist_ok=True)
+    (githooks / filename).write_text(content)
 
 
 def _call_bash_helper(repo_path: Path, expected_version: str) -> str:
@@ -255,3 +267,59 @@ def test_parity_python_matches_bash(
     assert bash_wire == want_status, (
         f"Bash returned {bash_wire!r}; expected {want_status!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# T3.2a — optional version_filename parameter
+# ---------------------------------------------------------------------------
+
+_RULE_ENFORCER_FILENAME = "tcs-helper-rule-enforcer-version"
+
+
+class TestDefaultFilenameBackwardCompat:
+    """Omitting version_filename must behave identically to the 2-arg form."""
+
+    def test_check_hook_bundle_default_filename_backward_compat(
+        self, dc, tmp_path: Path
+    ) -> None:
+        """2-arg call succeeds on tcs-git-helpers-version (default filename)."""
+        _write_version_file(tmp_path, "h7\n")
+        result = dc.check_hook_bundle(tmp_path, "h7")
+        assert result.status == dc.DriftStatus.OK
+        assert result.installed_version == "h7"
+
+
+class TestCustomFilename:
+    """version_filename parameter routes drift-check to an alternate marker file."""
+
+    def test_check_hook_bundle_custom_filename_missing(
+        self, dc, tmp_path: Path
+    ) -> None:
+        """Custom filename absent → MISSING (file never installed)."""
+        result = dc.check_hook_bundle(
+            tmp_path, "1.0.0", version_filename=_RULE_ENFORCER_FILENAME
+        )
+        assert result.status == dc.DriftStatus.MISSING
+        assert result.installed_version is None
+
+    def test_check_hook_bundle_custom_filename_ok(
+        self, dc, tmp_path: Path
+    ) -> None:
+        """Custom filename present with matching content → OK."""
+        _write_custom_version_file(tmp_path, _RULE_ENFORCER_FILENAME, "1.0.0\n")
+        result = dc.check_hook_bundle(
+            tmp_path, "1.0.0", version_filename=_RULE_ENFORCER_FILENAME
+        )
+        assert result.status == dc.DriftStatus.OK
+        assert result.installed_version == "1.0.0"
+
+    def test_check_hook_bundle_custom_filename_drift(
+        self, dc, tmp_path: Path
+    ) -> None:
+        """Custom filename present with different content → DRIFT."""
+        _write_custom_version_file(tmp_path, _RULE_ENFORCER_FILENAME, "1.0.0\n")
+        result = dc.check_hook_bundle(
+            tmp_path, "1.0.1", version_filename=_RULE_ENFORCER_FILENAME
+        )
+        assert result.status == dc.DriftStatus.DRIFT
+        assert result.installed_version == "1.0.0"
