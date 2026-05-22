@@ -38,6 +38,13 @@ if [ -z "$LOCAL_SHA" ] || [ -z "$REMOTE_SHA" ]; then
   exit 0
 fi
 
+# Handle new-branch push: REMOTE_SHA is all-zeros sentinel (no remote ref yet).
+# Substitute git's well-known empty-tree SHA so rev-list and diff operate against
+# an empty base, catching all commits/files on the new branch.
+if [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
+  REMOTE_SHA="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+fi
+
 # Collect commits and changed paths for the pushed range
 commits_file="$(mktemp "${TMPDIR:-/tmp}/rule-enforcer-commits.XXXXXX")"
 diff_file="$(mktemp "${TMPDIR:-/tmp}/rule-enforcer-diff.XXXXXX")"

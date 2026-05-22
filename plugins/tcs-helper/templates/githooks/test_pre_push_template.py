@@ -181,6 +181,103 @@ def test_shellcheck(rendered, label):
         os.unlink(tmp_path)
 
 
+def _make_git_repo_with_md_commit():
+    """Create a temp git repo with one commit touching a .md file. Return (repo_dir, sha)."""
+    repo_dir = tempfile.mkdtemp()
+    env = dict(os.environ, GIT_AUTHOR_NAME="T", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="T", GIT_COMMITTER_EMAIL="t@t")
+    subprocess.run(["git", "init", "-b", "main", repo_dir], check=True, capture_output=True, env=env)
+    md_path = os.path.join(repo_dir, "NOTES.md")
+    with open(md_path, "w") as f:
+        f.write("hello\n")
+    subprocess.run(["git", "-C", repo_dir, "add", "NOTES.md"], check=True, capture_output=True, env=env)
+    subprocess.run(["git", "-C", repo_dir, "commit", "-m", "add notes"], check=True, capture_output=True, env=env)
+    result = subprocess.run(["git", "-C", repo_dir, "rev-parse", "HEAD"], check=True, capture_output=True, text=True, env=env)
+    sha = result.stdout.strip()
+    return repo_dir, sha
+
+
+def test_new_branch_push_fires_block(template_text):
+    """New-branch push (REMOTE_SHA=zeros) must NOT bypass detection — Block exits 1."""
+    context = {
+        "{{rule_description}}": "no .md files",
+        "{{detection_pattern}}": 'grep -q \\.md$ "$diff_file"',
+        "{{response_style}}": "Block",
+        "{{warning_message}}": "md file detected",
+    }
+    rendered = render(template_text, context)
+
+    with tempfile.NamedTemporaryFile(suffix=".sh", mode="w", delete=False) as f:
+        f.write(rendered)
+        hook_path = f.name
+    os.chmod(hook_path, 0o755)
+
+    repo_dir, local_sha = _make_git_repo_with_md_commit()
+    zeros = "0000000000000000000000000000000000000000"
+    stdin_line = f"refs/heads/my-branch {local_sha} refs/heads/my-branch {zeros}\n"
+
+    try:
+        result = subprocess.run(
+            [hook_path, "origin", "git@example.com:repo.git"],
+            input=stdin_line,
+            capture_output=True,
+            text=True,
+            cwd=repo_dir,
+        )
+        if result.returncode == 1:
+            print("PASS new_branch_push_fires_block: Block fired on new-branch push (exit 1)")
+            return True
+        print(
+            f"FAIL new_branch_push_fires_block: expected exit 1, got {result.returncode}\n"
+            f"  stdout: {result.stdout!r}\n  stderr: {result.stderr!r}"
+        )
+        return False
+    finally:
+        os.unlink(hook_path)
+        import shutil
+        shutil.rmtree(repo_dir, ignore_errors=True)
+
+
+def test_new_branch_push_noop_when_no_violation(template_text):
+    """New-branch push where detection pattern does NOT match must exit 0 (no false positive)."""
+    context = {
+        "{{rule_description}}": "no .rs files",
+        "{{detection_pattern}}": 'grep -q \\.rs$ "$diff_file"',
+        "{{response_style}}": "Block",
+        "{{warning_message}}": "rs file detected",
+    }
+    rendered = render(template_text, context)
+
+    with tempfile.NamedTemporaryFile(suffix=".sh", mode="w", delete=False) as f:
+        f.write(rendered)
+        hook_path = f.name
+    os.chmod(hook_path, 0o755)
+
+    repo_dir, local_sha = _make_git_repo_with_md_commit()
+    zeros = "0000000000000000000000000000000000000000"
+    stdin_line = f"refs/heads/my-branch {local_sha} refs/heads/my-branch {zeros}\n"
+
+    try:
+        result = subprocess.run(
+            [hook_path, "origin", "git@example.com:repo.git"],
+            input=stdin_line,
+            capture_output=True,
+            text=True,
+            cwd=repo_dir,
+        )
+        if result.returncode == 0:
+            print("PASS new_branch_push_noop: no violation on new-branch push — exit 0")
+            return True
+        print(
+            f"FAIL new_branch_push_noop: expected exit 0, got {result.returncode}\n"
+            f"  stdout: {result.stdout!r}\n  stderr: {result.stderr!r}"
+        )
+        return False
+    finally:
+        os.unlink(hook_path)
+        import shutil
+        shutil.rmtree(repo_dir, ignore_errors=True)
+
+
 def run_tests():
     """Run all tests. Return exit 0 on GREEN, exit 1 on RED."""
     print("=" * 60)
@@ -216,6 +313,10 @@ def run_tests():
     # shellcheck (optional — skip if not installed)
     results.append(test_shellcheck(rendered_block, "Block"))
     results.append(test_shellcheck(rendered_nudge, "Nudge"))
+
+    # New-branch push: REMOTE_SHA=zeros must not bypass detection
+    results.append(test_new_branch_push_fires_block(template_text))
+    results.append(test_new_branch_push_noop_when_no_violation(template_text))
 
     passed = sum(1 for r in results if r)
     total = len(results)
