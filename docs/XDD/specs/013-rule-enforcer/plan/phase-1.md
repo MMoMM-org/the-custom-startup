@@ -35,7 +35,7 @@ phase: 1
 
 This phase delivers the **UserPromptSubmit intercept hook** that watches every user prompt for recurrence trigger phrases (DE + EN) and injects a single-line system reminder suggesting `/enforce-rule` when one matches. PRD Features M1 + S1.
 
-- [ ] **T1.1 Trigger-phrases reference + lib parser** `[activity: data-architecture]` `[parallel: false]`
+- [x] **T1.1 Trigger-phrases reference + lib parser** `[activity: data-architecture]` `[parallel: false]`
 
   1. **Prime**: Read `plugins/tcs-helper/scripts/lib/reflect_utils.py` for the shared-lib pattern used by `capture_learning.py`. Read `plugins/tcs-helper/skills/skill-author/reference/conventions.md` for reference-file conventions.
   2. **Test (RED)**: Write `plugins/tcs-helper/scripts/lib/test_trigger_phrases.py` that asserts:
@@ -54,7 +54,7 @@ This phase delivers the **UserPromptSubmit intercept hook** that watches every u
      - [ ] `match()` correctly identifies recurrence phrases vs non-recurrence text `[ref: PRD/M1 AC-1, AC-2]`
      - [ ] Reference file is user-extensible (add language by adding `## <Lang>` section) `[ref: PRD/S1 AC-1, AC-2]`
 
-- [ ] **T1.2 Intercept hook script** `[activity: backend-tooling]` `[parallel: false]`
+- [x] **T1.2 Intercept hook script** `[activity: backend-tooling]` `[parallel: false]`
 
   1. **Prime**: Read `plugins/tcs-helper/scripts/capture_learning.py` — adopt its structure verbatim (stdin JSON read, try/except all errors, exit 0 always). Read SDD Hook Contract section.
   2. **Test (RED)**: Write `plugins/tcs-helper/scripts/test_intercept_rule_recurrence.py` that asserts:
@@ -68,9 +68,9 @@ This phase delivers the **UserPromptSubmit intercept hook** that watches every u
      - Suggestion format (per SDD): `[rule-enforcer] Recurrence signal detected ('<matched-phrase-snippet>'). Consider /enforce-rule "<rule>" to triage.`
   4. **Validate**: All test assertions pass. Manual test: `echo '{"prompt":"vergessen wieder die Doku"}' | python3 plugins/tcs-helper/scripts/intercept_rule_recurrence.py` produces expected output. Module compiles clean.
   5. **Success**:
-     - [ ] Hook injects suggestion only when trigger phrase matches `[ref: PRD/M1 AC-1, AC-2]`
-     - [ ] Hook exits 0 on all error paths `[ref: PRD/M1 AC-4]` `[ref: SDD/CON-4]`
-     - [ ] p95 latency measurement recorded (target ≤ 50ms) `[ref: PRD/M1 AC-3]` `[ref: SDD/CON-2]`
+     - [x] Hook injects suggestion only when trigger phrase matches `[ref: PRD/M1 AC-1, AC-2]`
+     - [x] Hook exits 0 on all error paths `[ref: PRD/M1 AC-4]` `[ref: SDD/CON-4]`
+     - [x] p95 latency measurement recorded (p95=25.3ms ≤ 50ms target) `[ref: PRD/M1 AC-3]` `[ref: SDD/CON-2]`
 
 - [ ] **T1.3 Hook registration + manual smoke test** `[activity: integration]` `[parallel: false]`
 
