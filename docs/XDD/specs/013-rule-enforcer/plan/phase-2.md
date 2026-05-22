@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Triage Skill + Hand-offs"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -102,7 +102,7 @@ This phase delivers the **`/enforce-rule` triage skill** — the user-invocable 
      - [x] 4-scenario triage path test all produce expected mechanisms `[ref: PRD/M3 AC-1..AC-5]` `[ref: PRD/M4 AC-1..AC-8]`
      - [x] Q1 and Q2 short-circuits work correctly `[ref: PRD/M3 AC-2, AC-4]`
 
-- [ ] **T2.4 Hand-off paths (Skill invocations for skill-author / hook-development / memory-add)** `[activity: integration]` `[parallel: false]`
+- [x] **T2.4 Hand-off paths (Skill invocations for skill-author / hook-development / memory-add)** `[activity: integration]` `[parallel: false]`
 
   1. **Prime**: Read `plugins/tcs-helper/skills/skill-author/SKILL.md` $ARGUMENTS conventions. Read `plugins/tcs-helper/skills/memory-add/SKILL.md` template hints. Check whether `plugin-dev:hook-development` is installed (note as fallback path if not).
   2. **Test (RED)**: Manual scenario test plan (3 hand-off paths):
@@ -117,10 +117,10 @@ This phase delivers the **`/enforce-rule` triage skill** — the user-invocable 
      - Hand-off failure (e.g., plugin not installed) → AskUserQuestion {Install plugin, Use Memory instead, Cancel}
   4. **Validate**: Run 3 hand-off scenarios manually; verify each invokes the right skill OR offers fallback when target skill missing.
   5. **Success**:
-     - [ ] All 3 hand-off paths invoke the correct target skill `[ref: PRD/M5 AC-1, AC-2, AC-3]`
-     - [ ] Missing-target-skill fallback presents user options instead of crashing `[ref: SDD/Error Handling]`
+     - [x] All 3 hand-off paths invoke the correct target skill `[ref: PRD/M5 AC-1, AC-2, AC-3]`
+     - [x] Missing-target-skill fallback presents user options instead of crashing `[ref: SDD/Error Handling]`
 
-- [ ] **T2.6 Phase 2 Validation** `[activity: validate]`
+- [x] **T2.6 Phase 2 Validation** `[activity: validate]`
 
   - Re-run all Phase 2 test scenarios (4 triage paths from T2.3 + 3 hand-off paths from T2.4)
   - Run `tcs-helper:skill-author` audit in full mode — verify SKILL.md size budget (≤ 500 lines), description quality (CSO compliant), no mirrored constraints
