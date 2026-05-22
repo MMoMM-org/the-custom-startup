@@ -96,6 +96,25 @@ class TestInterceptBehavior(unittest.TestCase):
         lines = [l for l in stdout.splitlines() if l.strip()]
         self.assertEqual(len(lines), 1, f"Expected exactly 1 non-empty output line, got: {lines}")
 
+    def test_with_claude_plugin_root_env(self):
+        """When CLAUDE_PLUGIN_ROOT is set, _phrases_path resolves relative to it (production runtime branch)."""
+        # CLAUDE_PLUGIN_ROOT in production is the plugin dir (plugins/tcs-helper/)
+        # SCRIPT lives at plugins/tcs-helper/scripts/intercept_rule_recurrence.py
+        # So plugin root = dirname(dirname(SCRIPT))
+        plugin_root = os.path.dirname(os.path.dirname(SCRIPT))
+        env = {**os.environ, "CLAUDE_PLUGIN_ROOT": plugin_root}
+        payload = json.dumps({'prompt': 'I keep forgetting X', 'cwd': '/tmp'})
+        result = subprocess.run(
+            [sys.executable, SCRIPT],
+            input=payload,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=5.0,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('[rule-enforcer]', result.stdout)
+
 
 class TestPerformance(unittest.TestCase):
 
@@ -103,8 +122,8 @@ class TestPerformance(unittest.TestCase):
         """100-invocation timing: p95 ≤ 50ms (soft assertion — warns but does not fail)."""
         payload = json.dumps({'prompt': 'I keep forgetting X', 'cwd': '/tmp'})
 
-        # Warmup: 5 invocations to prime disk/import caches before measurement
-        for _ in range(5):
+        # Warmup: 15 invocations to prime disk cache + Python interpreter before measurement
+        for _ in range(15):
             _run(payload)
 
         durations_ms = []

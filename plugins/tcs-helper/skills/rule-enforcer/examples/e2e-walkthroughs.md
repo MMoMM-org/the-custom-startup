@@ -64,7 +64,7 @@ Select the option matching `PR/merge to main` (with or without parenthetical).
 Select: `Auto-fix — fix it for me automatically without asking`
 
 **Expected**: Step 6 looks up matrix row `Q3 = PR/merge to main` × `Q4 = Auto-fix`
-and resolves mechanism = `CI workflow (auto-PR or commit with [skip ci])`.
+and resolves mechanism = `CI workflow (auto-PR or commit: detects and patches the violation automatically)`.
 
 **What to capture**: Copy the exact mechanism string the skill outputs at Step 6.
 
@@ -94,7 +94,7 @@ human-readable. No errors or stack traces anywhere in the session.
 
 - [ ] Intercept hook fired and injected the suggestion line
 - [ ] Q1–Q4 were asked in order, no skips
-- [ ] Mechanism at Step 6 = `CI workflow (auto-PR or commit with [skip ci])`
+- [ ] Mechanism at Step 6 = `CI workflow (auto-PR or commit: detects and patches the violation automatically)`
 - [ ] Step 8 rendered a human-readable YAML preview
 - [ ] Cancel left the repo clean (no new files)
 

@@ -139,6 +139,32 @@ def test_sh_pipefail(rendered_sh):
     return False
 
 
+def test_no_unrendered_rule_placeholders_yaml(rendered_yaml):
+    """Detect un-substituted rule-enforcer placeholders without flagging GitHub Actions syntax."""
+    import re
+    # Regex: match {{ }} that are NOT preceded by $
+    # This allows ${{ }} (GitHub Actions) while catching bare {{ }} (rule-enforcer)
+    bare_placeholders = re.findall(r'(?<!\$)\{\{[^}]+\}\}', rendered_yaml)
+    if bare_placeholders:
+        print(f"FAIL no_unrendered_placeholders_yaml: un-substituted placeholders remain: {bare_placeholders}")
+        return False
+    print("PASS no_unrendered_placeholders_yaml: no bare {{ }} placeholders in rendered YAML")
+    return True
+
+
+def test_no_unrendered_rule_placeholders_sh(rendered_sh):
+    """Detect un-substituted rule-enforcer placeholders without flagging GitHub Actions syntax."""
+    import re
+    # Regex: match {{ }} that are NOT preceded by $
+    # This allows ${{ }} (GitHub Actions) while catching bare {{ }} (rule-enforcer)
+    bare_placeholders = re.findall(r'(?<!\$)\{\{[^}]+\}\}', rendered_sh)
+    if bare_placeholders:
+        print(f"FAIL no_unrendered_placeholders_sh: un-substituted placeholders remain: {bare_placeholders}")
+        return False
+    print("PASS no_unrendered_placeholders_sh: no bare {{ }} placeholders in rendered .sh")
+    return True
+
+
 def test_shellcheck(rendered_sh):
     """Run shellcheck on rendered .sh — skip cleanly if not available."""
     with tempfile.NamedTemporaryFile(suffix=".sh", mode="w", delete=False) as f:
@@ -188,6 +214,8 @@ def run_tests():
     results.append(test_yaml_structure(rendered_yml))
     results.append(test_sh_shebang(rendered_sh))
     results.append(test_sh_pipefail(rendered_sh))
+    results.append(test_no_unrendered_rule_placeholders_yaml(rendered_yml))
+    results.append(test_no_unrendered_rule_placeholders_sh(rendered_sh))
     results.append(test_shellcheck(rendered_sh))
 
     passed = sum(1 for r in results if r)
