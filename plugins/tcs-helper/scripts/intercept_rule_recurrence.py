@@ -7,6 +7,9 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from lib.trigger_phrases import load, match
+
 
 def _phrases_path() -> str:
     """Resolve trigger-phrases.md relative to the plugin root.
@@ -35,30 +38,33 @@ def _find_matched_phrase(text: str, patterns: list) -> str:
     return ''
 
 
+def _compute_suggestion(stdin_text: str) -> str | None:
+    """Parse stdin and return suggestion string, or None if no action needed."""
+    data = json.loads(stdin_text)
+    prompt = data.get('prompt', '')
+    if not prompt:
+        return None
+
+    patterns = load(_phrases_path())
+    if not match(prompt, patterns):
+        return None
+
+    snippet = _find_matched_phrase(prompt, patterns)
+    return (
+        f"[rule-enforcer] Recurrence signal detected ('{snippet}'). "
+        f'Consider /enforce-rule "<rule>" to triage.'
+    )
+
+
 def main():
+    suggestion = None
     try:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from lib.trigger_phrases import load, match
-
-        data = json.loads(sys.stdin.read())
-        prompt = data.get('prompt', '')
-        if not prompt:
-            sys.exit(0)
-
-        patterns = load(_phrases_path())
-        if not match(prompt, patterns):
-            sys.exit(0)
-
-        snippet = _find_matched_phrase(prompt, patterns)
-        suggestion = (
-            f"[rule-enforcer] Recurrence signal detected ('{snippet}'). "
-            f'Consider /enforce-rule "<rule>" to triage.'
-        )
-        print(suggestion)
-
+        suggestion = _compute_suggestion(sys.stdin.read())
     except Exception:
         pass  # never block
 
+    if suggestion:
+        print(suggestion)
     sys.exit(0)
 
 

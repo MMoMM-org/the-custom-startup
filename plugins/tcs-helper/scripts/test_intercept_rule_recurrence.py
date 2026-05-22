@@ -64,8 +64,8 @@ class TestInterceptBehavior(unittest.TestCase):
         payload = json.dumps({'prompt': 'I keep forgetting to bump the version', 'cwd': '/tmp'})
         stdout, code = _run(payload)
         self.assertEqual(code, 0)
-        # The matched phrase or part of it should appear in the suggestion
-        self.assertIn("'", stdout, "Expected matched phrase in single-quotes in suggestion")
+        # The matched trigger phrase text must appear in the suggestion (fails on empty snippet)
+        self.assertIn("forgetting", stdout, "Expected matched trigger phrase text in suggestion")
 
     def test_suggestion_contains_enforce_rule(self):
         """Suggestion line mentions /enforce-rule command."""
@@ -102,8 +102,12 @@ class TestPerformance(unittest.TestCase):
     def test_p95_latency_under_50ms(self):
         """100-invocation timing: p95 ≤ 50ms (soft assertion — warns but does not fail)."""
         payload = json.dumps({'prompt': 'I keep forgetting X', 'cwd': '/tmp'})
-        durations_ms = []
 
+        # Warmup: 5 invocations to prime disk/import caches before measurement
+        for _ in range(5):
+            _run(payload)
+
+        durations_ms = []
         for _ in range(100):
             start = time.perf_counter()
             _run(payload)
@@ -121,8 +125,8 @@ class TestPerformance(unittest.TestCase):
         else:
             print(f'[perf] OK: p95 {p95:.1f}ms ≤ 50ms target.')
 
-        # Soft assertion: record result; only fail if wildly over budget (5×)
-        self.assertLess(p95, 250, f"p95 {p95:.1f}ms is catastrophically slow (>250ms hard limit)")
+        # Hard assertion: 2× budget — allows CI variance, still catches regressions
+        self.assertLess(p95, 100, f"p95 {p95:.1f}ms exceeds 100ms hard limit (2× the 50ms target)")
 
 
 if __name__ == '__main__':
