@@ -148,8 +148,9 @@ _hours_ago_iso() {
 
 # Run the hook in the test repo dir. Captures:
 #   $status  — exit code
-#   $output  — stdout (should be empty for this hook)
-#   $stderr  — stderr (the brief)
+#   $output  — stdout (the brief — Claude Code only surfaces stdout for
+#              SessionStart, so the brief must land here)
+#   $stderr  — stderr (should be empty for this hook)
 _run_hook() {
   run --separate-stderr bash -c 'cd "$1" && exec "$2"' _ "$TEST_REPO" "$HOOK"
 }
@@ -180,8 +181,8 @@ _run_hook() {
   [ "$status" -eq 0 ]
   # Anchor the canonical SDD wireframe: order + bullet separators are mandatory.
   # A single ERE pinning all four segments in order catches any transposition regression.
-  # Use a subshell grep directly (not `run`) to avoid clobbering bats $stderr.
-  local brief_output="$stderr"
+  # Use a subshell grep directly (not `run`) to avoid clobbering bats $output.
+  local brief_output="$output"
   printf '%s' "$brief_output" \
     | grep -qE '^\[tcs-git-helpers\] feat/foo • clean • 2 ahead • 3 stale-merged'
   # Supplementary individual-segment assertions (kept for diagnostic clarity).
@@ -209,8 +210,8 @@ _run_hook() {
   _run_hook
 
   [ "$status" -eq 0 ]
-  printf '%s' "$stderr" | grep -q "^⚠ \[tcs-git-helpers\]"
-  printf '%s' "$stderr" | grep -q "main"
+  printf '%s' "$output" | grep -q "^⚠ \[tcs-git-helpers\]"
+  printf '%s' "$output" | grep -q "main"
 }
 
 # ----------------------------------------------------------------------
@@ -236,7 +237,7 @@ _run_hook() {
   _run_hook
 
   [ "$status" -eq 0 ]
-  printf '%s' "$stderr" | grep -q "dirty (3 modified)"
+  printf '%s' "$output" | grep -q "dirty (3 modified)"
 }
 
 # ----------------------------------------------------------------------
@@ -252,7 +253,7 @@ _run_hook() {
   _run_hook
 
   [ "$status" -eq 0 ]
-  printf '%s' "$stderr" | grep -q "up to date"
+  printf '%s' "$output" | grep -q "up to date"
 }
 
 # ----------------------------------------------------------------------
@@ -270,7 +271,7 @@ _run_hook() {
 
   [ "$status" -eq 0 ]
   # Must match pattern "(cache Nh old)" for N >= 24.
-  printf '%s' "$stderr" | grep -qE "\(cache [0-9]+h old\)"
+  printf '%s' "$output" | grep -qE "\(cache [0-9]+h old\)"
 }
 
 # ----------------------------------------------------------------------
@@ -288,7 +289,7 @@ _run_hook() {
   _run_hook
 
   [ "$status" -eq 0 ]
-  printf '%s' "$stderr" | grep -q "run /tcs-git-helpers:git-setup"
+  printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-setup"
 }
 
 # ----------------------------------------------------------------------
@@ -338,8 +339,8 @@ STUB
   _run_hook
 
   [ "$status" -eq 0 ]
-  printf '%s' "$stderr" | grep -q "0 stale-merged"
-  [ -z "$output" ]
+  printf '%s' "$output" | grep -q "0 stale-merged"
+  [ -z "$stderr" ]
 }
 
 # ----------------------------------------------------------------------
@@ -421,7 +422,7 @@ STUB
   _run_hook
 
   [ "$status" -eq 0 ]
-  printf '%s' "$stderr" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
+  printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
 }
 
 # ----------------------------------------------------------------------
@@ -440,9 +441,9 @@ STUB
 
   [ "$status" -eq 0 ]
   # The ahead/behind segment must say "no upstream".
-  printf '%s' "$stderr" | grep -q "no upstream"
+  printf '%s' "$output" | grep -q "no upstream"
   # The canonical wireframe must still hold: branch • state • no upstream • stale-count.
-  printf '%s' "$stderr" \
+  printf '%s' "$output" \
     | grep -qE '^\[tcs-git-helpers\] local-only-branch • [^•]+ • no upstream • [0-9]+ stale-merged'
 }
 
@@ -465,15 +466,15 @@ STUB
 
   [ "$status" -eq 0 ]
   # Brief must emit successfully.
-  [ -n "$stderr" ]
+  [ -n "$output" ]
   # Must show stale-count from cache, not error.
-  printf '%s' "$stderr" | grep -q "1 stale-merged"
+  printf '%s' "$output" | grep -q "1 stale-merged"
   # No drift prompt lines in the output.
-  ! printf '%s' "$stderr" | grep -qE "drift|DRIFT|version"
+  ! printf '%s' "$output" | grep -qE "drift|DRIFT|version"
   # Cleanup suggestion should be present (stale-count > 0).
-  printf '%s' "$stderr" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
+  printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
   # No error output.
-  [ -z "$output" ]
+  [ -z "$stderr" ]
 }
 
 # ----------------------------------------------------------------------
@@ -490,9 +491,9 @@ STUB
 
   [ "$status" -eq 0 ]
   # Brief must emit successfully with no stale entries reported.
-  printf '%s' "$stderr" | grep -q "0 stale-merged"
+  printf '%s' "$output" | grep -q "0 stale-merged"
   # No error output.
-  [ -z "$output" ]
+  [ -z "$stderr" ]
   # No cleanup suggestion when stale-count == 0.
-  ! printf '%s' "$stderr" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
+  ! printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
 }
