@@ -182,6 +182,45 @@ SCENARIO_COUNT=$(grep -cE "^(##|###) Scenario" "$EXAMPLES_FILE" 2>/dev/null || e
 assert_check "examples/output-example.md has ≥ 7 scenario headings (found: $SCENARIO_COUNT)" \
   bash -c 'test -f "$1" && test "$(grep -cE "^(##|###) Scenario" "$1" 2>/dev/null || echo 0)" -ge 7' _ "$EXAMPLES_FILE"
 
+# ── T3.3 + T3.4 additions ─────────────────────────────────────────────────────
+
+FIXTURES_FILE="$(dirname "$0")/examples/self-test-fixtures.md"
+RESULTS_FILE="$(dirname "$0")/examples/self-test-results.md"
+E2E_FILE="$(dirname "$0")/examples/e2e-walkthroughs.md"
+
+# A38: examples/self-test-fixtures.md exists
+assert_check "examples/self-test-fixtures.md exists" test -f "$FIXTURES_FILE"
+
+# A39: 3 fixtures (≥ 3 headings matching ### Fixture or ## Fixture)
+FIXTURE_COUNT=$(grep -cE "^(##|###) Fixture" "$FIXTURES_FILE" 2>/dev/null || echo 0)
+assert_check "self-test-fixtures.md has ≥ 3 fixture headings (found: $FIXTURE_COUNT)" \
+  bash -c 'test -f "$1" && test "$(grep -cE "^(##|###) Fixture" "$1" 2>/dev/null || echo 0)" -ge 3' _ "$FIXTURES_FILE"
+
+# A40: Q1, Q2, Q3, Q4 each appear ≥ 3 times (total occurrences ≥ 12, 4 per fixture × 3 fixtures)
+Q_COUNT=$(grep -oE "\bQ[1-4]\b" "$FIXTURES_FILE" 2>/dev/null | wc -l | tr -d ' ' || echo 0)
+assert_check "self-test-fixtures.md mentions Q1/Q2/Q3/Q4 ≥ 12 times total (found: $Q_COUNT)" \
+  bash -c 'test -f "$1" && test "$(grep -oE "\bQ[1-4]\b" "$1" 2>/dev/null | wc -l | tr -d " ")" -ge 12' _ "$FIXTURES_FILE"
+
+# A41: Mechanism appears ≥ 3 times in self-test-fixtures.md
+MECH_COUNT=$(grep -c "Mechanism" "$FIXTURES_FILE" 2>/dev/null || echo 0)
+assert_check "self-test-fixtures.md mentions Mechanism ≥ 3 times (found: $MECH_COUNT)" \
+  bash -c 'test -f "$1" && test "$(grep -c "Mechanism" "$1" 2>/dev/null || echo 0)" -ge 3' _ "$FIXTURES_FILE"
+
+# A42: examples/self-test-results.md exists
+assert_check "examples/self-test-results.md exists" test -f "$RESULTS_FILE"
+
+# A43: examples/e2e-walkthroughs.md exists
+assert_check "examples/e2e-walkthroughs.md exists" test -f "$E2E_FILE"
+
+# A44: e2e-walkthroughs.md has ≥ 2 scenarios
+E2E_SCENARIO_COUNT=$(grep -cE "^(##|###) Scenario" "$E2E_FILE" 2>/dev/null || echo 0)
+assert_check "e2e-walkthroughs.md has ≥ 2 scenario headings (found: $E2E_SCENARIO_COUNT)" \
+  bash -c 'test -f "$1" && test "$(grep -cE "^(##|###) Scenario" "$1" 2>/dev/null || echo 0)" -ge 2' _ "$E2E_FILE"
+
+# A45: e2e file mentions both intercept (Scenario A path) and memory-add (Scenario B short-circuit)
+assert_check "e2e-walkthroughs.md mentions both 'intercept' and 'memory-add'" \
+  bash -c 'test -f "$1" && grep -q "intercept" "$1" && grep -q "memory-add" "$1"' _ "$E2E_FILE"
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 
