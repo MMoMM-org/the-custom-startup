@@ -195,10 +195,51 @@ if [ -n "$repo_top" ] && [ ! -d "$repo_top/.githooks" ]; then
 fi
 
 # ----------------------------------------------------------------------
+# 8b. Hook version drift hint when .githooks/ present
+# Compares the version banner stamped into installed hooks (lines 1–3:
+# "# tcs-git-helpers: vX.Y.Z") against the plugin's current .claude-plugin/
+# plugin.json version. Fail-open: any missing/unreadable piece → silent skip.
+# Mutually exclusive with setup_seg (one fires only when .githooks/ exists,
+# the other only when it doesn't).
+# ----------------------------------------------------------------------
+
+drift_seg=""
+if [ -n "$repo_top" ] && [ -d "$repo_top/.githooks" ]; then
+  _manifest="$_SCRIPT_DIR/../.claude-plugin/plugin.json"
+  if [ -r "$_manifest" ]; then
+    want_version="$(grep -E '"version"[[:space:]]*:' "$_manifest" 2>/dev/null \
+      | head -1 \
+      | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)"
+
+    # Banner pattern is "# tcs-git-helpers: <version>" — historically documented
+    # as "vX.Y.Z" but install_files.sh currently writes bare "X.Y.Z". Match both.
+    found_version=""
+    for _h in pre-commit pre-push commit-msg post-merge; do
+      if [ -r "$repo_top/.githooks/$_h" ]; then
+        _marker="$(head -3 "$repo_top/.githooks/$_h" 2>/dev/null \
+          | grep -E '^#[[:space:]]*tcs-git-helpers:[[:space:]]*v?[0-9]' \
+          | head -1 || true)"
+        if [ -n "$_marker" ]; then
+          _raw="${_marker##*:}"
+          found_version="$(printf '%s' "$_raw" \
+            | sed -E 's/^[[:space:]]*v?//;s/[[:space:]]*$//' || true)"
+          break
+        fi
+      fi
+    done
+
+    if [ -n "$want_version" ] && [ -n "$found_version" ] \
+       && [ "$found_version" != "$want_version" ]; then
+      drift_seg=" • hooks v${found_version} → v${want_version}; run /tcs-git-helpers:git-setup --update"
+    fi
+  fi
+fi
+
+# ----------------------------------------------------------------------
 # 9. Compose and emit the brief line
 # ----------------------------------------------------------------------
 
-brief="${warn_prefix}[tcs-git-helpers] ${branch} • ${state_seg} • ${ab_seg} • ${stale_seg}${cleanup_seg}${setup_seg}"
+brief="${warn_prefix}[tcs-git-helpers] ${branch} • ${state_seg} • ${ab_seg} • ${stale_seg}${cleanup_seg}${drift_seg}${setup_seg}"
 
 printf '%s\n' "$brief" >&2
 
