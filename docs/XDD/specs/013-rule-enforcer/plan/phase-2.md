@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Triage Skill + Hand-offs"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 2
 ---
@@ -38,7 +38,7 @@ phase: 2
 
 This phase delivers the **`/enforce-rule` triage skill** — the user-invocable entry point that walks the 4-question triage and routes to the right author skill via `Skill()` hand-offs. PRD Features M2–M5 + S2.
 
-- [ ] **T2.1 Skill scaffold (SKILL.md + frontmatter)** `[activity: skill-authoring]` `[parallel: true]`
+- [x] **T2.1 Skill scaffold (SKILL.md + frontmatter)** `[activity: skill-authoring]` `[parallel: true]`
 
   1. **Prime**: Read `plugins/tcs-helper/skills/skill-author/SKILL.md` and `reference/conventions.md` — adopt PICS structure (Persona, Interface, Constraints, Workflow). Read `plugins/tcs-helper/skills/memory-add/SKILL.md` for hand-off-target convention reference.
   2. **Test (RED)**: Write a structural assertion script (bash): SKILL.md exists, has YAML frontmatter with required fields (`name: rule-enforcer`, `description: ...`, `user-invocable: true`, `argument-hint: "[rule description]"`), contains `## Persona`, `## Interface`, `## Constraints`, `## Workflow` sections.
@@ -48,10 +48,10 @@ This phase delivers the **`/enforce-rule` triage skill** — the user-invocable 
      - Description per CSO rules: triggering conditions only, not workflow summary
   4. **Validate**: Run structural assertion. Run `tcs-helper:skill-author` in **audit mode** against the scaffold — expect "structure OK, workflow body pending" verdict.
   5. **Success**:
-     - [ ] SKILL.md passes skill-author structural audit `[ref: PRD/M2 AC-1, AC-3]`
-     - [ ] Active-skill announcement present and matches `tcs-helper:rule-enforcer` `[ref: SDD/Skill Contract]`
+     - [x] SKILL.md passes skill-author structural audit `[ref: PRD/M2 AC-1, AC-3]`
+     - [x] Active-skill announcement present and matches `tcs-helper:rule-enforcer` `[ref: SDD/Skill Contract]`
 
-- [ ] **T2.2 Mechanism matrix reference file** `[activity: data-architecture]` `[parallel: true]`
+- [x] **T2.2 Mechanism matrix reference file** `[activity: data-architecture]` `[parallel: true]`
 
   1. **Prime**: Read SDD `Mechanism Matrix File Format` section. Re-read the table in PRD `Value Proposition` and `Detailed Feature Specifications/M3`.
   2. **Test (RED)**: Write a parser assertion (Python): given `reference/mechanism-matrix.md`, parser returns a dict `{(q3, q4): mechanism}` covering all 7 Q3 options × 3 Q4 options = 21 entries.
@@ -62,10 +62,10 @@ This phase delivers the **`/enforce-rule` triage skill** — the user-invocable 
      - Map each (Q3, Q4) to one of: PreToolUse hook | PostToolUse hook | UserPromptSubmit hook | SessionStart/End hook | git pre-push hook (bundle-integrated per revised ADR-2) | CI workflow | Skill w/ discipline language | Memory rule
   4. **Validate**: Parser assertion passes; markdown renders correctly. Cross-check against PRD M4 AC examples — they must produce expected mechanisms.
   5. **Success**:
-     - [ ] All 21 (Q3, Q4) combinations have a mechanism mapping `[ref: PRD/M4 AC-1..AC-8]`
-     - [ ] PRD M4 example cases produce exactly the expected mechanism `[ref: PRD/M4 AC-1, AC-3, AC-5]`
+     - [x] All 21 (Q3, Q4) combinations have a mechanism mapping `[ref: PRD/M4 AC-1..AC-8]`
+     - [x] PRD M4 example cases produce exactly the expected mechanism `[ref: PRD/M4 AC-1, AC-3, AC-5]`
 
-- [ ] **T2.5 Worked examples reference file** `[activity: documentation]` `[parallel: true]`
+- [x] **T2.5 Worked examples reference file** `[activity: documentation]` `[parallel: true]`
 
   1. **Prime**: Re-read the 3 session violation patterns from PRD M7. Identify 2 more cases from the memory bank survey.
   2. **Test (RED)**: Bash assertion — `reference/examples.md` exists and contains at least 5 H3 sections each named like `### Example: <rule>` with the 4-question answers and final mechanism documented.
@@ -78,10 +78,10 @@ This phase delivers the **`/enforce-rule` triage skill** — the user-invocable 
      - Each example: rule description, Q1–Q4 answers with rationale, final mechanism, hand-off / scaffolding outcome
   4. **Validate**: Bash assertion passes; each example has all 4 questions answered with rationale.
   5. **Success**:
-     - [ ] At least 5 worked examples documented `[ref: PRD/S2 AC-1]`
-     - [ ] PRD M7 self-test cases match Example 1–3 mechanisms `[ref: PRD/M7 AC-1, AC-2, AC-3]`
+     - [x] At least 5 worked examples documented `[ref: PRD/S2 AC-1]`
+     - [x] PRD M7 self-test cases match Example 1–3 mechanisms `[ref: PRD/M7 AC-1, AC-2, AC-3]`
 
-- [ ] **T2.3 4-question triage workflow (Steps 1–7 in SKILL.md)** `[activity: skill-authoring]` `[parallel: false]`
+- [x] **T2.3 4-question triage workflow (Steps 1–7 in SKILL.md)** `[activity: skill-authoring]` `[parallel: false]`
 
   1. **Prime**: Reload T2.1 SKILL.md skeleton. Read T2.2 matrix file format. Read PRD M3 short-circuit logic carefully (Q1=1× and Q2=judgment short-circuit to Memory).
   2. **Test (RED)**: Manual scenario test plan (recorded in `examples/output-example.md`): 4 scenarios exercising different paths through the revised memory-first workflow:
@@ -99,8 +99,8 @@ This phase delivers the **`/enforce-rule` triage skill** — the user-invocable 
      - Step 7: Present recommendation with rationale via AskUserQuestion {Accept, Override, Explain}
   4. **Validate**: Manual scenario test (4 paths) in a Claude Code session after restart — each scenario produces the expected mechanism recommendation.
   5. **Success**:
-     - [ ] 4-scenario triage path test all produce expected mechanisms `[ref: PRD/M3 AC-1..AC-5]` `[ref: PRD/M4 AC-1..AC-8]`
-     - [ ] Q1 and Q2 short-circuits work correctly `[ref: PRD/M3 AC-2, AC-4]`
+     - [x] 4-scenario triage path test all produce expected mechanisms `[ref: PRD/M3 AC-1..AC-5]` `[ref: PRD/M4 AC-1..AC-8]`
+     - [x] Q1 and Q2 short-circuits work correctly `[ref: PRD/M3 AC-2, AC-4]`
 
 - [ ] **T2.4 Hand-off paths (Skill invocations for skill-author / hook-development / memory-add)** `[activity: integration]` `[parallel: false]`
 

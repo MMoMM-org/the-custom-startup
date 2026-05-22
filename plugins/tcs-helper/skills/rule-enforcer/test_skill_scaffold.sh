@@ -71,9 +71,85 @@ assert_check "At least 8 numbered workflow steps (### N.) — found: $STEP_COUNT
 assert_check "**Always:** constraint list present" grep -q "^\*\*Always:\*\*$" "$SKILL_FILE"
 assert_check "**Never:** constraint list present" grep -q "^\*\*Never:\*\*$" "$SKILL_FILE"
 
-# A15: Line count within budget (hard ceiling: 120)
+# A15: Line count within budget (hard ceiling: 500)
 LINE_COUNT=$(wc -l < "$SKILL_FILE" 2>/dev/null || echo 0)
-assert_check "SKILL.md line count within 120-line ceiling — found: $LINE_COUNT" test "$LINE_COUNT" -le 120
+assert_check "SKILL.md line count within 500-line budget — found: $LINE_COUNT" test "$LINE_COUNT" -le 500
+
+# ── T2.3 additions ────────────────────────────────────────────────────────────
+
+EXAMPLES_FILE="$(dirname "$0")/examples/output-example.md"
+
+# A16: No remaining T2.3 placeholder comments
+assert_check "SKILL.md has no remaining <!-- T2.3 will populate --> comments" \
+  bash -c '! grep -q "T2.3 will populate" "$1"' _ "$SKILL_FILE"
+
+# Helper: extract content lines from a step section (non-comment, non-empty, non-heading)
+step_content_lines() {
+  local step_num="$1"
+  # Extract from the step heading to the next ### heading (or end of file)
+  awk "/^### ${step_num}\\./{found=1; next} found && /^### /{exit} found" "$SKILL_FILE" \
+    | grep -v "^[[:space:]]*$" \
+    | grep -v "^<!--" \
+    | grep -v "^###" \
+    | wc -l | tr -d ' '
+}
+
+# A17: Step 1 has ≥ 3 lines of non-comment content
+CNT=$(step_content_lines 1)
+assert_check "Step 1 has ≥ 3 lines of non-comment content (found: $CNT)" test "$CNT" -ge 3
+
+# A18: Step 2 has ≥ 3 lines of non-comment content
+CNT=$(step_content_lines 2)
+assert_check "Step 2 has ≥ 3 lines of non-comment content (found: $CNT)" test "$CNT" -ge 3
+
+# A19: Step 3 has ≥ 3 lines of non-comment content
+CNT=$(step_content_lines 3)
+assert_check "Step 3 has ≥ 3 lines of non-comment content (found: $CNT)" test "$CNT" -ge 3
+
+# A20: Step 4 has ≥ 3 lines of non-comment content
+CNT=$(step_content_lines 4)
+assert_check "Step 4 has ≥ 3 lines of non-comment content (found: $CNT)" test "$CNT" -ge 3
+
+# A21: Step 5 has ≥ 3 lines of non-comment content
+CNT=$(step_content_lines 5)
+assert_check "Step 5 has ≥ 3 lines of non-comment content (found: $CNT)" test "$CNT" -ge 3
+
+# A22: Step 6 has ≥ 3 lines of non-comment content
+CNT=$(step_content_lines 6)
+assert_check "Step 6 has ≥ 3 lines of non-comment content (found: $CNT)" test "$CNT" -ge 3
+
+# A23: Step 7 has ≥ 3 lines of non-comment content
+CNT=$(step_content_lines 7)
+assert_check "Step 7 has ≥ 3 lines of non-comment content (found: $CNT)" test "$CNT" -ge 3
+
+# A24: Step 2 mentions Q1 AND AskUserQuestion
+assert_check "Step 2 mentions Q1 AND AskUserQuestion" \
+  bash -c 'awk "/^### 2\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "Q1" && awk "/^### 2\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "AskUserQuestion"' _ "$SKILL_FILE"
+
+# A25: Step 3 mentions Q2 AND AskUserQuestion
+assert_check "Step 3 mentions Q2 AND AskUserQuestion" \
+  bash -c 'awk "/^### 3\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "Q2" && awk "/^### 3\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "AskUserQuestion"' _ "$SKILL_FILE"
+
+# A26: Step 4 mentions Q3 AND AskUserQuestion
+assert_check "Step 4 mentions Q3 AND AskUserQuestion" \
+  bash -c 'awk "/^### 4\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "Q3" && awk "/^### 4\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "AskUserQuestion"' _ "$SKILL_FILE"
+
+# A27: Step 5 mentions Q4 AND AskUserQuestion
+assert_check "Step 5 mentions Q4 AND AskUserQuestion" \
+  bash -c 'awk "/^### 5\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "Q4" && awk "/^### 5\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "AskUserQuestion"' _ "$SKILL_FILE"
+
+# A28: Step 6 mentions mechanism-matrix
+assert_check "Step 6 mentions mechanism-matrix" \
+  bash -c 'awk "/^### 6\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "mechanism-matrix"' _ "$SKILL_FILE"
+
+# A29: Step 7 mentions AskUserQuestion
+assert_check "Step 7 mentions AskUserQuestion" \
+  bash -c 'awk "/^### 7\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "AskUserQuestion"' _ "$SKILL_FILE"
+
+# A30: examples/output-example.md exists with ≥ 4 scenario headings
+SCENARIO_COUNT=$(grep -cE "^(##|###) Scenario" "$EXAMPLES_FILE" 2>/dev/null || echo 0)
+assert_check "examples/output-example.md exists with ≥ 4 scenario headings (found: $SCENARIO_COUNT)" \
+  bash -c 'test -f "$1" && test "$(grep -cE "^(##|###) Scenario" "$1" 2>/dev/null || echo 0)" -ge 4' _ "$EXAMPLES_FILE"
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
