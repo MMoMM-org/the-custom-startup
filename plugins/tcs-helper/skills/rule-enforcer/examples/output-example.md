@@ -72,3 +72,66 @@ manually in a fresh Claude Code session.
 **Expected mechanism**: `git pre-push hook (exit 1, refuses push until violation resolved)`
 
 **Rationale**: Matrix section `## Q3 = Local git push`, row `Block` → git pre-push hook (exit 1). Bundle-versioning pattern (ADR-2) applies: template lives in `plugins/tcs-helper/templates/githooks/`.
+
+---
+
+## Scenario E: Coding pattern + Block → Skill hand-off
+
+**Rule**: "I keep skipping TDD — I start writing code before writing the test"
+
+| Question | Answer | Notes |
+|----------|--------|-------|
+| Step 1 — confirm rule | Looks right — continue | Rule echoed back correctly |
+| Q1 — recurrence | `Recurring — memory exists but was ignored` | Memory entry exists; pattern repeated across sessions |
+| Q2 — detectable? | `Yes — concrete signal` | Can detect Write/Edit calls before any test file is modified |
+| Q3 — intervention point | `In repeated coding patterns (e.g. TDD discipline)` | No discrete hook boundary — rule is about coding approach |
+| Q4 — enforcement style | `Block — refuse the action until the violation is resolved` | Must-style: enforce TDD strictly |
+
+**Expected mechanism**: `Skill with discipline language (MUST-style constraints, refuses to proceed)`
+
+**Step 8 hand-off**: Dispatches `Skill(tcs-helper:skill-author)` with `$ARGUMENTS` = `"Create or update a skill that enforces: I keep skipping TDD — I start writing code before writing the test. Q4 style: Block."`
+
+**Rationale**: Matrix section `## Q3 = In repeated coding patterns`, row `Block` → Skill with discipline language (MUST-style). No hook boundary exists for coding patterns; prompt-level guidance is the only lever.
+
+---
+
+## Scenario F: Hook path + PreToolUse + Block → hook-development hand-off
+
+**Rule**: "I keep using --break-system-packages when installing Python packages on macOS"
+
+| Question | Answer | Notes |
+|----------|--------|-------|
+| Step 1 — confirm rule | Looks right — continue | Rule echoed back correctly |
+| Q1 — recurrence | `Recurring — memory exists but was ignored` | Memory entry `feedback_python_venv.md` exists; broken again |
+| Q2 — detectable? | `Yes — concrete signal` | `--break-system-packages` flag is grep-detectable in pip/pip3 commands |
+| Q3 — intervention point | `Before Claude calls a tool (e.g. block --break-system-packages)` | Intercept before the Bash tool runs the pip command |
+| Q4 — enforcement style | `Block — refuse the action until the violation is resolved` | Hard block: command must not execute with that flag |
+
+**Expected mechanism**: `Claude PreToolUse hook`
+
+**Step 8 hand-off**: Dispatches `Skill(plugin-dev:hook-development)` with hook event = `PreToolUse` and rule context `"Block pip/pip3 commands that include --break-system-packages on macOS"`.
+
+**Rationale**: Matrix section `## Q3 = Before Claude calls a tool`, row `Block` → Claude PreToolUse hook. The flag is detectable in the tool-call arguments before execution.
+
+---
+
+## Scenario G: Hook path — plugin-dev NOT installed → fallback AskUserQuestion
+
+**Rule**: Same as Scenario F — `--break-system-packages` block.
+
+**Trigger**: At Step 8, `plugin-dev:hook-development` plugin is not installed in the current session.
+
+**Step 8 behaviour**: Instead of invoking hook-development, presents AskUserQuestion fallback:
+
+> "The `plugin-dev` plugin (required for hook authoring) is not installed. How would you like to proceed?"
+
+Options offered:
+- `Install plugin first — I will install plugin-dev and retry` → instructs user to install the plugin, aborts triage
+- `Use Memory rule instead — add to memory with strong wording` → dispatches `Skill(tcs-helper:memory-add)` with `type=feedback` and hint: prepend rule with `NEVER`
+- `Cancel — exit triage, no action taken` → exits skill, no further action
+
+**User picks**: `Use Memory rule instead`
+
+**Final hand-off**: `Skill(tcs-helper:memory-add)` invoked with `type=feedback` and strong-language hint. Rule stored as: `"NEVER use --break-system-packages when installing Python packages on macOS — always use a venv (PEP 668)."`
+
+**Rationale**: Fallback path prevents a hard crash when the target plugin is absent. Memory rule is the recommended interim since it is always available.

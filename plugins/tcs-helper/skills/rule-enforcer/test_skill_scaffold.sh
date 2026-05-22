@@ -151,6 +151,37 @@ SCENARIO_COUNT=$(grep -cE "^(##|###) Scenario" "$EXAMPLES_FILE" 2>/dev/null || e
 assert_check "examples/output-example.md exists with ≥ 4 scenario headings (found: $SCENARIO_COUNT)" \
   bash -c 'test -f "$1" && test "$(grep -cE "^(##|###) Scenario" "$1" 2>/dev/null || echo 0)" -ge 4' _ "$EXAMPLES_FILE"
 
+# ── T2.4 additions ────────────────────────────────────────────────────────────
+
+# A31: Step 8 has no remaining T2.4 placeholder
+assert_check "Step 8 has no remaining <!-- T2.4 will populate --> placeholder" \
+  bash -c '! grep -q "T2.4 will populate" "$1"' _ "$SKILL_FILE"
+
+# A32: Step 8 mentions tcs-helper:skill-author
+assert_check "Step 8 mentions tcs-helper:skill-author" \
+  bash -c 'awk "/^### 8\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "tcs-helper:skill-author"' _ "$SKILL_FILE"
+
+# A33: Step 8 mentions plugin-dev:hook-development
+assert_check "Step 8 mentions plugin-dev:hook-development" \
+  bash -c 'awk "/^### 8\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "plugin-dev:hook-development"' _ "$SKILL_FILE"
+
+# A34: Step 8 mentions tcs-helper:memory-add
+assert_check "Step 8 mentions tcs-helper:memory-add" \
+  bash -c 'awk "/^### 8\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "tcs-helper:memory-add"' _ "$SKILL_FILE"
+
+# A35: Step 8 mentions deferral to Phase 3 (CI / pre-push)
+assert_check "Step 8 mentions deferral to Phase 3" \
+  bash -c 'awk "/^### 8\./{found=1; next} found && /^### /{exit} found" "$1" | grep -q "Phase 3"' _ "$SKILL_FILE"
+
+# A36: Step 8 has a fallback path (Install plugin or fallback or missing)
+assert_check "Step 8 has a fallback path (Install plugin / fallback / missing)" \
+  bash -c 'awk "/^### 8\./{found=1; next} found && /^### /{exit} found" "$1" | grep -qE "Install plugin|fallback|missing"' _ "$SKILL_FILE"
+
+# A37: output-example.md has >= 7 scenario headings
+SCENARIO_COUNT=$(grep -cE "^(##|###) Scenario" "$EXAMPLES_FILE" 2>/dev/null || echo 0)
+assert_check "examples/output-example.md has ≥ 7 scenario headings (found: $SCENARIO_COUNT)" \
+  bash -c 'test -f "$1" && test "$(grep -cE "^(##|###) Scenario" "$1" 2>/dev/null || echo 0)" -ge 7' _ "$EXAMPLES_FILE"
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 

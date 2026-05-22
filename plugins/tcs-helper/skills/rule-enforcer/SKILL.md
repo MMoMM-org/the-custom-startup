@@ -141,7 +141,55 @@ If `Accept`: proceed to Step 8.
 
 ### 8. Hand-off
 
-<!-- T2.4 will populate -->
+Match on `triage.mechanism` (set in Step 6). Invoke the target skill with the
+rule context formatted as `$ARGUMENTS` so the target skill receives it as its
+`**Request**: $ARGUMENTS` input.
+
+**Mechanism match:**
+
+- `Skill with discipline language` →
+  `Skill(tcs-helper:skill-author)` with `$ARGUMENTS` =
+  `"Create or update a skill that enforces: [State.rule]. Q4 style: [triage.q4]."`
+
+- `Claude PreToolUse hook` →
+  `Skill(plugin-dev:hook-development)` with hook event = `PreToolUse` and rule context.
+  If plugin-dev plugin not installed, fall back to AskUserQuestion described in Fallback block.
+
+- `Claude PostToolUse hook` →
+  `Skill(plugin-dev:hook-development)` with hook event = `PostToolUse` and rule context.
+  If plugin-dev plugin not installed, fall back to AskUserQuestion described in Fallback block.
+
+- `Claude UserPromptSubmit hook` →
+  `Skill(plugin-dev:hook-development)` with hook event = `UserPromptSubmit` and rule context.
+  If plugin-dev plugin not installed, fall back to AskUserQuestion described in Fallback block.
+
+- `Claude SessionStart hook` →
+  `Skill(plugin-dev:hook-development)` with hook event = `SessionStart` and rule context.
+  If plugin-dev plugin not installed, fall back to AskUserQuestion described in Fallback block.
+
+- `Memory rule` →
+  `Skill(tcs-helper:memory-add)` with `type=feedback` and a strong-language hint:
+  prepend the rule with `MUST`, `NEVER`, or `ALWAYS` to maximise enforcement weight.
+
+- Any mechanism starting with `CI workflow` →
+  Defer to Phase 3 (T3.1 will scaffold the CI workflow template).
+  Acknowledge: "Hand-off to CI workflow is not yet available. Phase 3 will add it."
+  Offer Memory rule as interim: `Skill(tcs-helper:memory-add)` with strong-language hint.
+
+- Any mechanism starting with `git pre-push hook` →
+  Defer to Phase 3 (T3.2 will scaffold the pre-push hook template).
+  Acknowledge: "Hand-off to git pre-push hook is not yet available. Phase 3 will add it."
+  Offer Memory rule as interim: `Skill(tcs-helper:memory-add)` with strong-language hint.
+
+**Fallback (target plugin not installed):**
+
+AskUserQuestion with options:
+- `Install plugin first — I will install plugin-dev and retry`
+  → Instruct user to install the plugin, then abort triage (do not attempt hand-off).
+- `Use Memory rule instead — add to memory with strong wording`
+  → `Skill(tcs-helper:memory-add)` with `type=feedback` + strong-language hint.
+- `Cancel — exit triage, no action taken`
+  → Exit skill immediately with no further action.
 
 ### Entry Point
 
