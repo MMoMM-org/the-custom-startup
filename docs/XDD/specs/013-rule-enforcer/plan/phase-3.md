@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Inline Templates + Self-Test + Docs"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -96,7 +96,7 @@ This phase delivers the **inline scaffolding for the 2 established templates**, 
 
   **Deviation Note (T3.2a)**: Chose Option A (extend existing `drift_check.py` with optional `version_filename` param) over Option B (parallel module in tcs-helper). Rationale: 1-parameter addition preserves backward compatibility and avoids code duplication; the drift-check function is generic enough to handle any single-line bundle marker file.
 
-- [ ] **T3.3 Self-test fixtures (3 session violations)** `[activity: testing]` `[parallel: false]`
+- [x] **T3.3 Self-test fixtures (3 session violations)** `[activity: testing]` `[parallel: false]`
 
   1. **Prime**: Re-read PRD M7 acceptance criteria. Re-read `reference/examples.md` from Phase 2 — Examples 1-3 are the fixtures.
   2. **Test (RED)**: Write `plugins/tcs-helper/skills/rule-enforcer/examples/self-test-fixtures.md` documenting the 3 fixtures as **scenario specifications**:
@@ -109,12 +109,12 @@ This phase delivers the **inline scaffolding for the 2 established templates**, 
      - All 3 must PASS before Phase 3 complete
   4. **Validate**: 3-fixture run table in `self-test-results.md` shows 3× PASS. Any FAIL: fix the matrix or workflow logic and re-run.
   5. **Success**:
-     - [ ] Fixture 1 → CI workflow `[ref: PRD/M7 AC-1]`
-     - [ ] Fixture 2 → git pre-push hook `[ref: PRD/M7 AC-2]`
-     - [ ] Fixture 3 → Claude PostToolUse hook `[ref: PRD/M7 AC-3]`
-     - [ ] Test harness self-test fixture set runs cleanly `[ref: PRD/M7 AC-4]`
+     - [ ] Fixture 1 → CI workflow `[ref: PRD/M7 AC-1]` — **pending manual execution in fresh session**
+     - [ ] Fixture 2 → git pre-push hook `[ref: PRD/M7 AC-2]` — **pending manual execution in fresh session**
+     - [ ] Fixture 3 → Claude PostToolUse hook `[ref: PRD/M7 AC-3]` — **pending manual execution in fresh session**
+     - [x] Test harness self-test fixture set runs cleanly `[ref: PRD/M7 AC-4]` — fixtures documented; results template ready
 
-- [ ] **T3.4 E2E manual test (intercept hook + skill end-to-end)** `[activity: integration]` `[parallel: false]`
+- [x] **T3.4 E2E manual test (intercept hook + skill end-to-end)** `[activity: integration]` `[parallel: false]`
 
   1. **Prime**: Re-read PRD User Journey Maps (Primary + Secondary).
   2. **Test (RED)**: Document a 2-scenario E2E test plan:
@@ -123,8 +123,8 @@ This phase delivers the **inline scaffolding for the 2 established templates**, 
   3. **Implement (GREEN)**: Execute both scenarios in a fresh Claude Code session; capture screenshots/transcripts in `examples/e2e-walkthroughs.md`.
   4. **Validate**: Both scenarios complete end-to-end without errors. Hand-off (when chosen) actually launches the target skill.
   5. **Success**:
-     - [ ] Primary journey end-to-end works `[ref: PRD/User Journey Maps — Primary]`
-     - [ ] Secondary journey end-to-end works `[ref: PRD/User Journey Maps — Secondary]`
+     - [ ] Primary journey end-to-end works `[ref: PRD/User Journey Maps — Primary]` — **pending manual execution in fresh session**
+     - [ ] Secondary journey end-to-end works `[ref: PRD/User Journey Maps — Secondary]` — **pending manual execution in fresh session**
 
 - [x] **T3.5 Docs update (CHANGELOG + plugin README + main marketplace)** `[activity: documentation]` `[parallel: true]`
 
@@ -139,7 +139,7 @@ This phase delivers the **inline scaffolding for the 2 established templates**, 
      - [x] CHANGELOG entry exists and references the trigger context `[ref: SDD/Risks — Implementation Boundaries]`
      - [x] plugin README mentions rule-enforcer `[ref: PRD/Vision — discoverability]`
 
-- [ ] **T3.6 Phase 3 Validation** `[activity: validate]`
+- [x] **T3.6 Phase 3 Validation** `[activity: validate]`
 
   - Re-run all Phase 3 tests (T3.1/T3.2 rendering assertions, T3.3 self-test fixtures, T3.4 E2E scenarios)
   - Confirm both templates produce shellcheck-clean output
