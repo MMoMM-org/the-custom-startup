@@ -147,23 +147,23 @@ rule context formatted as `$ARGUMENTS` so the target skill receives it as its
 
 **Mechanism match:**
 
-- `Skill with discipline language` →
+- Any mechanism starting with `Skill with discipline language` →
   `Skill(tcs-helper:skill-author)` with `$ARGUMENTS` =
   `"Create or update a skill that enforces: [State.rule]. Q4 style: [triage.q4]."`
 
-- `Claude PreToolUse hook` →
+- Any mechanism starting with `Claude PreToolUse hook` →
   `Skill(plugin-dev:hook-development)` with hook event = `PreToolUse` and rule context.
   If plugin-dev plugin not installed, fall back to AskUserQuestion described in Fallback block.
 
-- `Claude PostToolUse hook` →
+- Any mechanism starting with `Claude PostToolUse hook` →
   `Skill(plugin-dev:hook-development)` with hook event = `PostToolUse` and rule context.
   If plugin-dev plugin not installed, fall back to AskUserQuestion described in Fallback block.
 
-- `Claude UserPromptSubmit hook` →
+- Any mechanism starting with `Claude UserPromptSubmit hook` →
   `Skill(plugin-dev:hook-development)` with hook event = `UserPromptSubmit` and rule context.
   If plugin-dev plugin not installed, fall back to AskUserQuestion described in Fallback block.
 
-- `Claude SessionStart hook` →
+- Any mechanism starting with `Claude SessionStart hook` →
   `Skill(plugin-dev:hook-development)` with hook event = `SessionStart` and rule context.
   If plugin-dev plugin not installed, fall back to AskUserQuestion described in Fallback block.
 
