@@ -290,3 +290,57 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$stderr" == *"override consumed"* ]]
 }
+
+# ----------------------------------------------------------------------
+# _scan_tool_input_for_override — CMD prefix matching (T2.1 / spec-014)
+# ----------------------------------------------------------------------
+
+@test "_scan_tool_input_for_override: match — granular prefix in CMD → returns 0" {
+  CMD="CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push"
+  run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 0 ]
+}
+
+@test "_scan_tool_input_for_override: match — master CLAUDE_ALLOW_GIT_BAD_OPS prefix → returns 0 (ADR-4)" {
+  CMD="CLAUDE_ALLOW_GIT_BAD_OPS=1 git push"
+  run _scan_tool_input_for_override CLAUDE_ALLOW_GIT_BAD_OPS
+  [ "$status" -eq 0 ]
+}
+
+@test "_scan_tool_input_for_override: no match — empty CMD → returns 1, no error output (CON-5)" {
+  CMD=""
+  run --separate-stderr _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ]
+}
+
+@test "_scan_tool_input_for_override: no match — unset CMD → returns 1, no error output (CON-5)" {
+  unset CMD
+  run --separate-stderr _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ]
+}
+
+@test "_scan_tool_input_for_override: no match — override token mid-command (M2-AC-REGEX anchor) → returns 1" {
+  CMD="git push && CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 foo"
+  run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 1 ]
+}
+
+@test "_scan_tool_input_for_override: no match — shell-quoting trick (M2 PRD edge case) → returns 1" {
+  CMD="git push' && CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1; '"
+  run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 1 ]
+}
+
+@test "_scan_tool_input_for_override: no match — =10 false-positive guard ([[:space:]]+ after =1 rejects) → returns 1" {
+  CMD="CLAUDE_ALLOW_FOO=10 git push"
+  run _scan_tool_input_for_override CLAUDE_ALLOW_FOO
+  [ "$status" -eq 1 ]
+}
+
+@test "_scan_tool_input_for_override: no match — leading whitespace before token (regex anchored to ^) → returns 1" {
+  CMD=" CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push"
+  run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 1 ]
+}

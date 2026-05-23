@@ -62,6 +62,25 @@ _override_sentinel_path() {
   printf '%s/override-consumed-%s' "$(_cache_dir)" "$env_var"
 }
 
+# Scan the CMD global variable for a recognized single-shot override prefix.
+#
+# Usage: _scan_tool_input_for_override <env_var>
+#   env_var — the exact CLAUDE_ALLOW_<RULE> or CLAUDE_ALLOW_GIT_BAD_OPS name.
+#
+# Returns:
+#   0 — CMD starts with exactly "<env_var>=1<whitespace>+" at position 0.
+#   1 — CMD is unset, empty, or the prefix is absent / not at position 0.
+#
+# Side effects: none. No I/O. Caller handles sentinel + audit (CON-5).
+# Bash 3.2 compatible: uses [[ =~ ]] with a variable-held pattern (CON-1).
+_scan_tool_input_for_override() {
+  local env_var="$1"
+  [ -z "${CMD:-}" ] && return 1
+  local pattern="^${env_var}=1[[:space:]]+"
+  [[ "$CMD" =~ $pattern ]] && return 0
+  return 1
+}
+
 # Public entry point. Returns 0 on consumption, 1 otherwise.
 _check_and_consume_override() {
   local rule="${1:-}"
