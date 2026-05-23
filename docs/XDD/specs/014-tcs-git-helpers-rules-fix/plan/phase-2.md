@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: M2 — Tool-Input Override Scanning"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 2
 ---

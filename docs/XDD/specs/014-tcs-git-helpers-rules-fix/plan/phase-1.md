@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: M1 — Squash-Merge-Trap Nuance"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 1
 ---
