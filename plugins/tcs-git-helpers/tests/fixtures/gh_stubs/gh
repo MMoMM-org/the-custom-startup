@@ -105,7 +105,31 @@ case "$1" in
         if [ -n "${GH_STUB_SPY_FILE:-}" ]; then
           printf 'pr-view\n' >> "$GH_STUB_SPY_FILE"
         fi
-        _emit_response pr-view
+        # Honor --jq <expr> like the real gh CLI (per stub wire-format rule —
+        # without this, callers using `--jq '.mergeCommit.oid'` would receive
+        # the raw JSON envelope and the test environment would silently diverge
+        # from production behavior). Scan remaining args for --jq <expr>.
+        _jq_expr=""
+        _scan_args=("$@")
+        _i=0
+        while [ "$_i" -lt "${#_scan_args[@]}" ]; do
+          case "${_scan_args[$_i]}" in
+            --jq)
+              _jq_expr="${_scan_args[$((_i+1))]:-}"
+              break
+              ;;
+            --jq=*)
+              _jq_expr="${_scan_args[$_i]#--jq=}"
+              break
+              ;;
+          esac
+          _i=$((_i + 1))
+        done
+        if [ -n "$_jq_expr" ]; then
+          _emit_response pr-view | jq -r "$_jq_expr"
+        else
+          _emit_response pr-view
+        fi
         ;;
       *)
         printf 'gh-stub: unsupported pr subcommand: %s\n' "${2:-<empty>}" >&2
