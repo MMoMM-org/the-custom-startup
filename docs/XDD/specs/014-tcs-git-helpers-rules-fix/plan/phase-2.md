@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: M2 — Tool-Input Override Scanning"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -87,7 +87,7 @@ Phase 2 delivers the M2 capability: `_check_and_consume_override` recognizes `CL
      - [x] CON-2 satisfied — every BATS regex scenario has a corresponding pytest parity row that produces the same classification `[ref: SDD/Constraints; lines: 42-46]`
      - [x] Python helper handles both granular and master env-var names `[ref: SDD/ADR-4; lines: 810-833]`
 
-- [ ] **T2.4 Phase 2 Validation** `[activity: validate]`
+- [x] **T2.4 Phase 2 Validation** `[activity: validate]`
 
   - Run all M2 BATS cases (`bats tests/bats/test_override.bats`) — all pass.
   - Run all parity tests (`python -m pytest tests/python/test_drift_check.py`) — all pass.

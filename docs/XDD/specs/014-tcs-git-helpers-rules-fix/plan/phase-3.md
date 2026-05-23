@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Final Integration, S1 & Release"
-status: pending
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -32,7 +32,7 @@ phase: 3
 
 Phase 3 verifies S1, exercises M1+M2 together in an integration test, and ships the plugin version bump.
 
-- [ ] **T3.1 S1 — Deny-message wording assertion** `[activity: backend-api]` `[ref: SDD/ADR-9; lines: 935-963]` `[ref: PRD/Feature S1; lines: 178-189]`
+- [x] **T3.1 S1 — Deny-message wording assertion** `[activity: backend-api]` `[ref: SDD/ADR-9; lines: 935-963]` `[ref: PRD/Feature S1; lines: 178-189]`
 
   1. **Prime**: Read the `_record_deny` call site at `block-bad-git-ops.sh:148` (or current equivalent) and confirm the deny-message suffix format `(override: CLAUDE_ALLOW_<RULE>=1)`. Confirm via `[ref: SDD/ADR-9; lines: 946-955]` that no edit is required.
   2. **Test (RED)**: Add (or confirm presence of) a BATS assertion in `test_push_to_closed_pr.bats` and `test_override.bats` that captures the current deny-message wording verbatim. The assertion is intentionally a "wording lock" — failing it means a wording change crept in and must be reviewed against ADR-9.
@@ -42,7 +42,7 @@ Phase 3 verifies S1, exercises M1+M2 together in an integration test, and ships 
      - [ ] Deny-message suffix `(override: CLAUDE_ALLOW_<RULE>=1)` is preserved across M1+M2 changes `[ref: SDD/ADR-9; lines: 946-955]` `[ref: PRD/AC-S1.1]`
      - [ ] All pre-existing deny-message test assertions continue to pass `[ref: SDD/Acceptance Criteria; lines: 1061-1066]`
 
-- [ ] **T3.2 End-to-end integration test — M1 + M2 combined** `[activity: testing]` `[ref: SDD/Runtime View; lines: 510-580]`
+- [x] **T3.2 End-to-end integration test — M1 + M2 combined** `[activity: testing]` `[ref: SDD/Runtime View; lines: 510-580]`
 
   1. **Prime**: Re-read both Runtime View sequence diagrams: `[ref: SDD/Path A sub-path; lines: 531-557]` (ghost branch + inline override consumed via scan) and `[ref: SDD/Path B; lines: 559-580]` (HEAD ahead → allow with stderr note). The integration must exercise both paths within one BATS file to prove M1 and M2 compose correctly.
   2. **Test (RED)** — add `tests/bats/test_integration_m1_m2.bats`:
@@ -56,7 +56,7 @@ Phase 3 verifies S1, exercises M1+M2 together in an integration test, and ships 
      - [ ] Audit log captures `tool_input_truncated` only on scan-path consumption `[ref: SDD/Implementation Boundaries; lines: 142-144]`
      - [ ] Stderr ADR-8 note emitted only on Path B (ahead allow), never on Path A `[ref: SDD/Runtime View; lines: 559-580]`
 
-- [ ] **T3.3 Plugin version bump + release prep** `[activity: build-platform]` `[ref: SDD/Deployment View; lines: 657-666]` `[ref: SDD/Project Commands; lines: 254-267]`
+- [x] **T3.3 Plugin version bump + release prep** `[activity: build-platform]` `[ref: SDD/Deployment View; lines: 657-666]` `[ref: SDD/Project Commands; lines: 254-267]`
 
   1. **Prime**: Read `plugins/tcs-git-helpers/.claude-plugin/plugin.json` to identify the current `version` field and any other release-affecting fields. Recall the canonical TCS bundle versioning pattern per the auto-memory reference: bump the version, push the change, marketplace sync handles the rest.
   2. **Test (RED)**: No new tests. Validation of this task is the green run of the full test suite plus shellcheck across all three touched files.
@@ -67,7 +67,7 @@ Phase 3 verifies S1, exercises M1+M2 together in an integration test, and ships 
      - [ ] Full test suite (BATS + pytest) green across the entire plugin `[ref: SDD/Quality Requirements; lines: 988-996]`
      - [ ] shellcheck clean on all three modified scripts `[ref: SDD/Project Commands; lines: 261-263]`
 
-- [ ] **T3.4 Phase 3 Final Validation** `[activity: validate]`
+- [x] **T3.4 Phase 3 Final Validation** `[activity: validate]`
 
   - Run all BATS suites in `plugins/tcs-git-helpers/tests/bats/` — every file green.
   - Run all pytest suites in `plugins/tcs-git-helpers/tests/python/` — every file green.

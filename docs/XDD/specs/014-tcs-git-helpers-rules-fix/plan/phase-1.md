@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: M1 — Squash-Merge-Trap Nuance"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -83,7 +83,7 @@ Phase 1 delivers the M1 capability: the closed-PR push guard distinguishes ghost
      - [x] M1-AC3 no-PR path unaffected by M1 edits `[ref: SDD/Acceptance Criteria; lines: 1020-1025]` `[ref: PRD/AC-M1.3]`
      - [x] At most one `gh pr view` call per uncached MERGED-branch push; zero `gh` calls on cache hit `[ref: SDD/Quality Requirements; lines: 974-980]`
 
-- [ ] **T1.4 Phase 1 Validation** `[activity: validate]`
+- [x] **T1.4 Phase 1 Validation** `[activity: validate]`
 
   - Run all M1 BATS cases (`bats tests/bats/test_cache.bats tests/bats/test_push_to_closed_pr.bats`) — all pass.
   - Run the full `tests/bats/` suite — no regressions in other rule handlers.
