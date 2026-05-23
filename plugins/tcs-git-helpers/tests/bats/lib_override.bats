@@ -451,6 +451,20 @@ teardown() {
   [ "$output" = "true" ]
 }
 
+# M7 AC3 contract verified for env-var-path master at line 201-207; this
+# test pins the same contract for the scan-path master so the warning can't
+# silently regress when the scan branch is touched.
+@test "M2 master scan: M7 AC3 LOUD stderr warning fires on scan-path master consumption" {
+  unset CLAUDE_ALLOW_PUSH_TO_CLOSED_PR CLAUDE_ALLOW_GIT_BAD_OPS
+  CMD="CLAUDE_ALLOW_GIT_BAD_OPS=1 git push origin main"
+
+  run --separate-stderr _check_and_consume_override PUSH_TO_CLOSED_PR
+
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"MASTER OVERRIDE"* ]]
+  [[ "$stderr" == *"granular"* ]]
+}
+
 # Granular-over-master precedence preserved when both env-vars set.
 @test "M2 regression: granular env-var wins over master env-var (existing behavior)" {
   export CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1
