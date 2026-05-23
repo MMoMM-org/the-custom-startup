@@ -451,7 +451,12 @@ _match_command "$CMD" "$PATTERN_RESTORE_DESTRUCTIVE" && _maybe_deny DESTRUCTIVE_
 _match_command "$CMD" "$PATTERN_BRANCH_FORCE_DELETE" && _maybe_deny FORCE_BRANCH_DELETE   "git branch -D force-deletes; use -d (safe) or recover via reflog"
 _match_command "$CMD" "$PATTERN_STASH_DESTROY"       && _maybe_deny STASH_DESTROY         "git stash drop/clear destroys stash; use pop"
 _match_command "$CMD" "$PATTERN_REFLOG_EXPIRE"       && _maybe_deny REFLOG_EXPIRE         "git reflog expire kills the recovery net"
-_match_command "$CMD" "$PATTERN_NO_VERIFY"           && _maybe_deny NO_VERIFY             "--no-verify bypasses .githooks/ — defeats the purpose"
+# NO_VERIFY uses _strip_quoted to prevent `.*` in PATTERN_NO_VERIFY from
+# matching `-n` / `--no-verify` text INSIDE a `git commit -m "..."` message
+# body (v2.2.1 false-positive fix). Scope is intentionally narrow: only this
+# pattern bridges from argv into a typically-quoted body. See pattern_match.sh.
+_match_command "$(_strip_quoted "$CMD")" "$PATTERN_NO_VERIFY" \
+                                                     && _maybe_deny NO_VERIFY             "--no-verify bypasses .githooks/ — defeats the purpose"
 
 # === Push variants (M1 closed-PR + M7 destructive push forms) ===
 _match_command "$CMD" "$PATTERN_PUSH"                && _check_push_to_closed_pr
