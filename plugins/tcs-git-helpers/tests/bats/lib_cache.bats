@@ -503,15 +503,16 @@ teardown() {
     skip "jq not installed"
   fi
   source "$LIB"
-  _write_pr_state_cache "feat/merged-branch" "MERGED" "99" "abc1234567890"
-  # Simulate exactly how block-bad-git-ops.sh reads the cache (line 229):
-  #   state=$(_read_pr_state_cache "$branch" 2>/dev/null) || state=""
-  # Then uses $state directly in a case statement. Because command substitution
-  # strips trailing newlines, a two-line output would have its two lines
-  # joined with a newline in the variable — we confirm line 1 is still "MERGED".
-  local raw
-  raw="$(_read_pr_state_cache "feat/merged-branch" 2>/dev/null)" || raw=""
-  local line1
-  line1="$(printf '%s\n' "$raw" | sed -n '1p')"
-  [ "$line1" = "MERGED" ]
+  local branch="feat/merged-branch"
+  _write_pr_state_cache "$branch" "MERGED" "99" "abc1234567890"
+  # Simulate block-bad-git-ops.sh line 229 verbatim (post-W1-fix):
+  local _raw state matched
+  _raw=$(_read_pr_state_cache "$branch" 2>/dev/null) || _raw=""
+  state=$(printf '%s\n' "$_raw" | sed -n '1p')
+  # Real case dispatch — falls through to no-match if state is "MERGED\n<sha>"
+  case "$state" in
+    CLOSED|MERGED) matched=yes ;;
+    *)             matched=no  ;;
+  esac
+  [ "$matched" = "yes" ]
 }
