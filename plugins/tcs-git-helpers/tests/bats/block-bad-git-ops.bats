@@ -1076,6 +1076,12 @@ _build_ahead_repo() {
   run _run_hook_with_cmd "git push origin $branch"
   rm -rf "$repo"
   _assert_deny_for_rule "PUSH_TO_CLOSED_PR"
+  # Pin the existing _record_deny wording so a future refactor can't silently
+  # swap the message text and slip past the rule-name+references assertion.
+  [[ "$output" == *"PR for branch"* ]] \
+    || { echo "expected existing deny wording 'PR for branch', got: $output" >&2; return 1; }
+  [[ "$output" == *"is MERGED"* ]] \
+    || { echo "expected 'is MERGED' in deny output, got: $output" >&2; return 1; }
 }
 
 # ----------------------------------------------------------------------
@@ -1164,7 +1170,7 @@ _build_ahead_repo() {
 # ----------------------------------------------------------------------
 
 @test "T1.3 cache-miss: MERGED+no merge_commit → one gh pr view call; SHA cached" {
-  local repo branch spy_file
+  local repo branch spy_file expected_sha resolved_path hash cache_file
   branch="feat/t13-cache-miss"
   repo="$(_build_ahead_repo "$branch" 1)"
 
@@ -1177,6 +1183,15 @@ _build_ahead_repo() {
 
   spy_file="$(mktemp "${TMPDIR:-/tmp}/tcs-gh-spy.XXXXXX")"
   export GH_STUB_SPY_FILE="$spy_file"
+
+  # Compute cache file path BEFORE rm -rf so we can read it after the run.
+  # Mirrors _seed_pr_cache's hashing (symlink-resolved path → shasum head -c 12).
+  resolved_path="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" \
+    || resolved_path="$repo"
+  hash="$(printf '%s' "$resolved_path" | shasum 2>/dev/null | head -c 12)"
+  cache_file="$CLAUDE_PLUGIN_DATA/cache/${hash}-pr-state.json"
+  # SHA from merged-pr/pr-view.json {"mergeCommit":{"oid":"d8c4a23..."}}.
+  expected_sha="d8c4a23719fbe21b8b7d6f1e2c5a90b3e7f4d6c1"
 
   cd "$repo"
   run _run_hook_with_cmd "git push origin $branch"
@@ -1192,6 +1207,16 @@ _build_ahead_repo() {
   # Exactly one gh pr view call was made (cache miss → fetch SHA).
   [ "$call_count" -eq 1 ] \
     || { echo "expected 1 gh pr view call (cache miss), got: $call_count" >&2; return 1; }
+
+  # Verify the resolved SHA was written back to the cache via T1.1's extended
+  # writer — the merge_commit field round-trips so a subsequent push would
+  # hit the cache-hit path (zero gh calls).
+  [ -f "$cache_file" ] \
+    || { echo "expected cache file at $cache_file" >&2; return 1; }
+  local cached_sha
+  cached_sha="$(jq -r --arg b "$branch" '.branch_state[$b].merge_commit // empty' "$cache_file")"
+  [ "$cached_sha" = "$expected_sha" ] \
+    || { echo "expected cached merge_commit=$expected_sha, got: $cached_sha" >&2; return 1; }
 }
 
 # ----------------------------------------------------------------------
@@ -1216,4 +1241,10 @@ _build_ahead_repo() {
 
   # SHA unavailable → _is_ahead_of_merged returns 2 → deny path fires.
   _assert_deny_for_rule "PUSH_TO_CLOSED_PR"
+  # Pin the existing _record_deny wording — confirms the pre-existing deny
+  # path fired (not a new SHA-resolution-specific error path).
+  [[ "$output" == *"PR for branch"* ]] \
+    || { echo "expected existing deny wording 'PR for branch', got: $output" >&2; return 1; }
+  [[ "$output" == *"is MERGED"* ]] \
+    || { echo "expected 'is MERGED' in deny output, got: $output" >&2; return 1; }
 }
