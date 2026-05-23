@@ -99,6 +99,7 @@ _check_and_consume_override() {
   # Resolve which override (if any) is active. Granular wins over master
   # per M12 §Edge Cases ("Master + granular both set: granular wins").
   # `${!var:-0}` is bash 2.0+ indirect expansion — supported on bash 3.2.
+  local _scan_path=0
   if [ "${!env_var:-0}" = "1" ]; then
     OVERRIDE_VAR="$env_var"
     OVERRIDE_MASTER="0"
@@ -106,7 +107,19 @@ _check_and_consume_override() {
     OVERRIDE_VAR="$master_var"
     OVERRIDE_MASTER="1"
   else
-    return 1
+    # M2: env-var path found nothing — scan CMD for inline prefix (ADR-2).
+    # Granular scan first (granular wins over master per M12 §Edge Cases).
+    if _scan_tool_input_for_override "$env_var"; then
+      OVERRIDE_VAR="$env_var"
+      OVERRIDE_MASTER="0"
+      _scan_path=1
+    elif _scan_tool_input_for_override "$master_var"; then
+      OVERRIDE_VAR="$master_var"
+      OVERRIDE_MASTER="1"
+      _scan_path=1
+    else
+      return 1
+    fi
   fi
 
   # 5-second double-tap window: if a sentinel exists with an epoch within
@@ -151,8 +164,14 @@ _check_and_consume_override() {
     if [ "$OVERRIDE_MASTER" = "1" ]; then
       master_field="true"
     fi
-    _audit_log env_var="$OVERRIDE_VAR" master="$master_field" \
-      >/dev/null 2>&1 || true
+    if [ "$_scan_path" = "1" ]; then
+      _audit_log env_var="$OVERRIDE_VAR" master="$master_field" \
+        tool_input_truncated="1" \
+        >/dev/null 2>&1 || true
+    else
+      _audit_log env_var="$OVERRIDE_VAR" master="$master_field" \
+        >/dev/null 2>&1 || true
+    fi
   fi
 
   if [ "$OVERRIDE_MASTER" = "1" ]; then

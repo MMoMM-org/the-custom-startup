@@ -51,7 +51,8 @@ setup() {
 
   # Defensive: ensure no stray override env-vars leak in from the caller.
   unset CLAUDE_ALLOW_RESET_HARD CLAUDE_ALLOW_GIT_BAD_OPS \
-        OVERRIDE_VAR OVERRIDE_MASTER
+        CLAUDE_ALLOW_PUSH_TO_CLOSED_PR \
+        OVERRIDE_VAR OVERRIDE_MASTER CMD
 
   # shellcheck source=/dev/null
   source "$AUDIT_LIB"
@@ -66,7 +67,8 @@ teardown() {
     rm -rf "$CLAUDE_PLUGIN_DATA"
   fi
   unset CLAUDE_ALLOW_RESET_HARD CLAUDE_ALLOW_GIT_BAD_OPS \
-        OVERRIDE_VAR OVERRIDE_MASTER
+        CLAUDE_ALLOW_PUSH_TO_CLOSED_PR \
+        OVERRIDE_VAR OVERRIDE_MASTER CMD
 }
 
 # ----------------------------------------------------------------------
@@ -343,4 +345,140 @@ teardown() {
   CMD=" CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push"
   run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
   [ "$status" -eq 1 ]
+}
+
+# ----------------------------------------------------------------------
+# M2: Tool-Input Scan integration into _check_and_consume_override (T2.2)
+# ----------------------------------------------------------------------
+
+# M2-AC1: env-var path unchanged; scan NOT invoked when env-var present.
+@test "M2-AC1: env-var set → consumed via env-var path; scan not called" {
+  export CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1
+  CMD="unrelated command"
+  # Spy on _scan_tool_input_for_override: stub increments a counter.
+  _SCAN_COUNT=0
+  _scan_tool_input_for_override() { _SCAN_COUNT=$((_SCAN_COUNT + 1)); return 1; }
+
+  _check_and_consume_override PUSH_TO_CLOSED_PR
+  local rc=$?
+
+  [ "$rc" -eq 0 ]
+  [ "$OVERRIDE_VAR" = "CLAUDE_ALLOW_PUSH_TO_CLOSED_PR" ]
+  [ "$OVERRIDE_MASTER" = "0" ]
+  # Sentinel written for the granular var.
+  [ -f "$CACHE_DIR/override-consumed-CLAUDE_ALLOW_PUSH_TO_CLOSED_PR" ]
+  # Scan must not have been called (env-var short-circuit).
+  [ "$_SCAN_COUNT" -eq 0 ]
+}
+
+# M2-AC2: env-var absent; CMD prefix → consumed via scan path; audit log
+# records tool_input_truncated=true.
+@test "M2-AC2: no env-var, CMD prefix present → consumed via scan; sentinel written; audit has tool_input_truncated" {
+  unset CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  CMD="CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push origin foo"
+
+  _check_and_consume_override PUSH_TO_CLOSED_PR
+  local rc=$?
+
+  [ "$rc" -eq 0 ]
+  [ "$OVERRIDE_VAR" = "CLAUDE_ALLOW_PUSH_TO_CLOSED_PR" ]
+  [ "$OVERRIDE_MASTER" = "0" ]
+  [ -f "$CACHE_DIR/override-consumed-CLAUDE_ALLOW_PUSH_TO_CLOSED_PR" ]
+  # Audit line must exist and tool_input_truncated must be true.
+  [ -f "$AUDIT_FILE" ]
+  run jq -r '.tool_input_truncated' "$AUDIT_FILE"
+  [ "$output" = "true" ]
+}
+
+# M2-AC3: env-var absent, CMD empty → no override; returns 1; no error output
+# (CON-5); sentinel NOT written.
+@test "M2-AC3: no env-var, CMD empty → returns 1; no sentinel; no stderr (CON-5)" {
+  unset CLAUDE_ALLOW_PUSH_TO_CLOSED_PR CLAUDE_ALLOW_GIT_BAD_OPS
+  CMD=""
+
+  run --separate-stderr _check_and_consume_override PUSH_TO_CLOSED_PR
+
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ]
+  [ ! -f "$CACHE_DIR/override-consumed-CLAUDE_ALLOW_PUSH_TO_CLOSED_PR" ]
+}
+
+# M2-AC3 variant: unset CMD → same result.
+@test "M2-AC3 (unset CMD): no env-var, CMD unset → returns 1; no stderr (CON-5)" {
+  unset CLAUDE_ALLOW_PUSH_TO_CLOSED_PR CLAUDE_ALLOW_GIT_BAD_OPS CMD
+
+  run --separate-stderr _check_and_consume_override PUSH_TO_CLOSED_PR
+
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ]
+}
+
+# M2-AC4: env-var AND CMD prefix both present → env-var path wins; scan never
+# invoked (spy verifies); exactly one sentinel write.
+@test "M2-AC4: env-var AND CMD prefix both present → env-var wins; scan not called" {
+  export CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1
+  CMD="CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push origin main"
+  _SCAN_COUNT=0
+  _scan_tool_input_for_override() { _SCAN_COUNT=$((_SCAN_COUNT + 1)); return 1; }
+
+  _check_and_consume_override PUSH_TO_CLOSED_PR
+  local rc=$?
+
+  [ "$rc" -eq 0 ]
+  [ "$OVERRIDE_VAR" = "CLAUDE_ALLOW_PUSH_TO_CLOSED_PR" ]
+  [ "$OVERRIDE_MASTER" = "0" ]
+  [ "$_SCAN_COUNT" -eq 0 ]
+  # Exactly one sentinel file.
+  [ -f "$CACHE_DIR/override-consumed-CLAUDE_ALLOW_PUSH_TO_CLOSED_PR" ]
+}
+
+# Master-override scan: CLAUDE_ALLOW_GIT_BAD_OPS=1 prefix in CMD, no env-var
+# → consumed via scan path with OVERRIDE_MASTER=1; audit reflects master.
+@test "M2 master scan: CLAUDE_ALLOW_GIT_BAD_OPS prefix in CMD → OVERRIDE_MASTER=1; audit master=true" {
+  unset CLAUDE_ALLOW_PUSH_TO_CLOSED_PR CLAUDE_ALLOW_GIT_BAD_OPS
+  CMD="CLAUDE_ALLOW_GIT_BAD_OPS=1 git push origin main"
+
+  _check_and_consume_override PUSH_TO_CLOSED_PR
+  local rc=$?
+
+  [ "$rc" -eq 0 ]
+  [ "$OVERRIDE_VAR" = "CLAUDE_ALLOW_GIT_BAD_OPS" ]
+  [ "$OVERRIDE_MASTER" = "1" ]
+  [ -f "$CACHE_DIR/override-consumed-CLAUDE_ALLOW_GIT_BAD_OPS" ]
+  run jq -r '.master' "$AUDIT_FILE"
+  [ "$output" = "true" ]
+  run jq -r '.tool_input_truncated' "$AUDIT_FILE"
+  [ "$output" = "true" ]
+}
+
+# Granular-over-master precedence preserved when both env-vars set.
+@test "M2 regression: granular env-var wins over master env-var (existing behavior)" {
+  export CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1
+  export CLAUDE_ALLOW_GIT_BAD_OPS=1
+
+  _check_and_consume_override PUSH_TO_CLOSED_PR
+  local rc=$?
+
+  [ "$rc" -eq 0 ]
+  [ "$OVERRIDE_VAR" = "CLAUDE_ALLOW_PUSH_TO_CLOSED_PR" ]
+  [ "$OVERRIDE_MASTER" = "0" ]
+  # Master sentinel must NOT be written.
+  [ ! -f "$CACHE_DIR/override-consumed-CLAUDE_ALLOW_GIT_BAD_OPS" ]
+  [ -f "$CACHE_DIR/override-consumed-CLAUDE_ALLOW_PUSH_TO_CLOSED_PR" ]
+}
+
+# CON-4: double-tap sentinel fires on scan-path consumption.
+@test "M2 CON-4: scan-path consumption is subject to 5s double-tap sentinel" {
+  unset CLAUDE_ALLOW_PUSH_TO_CLOSED_PR CLAUDE_ALLOW_GIT_BAD_OPS
+  CMD="CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push origin main"
+
+  # Pre-plant a fresh sentinel (simulates a recent scan-path consumption).
+  mkdir -p "$CACHE_DIR"
+  printf '%s\n' "$(date +%s)" \
+    > "$CACHE_DIR/override-consumed-CLAUDE_ALLOW_PUSH_TO_CLOSED_PR"
+
+  run --separate-stderr _check_and_consume_override PUSH_TO_CLOSED_PR
+
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"double-tap"* ]]
 }
