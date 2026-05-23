@@ -37,6 +37,7 @@ import pytest
 _PLUGIN_ROOT = Path(__file__).parent.parent.parent  # plugins/tcs-git-helpers/
 _LIB_PATH = _PLUGIN_ROOT / "scripts" / "lib" / "drift_check.py"
 _BASH_HELPER = _PLUGIN_ROOT / "scripts" / "lib" / "drift_check.sh"
+_BASH_LIB_OVERRIDE = _PLUGIN_ROOT / "scripts" / "lib" / "override.sh"
 
 
 def _load_module():
@@ -95,6 +96,29 @@ def _call_bash_helper(repo_path: Path, expected_version: str) -> str:
     )
     result.check_returncode()
     return result.stdout.strip()
+
+
+def _call_bash_scan(cmd: str, env_var: str) -> bool:
+    """
+    Invoke the bash _scan_tool_input_for_override helper via subprocess.
+    Sources cache.sh then override.sh, sets CMD, and calls the function.
+    Returns True if exit status is 0 (match), False if 1 (no match).
+    """
+    cache_sh = _PLUGIN_ROOT / "scripts" / "lib" / "cache.sh"
+    script = (
+        f'export CLAUDE_PLUGIN_DATA="$(mktemp -d)"; '
+        f'CMD={repr(cmd)}; '
+        f'source "{cache_sh}"; '
+        f'source "{_BASH_LIB_OVERRIDE}"; '
+        f'_scan_tool_input_for_override {repr(env_var)}'
+    )
+    result = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    return result.returncode == 0
 
 
 # ---------------------------------------------------------------------------
@@ -323,3 +347,98 @@ class TestCustomFilename:
         )
         assert result.status == dc.DriftStatus.DRIFT
         assert result.installed_version == "1.0.0"
+
+
+# ---------------------------------------------------------------------------
+# T2.3 — CON-2 parity rows: scan_tool_input_for_override (bash ↔ Python)
+#
+# Each row mirrors a BATS scenario from lib_override.bats §_scan_tool_input.
+# The Python helper must agree with bash on every (cmd, env_var) input.
+# CON-2: bash and Python implementations of the same logic MUST agree on
+# classification for every input in the parity test table.
+# ---------------------------------------------------------------------------
+
+_SCAN_PARITY_TABLE: list[tuple[Optional[str], str, bool]] = [
+    # (cmd, env_var, expected_match)
+    #
+    # positive match — granular env-var prefix at position 0, whitespace after =1
+    ("CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push", "CLAUDE_ALLOW_PUSH_TO_CLOSED_PR", True),
+    # master positive match — CLAUDE_ALLOW_GIT_BAD_OPS prefix (ADR-4)
+    ("CLAUDE_ALLOW_GIT_BAD_OPS=1 git push",        "CLAUDE_ALLOW_GIT_BAD_OPS",        True),
+    # empty CMD — bash returns 1 for empty string (CON-5)
+    ("",                                            "CLAUDE_ALLOW_PUSH_TO_CLOSED_PR", False),
+    # mid-command bypass — token not at position 0 (regex anchored to ^)
+    ("git push && CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 foo", "CLAUDE_ALLOW_PUSH_TO_CLOSED_PR", False),
+    # shell-quoting trick — injection after quote (M2 PRD edge case)
+    ("git push' && CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1; '", "CLAUDE_ALLOW_PUSH_TO_CLOSED_PR", False),
+    # =10 false-positive guard — [[:space:]]+ after =1 rejects =10
+    ("CLAUDE_ALLOW_FOO=10 git push",               "CLAUDE_ALLOW_FOO",                False),
+    # leading-whitespace bypass — leading space before token, ^ anchored rejects
+    (" CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push", "CLAUDE_ALLOW_PUSH_TO_CLOSED_PR", False),
+]
+
+# unset CMD maps to None in the table; bash treats unset and empty identically
+# per CON-5 — bash guard: `[ -z "${CMD:-}" ]` returns 1 for both.
+_SCAN_PARITY_TABLE_WITH_UNSET: list[tuple[Optional[str], str, bool]] = [
+    (None, "CLAUDE_ALLOW_PUSH_TO_CLOSED_PR", False),
+]
+
+
+@pytest.mark.parametrize(
+    "cmd,env_var,expected_match",
+    _SCAN_PARITY_TABLE,
+    ids=[
+        "granular-positive",
+        "master-positive",
+        "empty-cmd",
+        "mid-command",
+        "shell-quoting-trick",
+        "equals-10-false-positive",
+        "leading-whitespace",
+    ],
+)
+def test_scan_parity_python_matches_bash(
+    dc,
+    cmd: str,
+    env_var: str,
+    expected_match: bool,
+) -> None:
+    """Python scan_tool_input_for_override must agree with bash for every fixture."""
+    py_result = dc.scan_tool_input_for_override(cmd, env_var)
+    assert py_result == expected_match, (
+        f"Python: scan_tool_input_for_override({cmd!r}, {env_var!r}) "
+        f"returned {py_result!r}; expected {expected_match!r}"
+    )
+
+    # Cross-check against bash implementation when available.
+    if not _BASH_LIB_OVERRIDE.exists():
+        pytest.skip(
+            f"Bash override lib not yet at {_BASH_LIB_OVERRIDE}; "
+            "parity check will run once T2.1 lands"
+        )
+    bash_cmd = cmd  # may be empty string — bash treats "" same as unset via ${CMD:-}
+    bash_result = _call_bash_scan(bash_cmd, env_var)
+    assert bash_result == expected_match, (
+        f"Bash returned {bash_result!r}; expected {expected_match!r} for "
+        f"CMD={cmd!r}, env_var={env_var!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    "cmd,env_var,expected_match",
+    _SCAN_PARITY_TABLE_WITH_UNSET,
+    ids=["unset-cmd"],
+)
+def test_scan_parity_unset_cmd(
+    dc,
+    cmd: Optional[str],
+    env_var: str,
+    expected_match: bool,
+) -> None:
+    """Unset CMD (None) and empty CMD must both yield False — CON-5 parity."""
+    # Pass None to signal unset — Python helper receives None and treats it as no-match.
+    py_result = dc.scan_tool_input_for_override(cmd, env_var)
+    assert py_result == expected_match, (
+        f"Python: scan_tool_input_for_override(None, {env_var!r}) "
+        f"returned {py_result!r}; expected {expected_match!r}"
+    )
