@@ -234,7 +234,6 @@ _emit_permission_decision_deny() {
 #   - ADR-1: git merge-base --is-ancestor is the canonical ancestor test
 #   - ADR-8: stderr note wording is locked; do NOT paraphrase
 #   - Stdout: NEVER written — would corrupt the permissionDecision JSON caller emits
-# shellcheck disable=SC2329  # not yet wired into a caller; T1.3 integrates it
 _is_ahead_of_merged() {
   local merged_sha="$2"
 
@@ -272,11 +271,14 @@ _check_push_to_closed_pr() {
   fi
 
   # Try the 60s push-state cache before going to gh.
-  # _read_pr_state_cache emits two lines when merge_commit is present;
-  # extract only line 1 so the case dispatch below matches CLOSED|MERGED.
-  local _raw
+  # _read_pr_state_cache emits two stdout lines when merge_commit is cached:
+  #   line 1 — state (MERGED/CLOSED/OPEN/etc.)
+  #   line 2 — merge_commit SHA (only present when cached)
+  # Extract line 1 for the case dispatch; line 2 for the ahead-check.
+  local _raw merged_sha
   _raw=$(_read_pr_state_cache "$branch" 2>/dev/null) || _raw=""
   state=$(printf '%s\n' "$_raw" | sed -n '1p')
+  merged_sha=$(printf '%s\n' "$_raw" | sed -n '2p')
 
   if [ -z "$state" ]; then
     # _get_branch_state already populated PR_STATE via _get_pr_state.
@@ -300,6 +302,28 @@ _check_push_to_closed_pr() {
 
   case "$state" in
     CLOSED|MERGED)
+      # M1: attempt ahead-check before override or deny (ADR-8).
+      # Resolve merge_commit SHA if not already cached.
+      if [ -z "$merged_sha" ] && [ "$state" = "MERGED" ]; then
+        if command -v gh >/dev/null 2>&1; then
+          merged_sha=$(gh pr view "$branch" \
+            --json mergeCommit \
+            --jq '.mergeCommit.oid // empty' 2>/dev/null) || merged_sha=""
+          if [ -n "$merged_sha" ]; then
+            _write_pr_state_cache "$branch" "$state" "0" "$merged_sha" \
+              2>/dev/null || true
+          fi
+        fi
+      fi
+
+      # Ahead-check: return 0 (allow) when HEAD has new commits past the merge.
+      # _is_ahead_of_merged emits the ADR-8 stderr note on return 0.
+      # Return 2 (empty SHA) or 1 (not-ahead) → fall through to override/deny.
+      if _is_ahead_of_merged "$branch" "$merged_sha"; then
+        return 0
+      fi
+
+      # Not ahead, or SHA unavailable — fall through to override then deny.
       if _check_and_consume_override "$rule"; then
         return 0
       fi

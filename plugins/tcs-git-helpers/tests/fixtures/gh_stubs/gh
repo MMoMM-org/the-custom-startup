@@ -101,6 +101,10 @@ case "$1" in
         _emit_response pr-list
         ;;
       view)
+        # Spy: when GH_STUB_SPY_FILE is set, record each pr-view invocation.
+        if [ -n "${GH_STUB_SPY_FILE:-}" ]; then
+          printf 'pr-view\n' >> "$GH_STUB_SPY_FILE"
+        fi
         _emit_response pr-view
         ;;
       *)
