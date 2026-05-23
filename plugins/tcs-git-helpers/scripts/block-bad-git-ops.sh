@@ -212,6 +212,52 @@ _emit_permission_decision_deny() {
 }
 
 # ---------------------------------------------------------------------------
+# M1 helper: _is_ahead_of_merged — 4-path ancestor check (ADR-1 / ADR-8)
+# ---------------------------------------------------------------------------
+#
+# Determines whether the current HEAD has diverged past a known merged SHA
+# (e.g., the merge_commit recorded in the PR-state cache from T1.1).
+#
+# Arguments: <branch> <merged_sha>
+#   <branch>     — informational; not used by git calls (HEAD is the test subject)
+#   <merged_sha> — SHA of the commit at which the PR was merged into the base branch
+#
+# Return values (per SDD §Interface Specifications):
+#   0 — HEAD is strictly ahead of merged_sha (allow push; emits ADR-8 stderr note)
+#   1 — deny: HEAD == merged_sha (ghost-branch), merged_sha not ancestor, or
+#             merged_sha absent from local object store (conservative fallback)
+#   2 — SHA argument was empty; caller treats this as deny
+#
+# Constraints:
+#   - bash 3.2 / CON-1: no associative arrays, no ${var,,}, no mapfile
+#   - Only uses: git rev-parse HEAD, git merge-base --is-ancestor, string compare
+#   - ADR-1: git merge-base --is-ancestor is the canonical ancestor test
+#   - ADR-8: stderr note wording is locked; do NOT paraphrase
+#   - Stdout: NEVER written — would corrupt the permissionDecision JSON caller emits
+# shellcheck disable=SC2329  # not yet wired into a caller; T1.3 integrates it
+_is_ahead_of_merged() {
+  local merged_sha="$2"
+
+  if [ -z "$merged_sha" ]; then
+    return 2
+  fi
+
+  local head_sha
+  head_sha=$(git -C "$PWD" rev-parse HEAD 2>/dev/null) || return 1
+
+  if [ "$head_sha" = "$merged_sha" ]; then
+    return 1
+  fi
+
+  if git -C "$PWD" merge-base --is-ancestor "$merged_sha" HEAD 2>/dev/null; then
+    printf 'tcs-git-helpers: PR was merged; HEAD is ahead by new commits. A new PR will be required for this push.\n' >&2
+    return 0
+  fi
+
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # M1: push-to-closed-PR — gh fail-open, 60s cache (CON-4)
 # ---------------------------------------------------------------------------
 

@@ -36,7 +36,41 @@ setup_file() {
 
   # Build synthetic repos once per test file. build.sh prints OUT_DIR on stdout.
   REPOS_ROOT="$("$FIXTURE_DIR/repos/build.sh" 2>/dev/null)"
-  export REPOS_ROOT TESTS_DIR PLUGIN_ROOT FIXTURE_DIR
+
+  # Build the _is_ahead_of_merged runner script once; tests reference IS_AHEAD_RUNNER.
+  IS_AHEAD_RUNNER="$BATS_TMPDIR/is_ahead_runner.sh"
+  cat > "$IS_AHEAD_RUNNER" << 'RUNNER_EOF'
+#!/usr/bin/env bash
+set -uo pipefail
+PLUGIN_ROOT="$1"; shift
+BRANCH="$1";      shift
+MERGED_SHA="$1";  shift
+
+# Source git_state.sh for any indirect deps the function may acquire later.
+# shellcheck source=/dev/null
+. "$PLUGIN_ROOT/scripts/lib/git_state.sh"
+
+# Extract _is_ahead_of_merged from block-bad-git-ops.sh without sourcing the
+# full script (which would call exit 0 after the early tool-name guard).
+# awk: collect lines from function header until the closing `}` on its own line.
+_fn_def=$(awk '
+  /^_is_ahead_of_merged\(\)[[:space:]]*\{/ { p=1 }
+  p { print }
+  p && /^\}[[:space:]]*$/ { p=0; exit }
+' "$PLUGIN_ROOT/scripts/block-bad-git-ops.sh")
+
+if [ -z "$_fn_def" ]; then
+  printf 'RUNNER: _is_ahead_of_merged not found in block-bad-git-ops.sh\n' >&2
+  exit 99
+fi
+
+eval "$_fn_def"
+
+_is_ahead_of_merged "$BRANCH" "$MERGED_SHA"
+RUNNER_EOF
+  chmod +x "$IS_AHEAD_RUNNER"
+
+  export REPOS_ROOT TESTS_DIR PLUGIN_ROOT FIXTURE_DIR IS_AHEAD_RUNNER
 }
 
 teardown_file() {
@@ -747,4 +781,180 @@ _assert_allow() {
   elapsed_ms=$((t1 - t0))
   [ "$elapsed_ms" -lt 1000 ] \
     || { echo "non-push hook took ${elapsed_ms}ms (>1000ms smoke threshold)" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.2: _is_ahead_of_merged helper unit tests (ADR-8 / M1-AC2)
+#
+# _is_ahead_of_merged <branch> <merged_sha> lives in block-bad-git-ops.sh.
+# Since that script calls `exit 0` early when stdin is not a Bash hook
+# envelope, we test the function in isolation via a per-test bash subprocess
+# that sources only the needed libs and defines the function.
+#
+# Return codes (per SDD §Interface Specifications):
+#   0 — HEAD is ahead of merged_sha (allow; emits ADR-8 stderr note)
+#   1 — deny (HEAD==SHA, divergent, or object-missing)
+#   2 — SHA argument empty (caller treats as deny)
+#
+# Each test uses _run_is_ahead_of_merged <branch> <merged_sha> inside a
+# temp git repo with the relevant commit topology.
+# ----------------------------------------------------------------------
+
+# Run _is_ahead_of_merged in a fresh git repo with the given topology.
+# Caller must `cd <repo_dir>` first so git commands resolve to the right repo.
+# Usage: _run_is_ahead_of_merged <branch> <merged_sha>
+# Sets $status and $stderr (via run --separate-stderr).
+_run_is_ahead_of_merged() {
+  local branch="$1" merged_sha="$2"
+  run --separate-stderr bash "$IS_AHEAD_RUNNER" "$PLUGIN_ROOT" "$branch" "$merged_sha"
+}
+
+# ----------------------------------------------------------------------
+# T1.2-C1: Empty SHA argument → returns 2, no stderr output
+# ----------------------------------------------------------------------
+
+@test "_is_ahead_of_merged: empty SHA → returns 2, no stderr" {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ahead-c1.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  printf 'a\n' > "$repo/a"
+  git -C "$repo" add a
+  git -C "$repo" commit -q -m "init"
+  cd "$repo"
+  _run_is_ahead_of_merged "main" ""
+  rm -rf "$repo"
+  [ "$status" -eq 2 ]
+  [ -z "$stderr" ] || { echo "expected no stderr, got: $stderr" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.2-C2: HEAD SHA equals provided SHA → returns 1, no stderr note
+# (ghost-branch / genuine squash-merge-trap: no new commits after merge)
+# ----------------------------------------------------------------------
+
+@test "_is_ahead_of_merged: HEAD equals merged_sha → returns 1, no stderr" {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ahead-c2.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  printf 'a\n' > "$repo/a"
+  git -C "$repo" add a
+  git -C "$repo" commit -q -m "init"
+  local head_sha
+  head_sha=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo"
+  _run_is_ahead_of_merged "main" "$head_sha"
+  rm -rf "$repo"
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ] || { echo "expected no stderr, got: $stderr" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.2-C3: merged_sha is an ancestor of HEAD AND HEAD != SHA → returns 0
+#           AND stderr contains the exact ADR-8 wording (allow + note)
+# ----------------------------------------------------------------------
+
+@test "_is_ahead_of_merged: merged_sha is ancestor of HEAD → returns 0, ADR-8 stderr" {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ahead-c3.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  printf 'a\n' > "$repo/a"
+  git -C "$repo" add a
+  git -C "$repo" commit -q -m "base"
+  local merged_sha
+  merged_sha=$(git -C "$repo" rev-parse HEAD)
+  # Add a new commit so HEAD != merged_sha but merged_sha IS ancestor of HEAD.
+  printf 'b\n' > "$repo/b"
+  git -C "$repo" add b
+  git -C "$repo" commit -q -m "new work"
+  cd "$repo"
+  _run_is_ahead_of_merged "main" "$merged_sha"
+  rm -rf "$repo"
+  [ "$status" -eq 0 ]
+  local expected_note="tcs-git-helpers: PR was merged; HEAD is ahead by new commits. A new PR will be required for this push."
+  [[ "$stderr" == *"$expected_note"* ]] \
+    || { echo "expected ADR-8 note in stderr, got: $stderr" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.2-C4: merged_sha NOT ancestor of HEAD (divergent) → returns 1, no stderr
+# ----------------------------------------------------------------------
+
+@test "_is_ahead_of_merged: divergent history (not ancestor) → returns 1, no stderr" {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ahead-c4.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  printf 'a\n' > "$repo/a"
+  git -C "$repo" add a
+  git -C "$repo" commit -q -m "base"
+  # Create a divergent SHA: a commit on a side branch NOT in main's history.
+  git -C "$repo" checkout -q -b side
+  printf 's\n' > "$repo/side.txt"
+  git -C "$repo" add side.txt
+  git -C "$repo" commit -q -m "side"
+  local divergent_sha
+  divergent_sha=$(git -C "$repo" rev-parse HEAD)
+  git -C "$repo" checkout -q main
+  cd "$repo"
+  # HEAD is on main; divergent_sha is on side branch — not an ancestor of main.
+  _run_is_ahead_of_merged "main" "$divergent_sha"
+  rm -rf "$repo"
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ] || { echo "expected no stderr, got: $stderr" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.2-C5: SHA not present in local object store (shallow clone simulation)
+#           → returns 1 (conservative fallback), no stderr note
+# ----------------------------------------------------------------------
+
+@test "_is_ahead_of_merged: SHA absent from object store → returns 1, no stderr" {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ahead-c5.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  printf 'a\n' > "$repo/a"
+  git -C "$repo" add a
+  git -C "$repo" commit -q -m "init"
+  cd "$repo"
+  # 40 hex zeros: syntactically valid SHA but absent from any real object store.
+  local phantom_sha="0000000000000000000000000000000000000000"
+  _run_is_ahead_of_merged "main" "$phantom_sha"
+  rm -rf "$repo"
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ] || { echo "expected no stderr, got: $stderr" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.2 stdout purity: _is_ahead_of_merged MUST NOT write to stdout
+# (would corrupt the permissionDecision JSON on the real hook's stdout)
+# ----------------------------------------------------------------------
+
+@test "_is_ahead_of_merged: ancestor path produces no stdout output" {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ahead-stdout.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  printf 'a\n' > "$repo/a"
+  git -C "$repo" add a
+  git -C "$repo" commit -q -m "base"
+  local merged_sha
+  merged_sha=$(git -C "$repo" rev-parse HEAD)
+  printf 'b\n' > "$repo/b"
+  git -C "$repo" add b
+  git -C "$repo" commit -q -m "new"
+  cd "$repo"
+  run --separate-stderr bash "$IS_AHEAD_RUNNER" "$PLUGIN_ROOT" "main" "$merged_sha"
+  rm -rf "$repo"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ] || { echo "expected empty stdout, got: $output" >&2; return 1; }
 }
