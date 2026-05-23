@@ -34,7 +34,7 @@ phase: 1
 
 Phase 1 delivers the M1 capability: the closed-PR push guard distinguishes ghost branches (HEAD == merged SHA → deny preserved) from legitimate follow-up work (HEAD ahead → allow + stderr note). Three deliverables — cache schema extension, the ahead-check helper, and the `_check_push_to_closed_pr` integration — followed by phase validation.
 
-- [ ] **T1.1 Cache schema extension — `merge_commit` field** `[activity: backend-api]` `[parallel: true]` `[ref: SDD/Data Storage Changes; lines: 349-370]`
+- [x] **T1.1 Cache schema extension — `merge_commit` field** `[activity: backend-api]` `[parallel: true]` `[ref: SDD/Data Storage Changes; lines: 349-370]`
 
   1. **Prime**: Read `plugins/tcs-git-helpers/scripts/lib/cache.sh` end-to-end. Understand existing atomicity convention (write-tmp-then-mv) and the current `_read_pr_state_cache` / `_write_pr_state_cache` shape. Cross-reference with `[ref: SDD/Building Block View; lines: 304-308]` (PRCache component).
   2. **Test (RED)** — extend `plugins/tcs-git-helpers/tests/bats/test_cache.bats` (or create if absent):
@@ -45,11 +45,11 @@ Phase 1 delivers the M1 capability: the closed-PR push guard distinguishes ghost
   3. **Implement (GREEN)**: Extend cache.sh writer to accept an optional 4th positional arg (`merge_commit`); persist via existing jq write pattern. Extend reader to emit second stdout line when `merge_commit` is present in the cache JSON; use `jq '.merge_commit // empty'` so absence yields empty. Preserve write-tmp-then-mv atomicity. No new CLI deps (CON-6 — jq already in use).
   4. **Validate**: `bats tests/bats/test_cache.bats` passes; `shellcheck scripts/lib/cache.sh` clean; existing callers of `_read_pr_state_cache` (`block-bad-git-ops.sh`) that read only line 1 continue to work — verified by re-running the full `tests/bats/` suite.
   5. **Success**:
-     - [ ] `merge_commit` field round-trips through writer/reader without loss `[ref: SDD/Data Storage Changes; lines: 349-370]`
-     - [ ] Backward compatibility preserved — legacy entries without `merge_commit` produce a one-line read `[ref: SDD/Data Storage Changes; lines: 361-362]`
-     - [ ] CON-6 honored — no new CLI deps beyond `jq` `[ref: SDD/Constraints; lines: 62-64]`
+     - [x] `merge_commit` field round-trips through writer/reader without loss `[ref: SDD/Data Storage Changes; lines: 349-370]`
+     - [x] Backward compatibility preserved — legacy entries without `merge_commit` produce a one-line read `[ref: SDD/Data Storage Changes; lines: 361-362]`
+     - [x] CON-6 honored — no new CLI deps beyond `jq` `[ref: SDD/Constraints; lines: 62-64]`
 
-- [ ] **T1.2 `_is_ahead_of_merged` helper in `block-bad-git-ops.sh`** `[activity: backend-api]` `[parallel: true]` `[ref: SDD/Implementation Examples; lines: 420-448]`
+- [x] **T1.2 `_is_ahead_of_merged` helper in `block-bad-git-ops.sh`** `[activity: backend-api]` `[parallel: true]` `[ref: SDD/Implementation Examples; lines: 420-448]`
 
   1. **Prime**: Re-read the pseudocode at `[ref: SDD/Implementation Examples; lines: 426-447]`. Internalize the 4-path logic: empty SHA → 2; HEAD == SHA → 1; ancestor → 0 (with stderr note); divergent → 1. Confirm wording for stderr note from `[ref: SDD/ADR-8]`.
   2. **Test (RED)** — add cases to `plugins/tcs-git-helpers/tests/bats/test_push_to_closed_pr.bats`:
@@ -61,11 +61,11 @@ Phase 1 delivers the M1 capability: the closed-PR push guard distinguishes ghost
   3. **Implement (GREEN)**: Add `_is_ahead_of_merged <branch> <merged_sha>` to `block-bad-git-ops.sh` following the pseudocode at `[ref: SDD/Implementation Examples; lines: 426-447]`. Use only `git rev-parse HEAD`, `git merge-base --is-ancestor`, and string compare (CON-1: bash 3.2). Stderr note wording: exact match to ADR-8.
   4. **Validate**: `bats tests/bats/test_push_to_closed_pr.bats` cases for the new function pass; `shellcheck scripts/block-bad-git-ops.sh` clean; verify the stderr note does NOT corrupt the permissionDecision JSON on stdout (regression check: the existing M7 BATS run must still produce parsable JSON).
   5. **Success**:
-     - [ ] All five return-code/side-effect scenarios produce the expected exit codes `[ref: SDD/Interface Specifications; lines: 375-383]`
-     - [ ] M1-AC2 stderr wording matches ADR-8 exactly `[ref: SDD/ADR-8; lines: 917-918]` `[ref: PRD/AC-M1.2]`
-     - [ ] CON-1 honored — bash 3.2 only `[ref: SDD/Constraints; lines: 36-40]`
+     - [x] All five return-code/side-effect scenarios produce the expected exit codes `[ref: SDD/Interface Specifications; lines: 375-383]`
+     - [x] M1-AC2 stderr wording matches ADR-8 exactly `[ref: SDD/ADR-8; lines: 917-918]` `[ref: PRD/AC-M1.2]`
+     - [x] CON-1 honored — bash 3.2 only `[ref: SDD/Constraints; lines: 36-40]`
 
-- [ ] **T1.3 Integrate ahead-check into `_check_push_to_closed_pr`** `[activity: backend-api]` `[ref: SDD/Implementation Examples; lines: 473-504]` `[ref: SDD/Complex Logic; lines: 610-631]`
+- [x] **T1.3 Integrate ahead-check into `_check_push_to_closed_pr`** `[activity: backend-api]` `[ref: SDD/Implementation Examples; lines: 473-504]` `[ref: SDD/Complex Logic; lines: 610-631]`
 
   1. **Prime**: Read the existing `_check_push_to_closed_pr` body (`block-bad-git-ops.sh:218-267`). Understand the current `CASE state` switch and where `_record_deny` is called. Re-read `[ref: SDD/Implementation Examples; lines: 478-504]` for the placement of the ahead-check.
   2. **Test (RED)** — add or update BATS cases in `test_push_to_closed_pr.bats`:
@@ -78,10 +78,10 @@ Phase 1 delivers the M1 capability: the closed-PR push guard distinguishes ghost
   3. **Implement (GREEN)**: Modify `_check_push_to_closed_pr` body per `[ref: SDD/Implementation Examples; lines: 478-504]`. Order: (a) read merge_commit from cache; (b) if empty AND state==MERGED, call `gh pr view --json mergeCommit --jq '.mergeCommit.oid // empty'`, write back to cache via the extended writer from T1.1; (c) call `_is_ahead_of_merged(branch, sha)`; (d) on return 0, `return 0` immediately; on return 2, fall through to existing override/deny; on return 1, fall through to existing override/deny. Existing override-then-deny path remains the last fallback (no edits to `_check_and_consume_override` callsite — frozen per ADR-6).
   4. **Validate**: All M1 BATS cases pass; existing M7 / closed-PR deny cases pass without modification (regression guard); `shellcheck scripts/block-bad-git-ops.sh` clean.
   5. **Success**:
-     - [ ] M1-AC1 deny path preserved exactly (message + exit code) `[ref: SDD/Acceptance Criteria; lines: 1004-1009]` `[ref: PRD/AC-M1.1]`
-     - [ ] M1-AC2 allow path returns 0 with stderr note `[ref: SDD/Acceptance Criteria; lines: 1011-1018]` `[ref: PRD/AC-M1.2]`
-     - [ ] M1-AC3 no-PR path unaffected by M1 edits `[ref: SDD/Acceptance Criteria; lines: 1020-1025]` `[ref: PRD/AC-M1.3]`
-     - [ ] At most one `gh pr view` call per uncached MERGED-branch push; zero `gh` calls on cache hit `[ref: SDD/Quality Requirements; lines: 974-980]`
+     - [x] M1-AC1 deny path preserved exactly (message + exit code) `[ref: SDD/Acceptance Criteria; lines: 1004-1009]` `[ref: PRD/AC-M1.1]`
+     - [x] M1-AC2 allow path returns 0 with stderr note `[ref: SDD/Acceptance Criteria; lines: 1011-1018]` `[ref: PRD/AC-M1.2]`
+     - [x] M1-AC3 no-PR path unaffected by M1 edits `[ref: SDD/Acceptance Criteria; lines: 1020-1025]` `[ref: PRD/AC-M1.3]`
+     - [x] At most one `gh pr view` call per uncached MERGED-branch push; zero `gh` calls on cache hit `[ref: SDD/Quality Requirements; lines: 974-980]`
 
 - [ ] **T1.4 Phase 1 Validation** `[activity: validate]`
 
