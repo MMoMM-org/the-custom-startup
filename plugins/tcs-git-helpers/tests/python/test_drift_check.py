@@ -24,6 +24,7 @@ T3.2a extension — optional version_filename parameter:
 from __future__ import annotations
 
 import importlib.util
+import shlex
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -105,12 +106,16 @@ def _call_bash_scan(cmd: str, env_var: str) -> bool:
     Returns True if exit status is 0 (match), False if 1 (no match).
     """
     cache_sh = _PLUGIN_ROOT / "scripts" / "lib" / "cache.sh"
+    # shlex.quote (not repr) — repr emits Python string literals; bash does
+    # not honour backslash escapes inside single quotes, so any cmd mixing
+    # single and double quote chars would silently produce wrong CMD or a
+    # syntax error and mask a real parity divergence.
     script = (
         f'export CLAUDE_PLUGIN_DATA="$(mktemp -d)"; '
-        f'CMD={repr(cmd)}; '
+        f'CMD={shlex.quote(cmd)}; '
         f'source "{cache_sh}"; '
         f'source "{_BASH_LIB_OVERRIDE}"; '
-        f'_scan_tool_input_for_override {repr(env_var)}'
+        f'_scan_tool_input_for_override {shlex.quote(env_var)}'
     )
     result = subprocess.run(
         ["bash", "-c", script],
