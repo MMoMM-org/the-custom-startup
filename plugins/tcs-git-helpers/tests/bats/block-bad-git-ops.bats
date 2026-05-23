@@ -1150,6 +1150,8 @@ _build_ahead_repo() {
   run _run_hook_with_cmd "git push origin $branch"
   rm -rf "$repo"
 
+  # Capture spy state and clean up immediately — assertions after this line
+  # can `return 1` and would otherwise orphan the tempfile in $TMPDIR.
   local call_count=0
   if [ -f "$spy_file" ]; then
     call_count=$(wc -l < "$spy_file" | tr -d ' ')
@@ -1197,6 +1199,8 @@ _build_ahead_repo() {
   run _run_hook_with_cmd "git push origin $branch"
   rm -rf "$repo"
 
+  # Capture spy state and clean up immediately — assertions after this line
+  # can `return 1` and would otherwise orphan the tempfile in $TMPDIR.
   local call_count=0
   if [ -f "$spy_file" ]; then
     call_count=$(wc -l < "$spy_file" | tr -d ' ')

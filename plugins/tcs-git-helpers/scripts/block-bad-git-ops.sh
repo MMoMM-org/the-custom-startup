@@ -310,7 +310,20 @@ _check_push_to_closed_pr() {
             --json mergeCommit \
             --jq '.mergeCommit.oid // empty' 2>/dev/null) || merged_sha=""
           if [ -n "$merged_sha" ]; then
-            _write_pr_state_cache "$branch" "$state" "0" "$merged_sha" \
+            # Preserve any existing pr_number on this entry — _write_pr_state_cache
+            # replaces .branch_state[$branch] wholesale, so passing "0" here would
+            # silently drop the `number` field a prior write captured (the typical
+            # cache-hit reentry into this branch hits exactly that condition).
+            local _existing_number=0
+            local _pr_state_file
+            _pr_state_file="$(_pr_state_path 2>/dev/null)" || _pr_state_file=""
+            if [ -n "$_pr_state_file" ] && [ -r "$_pr_state_file" ] \
+                && command -v jq >/dev/null 2>&1; then
+              _existing_number=$(jq -r --arg b "$branch" \
+                '.branch_state[$b].number // 0' \
+                "$_pr_state_file" 2>/dev/null) || _existing_number=0
+            fi
+            _write_pr_state_cache "$branch" "$state" "$_existing_number" "$merged_sha" \
               2>/dev/null || true
           fi
         fi
