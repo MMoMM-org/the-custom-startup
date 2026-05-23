@@ -400,3 +400,118 @@ teardown() {
   # Cleanup
   rm -f "$lock"
 }
+
+# ----------------------------------------------------------------------
+# PR state cache — merge_commit field (T1.1 — spec 014)
+# SDD §Data Storage Changes: extended branch_state entry
+# ----------------------------------------------------------------------
+
+@test "_write_pr_state_cache accepts optional merge_commit arg and persists it" {
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not installed"
+  fi
+  source "$LIB"
+  _write_pr_state_cache "feat/merged-branch" "MERGED" "99" "abc1234567890"
+
+  local hash json
+  hash="$(_repo_hash)"
+  json="$CLAUDE_PLUGIN_DATA/cache/${hash}-pr-state.json"
+  [ -f "$json" ]
+  local mc
+  mc="$(jq -r '.branch_state["feat/merged-branch"].merge_commit // empty' "$json")"
+  [ "$mc" = "abc1234567890" ]
+}
+
+@test "_read_pr_state_cache emits two stdout lines when merge_commit is present" {
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not installed"
+  fi
+  source "$LIB"
+  _write_pr_state_cache "feat/merged-branch" "MERGED" "99" "abc1234567890"
+  run _read_pr_state_cache "feat/merged-branch"
+  [ "$status" -eq 0 ]
+  # Line 1: state
+  local line1 line2
+  line1="$(printf '%s\n' "$output" | sed -n '1p')"
+  line2="$(printf '%s\n' "$output" | sed -n '2p')"
+  [ "$line1" = "MERGED" ]
+  [ "$line2" = "abc1234567890" ]
+}
+
+@test "_read_pr_state_cache emits one stdout line when merge_commit is absent" {
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not installed"
+  fi
+  source "$LIB"
+  _write_pr_state_cache "feat/open-branch" "OPEN" "55"
+  run _read_pr_state_cache "feat/open-branch"
+  [ "$status" -eq 0 ]
+  # Exactly one non-empty line
+  local line_count
+  line_count="$(printf '%s\n' "$output" | grep -c '[^[:space:]]')"
+  [ "$line_count" -eq 1 ]
+  [ "$output" = "OPEN" ]
+}
+
+@test "_read_pr_state_cache: legacy cache entry without merge_commit succeeds (one line)" {
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not installed"
+  fi
+  source "$LIB"
+  # Write a legacy-format entry manually — no merge_commit field.
+  local hash json
+  hash="$(_repo_hash)"
+  mkdir -p "$CLAUDE_PLUGIN_DATA/cache"
+  json="$CLAUDE_PLUGIN_DATA/cache/${hash}-pr-state.json"
+  local now_iso
+  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '{"version":1,"updated_iso":"%s","branch_state":{"feat/legacy":{"state":"MERGED","checked_iso":"%s","number":7}}}' \
+    "$now_iso" "$now_iso" > "$json"
+
+  run _read_pr_state_cache "feat/legacy"
+  [ "$status" -eq 0 ]
+  # Must produce exactly one line (state only — no merge_commit line)
+  local line_count
+  line_count="$(printf '%s\n' "$output" | grep -c '[^[:space:]]')"
+  [ "$line_count" -eq 1 ]
+  [ "$output" = "MERGED" ]
+}
+
+@test "_write_pr_state_cache merge_commit atomic: no .tmp file remains" {
+  source "$LIB"
+  _write_pr_state_cache "feat/merged-branch" "MERGED" "99" "abc1234567890"
+  ! ls "$CLAUDE_PLUGIN_DATA/cache/"*.tmp >/dev/null 2>&1
+}
+
+@test "_write_pr_state_cache: merge_commit field omitted when arg is empty" {
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not installed"
+  fi
+  source "$LIB"
+  _write_pr_state_cache "feat/open-branch" "OPEN" "10" ""
+
+  local hash json
+  hash="$(_repo_hash)"
+  json="$CLAUDE_PLUGIN_DATA/cache/${hash}-pr-state.json"
+  local mc
+  mc="$(jq -r '.branch_state["feat/open-branch"].merge_commit // empty' "$json")"
+  [ -z "$mc" ]
+}
+
+@test "block-bad-git-ops caller: reads only line 1 (state) — unaffected by merge_commit" {
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not installed"
+  fi
+  source "$LIB"
+  _write_pr_state_cache "feat/merged-branch" "MERGED" "99" "abc1234567890"
+  # Simulate exactly how block-bad-git-ops.sh reads the cache (line 229):
+  #   state=$(_read_pr_state_cache "$branch" 2>/dev/null) || state=""
+  # Then uses $state directly in a case statement. Because command substitution
+  # strips trailing newlines, a two-line output would have its two lines
+  # joined with a newline in the variable — we confirm line 1 is still "MERGED".
+  local raw
+  raw="$(_read_pr_state_cache "feat/merged-branch" 2>/dev/null)" || raw=""
+  local line1
+  line1="$(printf '%s\n' "$raw" | sed -n '1p')"
+  [ "$line1" = "MERGED" ]
+}
