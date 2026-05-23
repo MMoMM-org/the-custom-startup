@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-05-22 |
-| **Current Phase** | Ready |
-| **Last Updated** | 2026-05-22 |
+| **Current Phase** | Implemented |
+| **Last Updated** | 2026-05-23 |
 
 ## Documents
 
@@ -32,6 +32,7 @@
 | 2026-05-22 | Validation: PASS (structural/coverage); 1 path fix applied | Alignment agent caught `plugin.json` location: it lives at `.claude-plugin/plugin.json`, not plugin root. SDD Directory Map + Project Commands + phase-3 T3.3 + plan/README Context Priming updated. |
 | 2026-05-22 | Phase transition: PLAN → Ready | All three documents complete and self-consistent; plan executable by `/implement`. |
 | 2026-05-23 | /implement 014 kicked off — mode: Agent Team + Strict | Triggered after `/tcs-git-helpers:git-audit --cleanup` hit Defect 2 (inline-override unrecognized) on `refactor/skill-naming-domain-prefix`. Implementation branch: `spec/014-tcs-git-helpers-rules-fix-impl` off origin/main. Phase 1 + Phase 2 marked in_progress for parallel execution (disjoint files per plan dependency analysis); Phase 3 gated. |
+| 2026-05-23 | Implementation complete | v2.2.0 release on branch spec/014-tcs-git-helpers-rules-fix-impl (19 commits, head b2d7db6). M1 squash-merge-trap nuance + M2 inline-override scan + S1 wording-lock shipped. Plugin.json 2.1.3 → 2.2.0. 156/156 M1+M2 BATS pass; 68/68 pytest; shellcheck clean; integration test (3 scenarios) green. |
 
 ## Context
 
