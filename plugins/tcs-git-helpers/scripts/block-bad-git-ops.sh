@@ -226,7 +226,11 @@ _check_push_to_closed_pr() {
   fi
 
   # Try the 60s push-state cache before going to gh.
-  state=$(_read_pr_state_cache "$branch" 2>/dev/null) || state=""
+  # _read_pr_state_cache emits two lines when merge_commit is present;
+  # extract only line 1 so the case dispatch below matches CLOSED|MERGED.
+  local _raw
+  _raw=$(_read_pr_state_cache "$branch" 2>/dev/null) || _raw=""
+  state=$(printf '%s\n' "$_raw" | sed -n '1p')
 
   if [ -z "$state" ]; then
     # _get_branch_state already populated PR_STATE via _get_pr_state.
