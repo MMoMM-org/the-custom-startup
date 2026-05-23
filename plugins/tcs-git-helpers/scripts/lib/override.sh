@@ -62,6 +62,25 @@ _override_sentinel_path() {
   printf '%s/override-consumed-%s' "$(_cache_dir)" "$env_var"
 }
 
+# Scan the CMD global variable for a recognized single-shot override prefix.
+#
+# Usage: _scan_tool_input_for_override <env_var>
+#   env_var — the exact CLAUDE_ALLOW_<RULE> or CLAUDE_ALLOW_GIT_BAD_OPS name.
+#
+# Returns:
+#   0 — CMD starts with exactly "<env_var>=1<whitespace>+" at position 0.
+#   1 — CMD is unset, empty, or the prefix is absent / not at position 0.
+#
+# Side effects: none. No I/O. Caller handles sentinel + audit (CON-5).
+# Bash 3.2 compatible: uses [[ =~ ]] with a variable-held pattern (CON-1).
+_scan_tool_input_for_override() {
+  local env_var="$1"
+  [ -z "${CMD:-}" ] && return 1
+  local pattern="^${env_var}=1[[:space:]]+"
+  [[ "$CMD" =~ $pattern ]] && return 0
+  return 1
+}
+
 # Public entry point. Returns 0 on consumption, 1 otherwise.
 _check_and_consume_override() {
   local rule="${1:-}"
@@ -80,6 +99,7 @@ _check_and_consume_override() {
   # Resolve which override (if any) is active. Granular wins over master
   # per M12 §Edge Cases ("Master + granular both set: granular wins").
   # `${!var:-0}` is bash 2.0+ indirect expansion — supported on bash 3.2.
+  local _scan_path=0
   if [ "${!env_var:-0}" = "1" ]; then
     OVERRIDE_VAR="$env_var"
     OVERRIDE_MASTER="0"
@@ -87,7 +107,19 @@ _check_and_consume_override() {
     OVERRIDE_VAR="$master_var"
     OVERRIDE_MASTER="1"
   else
-    return 1
+    # M2: env-var path found nothing — scan CMD for inline prefix (ADR-2).
+    # Granular scan first (granular wins over master per M12 §Edge Cases).
+    if _scan_tool_input_for_override "$env_var"; then
+      OVERRIDE_VAR="$env_var"
+      OVERRIDE_MASTER="0"
+      _scan_path=1
+    elif _scan_tool_input_for_override "$master_var"; then
+      OVERRIDE_VAR="$master_var"
+      OVERRIDE_MASTER="1"
+      _scan_path=1
+    else
+      return 1
+    fi
   fi
 
   # 5-second double-tap window: if a sentinel exists with an epoch within
@@ -132,8 +164,14 @@ _check_and_consume_override() {
     if [ "$OVERRIDE_MASTER" = "1" ]; then
       master_field="true"
     fi
-    _audit_log env_var="$OVERRIDE_VAR" master="$master_field" \
-      >/dev/null 2>&1 || true
+    if [ "$_scan_path" = "1" ]; then
+      _audit_log env_var="$OVERRIDE_VAR" master="$master_field" \
+        tool_input_truncated="1" \
+        >/dev/null 2>&1 || true
+    else
+      _audit_log env_var="$OVERRIDE_VAR" master="$master_field" \
+        >/dev/null 2>&1 || true
+    fi
   fi
 
   if [ "$OVERRIDE_MASTER" = "1" ]; then

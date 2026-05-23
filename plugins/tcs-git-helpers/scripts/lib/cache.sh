@@ -193,8 +193,9 @@ _iso_to_epoch() {
 }
 
 # Read PR state for one branch from cache. Honors a 60s TTL via per-entry
-# `checked_iso`. Outputs the bare state (e.g. "OPEN", "MERGED", "NO_PR")
-# or empty on miss/expired/corrupt. Never crashes.
+# `checked_iso`. Outputs state on line 1; when merge_commit is cached,
+# outputs the SHA on line 2. Callers reading only line 1 are unaffected.
+# Returns empty on miss/expired/corrupt. Never crashes.
 _read_pr_state_cache() {
   local branch="${1:-}"
   [ -n "$branch" ] || return 0
@@ -207,7 +208,7 @@ _read_pr_state_cache() {
   # Validate JSON; bail to empty if corrupt.
   jq -e . "$f" >/dev/null 2>&1 || return 0
 
-  local checked state now epoch
+  local checked state merge_commit now epoch
   checked="$(jq -r --arg b "$branch" '.branch_state[$b].checked_iso // empty' "$f" 2>/dev/null)"
   state="$(jq -r --arg b "$branch"   '.branch_state[$b].state       // empty' "$f" 2>/dev/null)"
 
@@ -217,7 +218,11 @@ _read_pr_state_cache() {
   if epoch="$(_iso_to_epoch "$checked")"; then
     now="$(date +%s)"
     if [ $((now - epoch)) -lt 60 ]; then
-      printf '%s' "$state"
+      printf '%s\n' "$state"
+      merge_commit="$(jq -r --arg b "$branch" '.branch_state[$b].merge_commit // empty' "$f" 2>/dev/null)"
+      if [ -n "$merge_commit" ]; then
+        printf '%s\n' "$merge_commit"
+      fi
     fi
   fi
   return 0
@@ -225,10 +230,12 @@ _read_pr_state_cache() {
 
 # Write/update PR state for one branch.
 # Args: $1=branch, $2=state, $3=pr_number (optional, defaults to 0/omitted)
+#       $4=merge_commit (optional SHA; omitted from JSON when empty)
 _write_pr_state_cache() {
   local branch="${1:-}"
   local state="${2:-}"
   local pr_number="${3:-0}"
+  local merge_commit="${4:-}"
   [ -n "$branch" ] || return 1
   [ -n "$state" ]  || return 1
 
@@ -250,12 +257,16 @@ _write_pr_state_cache() {
            --arg state "$state" \
            --arg pr_number "$pr_number" \
            --arg now "$now_iso" \
+           --arg merge_commit "$merge_commit" \
            '.version = 1
             | .updated_iso = $now
             | .branch_state[$branch] = (
                 { state: $state, checked_iso: $now }
                 + (if (($pr_number|tonumber?) // 0) > 0
                    then { number: ($pr_number|tonumber) }
+                   else {} end)
+                + (if $merge_commit != ""
+                   then { merge_commit: $merge_commit }
                    else {} end)
               )' > "${f}.tmp" 2>/dev/null \
       && mv "${f}.tmp" "$f"
@@ -277,6 +288,9 @@ _write_pr_state_cache() {
         0) : ;;
         *) printf ',"number":%s' "$pr_number" ;;
       esac
+      if [ -n "$merge_commit" ]; then
+        printf ',"merge_commit":"%s"' "$(_json_escape "$merge_commit")"
+      fi
       printf '}\n'
       printf '  }\n'
       printf '}\n'

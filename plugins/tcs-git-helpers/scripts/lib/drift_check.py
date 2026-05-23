@@ -37,6 +37,28 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+# ---------------------------------------------------------------------------
+# Tool-input override scan helper (CON-2 Python parity — T2.3)
+# ---------------------------------------------------------------------------
+
+
+def scan_tool_input_for_override(cmd: Optional[str], env_var: str) -> bool:
+    """Return True if cmd starts with exactly '<env_var>=1<whitespace>+'.
+
+    Mirrors the bash helper _scan_tool_input_for_override in override.sh.
+    Both return False for None/empty cmd (CON-5: unset and empty are equivalent).
+
+    Regex: re.ASCII is passed so \\s matches only POSIX [[:space:]] (space, tab,
+    newline, carriage-return, form-feed, vertical-tab) — same set as bash
+    [[:space:]], preventing Unicode whitespace from widening the match relative
+    to bash.  re.escape(env_var) prevents caller-supplied metachars from
+    widening the pattern (defensive — matches bash's literal variable expansion).
+    """
+    if not cmd:
+        return False
+    pattern = re.compile(r"^" + re.escape(env_var) + r"=1\s+", re.ASCII)
+    return bool(pattern.match(cmd))
+
 # Default bundle marker filename; used when version_filename is not supplied.
 # Kept as a module-level constant for documentation — not referenced in the
 # function body (the parameter default carries the value at call time).

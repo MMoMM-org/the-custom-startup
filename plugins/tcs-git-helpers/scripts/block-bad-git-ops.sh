@@ -212,6 +212,51 @@ _emit_permission_decision_deny() {
 }
 
 # ---------------------------------------------------------------------------
+# M1 helper: _is_ahead_of_merged — 4-path ancestor check (ADR-1 / ADR-8)
+# ---------------------------------------------------------------------------
+#
+# Determines whether the current HEAD has diverged past a known merged SHA
+# (e.g., the merge_commit recorded in the PR-state cache from T1.1).
+#
+# Arguments: <branch> <merged_sha>
+#   <branch>     — informational; not used by git calls (HEAD is the test subject)
+#   <merged_sha> — SHA of the commit at which the PR was merged into the base branch
+#
+# Return values (per SDD §Interface Specifications):
+#   0 — HEAD is strictly ahead of merged_sha (allow push; emits ADR-8 stderr note)
+#   1 — deny: HEAD == merged_sha (ghost-branch), merged_sha not ancestor, or
+#             merged_sha absent from local object store (conservative fallback)
+#   2 — SHA argument was empty; caller treats this as deny
+#
+# Constraints:
+#   - bash 3.2 / CON-1: no associative arrays, no ${var,,}, no mapfile
+#   - Only uses: git rev-parse HEAD, git merge-base --is-ancestor, string compare
+#   - ADR-1: git merge-base --is-ancestor is the canonical ancestor test
+#   - ADR-8: stderr note wording is locked; do NOT paraphrase
+#   - Stdout: NEVER written — would corrupt the permissionDecision JSON caller emits
+_is_ahead_of_merged() {
+  local merged_sha="$2"
+
+  if [ -z "$merged_sha" ]; then
+    return 2
+  fi
+
+  local head_sha
+  head_sha=$(git -C "$PWD" rev-parse HEAD 2>/dev/null) || return 1
+
+  if [ "$head_sha" = "$merged_sha" ]; then
+    return 1
+  fi
+
+  if git -C "$PWD" merge-base --is-ancestor "$merged_sha" HEAD 2>/dev/null; then
+    printf 'tcs-git-helpers: PR was merged; HEAD is ahead by new commits. A new PR will be required for this push.\n' >&2
+    return 0
+  fi
+
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # M1: push-to-closed-PR — gh fail-open, 60s cache (CON-4)
 # ---------------------------------------------------------------------------
 
@@ -226,7 +271,14 @@ _check_push_to_closed_pr() {
   fi
 
   # Try the 60s push-state cache before going to gh.
-  state=$(_read_pr_state_cache "$branch" 2>/dev/null) || state=""
+  # _read_pr_state_cache emits two stdout lines when merge_commit is cached:
+  #   line 1 — state (MERGED/CLOSED/OPEN/etc.)
+  #   line 2 — merge_commit SHA (only present when cached)
+  # Extract line 1 for the case dispatch; line 2 for the ahead-check.
+  local _raw merged_sha
+  _raw=$(_read_pr_state_cache "$branch" 2>/dev/null) || _raw=""
+  state=$(printf '%s\n' "$_raw" | sed -n '1p')
+  merged_sha=$(printf '%s\n' "$_raw" | sed -n '2p')
 
   if [ -z "$state" ]; then
     # _get_branch_state already populated PR_STATE via _get_pr_state.
@@ -250,6 +302,41 @@ _check_push_to_closed_pr() {
 
   case "$state" in
     CLOSED|MERGED)
+      # M1: attempt ahead-check before override or deny (ADR-8).
+      # Resolve merge_commit SHA if not already cached.
+      if [ -z "$merged_sha" ] && [ "$state" = "MERGED" ]; then
+        if command -v gh >/dev/null 2>&1; then
+          merged_sha=$(gh pr view "$branch" \
+            --json mergeCommit \
+            --jq '.mergeCommit.oid // empty' 2>/dev/null) || merged_sha=""
+          if [ -n "$merged_sha" ]; then
+            # Preserve any existing pr_number on this entry — _write_pr_state_cache
+            # replaces .branch_state[$branch] wholesale, so passing "0" here would
+            # silently drop the `number` field a prior write captured (the typical
+            # cache-hit reentry into this branch hits exactly that condition).
+            local _existing_number=0
+            local _pr_state_file
+            _pr_state_file="$(_pr_state_path 2>/dev/null)" || _pr_state_file=""
+            if [ -n "$_pr_state_file" ] && [ -r "$_pr_state_file" ] \
+                && command -v jq >/dev/null 2>&1; then
+              _existing_number=$(jq -r --arg b "$branch" \
+                '.branch_state[$b].number // 0' \
+                "$_pr_state_file" 2>/dev/null) || _existing_number=0
+            fi
+            _write_pr_state_cache "$branch" "$state" "$_existing_number" "$merged_sha" \
+              2>/dev/null || true
+          fi
+        fi
+      fi
+
+      # Ahead-check: return 0 (allow) when HEAD has new commits past the merge.
+      # _is_ahead_of_merged emits the ADR-8 stderr note on return 0.
+      # Return 2 (empty SHA) or 1 (not-ahead) → fall through to override/deny.
+      if _is_ahead_of_merged "$branch" "$merged_sha"; then
+        return 0
+      fi
+
+      # Not ahead, or SHA unavailable — fall through to override then deny.
       if _check_and_consume_override "$rule"; then
         return 0
       fi

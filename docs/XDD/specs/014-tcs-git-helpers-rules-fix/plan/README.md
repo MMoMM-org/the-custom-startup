@@ -1,6 +1,6 @@
 ---
 title: "tcs-git-helpers Rule Fixes — Squash-Merge-Trap Nuance + Inline Override Support"
-status: draft
+status: complete
 version: "1.0"
 ---
 
@@ -160,9 +160,9 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 
 > **Phase parallelism**: Phase 1 (M1) and Phase 2 (M2) touch disjoint files (`block-bad-git-ops.sh` + `cache.sh` vs. `override.sh`) and have no cross-dependency. They MAY be implemented concurrently. Phase 3 depends on both.
 
-- [ ] [Phase 1: M1 — Squash-Merge-Trap Nuance](phase-1.md)
-- [ ] [Phase 2: M2 — Tool-Input Override Scanning](phase-2.md)
-- [ ] [Phase 3: Final Integration, S1 & Release](phase-3.md)
+- [x] [Phase 1: M1 — Squash-Merge-Trap Nuance](phase-1.md)
+- [x] [Phase 2: M2 — Tool-Input Override Scanning](phase-2.md)
+- [x] [Phase 3: Final Integration, S1 & Release](phase-3.md)
 
 ---
 

@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+#
+# tests/bats/lib/helpers.bash
+#
+# Shared bats helper functions used by block-bad-git-ops.bats and
+# integration-m1-m2.bats. Load with:
+#
+#   load 'lib/helpers'
+#
+# Requires: jq, git, shasum (standard on macOS and most Linux distros).
+# bash 3.2 compatible (no associative arrays, no mapfile).
+
+# Build a tool_input JSON envelope and pipe it to the hook.
+# $1 = bash command string. Returns the hook's stdout/stderr/exit via $output etc.
+_run_hook_with_cmd() {
+  local cmd="$1"
+  local input
+  input=$(jq -n --arg c "$cmd" '{tool_name:"Bash", tool_input:{command:$c}}')
+  printf '%s' "$input" | bash "$HOOK"
+}
+
+# Run the hook and assert: exit 0, stdout contains a deny JSON, deny reason
+# mentions the supplied rule name AND a `references/` link (per SDD/PRD —
+# every deny carries rule + reference + override hint). Use
+# `run --separate-stderr` outside if you need stderr separately.
+_assert_deny_for_rule() {
+  local rule="$1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"permissionDecision":"deny"'* ]] \
+    || { echo "expected deny JSON, got: $output" >&2; return 1; }
+  [[ "$output" == *"$rule"* ]] \
+    || { echo "expected rule $rule in reason, got: $output" >&2; return 1; }
+  [[ "$output" == *"references/"* ]] \
+    || { echo "expected reference-doc link in reason, got: $output" >&2; return 1; }
+  return 0
+}
+
+# Run the hook and assert: exit 0, NO deny JSON on stdout (allow path).
+_assert_allow() {
+  [ "$status" -eq 0 ]
+  if [[ "$output" == *'"permissionDecision":"deny"'* ]]; then
+    echo "expected ALLOW (no deny JSON), got: $output" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Seed the PR-state cache with a fresh entry for <branch> in <repo>.
+# Usage: _seed_pr_cache <repo_path> <branch> <state> [<merge_commit>]
+_seed_pr_cache() {
+  local repo_path="$1"
+  local branch="$2"
+  local state="$3"
+  local merge_commit="${4:-}"
+
+  # Derive repo hash identical to cache.sh: SHA1 prefix of repo top-level path.
+  # Must use git rev-parse --show-toplevel to resolve symlinks (e.g. /tmp →
+  # /private/tmp on macOS) so the hash matches what the hook computes at runtime.
+  local resolved_path
+  resolved_path="$(git -C "$repo_path" rev-parse --show-toplevel 2>/dev/null)" \
+    || resolved_path="$repo_path"
+
+  local hash
+  hash="$(printf '%s' "$resolved_path" | shasum 2>/dev/null | head -c 12)"
+
+  local cache_dir="$CLAUDE_PLUGIN_DATA/cache"
+  local f="$cache_dir/${hash}-pr-state.json"
+  mkdir -p "$cache_dir"
+
+  local now_iso
+  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  # Build the cache JSON, optionally including merge_commit.
+  if [ -n "$merge_commit" ]; then
+    jq -n \
+      --arg branch "$branch" \
+      --arg state "$state" \
+      --arg now "$now_iso" \
+      --arg mc "$merge_commit" \
+      '{
+        version: 1,
+        updated_iso: $now,
+        branch_state: {
+          ($branch): { state: $state, checked_iso: $now, merge_commit: $mc }
+        }
+      }' > "$f"
+  else
+    jq -n \
+      --arg branch "$branch" \
+      --arg state "$state" \
+      --arg now "$now_iso" \
+      '{
+        version: 1,
+        updated_iso: $now,
+        branch_state: {
+          ($branch): { state: $state, checked_iso: $now }
+        }
+      }' > "$f"
+  fi
+}
+
+# Build a minimal git repo on a named branch with N commits.
+# Prints repo path on stdout. Caller owns cleanup.
+# Usage: _build_ahead_repo <branch_name> <n_commits_after_base>
+_build_ahead_repo() {
+  local branch="$1"
+  local extra_commits="${2:-0}"
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-t13.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  git -C "$repo" config commit.gpgsign false
+  printf 'base\n' > "$repo/base.txt"
+  git -C "$repo" add base.txt
+  git -C "$repo" commit -q -m "base"
+  git -C "$repo" checkout -q -b "$branch"
+  local i=0
+  while [ "$i" -lt "$extra_commits" ]; do
+    printf 'extra %s\n' "$i" > "$repo/extra${i}.txt"
+    git -C "$repo" add "extra${i}.txt"
+    git -C "$repo" commit -q -m "extra $i"
+    i=$((i + 1))
+  done
+  printf '%s\n' "$repo"
+}

@@ -36,7 +36,41 @@ setup_file() {
 
   # Build synthetic repos once per test file. build.sh prints OUT_DIR on stdout.
   REPOS_ROOT="$("$FIXTURE_DIR/repos/build.sh" 2>/dev/null)"
-  export REPOS_ROOT TESTS_DIR PLUGIN_ROOT FIXTURE_DIR
+
+  # Build the _is_ahead_of_merged runner script once; tests reference IS_AHEAD_RUNNER.
+  IS_AHEAD_RUNNER="$BATS_TMPDIR/is_ahead_runner.sh"
+  cat > "$IS_AHEAD_RUNNER" << 'RUNNER_EOF'
+#!/usr/bin/env bash
+set -uo pipefail
+PLUGIN_ROOT="$1"; shift
+BRANCH="$1";      shift
+MERGED_SHA="$1";  shift
+
+# Source git_state.sh for any indirect deps the function may acquire later.
+# shellcheck source=/dev/null
+. "$PLUGIN_ROOT/scripts/lib/git_state.sh"
+
+# Extract _is_ahead_of_merged from block-bad-git-ops.sh without sourcing the
+# full script (which would call exit 0 after the early tool-name guard).
+# awk: collect lines from function header until the closing `}` on its own line.
+_fn_def=$(awk '
+  /^_is_ahead_of_merged\(\)[[:space:]]*\{/ { p=1 }
+  p { print }
+  p && /^\}[[:space:]]*$/ { p=0; exit }
+' "$PLUGIN_ROOT/scripts/block-bad-git-ops.sh")
+
+if [ -z "$_fn_def" ]; then
+  printf 'RUNNER: _is_ahead_of_merged not found in block-bad-git-ops.sh\n' >&2
+  exit 99
+fi
+
+eval "$_fn_def"
+
+_is_ahead_of_merged "$BRANCH" "$MERGED_SHA"
+RUNNER_EOF
+  chmod +x "$IS_AHEAD_RUNNER"
+
+  export REPOS_ROOT TESTS_DIR PLUGIN_ROOT FIXTURE_DIR IS_AHEAD_RUNNER
 }
 
 teardown_file() {
@@ -85,43 +119,10 @@ teardown() {
 }
 
 # ----------------------------------------------------------------------
-# Helpers
+# Helpers — loaded from shared lib
 # ----------------------------------------------------------------------
 
-# Build a tool_input JSON envelope and pipe it to the hook.
-# $1 = bash command string. Returns the hook's stdout/stderr/exit via $output etc.
-_run_hook_with_cmd() {
-  local cmd="$1"
-  local input
-  input=$(jq -n --arg c "$cmd" '{tool_name:"Bash", tool_input:{command:$c}}')
-  printf '%s' "$input" | bash "$HOOK"
-}
-
-# Run the hook and assert: exit 0, stdout contains a deny JSON, deny reason
-# mentions the supplied rule name AND a `references/` link (per SDD/PRD —
-# every deny carries rule + reference + override hint). Use
-# `run --separate-stderr` outside if you need stderr separately.
-_assert_deny_for_rule() {
-  local rule="$1"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *'"permissionDecision":"deny"'* ]] \
-    || { echo "expected deny JSON, got: $output" >&2; return 1; }
-  [[ "$output" == *"$rule"* ]] \
-    || { echo "expected rule $rule in reason, got: $output" >&2; return 1; }
-  [[ "$output" == *"references/"* ]] \
-    || { echo "expected reference-doc link in reason, got: $output" >&2; return 1; }
-  return 0
-}
-
-# Run the hook and assert: exit 0, NO deny JSON on stdout (allow path).
-_assert_allow() {
-  [ "$status" -eq 0 ]
-  if [[ "$output" == *'"permissionDecision":"deny"'* ]]; then
-    echo "expected ALLOW (no deny JSON), got: $output" >&2
-    return 1
-  fi
-  return 0
-}
+load 'lib/helpers'
 
 # ----------------------------------------------------------------------
 # Sanity
@@ -689,6 +690,18 @@ _assert_allow() {
   [[ "$output" == *"CLAUDE_ALLOW_RESET_HARD"* ]]
 }
 
+# S1-AC1 wording lock — preserve the existing parenthesized override-hint
+# suffix verbatim. ADR-9 keeps the wording as-is; M2 makes the documented
+# mechanism actually work, but the suffix wording stays. A future refactor
+# that changes the format (e.g. drops the parens or repunctuates) must
+# trip this lock so the change is reviewed against ADR-9.
+@test "S1 wording lock: deny suffix is exactly (override: CLAUDE_ALLOW_<RULE>=1)" {
+  run _run_hook_with_cmd "git reset --hard"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"(override: CLAUDE_ALLOW_RESET_HARD=1)"* ]] \
+    || { echo "expected '(override: CLAUDE_ALLOW_RESET_HARD=1)' literal in output, got: $output" >&2; return 1; }
+}
+
 # ----------------------------------------------------------------------
 # Reference-doc path resolution — CLAUDE_PLUGIN_ROOT is expanded, not
 # emitted as literal text (so users can paste the path into `cat`).
@@ -747,4 +760,398 @@ _assert_allow() {
   elapsed_ms=$((t1 - t0))
   [ "$elapsed_ms" -lt 1000 ] \
     || { echo "non-push hook took ${elapsed_ms}ms (>1000ms smoke threshold)" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.2: _is_ahead_of_merged helper unit tests (ADR-8 / M1-AC2)
+#
+# _is_ahead_of_merged <branch> <merged_sha> lives in block-bad-git-ops.sh.
+# Since that script calls `exit 0` early when stdin is not a Bash hook
+# envelope, we test the function in isolation via a per-test bash subprocess
+# that sources only the needed libs and defines the function.
+#
+# Return codes (per SDD §Interface Specifications):
+#   0 — HEAD is ahead of merged_sha (allow; emits ADR-8 stderr note)
+#   1 — deny (HEAD==SHA, divergent, or object-missing)
+#   2 — SHA argument empty (caller treats as deny)
+#
+# Each test uses _run_is_ahead_of_merged <branch> <merged_sha> inside a
+# temp git repo with the relevant commit topology.
+# ----------------------------------------------------------------------
+
+# Run _is_ahead_of_merged in a fresh git repo with the given topology.
+# Caller must `cd <repo_dir>` first so git commands resolve to the right repo.
+# Usage: _run_is_ahead_of_merged <branch> <merged_sha>
+# Sets $status and $stderr (via run --separate-stderr).
+_run_is_ahead_of_merged() {
+  local branch="$1" merged_sha="$2"
+  run --separate-stderr bash "$IS_AHEAD_RUNNER" "$PLUGIN_ROOT" "$branch" "$merged_sha"
+}
+
+# ----------------------------------------------------------------------
+# T1.2-C1: Empty SHA argument → returns 2, no stderr output
+# ----------------------------------------------------------------------
+
+@test "_is_ahead_of_merged: empty SHA → returns 2, no stderr" {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ahead-c1.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  printf 'a\n' > "$repo/a"
+  git -C "$repo" add a
+  git -C "$repo" commit -q -m "init"
+  cd "$repo"
+  _run_is_ahead_of_merged "main" ""
+  rm -rf "$repo"
+  [ "$status" -eq 2 ]
+  [ -z "$stderr" ] || { echo "expected no stderr, got: $stderr" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.2-C2: HEAD SHA equals provided SHA → returns 1, no stderr note
+# (ghost-branch / genuine squash-merge-trap: no new commits after merge)
+# ----------------------------------------------------------------------
+
+@test "_is_ahead_of_merged: HEAD equals merged_sha → returns 1, no stderr" {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ahead-c2.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  printf 'a\n' > "$repo/a"
+  git -C "$repo" add a
+  git -C "$repo" commit -q -m "init"
+  local head_sha
+  head_sha=$(git -C "$repo" rev-parse HEAD)
+  cd "$repo"
+  _run_is_ahead_of_merged "main" "$head_sha"
+  rm -rf "$repo"
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ] || { echo "expected no stderr, got: $stderr" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.2-C3: merged_sha is an ancestor of HEAD AND HEAD != SHA → returns 0
+#           AND stderr contains the exact ADR-8 wording (allow + note)
+# ----------------------------------------------------------------------
+
+@test "_is_ahead_of_merged: merged_sha is ancestor of HEAD → returns 0, ADR-8 stderr" {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ahead-c3.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  printf 'a\n' > "$repo/a"
+  git -C "$repo" add a
+  git -C "$repo" commit -q -m "base"
+  local merged_sha
+  merged_sha=$(git -C "$repo" rev-parse HEAD)
+  # Add a new commit so HEAD != merged_sha but merged_sha IS ancestor of HEAD.
+  printf 'b\n' > "$repo/b"
+  git -C "$repo" add b
+  git -C "$repo" commit -q -m "new work"
+  cd "$repo"
+  _run_is_ahead_of_merged "main" "$merged_sha"
+  rm -rf "$repo"
+  [ "$status" -eq 0 ]
+  local expected_note="tcs-git-helpers: PR was merged; HEAD is ahead by new commits. A new PR will be required for this push."
+  [[ "$stderr" == *"$expected_note"* ]] \
+    || { echo "expected ADR-8 note in stderr, got: $stderr" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.2-C4: merged_sha NOT ancestor of HEAD (divergent) → returns 1, no stderr
+# ----------------------------------------------------------------------
+
+@test "_is_ahead_of_merged: divergent history (not ancestor) → returns 1, no stderr" {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ahead-c4.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  printf 'a\n' > "$repo/a"
+  git -C "$repo" add a
+  git -C "$repo" commit -q -m "base"
+  # Create a divergent SHA: a commit on a side branch NOT in main's history.
+  git -C "$repo" checkout -q -b side
+  printf 's\n' > "$repo/side.txt"
+  git -C "$repo" add side.txt
+  git -C "$repo" commit -q -m "side"
+  local divergent_sha
+  divergent_sha=$(git -C "$repo" rev-parse HEAD)
+  git -C "$repo" checkout -q main
+  cd "$repo"
+  # HEAD is on main; divergent_sha is on side branch — not an ancestor of main.
+  _run_is_ahead_of_merged "main" "$divergent_sha"
+  rm -rf "$repo"
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ] || { echo "expected no stderr, got: $stderr" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.2-C5: SHA not present in local object store (shallow clone simulation)
+#           → returns 1 (conservative fallback), no stderr note
+# ----------------------------------------------------------------------
+
+@test "_is_ahead_of_merged: SHA absent from object store → returns 1, no stderr" {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ahead-c5.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  printf 'a\n' > "$repo/a"
+  git -C "$repo" add a
+  git -C "$repo" commit -q -m "init"
+  cd "$repo"
+  # 40 hex zeros: syntactically valid SHA but absent from any real object store.
+  local phantom_sha="0000000000000000000000000000000000000000"
+  _run_is_ahead_of_merged "main" "$phantom_sha"
+  rm -rf "$repo"
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ] || { echo "expected no stderr, got: $stderr" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.2 stdout purity: _is_ahead_of_merged MUST NOT write to stdout
+# (would corrupt the permissionDecision JSON on the real hook's stdout)
+# ----------------------------------------------------------------------
+
+@test "_is_ahead_of_merged: ancestor path produces no stdout output" {
+  local repo
+  repo="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ahead-stdout.XXXXXX")"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@t"
+  git -C "$repo" config user.name "t"
+  printf 'a\n' > "$repo/a"
+  git -C "$repo" add a
+  git -C "$repo" commit -q -m "base"
+  local merged_sha
+  merged_sha=$(git -C "$repo" rev-parse HEAD)
+  printf 'b\n' > "$repo/b"
+  git -C "$repo" add b
+  git -C "$repo" commit -q -m "new"
+  cd "$repo"
+  run --separate-stderr bash "$IS_AHEAD_RUNNER" "$PLUGIN_ROOT" "main" "$merged_sha"
+  rm -rf "$repo"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ] || { echo "expected empty stdout, got: $output" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# T1.3: _check_push_to_closed_pr — ahead-check integration (M1-AC1/2/3)
+#
+# These tests verify the wiring added in T1.3:
+#   - M1-AC1: MERGED + HEAD==merged_sha → deny (no regression on deny path)
+#   - M1-AC2: MERGED + HEAD ahead by N commits → allow + ADR-8 stderr note
+#   - M1-AC3: NO_PR → allow (M1-AC2 logic not entered; no regression)
+#   - Cache-hit: merge_commit cached → no gh pr view call (zero spy entries)
+#   - Cache-miss: MERGED state cached, no merge_commit → one gh pr view call;
+#                 result written to cache
+#   - SHA-resolution-fail: gh pr view returns empty → fall through to deny
+#
+# Test pattern: build a temp git repo with controlled history, pre-populate
+# the PR-state cache so gh pr list is never called (cache-hit for state),
+# then run the hook. For cache-miss tests, omit merge_commit from cache.
+#
+# _seed_pr_cache <repo_path> <branch> <state> [<merge_commit>]
+#   Write a fresh (non-expired) PR-state cache entry for the given repo.
+#   Uses jq — test setup already ensures jq is available.
+# ----------------------------------------------------------------------
+
+# _seed_pr_cache and _build_ahead_repo are provided by load 'lib/helpers' (see top of file).
+
+# ----------------------------------------------------------------------
+# M1-AC1: MERGED PR, HEAD == merged SHA → push DENIED (no regression)
+# The deny path must produce the existing squash-merge-trap message.
+# ----------------------------------------------------------------------
+
+@test "T1.3 M1-AC1: MERGED PR HEAD==merged_sha → DENY PUSH_TO_CLOSED_PR" {
+  local repo branch merged_sha
+  branch="feat/t13-ac1"
+  repo="$(_build_ahead_repo "$branch" 0)"
+  merged_sha="$(git -C "$repo" rev-parse HEAD)"
+
+  # Pre-populate cache: state=MERGED, merge_commit=HEAD (ghost branch)
+  _seed_pr_cache "$repo" "$branch" "MERGED" "$merged_sha"
+
+  cd "$repo"
+  run _run_hook_with_cmd "git push origin $branch"
+  rm -rf "$repo"
+  _assert_deny_for_rule "PUSH_TO_CLOSED_PR"
+  # Pin the existing _record_deny wording so a future refactor can't silently
+  # swap the message text and slip past the rule-name+references assertion.
+  [[ "$output" == *"PR for branch"* ]] \
+    || { echo "expected existing deny wording 'PR for branch', got: $output" >&2; return 1; }
+  [[ "$output" == *"is MERGED"* ]] \
+    || { echo "expected 'is MERGED' in deny output, got: $output" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# M1-AC2: MERGED PR, HEAD ahead by N commits → push ALLOWED + ADR-8 note
+# ----------------------------------------------------------------------
+
+@test "T1.3 M1-AC2: MERGED PR HEAD ahead → ALLOW with ADR-8 stderr note" {
+  local repo branch base_sha
+  branch="feat/t13-ac2"
+  repo="$(_build_ahead_repo "$branch" 0)"
+  # HEAD at this point is the base commit; record it as the merged SHA.
+  base_sha="$(git -C "$repo" rev-parse HEAD)"
+  # Add a commit so HEAD is ahead of base_sha.
+  printf 'new work\n' > "$repo/new.txt"
+  git -C "$repo" add new.txt
+  git -C "$repo" commit -q -m "new work"
+
+  # Pre-populate cache: state=MERGED, merge_commit=base_sha (HEAD is now ahead)
+  _seed_pr_cache "$repo" "$branch" "MERGED" "$base_sha"
+
+  cd "$repo"
+  run --separate-stderr _run_hook_with_cmd "git push origin $branch"
+  rm -rf "$repo"
+  _assert_allow
+  local expected_note="PR was merged; HEAD is ahead by new commits"
+  [[ "$stderr" == *"$expected_note"* ]] \
+    || { echo "expected ADR-8 note in stderr, got: $stderr" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# M1-AC3: Branch with NO_PR → ALLOW (M1 MERGED block not entered)
+# ----------------------------------------------------------------------
+
+@test "T1.3 M1-AC3: NO_PR branch → ALLOW (ahead-check not entered)" {
+  local repo branch
+  branch="feat/t13-ac3"
+  repo="$(_build_ahead_repo "$branch" 1)"
+
+  # Pre-populate cache with NO_PR state — no merge_commit field.
+  _seed_pr_cache "$repo" "$branch" "NO_PR"
+
+  cd "$repo"
+  run _run_hook_with_cmd "git push origin $branch"
+  rm -rf "$repo"
+  _assert_allow
+}
+
+# ----------------------------------------------------------------------
+# Cache-hit: merge_commit already cached → zero gh pr view invocations
+# ----------------------------------------------------------------------
+
+@test "T1.3 cache-hit: merge_commit cached → no gh pr view call" {
+  local repo branch merged_sha spy_file
+  branch="feat/t13-cache-hit"
+  repo="$(_build_ahead_repo "$branch" 0)"
+  merged_sha="$(git -C "$repo" rev-parse HEAD)"
+
+  # Pre-populate cache with merge_commit present (cache hit).
+  _seed_pr_cache "$repo" "$branch" "MERGED" "$merged_sha"
+
+  # Set up spy to track gh pr view calls.
+  spy_file="$(mktemp "${TMPDIR:-/tmp}/tcs-gh-spy.XXXXXX")"
+  export GH_STUB_SPY_FILE="$spy_file"
+
+  cd "$repo"
+  run _run_hook_with_cmd "git push origin $branch"
+  rm -rf "$repo"
+
+  # Capture spy state and clean up immediately — assertions after this line
+  # can `return 1` and would otherwise orphan the tempfile in $TMPDIR.
+  local call_count=0
+  if [ -f "$spy_file" ]; then
+    call_count=$(wc -l < "$spy_file" | tr -d ' ')
+  fi
+  rm -f "$spy_file"
+  unset GH_STUB_SPY_FILE
+
+  # merge_commit was cached → no gh pr view call.
+  [ "$call_count" -eq 0 ] \
+    || { echo "expected 0 gh pr view calls (cache hit), got: $call_count" >&2; return 1; }
+  # HEAD == merged_sha → deny path.
+  _assert_deny_for_rule "PUSH_TO_CLOSED_PR"
+}
+
+# ----------------------------------------------------------------------
+# Cache-miss: MERGED state cached but no merge_commit → one gh pr view call;
+# result written back to cache.
+# ----------------------------------------------------------------------
+
+@test "T1.3 cache-miss: MERGED+no merge_commit → one gh pr view call; SHA cached" {
+  local repo branch spy_file expected_sha resolved_path hash cache_file
+  branch="feat/t13-cache-miss"
+  repo="$(_build_ahead_repo "$branch" 1)"
+
+  # Seed cache with MERGED but no merge_commit (simulates first push after
+  # state was cached without SHA).
+  _seed_pr_cache "$repo" "$branch" "MERGED"
+
+  # Use merged-pr scenario: pr-view.json returns a non-empty mergeCommit SHA.
+  export GH_STUB_SCENARIO="merged-pr"
+
+  spy_file="$(mktemp "${TMPDIR:-/tmp}/tcs-gh-spy.XXXXXX")"
+  export GH_STUB_SPY_FILE="$spy_file"
+
+  # Compute cache file path BEFORE rm -rf so we can read it after the run.
+  # Mirrors _seed_pr_cache's hashing (symlink-resolved path → shasum head -c 12).
+  resolved_path="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" \
+    || resolved_path="$repo"
+  hash="$(printf '%s' "$resolved_path" | shasum 2>/dev/null | head -c 12)"
+  cache_file="$CLAUDE_PLUGIN_DATA/cache/${hash}-pr-state.json"
+  # SHA from merged-pr/pr-view.json {"mergeCommit":{"oid":"d8c4a23..."}}.
+  expected_sha="d8c4a23719fbe21b8b7d6f1e2c5a90b3e7f4d6c1"
+
+  cd "$repo"
+  run _run_hook_with_cmd "git push origin $branch"
+  rm -rf "$repo"
+
+  # Capture spy state and clean up immediately — assertions after this line
+  # can `return 1` and would otherwise orphan the tempfile in $TMPDIR.
+  local call_count=0
+  if [ -f "$spy_file" ]; then
+    call_count=$(wc -l < "$spy_file" | tr -d ' ')
+  fi
+  rm -f "$spy_file"
+  unset GH_STUB_SPY_FILE
+
+  # Exactly one gh pr view call was made (cache miss → fetch SHA).
+  [ "$call_count" -eq 1 ] \
+    || { echo "expected 1 gh pr view call (cache miss), got: $call_count" >&2; return 1; }
+
+  # Verify the resolved SHA was written back to the cache via T1.1's extended
+  # writer — the merge_commit field round-trips so a subsequent push would
+  # hit the cache-hit path (zero gh calls).
+  [ -f "$cache_file" ] \
+    || { echo "expected cache file at $cache_file" >&2; return 1; }
+  local cached_sha
+  cached_sha="$(jq -r --arg b "$branch" '.branch_state[$b].merge_commit // empty' "$cache_file")"
+  [ "$cached_sha" = "$expected_sha" ] \
+    || { echo "expected cached merge_commit=$expected_sha, got: $cached_sha" >&2; return 1; }
+}
+
+# ----------------------------------------------------------------------
+# SHA-resolution-fail: gh pr view returns empty → _is_ahead_of_merged
+# returns 2 → falls through to override/deny (no regression in deny path)
+# ----------------------------------------------------------------------
+
+@test "T1.3 SHA-fail: gh returns empty mergeCommit → fall-through to DENY" {
+  local repo branch
+  branch="feat/t13-sha-fail"
+  repo="$(_build_ahead_repo "$branch" 1)"
+
+  # Seed cache: MERGED state, no merge_commit.
+  _seed_pr_cache "$repo" "$branch" "MERGED"
+
+  # Use scenario where pr-view returns null mergeCommit (→ empty jq output).
+  export GH_STUB_SCENARIO="merged-pr-no-sha"
+
+  cd "$repo"
+  run _run_hook_with_cmd "git push origin $branch"
+  rm -rf "$repo"
+
+  # SHA unavailable → _is_ahead_of_merged returns 2 → deny path fires.
+  _assert_deny_for_rule "PUSH_TO_CLOSED_PR"
+  # Pin the existing _record_deny wording — confirms the pre-existing deny
+  # path fired (not a new SHA-resolution-specific error path).
+  [[ "$output" == *"PR for branch"* ]] \
+    || { echo "expected existing deny wording 'PR for branch', got: $output" >&2; return 1; }
+  [[ "$output" == *"is MERGED"* ]] \
+    || { echo "expected 'is MERGED' in deny output, got: $output" >&2; return 1; }
 }
