@@ -302,6 +302,72 @@ load 'lib/helpers'
   _assert_allow
 }
 
+# ----------------------------------------------------------------------
+# NO_VERIFY: quoted-body false-positive regression (v2.2.1 fix)
+#
+# Real user report: a `git commit -m "$(cat <<'EOF' …body with `-n,`… EOF)"`
+# heredoc tripped NO_VERIFY because the greedy `.*` in PATTERN_NO_VERIFY
+# allowed `-n[[:>:]]` to match text INSIDE the -m message body. Fix is a
+# `_strip_quoted` preprocessing step applied ONLY to the NO_VERIFY check
+# (CON-7 narrow scope; other patterns unchanged).
+# ----------------------------------------------------------------------
+
+@test "NO_VERIFY: negative — -n inside double-quoted -m body is allowed" {
+  # The literal "-n," appears in a release-notes body; must not match the flag.
+  run _run_hook_with_cmd 'git commit -m "release notes: see -n, foo bar"'
+  _assert_allow
+}
+
+@test "NO_VERIFY: negative — -n inside single-quoted -m body is allowed" {
+  run _run_hook_with_cmd "git commit -m 'fix: stop using -n flag'"
+  _assert_allow
+}
+
+@test "NO_VERIFY: negative — --no-verify inside -m body is allowed" {
+  run _run_hook_with_cmd 'git commit -m "docs: explain --no-verify trap"'
+  _assert_allow
+}
+
+@test "NO_VERIFY: negative — heredoc body mentioning -n is allowed (user report)" {
+  # Real user report: `git commit -m "$(cat <<'EOF' …body with -n,… EOF)"`
+  # tripped NO_VERIFY because the body text reached the regex. With the
+  # _strip_quoted fix, the entire outer "$(...)" wrapper is one double-quoted
+  # segment (no inner `"` chars in this form) and is replaced by spaces
+  # before NO_VERIFY runs.
+  local cmd='git commit -m "$(cat <<'"'"'EOF'"'"'
+release notes
+fix: see -n, flag
+EOF
+)"'
+  run _run_hook_with_cmd "$cmd"
+  _assert_allow
+}
+
+@test "NO_VERIFY: known limitation — nested \" inside \$(…) may still trip (use override)" {
+  # When command substitution contains inner double-quotes (e.g. printf "x"),
+  # the naive quote-scanner reads the inner `"` as closing the outer dq, so
+  # the body text leaks back to the regex. Documented limitation — users
+  # have the v2.2.0 inline override `CLAUDE_ALLOW_NO_VERIFY=1 git commit …`
+  # as escape hatch. This test pins the current behavior so a future smarter
+  # scanner that fixes it will trip this test and force review.
+  run _run_hook_with_cmd 'git commit -m "$(printf "release notes\nfix: see -n flag\n")"'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"permissionDecision":"deny"'* ]] \
+    || { echo "expected deny (current behavior pinned for known limitation), got: $output" >&2; return 1; }
+}
+
+@test "NO_VERIFY: positive — -n AFTER closing quote still denies" {
+  # Quote-strip must not be so aggressive that it kills the real flag when
+  # it appears outside the quoted message.
+  run _run_hook_with_cmd 'git commit -m "msg" -n'
+  _assert_deny_for_rule "NO_VERIFY"
+}
+
+@test "NO_VERIFY: positive — --no-verify AFTER closing quote still denies" {
+  run _run_hook_with_cmd 'git commit -m "msg" --no-verify'
+  _assert_deny_for_rule "NO_VERIFY"
+}
+
 @test "FORCE_PUSH: positive — git push --force denies" {
   run _run_hook_with_cmd "git push --force origin main"
   _assert_deny_for_rule "FORCE_PUSH"

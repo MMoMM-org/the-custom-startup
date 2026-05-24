@@ -170,3 +170,56 @@ _match_command() {
   local pattern="$2"
   [[ "$cmd" =~ $pattern ]]
 }
+
+# _strip_quoted <command>
+#   Returns <command> with content inside single- and double-quoted segments
+#   replaced by spaces (token boundaries preserved). Used to prevent regex
+#   patterns whose `.*` would otherwise bridge from the real argv into a
+#   quoted message body (e.g. NO_VERIFY matching `-n,` inside `-m "...-n,..."`).
+#
+#   Scope: applied ONLY where a verb commonly carries a quoted message body
+#   (currently just NO_VERIFY's `git commit -m "..."`). Other patterns must
+#   keep using raw $CMD — see block-bad-git-ops.sh dispatcher.
+#
+#   Known limitations (documented; users hit them rarely and have the v2.2.0
+#   `CLAUDE_ALLOW_NO_VERIFY=1` inline-override path as escape hatch):
+#     - Nested quotes inside command substitution (e.g. "$(printf "x")") may
+#       confuse the scanner: the inner `"` is read as closing the outer dq.
+#       The heredoc form `"$(cat <<'EOF' …EOF)"` is NOT affected because the
+#       outer `"..."` contains no inner `"` characters.
+#     - Backslash-escaping inside double quotes is honored (`\"` does not
+#       close the dq). Single quotes follow POSIX — no escapes inside.
+#
+#   bash 3.2 compatible: pure parameter expansion, no associative arrays,
+#   no mapfile.
+_strip_quoted() {
+  local cmd="$1"
+  local out=""
+  local i=0
+  local len=${#cmd}
+  local in_sq=0 in_dq=0
+  local ch prev=""
+  while [ "$i" -lt "$len" ]; do
+    ch="${cmd:$i:1}"
+    if [ "$in_sq" -eq 1 ]; then
+      if [ "$ch" = "'" ]; then
+        in_sq=0
+      fi
+      out="${out} "
+    elif [ "$in_dq" -eq 1 ]; then
+      if [ "$ch" = '"' ] && [ "$prev" != "\\" ]; then
+        in_dq=0
+      fi
+      out="${out} "
+    else
+      case "$ch" in
+        "'") in_sq=1; out="${out} " ;;
+        '"') in_dq=1; out="${out} " ;;
+        *)   out="${out}${ch}" ;;
+      esac
+    fi
+    prev="$ch"
+    i=$((i + 1))
+  done
+  printf '%s' "$out"
+}
