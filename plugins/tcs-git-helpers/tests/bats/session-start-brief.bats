@@ -1,29 +1,29 @@
 #!/usr/bin/env bats
-# Tests for scripts/session-start-brief.sh (T3.2).
+# Tests for scripts/session-start-brief.sh.
+#
+# v2.2.2 rewrite: the brief is no longer a plain-text line. SessionStart
+# stdout goes only to Claude's context, so the script now emits a JSON
+# hook response with two channels:
+#   - systemMessage          : user-visible TUI notice
+#   - hookSpecificOutput.additionalContext : Claude-only context
+# When nothing is actionable, the script exits 0 silently (no stdout).
 #
 # Coverage:
-#   1. Brief format matches SDD wireframe (branch, state, ahead/behind, stale-count)
-#   2. Warning marker ⚠ on protected branch (main/master)
-#   3. Dirty state with modified count
-#   4. "up to date" when no ahead/behind
-#   5. Staleness indicator when cache >24h old
-#   6. Setup hint when .githooks/ absent
-#   7. No gh invocations (sentinel stub)
-#   8. Cache empty renders gracefully (0 stale-merged, no errors)
-#   9. Performance p99 <300ms (or 500ms on CI) over 100 invocations
-#  10. Cleanup suggestion when stale-count > 0
-#
-# Spec refs:
-#   - SDD §Runtime View Tertiary Flow (session-start-brief)
-#   - SDD §UI Visualization Brief Layout
-#   - PRD M4 AC1–AC5
-#   - ADR-4: TSV format with comment header
+#   1.  Silent on idle (feat branch, hooks current, no stale)
+#   2.  Silent on idle when cache file missing
+#   3.  Main branch idle → additionalContext nudge only, no systemMessage
+#   4.  Drift hint → both channels carry the suggestion
+#   5.  Setup hint when .githooks/ absent → both channels
+#   6.  Cleanup hint when stale-count > 0 → both channels
+#   7.  Main + cleanup → systemMessage has hint, additionalContext has hint + nudge
+#   8.  JSON output parses cleanly
+#   9.  No gh invocations (sentinel stub)
+#  10.  Performance p99 < 300ms (500ms on CI) over 100 invocations
 #
 # Constraints:
 #   - bash 3.2 compatible (no declare -A, no mapfile)
 #   - POSIX ERE patterns only
 #   - No jq dependency
-#   - No gh invocations in hook
 
 bats_require_minimum_version 1.5.0
 
@@ -44,7 +44,6 @@ setup() {
   mkdir -p "$CACHE_DIR"
 
   # Build a synthetic fixture repo for this test (fresh per test).
-  # We use inline repo-building rather than build.sh to control upstream state.
   TEST_REPO="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ssb-repo.XXXXXX")"
   export TEST_REPO
 
@@ -61,7 +60,6 @@ setup() {
   export ORIGIN
   git -C "$ORIGIN" init -q --bare 2>/dev/null \
     || { git -C "$ORIGIN" init --bare >/dev/null 2>&1; }
-  # Try to force main as branch name for the bare repo.
   git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main 2>/dev/null || true
 
   git -C "$TEST_REPO" init -q 2>/dev/null || git -C "$TEST_REPO" init >/dev/null 2>&1
@@ -73,35 +71,25 @@ setup() {
   printf 'init\n' > "$TEST_REPO/init.txt"
   git -C "$TEST_REPO" add init.txt
   git -C "$TEST_REPO" commit -q -m "feat: init"
-  # Try to set branch to main.
   git -C "$TEST_REPO" checkout -B main >/dev/null 2>&1 || true
   git -C "$TEST_REPO" remote add origin "$ORIGIN"
   git -C "$TEST_REPO" push -q -u origin main 2>/dev/null \
     || git -C "$TEST_REPO" push -q -u origin HEAD:main 2>/dev/null || true
   git -C "$TEST_REPO" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main 2>/dev/null || true
 
-  # Create and switch to feat branch for most tests.
+  # Create and switch to feat branch — most tests run from a feature branch.
   git -C "$TEST_REPO" checkout -q -b feat/foo 2>/dev/null || true
   git -C "$TEST_REPO" push -q -u origin feat/foo 2>/dev/null || true
 
-  # Compute repo hash using EXACTLY the same method as lib/cache.sh _repo_hash:
-  #   printf '%s' "$repo_path" | shasum | head -c 12
-  # Key subtleties:
-  #   - `git rev-parse --show-toplevel` is used (not the mktemp path) because on
-  #     macOS /tmp is a symlink to /private/tmp — git resolves the real path.
-  #   - `printf '%s'` is used (not a pipe from git) because git output includes a
-  #     trailing newline which changes the sha1 hash.
+  # Repo hash matches lib/cache.sh _repo_hash exactly (printf '%s' on the
+  # real-path show-toplevel, no trailing newline).
   _real_top="$(git -C "$TEST_REPO" rev-parse --show-toplevel 2>/dev/null)"
   REPO_HASH="$(printf '%s' "$_real_top" | shasum 2>/dev/null | head -c 12)"
   export REPO_HASH
   export CACHE_DIR
-
-  # Remove installed .githooks dir by default — each test that needs it will add it.
-  unset GITHOOKS_INSTALLED 2>/dev/null || true
 }
 
 teardown() {
-  # Best-effort cleanup.
   if [ -n "${TEST_REPO:-}" ] && [ -d "$TEST_REPO" ]; then
     chmod -R u+w "$TEST_REPO" 2>/dev/null || true
     rm -rf "$TEST_REPO"
@@ -114,8 +102,7 @@ teardown() {
   fi
 }
 
-# Write a stale-cache TSV file with the given updated_iso timestamp and rows.
-# Args: $1=updated_iso, $2+=rows (each: "branch\tpr\tdate")
+# Write a stale-cache TSV file. Args: $1=updated_iso, $2+=rows.
 _write_test_cache() {
   local updated_iso="$1"
   shift
@@ -131,105 +118,101 @@ _write_test_cache() {
   } > "$tsv_path"
 }
 
-# Compute ISO timestamp N hours ago (UTC).
-# Uses BSD date -v (macOS) with GNU date -d fallback.
-_hours_ago_iso() {
-  local hours="$1"
-  local secs=$(( hours * 3600 ))
-  local epoch
-  epoch="$(date +%s)"
-  epoch="$((epoch - secs))"
-  # BSD/macOS: date -r <epoch>; GNU: date -d @<epoch>
-  if date -r "$epoch" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null; then
-    return 0
-  fi
-  date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null
+# Install fake .githooks/ with hooks bannered at a given version. The
+# drift-check in section 8b of session-start-brief.sh reads the first
+# tcs-git-helpers banner line out of pre-commit / pre-push / commit-msg /
+# post-merge, so we only need to write those files with the banner.
+_install_githooks_at() {
+  local v="$1"
+  mkdir -p "$TEST_REPO/.githooks"
+  local h
+  for h in pre-commit pre-push commit-msg post-merge; do
+    {
+      printf '#!/bin/bash\n'
+      printf '# tcs-git-helpers: %s\n' "$v"
+      printf 'exit 0\n'
+    } > "$TEST_REPO/.githooks/$h"
+    chmod +x "$TEST_REPO/.githooks/$h"
+  done
 }
 
-# Run the hook in the test repo dir. Captures:
-#   $status  — exit code
-#   $output  — stdout (the brief — Claude Code only surfaces stdout for
-#              SessionStart, so the brief must land here)
-#   $stderr  — stderr (should be empty for this hook)
+# Install .githooks/ at the plugin.json current version → silences drift_seg.
+_install_githooks_current() {
+  local v
+  v="$(grep -E '"version"[[:space:]]*:' "$PLUGIN_ROOT/.claude-plugin/plugin.json" \
+       | head -1 \
+       | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+  _install_githooks_at "$v"
+}
+
+# Run the hook in the test repo dir.
 _run_hook() {
   run --separate-stderr bash -c 'cd "$1" && exec "$2"' _ "$TEST_REPO" "$HOOK"
 }
 
 # ----------------------------------------------------------------------
-# Test 1: Brief format matches SDD wireframe
+# Test 1: Silent on idle (feat branch, hooks current, no stale)
 # ----------------------------------------------------------------------
 
-@test "brief format matches SDD wireframe (feat/foo • clean • 2 ahead • 3 stale-merged)" {
-  # Make repo 2 ahead of upstream.
-  printf 'change1\n' > "$TEST_REPO/c1.txt"
-  git -C "$TEST_REPO" add c1.txt
-  git -C "$TEST_REPO" commit -q -m "feat: c1"
-  printf 'change2\n' > "$TEST_REPO/c2.txt"
-  git -C "$TEST_REPO" add c2.txt
-  git -C "$TEST_REPO" commit -q -m "feat: c2"
-
-  # Write cache with 3 stale entries, updated now (no staleness).
+@test "silent on idle: feat branch + current githooks + no stale" {
+  _install_githooks_current
   local now_iso
   now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  _write_test_cache "$now_iso" \
-    "feat/old-thing	38	2026-04-12T10:00:00Z" \
-    "fix/another-thing	40	2026-04-15T09:00:00Z" \
-    "feat/more-old	41	2026-04-20T09:00:00Z"
+  _write_test_cache "$now_iso"  # empty cache, no stale rows
 
   _run_hook
 
   [ "$status" -eq 0 ]
-  # Anchor the canonical SDD wireframe: order + bullet separators are mandatory.
-  # A single ERE pinning all four segments in order catches any transposition regression.
-  # Use a subshell grep directly (not `run`) to avoid clobbering bats $output.
-  local brief_output="$output"
-  printf '%s' "$brief_output" \
-    | grep -qE '^\[tcs-git-helpers\] feat/foo • clean • 2 ahead • 3 stale-merged'
-  # Supplementary individual-segment assertions (kept for diagnostic clarity).
-  printf '%s' "$brief_output" | grep -q "feat/foo"
-  printf '%s' "$brief_output" | grep -q "clean"
-  printf '%s' "$brief_output" | grep -q "2 ahead"
-  printf '%s' "$brief_output" | grep -q "3 stale-merged"
-  # Must start with the prefix (no ⚠ for feat branch).
-  printf '%s' "$brief_output" | grep -q "^\[tcs-git-helpers\]"
+  [ -z "$output" ]
+  [ -z "$stderr" ]
 }
 
 # ----------------------------------------------------------------------
-# Test 2: Warning marker on protected branch
+# Test 2: Silent on idle when cache file is missing entirely
 # ----------------------------------------------------------------------
 
-@test "warning marker ⚠ on protected branch (main)" {
-  # Switch back to main.
-  git -C "$TEST_REPO" checkout -q main 2>/dev/null || true
-
-  local now_iso
-  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  _write_test_cache "$now_iso" \
-    "feat/old-thing	38	2026-04-12T10:00:00Z"
+@test "silent on idle: cache file absent, fail-open" {
+  _install_githooks_current
+  local tsv_path="$CACHE_DIR/${REPO_HASH}-stale-cache.tsv"
+  [ ! -f "$tsv_path" ]
 
   _run_hook
 
   [ "$status" -eq 0 ]
-  printf '%s' "$output" | grep -q "^⚠ \[tcs-git-helpers\]"
+  [ -z "$output" ]
+  [ -z "$stderr" ]
+}
+
+# ----------------------------------------------------------------------
+# Test 3: Main branch idle — additionalContext nudge only, no systemMessage
+# ----------------------------------------------------------------------
+
+@test "main branch idle: additionalContext has nudge, no systemMessage" {
+  git -C "$TEST_REPO" checkout -q main 2>/dev/null || true
+  _install_githooks_current
+  local now_iso
+  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  _write_test_cache "$now_iso"
+
+  _run_hook
+
+  [ "$status" -eq 0 ]
+  [ -n "$output" ]
+  # No systemMessage field present → user sees nothing.
+  ! printf '%s' "$output" | grep -q '"systemMessage"'
+  # additionalContext present and contains the protected-branch nudge.
+  printf '%s' "$output" | grep -q '"additionalContext"'
+  printf '%s' "$output" | grep -q "protected branch"
+  printf '%s' "$output" | grep -q "do not create or edit"
   printf '%s' "$output" | grep -q "main"
 }
 
 # ----------------------------------------------------------------------
-# Test 3: Dirty state with modified count
+# Test 4: Drift hint surfaces in both channels
 # ----------------------------------------------------------------------
 
-@test "dirty state reports N modified count" {
-  # Create 3 tracked modified files.
-  printf 'orig\n' > "$TEST_REPO/f1.txt"
-  printf 'orig\n' > "$TEST_REPO/f2.txt"
-  printf 'orig\n' > "$TEST_REPO/f3.txt"
-  git -C "$TEST_REPO" add f1.txt f2.txt f3.txt
-  git -C "$TEST_REPO" commit -q -m "feat: add files"
-  # Now modify them without committing.
-  printf 'changed\n' > "$TEST_REPO/f1.txt"
-  printf 'changed\n' > "$TEST_REPO/f2.txt"
-  printf 'changed\n' > "$TEST_REPO/f3.txt"
-
+@test "drift hint surfaces in systemMessage and additionalContext" {
+  _install_githooks_at "2.0.0"   # forces drift vs current plugin.json
   local now_iso
   now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   _write_test_cache "$now_iso"
@@ -237,15 +220,19 @@ _run_hook() {
   _run_hook
 
   [ "$status" -eq 0 ]
-  printf '%s' "$output" | grep -q "dirty (3 modified)"
+  [ -n "$output" ]
+  printf '%s' "$output" | grep -q '"systemMessage"'
+  printf '%s' "$output" | grep -q '"additionalContext"'
+  printf '%s' "$output" | grep -q "hooks v2.0.0"
+  printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-setup --update"
 }
 
 # ----------------------------------------------------------------------
-# Test 4: up to date when no ahead/behind
+# Test 5: Setup hint surfaces when .githooks/ absent
 # ----------------------------------------------------------------------
 
-@test "up to date when HEAD equals upstream" {
-  # The feat/foo branch was pushed with no commits ahead — already up to date.
+@test "setup hint surfaces when .githooks/ absent" {
+  [ ! -d "$TEST_REPO/.githooks" ]
   local now_iso
   now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   _write_test_cache "$now_iso"
@@ -253,35 +240,62 @@ _run_hook() {
   _run_hook
 
   [ "$status" -eq 0 ]
-  printf '%s' "$output" | grep -q "up to date"
+  [ -n "$output" ]
+  printf '%s' "$output" | grep -q '"systemMessage"'
+  printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-setup"
 }
 
 # ----------------------------------------------------------------------
-# Test 5: Staleness indicator when cache >24h old
+# Test 6: Cleanup hint surfaces when stale-count > 0
 # ----------------------------------------------------------------------
 
-@test "staleness indicator when cache older than 24h" {
-  # Write cache with updated_iso 26 hours ago.
-  local stale_iso
-  stale_iso="$(_hours_ago_iso 26)"
-  _write_test_cache "$stale_iso" \
+@test "cleanup hint surfaces when stale-count > 0" {
+  _install_githooks_current
+  local now_iso
+  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  _write_test_cache "$now_iso" \
+    "feat/old-thing	38	2026-04-12T10:00:00Z" \
+    "fix/another-thing	40	2026-04-15T09:00:00Z"
+
+  _run_hook
+
+  [ "$status" -eq 0 ]
+  [ -n "$output" ]
+  printf '%s' "$output" | grep -q '"systemMessage"'
+  printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
+}
+
+# ----------------------------------------------------------------------
+# Test 7: Main + cleanup — systemMessage has hint, additionalContext has hint + nudge
+# ----------------------------------------------------------------------
+
+@test "main + cleanup: systemMessage has hint, additionalContext has hint + nudge" {
+  git -C "$TEST_REPO" checkout -q main 2>/dev/null || true
+  _install_githooks_current
+  local now_iso
+  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  _write_test_cache "$now_iso" \
     "feat/old-thing	38	2026-04-12T10:00:00Z"
 
   _run_hook
 
   [ "$status" -eq 0 ]
-  # Must match pattern "(cache Nh old)" for N >= 24.
-  printf '%s' "$output" | grep -qE "\(cache [0-9]+h old\)"
+  printf '%s' "$output" | grep -q '"systemMessage"'
+  printf '%s' "$output" | grep -q '"additionalContext"'
+  # Cleanup hint must appear in both fields (count the occurrences ≥ 2).
+  local count
+  count="$(printf '%s' "$output" | grep -o "run /tcs-git-helpers:git-audit --cleanup" | wc -l | tr -d '[:space:]')"
+  [ "$count" -ge 2 ]
+  # Nudge appears only in additionalContext, so just count ≥ 1.
+  printf '%s' "$output" | grep -q "protected branch"
 }
 
 # ----------------------------------------------------------------------
-# Test 6: Setup hint when .githooks/ absent
+# Test 8: JSON output parses cleanly
 # ----------------------------------------------------------------------
 
-@test "setup hint when .githooks/ absent" {
-  # Confirm no .githooks exists in test repo.
-  [ ! -d "$TEST_REPO/.githooks" ]
-
+@test "JSON output is syntactically valid when emitted" {
+  _install_githooks_at "2.0.0"   # ensure something is emitted
   local now_iso
   now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   _write_test_cache "$now_iso"
@@ -289,15 +303,22 @@ _run_hook() {
   _run_hook
 
   [ "$status" -eq 0 ]
-  printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-setup"
+  [ -n "$output" ]
+  # Validate via python3 if present, else jq, else skip.
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s' "$output" | python3 -c 'import json,sys;json.loads(sys.stdin.read())'
+  elif command -v jq >/dev/null 2>&1; then
+    printf '%s' "$output" | jq -e . >/dev/null
+  else
+    skip "Neither python3 nor jq available to validate JSON"
+  fi
 }
 
 # ----------------------------------------------------------------------
-# Test 7: No gh invocations
+# Test 9: No gh invocations (sentinel stub)
 # ----------------------------------------------------------------------
 
 @test "hook makes NO gh invocations (sentinel stub exits 99)" {
-  # Install a sentinel gh stub that records invocation and exits 99.
   local stub_dir
   stub_dir="$(mktemp -d "${TMPDIR:-/tmp}/tcs-ssb-ghstub.XXXXXX")"
   local sentinel="$stub_dir/gh-invoked"
@@ -315,46 +336,28 @@ STUB
   now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   _write_test_cache "$now_iso"
 
-  # Run hook with sentinel gh on PATH.
   run --separate-stderr bash -c \
     'export PATH="$1:$PATH"; export GH_SENTINEL_FILE="$2"; cd "$3" && exec "$4"' \
     _ "$stub_dir" "$sentinel" "$TEST_REPO" "$HOOK"
 
   [ "$status" -eq 0 ]
-  # Sentinel file must NOT exist — gh was never invoked.
   [ ! -f "$sentinel" ]
 
   rm -rf "$stub_dir"
 }
 
 # ----------------------------------------------------------------------
-# Test 8: Cache empty renders gracefully
-# ----------------------------------------------------------------------
-
-@test "cache empty renders gracefully (0 stale-merged, exit 0)" {
-  # No cache file at all — _read_stale_cache_tsv returns empty.
-  local tsv_path="$CACHE_DIR/${REPO_HASH}-stale-cache.tsv"
-  [ ! -f "$tsv_path" ]  # Confirm absent.
-
-  _run_hook
-
-  [ "$status" -eq 0 ]
-  printf '%s' "$output" | grep -q "0 stale-merged"
-  [ -z "$stderr" ]
-}
-
-# ----------------------------------------------------------------------
-# Test 9: Performance p99 under 300ms (500ms on CI)
+# Test 10: Performance p99 under 300ms (500ms on CI)
 # ----------------------------------------------------------------------
 
 @test "performance p99 under 300ms (100 invocations)" {
+  _install_githooks_current
   local now_iso
   now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   _write_test_cache "$now_iso" \
     "feat/old-thing	38	2026-04-12T10:00:00Z" \
     "fix/another-thing	40	2026-04-15T09:00:00Z"
 
-  # Determine the performance ceiling: 500ms on CI, 300ms locally.
   local ceiling_ms
   if [ "${CI:-}" = "true" ]; then
     ceiling_ms=500
@@ -366,11 +369,6 @@ STUB
   local tmp_times
   tmp_times="$(mktemp "${TMPDIR:-/tmp}/tcs-ssb-perf.XXXXXX")"
 
-  # Measure each invocation using date +%s%3N (milliseconds since epoch).
-  # gdate (coreutils) is more precise on macOS; fall back to GNU date.
-  # Use gdate (GNU coreutils) on macOS for millisecond precision.
-  # Fall back to perl -MTime::HiRes if gdate absent.
-  # If neither is available, skip.
   local ms_cmd=""
   if command -v gdate >/dev/null 2>&1; then
     ms_cmd="gdate +%s%3N"
@@ -392,12 +390,10 @@ STUB
     printf '%s\n' "$elapsed_ms" >> "$tmp_times"
   done
 
-  # Compute p99: the 99th sample of 100 sorted ascending (1 sample exceeds it).
   local p99
   p99="$(sort -n "$tmp_times" | awk 'NR==99{print; exit}')"
   rm -f "$tmp_times"
 
-  # Guard: if p99 is empty or non-numeric, timing failed — skip.
   case "${p99:-}" in
     ''|*[!0-9]*) skip "Could not parse timing data; skipping perf assertion" ;;
   esac
@@ -406,94 +402,4 @@ STUB
     printf 'FAIL: p99=%dms exceeds ceiling=%dms\n' "$p99" "$ceiling_ms" >&2
     return 1
   fi
-}
-
-# ----------------------------------------------------------------------
-# Test 10: Cleanup suggestion when stale-count > 0
-# ----------------------------------------------------------------------
-
-@test "cleanup suggestion appended when stale-count > 0" {
-  local now_iso
-  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  _write_test_cache "$now_iso" \
-    "feat/old-thing	38	2026-04-12T10:00:00Z" \
-    "fix/another-thing	40	2026-04-15T09:00:00Z"
-
-  _run_hook
-
-  [ "$status" -eq 0 ]
-  printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
-}
-
-# ----------------------------------------------------------------------
-# Test 11: "no upstream" branch path (M4 fail-open coverage)
-# ----------------------------------------------------------------------
-
-@test "brief shows 'no upstream' when branch has no tracking" {
-  # Create a local branch with no upstream tracking configured.
-  git -C "$TEST_REPO" checkout -q -b local-only-branch 2>/dev/null
-
-  local now_iso
-  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  _write_test_cache "$now_iso"
-
-  _run_hook
-
-  [ "$status" -eq 0 ]
-  # The ahead/behind segment must say "no upstream".
-  printf '%s' "$output" | grep -q "no upstream"
-  # The canonical wireframe must still hold: branch • state • no upstream • stale-count.
-  printf '%s' "$output" \
-    | grep -qE '^\[tcs-git-helpers\] local-only-branch • [^•]+ • no upstream • [0-9]+ stale-merged'
-}
-
-# ----------------------------------------------------------------------
-# Test 12: Missing .githooks/tcs-git-helpers-version does not break brief
-# (per CON-5: SessionStart is not the drift surface)
-# ----------------------------------------------------------------------
-
-@test "missing .githooks/tcs-git-helpers-version renders brief with 0 stale-merged, no error" {
-  # Ensure no .githooks dir exists (default state in setup).
-  [ ! -d "$TEST_REPO/.githooks" ]
-
-  # Cache exists but version file will not (we never create it).
-  local now_iso
-  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  _write_test_cache "$now_iso" \
-    "feat/old-thing	38	2026-04-12T10:00:00Z"
-
-  _run_hook
-
-  [ "$status" -eq 0 ]
-  # Brief must emit successfully.
-  [ -n "$output" ]
-  # Must show stale-count from cache, not error.
-  printf '%s' "$output" | grep -q "1 stale-merged"
-  # No drift prompt lines in the output.
-  ! printf '%s' "$output" | grep -qE "drift|DRIFT|version"
-  # Cleanup suggestion should be present (stale-count > 0).
-  printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
-  # No error output.
-  [ -z "$stderr" ]
-}
-
-# ----------------------------------------------------------------------
-# Test 13: Missing cache file does not break brief
-# (per CON-5: brief fails open on missing inputs)
-# ----------------------------------------------------------------------
-
-@test "missing cache file renders brief with 0 stale-merged, no error" {
-  # Ensure cache file does not exist.
-  local tsv_path="$CACHE_DIR/${REPO_HASH}-stale-cache.tsv"
-  [ ! -f "$tsv_path" ]
-
-  _run_hook
-
-  [ "$status" -eq 0 ]
-  # Brief must emit successfully with no stale entries reported.
-  printf '%s' "$output" | grep -q "0 stale-merged"
-  # No error output.
-  [ -z "$stderr" ]
-  # No cleanup suggestion when stale-count == 0.
-  ! printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
 }

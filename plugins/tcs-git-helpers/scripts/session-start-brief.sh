@@ -3,14 +3,32 @@
 #
 # tcs-git-helpers — SessionStart brief renderer (T3.2, M4).
 #
-# Emits a one-line branch-state brief to stdout on every SessionStart event.
-# Pure bash 3.2. NO jq. NO gh. NO python. Reads only local git + TSV cache.
+# Emits — only when there is something actionable — a JSON SessionStart hook
+# response that surfaces a user-visible notice AND/OR Claude-only context.
+# When nothing needs attention the script exits 0 silently (no stdout, no
+# stderr). Pure bash 3.2. NO jq. NO gh. Reads only local git + TSV cache.
+# python3 is used opportunistically for JSON encoding; a sed-based fallback
+# covers environments without it.
 #
-# Output format (SDD §UI Visualization Brief Layout):
-#   [tcs-git-helpers] <branch> • <state> • <ahead/behind> • <stale-count> [• <staleness>] [• <suggestion>]
+# Actionable triggers (any one → emit):
+#   - drift_seg   : installed hook banner version != plugin.json version
+#   - cleanup_seg : stale-merged branch count > 0
+#   - setup_seg   : repo missing .githooks/
 #
-# Protected-branch prefix (main/master):
-#   ⚠ [tcs-git-helpers] <branch> • ...
+# Output shape (JSON on stdout, exit 0):
+#   {
+#     "systemMessage": "[tcs-git-helpers] <actionable bits>",   // user-visible (omitted when nothing user-actionable)
+#     "hookSpecificOutput": {
+#       "hookEventName": "SessionStart",
+#       "additionalContext": "<user msg if any>\n<protected-branch nudge if on main/master>"
+#     }
+#   }
+#
+# Channel rationale (per Claude Code hooks docs, May 2026):
+#   - Plain stdout on SessionStart → additionalContext (Claude only); never user-visible.
+#   - JSON `systemMessage` → user-visible TUI notice.
+#   - JSON `hookSpecificOutput.additionalContext` → Claude context.
+# We use both so the user is informed AND Claude can act on the same info.
 #
 # Constraints:
 #   CON-1/ADR-2: bash 3.2 compat — no declare -A, no mapfile, no \s/\b PCRE
@@ -21,9 +39,7 @@
 #
 # SessionStart hook contract:
 #   - stdin: JSON event payload (ignored — no data needed)
-#   - stdout: the brief line (Claude Code surfaces stdout in the session UI;
-#     stderr is silently dropped for SessionStart, so the brief must go to
-#     stdout or it never reaches the user)
+#   - stdout: JSON object as documented above, OR empty when idle
 #   - stderr: empty
 #   - exit: always 0 (fail-open)
 #
@@ -37,16 +53,16 @@ set -uo pipefail
 # Resolve script directory for relative lib sourcing.
 _SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 
-# Source cache library — exposes _read_stale_cache_tsv, _repo_hash, _stale_tsv_path, _cache_dir.
-# Fail-open: if the lib is missing, we render with 0 stale-merged and continue.
+# Source cache library — exposes _read_stale_cache_tsv (only function we
+# still call after the v2.2.2 cleanup; _stale_tsv_path was used by the
+# cache-age suffix that no longer ships).
+# Fail-open: if the lib is missing, treat stale-count as 0 and continue.
 # shellcheck source=lib/cache.sh
 if [ -f "$_SCRIPT_DIR/lib/cache.sh" ]; then
   # shellcheck disable=SC1091
   source "$_SCRIPT_DIR/lib/cache.sh"
 else
-  # Minimal stub so the rest of the script doesn't error.
   _read_stale_cache_tsv() { return 0; }
-  _stale_tsv_path()       { return 1; }
 fi
 
 # Fail-open wrapper: any unexpected error exits 0 with no output.
@@ -72,70 +88,22 @@ if [ -z "$branch" ]; then
 fi
 
 # ----------------------------------------------------------------------
-# 3. Protected-branch warning marker
-# Hardcoded for v1: main, master.
-# Future: read TCS_PROTECTED_BRANCHES from .githooks/.config.
+# 3-5. Historic info-only segments (warn_prefix, state_seg, ab_seg) were
+# removed in v2.2.2 — they were rendered into a plain-stdout brief that
+# never reached the user (SessionStart stdout goes to Claude only). The
+# user-visible nudge for protected branches now lives in section 9b's
+# additionalContext path. Working-tree state and ahead/behind status are
+# already in Claude's gitStatus env, so duplicating them here added no
+# value while costing ~62ms per session start.
 # ----------------------------------------------------------------------
 
-warn_prefix=""
-case "$branch" in
-  main|master)
-    warn_prefix="⚠ "
-    ;;
-esac
-
 # ----------------------------------------------------------------------
-# 4. Working-tree state (git status --porcelain ~47ms)
-# State grammar:
-#   clean           — empty output
-#   dirty (N modified) — N = line count of porcelain output
-# ----------------------------------------------------------------------
-
-porcelain="$(git status --porcelain 2>/dev/null || true)"
-if [ -z "$porcelain" ]; then
-  state_seg="clean"
-else
-  modified_count="$(printf '%s\n' "$porcelain" | wc -l | tr -d '[:space:]')"
-  state_seg="dirty (${modified_count} modified)"
-fi
-
-# ----------------------------------------------------------------------
-# 5. Ahead/behind vs upstream (git rev-list --left-right --count ~15ms)
-# Grammar:
-#   up to date      — both 0
-#   N ahead         — ahead>0, behind=0
-#   N behind        — ahead=0, behind>0
-#   N ahead, M behind — both >0
-#   no upstream     — command fails / no upstream configured
-# ----------------------------------------------------------------------
-
-counts="$(git rev-list --left-right --count '@{u}...HEAD' 2>/dev/null || true)"
-if [ -z "$counts" ]; then
-  ab_seg="no upstream"
-else
-  # rev-list emits "<behind><TAB><ahead>".
-  # bash 3.2: use read with IFS=$'\t'.
-  behind="${counts%%	*}"
-  ahead="${counts##*	}"
-  # Coerce to integer.
-  behind="$(( behind + 0 ))"
-  ahead="$(( ahead + 0 ))"
-
-  if [ "$behind" -eq 0 ] && [ "$ahead" -eq 0 ]; then
-    ab_seg="up to date"
-  elif [ "$behind" -eq 0 ] && [ "$ahead" -gt 0 ]; then
-    ab_seg="${ahead} ahead"
-  elif [ "$behind" -gt 0 ] && [ "$ahead" -eq 0 ]; then
-    ab_seg="${behind} behind"
-  else
-    ab_seg="${ahead} ahead, ${behind} behind"
-  fi
-fi
-
-# ----------------------------------------------------------------------
-# 6. Stale-merged count + staleness (TSV read ~3ms)
+# 6. Stale-merged count (TSV read ~3ms). Used by section 7 to decide
+# whether to surface a cleanup suggestion. The historic stale_seg/
+# staleness_suffix rendering was dropped with the dead info segments
+# above — the cache-age suffix never reached the user either, and the
+# 0 stale-merged label is non-actionable noise.
 # ADR-4: parsed via grep/wc, no jq.
-# Staleness: now - updated_iso > 24h → append "(cache Nh old)"
 # ----------------------------------------------------------------------
 
 stale_count=0
@@ -143,39 +111,6 @@ stale_rows="$(_read_stale_cache_tsv 2>/dev/null || true)"
 if [ -n "$stale_rows" ]; then
   stale_count="$(printf '%s\n' "$stale_rows" | wc -l | tr -d '[:space:]')"
 fi
-
-# Build stale segment.
-stale_seg="${stale_count} stale-merged"
-
-# Check cache staleness (>24h since updated_iso header).
-staleness_suffix=""
-tsv_path="$(_stale_tsv_path 2>/dev/null || true)"
-if [ -n "$tsv_path" ] && [ -r "$tsv_path" ]; then
-  # Extract updated_iso from comment header: "# updated_iso=2026-05-09T14:23:11Z"
-  updated_iso="$(grep -m1 '^# updated_iso=' "$tsv_path" 2>/dev/null | cut -d= -f2- || true)"
-
-  if [ -n "$updated_iso" ]; then
-    # Convert updated_iso to epoch seconds.
-    # Try BSD date -j -u -f first (macOS), then GNU date -u -d.
-    updated_epoch=""
-    if updated_epoch="$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$updated_iso" +%s 2>/dev/null)"; then
-      :
-    elif updated_epoch="$(date -u -d "$updated_iso" +%s 2>/dev/null)"; then
-      :
-    fi
-
-    if [ -n "$updated_epoch" ]; then
-      now_epoch="$(date +%s)"
-      age_secs="$(( now_epoch - updated_epoch ))"
-      age_hours="$(( age_secs / 3600 ))"
-      if [ "$age_secs" -gt 86400 ]; then
-        staleness_suffix=" (cache ${age_hours}h old)"
-      fi
-    fi
-  fi
-fi
-
-stale_seg="${stale_seg}${staleness_suffix}"
 
 # ----------------------------------------------------------------------
 # 7. Cleanup suggestion when stale-count > 0
@@ -238,11 +173,72 @@ if [ -n "$repo_top" ] && [ -d "$repo_top/.githooks" ]; then
 fi
 
 # ----------------------------------------------------------------------
-# 9. Compose and emit the brief line
+# 9. Compose user_msg (systemMessage) and ctx_msg (additionalContext)
+# Silent exit when neither is needed.
 # ----------------------------------------------------------------------
 
-brief="${warn_prefix}[tcs-git-helpers] ${branch} • ${state_seg} • ${ab_seg} • ${stale_seg}${cleanup_seg}${drift_seg}${setup_seg}"
+# 9a. User-actionable bits = drift / cleanup / setup.
+# Each segment already starts with " • "; strip the leading " • " of the
+# first one and the rest read naturally.
+actionable_segs="${cleanup_seg}${drift_seg}${setup_seg}"
+user_msg=""
+if [ -n "$actionable_segs" ]; then
+  # ${var# • } strips a single leading " • "; bash 3.2 compatible.
+  user_msg="[tcs-git-helpers] ${actionable_segs# • }"
+fi
 
-printf '%s\n' "$brief"
+# 9b. Claude context = user message (when any) + protected-branch nudge.
+ctx_msg=""
+if [ -n "$user_msg" ]; then
+  ctx_msg="$user_msg"
+fi
+case "$branch" in
+  main|master)
+    nudge="[tcs-git-helpers] On protected branch '${branch}': do not create or edit non-gitignored files here. Switch to a feature branch before any Write/Edit."
+    if [ -n "$ctx_msg" ]; then
+      ctx_msg="${ctx_msg}
+${nudge}"
+    else
+      ctx_msg="$nudge"
+    fi
+    ;;
+esac
+
+# 9c. Silent when nothing to say.
+if [ -z "$user_msg" ] && [ -z "$ctx_msg" ]; then
+  exit 0
+fi
+
+# 9d. JSON-encode strings. Prefer python3; fall back to a sed-based escape
+# that covers backslash, double-quote, newline, and tab (sufficient for our
+# content — segments are plain ASCII + the • bullet, the nudge has \n).
+_json_escape() {
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s' "$1" | python3 -c 'import json,sys;sys.stdout.write(json.dumps(sys.stdin.read()))'
+    return
+  fi
+  # Fallback: escape backslash, dquote, then convert newlines/tabs to escapes.
+  _esc="$(printf '%s' "$1" \
+    | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
+    | awk 'BEGIN{ORS=""} NR>1{print "\\n"} {print}' \
+    | sed -e $'s/\t/\\\\t/g')"
+  printf '"%s"' "$_esc"
+}
+
+# 9e. Emit JSON. Build the parts list to omit empty fields cleanly.
+_json_parts=""
+if [ -n "$user_msg" ]; then
+  _json_parts="\"systemMessage\":$(_json_escape "$user_msg")"
+fi
+if [ -n "$ctx_msg" ]; then
+  _hso="\"hookEventName\":\"SessionStart\",\"additionalContext\":$(_json_escape "$ctx_msg")"
+  if [ -n "$_json_parts" ]; then
+    _json_parts="${_json_parts},\"hookSpecificOutput\":{${_hso}}"
+  else
+    _json_parts="\"hookSpecificOutput\":{${_hso}}"
+  fi
+fi
+
+printf '{%s}\n' "$_json_parts"
 
 exit 0

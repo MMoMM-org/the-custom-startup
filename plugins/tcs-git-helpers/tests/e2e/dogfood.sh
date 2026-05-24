@@ -652,9 +652,11 @@ _scenario_7() {
     _run_session_start_hook "$SCRIPTS_DIR/session-start-brief.sh"
     [ "$HOOK_RC" -eq 0 ] \
       || { echo "S7: hook rc=$HOOK_RC stderr=$HOOK_STDERR"; exit 1; }
-    # Brief writes to stderr; sanity-check the format.
-    _contains "$HOOK_STDERR" "[tcs-git-helpers]" \
-      || { echo "S7: brief missing tag: $HOOK_STDERR"; exit 1; }
+    # Brief writes JSON to stdout when there's something actionable (v2.2.2+).
+    # The large-50-branches fixture has no .githooks/ → setup_seg fires, so
+    # stdout must contain a non-empty JSON object with the tcs-git-helpers tag.
+    _contains "$HOOK_STDOUT" "[tcs-git-helpers]" \
+      || { echo "S7: brief missing tag in stdout: $HOOK_STDOUT"; exit 1; }
     exit 0
   )
   local rc=$?
