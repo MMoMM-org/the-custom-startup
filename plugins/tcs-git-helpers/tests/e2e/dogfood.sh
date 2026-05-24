@@ -731,9 +731,13 @@ _scenario_9() {
     for b in feat/stale-a fix/stale-b chore/stale-c; do
       git -C "$repo" branch "$b" main
     done
-    # Install the post-merge hook the way setup would.
+    # Install the post-merge hook AND its sibling lib-bundle.sh — since
+    # v2.1.0, hooks source the bundle from the same .githooks/ dir, so this
+    # one-off fixture must mirror that layout (otherwise the hook bails with
+    # "lib-bundle.sh missing"). install_files.sh does this in real installs.
     mkdir -p "$repo/.githooks"
     cp "$TEMPLATES_DIR/githooks/post-merge" "$repo/.githooks/post-merge"
+    cp "$TEMPLATES_DIR/githooks/lib-bundle.sh" "$repo/.githooks/lib-bundle.sh"
     chmod +x "$repo/.githooks/post-merge"
 
     cd "$repo" || exit

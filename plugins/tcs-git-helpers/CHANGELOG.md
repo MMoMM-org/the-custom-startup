@@ -17,6 +17,17 @@
 ### Fixed (test-side)
 
 - **`tests/e2e/dogfood.sh` scenario 7** now asserts the brief tag on `HOOK_STDOUT` (where the brief has always been written) instead of `HOOK_STDERR`. The scenario was failing pre-change due to this assertion error.
+- **`tests/e2e/dogfood.sh` scenario 9** now also copies `lib-bundle.sh` into the test repo's `.githooks/` alongside `post-merge`. Since v2.1.0 the post-merge hook sources its sibling `lib-bundle.sh` (the bundle is part of every real install), so the one-off fixture must mirror that layout — without the copy, the hook bails with `lib-bundle.sh missing in .githooks/`. The scenario was silently failing on every dogfood run since v2.1.0.
+
+### Fixed (install_files banner)
+
+- **Installed `.githooks/*` banners now carry the canonical `v` prefix.** The hook templates substituted `__TCS_GIT_HELPERS_VERSION__` with the bare semver (`2.2.2`), but every consumer in the project — `detect_conflicts.sh`, the C07 / C08 / C21 fixture and bats assertions, `tests/integration/verify-tcs-rollout.sh`, and the dogfood S1 banner check — expected `v2.2.2`. Concrete impact:
+  - `detect_conflicts.sh` reported all post-v2.0.0 installs as "no marker found" (CONFLICT path) because its grep required `v`, so users running `/tcs-git-helpers:git-setup --update` saw the per-file-diff workflow instead of the cleaner OUTDATED path.
+  - The C21 bats test had been failing on every run since v2.0.0.
+
+  Fix: prepend `v` to the placeholder in all seven templates (`templates/githooks/{pre-commit,pre-push,commit-msg,post-merge,.config.example,exclude-paths.example}` plus `templates/github-actions/pr-title-check.yml`). New banners render as `# tcs-git-helpers: v2.2.2`.
+
+- **`detect_conflicts.sh` now accepts both banner forms** (`v<semver>` and bare `<semver>`) for backwards compatibility with v2.0.0 – v2.2.1 installs. The OUTDATED path is reached cleanly for those legacy banners, and `--update` refreshes them to the canonical form. Comparison normalizes by stripping a single leading `v` from both sides.
 
 ## [2.1.0] - 2026-05-13
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# tcs-git-helpers: __TCS_GIT_HELPERS_VERSION__
+# tcs-git-helpers: v__TCS_GIT_HELPERS_VERSION__
 # tcs-git-helpers-bundle: __HOOK_BUNDLE_VERSION__
 # commit-msg — tcs-git-helpers repo-side Conventional Commits enforcement hook
 #
