@@ -1,4 +1,4 @@
-# tcs-git-helpers: __TCS_GIT_HELPERS_VERSION__
+# tcs-git-helpers: v__TCS_GIT_HELPERS_VERSION__
 # pr-title-check.yml — Validate PR title follows Conventional Commits format.
 #
 # Mirrors the regex from templates/githooks/commit-msg so squash-merged PRs

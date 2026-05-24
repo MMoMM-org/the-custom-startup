@@ -652,9 +652,11 @@ _scenario_7() {
     _run_session_start_hook "$SCRIPTS_DIR/session-start-brief.sh"
     [ "$HOOK_RC" -eq 0 ] \
       || { echo "S7: hook rc=$HOOK_RC stderr=$HOOK_STDERR"; exit 1; }
-    # Brief writes to stderr; sanity-check the format.
-    _contains "$HOOK_STDERR" "[tcs-git-helpers]" \
-      || { echo "S7: brief missing tag: $HOOK_STDERR"; exit 1; }
+    # Brief writes JSON to stdout when there's something actionable (v2.2.2+).
+    # The large-50-branches fixture has no .githooks/ → setup_seg fires, so
+    # stdout must contain a non-empty JSON object with the tcs-git-helpers tag.
+    _contains "$HOOK_STDOUT" "[tcs-git-helpers]" \
+      || { echo "S7: brief missing tag in stdout: $HOOK_STDOUT"; exit 1; }
     exit 0
   )
   local rc=$?
@@ -729,9 +731,13 @@ _scenario_9() {
     for b in feat/stale-a fix/stale-b chore/stale-c; do
       git -C "$repo" branch "$b" main
     done
-    # Install the post-merge hook the way setup would.
+    # Install the post-merge hook AND its sibling lib-bundle.sh — since
+    # v2.1.0, hooks source the bundle from the same .githooks/ dir, so this
+    # one-off fixture must mirror that layout (otherwise the hook bails with
+    # "lib-bundle.sh missing"). install_files.sh does this in real installs.
     mkdir -p "$repo/.githooks"
     cp "$TEMPLATES_DIR/githooks/post-merge" "$repo/.githooks/post-merge"
+    cp "$TEMPLATES_DIR/githooks/lib-bundle.sh" "$repo/.githooks/lib-bundle.sh"
     chmod +x "$repo/.githooks/post-merge"
 
     cd "$repo" || exit

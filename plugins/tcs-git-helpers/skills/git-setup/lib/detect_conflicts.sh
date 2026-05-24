@@ -142,10 +142,13 @@ fi
 # --- 5. Existing .githooks/ marker check ----------------------------------
 if [ -d ".githooks" ]; then
   # Look for the version banner on line 1-3 of any standard hook file.
+  # Accept both `v<semver>` (canonical, install_files.sh from v2.2.2 onward)
+  # and bare `<semver>` (legacy banners written by v2.0.0..v2.2.1 installs).
+  # Comparison below normalizes the leading v? before equality.
   marker_line=""
   for h in .githooks/pre-commit .githooks/commit-msg .githooks/pre-push .githooks/post-merge; do
     if [ -f "$h" ]; then
-      marker_line="$(head -3 "$h" 2>/dev/null | grep -E '^#[[:space:]]*tcs-git-helpers:[[:space:]]*v' | head -1 || true)"
+      marker_line="$(head -3 "$h" 2>/dev/null | grep -E '^#[[:space:]]*tcs-git-helpers:[[:space:]]*v?[0-9]' | head -1 || true)"
       [ -n "$marker_line" ] && break
     fi
   done
@@ -156,14 +159,18 @@ if [ -d ".githooks" ]; then
     _emit "INFO"     "Skill will switch to per-file diff mode; no overwrite without confirmation."
     _bump 3
   else
-    found_version="${marker_line##*:}"
-    # Strip whitespace (bash 3.2 friendly).
-    found_version="$(printf '%s' "$found_version" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-    if [ "$found_version" = "$WANT_VERSION" ]; then
+    # Extract raw banner value, then normalize by stripping whitespace and a
+    # single leading 'v'. WANT_VERSION carries the 'v' prefix for display, so
+    # we strip it on both sides to compare like-for-like.
+    found_version_raw="${marker_line##*:}"
+    found_version_raw="$(printf '%s' "$found_version_raw" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    found_version_norm="${found_version_raw#v}"
+    want_version_norm="${WANT_VERSION#v}"
+    if [ "$found_version_norm" = "$want_version_norm" ]; then
       _emit "OK" "Existing .githooks/ already at matching version $WANT_VERSION (up to date)."
       # status stays 0 (or whatever was set by other checks)
     else
-      _emit "OUTDATED" "Existing .githooks/ at $found_version (does not match expected $WANT_VERSION); update mode recommended."
+      _emit "OUTDATED" "Existing .githooks/ at $found_version_raw (does not match expected $WANT_VERSION); update mode recommended."
       _bump 3
     fi
   fi
