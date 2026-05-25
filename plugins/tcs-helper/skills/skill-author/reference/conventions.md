@@ -303,6 +303,21 @@ Good — one rule, one location:
 **Never:** Skip test verification after a change.
 ```
 
+### Instruction Purity
+
+Skills are **imperative instructions for an LLM**, not documentation for humans. Every line must earn its place by improving execution. Content that explains WHY, references history, or cites specs without an actionable directive is dead weight — or worse, actively harmful.
+
+**Strip on sight:**
+- Rationale ("because...", "the reason is...")
+- History ("was removed", "previously", "no longer")
+- Spec refs without action ("see PRD §3.2", "per ADR-5")
+- Negative existence ("X doesn't exist") — triggers the model to search for X
+- Past-tense narrative ("we decided to...") — wrong temporal frame
+
+**The test:** *"Would removing this line degrade execution?"* If no, strip it.
+
+**Before stripping:** verify the WHY is captured elsewhere (docs/ mirror, ADR, git history). Write to destination first, strip from runtime second — strip-first destroys institutional knowledge.
+
 ### Progressive Disclosure Enforcement
 
 Content belongs in `reference/` (not SKILL.md) when it is:
