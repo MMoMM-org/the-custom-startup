@@ -186,6 +186,55 @@ Omitting `model:` field on activity agents. When user runs Opus, every dispatch 
 
 ---
 
+## Documentation Smell Anti-Patterns
+
+Agent body files are **imperative instructions for an LLM**, not documentation for humans. Rationale, history, and spec references dilute directives and cause actively harmful behavior.
+
+### The Streisand Effect
+
+Mentioning removed or non-existent things causes the model to search for them:
+
+```markdown
+# ❌ BAD: model will look for auth-v1.py
+File auth-v1.py was removed in the rewrite. Use auth.py instead.
+
+# ✅ GOOD: model uses auth.py, never thinks about v1
+Use auth.py for authentication logic.
+```
+
+### Rationale Dilution
+
+Explaining WHY competes with WHAT for the model's attention:
+
+```markdown
+# ❌ BAD: 3 lines of rationale, 1 line of instruction
+Because the legacy parser couldn't handle nested brackets (see issue #347),
+and after evaluating three alternatives (documented in ADR-8),
+we chose the recursive descent approach.
+Use recursive descent parsing for bracket expressions.
+
+# ✅ GOOD: instruction only
+Use recursive descent parsing for bracket expressions.
+```
+
+### Dead Spec References
+
+References to external documents the model cannot read:
+
+```markdown
+# ❌ BAD: model can't open PRD §3.2
+Validate input per PRD §3.2 acceptance criteria.
+
+# ✅ GOOD: inline the actual rule
+Validate input: non-empty string, max 255 chars, UTF-8 only.
+```
+
+### Strip-First Risk
+
+Before removing rationale from an agent file, verify the WHY is captured elsewhere (docs/ mirror, ADR, git history). Write to destination first, strip from runtime second — strip-first destroys institutional knowledge.
+
+---
+
 ## Reject-on-Sight Checklist
 
 When auditing an agent, immediately reject if:
@@ -200,3 +249,5 @@ When auditing an agent, immediately reject if:
 - [ ] Scope overlaps significantly with main agent or another existing agent
 - [ ] Designed for interactive chat instead of artifact delivery
 - [ ] Body exceeds 25 KB without progressive disclosure to references
+- [ ] Body contains rationale blocks, historical references, or spec citations without actionable instructions
+- [ ] Body mentions removed/non-existent files or features (Streisand effect)

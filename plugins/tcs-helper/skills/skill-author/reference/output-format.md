@@ -17,6 +17,7 @@ Guidelines for writing-skills output. See `examples/output-example.md` for concr
 | **Tools** | Tool usage referenced in workflow steps? | |
 | **Output** | Clear output format defined or referenced? | |
 | **Size** | Under 500 lines? Heavy content in reference/? | |
+| **Instruction Purity** | No rationale, history, spec refs, or negative existence claims? | |
 
 ---
 
@@ -30,3 +31,5 @@ Guidelines for writing-skills output. See `examples/output-example.md` for concr
 | "Agent can't find skill" | CSO problem | Improve description keywords |
 | "Skill is too long" | Bloat | Extract to reference/ directory |
 | "Agent treats blocks as code" | Code fence problem | Remove ``` wrappers around skill syntax |
+| "Agent searches for removed files" | Documentation smell | Strip historical/rationale content; relocate WHY to docs/ or ADR |
+| "Skill uses excessive context" | Rationale bloat | Remove why-explanations, spec refs, negative existence claims |
