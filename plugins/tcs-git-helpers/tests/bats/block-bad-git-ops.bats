@@ -397,6 +397,21 @@ EOF
   _assert_deny_for_rule "REMOTE_BRANCH_DELETE"
 }
 
+@test "REMOTE_BRANCH_DELETE: positive — gh api ref delete denies" {
+  run _run_hook_with_cmd "gh api repos/o/r/git/refs/heads/feat/old -X DELETE"
+  _assert_deny_for_rule "REMOTE_BRANCH_DELETE"
+}
+
+@test "REMOTE_BRANCH_DELETE: positive — gh api --method DELETE ref denies" {
+  run _run_hook_with_cmd "gh api --method DELETE repos/o/r/git/refs/heads/feat/old"
+  _assert_deny_for_rule "REMOTE_BRANCH_DELETE"
+}
+
+@test "GH_REF_DELETE: negative — gh api PATCH on non-ref path is allowed" {
+  run _run_hook_with_cmd "gh api repos/o/r/pulls/123 -X PATCH"
+  _assert_allow
+}
+
 @test "PUSH_COLON_DELETE: negative — refspec main:main (no leading colon) is allowed" {
   # `<src>:<dst>` is a normal refspec pair, not a delete. PATTERN_PUSH_COLON_DELETE
   # requires `:<branch>` immediately after the remote — i.e., empty src

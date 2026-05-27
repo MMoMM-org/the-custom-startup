@@ -116,6 +116,18 @@ deny	REMOTE_BRANCH_DELETE	git	push	origin	:feat/old
 allow	NEGATIVE	git push origin feat/old
 allow	NEGATIVE	git push origin main:main
 
+# === REMOTE_BRANCH_DELETE via gh api (bypasses git push patterns) ==========
+deny	REMOTE_BRANCH_DELETE	gh api repos/MMoMM-org/my-repo/git/refs/heads/feat/old -X DELETE
+deny	REMOTE_BRANCH_DELETE	gh api repos/MMoMM-org/my-repo/git/refs/heads/feat/old --method DELETE
+deny	REMOTE_BRANCH_DELETE	gh api -X DELETE repos/MMoMM-org/my-repo/git/refs/heads/feat/old
+deny	REMOTE_BRANCH_DELETE	gh api --method DELETE repos/MMoMM-org/my-repo/git/refs/heads/feat/old
+deny	REMOTE_BRANCH_DELETE	gh api repos/owner/repo/git/refs/tags/v1.0.0 -X DELETE
+deny	REMOTE_BRANCH_DELETE	gh	api	repos/o/r/git/refs/heads/main	-X	DELETE
+deny	REMOTE_BRANCH_DELETE	cd repo && gh api repos/o/r/git/refs/heads/feat -X DELETE
+allow	NEGATIVE	gh api repos/MMoMM-org/my-repo/pulls/123 -X PATCH
+allow	NEGATIVE	gh api repos/MMoMM-org/my-repo/git/refs/heads/main
+allow	NEGATIVE	gh pr delete 123
+
 # === HOOKSPATH_OVERRIDE (subverting .githooks/) ===========================
 deny	HOOKSPATH_OVERRIDE	git -c core.hooksPath=/dev/null commit
 deny	HOOKSPATH_OVERRIDE	git -c core.hooksPath=/tmp/empty status
