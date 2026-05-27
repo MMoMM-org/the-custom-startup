@@ -36,10 +36,11 @@
 #    11. git push --force (NOT --force-with-lease) -> PATTERN_PUSH_FORCE
 #    12. git push --delete <branch>          -> PATTERN_PUSH_DELETE_FLAG
 #    13. git push <remote> :<branch>         -> PATTERN_PUSH_COLON_DELETE
-#    14. git checkout -b / git switch -c     -> PATTERN_BRANCH_CREATE  [M2]
-#    15. git checkout / git switch <branch>  -> PATTERN_BRANCH_RESUME  [M3]
-#    16. git -c core.hooksPath=...           -> PATTERN_HOOKSPATH_INLINE
-#    17. git config core.hooksPath ...       -> PATTERN_HOOKSPATH_CONFIG
+#    14. gh api ... git/refs ... DELETE       -> PATTERN_GH_REF_DELETE_A/B
+#    15. git checkout -b / git switch -c     -> PATTERN_BRANCH_CREATE  [M2]
+#    16. git checkout / git switch <branch>  -> PATTERN_BRANCH_RESUME  [M3]
+#    17. git -c core.hooksPath=...           -> PATTERN_HOOKSPATH_INLINE
+#    18. git config core.hooksPath ...       -> PATTERN_HOOKSPATH_CONFIG
 
 # ---------------------------------------------------------------------------
 # Destructive operation patterns (PRD §Feature M7)
@@ -128,6 +129,20 @@ PATTERN_HOOKSPATH_INLINE='git[[:space:]]+-c[[:space:]]+core\.hooksPath'
 # git config [--global|--local|--system|...] core.hooksPath ...
 PATTERN_HOOKSPATH_CONFIG='git[[:space:]]+config[[:space:]]+(--[^[:space:]]+[[:space:]]+)?core\.hooksPath'
 
+# ---------------------------------------------------------------------------
+# gh API bypass patterns (remote ref deletion via GitHub REST API)
+# ---------------------------------------------------------------------------
+
+# gh api repos/OWNER/REPO/git/refs/heads/BRANCH -X DELETE
+# gh api repos/OWNER/REPO/git/refs/heads/BRANCH --method DELETE
+# (method flag AFTER the URL path)
+PATTERN_GH_REF_DELETE_A='gh[[:space:]]+api[[:space:]].*git/refs/.*(-X|--method)[[:space:]]+DELETE'
+
+# gh api -X DELETE repos/OWNER/REPO/git/refs/heads/BRANCH
+# gh api --method DELETE repos/OWNER/REPO/git/refs/heads/BRANCH
+# (method flag BEFORE the URL path)
+PATTERN_GH_REF_DELETE_B='gh[[:space:]]+api[[:space:]].*(-X|--method)[[:space:]]+DELETE.*git/refs/'
+
 # Read-only forms (--get, --get-all, --get-regexp). These never mutate state
 # so they bypass the HOOKSPATH_OVERRIDE check, allowing debugging like
 # `git config --get core.hooksPath` without setting TCS_GIT_HELPERS_SETUP_ACTIVE.
@@ -149,6 +164,8 @@ export \
   PATTERN_PUSH_FORCE \
   PATTERN_PUSH_DELETE_FLAG \
   PATTERN_PUSH_COLON_DELETE \
+  PATTERN_GH_REF_DELETE_A \
+  PATTERN_GH_REF_DELETE_B \
   PATTERN_BRANCH_CREATE \
   PATTERN_BRANCH_RESUME \
   PATTERN_HOOKSPATH_INLINE \

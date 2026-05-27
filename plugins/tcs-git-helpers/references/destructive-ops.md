@@ -47,6 +47,11 @@ The full set of operations the plugin denies, with the loss they cause:
   remote branch deletion. The branch ref on the remote is gone; if the
   branch was the only ref pointing at a chain of commits, those commits
   become unreachable on the remote and will be GC'd within ~30 days.
+- `gh api repos/OWNER/REPO/git/refs/heads/BRANCH -X DELETE` —
+  remote ref deletion via the GitHub REST API. Bypasses git push entirely
+  (no pre-push hooks, no `--force-with-lease` safety) and leaves no local
+  reflog trace. Both `-X DELETE` and `--method DELETE` forms are caught,
+  in any argument order. Tag refs (`git/refs/tags/`) are caught too.
 
 The trap is that each of these has *one* legitimate use case (a `reset
 --hard` to recover from your own reflog after a known-good checkpoint;

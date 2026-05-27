@@ -2,7 +2,7 @@
 # scripts/block-bad-git-ops.sh — PreToolUse:Bash dispatcher
 #
 # Reads the PreToolUse:Bash hook envelope from stdin, regex-matches the
-# tool_input.command against the 17 destructive / state-sensitive patterns
+# tool_input.command against the 19 destructive / state-sensitive patterns
 # from PRD §M7 + M1 (push-to-closed-PR) + M2 (branch-from-unfinished) +
 # M3 (resume-squash-merged), and emits a single cascading-denial
 # permissionDecision JSON to stdout when one or more rules fire.
@@ -463,6 +463,8 @@ _match_command "$CMD" "$PATTERN_PUSH"                && _check_push_to_closed_pr
 _match_command "$CMD" "$PATTERN_PUSH_FORCE"          && _maybe_deny FORCE_PUSH            "use --force-with-lease, not --force"
 _match_command "$CMD" "$PATTERN_PUSH_DELETE_FLAG"    && _maybe_deny REMOTE_BRANCH_DELETE  "git push --delete removes remote branch"
 _match_command "$CMD" "$PATTERN_PUSH_COLON_DELETE"   && _maybe_deny REMOTE_BRANCH_DELETE  "git push <remote> :<branch> deletes remote branch"
+_match_command "$CMD" "$PATTERN_GH_REF_DELETE_A"     && _maybe_deny REMOTE_BRANCH_DELETE  "gh api DELETE on git/refs removes remote ref"
+_match_command "$CMD" "$PATTERN_GH_REF_DELETE_B"     && _maybe_deny REMOTE_BRANCH_DELETE  "gh api DELETE on git/refs removes remote ref"
 
 # === Branch creation / resume (M2, M3) ===
 _match_command "$CMD" "$PATTERN_BRANCH_CREATE"       && _check_branch_creation_from_unfinished

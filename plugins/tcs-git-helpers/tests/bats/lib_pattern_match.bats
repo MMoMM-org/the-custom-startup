@@ -285,7 +285,32 @@ _no_match() {
   _no_match "git push origin feat/foo"          "$PATTERN_PUSH_COLON_DELETE"
 }
 
-# -- 14. PATTERN_BRANCH_CREATE -------------------------------------------------
+# -- 14. PATTERN_GH_REF_DELETE_A/B (gh api DELETE on git/refs) -----------------
+
+@test "PATTERN_GH_REF_DELETE_A: positive — gh api <url> -X DELETE" {
+  _match_command "gh api repos/MMoMM-org/my-repo/git/refs/heads/feat/old -X DELETE" "$PATTERN_GH_REF_DELETE_A"
+  _match_command "gh api repos/o/r/git/refs/heads/main --method DELETE"             "$PATTERN_GH_REF_DELETE_A"
+  _match_command "gh api repos/o/r/git/refs/tags/v1.0.0 -X DELETE"                 "$PATTERN_GH_REF_DELETE_A"
+  _match_command $'gh\tapi\trepos/o/r/git/refs/heads/main\t-X\tDELETE'             "$PATTERN_GH_REF_DELETE_A"
+  _match_command "cd repo && gh api repos/o/r/git/refs/heads/feat -X DELETE"        "$PATTERN_GH_REF_DELETE_A"
+}
+
+@test "PATTERN_GH_REF_DELETE_B: positive — gh api -X DELETE <url>" {
+  _match_command "gh api -X DELETE repos/o/r/git/refs/heads/feat/old"               "$PATTERN_GH_REF_DELETE_B"
+  _match_command "gh api --method DELETE repos/o/r/git/refs/heads/feat/old"         "$PATTERN_GH_REF_DELETE_B"
+  _match_command $'gh\tapi\t-X\tDELETE\trepos/o/r/git/refs/heads/feat'             "$PATTERN_GH_REF_DELETE_B"
+}
+
+@test "PATTERN_GH_REF_DELETE: negative — non-DELETE methods / no git/refs" {
+  _no_match "gh api repos/o/r/pulls/123 -X PATCH"         "$PATTERN_GH_REF_DELETE_A"
+  _no_match "gh api repos/o/r/pulls/123 -X PATCH"         "$PATTERN_GH_REF_DELETE_B"
+  _no_match "gh api repos/o/r/git/refs/heads/main"         "$PATTERN_GH_REF_DELETE_A"
+  _no_match "gh api repos/o/r/git/refs/heads/main"         "$PATTERN_GH_REF_DELETE_B"
+  _no_match "gh pr delete 123"                             "$PATTERN_GH_REF_DELETE_A"
+  _no_match "gh pr delete 123"                             "$PATTERN_GH_REF_DELETE_B"
+}
+
+# -- 15. PATTERN_BRANCH_CREATE -------------------------------------------------
 # (M2 hook — branch creation; not destructive but uses the same matcher infra.)
 
 @test "PATTERN_BRANCH_CREATE: positive — checkout -b / switch -c" {
@@ -301,7 +326,7 @@ _no_match() {
   _no_match "git branch -d feat/foo" "$PATTERN_BRANCH_CREATE"
 }
 
-# -- 15. PATTERN_BRANCH_RESUME -------------------------------------------------
+# -- 16. PATTERN_BRANCH_RESUME -------------------------------------------------
 # (M3 hook — squash-merge resume detection.)
 
 @test "PATTERN_BRANCH_RESUME: positive — bare checkout / switch <branch>" {
@@ -318,7 +343,7 @@ _no_match() {
   _no_match "git checkout ."               "$PATTERN_BRANCH_RESUME"
 }
 
-# -- 16. PATTERN_HOOKSPATH_INLINE ----------------------------------------------
+# -- 17. PATTERN_HOOKSPATH_INLINE ----------------------------------------------
 
 @test "PATTERN_HOOKSPATH_INLINE: positive — git -c core.hooksPath=…" {
   _match_command "git -c core.hooksPath=/dev/null commit"            "$PATTERN_HOOKSPATH_INLINE"
@@ -332,7 +357,7 @@ _no_match() {
   _no_match "git -c color.ui=auto status"     "$PATTERN_HOOKSPATH_INLINE"
 }
 
-# -- 17. PATTERN_HOOKSPATH_CONFIG ----------------------------------------------
+# -- 18. PATTERN_HOOKSPATH_CONFIG ----------------------------------------------
 
 @test "PATTERN_HOOKSPATH_CONFIG: positive — git config core.hooksPath …" {
   _match_command "git config core.hooksPath .githooks"                "$PATTERN_HOOKSPATH_CONFIG"
