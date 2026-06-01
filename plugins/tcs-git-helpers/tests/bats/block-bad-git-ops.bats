@@ -368,6 +368,27 @@ EOF
   _assert_deny_for_rule "NO_VERIFY"
 }
 
+# ----------------------------------------------------------------------
+# NO_VERIFY: sibling-isolation regression (T1.2 — spec-015 fix)
+#
+# The old dispatcher used _match_command on _strip_quoted(CMD), which let the
+# unbounded .* in PATTERN_NO_VERIFY bridge from `git commit` into a sibling
+# command's -n flag. These tests verify the fix: _match_no_verify splits on
+# shell separators so only the git commit clause is tested.
+# ----------------------------------------------------------------------
+
+@test "NO_VERIFY: sibling echo -n — ALLOWS (no false-positive deny)" {
+  # BUG REGRESSION: old code denied this. _match_no_verify must split on &&.
+  run _run_hook_with_cmd 'git commit -m "done" && echo -n ok'
+  _assert_allow
+}
+
+@test "NO_VERIFY: chained genuine bypass git add && git commit -n — DENIES" {
+  # Both clauses are git commands; the commit clause carries -n.
+  run _run_hook_with_cmd 'git add . && git commit -n -m "done"'
+  _assert_deny_for_rule "NO_VERIFY"
+}
+
 @test "FORCE_PUSH: positive — git push --force denies" {
   run _run_hook_with_cmd "git push --force origin main"
   _assert_deny_for_rule "FORCE_PUSH"
