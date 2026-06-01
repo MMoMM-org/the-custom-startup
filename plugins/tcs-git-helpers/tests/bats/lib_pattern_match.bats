@@ -397,11 +397,7 @@ _no_match() {
   # BUG CASE: the old dispatcher's unbounded .* bridged from `git commit` into
   # a sibling command's `-n`. _match_no_verify must split on && and only match
   # clauses that themselves contain `git commit ... -n`.
-  local fn
-  fn=$( declare -f _match_no_verify 2>/dev/null )
-  if [ -z "$fn" ]; then
-    skip "_match_no_verify not yet defined"
-  fi
+  declare -f _match_no_verify >/dev/null || fail "_match_no_verify not defined"
   if _match_no_verify 'git commit -m "done" && echo -n ok'; then
     printf 'FALSE POSITIVE: matched sibling echo -n as --no-verify\n' >&2
     return 1
@@ -409,11 +405,7 @@ _no_match() {
 }
 
 @test "_match_no_verify: negative — sibling head -n 5 via semicolon" {
-  local fn
-  fn=$( declare -f _match_no_verify 2>/dev/null )
-  if [ -z "$fn" ]; then
-    skip "_match_no_verify not yet defined"
-  fi
+  declare -f _match_no_verify >/dev/null || fail "_match_no_verify not defined"
   if _match_no_verify 'git commit -m "done"; head -n 5 CHANGELOG.md'; then
     printf 'FALSE POSITIVE: matched sibling head -n as --no-verify\n' >&2
     return 1
@@ -421,11 +413,7 @@ _no_match() {
 }
 
 @test "_match_no_verify: negative — sibling grep -n via pipe" {
-  local fn
-  fn=$( declare -f _match_no_verify 2>/dev/null )
-  if [ -z "$fn" ]; then
-    skip "_match_no_verify not yet defined"
-  fi
+  declare -f _match_no_verify >/dev/null || fail "_match_no_verify not defined"
   if _match_no_verify 'git commit -m "done" | grep -n foo'; then
     printf 'FALSE POSITIVE: matched piped grep -n as --no-verify\n' >&2
     return 1
@@ -433,11 +421,7 @@ _no_match() {
 }
 
 @test "_match_no_verify: negative — -n inside -m quoted body (already covered by _strip_quoted)" {
-  local fn
-  fn=$( declare -f _match_no_verify 2>/dev/null )
-  if [ -z "$fn" ]; then
-    skip "_match_no_verify not yet defined"
-  fi
+  declare -f _match_no_verify >/dev/null || fail "_match_no_verify not defined"
   if _match_no_verify 'git commit -m "release notes: see -n, flag"'; then
     printf 'FALSE POSITIVE: matched -n inside quoted message body\n' >&2
     return 1
@@ -446,16 +430,22 @@ _no_match() {
 
 @test "_match_no_verify: negative — newline-separated sibling command (no match)" {
   # Ensure the trailing-newline empty clause from <<< does not cause a spurious match.
-  local fn
-  fn=$( declare -f _match_no_verify 2>/dev/null )
-  if [ -z "$fn" ]; then
-    skip "_match_no_verify not yet defined"
-  fi
+  declare -f _match_no_verify >/dev/null || fail "_match_no_verify not defined"
   local cmd
   # Build a literal newline-separated pair via printf.
   cmd="$(printf 'git commit -m "done"\necho -n ok')"
   if _match_no_verify "$cmd"; then
     printf 'FALSE POSITIVE: matched newline-separated sibling -n as --no-verify\n' >&2
+    return 1
+  fi
+}
+
+@test "_match_no_verify: negative — sibling echo -n via || operator (no match)" {
+  # Covers the || separator path. _match_no_verify splits on || so the echo
+  # clause is evaluated separately and does not match PATTERN_NO_VERIFY.
+  declare -f _match_no_verify >/dev/null || fail "_match_no_verify not defined"
+  if _match_no_verify 'git commit -m "done" || echo -n ok'; then
+    printf 'FALSE POSITIVE: matched sibling echo -n (|| path) as --no-verify\n' >&2
     return 1
   fi
 }
