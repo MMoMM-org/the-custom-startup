@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Sibling-isolation fix (TDD)"
-status: pending
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -31,7 +31,7 @@ phase: 1
 This phase delivers the corrected NO_VERIFY detection: legitimate compound commands with a
 sibling `-n` are allowed, while genuine bypasses (including chained and piped forms) still deny.
 
-- [ ] **T1.1 `_match_no_verify` helper + dispatcher swap** `[activity: backend-implementation]`
+- [x] **T1.1 `_match_no_verify` helper + dispatcher swap** `[activity: backend-implementation]`
 
   1. Prime: Read the `_match_no_verify` contract and reference implementation `[ref: SDD/Building Block View/Interface Specifications]` `[ref: SDD/Implementation Examples]`, plus the existing `_strip_quoted`, `_match_command`, and `PATTERN_NO_VERIFY` in `plugins/tcs-git-helpers/scripts/lib/pattern_match.sh` and the NO_VERIFY dispatch line in `plugins/tcs-git-helpers/scripts/block-bad-git-ops.sh`.
   2. Test (RED): In `tests/bats/lib_pattern_match.bats`, add `_match_no_verify` unit cases — genuine `--no-verify`/`-n` → match; chained genuine bypass `git add . && git commit -n` → match; sibling `git commit -m "done" && echo -n ok` → no match; `; head -n 5` → no match; `| grep -n` → no match; `-n` inside `-m "..."` body → no match; newline-separated sibling → no match `[ref: PRD/Feature Requirements F1, F2, F3]`. Run bats and confirm the new cases FAIL against the current code.
@@ -43,7 +43,7 @@ sibling `-n` are allowed, while genuine bypasses (including chained and piped fo
      - [ ] `-n` inside the quoted message body still allowed `[ref: PRD/AC F3]`
      - [ ] `PATTERN_NO_VERIFY` constant is unchanged `[ref: SDD/ADR-2]`
 
-- [ ] **T1.2 Dispatcher regression coverage + corpus** `[activity: testing]` `[parallel: true]`
+- [x] **T1.2 Dispatcher regression coverage + corpus** `[activity: testing]` `[parallel: true]`
 
   1. Prime: Read `tests/bats/block-bad-git-ops.bats` NO_VERIFY cases and `tests/fixtures/commands/bypass_corpus.txt` (note the existing `deny NO_VERIFY echo "fix" | git commit --no-verify -F -` line) `[ref: SDD/Implementation Context]`.
   2. Test (RED): Add dispatcher-level bats cases asserting that the full hook ALLOWS `git commit -m "done" && echo -n ok` (no deny) and DENIES `git add . && git commit -n`. Add an `allow NEGATIVE` corpus line for a sibling-`-n` compound and a `deny NO_VERIFY` line for a chained bypass; confirm the new allow-case fails before the fix.
@@ -53,6 +53,6 @@ sibling `-n` are allowed, while genuine bypasses (including chained and piped fo
      - [ ] Hook-level allow for sibling-`-n` compound; hook-level deny for chained bypass `[ref: PRD/AC F1, F2]`
      - [ ] `bypass_corpus.txt` covers both a sibling-`-n` negative and a chained-bypass positive
 
-- [ ] **T1.3 Phase Validation** `[activity: validate]`
+- [x] **T1.3 Phase Validation** `[activity: validate]`
 
   - Run the full `bats plugins/tcs-git-helpers/tests/bats/` suite and `shellcheck` on both modified scripts. Confirm the live false-positive set (`git commit ... && echo -n`) is now allowed and the genuine-bypass set still denies. Verify against SDD Runtime View traced walkthrough and PRD F1/F2/F3.

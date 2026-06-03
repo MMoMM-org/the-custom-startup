@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.4] - 2026-06-03
+
+### Fixed
+
+- **NO_VERIFY no longer false-positives on sibling commands (spec-015).** The bypass guard's pattern `git[[:space:]]+commit.*(--no-verify|-n[[:>:]])` used an unbounded `.*` that bridged from `git commit` to a `-n` flag belonging to a *different* command chained in the same string — so legitimate compounds like `git commit -m "done" && echo -n ok`, `git commit -m "x" ; head -n 5 f`, or `git commit -m "x" | grep -n foo` were wrongly denied. Because bash does not set `REG_NEWLINE`, `.` also matched newlines, so multi-line compounds were affected too. The detection now runs through a new `_match_no_verify` helper that splits the (quote-stripped) command on shell separators (`&&`, `||`, `|`, `;`, `&`, newline) and matches the **unchanged** `PATTERN_NO_VERIFY` against each clause individually, so the `.*` can no longer reach a sibling command's flag.
+  - **Preserved**: genuine `git commit --no-verify` / `git commit -n` (including chained forms like `git add . && git commit -n`) still deny; `-n` / `--no-verify` text inside a quoted `-m "..."` message is still exempt (via the existing `_strip_quoted`).
+  - `PATTERN_NO_VERIFY` is byte-identical; only the call site changed. Added unit + dispatcher regression tests and bypass-corpus entries covering the sibling-command cases.
+
 ## [2.2.2] - 2026-05-24
 
 ### Fixed

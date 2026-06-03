@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-06-01 |
-| **Current Phase** | Ready |
-| **Last Updated** | 2026-06-01 |
+| **Current Phase** | Implemented |
+| **Last Updated** | 2026-06-03 |
 
 ## Documents
 
@@ -27,6 +27,7 @@
 | 2026-06-01 | PRD approved | Won't-have kept scoped to common shell separators; no full shell-grammar parser |
 | 2026-06-01 | SDD ADRs confirmed | ADR-1 per-clause matching; ADR-2 PATTERN_NO_VERIFY unchanged; ADR-3 separator set &&/\|\|/\|/;/&/newline, pure-bash split |
 | 2026-06-01 | PLAN completed + validated | 2 phases, 5 tasks; drift-check PASS against live pattern_match.sh:85 / block-bad-git-ops.sh:458 |
+| 2026-06-03 | Implementation complete | `_match_no_verify` per-clause helper (commits a5bcfac, aaa4f70); spec-compliance + code-quality PASS; bats lib 55/55 + dispatcher 103/103, e2e dogfood 10/10; 0 regressions (24 failures pre-existing, verified vs base 00931a0); CHANGELOG 2.2.4; plugin.json auto-bump on merge |
 
 ## Context
 

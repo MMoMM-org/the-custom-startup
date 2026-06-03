@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Release notes & full verification"
-status: pending
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -27,7 +27,7 @@ phase: 2
 
 This phase ships the fix: documents the change for users and runs the full verification gate.
 
-- [ ] **T2.1 CHANGELOG entry** `[activity: documentation]`
+- [x] **T2.1 CHANGELOG entry** `[activity: documentation]`
 
   1. Prime: Read the top of `plugins/tcs-git-helpers/CHANGELOG.md` for the existing format (sectioned `### Fixed` prose under a version heading) `[ref: SDD/Deployment View]`.
   2. Test: N/A (docs). The assertion is reviewer-level: entry accurately describes the false-positive and the per-clause fix.
@@ -36,7 +36,7 @@ This phase ships the fix: documents the change for users and runs the full verif
   5. Success:
      - [ ] CHANGELOG documents the fix and preserved behaviors `[ref: PRD/Success Metrics]`
 
-- [ ] **T2.2 Full integration & E2E verification** `[activity: validate]`
+- [x] **T2.2 Full integration & E2E verification** `[activity: validate]`
 
   1. Prime: Confirm the verification command set `[ref: PLAN/Context Priming]`.
   2. Test: Run the complete suite — `bats plugins/tcs-git-helpers/tests/bats/`, `bash plugins/tcs-git-helpers/tests/e2e/dogfood.sh`, and `shellcheck` on both modified scripts.

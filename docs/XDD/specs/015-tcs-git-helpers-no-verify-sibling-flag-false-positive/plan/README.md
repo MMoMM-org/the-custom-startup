@@ -92,8 +92,8 @@ shellcheck plugins/tcs-git-helpers/scripts/lib/pattern_match.sh \
 
 Each phase is defined in a separate file. Tasks follow red-green-refactor: **Prime**, **Test** (red), **Implement** (green), **Validate** (refactor + verify).
 
-- [ ] [Phase 1: Sibling-isolation fix (TDD)](phase-1.md)
-- [ ] [Phase 2: Release notes & full verification](phase-2.md)
+- [x] [Phase 1: Sibling-isolation fix (TDD)](phase-1.md)
+- [x] [Phase 2: Release notes & full verification](phase-2.md)
 
 ---
 
