@@ -51,3 +51,8 @@ allow	NEGATIVE	echo "git reset --hard is dangerous"
 allow	NEGATIVE	cat README.md | grep "force-push"
 allow	NEGATIVE	man git-reset
 allow	NEGATIVE	git help reset
+# spec-015: sibling command with -n must NOT trigger NO_VERIFY (false-positive)
+allow	NEGATIVE	git commit -m "done" && echo -n ok
+
+# spec-015: chained genuine bypass — the git commit clause carries -n itself
+deny	NO_VERIFY	git add . && git commit -n -m "done"

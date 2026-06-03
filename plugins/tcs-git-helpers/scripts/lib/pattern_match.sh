@@ -82,6 +82,10 @@ PATTERN_REFLOG_EXPIRE='git[[:space:]]+reflog[[:space:]]+expire[[:>:]]'
 # canonical form. Widening to `-[a-zA-Z]*n` would also flag the discrete flag
 # bundle `-an` (= -a + -n) which is correct in spirit, but the design choice in
 # v1.0 is to stay specific to the canonical forms documented in the PRD.
+#
+# NOTE: Dispatchers must call _match_no_verify instead of _match_command
+# directly so that compound commands like `git commit && echo -n` do not
+# produce a false-positive. See _match_no_verify below.
 PATTERN_NO_VERIFY='git[[:space:]]+commit.*(--no-verify|-n[[:>:]])'
 
 # ---------------------------------------------------------------------------
@@ -239,4 +243,32 @@ _strip_quoted() {
     i=$((i + 1))
   done
   printf '%s' "$out"
+}
+
+# _match_no_verify <command>
+#   True (0) iff a genuine --no-verify / -n flag belongs to a `git commit` clause.
+#   Splits on shell separators so PATTERN_NO_VERIFY's `.*` cannot bridge from
+#   `git commit` into a sibling command's `-n` (e.g. `git commit && echo -n`).
+#
+#   Separator normalization order: two-char operators FIRST (&&, ||), then
+#   single-char (|, ;, &), so `&&`/`||` are not half-consumed by `&`/`|`.
+#   The here-string `<<<` appends a trailing newline which produces an empty
+#   final clause; empty clauses cannot match PATTERN_NO_VERIFY.
+#
+#   bash 3.2 compatible: `${var//pat/repl}` and `<<<` are both available in
+#   bash 3.2.57 (macOS default). `$'\n'` in parameter-substitution replacement
+#   is handled via a NL variable to ensure compatibility.
+_match_no_verify() {
+  local stripped clause NL
+  NL=$'\n'
+  stripped="$(_strip_quoted "$1")"
+  stripped="${stripped//&&/$NL}"
+  stripped="${stripped//||/$NL}"
+  stripped="${stripped//|/$NL}"
+  stripped="${stripped//;/$NL}"
+  stripped="${stripped//&/$NL}"
+  while IFS= read -r clause; do
+    _match_command "$clause" "$PATTERN_NO_VERIFY" && return 0
+  done <<< "$stripped"
+  return 1
 }
