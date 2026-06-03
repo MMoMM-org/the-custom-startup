@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.2.5] - 2026-06-03
+
+### Fixed (test-side)
+
+- **Removed 10 stale bats assertions that drifted from shipped reality (no production change).**
+  - `plugin_manifest.bats` asserted `plugin.json` version `1.0.0`; versions are auto-bumped on merge, so it now asserts semver *shape* instead of a hardcoded literal.
+  - Version-marker tests (`githooks_{commit_msg,pre_commit,pre_push,post_merge}.bats`, `gha_pr_title_check.bats`) grepped the source templates for a concrete `vN.N.N`, but templates intentionally carry the `v__TCS_GIT_HELPERS_VERSION__` placeholder that `install_files.sh` substitutes at install time (the substituted form is already covered by the e2e/rollout tests). The regex now accepts the placeholder or a concrete version, and uses ERE for BSD-grep portability.
+  - `docs_smoke.bats` required `## Overview` / `## Basic Usage` sections and an `M1..M12` PRD-goal dump that spec-006 (docs-rewrite) intentionally removed; the test now tracks the current `## Skills` / `## Hooks` information architecture.
+
 ## [2.2.4] - 2026-06-03
 
 ### Fixed
