@@ -17,10 +17,12 @@
 # Exit codes:
 #   0  PASS (or infra-only, per Fixture-4 rule)
 #   1  FAIL (at least one required persona has a required-question fail)
-#   2  Configuration error (prereq missing, persona file invalid)
+#   2  Configuration error (prereq missing, persona file invalid, awk cannot
+#      parse personas, or an unfiltered run produced a zero-coverage work plan)
 #
 # Bash 3.2 compatible: no associative arrays, no mapfile, no wait -n.
-# macOS awk compatible.
+# awk-portable: persona parsing works on both One True AWK (macOS) and mawk
+# (Linux); see lib-personas.sh. A functional awk self-test runs as a prereq.
 
 set -euo pipefail
 
@@ -86,6 +88,23 @@ fi
 # shellcheck disable=SC2016
 if ! command -v claude >/dev/null 2>&1; then
   printf 'ERROR: review mode requires the `claude` CLI; install via `npm install -g @anthropic-ai/claude-code` and authenticate with `claude /login`\n' >&2
+  exit 2
+fi
+
+# awk-capability probe (defense-in-depth against parser portability bugs).
+# The persona parser in lib-personas.sh relies on POSIX awk features (anchored
+# matches, match(), sub()). Rather than probe for a specific feature, do a
+# functional self-test: parse the bundled default persona set and confirm at
+# least one persona id comes back. If the local awk cannot parse a known-good
+# file, fail loudly here instead of silently producing an empty work plan
+# downstream (the mawk interval-regex class of bug). Skipped only if the
+# bundled template is somehow absent.
+_DEFAULT_PERSONAS="$(_skill_root)/templates/personas-default.md"
+if [ -f "$_DEFAULT_PERSONAS" ] && [ -z "$(list_persona_ids "$_DEFAULT_PERSONAS" 2>/dev/null)" ]; then
+  printf 'ERROR: the awk on this system could not parse the bundled persona file.\n' >&2
+  printf '       awk in use: %s\n' "$(command -v awk 2>/dev/null || printf '?')" >&2
+  printf '       Install GNU awk (gawk) or One True AWK and ensure it is first on PATH,\n' >&2
+  printf '       then re-run. Refusing to proceed with an unparseable persona set.\n' >&2
   exit 2
 fi
 
@@ -251,6 +270,24 @@ EOF
 PAGES_TESTED=""
 if [ -s "$PAGES_TESTED_SET" ]; then
   PAGES_TESTED="$(sort -u "$PAGES_TESTED_SET" | tr '\n' ',' | sed 's/,$//')"
+fi
+
+# ---------------------------------------------------------------------------
+# Zero-coverage guard — a review that tested nothing must never report PASS.
+# When neither --page nor --since was given, the run is meant to cover the
+# whole docs tree, so an empty work plan can only mean persona parsing produced
+# no work (e.g. a broken/limited awk). Emitting PASS here is a dangerous false
+# green: authors believe their docs passed a reader test that never ran.
+# Fail loudly with exit 2. With an explicit --page/--since filter, an empty
+# plan is a legitimate "nothing in scope" result and is left to the normal
+# empty-output path below.
+# ---------------------------------------------------------------------------
+if [ -z "$PAGE_FILTER" ] && [ -z "$SINCE_REF" ] && [ ! -s "$WORK_PLAN_FILE" ]; then
+  printf 'ERROR: 0 pages tested — persona parsing produced no work plan.\n' >&2
+  printf '       An unfiltered review must cover the docs tree; an empty plan means the\n' >&2
+  printf '       persona set could not be parsed (often awk lacking interval support,\n' >&2
+  printf '       e.g. mawk on Linux). Refusing to emit a vacuous PASS.\n' >&2
+  exit 2
 fi
 
 # ---------------------------------------------------------------------------

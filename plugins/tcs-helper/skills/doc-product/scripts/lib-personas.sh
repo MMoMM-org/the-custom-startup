@@ -2,8 +2,11 @@
 # lib-personas.sh — persona file resolution and YAML-in-Markdown extraction helpers
 # Sourceable library; no top-level side effects.
 # Bash 3.2 compatible: no associative arrays, no mapfile, no ${var,,}.
-# macOS awk (One True AWK 20200816) compatible: no ! negation operator,
-# no != in if/pattern contexts; use == 0 and match() instead.
+# Portable across One True AWK (macOS) and mawk (Linux): no ! negation
+# operator, no != in if/pattern contexts (use == 0 and match() instead), and
+# NO {n} interval regexes — mawk 1.3.4 ignores them, which silently breaks
+# indentation matching. YAML indentation is fixed-width spaces, so all indent
+# anchors use literal spaces (e.g. /^  -/, /^      /) instead of [[:space:]]{n}.
 #
 # Usage: source this file, then call the exported functions.
 
@@ -155,9 +158,9 @@ validate_personas_file() {
     }
 
     # Persona-level id line: exactly 2 spaces before "- id:"
-    /^[[:space:]]{2}-[[:space:]]+id:[[:space:]]+/ {
+    /^  -[[:space:]]+id:[[:space:]]+/ {
       # Skip if indent is 6+ (question-level lines also match the above)
-      if (match($0, /^[[:space:]]{6}/)) { next }
+      if (match($0, /^      /)) { next }
       flush_question(persona_id, question_id)
       flush_persona(persona_id)
       in_persona   = 1
@@ -177,7 +180,7 @@ validate_personas_file() {
     }
 
     # Question-level id line: exactly 6 spaces before "- id:"
-    /^[[:space:]]{6}-[[:space:]]+id:[[:space:]]+/ {
+    /^      -[[:space:]]+id:[[:space:]]+/ {
       flush_question(persona_id, question_id)
       in_question = 1
       q_count++
@@ -191,14 +194,14 @@ validate_personas_file() {
     }
 
     # Persona-level fields (indent 4)
-    /^[[:space:]]{4}required:[[:space:]]/ { if (in_question == 0) has_required = 1 }
-    /^[[:space:]]{4}description:/         { if (in_question == 0) has_desc = 1 }
-    /^[[:space:]]{4}questions:/           { has_questions = 1 }
+    /^    required:[[:space:]]/ { if (in_question == 0) has_required = 1 }
+    /^    description:/         { if (in_question == 0) has_desc = 1 }
+    /^    questions:/           { has_questions = 1 }
 
     # Question-level fields (indent 8)
-    /^[[:space:]]{8}required:[[:space:]]/ { q_has_req = 1 }
-    /^[[:space:]]{8}text:[[:space:]]/     { q_has_text = 1 }
-    /^[[:space:]]{8}pages:/               { q_has_pages = 1 }
+    /^        required:[[:space:]]/ { q_has_req = 1 }
+    /^        text:[[:space:]]/     { q_has_text = 1 }
+    /^        pages:/               { q_has_pages = 1 }
 
     END {
       flush_question(persona_id, question_id)
@@ -213,8 +216,8 @@ validate_personas_file() {
 list_persona_ids() {
   local path="$1"
   _extract_yaml_body "$path" | awk '
-    /^[[:space:]]{2}-[[:space:]]+id:[[:space:]]+/ {
-      if (match($0, /^[[:space:]]{6}/)) { next }
+    /^  -[[:space:]]+id:[[:space:]]+/ {
+      if (match($0, /^      /)) { next }
       line = $0
       sub(/^.*id:[[:space:]]+/, "", line)
       print line
@@ -228,13 +231,13 @@ list_question_ids() {
   local persona_id="$1"
   local path="$2"
   _extract_yaml_body "$path" | awk -v pid="$persona_id" '
-    /^[[:space:]]{2}-[[:space:]]+id:[[:space:]]+/ {
-      if (match($0, /^[[:space:]]{6}/)) { next }
+    /^  -[[:space:]]+id:[[:space:]]+/ {
+      if (match($0, /^      /)) { next }
       line = $0
       sub(/^.*id:[[:space:]]+/, "", line)
       in_persona = (line == pid)
     }
-    in_persona && /^[[:space:]]{6}-[[:space:]]+id:[[:space:]]+/ {
+    in_persona && /^      -[[:space:]]+id:[[:space:]]+/ {
       line = $0
       sub(/^.*id:[[:space:]]+/, "", line)
       print line
@@ -248,24 +251,24 @@ get_persona_description() {
   local persona_id="$1"
   local path="$2"
   _extract_yaml_body "$path" | awk -v pid="$persona_id" '
-    /^[[:space:]]{2}-[[:space:]]+id:[[:space:]]+/ {
-      if (match($0, /^[[:space:]]{6}/)) { next }
+    /^  -[[:space:]]+id:[[:space:]]+/ {
+      if (match($0, /^      /)) { next }
       line = $0
       sub(/^.*id:[[:space:]]+/, "", line)
       in_persona = (line == pid)
       in_desc = 0
     }
-    in_persona && /^[[:space:]]{4}description:/ {
+    in_persona && /^    description:/ {
       in_desc = 1
       next
     }
     # End description on the next 4-space field (but not 6-space continuation)
-    in_persona && in_desc && /^[[:space:]]{4}[a-z]/ {
+    in_persona && in_desc && /^    [a-z]/ {
       in_desc = 0
     }
     in_persona && in_desc {
       line = $0
-      sub(/^[[:space:]]{6}/, "", line)
+      sub(/^      /, "", line)
       printf "%s\n", line
     }
   '
@@ -278,19 +281,19 @@ get_question_text() {
   local question_id="$2"
   local path="$3"
   _extract_yaml_body "$path" | awk -v pid="$persona_id" -v qid="$question_id" '
-    /^[[:space:]]{2}-[[:space:]]+id:[[:space:]]+/ {
-      if (match($0, /^[[:space:]]{6}/)) { next }
+    /^  -[[:space:]]+id:[[:space:]]+/ {
+      if (match($0, /^      /)) { next }
       line = $0
       sub(/^.*id:[[:space:]]+/, "", line)
       in_persona = (line == pid)
       in_question = 0
     }
-    in_persona && /^[[:space:]]{6}-[[:space:]]+id:[[:space:]]+/ {
+    in_persona && /^      -[[:space:]]+id:[[:space:]]+/ {
       line = $0
       sub(/^.*id:[[:space:]]+/, "", line)
       in_question = (line == qid)
     }
-    in_question && /^[[:space:]]{8}text:[[:space:]]/ {
+    in_question && /^        text:[[:space:]]/ {
       line = $0
       sub(/^[[:space:]]*text:[[:space:]]*/, "", line)
       gsub(/^"/, "", line)
@@ -308,21 +311,21 @@ get_question_pages() {
   local question_id="$2"
   local path="$3"
   _extract_yaml_body "$path" | awk -v pid="$persona_id" -v qid="$question_id" '
-    /^[[:space:]]{2}-[[:space:]]+id:[[:space:]]+/ {
-      if (match($0, /^[[:space:]]{6}/)) { next }
+    /^  -[[:space:]]+id:[[:space:]]+/ {
+      if (match($0, /^      /)) { next }
       line = $0
       sub(/^.*id:[[:space:]]+/, "", line)
       in_persona = (line == pid)
       in_question = 0
       in_pages = 0
     }
-    in_persona && /^[[:space:]]{6}-[[:space:]]+id:[[:space:]]+/ {
+    in_persona && /^      -[[:space:]]+id:[[:space:]]+/ {
       line = $0
       sub(/^.*id:[[:space:]]+/, "", line)
       in_question = (line == qid)
       in_pages = 0
     }
-    in_question && /^[[:space:]]{8}pages:[[:space:]]*\[/ {
+    in_question && /^        pages:[[:space:]]*\[/ {
       # Inline list: pages: [a, b, c]
       line = $0
       sub(/^[[:space:]]*pages:[[:space:]]*\[/, "", line)
@@ -337,17 +340,17 @@ get_question_pages() {
       in_pages = 0
       exit
     }
-    in_question && /^[[:space:]]{8}pages:[[:space:]]*$/ {
+    in_question && /^        pages:[[:space:]]*$/ {
       in_pages = 1
       next
     }
-    in_question && in_pages && /^[[:space:]]{10}-[[:space:]]+/ {
+    in_question && in_pages && /^          -[[:space:]]+/ {
       line = $0
       sub(/^[[:space:]]*-[[:space:]]+/, "", line)
       gsub(/[[:space:]]+$/, "", line)
       print line
     }
-    in_question && in_pages && /^[[:space:]]{8}[a-z]/ { in_pages = 0 }
+    in_question && in_pages && /^        [a-z]/ { in_pages = 0 }
   '
 }
 
@@ -358,19 +361,19 @@ get_question_required() {
   local question_id="$2"
   local path="$3"
   _extract_yaml_body "$path" | awk -v pid="$persona_id" -v qid="$question_id" '
-    /^[[:space:]]{2}-[[:space:]]+id:[[:space:]]+/ {
-      if (match($0, /^[[:space:]]{6}/)) { next }
+    /^  -[[:space:]]+id:[[:space:]]+/ {
+      if (match($0, /^      /)) { next }
       line = $0
       sub(/^.*id:[[:space:]]+/, "", line)
       in_persona = (line == pid)
       in_question = 0
     }
-    in_persona && /^[[:space:]]{6}-[[:space:]]+id:[[:space:]]+/ {
+    in_persona && /^      -[[:space:]]+id:[[:space:]]+/ {
       line = $0
       sub(/^.*id:[[:space:]]+/, "", line)
       in_question = (line == qid)
     }
-    in_question && /^[[:space:]]{8}required:[[:space:]]/ {
+    in_question && /^        required:[[:space:]]/ {
       line = $0
       sub(/^[[:space:]]*required:[[:space:]]*/, "", line)
       print line
@@ -385,17 +388,17 @@ get_persona_required() {
   local persona_id="$1"
   local path="$2"
   _extract_yaml_body "$path" | awk -v pid="$persona_id" '
-    /^[[:space:]]{2}-[[:space:]]+id:[[:space:]]+/ {
-      if (match($0, /^[[:space:]]{6}/)) { next }
+    /^  -[[:space:]]+id:[[:space:]]+/ {
+      if (match($0, /^      /)) { next }
       line = $0
       sub(/^.*id:[[:space:]]+/, "", line)
       in_persona = (line == pid)
       in_question = 0
     }
-    in_persona && /^[[:space:]]{6}-[[:space:]]+id:[[:space:]]+/ {
+    in_persona && /^      -[[:space:]]+id:[[:space:]]+/ {
       in_question = 1
     }
-    in_persona && /^[[:space:]]{4}required:[[:space:]]/ {
+    in_persona && /^    required:[[:space:]]/ {
       if (in_question == 0) {
         line = $0
         sub(/^[[:space:]]*required:[[:space:]]*/, "", line)
@@ -446,14 +449,14 @@ resolve_active_persona_set() {
   # Collect persona IDs from each source (newline-separated)
   local default_ids override_ids
   default_ids="$(printf '%s\n' "$default_yaml" | awk '
-    /^[[:space:]]{2}-[[:space:]]+id:[[:space:]]+/ {
-      if (match($0, /^[[:space:]]{6}/)) { next }
+    /^  -[[:space:]]+id:[[:space:]]+/ {
+      if (match($0, /^      /)) { next }
       line = $0; sub(/^.*id:[[:space:]]+/, "", line); print line
     }
   ')"
   override_ids="$(printf '%s\n' "$override_yaml" | awk '
-    /^[[:space:]]{2}-[[:space:]]+id:[[:space:]]+/ {
-      if (match($0, /^[[:space:]]{6}/)) { next }
+    /^  -[[:space:]]+id:[[:space:]]+/ {
+      if (match($0, /^      /)) { next }
       line = $0; sub(/^.*id:[[:space:]]+/, "", line); print line
     }
   ')"
@@ -464,8 +467,8 @@ resolve_active_persona_set() {
     local pid="$1"
     local yaml_body="$2"
     printf '%s\n' "$yaml_body" | awk -v pid="$pid" '
-      /^[[:space:]]{2}-[[:space:]]+id:[[:space:]]+/ {
-        if (match($0, /^[[:space:]]{6}/)) { next }
+      /^  -[[:space:]]+id:[[:space:]]+/ {
+        if (match($0, /^      /)) { next }
         line = $0; sub(/^.*id:[[:space:]]+/, "", line)
         if (line == pid) { printing = 1 } else { if (printing) exit; printing = 0 }
       }

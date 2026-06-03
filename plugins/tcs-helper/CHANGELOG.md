@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.1.3] - 2026-06-03
+
+### Fixed
+
+- **`doc-product` review mode no longer reports a vacuous `PASS` on Linux.** On systems where `/usr/bin/awk` is **mawk** (Debian/Ubuntu default), the persona parser in `scripts/lib-personas.sh` matched nothing: every indentation pattern used POSIX `{n}` interval regexes (`[[:space:]]{2}`, `{6}`, …), which mawk silently ignores. The work plan came out empty and `scripts/run-review.sh` emitted `{"outcome":"PASS","pages_tested":[],"tuples":[]}` with exit 0 — a dangerous false green where authors believed their docs passed a reader test that never ran. (macOS One True AWK supports intervals, so the bug never reproduced locally.) Three-part fix:
+  - **Zero-coverage guard (`run-review.sh`):** an unfiltered run (`--page`/`--since` absent) that produces an empty work plan now exits `2` with a loud error instead of `PASS`. A zero-coverage run can never be a silent pass again.
+  - **mawk-portable parser (`lib-personas.sh`):** all 44 `[[:space:]]{n}` interval patterns replaced with literal-space anchors (`/^  -/`, `/^      /`), since YAML indentation is fixed-width. Behaviour is identical on One True AWK; now also correct on mawk.
+  - **awk-capability prereq probe (`run-review.sh`):** a functional self-test parses the bundled persona set before any work; if the local awk cannot parse it, the run fails fast (exit 2) with an actionable message rather than proceeding to a zero-coverage run.
+  - Regression tests added: static interval-free guard (`lib-personas.test.sh` S5, with negative control), zero-coverage refusal (`run-review.test.sh` S8), and broken-awk prereq refusal (S9). `run-review.sh` exit code `2` is now documented in `modes/review.md`.
+
 ## [4.1.0] - 2026-05-11
 
 ### Added

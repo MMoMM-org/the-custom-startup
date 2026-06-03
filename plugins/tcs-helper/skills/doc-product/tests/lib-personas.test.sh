@@ -283,6 +283,25 @@ scenario_4c() {
 }
 
 # ---------------------------------------------------------------------------
+# Scenario 5: awk portability — no {n} interval regexes in the parser.
+# mawk (the default awk on Debian/Ubuntu) silently ignores POSIX {n} interval
+# expressions, so any /^[[:space:]]{2}.../ pattern matches nothing there. That
+# produced an empty work plan and a vacuous PASS in review mode. The parser
+# must use literal-space anchors instead. This is a static guard: it catches a
+# regression on ANY platform, including macOS where intervals happen to work.
+# ---------------------------------------------------------------------------
+scenario_5() {
+  printf '\n--- Scenario 5: parser is free of {n} interval regexes (mawk-portable) ---\n'
+
+  # grep -c prints "0" and exits 1 when there are no matches; `|| true` keeps
+  # that "0" as the only output (a fallback printf would double it).
+  local interval_count
+  interval_count="$(grep -c '\[\[:space:\]\]{[0-9]' "$LIB" 2>/dev/null || true)"
+  assert_eq "S5: zero [[:space:]]{n} interval patterns in lib-personas.sh" \
+    "0" "${interval_count:-0}"
+}
+
+# ---------------------------------------------------------------------------
 # Run all scenarios
 # ---------------------------------------------------------------------------
 
@@ -295,6 +314,7 @@ scenario_3
 scenario_4a
 scenario_4b
 scenario_4c
+scenario_5
 
 # ---------------------------------------------------------------------------
 # Summary
