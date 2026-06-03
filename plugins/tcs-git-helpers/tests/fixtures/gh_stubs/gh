@@ -98,7 +98,25 @@ case "$1" in
   pr)
     case "${2:-}" in
       list)
-        _emit_response pr-list
+        # Emulate real gh's state filtering. `gh pr list` defaults to
+        # --state open; a CLOSED/MERGED PR is invisible unless the caller
+        # passes --state all (or the matching state). Tests/callers that pass
+        # an explicit --state get the canned response verbatim (preserves all
+        # existing fixtures). With NO --state flag, filter the canned array to
+        # OPEN/DRAFT only — this mirrors real gh and is what catches a hook that
+        # forgot --state all (project-memory: test-stubs-mirror-real-wire-format).
+        _has_state=0
+        for _a in "$@"; do
+          case "$_a" in
+            --state|--state=*) _has_state=1; break ;;
+          esac
+        done
+        if [ "$_has_state" -eq 1 ] || ! command -v jq >/dev/null 2>&1; then
+          _emit_response pr-list
+        else
+          _emit_response pr-list \
+            | jq -c '[ .[] | select(.state == "OPEN" or .state == "DRAFT") ]'
+        fi
         ;;
       view)
         # Spy: when GH_STUB_SPY_FILE is set, record each pr-view invocation.
