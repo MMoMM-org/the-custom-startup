@@ -68,7 +68,9 @@ Capture both stdout (aggregate JSON) and exit code. The helper:
 - Runs each tuple via `scripts/reader-test.sh` in parallel (bounded by `READER_TEST_PARALLEL`, default 4)
 - Writes per-tuple JSON output files to a tempdir
 - Aggregates all results and emits a single JSON object to stdout
-- Exits 0 on PASS, 1 on FAIL
+- Exits 0 on PASS, 1 on FAIL, 2 on a configuration/coverage error (missing
+  prerequisite, unparseable persona set, or an unfiltered run that produced a
+  zero-coverage work plan). On exit 2 there is no JSON on stdout — see Step 3.
 
 **Aggregate JSON shape:**
 

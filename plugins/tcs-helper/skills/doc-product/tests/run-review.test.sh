@@ -570,6 +570,79 @@ STUB
 }
 
 # ---------------------------------------------------------------------------
+# S8: Zero-coverage guard — an unfiltered run with an empty work plan must
+# FAIL loudly, never emit a vacuous PASS. The empty-pages fixture parses fine
+# (valid personas, pages: []) but yields zero tuples, reproducing the exact
+# observable condition the mawk interval-regex bug caused in the wild.
+# Regression guard for the silent false-pass (run-review.sh zero-coverage check).
+# ---------------------------------------------------------------------------
+scenario_8() {
+  printf '\n--- S8: Empty work plan, no filter → exit 2, no vacuous PASS ---\n'
+
+  local tmpdir skill_dir repo_dir
+  tmpdir="$(_make_tmpdir)"
+  skill_dir="${tmpdir}/skill"
+  repo_dir="${tmpdir}/repo"
+  mkdir -p "$skill_dir" "$repo_dir"
+  _setup_fixture_repo "$repo_dir"
+  _build_temp_skill "$skill_dir" "$(_stub_happy)"
+
+  local output exit_code
+  exit_code=0
+  output="$(
+    export PERSONAS_FILE="${SCRIPT_DIR}/fixtures/run-review-empty-pages.md"
+    export REPO_ROOT_OVERRIDE="$repo_dir"
+    bash "${skill_dir}/scripts/run-review.sh" 2>&1
+  )" || exit_code=$?
+
+  # exit 2 = configuration/coverage error; must NOT be 0 (PASS) or 1 (FAIL)
+  assert_eq "S8: exit code is 2 (zero-coverage refusal)" "2" "$exit_code"
+  assert_contains "S8: error names the zero-coverage condition" \
+    "0 pages tested" "$output"
+  assert_not_contains "S8: no vacuous PASS emitted" '"outcome": "PASS"' "$output"
+
+  rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
+# S9: awk-capability probe — if the local awk cannot parse the bundled persona
+# set, run-review must fail loudly at the prereq stage rather than proceed to a
+# zero-coverage run. Simulated by shadowing awk with a no-output stub (claude
+# is also stubbed so the run reaches the awk probe). Uses the REAL skill root
+# so templates/personas-default.md is present for the probe.
+# ---------------------------------------------------------------------------
+scenario_9() {
+  printf '\n--- S9: broken awk → exit 2 at prereq, actionable message ---\n'
+
+  local tmpdir bin_dir repo_dir
+  tmpdir="$(_make_tmpdir)"
+  bin_dir="${tmpdir}/bin"
+  repo_dir="${tmpdir}/repo"
+  mkdir -p "$bin_dir" "$repo_dir"
+  _setup_fixture_repo "$repo_dir"
+
+  # Stub claude (so the claude prereq passes) and a broken awk (emits nothing,
+  # like an awk that cannot parse our persona format).
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${bin_dir}/claude"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${bin_dir}/awk"
+  chmod +x "${bin_dir}/claude" "${bin_dir}/awk"
+
+  local output exit_code
+  exit_code=0
+  output="$(
+    export PATH="${bin_dir}:${PATH}"
+    export REPO_ROOT_OVERRIDE="$repo_dir"
+    bash "$REAL_RUN_REVIEW" 2>&1
+  )" || exit_code=$?
+
+  assert_eq "S9: exit code is 2 (awk prereq refusal)" "2" "$exit_code"
+  assert_contains "S9: message blames awk parsing" \
+    "could not parse the bundled persona file" "$output"
+
+  rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all scenarios
 # ---------------------------------------------------------------------------
 scenario_1
@@ -579,6 +652,8 @@ scenario_4
 scenario_5
 scenario_6
 scenario_7
+scenario_8
+scenario_9
 
 # ---------------------------------------------------------------------------
 # Summary
