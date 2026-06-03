@@ -20,6 +20,13 @@ See ADR-4 in the doc-product SDD (spec 010-doc-product-skill) for the full overr
   from the document content itself. No persona text refers to a specific technology, OS, or
   project type (e.g. "Obsidian plugin", "Python CLI", "macOS"). Project-local overrides exist
   for edge cases where these defaults are too vague.
+- **Each question must be self-contained.** The review harness runs every
+  `persona × question` tuple as an independent, stateless `claude -p` call — the reader is told
+  it has *no context beyond the document corpus* and never sees another question or its answer.
+  A question must therefore never refer back to a prior question's answer (e.g. "that same
+  setting", "the option above", "as before"). Such references have no antecedent at runtime, so
+  the reader guesses and the result is a spurious `partial`. If two questions need a shared
+  subject, each must re-establish it independently (e.g. both say "the most prominent option").
 
 ## Canonical Persona Definitions
 
@@ -52,7 +59,7 @@ personas:
         pages: [docs/configuration.md]
       - id: setting-impact
         required: false
-        text: "For that same setting, what happens if I leave it at its default?"
+        text: "Pick the most prominent configuration option in the document. If you leave it at its default value, what happens?"
         pages: [docs/configuration.md]
 
   - id: troubleshooter

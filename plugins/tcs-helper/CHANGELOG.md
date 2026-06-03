@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.1.4] - 2026-06-03
+
+### Fixed
+
+- **`doc-product` default persona: removed a self-referential question that produced spurious `partial` findings.** The `config-explorer` persona's non-required `setting-impact` question read *"For that same setting, what happens if I leave it at its default?"* — referring back to the setting chosen in the preceding `setting-purpose` question. But the review harness runs every `persona × question` tuple as an **independent, stateless** `claude -p` call (the reader is explicitly told it has no context beyond the document corpus and never sees another question or its answer). So *"that same setting"* had no antecedent at runtime: the reader guessed which setting was meant and hedged, yielding a `partial` regardless of documentation quality — a false gap that was a persona artifact, not a doc problem. The question now re-establishes its subject independently (*"Pick the most prominent configuration option in the document. If you leave it at its default value, what happens?"*). Added a **self-contained-question** authoring rule to the persona file's Usage Notes so overrides and future questions don't reintroduce cross-question references.
+
 ## [4.1.3] - 2026-06-03
 
 ### Fixed
