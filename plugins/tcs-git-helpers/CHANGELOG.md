@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.6] - 2026-06-03
+
+### Fixed
+
+- **`pre-push` hook no longer fails open on MERGED/CLOSED PRs (M1 false-negative).** The repo-side `.githooks/pre-push` hook is meant to block pushes to branches whose GitHub PR is CLOSED or MERGED (PRD M1 AC1–AC5). But its lookup ran `gh pr list --head <branch> --json … --limit 1` **without `--state all`** — and `gh pr list` defaults to `--state open`. So a closed or merged PR (exactly the case the hook exists to catch) was invisible: the query returned `[]`, the hook classified it as `NO_PR`, and the push was allowed. Added `--state all`, matching the canonical query in `scripts/lib/git_state.sh` (the Claude-side `block-bad-git-ops.sh` path was already correct; only the git-level template hook had drifted).
+- **Test-stub fidelity: the gh stub now emulates `gh pr list`'s state filtering.** The fixture stub (`tests/fixtures/gh_stubs/gh`) previously returned its canned `pr-list` response regardless of the `--state` flag, so the three `pre-push` block-tests (`merged`, `closed`, standalone-closed) passed *vacuously* — they never exercised the missing `--state all` and so never caught the bug. The stub now mirrors real `gh`: an explicit `--state` returns the canned response verbatim (all existing fixtures unaffected), while a call with **no** `--state` flag filters to OPEN/DRAFT only. With this fidelity restored, those three existing tests fail against the unpatched hook and pass against the fix — converting false-greens into genuine regression guards (project-memory: test-stubs-mirror-real-wire-format).
+  - **Action for installed repos:** the fix is in the template; existing installs carry the old hook until re-installed. Run `/tcs-git-helpers:git-setup --update` to refresh `.githooks/`.
+
 ## [2.2.5] - 2026-06-03
 
 ### Fixed (test-side)
