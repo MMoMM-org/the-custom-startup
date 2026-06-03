@@ -54,7 +54,10 @@ extract_regex() {
 }
 
 @test "pr-title-check.yml: header has tcs-git-helpers version marker" {
-  run grep -E '^# tcs-git-helpers: v[0-9]+\.[0-9]+\.[0-9]+' "$YAML"
+  # Source template carries the v__TCS_GIT_HELPERS_VERSION__ placeholder, which
+  # install_files.sh substitutes with the concrete version at install time.
+  # Accept either the placeholder or a concrete vN.N.N marker.
+  run grep -E '^# tcs-git-helpers: v(__TCS_GIT_HELPERS_VERSION__|[0-9]+\.[0-9]+\.[0-9]+)' "$YAML"
   [ "$status" -eq 0 ]
 }
 

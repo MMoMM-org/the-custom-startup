@@ -424,8 +424,10 @@ GHSTUB
 @test "test_version_marker_line_2" {
   local line2
   line2="$(sed -n '2p' "$HOOK")"
-  # Must match: # tcs-git-helpers: vN.N.N
-  echo "$line2" | grep -qE '^# tcs-git-helpers: v[0-9]+\.[0-9]+\.[0-9]+'
+  # Source template carries the v__TCS_GIT_HELPERS_VERSION__ placeholder, which
+  # install_files.sh substitutes with the concrete version at install time.
+  # Accept either the placeholder or a concrete vN.N.N marker.
+  echo "$line2" | grep -qE '^# tcs-git-helpers: v(__TCS_GIT_HELPERS_VERSION__|[0-9]+\.[0-9]+\.[0-9]+)'
 }
 
 # ---------------------------------------------------------------------------

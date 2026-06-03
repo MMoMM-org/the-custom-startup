@@ -32,10 +32,12 @@ setup() {
   [ "$output" = "tcs-git-helpers" ]
 }
 
-@test "plugin.json version is 1.0.0" {
+@test "plugin.json version is valid semver" {
+  # Versions are auto-bumped on merge (.github/workflows/auto-bump-versions.yml),
+  # so assert semver SHAPE rather than a hardcoded literal that goes stale.
   run jq -r '.version' "${PLUGIN_ROOT}/.claude-plugin/plugin.json"
   [ "$status" -eq 0 ]
-  [ "$output" = "1.0.0" ]
+  [[ "$output" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 }
 
 @test "plugin.json has non-empty description" {

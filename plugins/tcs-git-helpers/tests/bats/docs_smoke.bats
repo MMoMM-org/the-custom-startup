@@ -1,10 +1,12 @@
 #!/usr/bin/env bats
-# T1.2 — README + CHANGELOG smoke test
+# README + CHANGELOG smoke test
 # Validates plugins/tcs-git-helpers documentation surface so future tasks have
-# stable docs-shape contract:
-#   - README mentions all 12 PRD Goals (M1-M12) on dedicated `- M<N>` lines
-#   - README has the four mandatory sections (## Overview, ## Installation,
-#     ## Basic Usage, ## References)
+# a stable docs-shape contract. The README was restructured in spec-006
+# (docs-rewrite) to the tcs-helper-style layout, so this test tracks the
+# current information architecture rather than the original v1.0 PRD dump:
+#   - README has the user-facing sections (## Skills, ## Hooks, ## Installation,
+#     ## References). The M1-M12 PRD goals now live in spec-011 requirements,
+#     not the user-facing README.
 #   - All in-document `](path)` links resolve to files that exist relative
 #     to the plugin root
 #   - CHANGELOG has the `## [1.0.0] - 2026-MM-DD` entry
@@ -12,42 +14,27 @@
 PLUGIN_ROOT="${BATS_TEST_DIRNAME}/../.."
 
 # ---------------------------------------------------------------------------
-# README — 12 PRD Goals (M1..M12) coverage
+# README — existence
 # ---------------------------------------------------------------------------
 
 @test "README.md exists" {
   [ -f "${PLUGIN_ROOT}/README.md" ]
 }
 
-@test "README references all 12 PRD Goals via '- M<N>' lines (>=12 matches)" {
-  run grep -c '^- M' "${PLUGIN_ROOT}/README.md"
-  [ "$status" -eq 0 ]
-  [ "$output" -ge 12 ]
-}
-
-@test "README mentions each M1..M12 explicitly" {
-  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-    grep -qE "^- M${i}\b" "${PLUGIN_ROOT}/README.md" || {
-      echo "missing PRD Goal line: M${i}" >&2
-      return 1
-    }
-  done
-}
-
 # ---------------------------------------------------------------------------
-# README — required sections
+# README — required sections (current spec-006 information architecture)
 # ---------------------------------------------------------------------------
 
-@test "README has '## Overview' section" {
-  grep -qE '^## Overview$' "${PLUGIN_ROOT}/README.md"
+@test "README has '## Skills' section" {
+  grep -qE '^## Skills$' "${PLUGIN_ROOT}/README.md"
+}
+
+@test "README has '## Hooks' section" {
+  grep -qE '^## Hooks$' "${PLUGIN_ROOT}/README.md"
 }
 
 @test "README has '## Installation' section" {
   grep -qE '^## Installation$' "${PLUGIN_ROOT}/README.md"
-}
-
-@test "README has '## Basic Usage' section" {
-  grep -qE '^## Basic Usage$' "${PLUGIN_ROOT}/README.md"
 }
 
 @test "README has '## References' section" {

@@ -402,11 +402,15 @@ _run_hook_with_root() {
 # ---------------------------------------------------------------------------
 
 @test "version marker present on line 2" {
-  run grep -n '# tcs-git-helpers: v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' "$HOOK"
+  # Source templates carry the v__TCS_GIT_HELPERS_VERSION__ placeholder, which
+  # install_files.sh substitutes with the concrete version at install time.
+  # Accept either form (use ERE so it is portable to BSD grep on macOS).
+  local marker='# tcs-git-helpers: v(__TCS_GIT_HELPERS_VERSION__|[0-9]+\.[0-9]+\.[0-9]+)'
+  run grep -nE "$marker" "$HOOK"
   [ "$status" -eq 0 ]
 
   local line_num
-  line_num="$(grep -n '# tcs-git-helpers: v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' "$HOOK" | head -1 | cut -d: -f1)"
+  line_num="$(grep -nE "$marker" "$HOOK" | head -1 | cut -d: -f1)"
   [ "$line_num" -eq 2 ]
 }
 
