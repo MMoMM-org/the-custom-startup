@@ -2,7 +2,7 @@
 
 **Workflow orchestration plugin for spec-driven development in Claude Code.**
 
-The `start` plugin provides ten user-invocable workflow skills, five autonomous skills, and two output styles to transform how you build software with Claude Code.
+The `start` plugin provides eleven user-invocable workflow skills, five autonomous skills, and two output styles to transform how you build software with Claude Code.
 
 **For quick start, workflow guide, and skill selection, see the [main README](../../README.md).**
 
@@ -10,7 +10,7 @@ The `start` plugin provides ten user-invocable workflow skills, five autonomous 
 
 ## Table of Contents
 
-- [User-Invocable Skills](#user-invocable-skills) — specify, implement, validate, test, review, document, analyze, refactor, debug, constitution
+- [User-Invocable Skills](#user-invocable-skills) — pickup, specify, implement, validate, test, review, document, analyze, refactor, debug, constitution
 - [Autonomous Skills](#autonomous-skills) — 5 context-activated skills
 - [Documentation Structure](#documentation-structure) — specs, domain, patterns, interfaces
 - [Output Styles](#output-styles) — The Startup, The ScaleUp
@@ -24,6 +24,29 @@ The `start` plugin provides ten user-invocable workflow skills, five autonomous 
 ## User-Invocable Skills
 
 These skills are invoked by the user via slash commands (e.g., `/xdd`). Unlike autonomous skills which activate automatically based on context, user-invocable skills wait for explicit invocation.
+
+### `/pickup [project-number | issue-number]`
+
+Start a work session from the GitHub Project (v2) board. The board can't push into your local CLI, so `/pickup` pulls: it finds your In Progress item, loads its context, creates a branch, proposes a plan — then stops before implementing.
+
+**Purpose:** Orient a session from the GitHub board rather than from local git/plan state (which `/guide` already covers).
+
+**Usage:**
+```bash
+/pickup            # resolve the project from the board, pick the In Progress item
+/pickup 7          # use project number 7 explicitly
+```
+
+**Key Features:**
+- **Project resolution** - Explicit arg → `[tcs] project` in `.claude/startup.toml` → auto-detect; asks on ambiguity, never guesses
+- **Context loading** - Issue body/title/labels, parent epic (`Part of #N`), and `Blocked by` field + cross-repo refs (warns on open blockers)
+- **Branch creation** - `<type>/<issue>-<slug>` from `main`, aborts on a dirty tree; `bug`→`fix/`, `docs`→`docs/`, else `feature/`
+- **Board-safe** - Read-only except one optional `Todo → In Progress` flip; never duplicates GitHub's built-in Done/add/link automations
+- **Orient-then-STOP** - Proposes a numbered plan and waits for "Go" — does not implement
+
+**Requires:** `gh` CLI with the `project` token scope (`gh auth refresh -s project`).
+
+---
 
 ### `/xdd <description>`
 
