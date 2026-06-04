@@ -63,6 +63,8 @@ adding items to the board (these are GitHub's built-in server-side Project workf
 - Write to the board except the single `Todo → In Progress` flip in Step 3.
 - Post issue comments or any other GitHub write without asking first.
 - Move items to Done / add items / link PRs — those run server-side already.
+- Pipe `gh` JSON to `python3 -c` or any inline interpreter with nested quotes — filter
+  with `gh`'s built-in `-q` (jq) instead; for multi-line transforms, write a temp script file.
 
 ## Reference Materials
 
@@ -112,12 +114,14 @@ record the choice in `.claude/startup.toml` under `[tcs] project`).
 ### 3. Read board items and pick the target
 
 ```bash
-gh project item-list <projectNumber> --owner <owner> --format json
+gh project item-list <projectNumber> --owner <owner> --format json \
+  -q '.items[] | select(.content.type == "DraftIssue" | not) | {n:.content.number, repo:.content.repository, title, status, priority}'
 ```
 
 Each item is flattened: `.status`, `.title`, `.priority`, `.track`, `.area` are top-level;
 the linked issue is `.content.number` / `.content.type` / `.content.repository`. Custom
-fields (e.g. `priority`) appear only when set — treat missing fields as unset.
+fields (e.g. `priority`) appear only when set — treat missing fields as unset. Filter with
+`gh`'s built-in `-q` (jq) as above — never pipe the JSON to `python3 -c`.
 
 Skip draft items (`.content.type == "DraftIssue"` or no `.content.number`).
 Filter to `.status == "In Progress"`.
@@ -131,7 +135,8 @@ match (in-progress count) {
 **Todo → In Progress flip** (the only board write). Resolve field/option IDs, then edit:
 
 ```bash
-gh project field-list <projectNumber> --owner <owner> --format json   # find Status field id + "In Progress" option id
+gh project field-list <projectNumber> --owner <owner> --format json \
+  -q '.fields[] | select(.name=="Status") | {fieldId:.id, options}'   # Status field id + option ids
 gh project item-edit --id <itemId> --project-id <projectId> \
   --field-id <statusFieldId> --single-select-option-id <inProgressOptionId>
 ```

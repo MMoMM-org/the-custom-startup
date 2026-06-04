@@ -53,6 +53,8 @@ between columns after creation; merging PRs; editing issue bodies in bulk.
 - Create or close an issue without explicit confirmation.
 - Invent labels, milestones, or assignees the user did not supply or confirm.
 - Link parent/child relationships here — delegate to `/link-issue`.
+- Pipe `gh` JSON to `python3 -c` or any inline interpreter with nested quotes — filter with
+  `gh`'s built-in `-q` (jq) instead; for multi-line transforms, write a temp script file.
 
 ## Reference Materials
 
@@ -113,8 +115,9 @@ If no project resolves, auto-detect with `gh project list --owner <owner> --form
 multiple or none, `AskUserQuestion`. With a `projectNumber`, add the new issue and set status:
 
 ```bash
-gh project item-add <projectNumber> --owner <owner> --url <issueUrl> --format json   # capture .id
-gh project field-list <projectNumber> --owner <owner> --format json                  # Status field id + option id
+gh project item-add <projectNumber> --owner <owner> --url <issueUrl> --format json -q '.id'   # itemId
+gh project field-list <projectNumber> --owner <owner> --format json \
+  -q '.fields[] | select(.name=="Status") | {fieldId:.id, options}'                   # field + option ids
 gh project item-edit --id <itemId> --project-id <projectId> \
   --field-id <statusFieldId> --single-select-option-id <optionId>                     # default: Todo
 ```

@@ -239,6 +239,31 @@ Examples of non-linear entry points:
 
 **Why markdown headings over `fn` definitions**: LLMs process markdown headers as their strongest structural signal. `fn` definitions trigger code-interpretation patterns and require the LLM to learn the novel `fn`/no-`fn` entry-point convention. Numbered headings are immediately parseable.
 
+### Shelling Out: Parse CLI JSON In-Tool, Not With Inline Interpreters
+
+When a workflow step shells out to a CLI that emits JSON (`gh`, `aws`, `kubectl`, …), have it
+filter the JSON with the **tool's own built-in selector** — `gh … -q '<jq>'` / `--jq`,
+`aws … --query`, `jq` — never by piping to `python3 -c '…'` (or `node -e`, `ruby -e`) with
+nested quotes. Inline interpreter one-liners are a recurring failure: backslash-escaped quotes
+break under both the shell and the language (e.g. `\"` is illegal inside a Python f-string
+expression), so the parser dies on the first item.
+
+```
+# ✅ robust — gh's embedded jq, no nested quotes
+gh project item-list 3 --owner ACME --format json -q '.items[] | select(.status=="In Progress") | .title'
+
+# ❌ fragile — inline python with escaped quotes; breaks on the shell/quoting boundary
+gh project item-list 3 --owner ACME --format json | python3 -c 'import json,sys; [print(f"{i[\"title\"]}") for i in ...]'
+```
+
+If a transform genuinely needs a real interpreter (multi-line logic, not a one-liner), write it
+to a temp script file and run that file — keep interpreter source out of `-c`/`-e` flags.
+
+**Avoid `!` in any expression passed through the shell.** zsh history-expansion rewrites `!` to
+`\!` even inside single quotes and heredocs, which breaks jq (`!=`), GraphQL (`ID!`), and more.
+Write the negation `!`-free: jq `select(x == y | not)` not `select(x != y)`; GraphQL — inline the
+opaque IDs instead of declaring `query($id: ID!)`.
+
 ---
 
 ## Skill Types
