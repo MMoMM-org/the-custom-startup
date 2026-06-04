@@ -145,7 +145,7 @@ _ensure_branch_state() {
 # Append a denial reason to the cascading-denial accumulator. Always 0.
 _record_deny() {
   local rule="$1" msg="$2"
-  DENY_REASONS+=("[${rule}] ${msg} (override: CLAUDE_ALLOW_${rule}=1)")
+  DENY_REASONS+=("[${rule}] ${msg} (override: prefix the command with CLAUDE_ALLOW_${rule}=1)")
   return 0
 }
 
@@ -188,6 +188,12 @@ _emit_permission_decision_deny() {
   local plugin_root="${CLAUDE_PLUGIN_ROOT:-tcs-git-helpers}"
   body="${body}"$'\n'"References: ${plugin_root}/references/destructive-ops.md, ${plugin_root}/references/force-push-safety.md, ${plugin_root}/references/sandbox-and-git-config.md"
   body="${body}"$'\n'"Master override: CLAUDE_ALLOW_GIT_BAD_OPS=1 (loud warn; granular preferred)"
+
+  # #42 near-miss hint: an override token is present in the command but was not
+  # applied — almost always because it sits mid-command instead of first.
+  if [[ "${CMD:-}" =~ CLAUDE_ALLOW_[A-Z_]+=1 ]]; then
+    body="${body}"$'\n'"⚠ Override token present but not applied — put CLAUDE_ALLOW_<RULE>=1 as the command's first token (a leading 'cd <path> &&' is fine), not mid-command."
+  fi
 
   # Cap at 15 lines per SDD §Quality Requirements / EC1.
   body=$(printf '%s\n' "$body" | head -n 15)

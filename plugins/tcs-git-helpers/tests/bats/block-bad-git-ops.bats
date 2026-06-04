@@ -575,6 +575,18 @@ EOF
   _assert_deny_for_rule "RESET_HARD"
 }
 
+@test "#42: cd-prefixed inline override (the harness command shape) → ALLOWED end-to-end" {
+  run _run_hook_with_cmd "cd /repo && CLAUDE_ALLOW_RESET_HARD=1 git reset --hard"
+  _assert_allow
+}
+
+@test "#42: override placed mid-command → DENIED with near-miss diagnostic hint" {
+  run _run_hook_with_cmd "git reset --hard && CLAUDE_ALLOW_RESET_HARD=1 echo done"
+  _assert_deny_for_rule "RESET_HARD"
+  [[ "$output" == *"Override token present but not applied"* ]] \
+    || { echo "expected #42 near-miss hint in deny body, got: $output" >&2; return 1; }
+}
+
 @test "override: master CLAUDE_ALLOW_GIT_BAD_OPS=1 → ALLOWED + master=true audit + warning" {
   export CLAUDE_ALLOW_GIT_BAD_OPS=1
   run --separate-stderr _run_hook_with_cmd "git reset --hard"
@@ -797,11 +809,11 @@ EOF
 # mechanism actually work, but the suffix wording stays. A future refactor
 # that changes the format (e.g. drops the parens or repunctuates) must
 # trip this lock so the change is reviewed against ADR-9.
-@test "S1 wording lock: deny suffix is exactly (override: CLAUDE_ALLOW_<RULE>=1)" {
+@test "S1 wording lock: deny suffix is exactly (override: prefix the command with CLAUDE_ALLOW_<RULE>=1)" {
   run _run_hook_with_cmd "git reset --hard"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"(override: CLAUDE_ALLOW_RESET_HARD=1)"* ]] \
-    || { echo "expected '(override: CLAUDE_ALLOW_RESET_HARD=1)' literal in output, got: $output" >&2; return 1; }
+  [[ "$output" == *"(override: prefix the command with CLAUDE_ALLOW_RESET_HARD=1)"* ]] \
+    || { echo "expected '(override: prefix the command with CLAUDE_ALLOW_RESET_HARD=1)' literal in output, got: $output" >&2; return 1; }
 }
 
 # ----------------------------------------------------------------------

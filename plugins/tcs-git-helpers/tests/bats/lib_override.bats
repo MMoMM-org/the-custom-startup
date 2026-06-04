@@ -348,6 +348,42 @@ teardown() {
 }
 
 # ----------------------------------------------------------------------
+# #42: tolerate a leading `cd <path> &&` / `pushd … &&` prefix — the
+# Claude Code Bash tool's default command shape — so the override still
+# consumes when it is the first token *after* the directory change.
+# ----------------------------------------------------------------------
+
+@test "_scan_tool_input_for_override: match — cd-prefixed override (the harness default shape, #42) → returns 0" {
+  CMD="cd /repo && CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push"
+  run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 0 ]
+}
+
+@test "_scan_tool_input_for_override: match — cd-prefixed master override (#42) → returns 0" {
+  CMD="cd /some/repo && CLAUDE_ALLOW_GIT_BAD_OPS=1 git checkout -b foo"
+  run _scan_tool_input_for_override CLAUDE_ALLOW_GIT_BAD_OPS
+  [ "$status" -eq 0 ]
+}
+
+@test "_scan_tool_input_for_override: match — pushd-prefixed override (#42) → returns 0" {
+  CMD="pushd /repo && CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push"
+  run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 0 ]
+}
+
+@test "_scan_tool_input_for_override: match — cd-prefixed with semicolon separator (#42) → returns 0" {
+  CMD="cd /repo; CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push"
+  run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 0 ]
+}
+
+@test "_scan_tool_input_for_override: no match — override after cd AND another command (still mid-command) → returns 1" {
+  CMD="cd /repo && git push && CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 foo"
+  run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 1 ]
+}
+
+# ----------------------------------------------------------------------
 # M2: Tool-Input Scan integration into _check_and_consume_override (T2.2)
 # ----------------------------------------------------------------------
 
