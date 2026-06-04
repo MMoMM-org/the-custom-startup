@@ -1,6 +1,6 @@
 # Plugins
 
-The Custom Agentic Startup is distributed as four Claude Code marketplace plugins. The [interactive install script](../getting-started/installation.md) lets you choose which plugins to install, or you can install individual plugins manually using the commands below.
+The Custom Agentic Startup is distributed as six Claude Code marketplace plugins. The [interactive install script](../getting-started/installation.md) lets you choose which plugins to install, or you can install individual plugins manually using the commands below.
 
 ---
 
@@ -114,3 +114,41 @@ Optional. 17 pattern skills covering architecture, API design, testing, language
 | **Integrations** | `mcp-server` · `obsidian-plugin` |
 
 Invoke any skill by name: `/ddd`, `/hexagonal`, `/typescript-strict`, etc.
+
+---
+
+## tcs-git-helpers
+
+```
+/plugin install tcs-git-helpers@the-custom-startup
+```
+
+Optional. Machine-enforces the recurring git mistakes Claude makes across repos — pushes to closed PRs, branching off unfinished work, squash-merge resume, destructive operations, and worktree-exit data loss. It runs invisibly through hooks; you notice it only on a denial or the SessionStart brief.
+
+| Skill | What it does |
+|-------|-------------|
+| `/git-setup` | Per-repo install — writes `.githooks/`, sets `core.hooksPath`, detects and aborts on Husky/lefthook/pre-commit/simple-git-hooks conflicts |
+| `/git-audit` | Per-repo health check — branch state, stale branches, override audit; `--cleanup` to delete stale branches, `--overrides` to review the consumption log |
+
+| Event | Hooks | Purpose |
+|-------|-------|---------|
+| `PreToolUse` | Bash / Edit / Write / ExitWorktree | Deny 14+ destructive patterns, closed-PR pushes, squash-merge resume, unfinished-branch creation, and worktree exit with uncommitted work |
+| `PostToolUse` | git / gh nudges | Soft reminders after `git checkout -b`, `gh pr create`, `gh pr merge`, `git rebase`, `git stash pop` |
+| `SessionStart` | branch brief | One-line awareness brief — branch, dirty/clean, ahead/behind, stale-merged count |
+
+Optional setup flags: `--with-branch-protection` (GitHub single-coder preset) · `--with-gha` (PR-title check workflow).
+
+---
+
+## tcs-issues
+
+```
+/plugin install tcs-issues@the-custom-startup
+```
+
+Optional. GitHub issue lifecycle plus native sub-issue (parent/child) management. Complements `/pickup` — which reads the GitHub Projects board — by writing to it: creating issues onto the board and linking the issue graph. Requires an authenticated `gh` CLI.
+
+| Skill | What it does |
+|-------|-------------|
+| `/issue` | Create, list, close, and comment on issues. New issues are placed on the repo's Project (v2) board with a status and labels. Confirms before every write. |
+| `/link-issue` | Link / unlink native sub-issues (parent ↔ child) and list an issue's children and parent epic, via the GitHub GraphQL sub-issue API. |

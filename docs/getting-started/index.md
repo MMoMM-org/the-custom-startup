@@ -12,6 +12,8 @@ The Custom Startup (TCS) is a spec-driven development framework for Claude Code,
 | **tcs-team** | 15 specialist agents across 8 roles (Analyst, Architect, Developer, Tester, Designer, DevOps, Chief, Meta Agent) | Alongside tcs-workflow; agents activate automatically when the workflow delegates specialist work |
 | **tcs-helper** | Skill authoring tools and a file-based project memory system | Optional — install if you want to build your own skills or add structured memory to your repos |
 | **tcs-patterns** | 17 domain pattern skills covering architecture, testing, platforms, and integrations | Optional — install only the patterns relevant to your stack; they activate on trigger terms |
+| **tcs-git-helpers** | Git workflow discipline — hooks that block destructive ops and a per-repo `.githooks/` setup | Optional — install in repos where you want git mistakes machine-blocked |
+| **tcs-issues** | GitHub issue lifecycle and native sub-issue (parent/child) management via `gh` + GraphQL | Optional — install if you track work in GitHub issues and Projects |
 
 ---
 
