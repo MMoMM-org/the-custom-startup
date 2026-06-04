@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/MMoMM-org/the-custom-startup/main/i
 The wizard lets you choose:
 
 - **Install target** — global (all Claude sessions), current repo, or a custom path
-- **Plugins** — tcs-workflow only, tcs-team only, both (recommended), or all four including tcs-helper and tcs-patterns
+- **Plugins** — tcs-workflow only, tcs-team only, both (recommended), or all six including tcs-helper, tcs-patterns, tcs-git-helpers, and tcs-issues
 - **Output style** — The Startup (high-energy, delivery-focused) or The ScaleUp (structured, process-oriented)
 - **Specs directory** — the directory name where specification files (PRDs, SDDs, plans) will be stored, written to `.claude/startup.toml`
 - **Satori** *(optional)* — MCP gateway for session context capture and context reduction. Builds the submodule, registers the MCP server, and optionally installs context-capture hooks.
@@ -52,6 +52,8 @@ If you prefer to install via the Claude Code plugin marketplace, start `claude` 
 /plugin install tcs-team@the-custom-startup        # specialist agents — optional
 /plugin install tcs-helper@the-custom-startup      # skill authoring tools — optional
 /plugin install tcs-patterns@the-custom-startup    # domain pattern skills — optional
+/plugin install tcs-git-helpers@the-custom-startup # git workflow discipline — optional
+/plugin install tcs-issues@the-custom-startup      # GitHub issue + sub-issue management — optional
 ```
 
 `tcs-workflow` is the only required plugin. The others extend it:
@@ -62,6 +64,8 @@ If you prefer to install via the Claude Code plugin marketplace, start `claude` 
 | `tcs-team@the-custom-startup` | 8 specialist agent roles (analyst, architect, developer, etc.) | No |
 | `tcs-helper@the-custom-startup` | Skill authoring, Memory Bank, git workflows, project onboarding | No |
 | `tcs-patterns@the-custom-startup` | Domain pattern skills (DDD, hexagonal, testing, TypeScript, and more) — see [tcs-patterns guide](../guides/tcs-patterns.md) | No |
+| `tcs-git-helpers@the-custom-startup` | Git workflow discipline — destructive-op blocks, per-repo `.githooks/` setup, branch awareness | No |
+| `tcs-issues@the-custom-startup` | GitHub issue lifecycle + native sub-issue (parent/child) management via `gh` and GraphQL | No |
 
 Marketplace installation only installs the plugins. The following extras are **not** set up automatically and need to be configured manually.
 
