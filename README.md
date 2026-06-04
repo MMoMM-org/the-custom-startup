@@ -162,6 +162,15 @@ Machine-enforces the recurring git mistakes Claude makes across repos: pushes to
 
 Optional: `setup --with-branch-protection` (GitHub single-coder branch protection preset) · `setup --with-gha` (GHA PR-title check workflow).
 
+### Issues Plugin (`tcs-issues`) — GitHub Issue & Sub-Issue Management *(optional)*
+
+**2 user-invocable skills** for the GitHub issue lifecycle plus native sub-issue (parent/child) linking via the GraphQL API. Complements `/pickup` (which reads the Project board) by writing to it.
+
+| Skill | Purpose |
+|-------|---------|
+| `/tcs-issues:issue` | Create (onto the Project v2 board with status + labels), list, close, and comment on issues — `[create \| list \| close \| comment]` |
+| `/tcs-issues:link-issue` | Link/unlink sub-issues and list an issue's children or parent epic — `[link \| unlink \| list]` |
+
 ### Patterns Plugin (`tcs-patterns`) — Domain Pattern Skills *(optional)*
 
 **17 pattern skills** covering architecture, testing, languages, and platform. Install only what you need — they activate on trigger terms. Agents from `tcs-team` automatically use relevant pattern skills when delegating specialist work.

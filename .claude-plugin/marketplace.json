@@ -33,6 +33,11 @@
       "name": "tcs-git-helpers",
       "source": "./plugins/tcs-git-helpers",
       "description": "Git workflow discipline for Claude Code — destructive-op blocks, worktree-exit guard, session brief, and per-repo .githooks/ setup"
+    },
+    {
+      "name": "tcs-issues",
+      "source": "./plugins/tcs-issues",
+      "description": "GitHub issue lifecycle and sub-issue (parent/child) management — create issues onto the Project board, link sub-issues via GraphQL"
     }
   ]
 }
