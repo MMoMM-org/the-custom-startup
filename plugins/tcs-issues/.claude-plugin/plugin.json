@@ -1,6 +1,6 @@
 {
   "name": "tcs-issues",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "GitHub issue lifecycle and sub-issue (parent/child) management — create issues onto the Project board, link sub-issues via GraphQL",
   "author": {
     "name": "Marcus Breiden"
