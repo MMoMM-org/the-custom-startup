@@ -1,0 +1,10 @@
+[
+  {"number": 16, "title": "Epic: Obsidian-Power Skills", "id": "E_16", "body": "Umbrella epic.", "parent": null},
+  {"number": 30, "title": "Child via 'Part of'", "id": "I_30", "body": "Implements X.\n\nPart of #16", "parent": null},
+  {"number": 31, "title": "Child already linked", "id": "I_31", "body": "Part of #16", "parent": {"number": 16}},
+  {"number": 32, "title": "Child via 'Epic:'", "id": "I_32", "body": "Epic: #16\nsome detail", "parent": null},
+  {"number": 33, "title": "Child via 'Parent:'", "id": "I_33", "body": "Parent: #16", "parent": null},
+  {"number": 40, "title": "Dangling reference", "id": "I_40", "body": "Part of #99", "parent": null},
+  {"number": 50, "title": "Standalone, no reference", "id": "I_50", "body": "Independent work.", "parent": null},
+  {"number": 51, "title": "Child of a different parent", "id": "I_51", "body": "Part of #16", "parent": {"number": 17}}
+]
