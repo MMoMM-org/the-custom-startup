@@ -245,6 +245,60 @@ _strip_quoted() {
   printf '%s' "$out"
 }
 
+# _clausify <command>
+#   Returns <command> reduced to its real command clauses, one per line:
+#     1. quoted content blanked (via _strip_quoted) so git-op literals inside
+#        commit/PR bodies, echo/printf payloads, and heredocs disappear;
+#     2. shell separators (&&, ||, |, ;, &) normalized to newlines so an
+#        unbounded `.*` in a pattern cannot bridge across into a sibling command.
+#   Compute ONCE per hook invocation and reuse across patterns (the char-by-char
+#   _strip_quoted is the only O(n) step; do it once, not per pattern — CON-2).
+#
+#   Separator order matters: two-char operators (&&, ||) FIRST, else `&`/`|`
+#   would half-consume them. bash 3.2 compatible.
+_clausify() {
+  local s NL
+  NL=$'\n'
+  s="$1"
+  # Shell-executor guard: when the command invokes a shell on a quoted payload
+  # (`bash -c '…'`, `sh -c "…"`, `eval '…'`), that payload is CODE, not data —
+  # a destructive op hidden in a subshell must still be caught. Leave it intact
+  # (raw whole-command match) rather than blanking the quotes. Conservative: an
+  # ambiguous executor falls back to the original substring behaviour.
+  if [[ "$s" =~ (^|[^[:alnum:]_])[a-z]*sh[[:space:]]+-c([[:space:]]|$) ]] \
+     || [[ "$s" =~ (^|[^[:alnum:]_])eval([[:space:]]|$) ]]; then
+    printf '%s' "$s"
+    return 0
+  fi
+  s="$(_strip_quoted "$s")"
+  s="${s//&&/$NL}"
+  s="${s//||/$NL}"
+  s="${s//|/$NL}"
+  s="${s//;/$NL}"
+  s="${s//&/$NL}"
+  printf '%s' "$s"
+}
+
+# _match_clauses <clausified> <pattern>
+#   True (0) iff <pattern> matches any clause of <clausified> (output of
+#   _clausify). Use this — not raw _match_command against $CMD — for every
+#   dispatch pattern, so a git-op literal quoted inside another command's
+#   argument does not trip a false denial (#42 sibling fix).
+#
+#   Trade-off: a dangerous token that is itself a quoted required argument
+#   (e.g. `git checkout -b "name with spaces"`, `git push o ":br"`) is blanked
+#   and will not match. Such quoted forms are vanishingly rare and the inline
+#   `CLAUDE_ALLOW_<RULE>=1` override remains available.
+#
+#   bash 3.2 compatible: here-string + read loop, no mapfile.
+_match_clauses() {
+  local clause
+  while IFS= read -r clause; do
+    _match_command "$clause" "$2" && return 0
+  done <<< "$1"
+  return 1
+}
+
 # _match_no_verify <command>
 #   True (0) iff a genuine --no-verify / -n flag belongs to a `git commit` clause.
 #   Splits on shell separators so PATTERN_NO_VERIFY's `.*` cannot bridge from
@@ -259,16 +313,5 @@ _strip_quoted() {
 #   bash 3.2.57 (macOS default). `$'\n'` in parameter-substitution replacement
 #   is handled via a NL variable to ensure compatibility.
 _match_no_verify() {
-  local stripped clause NL
-  NL=$'\n'
-  stripped="$(_strip_quoted "$1")"
-  stripped="${stripped//&&/$NL}"
-  stripped="${stripped//||/$NL}"
-  stripped="${stripped//|/$NL}"
-  stripped="${stripped//;/$NL}"
-  stripped="${stripped//&/$NL}"
-  while IFS= read -r clause; do
-    _match_command "$clause" "$PATTERN_NO_VERIFY" && return 0
-  done <<< "$stripped"
-  return 1
+  _match_clauses "$(_clausify "$1")" "$PATTERN_NO_VERIFY"
 }

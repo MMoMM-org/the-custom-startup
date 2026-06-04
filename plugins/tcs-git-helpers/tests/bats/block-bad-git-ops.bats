@@ -1269,3 +1269,58 @@ _run_is_ahead_of_merged() {
   [[ "$output" == *"is MERGED"* ]] \
     || { echo "expected 'is MERGED' in deny output, got: $output" >&2; return 1; }
 }
+
+# ----------------------------------------------------------------------
+# #42 sibling: git-op literals quoted inside another command's argument
+# (commit/PR bodies, echo/printf payloads, heredocs) must NOT trip a
+# denial. The matcher must look at real command clauses, not substring-
+# scan the whole command string.
+# ----------------------------------------------------------------------
+
+@test "#42 sibling: 'git reset --hard' quoted inside a commit message → ALLOWED" {
+  run _run_hook_with_cmd 'git commit -m "revert the git reset --hard hack"'
+  _assert_allow
+}
+
+@test "#42 sibling: 'git push --force' inside an echo string → ALLOWED" {
+  run _run_hook_with_cmd 'echo "reminder: never git push --force on main"'
+  _assert_allow
+}
+
+@test "#42 sibling: 'git stash drop' inside a printf payload → ALLOWED" {
+  run _run_hook_with_cmd "printf '%s\\n' 'run git stash drop to clean up'"
+  _assert_allow
+}
+
+@test "#42 sibling: destructive literal inside a gh PR body → ALLOWED" {
+  run _run_hook_with_cmd 'gh pr create --title x --body "we ran git reset --hard earlier"'
+  _assert_allow
+}
+
+# Regression guards: real destructive ops (bare and cd-prefixed) still fire.
+@test "#42 sibling regression: bare 'git reset --hard' still DENIED" {
+  run _run_hook_with_cmd "git reset --hard"
+  _assert_deny_for_rule "RESET_HARD"
+}
+
+@test "#42 sibling regression: cd-prefixed 'git reset --hard' still DENIED" {
+  run _run_hook_with_cmd "cd /tmp && git reset --hard"
+  _assert_deny_for_rule "RESET_HARD"
+}
+
+@test "#42 sibling regression: real 'git push --force' (unquoted) still DENIED" {
+  run _run_hook_with_cmd "git push --force origin main"
+  _assert_deny_for_rule "FORCE_PUSH"
+}
+
+# Shell-executor payloads are CODE, not data — must stay caught (no regression
+# of the subshell-evasion guard).
+@test "#42 sibling: bash -c '<destructive>' is still DENIED (executor payload)" {
+  run _run_hook_with_cmd "bash -c 'git push --force origin main'"
+  _assert_deny_for_rule "FORCE_PUSH"
+}
+
+@test "#42 sibling: sh -c \"<destructive>\" is still DENIED (executor payload)" {
+  run _run_hook_with_cmd 'sh -c "git reset --hard"'
+  _assert_deny_for_rule "RESET_HARD"
+}

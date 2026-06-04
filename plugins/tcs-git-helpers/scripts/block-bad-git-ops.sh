@@ -444,44 +444,50 @@ _check_resume_squash_merged() {
 # ---------------------------------------------------------------------------
 # Pattern dispatch table
 # ---------------------------------------------------------------------------
-# Each line is `_match_command "$CMD" "$PATTERN" && _<handler> ARGS`.
+# Each line is `_match_clauses "$_CMD_CLAUSES" "$PATTERN" && _<handler> ARGS`.
 # Returning 0 from the handler is required so set -uo doesn't blow up on
 # the next line (and so cascading-denial accumulation continues).
+#
+# _CMD_CLAUSES is $CMD with quoted content blanked and shell separators turned
+# into newlines (computed once — see _clausify). Matching against it instead of
+# raw $CMD means a git-op literal quoted inside another command's argument
+# (commit/PR bodies, echo/printf payloads, heredocs) no longer trips a false
+# denial (#42 sibling fix).
+_CMD_CLAUSES="$(_clausify "$CMD")"
 
 # === M7 destructive ops ===
-_match_command "$CMD" "$PATTERN_RESET_HARD"          && _maybe_deny RESET_HARD            "git reset --hard destroys working tree + index"
-_match_command "$CMD" "$PATTERN_CLEAN_FORCE"         && _maybe_deny CLEAN_FORCE           "git clean -f deletes untracked files (use -n to dry-run first)"
-_match_command "$CMD" "$PATTERN_CHECKOUT_DOT"        && _maybe_deny DESTRUCTIVE_CHECKOUT  "git checkout . discards working-tree changes silently"
-_match_command "$CMD" "$PATTERN_CHECKOUT_PATH"       && _maybe_deny DESTRUCTIVE_CHECKOUT  "git checkout -- <path> discards path changes"
-_match_command "$CMD" "$PATTERN_RESTORE_DESTRUCTIVE" && _maybe_deny DESTRUCTIVE_RESTORE   "git restore --worktree --source / --staged destroys changes"
-_match_command "$CMD" "$PATTERN_BRANCH_FORCE_DELETE" && _maybe_deny FORCE_BRANCH_DELETE   "git branch -D force-deletes; use -d (safe) or recover via reflog"
-_match_command "$CMD" "$PATTERN_STASH_DESTROY"       && _maybe_deny STASH_DESTROY         "git stash drop/clear destroys stash; use pop"
-_match_command "$CMD" "$PATTERN_REFLOG_EXPIRE"       && _maybe_deny REFLOG_EXPIRE         "git reflog expire kills the recovery net"
-# NO_VERIFY uses _match_no_verify (pattern_match.sh) which splits on shell
-# separators before calling PATTERN_NO_VERIFY per clause. This prevents the
-# unbounded `.*` from bridging into a sibling command's `-n` flag
-# (e.g. `git commit && echo -n ok`) — spec-015 sibling-isolation fix.
-_match_no_verify "$CMD"                              && _maybe_deny NO_VERIFY             "--no-verify bypasses .githooks/ — defeats the purpose"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_RESET_HARD"          && _maybe_deny RESET_HARD            "git reset --hard destroys working tree + index"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_CLEAN_FORCE"         && _maybe_deny CLEAN_FORCE           "git clean -f deletes untracked files (use -n to dry-run first)"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_CHECKOUT_DOT"        && _maybe_deny DESTRUCTIVE_CHECKOUT  "git checkout . discards working-tree changes silently"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_CHECKOUT_PATH"       && _maybe_deny DESTRUCTIVE_CHECKOUT  "git checkout -- <path> discards path changes"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_RESTORE_DESTRUCTIVE" && _maybe_deny DESTRUCTIVE_RESTORE   "git restore --worktree --source / --staged destroys changes"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_FORCE_DELETE" && _maybe_deny FORCE_BRANCH_DELETE   "git branch -D force-deletes; use -d (safe) or recover via reflog"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_STASH_DESTROY"       && _maybe_deny STASH_DESTROY         "git stash drop/clear destroys stash; use pop"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_REFLOG_EXPIRE"       && _maybe_deny REFLOG_EXPIRE         "git reflog expire kills the recovery net"
+# NO_VERIFY matches per clause (like every pattern now) so the unbounded `.*`
+# cannot bridge into a sibling command's `-n` flag (e.g. `git commit && echo -n
+# ok`) — spec-015 sibling-isolation fix, preserved by _CMD_CLAUSES.
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_NO_VERIFY"                              && _maybe_deny NO_VERIFY             "--no-verify bypasses .githooks/ — defeats the purpose"
 
 # === Push variants (M1 closed-PR + M7 destructive push forms) ===
-_match_command "$CMD" "$PATTERN_PUSH"                && _check_push_to_closed_pr
-_match_command "$CMD" "$PATTERN_PUSH_FORCE"          && _maybe_deny FORCE_PUSH            "use --force-with-lease, not --force"
-_match_command "$CMD" "$PATTERN_PUSH_DELETE_FLAG"    && _maybe_deny REMOTE_BRANCH_DELETE  "git push --delete removes remote branch"
-_match_command "$CMD" "$PATTERN_PUSH_COLON_DELETE"   && _maybe_deny REMOTE_BRANCH_DELETE  "git push <remote> :<branch> deletes remote branch"
-_match_command "$CMD" "$PATTERN_GH_REF_DELETE_A"     && _maybe_deny REMOTE_BRANCH_DELETE  "gh api DELETE on git/refs removes remote ref"
-_match_command "$CMD" "$PATTERN_GH_REF_DELETE_B"     && _maybe_deny REMOTE_BRANCH_DELETE  "gh api DELETE on git/refs removes remote ref"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH"                && _check_push_to_closed_pr
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH_FORCE"          && _maybe_deny FORCE_PUSH            "use --force-with-lease, not --force"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH_DELETE_FLAG"    && _maybe_deny REMOTE_BRANCH_DELETE  "git push --delete removes remote branch"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH_COLON_DELETE"   && _maybe_deny REMOTE_BRANCH_DELETE  "git push <remote> :<branch> deletes remote branch"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_GH_REF_DELETE_A"     && _maybe_deny REMOTE_BRANCH_DELETE  "gh api DELETE on git/refs removes remote ref"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_GH_REF_DELETE_B"     && _maybe_deny REMOTE_BRANCH_DELETE  "gh api DELETE on git/refs removes remote ref"
 
 # === Branch creation / resume (M2, M3) ===
-_match_command "$CMD" "$PATTERN_BRANCH_CREATE"       && _check_branch_creation_from_unfinished
-_match_command "$CMD" "$PATTERN_BRANCH_RESUME"       && _check_resume_squash_merged
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_CREATE"       && _check_branch_creation_from_unfinished
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_RESUME"       && _check_resume_squash_merged
 
 # === core.hooksPath subversion ===
-_match_command "$CMD" "$PATTERN_HOOKSPATH_INLINE"    && _maybe_deny HOOKSPATH_OVERRIDE    "git -c core.hooksPath=… disables .githooks/"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_HOOKSPATH_INLINE"    && _maybe_deny HOOKSPATH_OVERRIDE    "git -c core.hooksPath=… disables .githooks/"
 # Read-only --get/--get-all/--get-regexp forms short-circuit before the write check.
 # `git config --get core.hooksPath` and friends mutate nothing, so they should
 # never trigger the sentinel-gated denial.
-_match_command "$CMD" "$PATTERN_HOOKSPATH_CONFIG_READ" || \
-  { _match_command "$CMD" "$PATTERN_HOOKSPATH_CONFIG" && _maybe_check_setup_sentinel HOOKSPATH_OVERRIDE  "git config core.hooksPath only allowed during /tcs-git-helpers:git-setup (set TCS_GIT_HELPERS_SETUP_ACTIVE=1)"; }
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_HOOKSPATH_CONFIG_READ" || \
+  { _match_clauses "$_CMD_CLAUSES" "$PATTERN_HOOKSPATH_CONFIG" && _maybe_check_setup_sentinel HOOKSPATH_OVERRIDE  "git config core.hooksPath only allowed during /tcs-git-helpers:git-setup (set TCS_GIT_HELPERS_SETUP_ACTIVE=1)"; }
 
 # ---------------------------------------------------------------------------
 # Aggregate decision — emit cascading denial if anything matched
