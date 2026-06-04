@@ -180,7 +180,7 @@ choose_plugins() {
   printf "\n${BRIGHT_GREEN}── Plugins${RESET}\n\n"
   printf "  ${CYAN}1)${RESET} Recommended       — tcs-workflow + tcs-team + tcs-helper (workflow, agents, Memory Bank)\n"
   printf "  ${CYAN}2)${RESET} Core only         — tcs-workflow + tcs-team (workflow + agents, no Memory Bank)\n"
-  printf "  ${CYAN}3)${RESET} All               — everything including tcs-patterns (domain pattern skills)\n"
+  printf "  ${CYAN}3)${RESET} All               — every plugin (adds tcs-patterns, tcs-git-helpers, tcs-issues)\n"
   printf "  ${CYAN}4)${RESET} Pick and choose   — select individual plugins\n"
   printf "\n"
   ask "Select plugins [1-4, default: 1]:"
@@ -188,7 +188,7 @@ choose_plugins() {
   read -r choice </dev/tty
   case "$choice" in
     2) PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup" ;;
-    3) PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup tcs-patterns@the-custom-startup" ;;
+    3) PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup tcs-git-helpers@the-custom-startup tcs-patterns@the-custom-startup tcs-issues@the-custom-startup" ;;
     4) _pick_plugins ;;
     *) PLUGINS="tcs-workflow@the-custom-startup tcs-team@the-custom-startup tcs-helper@the-custom-startup" ;;
   esac
@@ -211,9 +211,17 @@ _pick_plugins() {
   read -r c </dev/tty
   case "$c" in [nN]|[nN][oO]) ;; *) PLUGINS="$PLUGINS tcs-helper@the-custom-startup" ;; esac
 
+  ask "tcs-git-helpers — git discipline hooks + per-repo .githooks/ setup [y/N]:"
+  read -r c </dev/tty
+  case "$c" in [yY]|[yY][eE][sS]) PLUGINS="$PLUGINS tcs-git-helpers@the-custom-startup" ;; esac
+
   ask "tcs-patterns — 17 domain pattern skills (architecture, testing, platforms) [y/N]:"
   read -r c </dev/tty
   case "$c" in [yY]|[yY][eE][sS]) PLUGINS="$PLUGINS tcs-patterns@the-custom-startup" ;; esac
+
+  ask "tcs-issues   — GitHub issue + sub-issue management (2 skills) [y/N]:"
+  read -r c </dev/tty
+  case "$c" in [yY]|[yY][eE][sS]) PLUGINS="$PLUGINS tcs-issues@the-custom-startup" ;; esac
 
   PLUGINS="${PLUGINS# }"
   if [[ -z "$PLUGINS" ]]; then
