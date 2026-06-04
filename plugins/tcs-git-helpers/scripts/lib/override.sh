@@ -68,16 +68,23 @@ _override_sentinel_path() {
 #   env_var — the exact CLAUDE_ALLOW_<RULE> or CLAUDE_ALLOW_GIT_BAD_OPS name.
 #
 # Returns:
-#   0 — CMD starts with exactly "<env_var>=1<whitespace>+" at position 0.
-#   1 — CMD is unset, empty, or the prefix is absent / not at position 0.
+#   0 — "<env_var>=1<whitespace>+" is the first token, optionally after a single
+#       leading `cd <path> &&|;` / `pushd <path> &&|;` directory-change prefix
+#       (the Claude Code Bash tool's default command shape — see #42).
+#   1 — CMD is unset, empty, or the prefix is absent / mid-command.
 #
 # Side effects: none. No I/O. Caller handles sentinel + audit (CON-5).
 # Bash 3.2 compatible: uses [[ =~ ]] with a variable-held pattern (CON-1).
 _scan_tool_input_for_override() {
   local env_var="$1"
   [ -z "${CMD:-}" ] && return 1
+  # Strip one leading `cd|pushd <args> &&|;` so an override placed first *after*
+  # the harness's directory change still counts as the first token (#42). Only a
+  # single benign cd/pushd is tolerated — anything else keeps the position-0 rule.
+  local scan
+  scan="$(printf '%s' "$CMD" | sed -E 's/^[[:space:]]*(cd|pushd)[[:space:]]+[^&;]*(&&|;)[[:space:]]*//')"
   local pattern="^${env_var}=1[[:space:]]+"
-  [[ "$CMD" =~ $pattern ]] && return 0
+  [[ "$scan" =~ $pattern ]] && return 0
   return 1
 }
 
