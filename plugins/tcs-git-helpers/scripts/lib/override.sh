@@ -69,8 +69,9 @@ _override_sentinel_path() {
 #
 # Returns:
 #   0 — "<env_var>=1<whitespace>+" is the first token, optionally after a single
-#       leading `cd <path> &&|;` / `pushd <path> &&|;` directory-change prefix
-#       (the Claude Code Bash tool's default command shape — see #42).
+#       leading `cd <path> &&|;|<newline>` / `pushd <path> …` directory-change
+#       prefix (the Claude Code Bash tool's default command shapes — see #42 for
+#       the `&&`/`;` forms and the newline-separated multi-line form).
 #   1 — CMD is unset, empty, or the prefix is absent / mid-command.
 #
 # Side effects: none. No I/O. Caller handles sentinel + audit (CON-5).
@@ -78,11 +79,17 @@ _override_sentinel_path() {
 _scan_tool_input_for_override() {
   local env_var="$1"
   [ -z "${CMD:-}" ] && return 1
-  # Strip one leading `cd|pushd <args> &&|;` so an override placed first *after*
-  # the harness's directory change still counts as the first token (#42). Only a
-  # single benign cd/pushd is tolerated — anything else keeps the position-0 rule.
+  # Flatten newlines to `;` first: `sed` is line-oriented and bash `=~` anchors
+  # `^` to string start, so neither can bridge a `cd <path>⏎override` shape on
+  # its own. A newline is a statement separator semantically identical to `;`,
+  # and we only mutate this scan copy (never the executed command), so the
+  # rewrite is safe and keeps `cd <path>⏎override` equivalent to `cd <path>; …`.
+  # Then strip one leading `cd|pushd <args> &&|;` so an override placed first
+  # *after* the harness's directory change still counts as the first token
+  # (#42). Only a single benign cd/pushd is tolerated — anything else keeps the
+  # position-0 rule (a second command before the override is NOT stripped).
   local scan
-  scan="$(printf '%s' "$CMD" | sed -E 's/^[[:space:]]*(cd|pushd)[[:space:]]+[^&;]*(&&|;)[[:space:]]*//')"
+  scan="$(printf '%s' "$CMD" | tr '\n' ';' | sed -E 's/^[[:space:]]*(cd|pushd)[[:space:]]+[^&;]*(&&|;)[[:space:]]*//')"
   local pattern="^${env_var}=1[[:space:]]+"
   [[ "$scan" =~ $pattern ]] && return 0
   return 1

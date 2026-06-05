@@ -384,6 +384,52 @@ teardown() {
 }
 
 # ----------------------------------------------------------------------
+# #42 follow-up: the Claude Code Bash tool ALSO emits a newline-separated
+# multi-line shape (`cd <path>⏎override git …`), not just `cd <path> && …`.
+# The original #42 fix only stripped `&&`/`;` separators, so the override
+# silently dropped on the most common harness shape. A newline is a statement
+# separator semantically identical to `;`; flattening it keeps the position-0
+# rule intact while honoring the multi-line form.
+# ----------------------------------------------------------------------
+
+@test "_scan_tool_input_for_override: match — cd-prefixed override, NEWLINE separator (harness multi-line shape) → returns 0" {
+  CMD=$'cd /repo\nCLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push'
+  run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 0 ]
+}
+
+@test "_scan_tool_input_for_override: match — exact failing repro: cd⏎override git switch -c → returns 0" {
+  # The literal command shape that silently dropped the override in the field.
+  CMD=$'cd /Volumes/Moon/Coding/MiYo/Hashi\nCLAUDE_ALLOW_BRANCH_FROM_UNFINISHED=1 git switch -c chore/bump'
+  run _scan_tool_input_for_override CLAUDE_ALLOW_BRANCH_FROM_UNFINISHED
+  [ "$status" -eq 0 ]
+}
+
+@test "_scan_tool_input_for_override: match — cd-prefixed MASTER override, newline separator → returns 0" {
+  CMD=$'cd /some/repo\nCLAUDE_ALLOW_GIT_BAD_OPS=1 git checkout -b foo'
+  run _scan_tool_input_for_override CLAUDE_ALLOW_GIT_BAD_OPS
+  [ "$status" -eq 0 ]
+}
+
+@test "_scan_tool_input_for_override: match — pushd-prefixed override, newline separator → returns 0" {
+  CMD=$'pushd /repo\nCLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push'
+  run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 0 ]
+}
+
+@test "_scan_tool_input_for_override: no match — newline-separated override after cd AND another command (still mid-command) → returns 1" {
+  CMD=$'cd /repo\ngit push\nCLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 foo'
+  run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 1 ]
+}
+
+@test "_scan_tool_input_for_override: no match — leading newline before override (not first token) → returns 1" {
+  CMD=$'\nCLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push'
+  run _scan_tool_input_for_override CLAUDE_ALLOW_PUSH_TO_CLOSED_PR
+  [ "$status" -eq 1 ]
+}
+
+# ----------------------------------------------------------------------
 # M2: Tool-Input Scan integration into _check_and_consume_override (T2.2)
 # ----------------------------------------------------------------------
 
