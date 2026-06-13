@@ -206,15 +206,21 @@ Implementer subagent must:
 ```
 DONE                → proceed to 4f (spec compliance review)
 DONE_WITH_CONCERNS  → read concerns carefully; if about correctness/scope → address before 4f; if observational → note and proceed to 4f
-NEEDS_CONTEXT       → provide the missing context, re-dispatch same subagent with same model
+NEEDS_CONTEXT       → provide the missing context, re-dispatch with same model (see "Re-dispatch by mode" below)
 BLOCKED             → assess blocker:
-                       - Context problem → provide context, re-dispatch same model
+                       - Context problem → provide context, re-dispatch with same model
                        - Complexity problem → re-dispatch with upgraded model
                        - Task too large → break into sub-tasks, create new TodoWrite entries
                        - Plan is wrong → escalate to user with explanation
 ```
 
 **Never** silently ignore a BLOCKED or NEEDS_CONTEXT status.
+
+> **Re-dispatch by mode.** "Re-dispatch" does NOT mean the prior subagent resumes with its memory intact — what it means depends on the mode chosen in step 2:
+> - **Standard mode** — implementers are fire-and-forget subagents with no persistent context. A re-dispatch is a **fresh, stateless subagent**: re-supply the curated task context (per 4d) plus the new fix list or missing context. Never assume the new subagent "remembers" prior attempts.
+> - **Agent Team mode** — the implementer is a live, addressable teammate. Use `SendMessage` to continue it **in place** with its context intact, instead of rebuilding context.
+>
+> `SendMessage` applies **only** in Agent Team mode. In Standard mode there is no addressable agent, so a fresh re-dispatch is the correct and only path — this is expected behavior, not a missing capability.
 
 #### 4f. Spec Compliance Review
 
@@ -225,7 +231,7 @@ Dispatch the `spec-compliance-reviewer` agent (Agent tool, `subagent_type: spec-
 
 Agent verdict (PASS or FAIL with fix list):
 - ✅ PASS → proceed to 4g
-- ❌ FAIL → implementer addresses fix list → re-dispatch `spec-compliance-reviewer` (repeat until PASS)
+- ❌ FAIL → re-dispatch implementer with the fix list (see "Re-dispatch by mode" in 4e) → re-dispatch `spec-compliance-reviewer` (repeat until PASS)
 
 #### 4g. Code Quality Review
 
@@ -233,7 +239,7 @@ Dispatch the `code-quality-reviewer` agent (Agent tool, `subagent_type: code-qua
 
 Agent verdict (PASS or FAIL with fix list, scoped to BASE_SHA..HEAD_SHA):
 - ✅ PASS → proceed to 4h
-- ❌ FAIL → implementer addresses fix list → re-dispatch `code-quality-reviewer` (repeat until PASS)
+- ❌ FAIL → re-dispatch implementer with the fix list (see "Re-dispatch by mode" in 4e) → re-dispatch `code-quality-reviewer` (repeat until PASS)
 
 **Spec compliance review (4f) must pass before code quality review (4g) begins.**
 
