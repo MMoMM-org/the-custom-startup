@@ -946,8 +946,12 @@ class TestCleanupDriftGate:
         assert "h0" in combined_stderr, (
             f"Expected installed version 'h0' in stderr:\n{combined_stderr}"
         )
-        assert "h1" in combined_stderr, (
-            f"Expected expected version 'h1' in stderr:\n{combined_stderr}"
+        # The required version in the message is the module's
+        # EXPECTED_HOOK_BUNDLE_VERSION constant, not the DriftResult's installed
+        # value — assert against the constant so this doesn't rot on each bump.
+        expected_version = gsa.EXPECTED_HOOK_BUNDLE_VERSION
+        assert expected_version in combined_stderr, (
+            f"Expected required version {expected_version!r} in stderr:\n{combined_stderr}"
         )
         assert "/tcs-git-helpers:git-setup" in combined_stderr, (
             f"Expected /tcs-git-helpers:git-setup suggestion in stderr:\n{combined_stderr}"
