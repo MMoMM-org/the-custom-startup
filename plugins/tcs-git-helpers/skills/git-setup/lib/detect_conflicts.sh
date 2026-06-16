@@ -140,7 +140,23 @@ if [ -n "$HOOKS_PATH" ] && [ "$HOOKS_PATH" != ".githooks" ]; then
 fi
 
 # --- 5. Existing .githooks/ marker check ----------------------------------
+# Ignore a .githooks/ that holds nothing but the skill's own .setup.lock (or is
+# otherwise empty). Step 1 of the workflow (lock.sh acquire) runs `mkdir -p
+# .githooks` and writes .githooks/.setup.lock BEFORE this detector runs, so on a
+# fresh repo .githooks/ always exists with just the lock file. Treating that as
+# an existing-install conflict false-positives every first-time setup.
+_githooks_has_real_content=""
 if [ -d ".githooks" ]; then
+  for _entry in .githooks/* .githooks/.[!.]* .githooks/..?*; do
+    [ -e "$_entry" ] || continue
+    case "$_entry" in
+      */.setup.lock) continue ;;
+    esac
+    _githooks_has_real_content="yes"
+    break
+  done
+fi
+if [ -n "$_githooks_has_real_content" ]; then
   # Look for the version banner on line 1-3 of any standard hook file.
   # Accept both `v<semver>` (canonical, install_files.sh from v2.2.2 onward)
   # and bare `<semver>` (legacy banners written by v2.0.0..v2.2.1 installs).
@@ -175,6 +191,7 @@ if [ -d ".githooks" ]; then
     fi
   fi
 fi
+unset _githooks_has_real_content _entry 2>/dev/null || true
 
 # --- 6. Non-.sample files in .git/hooks/ ----------------------------------
 if [ -d ".git/hooks" ]; then

@@ -93,6 +93,8 @@ The helper writes `<repo>/.githooks/.setup.lock` containing `<pid>:<unix-timesta
 
 If acquire fails, surface the error (`another setup run holds .githooks/.setup.lock`) and exit non-zero — do NOT force-remove a foreign lock.
 
+**Ordering note.** The lock is acquired FIRST (before conflict detection) so two concurrent runs serialize across the whole detect→install sequence, not just the write. Acquiring creates `<repo>/.githooks/` plus the bare `.setup.lock` before step 2 runs, so on a fresh repo the conflict detector sees a `.githooks/` that contains only the lock. `detect_conflicts.sh` explicitly ignores a `.githooks/` that holds nothing but `.setup.lock` (or is otherwise empty) and treats it as a clean install — the lock never counts as a pre-existing foreign hook set. `install_files.sh` (step 4) also writes `.githooks/.gitignore` so `.setup.lock` is never committed.
+
 ### 2. Detect conflicts
 
 ```bash
@@ -163,13 +165,13 @@ Always print a structured summary listing:
 - Submodules listed (not recursed) per M10 AC6.
 - Reminder: setup did NOT auto-commit; Marcus reviews via `git status` then commits.
 
-Release the lock:
+Release the lock on EVERY exit path — success, abort (exit 2), conflict that the user declines, and any error in between:
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/skills/git-setup/lib/lock.sh" release
 ```
 
-Even on error paths — release in a `trap` if you'd otherwise leak the lock.
+`release` removes the lock when the current process owns it OR when the recorded owner PID is no longer alive — so it cleans up correctly even though the skill runs `acquire` and `release` as separate Bash calls (different PIDs). A lock owned by a *live* foreign run is never force-removed. If you abort before reaching this step, run `release` explicitly (e.g. in a `trap`) so a dead-PID lock is not left in `.githooks/`.
 
 ## Conflict matrix
 

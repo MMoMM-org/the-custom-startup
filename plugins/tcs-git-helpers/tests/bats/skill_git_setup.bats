@@ -401,6 +401,27 @@ _make_clean_repo() {
   echo "$output" | grep -qiE 'no marker|existing-hooks|conflict|per-file'
 }
 
+@test "C16a detect_conflicts ignores a .githooks/ holding only .setup.lock (fresh-repo lock)" {
+  # Step 1 of the workflow (lock.sh acquire) creates .githooks/.setup.lock
+  # before detect runs; a bare lock must NOT be reported as an existing install.
+  _make_clean_repo "$TEST_TMP/lockonly"
+  cd "$TEST_TMP/lockonly"
+  mkdir -p .githooks
+  printf '12345:%s\n' "$(date +%s)" > .githooks/.setup.lock
+  run "$LIB_DIR/detect_conflicts.sh"
+  [ "$status" -eq 0 ]
+  ! echo "$output" | grep -qi 'conflict'
+}
+
+@test "C16b detect_conflicts ignores an empty .githooks/ directory" {
+  _make_clean_repo "$TEST_TMP/emptyhooks"
+  cd "$TEST_TMP/emptyhooks"
+  mkdir -p .githooks
+  run "$LIB_DIR/detect_conflicts.sh"
+  [ "$status" -eq 0 ]
+  ! echo "$output" | grep -qi 'conflict'
+}
+
 @test "C17 detect_conflicts on with-tcs-current emits up-to-date" {
   cd "$(_use_fixture with-tcs-current)"
   # Current matching version: detect_conflicts considers this informational, not
@@ -455,6 +476,24 @@ _make_clean_repo() {
   [ -f .githooks/exclude-paths.example ]
 }
 
+@test "C23a install_files writes .githooks/.gitignore so .setup.lock is never committed" {
+  cd "$(_use_fixture clean-repo)"
+  "$LIB_DIR/install_files.sh"
+  [ -f .githooks/.gitignore ]
+  grep -qxF '.setup.lock' .githooks/.gitignore
+  # git must actually treat the lock as ignored once the bundle is installed.
+  : > .githooks/.setup.lock
+  run git check-ignore .githooks/.setup.lock
+  [ "$status" -eq 0 ]
+}
+
+@test "C23b install_files .gitignore write is idempotent (no duplicate rule)" {
+  cd "$(_use_fixture clean-repo)"
+  "$LIB_DIR/install_files.sh"
+  "$LIB_DIR/install_files.sh"
+  [ "$(grep -cxF '.setup.lock' .githooks/.gitignore)" -eq 1 ]
+}
+
 @test "C24 install_files makes hook files executable" {
   cd "$(_use_fixture clean-repo)"
   "$LIB_DIR/install_files.sh"
@@ -493,6 +532,31 @@ _make_clean_repo() {
   [ "$status" -eq 0 ]
   run "$LIB_DIR/lock.sh" release
   [ "$status" -eq 0 ]
+}
+
+@test "C27a lock.sh release removes a lock whose owner PID is dead" {
+  # acquire and release run as separate processes, so by release time the
+  # acquiring PID is already gone. release must still clean up the dead lock,
+  # otherwise .setup.lock lingers after every setup run.
+  _make_clean_repo "$TEST_TMP/lockrepo"
+  cd "$TEST_TMP/lockrepo"
+  mkdir -p .githooks
+  printf '99999:%s\n' "$(date +%s)" > .githooks/.setup.lock
+  run "$LIB_DIR/lock.sh" release
+  [ "$status" -eq 0 ]
+  [ ! -f .githooks/.setup.lock ]
+}
+
+@test "C27b lock.sh release preserves a lock owned by a live foreign process" {
+  _make_clean_repo "$TEST_TMP/lockrepo"
+  cd "$TEST_TMP/lockrepo"
+  mkdir -p .githooks
+  # The bats runner ($$) is alive and is NOT the lock.sh process; its lock must
+  # not be force-removed.
+  printf '%s:%s\n' "$$" "$(date +%s)" > .githooks/.setup.lock
+  run "$LIB_DIR/lock.sh" release
+  [ "$status" -eq 0 ]
+  [ -f .githooks/.setup.lock ]
 }
 
 @test "C28 lock.sh: second concurrent acquire fails while first holds" {

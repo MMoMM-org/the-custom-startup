@@ -105,7 +105,15 @@ _release() {
   local existing pid
   existing="$(cat "$lock_file" 2>/dev/null)" || return 0
   pid="${existing%%:*}"
+  # Remove the lock when we own it (pid == $$) OR when the recorded owner is no
+  # longer alive. The skill invokes `acquire` and `release` as SEPARATE Bash
+  # calls (different PIDs), so the acquiring process is already gone by the time
+  # `release` runs — a pid==$$ check alone would never match and the lock would
+  # linger after every setup run (and risk being committed). A *live* foreign
+  # owner is always preserved: we never force-remove another active run's lock.
   if [ "$pid" = "$$" ]; then
+    rm -f "$lock_file" 2>/dev/null
+  elif [ -n "$pid" ] && [ "$pid" -eq "$pid" ] 2>/dev/null && ! kill -0 "$pid" 2>/dev/null; then
     rm -f "$lock_file" 2>/dev/null
   fi
   return 0
