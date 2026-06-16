@@ -582,9 +582,45 @@ def cmd_brief(*, cache_dir: Path, repo_path: str) -> None:
 # Mode: --cleanup
 # ---------------------------------------------------------------------------
 
-def cmd_cleanup(*, cache_dir: Path, repo_path: str, interactive: bool = True) -> None:
+def _delete_stale_branch(branch_name: str, repo_path: str) -> bool:
     """
-    List stale-merged local branches and (interactively) prompt for deletion.
+    Delete a single local branch. Tries `git branch -d` first, then falls back
+    to `-D` (a squash-merged branch is not "fully merged" in git's view even
+    though its PR landed). Prints the outcome. Returns True on deletion.
+    """
+    rc, _, _ = _run_git(["branch", "-d", branch_name], cwd=repo_path)
+    if rc == 0:
+        print(f"  Deleted {branch_name}")
+        return True
+    rc2, _, err2 = _run_git(["branch", "-D", branch_name], cwd=repo_path)
+    if rc2 == 0:
+        print(f"  Deleted {branch_name} (forced — squash-merged)")
+        return True
+    print(
+        f"  [tcs-git-helpers] ERROR: could not delete {branch_name}: {err2}",
+        file=sys.stderr,
+    )
+    return False
+
+
+def cmd_cleanup(
+    *,
+    cache_dir: Path,
+    repo_path: str,
+    interactive: bool = True,
+    assume_yes: bool = False,
+) -> None:
+    """
+    List stale-merged local branches and delete them.
+
+    Deletion path is chosen in this order:
+      - assume_yes=True (--yes): delete ALL candidates without prompting. This is
+        the path for non-interactive callers (agents, CI) — Claude's Bash tool
+        always gets a piped stdin (never a TTY) in every environment, host or
+        container, so the per-branch prompt can never run for them.
+      - interactive=True (real TTY): per-branch y/N prompt (human at a terminal).
+      - neither: list only, then explain how to delete (--yes or manual git).
+
     M6 AC3: branches checked out in a worktree are excluded.
     T2.3: drift gate first; live refresh before cache read (PRD/AC-F2.1).
     T2.4: refactored to use _drift_gate for consistency with other modes.
@@ -640,11 +676,31 @@ def cmd_cleanup(*, cache_dir: Path, repo_path: str, interactive: bool = True) ->
         merged_date = merged_at[:10] if merged_at else "unknown"
         print(f"  {e['name']:<40}  PR #{pr_num}  merged {merged_date}")
 
-    if not interactive:
+    deleted: list[str] = []
+
+    # Non-interactive bulk delete (--yes): the only path available to agents/CI.
+    if assume_yes:
+        print()
+        for e in candidates:
+            if _delete_stale_branch(e["name"], repo_path):
+                deleted.append(e["name"])
+        if deleted:
+            print(f"\n[tcs-git-helpers] Deleted {len(deleted)} branch(es).")
         return
 
+    # No TTY and no --yes: cannot prompt. Explain how to proceed instead of
+    # silently listing and exiting (the old behavior looked like a no-op).
+    if not interactive:
+        print()
+        print(
+            "[tcs-git-helpers] No TTY for per-branch prompts. Re-run with "
+            "--yes to delete all listed branches, or delete individually with "
+            "'git branch -d <name>'."
+        )
+        return
+
+    # Interactive: per-branch y/N prompt for a human at a real terminal.
     print()
-    deleted: list[str] = []
     for e in candidates:
         branch_name = e["name"]
         try:
@@ -652,21 +708,8 @@ def cmd_cleanup(*, cache_dir: Path, repo_path: str, interactive: bool = True) ->
         except EOFError:
             break
         if answer == "y":
-            rc, _, err = _run_git(["branch", "-d", branch_name], cwd=repo_path)
-            if rc == 0:
+            if _delete_stale_branch(branch_name, repo_path):
                 deleted.append(branch_name)
-                print(f"  Deleted {branch_name}")
-            else:
-                # Try -D if -d fails (branch not fully merged in git's view due to squash)
-                rc2, _, err2 = _run_git(["branch", "-D", branch_name], cwd=repo_path)
-                if rc2 == 0:
-                    deleted.append(branch_name)
-                    print(f"  Deleted {branch_name} (forced — squash-merged)")
-                else:
-                    print(
-                        f"  [tcs-git-helpers] ERROR: could not delete {branch_name}: {err2}",
-                        file=sys.stderr,
-                    )
 
     if deleted:
         print(f"\n[tcs-git-helpers] Deleted {len(deleted)} branch(es).")
@@ -809,6 +852,17 @@ def main(argv: list[str] | None = None) -> None:
         help="Number of override events to show (default: 20)",
     )
 
+    parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help=(
+            "With --cleanup: delete ALL listed stale-merged branches without "
+            "prompting. Required for non-interactive callers (agents, CI) that "
+            "have no TTY for the per-branch y/N prompt."
+        ),
+    )
+
     args = parser.parse_args(argv)
 
     if args.brief:
@@ -818,7 +872,12 @@ def main(argv: list[str] | None = None) -> None:
     elif args.cleanup:
         cd, repo_path = _resolve_context()
         interactive = sys.stdin.isatty()
-        cmd_cleanup(cache_dir=cd, repo_path=repo_path, interactive=interactive)
+        cmd_cleanup(
+            cache_dir=cd,
+            repo_path=repo_path,
+            interactive=interactive,
+            assume_yes=args.yes,
+        )
 
     elif args.json:
         cd, repo_path = _resolve_context()

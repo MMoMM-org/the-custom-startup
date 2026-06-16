@@ -1200,6 +1200,120 @@ class TestCleanupDriftGate:
             f"Expected at least one 'git branch -d' call, got: {git_delete_calls}"
         )
 
+    # ------------------------------------------------------------------
+    # 7. --yes deletes ALL candidates without prompting (agent/CI path)
+    # ------------------------------------------------------------------
+    def test_yes_flag_deletes_all_without_prompting(
+        self, gsa, dc, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """
+        assume_yes=True with no TTY must delete every stale candidate via
+        git branch -d and must NEVER call input(). This is the only deletion
+        path available to agents/CI, which never get a TTY.
+        """
+        repo_path = "/fake/repo/cleanup-yes"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        self._setup_cache(cache_dir, repo_path)
+
+        ok_result = self._make_drift_result(dc, "OK", "h1")
+        git_delete_calls: list = []
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "gh" and "--version" in cmd:
+                return _git_result("gh version 2.0.0")
+            if cmd[0] == "gh" and "auth" in cmd and "status" in cmd:
+                return _git_result("", returncode=0)
+            if cmd[0] == "git":
+                if "for-each-ref" in cmd:
+                    return _git_result("feat/old-thing\nfix/another-thing\nmain")
+                if "worktree" in cmd and "list" in cmd:
+                    return _git_result("")
+                if "branch" in cmd and ("-d" in cmd or "-D" in cmd):
+                    git_delete_calls.append(cmd)
+                    return _git_result("")
+            return _git_result("")
+
+        monkeypatch.setattr(gsa, "check_hook_bundle", lambda rp, ver: ok_result)
+        monkeypatch.setattr(gsa, "refresh_stale_cache", lambda **kw: None)
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        def _no_input(prompt=""):
+            raise AssertionError("input() must not be called when assume_yes=True")
+
+        monkeypatch.setattr("builtins.input", _no_input)
+
+        output_lines: list[str] = []
+        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+
+        gsa.cmd_cleanup(
+            cache_dir=cache_dir,
+            repo_path=repo_path,
+            interactive=False,
+            assume_yes=True,
+        )
+
+        deleted = {c[-1] for c in git_delete_calls}
+        assert deleted == {"feat/old-thing", "fix/another-thing"}, (
+            f"Expected both candidates deleted, got: {git_delete_calls}"
+        )
+        combined = "\n".join(output_lines)
+        assert "Deleted 2 branch(es)" in combined, combined
+
+    # ------------------------------------------------------------------
+    # 8. No TTY + no --yes → hint, delete nothing (not a silent no-op)
+    # ------------------------------------------------------------------
+    def test_no_tty_without_yes_prints_hint_and_deletes_nothing(
+        self, gsa, dc, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """
+        Without a TTY and without --yes, cmd_cleanup must delete nothing and must
+        print a hint pointing at --yes / manual deletion, rather than silently
+        listing and exiting (the old behavior looked like a no-op).
+        """
+        repo_path = "/fake/repo/cleanup-no-tty"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        self._setup_cache(cache_dir, repo_path)
+
+        ok_result = self._make_drift_result(dc, "OK", "h1")
+        git_delete_calls: list = []
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "gh" and "--version" in cmd:
+                return _git_result("gh version 2.0.0")
+            if cmd[0] == "gh" and "auth" in cmd and "status" in cmd:
+                return _git_result("", returncode=0)
+            if cmd[0] == "git":
+                if "for-each-ref" in cmd:
+                    return _git_result("feat/old-thing\nfix/another-thing\nmain")
+                if "worktree" in cmd and "list" in cmd:
+                    return _git_result("")
+                if "branch" in cmd and ("-d" in cmd or "-D" in cmd):
+                    git_delete_calls.append(cmd)
+                    return _git_result("")
+            return _git_result("")
+
+        monkeypatch.setattr(gsa, "check_hook_bundle", lambda rp, ver: ok_result)
+        monkeypatch.setattr(gsa, "refresh_stale_cache", lambda **kw: None)
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        output_lines: list[str] = []
+        monkeypatch.setattr("builtins.print", lambda s="", **_: output_lines.append(s))
+
+        gsa.cmd_cleanup(
+            cache_dir=cache_dir,
+            repo_path=repo_path,
+            interactive=False,
+            assume_yes=False,
+        )
+
+        assert git_delete_calls == [], (
+            f"Nothing should be deleted without a TTY or --yes: {git_delete_calls}"
+        )
+        combined = "\n".join(output_lines)
+        assert "--yes" in combined, f"Expected a --yes hint in output:\n{combined}"
+
 
 # ===========================================================================
 # Tests for lazy drift_check loading (updated for T2.4)
