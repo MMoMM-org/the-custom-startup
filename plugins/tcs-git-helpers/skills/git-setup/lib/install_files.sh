@@ -90,6 +90,17 @@ ROOT="$(_repo_root)"
 
   mkdir -p "$ROOT/.githooks"
 
+  # Ensure the runtime lock is never committed. .githooks/.setup.lock is
+  # per-machine state written by lib/lock.sh; committing it would falsely
+  # serialize other clones and leave a dead-PID lock in history. A self-
+  # contained .githooks/.gitignore travels with the bundle and covers every
+  # collaborator. Idempotent: only add the rule if it is not already present.
+  if [ ! -f "$ROOT/.githooks/.gitignore" ]; then
+    printf '%s\n' ".setup.lock" > "$ROOT/.githooks/.gitignore"
+  elif ! grep -qxF ".setup.lock" "$ROOT/.githooks/.gitignore"; then
+    printf '%s\n' ".setup.lock" >> "$ROOT/.githooks/.gitignore"
+  fi
+
   # Copy hook scripts, substituting both version placeholders so the installed
   # banners always reflect plugin.json and the bundle version file.
   for h in $HOOK_FILES; do
