@@ -4,7 +4,7 @@ After a PR merges, the feature branch is "done" but the local and remote
 refs persist by default. Without cleanup they accumulate, obscure active
 work, and feed the squash-merge-resume failure mode (M3). The post-merge
 hook (M6) surfaces stale candidates after each pull; the status skill's
-`--cleanup` flag drives interactive deletion.
+`--cleanup` flag drives deletion (interactive at a TTY, or `--cleanup --yes` for non-interactive callers).
 
 ## What goes wrong
 
@@ -64,13 +64,31 @@ The SessionStart brief (Feature M4) includes the count:
 All cleanup commands below are non-destructive when used as shown. They
 refuse to act on unmerged or worktree-bound branches.
 
-**Interactive cleanup via the status skill (preferred):**
+**Cleanup via the status skill (preferred):**
 
 ```bash
 /tcs-git-helpers:git-audit --cleanup
-# Lists each stale-merged branch; prompts y/n per branch; excludes any
-# branch currently checked out in a worktree (M6 acceptance criterion).
+# Lists each stale-merged branch; excludes any branch currently checked out
+# in a worktree (M6 acceptance criterion). At a real TTY it then prompts
+# y/N per branch.
 ```
+
+The per-branch `y/N` prompt only runs when stdin is a TTY. **An agent (Claude
+via the Bash tool) never gets a TTY — in any environment, host or container —**
+so for an agent the bare `--cleanup` lists candidates and stops. Two correct
+ways to actually delete:
+
+```bash
+# 1. Delete ALL listed candidates non-interactively (agent/CI), after the
+#    user has seen the list and approved:
+/tcs-git-helpers:git-audit --cleanup --yes
+
+# 2. Run --cleanup yourself in a real terminal to get the per-branch prompts
+#    (in a Claude prompt, the `!` prefix runs it in your shell):
+!/tcs-git-helpers:git-audit --cleanup
+```
+
+For a subset, delete the named branches manually (next section).
 
 **Manual cleanup, one branch at a time:**
 
