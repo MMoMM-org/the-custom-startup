@@ -2,9 +2,9 @@
 # Stop the brainstorm server and clean up
 # Usage: stop-server.sh <session_dir>
 #
-# Kills the server process. Only deletes session directory if it's
-# under /tmp (ephemeral). Persistent directories (.superpowers/) are
-# kept so mockups can be reviewed later.
+# Kills the server process. Only deletes the session directory if it's
+# under /tmp (ephemeral). Persistent directories outside /tmp are kept
+# so mockups can be reviewed later.
 
 SESSION_DIR="$1"
 
