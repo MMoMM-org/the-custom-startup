@@ -152,6 +152,12 @@ case "${STUB_MODE:-happy}" in
     printf 'this is not json\n'
     exit 0
     ;;
+  fenced)
+    # Envelope whose .result string wraps the inner JSON in a ```json fence
+    # plus surrounding prose — the reader-test parser must still recover it.
+    printf '{"type":"result","subtype":"success","is_error":false,"duration_ms":3456,"result":"Here is what I found:\\n```json\\n{\\"found\\":\\"yes\\",\\"answer\\":\\"Run the setup script.\\",\\"unclear\\":[],\\"guessed\\":[],\\"page_used\\":\\"README.md\\"}\\n```"}\n'
+    exit 0
+    ;;
   wrapper-no-inner)
     # Wrapper subtype where .result is missing (e.g. error_max_turns, error_during_execution)
     printf '{"type":"result","subtype":"error_max_turns","is_error":true,"duration_ms":5000}\n'
@@ -454,6 +460,44 @@ scenario_8() {
 }
 
 # ---------------------------------------------------------------------------
+# Scenario 9: Fenced JSON in .result — parser recovers a real .found value
+# Regression test for the secondary review-mode bug: a reply wrapped in a
+# ```json fence (with surrounding prose) used to yield error:unparseable_response
+# because the old unwrap assumed .result was pure JSON. The hardened parser must
+# extract the fenced object and surface found:yes.
+# ---------------------------------------------------------------------------
+scenario_9() {
+  printf '\n--- Scenario 9: Fenced JSON in .result — found recovered, not unparseable ---\n'
+
+  local tmpdir stub_dir repo_dir
+  tmpdir="$(_make_tmpdir)"
+  stub_dir="${tmpdir}/bin"
+  repo_dir="${tmpdir}/repo"
+  mkdir -p "$stub_dir"
+  _setup_fixture_repo "$repo_dir"
+  _write_stub_claude "$stub_dir"
+
+  local output exit_code
+  exit_code=0
+  output="$(
+    export PATH="${stub_dir}:${PATH}"
+    export STUB_MODE=fenced
+    export REPO_ROOT_OVERRIDE="$repo_dir"
+    export PERSONAS_FILE="$PERSONAS_FIXTURE"
+    bash "$READER_TEST" test-reader what-is-it
+  )" || exit_code=$?
+
+  assert_exit_zero "S9: exit code is 0" "$exit_code"
+  assert_json_field "S9: found == yes (fence stripped)" ".found" "yes" "$output"
+  # The .error field must be absent — a successful parse, not the sentinel.
+  local err
+  err="$(printf '%s\n' "$output" | jq -r '.error // "none"' 2>/dev/null || true)"
+  assert_eq "S9: no unparseable_response error" "none" "$err"
+
+  rm -rf "$tmpdir"
+}
+
+# ---------------------------------------------------------------------------
 # Run all scenarios
 # ---------------------------------------------------------------------------
 scenario_1
@@ -464,6 +508,7 @@ scenario_5
 scenario_6
 scenario_7
 scenario_8
+scenario_9
 
 # ---------------------------------------------------------------------------
 # Summary

@@ -154,7 +154,10 @@ ${CORPUS}
 
 QUESTION: ${QUESTION_TEXT}
 
-OUTPUT (JSON only, no prose):
+OUTPUT — return ONE raw JSON object and nothing else. Do NOT wrap it in
+Markdown code fences (no \`\`\`json). Do NOT add any prose, explanation, or
+text before or after the object. The very first character of your reply must
+be { and the very last must be }.
 {
   \"found\": \"yes\" | \"partial\" | \"no\",
   \"answer\": \"<your best answer from the corpus>\",
@@ -180,7 +183,12 @@ _run_with_timeout() {
   local secs="$1"
   shift
   if command -v timeout >/dev/null 2>&1; then
-    timeout "$secs" "$@"
+    # --foreground lets the TERM signal reach the command directly (it is not
+    # put in a separate background process group), so a hung claude is killed
+    # promptly. -k sends KILL shortly after TERM to reap a child that ignores
+    # TERM. Combined with --strict-mcp-config (no MCP children) and the
+    # write-to-file capture below, no grandchild can outlive the timeout.
+    timeout -k 5 --foreground "$secs" "$@"
     return
   fi
   # Perl fallback for macOS without coreutils
@@ -201,29 +209,110 @@ _run_with_timeout() {
 
 # ---------------------------------------------------------------------------
 # Invoke claude -p with timeout
+#
+# Two hardening measures guard against an indefinite hang (see the doc-product
+# review-mode post-mortem):
+#
+#   1. --strict-mcp-config with NO --mcp-config starts the subprocess with ZERO
+#      MCP servers. The reader-test never needs tools, and an inherited MCP
+#      server (e.g. an `npx mcp-image` child of the *invoking* session) would
+#      otherwise be spawned, inherit our capture fd, and outlive `claude`.
+#
+#   2. We capture stdout into a temp FILE instead of a command-substitution
+#      pipe, and feed stdin from /dev/null. `$(...)` blocks until every writer
+#      of the pipe closes it, so an orphaned MCP grandchild holding the write
+#      end keeps the capture open forever even after `claude` exits and the
+#      `timeout` fires. A regular file has no such EOF dependency: `cat` of the
+#      file returns immediately regardless of any lingering fd holder.
+#
 # On any failure (timeout, exit non-zero): emit infra-error JSON, exit 0.
 # ---------------------------------------------------------------------------
+CLAUDE_OUT="${TMPDIR:-/tmp}/doc-product-reader-$$-${RANDOM}.json"
+# shellcheck disable=SC2064
+trap 'rm -f "$CLAUDE_OUT"' EXIT
+
 RESULT=""
-if ! RESULT="$(_run_with_timeout "$READER_TEST_TIMEOUT" \
-    claude -p --output-format json --max-turns 1 "$PROMPT")"; then
+if _run_with_timeout "$READER_TEST_TIMEOUT" \
+    claude -p --output-format json --max-turns 1 --strict-mcp-config "$PROMPT" \
+    >"$CLAUDE_OUT" 2>/dev/null </dev/null; then
+  RESULT="$(cat "$CLAUDE_OUT")"
+else
   printf '{"found":"no","answer":null,"unclear":["reader-test infrastructure error"],"guessed":[],"page_used":null,"error":"timeout_or_invocation_failure"}\n'
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
+# Recover the model's JSON object from a candidate text payload.
+#
+# The reader is instructed to emit a bare JSON object, but models sometimes
+# wrap it in a ```json fence or surround it with prose. This helper tries, in
+# order of preference:
+#   1. The payload is already a JSON object carrying .found.
+#   2. The body of a fenced code block (```json … ``` or ``` … ```).
+#   3. The substring from the first "{" to the last "}" (an object embedded in
+#      prose).
+# The first candidate that parses to JSON with a .found field wins. Prints the
+# compacted object on success; prints nothing and returns 1 on failure.
+# Bash 3.2 / macOS awk compatible.
+# ---------------------------------------------------------------------------
+_extract_reader_json() {
+  local raw="$1" candidate
+
+  # 1. Already a JSON object with .found.
+  if printf '%s' "$raw" | jq -e '.found' >/dev/null 2>&1; then
+    printf '%s' "$raw" | jq -c '.'
+    return 0
+  fi
+
+  # 2. Body between the first and second Markdown code fence. The toggle skips
+  #    the opening fence line (which may carry a language tag like ```json) and
+  #    stops collecting at the closing fence.
+  candidate="$(printf '%s\n' "$raw" | awk '
+    /^[[:space:]]*```/ { fence = 1 - fence; next }
+    fence { print }
+  ')"
+  if [ -n "$candidate" ] && printf '%s' "$candidate" | jq -e '.found' >/dev/null 2>&1; then
+    printf '%s' "$candidate" | jq -c '.'
+    return 0
+  fi
+
+  # 3. First "{" through last "}" — recover an object embedded in prose.
+  case "$raw" in
+    *'{'*'}'*)
+      candidate="{${raw#*\{}"        # from first "{" to end
+      candidate="${candidate%\}*}"   # drop from last "}" onward
+      candidate="${candidate}}"      # re-append the "}"
+      if printf '%s' "$candidate" | jq -e '.found' >/dev/null 2>&1; then
+        printf '%s' "$candidate" | jq -c '.'
+        return 0
+      fi
+      ;;
+  esac
+
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # Unwrap claude -p --output-format json envelope and validate inner shape
 #
 # `claude -p --output-format json` returns a wrapper object:
-#   {"type":"result","subtype":"success","result":"<inner-JSON-as-string>",...}
-# The model's actual JSON (with .found etc.) is nested under .result as a
-# stringified payload. We must:
-#   1. Extract .result from the outer wrapper.
-#   2. Parse it as JSON via `fromjson`.
+#   {"type":"result","subtype":"success","result":"<inner-payload-as-string>",...}
+# The model's actual answer (with .found etc.) is nested under .result as a
+# stringified payload. We:
+#   1. Extract the .result string from the outer wrapper (falling back to the
+#      raw response when there is no wrapper or no .result — e.g. an error
+#      subtype, or a non-envelope reply).
+#   2. Recover a JSON object from that payload via _extract_reader_json, which
+#      tolerates ```json fences and prose around the object.
 #   3. Verify it has the .found field this skill contracts on.
-# Any failure (no wrapper, no .result, .result not JSON, no .found) → emit
-# the unparseable_response sentinel JSON and exit 0.
+# Any failure → emit the unparseable_response sentinel JSON and exit 0.
 # ---------------------------------------------------------------------------
-INNER="$(printf '%s\n' "$RESULT" | jq -c 'try (.result | fromjson) catch empty' 2>/dev/null || true)"
+RAW_PAYLOAD="$(printf '%s\n' "$RESULT" | jq -r 'if type == "object" then (.result // empty) else empty end' 2>/dev/null || true)"
+if [ -z "$RAW_PAYLOAD" ]; then
+  RAW_PAYLOAD="$RESULT"
+fi
+
+INNER="$(_extract_reader_json "$RAW_PAYLOAD" 2>/dev/null || true)"
 if [ -z "$INNER" ] || ! printf '%s\n' "$INNER" | jq -e '.found' >/dev/null 2>&1; then
   printf '{"found":"no","answer":null,"unclear":["reader-test malformed response"],"guessed":[],"page_used":null,"error":"unparseable_response"}\n'
   exit 0
