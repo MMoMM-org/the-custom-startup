@@ -62,7 +62,7 @@ function decodeFrame(buffer) {
   const totalLen = dataOffset + payloadLen;
   if (buffer.length < totalLen) return null;
 
-  const mask = buffer.slice(maskOffset, dataOffset);
+  const mask = buffer.subarray(maskOffset, dataOffset);
   const data = Buffer.alloc(payloadLen);
   for (let i = 0; i < payloadLen; i++) {
     data[i] = buffer[dataOffset + i] ^ mask[i % 4];
@@ -199,7 +199,7 @@ function handleUpgrade(req, socket) {
         return;
       }
       if (!result) break;
-      buffer = buffer.slice(result.bytesConsumed);
+      buffer = buffer.subarray(result.bytesConsumed);
 
       switch (result.opcode) {
         case OPCODES.TEXT:
@@ -303,7 +303,7 @@ function startServer() {
     console.error(JSON.stringify({ type: 'server-error', code: err.code || 'UNKNOWN', message: err.message }));
   });
 
-  const watcher = fs.watch(CONTENT_DIR, (eventType, filename) => {
+  const watcher = fs.watch(CONTENT_DIR, (_eventType, filename) => {
     if (!filename || !filename.endsWith('.html')) return;
 
     if (debounceTimers.has(filename)) clearTimeout(debounceTimers.get(filename));
