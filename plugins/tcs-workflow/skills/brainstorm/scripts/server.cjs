@@ -128,35 +128,43 @@ function getNewestScreen() {
 
 function handleRequest(req, res) {
   touchActivity();
-  if (req.method === 'GET' && req.url === '/') {
-    const screenFile = getNewestScreen();
-    let html = screenFile
-      ? (raw => isFullDocument(raw) ? raw : wrapInFrame(raw))(fs.readFileSync(screenFile, 'utf-8'))
-      : WAITING_PAGE;
+  // Reads from disk can throw (EMFILE under fd pressure, a file unlinked mid-read).
+  // Contain it to a 500 for this request instead of crashing the whole server.
+  try {
+    if (req.method === 'GET' && req.url === '/') {
+      const screenFile = getNewestScreen();
+      let html = screenFile
+        ? (raw => isFullDocument(raw) ? raw : wrapInFrame(raw))(fs.readFileSync(screenFile, 'utf-8'))
+        : WAITING_PAGE;
 
-    if (html.includes('</body>')) {
-      html = html.replace('</body>', helperInjection + '\n</body>');
+      if (html.includes('</body>')) {
+        html = html.replace('</body>', helperInjection + '\n</body>');
+      } else {
+        html += helperInjection;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(html);
+    } else if (req.method === 'GET' && req.url.startsWith('/files/')) {
+      const fileName = req.url.slice(7);
+      const filePath = path.join(CONTENT_DIR, path.basename(fileName));
+      if (!fs.existsSync(filePath)) {
+        res.writeHead(404);
+        res.end('Not found');
+        return;
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      res.writeHead(200, { 'Content-Type': contentType });
+      res.end(fs.readFileSync(filePath));
     } else {
-      html += helperInjection;
-    }
-
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(html);
-  } else if (req.method === 'GET' && req.url.startsWith('/files/')) {
-    const fileName = req.url.slice(7);
-    const filePath = path.join(CONTENT_DIR, path.basename(fileName));
-    if (!fs.existsSync(filePath)) {
       res.writeHead(404);
       res.end('Not found');
-      return;
     }
-    const ext = path.extname(filePath).toLowerCase();
-    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': contentType });
-    res.end(fs.readFileSync(filePath));
-  } else {
-    res.writeHead(404);
-    res.end('Not found');
+  } catch (err) {
+    console.error(JSON.stringify({ type: 'request-error', url: req.url, message: err.message }));
+    if (!res.headersSent) res.writeHead(500);
+    res.end('Internal server error');
   }
 }
 
@@ -263,6 +271,18 @@ function startServer() {
   if (!fs.existsSync(CONTENT_DIR)) fs.mkdirSync(CONTENT_DIR, { recursive: true });
   if (!fs.existsSync(STATE_DIR)) fs.mkdirSync(STATE_DIR, { recursive: true });
 
+  // Last-resort safety net: the companion server is long-lived and its death is
+  // invisible to the user (the next pushed screen just never appears). A stray
+  // error — e.g. EMFILE under fd pressure, or a throw from an fs call in an async
+  // callback — must be logged and survived, not allowed to crash the process.
+  process.on('uncaughtException', (err) => {
+    console.error(JSON.stringify({ type: 'uncaught-exception', code: err.code || null, message: err.message }));
+  });
+  process.on('unhandledRejection', (reason) => {
+    const message = reason instanceof Error ? reason.message : String(reason);
+    console.error(JSON.stringify({ type: 'unhandled-rejection', message }));
+  });
+
   // Track known files to distinguish new screens from updates.
   // macOS fs.watch reports 'rename' for both new files and overwrites,
   // so we can't rely on eventType alone.
@@ -272,6 +292,16 @@ function startServer() {
 
   const server = http.createServer(handleRequest);
   server.on('upgrade', handleUpgrade);
+  server.on('error', (err) => {
+    // EADDRINUSE at listen time is fatal — the wrapper times out waiting for
+    // server-started and reports failure. Everything else (e.g. EMFILE on
+    // accept under fd pressure) is transient: log and keep serving.
+    if (err.code === 'EADDRINUSE') {
+      console.error(JSON.stringify({ type: 'server-error', code: err.code, fatal: true }));
+      process.exit(1);
+    }
+    console.error(JSON.stringify({ type: 'server-error', code: err.code || 'UNKNOWN', message: err.message }));
+  });
 
   const watcher = fs.watch(CONTENT_DIR, (eventType, filename) => {
     if (!filename || !filename.endsWith('.html')) return;
@@ -279,21 +309,27 @@ function startServer() {
     if (debounceTimers.has(filename)) clearTimeout(debounceTimers.get(filename));
     debounceTimers.set(filename, setTimeout(() => {
       debounceTimers.delete(filename);
-      const filePath = path.join(CONTENT_DIR, filename);
+      // This runs detached on the timer queue — an uncaught throw here (e.g.
+      // EMFILE from an fs call) would take down the whole server. Contain it.
+      try {
+        const filePath = path.join(CONTENT_DIR, filename);
 
-      if (!fs.existsSync(filePath)) return; // file was deleted
-      touchActivity();
+        if (!fs.existsSync(filePath)) return; // file was deleted
+        touchActivity();
 
-      if (!knownFiles.has(filename)) {
-        knownFiles.add(filename);
-        const eventsFile = path.join(STATE_DIR, 'events');
-        if (fs.existsSync(eventsFile)) fs.unlinkSync(eventsFile);
-        console.log(JSON.stringify({ type: 'screen-added', file: filePath }));
-      } else {
-        console.log(JSON.stringify({ type: 'screen-updated', file: filePath }));
+        if (!knownFiles.has(filename)) {
+          knownFiles.add(filename);
+          const eventsFile = path.join(STATE_DIR, 'events');
+          if (fs.existsSync(eventsFile)) fs.unlinkSync(eventsFile);
+          console.log(JSON.stringify({ type: 'screen-added', file: filePath }));
+        } else {
+          console.log(JSON.stringify({ type: 'screen-updated', file: filePath }));
+        }
+
+        broadcast({ type: 'reload' });
+      } catch (err) {
+        console.error(JSON.stringify({ type: 'watch-error', file: filename, message: err.message }));
       }
-
-      broadcast({ type: 'reload' });
     }, 100));
   });
   watcher.on('error', (err) => console.error('fs.watch error:', err.message));
