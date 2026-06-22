@@ -74,6 +74,18 @@ if [[ "$FOREGROUND" != "true" && "$FORCE_BACKGROUND" != "true" ]]; then
   fi
 fi
 
+# Claude Code's Bash tool tears down the command's process group when the tool
+# call returns, so a plain nohup/disown background server is killed after serving
+# a single screen — it dies silently (no graceful shutdown) and the next pushed
+# screen never appears. Foreground mode is the fix, but it must run inside a
+# run_in_background:true Bash tool call (foreground blocks until the server exits).
+# That tool-layer flag can only be set by the caller, so refuse the background
+# path here with actionable guidance instead of returning a doomed server.
+if [[ -n "${CLAUDECODE:-}" && "$FOREGROUND" != "true" && "$FORCE_BACKGROUND" != "true" ]]; then
+  echo '{"error": "Running under Claude Code: a backgrounded server is reaped when the Bash tool call returns, so it survives only one screen. Re-run with --foreground AND set the Bash tool'"'"'s run_in_background:true, then read $STATE_DIR/server-info on the next turn for the URL. To force the (reaped) background path anyway, pass --background."}'
+  exit 1
+fi
+
 # Generate unique session directory
 SESSION_ID="$$-$(date +%s)"
 

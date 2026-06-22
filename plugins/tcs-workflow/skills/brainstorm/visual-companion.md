@@ -33,34 +33,53 @@ The server watches a directory for HTML files and serves the newest one to the b
 ## Starting a Session
 
 ```bash
-# Start server with persistence (mockups saved to project)
-plugins/tcs-workflow/skills/brainstorm/scripts/start-server.sh --project-dir /path/to/project
+# Bash tool: run_in_background: true  (see "Launching under Claude Code" below)
+# Start server in foreground with persistence (mockups saved to project)
+plugins/tcs-workflow/skills/brainstorm/scripts/start-server.sh --project-dir /path/to/project --foreground
 
-# Returns: {"type":"server-started","port":52341,"url":"http://localhost:52341",
-#           "screen_dir":"/path/to/project/.brainstorm/12345-1706000000/content",
-#           "state_dir":"/path/to/project/.brainstorm/12345-1706000000/state"}
+# Writes to $STATE_DIR/server-info:
+#   {"type":"server-started","port":52341,"url":"http://localhost:52341",
+#    "screen_dir":"/path/to/project/.brainstorm/12345-1706000000/content",
+#    "state_dir":"/path/to/project/.brainstorm/12345-1706000000/state"}
 ```
 
-Save `screen_dir` and `state_dir` from the response. Tell user to open the URL.
+Read `screen_dir`, `state_dir`, and the URL from `$STATE_DIR/server-info` on your
+next turn (the backgrounded call doesn't return its stdout). Tell the user to open the URL.
 
 **Finding connection info:** The server writes its startup JSON to `$STATE_DIR/server-info`. If you launched the server in the background and didn't capture stdout, read that file to get the URL and port.
 
 **Note:** Pass the project root as `--project-dir` so mockups persist in `.brainstorm/` and survive server restarts. Without it, files go to `/tmp` and get cleaned up. Remind the user to add `.brainstorm/` to `.gitignore` if it's not already there.
 
-**Launching by platform:**
+**Launching under Claude Code (all platforms):**
 
-**macOS / Linux:**
+Claude Code's Bash tool reaps the command's process group when the tool call
+returns, so a backgrounded server is killed after serving a single screen. Run
+it in **foreground mode inside a `run_in_background: true` Bash tool call** so the
+process outlives the call:
+
+```bash
+# Bash tool: run_in_background: true
+plugins/tcs-workflow/skills/brainstorm/scripts/start-server.sh --project-dir /path/to/project --foreground
+```
+
+Because the call is backgrounded, its stdout isn't returned to you — read
+`$STATE_DIR/server-info` on your next turn to get the URL and port. (Without
+`--foreground`, `start-server.sh` refuses to start under Claude Code and prints
+an error explaining this, rather than handing back a server that dies on the
+next push.)
+
+**Windows (Git Bash):** same pattern — `run_in_background: true`, then read
+`$STATE_DIR/server-info` on the next turn.
+
+**Other harnesses (no process-group reaping):** the plain background form works:
 ```bash
 plugins/tcs-workflow/skills/brainstorm/scripts/start-server.sh --project-dir /path/to/project
 ```
 
-**Windows (Git Bash):**
-When calling via the Bash tool, set `run_in_background: true`. Then read `$STATE_DIR/server-info` on the next turn.
-
 ## The Loop
 
 1. **Check server is alive**, then **write HTML** to a new file in `screen_dir`:
-   - Before each write, check that `$STATE_DIR/server-info` exists. If it doesn't (or `$STATE_DIR/server-stopped` exists), restart with `start-server.sh` before continuing. Server auto-exits after 30 minutes of inactivity.
+   - Before each write, check that `$STATE_DIR/server-info` exists. If it doesn't (or `$STATE_DIR/server-stopped` exists), restart using the launch pattern above (`--foreground` + `run_in_background: true` under Claude Code) before continuing. Server auto-exits after 30 minutes of inactivity.
    - Use semantic filenames: `platform.html`, `layout.html`, `color-scheme.html`
    - **Never reuse filenames** — each screen gets a fresh file
    - Use Write tool — **never use cat/heredoc** (dumps noise into terminal)
