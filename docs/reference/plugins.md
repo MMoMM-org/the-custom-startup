@@ -92,6 +92,12 @@ Optional. Provides skill authoring tools, the **[Memory Bank](../about/concepts.
 | `PreCompact` | `check_learnings.py` | Back up queue before context compaction |
 | `PostToolUse(Bash)` | `post_commit_reminder.py` | Remind to run `/memory-add` after git commit; capture persistent tool errors |
 
+**Themes (auto-discovered from `themes/` when plugin is enabled):**
+
+| Theme | What it does |
+|-------|-------------|
+| `TCS Dark` | Dark base with an Apple-palette accent — blue `claude` highlight (response bullet, spinner, branding) plus system green/red/orange status colors. Select via `/theme`; a newly added theme appears after the next Claude Code restart. |
+
 ---
 
 ## tcs-patterns
