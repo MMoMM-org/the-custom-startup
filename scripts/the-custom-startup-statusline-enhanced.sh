@@ -92,7 +92,7 @@ render() {
       tok_bar=$(tcs_block_bar \
         "$TCS_BLOCK_TOKEN_PCT" "$tcs_cfg_budget_warn" "$tcs_cfg_budget_danger")
       local cost_fmt
-      cost_fmt=$(printf '$%.2f' "${TCS_BLOCK_COST:-0}" 2>/dev/null || echo '$0.00')
+      cost_fmt=$(awk -v c="${TCS_BLOCK_COST:-0}" 'BEGIN { printf "$%.2f", c + 0 }')
       line2+=" | 💰 ${tok_bar} ${TCS_BLOCK_TOKEN_PCT}% ${cost_fmt}"
       [[ -n "${TCS_BLOCK_TIME_LEFT:-}" ]] && line2+=" | ⏳ ${TCS_BLOCK_TIME_LEFT}"
 
@@ -106,7 +106,7 @@ render() {
       local cost_bar
       cost_bar=$(tcs_block_bar "$cost_pct" "$tcs_cfg_budget_warn" "$tcs_cfg_budget_danger")
       local cost_fmt
-      cost_fmt=$(printf '$%.2f' "${SESSION_COST:-0}" 2>/dev/null || echo '$0.00')
+      cost_fmt=$(awk -v c="${SESSION_COST:-0}" 'BEGIN { printf "$%.2f", c + 0 }')
       line2+=" | 💰 ${cost_bar} ${cost_pct}% ${cost_fmt}"
     fi
   fi

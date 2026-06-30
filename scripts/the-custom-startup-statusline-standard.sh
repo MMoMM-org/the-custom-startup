@@ -178,7 +178,7 @@ format_session() {
 
   if [[ -n "$session_cost" && "$session_cost" != "null" ]]; then
     local formatted_cost cost_color
-    formatted_cost=$(printf "%.2f" "$session_cost")
+    formatted_cost=$(awk -v c="$session_cost" 'BEGIN { printf "%.2f", c + 0 }')
     cost_color="$TCS_COLOR_SUCCESS"
 
     if tcs_decimal_gte "$session_cost" "$tcs_cfg_cost_danger"; then
