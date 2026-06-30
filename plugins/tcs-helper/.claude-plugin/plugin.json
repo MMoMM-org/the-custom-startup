@@ -1,6 +1,6 @@
 {
   "name": "tcs-helper",
-  "version": "4.1.6",
+  "version": "4.2.0",
   "description": "Helper tools for The Custom Agentic Startup — skill authoring, memory system, and project onboarding",
   "author": {
     "name": "Marcus Breiden"
@@ -13,6 +13,7 @@
     "plugin-development",
     "memory-system",
     "project-onboarding",
-    "utilities"
+    "utilities",
+    "theme"
   ]
 }

@@ -47,6 +47,14 @@ See [CHANGELOG.md](CHANGELOG.md) for version history. Hooks load natively from `
 |-------|-------------|
 | `/context-bridge` | Snapshot session state before `/clear` or `/compact` so the SessionStart hook can auto-restore continuity in the next session |
 
+## Themes
+
+| Theme | Base | Description |
+|-------|------|-------------|
+| `TCS Dark` | `dark` | Apple-palette accent — blue `claude` highlight (response bullet, spinner, branding) plus system green/red/orange status colors. Background, text, and syntax highlighting inherit from the dark base. |
+
+Themes ship in `themes/<slug>.json` and are **auto-discovered** by Claude Code when the plugin is enabled (no `plugin.json` entry needed). Select via `/theme` — a newly added theme appears in the picker after the next Claude Code restart.
+
 ## Hooks
 
 Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the plugin is enabled. No installation step required.

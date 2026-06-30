@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.2.0] - 2026-06-30
+
+### Added
+
+- **`TCS Dark` theme, shipped natively via the plugin `themes/` directory.** Claude Code loads custom themes from each enabled plugin's `themes/<slug>.json` (auto-discovered, no `plugin.json` entry needed) in addition to `~/.claude/themes/`, since v2.1.118. Installing `tcs-helper` now adds **TCS Dark** to every user's `/theme` picker, and updates propagate via `/plugin marketplace update` — no per-machine file copying.
+  - **What it is:** `base: "dark"` with four `overrides` — `claude: #0a84ff` (Apple blue accent, replacing the default warm clay/orange used for the response bullet, spinner, and "Claude" branding), `success: #34c759`, `error: #ff3b30`, `warning: #ff9f0a` (Apple system green/red/orange). Background, text, and syntax highlighting inherit unchanged from the dark base.
+  - **Discovery:** verified against the installed binary (v2.1.195) — plugin theme loading confirmed (`join(plugin, "themes")` iteration, `themes` registered as a plugin component), so distribution no longer depends on the Docker-home template mechanism.
+  - **Note:** a newly added theme file appears in the `/theme` picker only after a Claude Code **restart** (the theme index is built at startup); editing an already-loaded theme hot-reloads into the active session.
+
 ## [4.1.4] - 2026-06-03
 
 ### Fixed
