@@ -118,6 +118,7 @@ State {
 - Create @-imports in memory.md — it is an index only.
 - Propose replacing **protected @-imports** (see Protected @-Imports below).
 - Flag "skill overlap" when a CLAUDE.md section says "use /skill-name" and points to a reference file — the reference file supplements the skill, it does not duplicate it.
+- Mechanize enforceable directives (always/never/must rules) — detecting them is in scope, but classification and hook/CI authoring belong to `rule-enforcer`. Emit a pointer only.
 
 ### Protected @-Imports
 
@@ -248,6 +249,13 @@ For each discovered file:
        Replace with a brief pointer: "Use /skill-name for [purpose]"
        Remove the section entirely (the skill handles this)
 
+7. Count enforceable-directive candidates: among items categorized as `general` with
+   `always / never / must / prefer` directive language, count those describing a
+   mechanically detectable recurrence — a named tool/command, a git boundary, a CI event,
+   or a file-presence check. Do NOT classify further (no mechanism lookup, no Q2/Q3/Q4).
+   Record the count for the Step 4 report. This count is the batch-extraction candidate set
+   handed off to `rule-enforcer` (pointer only — this skill does not author enforcement).
+
 For each @-import found during discovery:
 1. Check against Protected @-Imports rules (see Constraints) — if protected, skip with note "Protected: [reason]"
 2. Analyze the imported file's content
@@ -317,10 +325,16 @@ Write `claude-md-optimization/OPTIMIZATION-REPORT.md` with these sections:
 3. **@-Import Replacements** — table: | File | Import | Action | Token Savings |
 4. **Sensitive Content Detected** — table: | File | Line | Type | (if any; else omit section)
    Note: "The proposed optimized files have these lines removed."
-5. **Before/After Comparison** — table: | Metric | Before | After | Delta |
+5. **Enforceable-directive candidates (N found)** — using the Step 3 count. Emit this pointer:
+   these always/never/must rules may be mechanically enforceable rather than left as memory
+   guidance; this skill relocates them into the Memory Bank as-is; to convert them into hooks,
+   CI checks, or git pre-push guards, run `/rule-enforcer --scan` AFTER this optimization
+   applies (so directives land in the canonical Memory Bank first, then the scan reads canonical
+   files). Optionally list up to 3 example candidate quotes. (Omit section if N is 0.)
+6. **Before/After Comparison** — table: | Metric | Before | After | Delta |
    Rows: Total files, Total lines, Always-loaded tokens, Lazy-loaded tokens, Net context savings
    Note: always-loaded = CLAUDE.md + @-imported files; lazy-loaded = memory category files
-6. **Verification Prompt** — blockquote (see Step 6 for exact format)
+7. **Verification Prompt** — blockquote (see Step 6 for exact format)
 
 AGENTS.md handling (Feature 11):
 

@@ -1,7 +1,7 @@
 # Rule Enforcer — Batch Scan Sources
 
 Defines the default source set the batch mode enumerates at workflow step B1
-(`--from-claude-md` sweep). Batch mode reads these files, extracts candidate
+(`--scan` sweep). Batch mode reads these files, extracts candidate
 directives, and routes each through the 4-question triage.
 
 Default scope is **repo + project**. Global is **opt-in only** (`--scope global`)

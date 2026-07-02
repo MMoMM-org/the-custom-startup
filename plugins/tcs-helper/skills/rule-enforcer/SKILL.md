@@ -1,9 +1,9 @@
 ---
 name: rule-enforcer
-description: "Use PROACTIVELY when the user describes a recurrence rule they keep violating, wants to enforce a personal workflow rule, or uses phrases like 'I keep forgetting', 'remind me to always', 'enforce that I', or 'make sure I never'."
+description: "Use PROACTIVELY when the user describes a recurrence rule they keep violating, wants to enforce a personal workflow rule, or uses phrases like 'I keep forgetting', 'remind me to always', 'enforce that I', or 'make sure I never'. Also use to bulk-convert already-written rules into enforcement — when the user says 'scan my rules', 'turn my CLAUDE.md into hooks', 'enforce all my rules', 'mechanize my memory rules', or invokes it with --scan / --from-file."
 user-invocable: true
 argument-hint: "[rule description] | --scan | --from-file <path>"
-allowed-tools: Read, AskUserQuestion, Task, Glob, Grep
+allowed-tools: Read, AskUserQuestion, Skill, Write, Bash, Glob, Grep
 ---
 
 ## Persona
@@ -64,6 +64,17 @@ Candidate {                # mirrors TriageState field-for-field so B9 feeds
 - Mirror constraints across PICS sections — each rule appears once.
 - Skip the Q1 short-circuit — if the rule has only happened once, defer to memory-add.
 - Ask Q2–Q4 when Q1 = First (those steps are irrelevant for first-time occurrences).
+
+## Reference Materials
+
+Load lazily — read a file only at the step that needs it.
+
+- `reference/mechanism-matrix.md` — (Q3 × Q4) → mechanism mapping. Single source of truth for both the interactive Step 6 lookup and batch B5.
+- `reference/examples.md` — worked (rule → Q2/Q3/Q4 → mechanism) cases; the analogy training set for classification.
+- `reference/trigger-phrases.md` — phrases that should fire the skill.
+- `reference/scan-sources.md` — batch B1 default source set, `@`-import policy, and structural exclusions.
+- `reference/extraction-heuristics.md` — batch B3/B4 enforceable-vs-judgment filter, Q3 bucket cues, Q4 defaults, and the canonical Q3 bare labels.
+- `reference/installed-enforcement-catalog.md` — batch B6 dedup hint layer (live `.githooks/` + `hooks.json` inspection is authoritative).
 
 ## Workflow
 

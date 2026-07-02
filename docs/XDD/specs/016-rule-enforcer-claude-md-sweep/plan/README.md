@@ -120,7 +120,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 
 - [x] [Phase 1: Foundation — reference files, ADR, label-drift self-test](phase-1.md)
 - [x] [Phase 2: Batch mode in SKILL.md + parity & security tests](phase-2.md)
-- [ ] [Phase 3: Optimizer integration, dogfood E2E, audit & release](phase-3.md)
+- [x] [Phase 3: Optimizer integration, dogfood E2E, audit & release](phase-3.md)
 
 ---
 
