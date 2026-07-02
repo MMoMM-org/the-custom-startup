@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Batch mode in SKILL.md + parity & security tests"
-status: pending
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -35,7 +35,7 @@ This phase wires the batch pipeline into the skill without disturbing the intera
 flow, and proves two properties by test: batch classification matches interactive
 (parity), and attacker-influenced scanned text cannot escape the slug/path gates.
 
-- [ ] **T2.1 Step 0 mode dispatch + frontmatter + interactive-untouched guard** `[activity: skill-authoring]`
+- [x] **T2.1 Step 0 mode dispatch + frontmatter + interactive-untouched guard** `[activity: skill-authoring]`
 
   1. Prime: Read `[ref: SKILL.md rule-enforcer frontmatter + Entry Point L245-251]`,
      `[ref: SDD/Implementation Examples/Step 0 dispatch]`, `[ref: SDD/ADR-1]`.
@@ -48,7 +48,7 @@ flow, and proves two properties by test: batch classification matches interactiv
   4. Validate: Interactive self-tests green; `wc -l SKILL.md` ≤ 500.
   5. Success: Dual-mode dispatch works; interactive path unchanged `[ref: PRD/CON-6; SDD/ADR-1]`.
 
-- [ ] **T2.2 Batch pipeline skeleton B1–B9 in SKILL.md** `[activity: skill-authoring]`
+- [x] **T2.2 Batch pipeline skeleton B1–B9 in SKILL.md** `[activity: skill-authoring]`
 
   1. Prime: Read `[ref: SDD/Runtime View B1-B9]`, `[ref: SDD/Complex Logic]`,
      `[ref: SKILL.md Step 8 hand-off L142-234]`, and the Phase 1 reference files.
@@ -61,7 +61,7 @@ flow, and proves two properties by test: batch classification matches interactiv
   4. Validate: `wc -l SKILL.md` ≤ 500; no matrix fork; Step 8 block untouched.
   5. Success: B1–B9 present and delegate correctly `[ref: PRD/Feature 1&4; SDD/ADR-3; CON-1,CON-2,CON-3]`.
 
-- [ ] **T2.3 Parity test: batch inference == interactive mechanism** `[activity: testing]`
+- [x] **T2.3 Parity test: batch inference == interactive mechanism** `[activity: testing]`
 
   1. Prime: Read `[ref: examples.md 5 worked cases]`, `[ref: SDD/Acceptance Criteria/Classification]`.
   2. Test (RED): For each of the 5 `examples.md` cases, batch inference (Q2/Q3/Q4 →
@@ -71,7 +71,7 @@ flow, and proves two properties by test: batch classification matches interactiv
   4. Validate: All 5 cases pass.
   5. Success: Matrix parity proven `[ref: PRD/SM-4; SDD/Acceptance Criteria]`.
 
-- [ ] **T2.4 Security: malicious-slug fixture + `--from-file` path confinement** `[activity: testing]`
+- [x] **T2.4 Security: malicious-slug fixture + `--from-file` path confinement** `[activity: testing]`
 
   1. Prime: Read `[ref: SKILL.md slug-validation gates L181-184, L212-215]`,
      `[ref: SDD/System-Wide Patterns/Security]`.
@@ -85,7 +85,7 @@ flow, and proves two properties by test: batch classification matches interactiv
   4. Validate: All security assertions pass; no fixture path escapes.
   5. Success: Slug gate + path confinement + privacy hold `[ref: SDD/CON-5; SDD/Security]`.
 
-- [ ] **T2.5 Phase 2 Validation** `[activity: validate]`
+- [x] **T2.5 Phase 2 Validation** `[activity: validate]`
 
   - Run all rule-enforcer self-tests (`test_examples_md.sh`, `test_batch_q3_labels.sh`,
     `test_batch_parity.sh`, `test_batch_security.sh`). `shellcheck` clean on new `.sh`.
