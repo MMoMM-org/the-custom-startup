@@ -41,8 +41,9 @@ assert_check "Frontmatter description present (non-empty)" grep -qE "^descriptio
 # A5: user-invocable: true
 assert_check "Frontmatter user-invocable: true" grep -q "^user-invocable: true$" "$SKILL_FILE"
 
-# A6: argument-hint present with expected value
-assert_check 'Frontmatter argument-hint: "[rule description]"' grep -q 'argument-hint: "\[rule description\]"' "$SKILL_FILE"
+# A6: argument-hint present; must still advertise the interactive "[rule description]"
+# form (batch mode appends "| --scan | --from-file <path>" per spec-016 ADR-1).
+assert_check 'Frontmatter argument-hint includes "[rule description]"' grep -q 'argument-hint: "\[rule description\]' "$SKILL_FILE"
 
 # A7: ## Persona section
 assert_check "## Persona section present" grep -q "^## Persona$" "$SKILL_FILE"

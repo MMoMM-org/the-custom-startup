@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.3.0] - 2026-07-02
+
+### Added
+
+- **`rule-enforcer` batch/extraction mode — sweep `CLAUDE.md` + memory files and mechanize the enforceable rules in one pass.** The skill now has two entry modes. The existing interactive flow (describe one rule → 4-question triage → hand-off) is unchanged; a new batch mode is reached via `/rule-enforcer --scan` (or `--from-file <path>`). Batch mode scans the repo+project rule sources (root `CLAUDE.md`, nested `**/CLAUDE.md`, `docs/ai/memory/*.md`, transitive `@`-imports; `~/.claude/` global set is opt-in via `--scope global`), extracts the deterministically-enforceable rules, classifies each non-interactively against the existing `mechanism-matrix.md` (which stays the single source of truth), deduplicates against already-installed `tcs-git-helpers` hooks, and presents **one consolidated proposal table** plus a "left as guidance" list for judgment-only rules. A single confirm then hands each accepted rule to the existing author skills — no new writer, the Step 8 hand-off (and its slug-validation gates) is reused verbatim.
+  - **Design:** Q1 (recurrence) is skipped and Q2/Q3/Q4 are inferred, documented as a batch-only exception in `docs/XDD/adr/0001`. Inspired by the aihero.dev "turn your CLAUDE.md into hooks" prompt, generalized across the full mechanism matrix (7 intervention points + CI + pre-push) with dedup and a single-confirm UX.
+  - **New reference files:** `scan-sources.md` (source set + `@`-import policy + exclusions), `extraction-heuristics.md` (enforceable-vs-judgment filter, Q3 bucket cues, Q4 defaults, and the 7 canonical Q3 bare labels), `installed-enforcement-catalog.md` (dedup hint layer; live `.githooks/` + `hooks.json` inspection is authoritative).
+  - **Safety:** slug-validation gate now also guards attacker-influenced scanned text; `--from-file` paths are confined (no `..`, no out-of-repo absolutes); personal `~/.claude/` content is paraphrased, never pasted into committed artifacts.
+  - **Tests:** `test_batch_q3_labels.sh` (label↔matrix-heading drift guard), `test_batch_parity.sh` (batch inference == interactive mechanism, matrix read at runtime), `test_batch_security.sh` (slug gate + path confinement + doc-contract). All green; interactive self-tests unchanged.
+- **`memory-claude-md-optimize` now points at batch mode.** When the optimizer detects `always/never/must` directives that look mechanically enforceable, it counts them and its report suggests running `/rule-enforcer --scan` after the optimization applies — a one-directional pointer (no back-call), so the optimizer relocates content and rule-enforcer mechanizes it, each authoritative on its own domain.
+
 ## [4.2.0] - 2026-06-30
 
 ### Added
