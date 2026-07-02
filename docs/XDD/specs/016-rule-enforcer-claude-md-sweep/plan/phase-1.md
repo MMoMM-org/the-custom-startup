@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Foundation — reference files, ADR, label-drift self-test"
-status: pending
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -35,7 +35,7 @@ This phase establishes the knowledge base the batch workflow reads (scan sources
 extraction heuristics, dedup catalog), records the ADR exception, and locks the
 Q3-label↔matrix-heading coupling with an executable self-test.
 
-- [ ] **T1.1 ADR: Q1-skip & non-interactive inference exception** `[activity: documentation]`
+- [x] **T1.1 ADR: Q1-skip & non-interactive inference exception** `[activity: documentation]`
 
   1. Prime: Read the interactive `Never` constraints and Step 6 lookup
      `[ref: SKILL.md rule-enforcer L47-51, L116-124]` and `[ref: SDD/ADR-2]`.
@@ -47,7 +47,7 @@ Q3-label↔matrix-heading coupling with an executable self-test.
   4. Validate: ADR renders; cross-links to spec 016; supersedes nothing.
   5. Success: Exception documented with rationale + trade-offs `[ref: PRD/Risks; SDD/ADR-2]`.
 
-- [ ] **T1.2 `reference/scan-sources.md` (default source set)** `[activity: documentation]` `[parallel: true]`
+- [x] **T1.2 `reference/scan-sources.md` (default source set)** `[activity: documentation]` `[parallel: true]`
 
   1. Prime: Read `[ref: SDD/Runtime View B1]`, `[ref: PRD/AC-1]`, and the optimizer's
      discovery model `[ref: memory-claude-md-optimize/SKILL.md discovery step]`.
@@ -58,7 +58,7 @@ Q3-label↔matrix-heading coupling with an executable self-test.
   4. Validate: Every path referenced exists or is clearly marked optional/global.
   5. Success: Default = repo+project, global opt-in `[ref: PRD/Open Questions; SDD/CON-5]`.
 
-- [ ] **T1.3 `reference/extraction-heuristics.md` (filter + Q3 labels + Q4 defaults)** `[activity: documentation]` `[parallel: true]`
+- [x] **T1.3 `reference/extraction-heuristics.md` (filter + Q3 labels + Q4 defaults)** `[activity: documentation]` `[parallel: true]`
 
   1. Prime: Read `[ref: SDD/Runtime View B3-B4]`, `[ref: mechanism-matrix.md headings]`,
      `[ref: examples.md 5 worked cases]`, and `[ref: SDD/ADR-4]`.
@@ -71,7 +71,7 @@ Q3-label↔matrix-heading coupling with an executable self-test.
      (no `(e.g. …)` suffix).
   5. Success: Filter + cues + defaults + label block `[ref: PRD/Feature 2; SDD/ADR-2, ADR-4]`.
 
-- [ ] **T1.4 `reference/installed-enforcement-catalog.md` (hint layer)** `[activity: documentation]` `[parallel: true]`
+- [x] **T1.4 `reference/installed-enforcement-catalog.md` (hint layer)** `[activity: documentation]` `[parallel: true]`
 
   1. Prime: Read `[ref: plugins/tcs-git-helpers/scripts/block-bad-git-ops.sh]`,
      `[ref: pre-edit-branch-check.sh]`, `[ref: hooks.json]`, and `[ref: SDD/ADR-5]`.
@@ -85,7 +85,7 @@ Q3-label↔matrix-heading coupling with an executable self-test.
   4. Validate: Entries match the actual scripts as of this spec; drift caveat present.
   5. Success: Dedup hint layer complete `[ref: PRD/Feature 3; SDD/ADR-5]`.
 
-- [ ] **T1.5 `test_batch_q3_labels.sh` (label-drift self-test)** `[activity: testing]`
+- [x] **T1.5 `test_batch_q3_labels.sh` (label-drift self-test)** `[activity: testing]`
 
   1. Prime: Read `[ref: SDD/Implementation Examples/label-drift self-test]` and
      `[ref: test_examples_md.sh]` for the existing self-test pattern.
@@ -97,7 +97,7 @@ Q3-label↔matrix-heading coupling with an executable self-test.
   4. Validate: Runs clean against T1.3 output; fails loudly on drift.
   5. Success: Coupling enforced by test `[ref: SDD/ADR-4; SDD/Risks/Technical Debt]`.
 
-- [ ] **T1.6 Phase 1 Validation** `[activity: validate]`
+- [x] **T1.6 Phase 1 Validation** `[activity: validate]`
 
   - Run `test_batch_q3_labels.sh` (green). Confirm all 3 reference files + ADR exist,
     the matrix file is unchanged (`git diff` empty for it), and no mapping was duplicated.

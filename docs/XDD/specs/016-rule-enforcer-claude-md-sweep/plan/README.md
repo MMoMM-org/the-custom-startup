@@ -118,7 +118,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 
 > **Tracking Principle**: Track logical units that produce verifiable outcomes. The TDD cycle is the method, not separate tracked items.
 
-- [ ] [Phase 1: Foundation — reference files, ADR, label-drift self-test](phase-1.md)
+- [x] [Phase 1: Foundation — reference files, ADR, label-drift self-test](phase-1.md)
 - [ ] [Phase 2: Batch mode in SKILL.md + parity & security tests](phase-2.md)
 - [ ] [Phase 3: Optimizer integration, dogfood E2E, audit & release](phase-3.md)
 
