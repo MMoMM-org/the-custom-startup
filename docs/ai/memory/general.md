@@ -3,6 +3,9 @@
 <!-- What goes here: how files are named, folder structure, style choices, branch conventions -->
 <!-- What does NOT go here: tool-specific quirks (→ tools.md), domain rules (→ domain.md) -->
 
+<!-- 2026-07-02 -->
+- **Skill scaffold tests hard-code frontmatter values → a legitimate frontmatter change breaks them.** spec-016 added a batch mode whose ADR-1 required changing `rule-enforcer`'s `argument-hint` from `"[rule description]"` to `"[rule description] | --scan | --from-file <path>"`. The scaffold self-test asserted the OLD value with an exact-match (`grep -q 'argument-hint: "\[rule description\]"'` — closing quote included), so the mandated change and "keep the test green" were mutually exclusive; the test failed as a false regression. Rule: assertions on frontmatter fields that are *expected to evolve* (argument-hint, description, keyword lists) should be **prefix/contains** matches anchored on the stable substring (here `argument-hint: "\[rule description\]` without the closing quote), not full-string exact matches. This is the mirror image of the "PRD verbatim string assertions need pinning" entry below — pin spec-mandated user-facing strings exactly, but keep evolving-field assertions loose.
+
 <!-- 2026-05-22 -->
 - **SKILL.md multi-task placeholder pattern** — when authoring a SKILL.md across multiple tasks (e.g. T2.1 scaffolds structure, T2.3 fills Workflow Steps 1-7, T2.4 fills Step 8), use `<!-- T2.X will populate -->` HTML-comment placeholders inside the section bodies during scaffold. Each later task can grep-and-replace its own placeholder without touching siblings. Test assertion `grep -c "<!-- T2.X will populate -->"` cleanly tracks RED→GREEN over the multi-task evolution (zero remaining = GREEN). Pattern proven in spec-013 rule-enforcer SKILL.md across T2.1 → T2.3 → T2.4.
 
