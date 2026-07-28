@@ -184,6 +184,8 @@ Optional: `setup --with-branch-protection` (GitHub single-coder branch protectio
 | **DevOps** | `/twelve-factor` |
 | **Integrations** | `/mcp-server` · `/obsidian-plugin` |
 
+Plus one write-time guard: a `PreToolUse` hook blocks `eslint-disable` from being written into Obsidian plugin repos, because the community-plugin reviewer rejects any submission that contains a disabled rule. See [Hooks](docs/guides/tcs-patterns.md#hooks).
+
 ---
 
 ## What's Different

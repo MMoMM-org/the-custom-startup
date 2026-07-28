@@ -217,6 +217,8 @@ grep -rn -E "['\"][a-z@/-]+['\"]\s*:\s*['\"]?off['\"]?" "$TARGET" --include=".es
 
 Flag **every match** as CRITICAL with kind `LINT_RULE_DISABLED`. The Obsidian community-plugin reviewer (primary path: the [community.obsidian.md](https://community.obsidian.md/account/plugins) portal, manual submission; legacy/parallel path: the `obsidianmd/obsidian-releases` PR bot) scans submissions for disabled rules and rejects plugins with any disabled rule — `obsidianmd/*`, `@typescript-eslint/*`, or otherwise. There is no "justified disable" exception. Fix: change the code to satisfy the rule. If the rule is genuinely wrong for the project, raise it upstream — do not disable locally.
 
+This step is the audit-time net. The plugin also ships a write-time guard for the same rule: the `PreToolUse` hook `scripts/block-eslint-disable.sh` denies any `Write`/`Edit`/`NotebookEdit` that introduces a disable into a repo detected as an Obsidian plugin, so the pattern never reaches the audit. See [docs/guides/tcs-patterns.md § Hooks](../../../../docs/guides/tcs-patterns.md#hooks) for the scope gate and the `CLAUDE_ALLOW_ESLINT_DISABLE=1` escape hatch.
+
 ### 12. Scan for Plugin-Guideline Violations (Submission Blockers + Theme/UX Hygiene)
 
 ```bash

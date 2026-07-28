@@ -1,0 +1,16 @@
+{
+  "description": "tcs-patterns hook registrations — write-time enforcement for pattern rules that cannot be recovered from later (see skills/obsidian-plugin/SKILL.md Step 11).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/block-eslint-disable.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
