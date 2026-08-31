@@ -58,7 +58,7 @@ const createFakeOrderRepo = (): OrderRepository & { readonly savedEntities: read
 
 ## Domain Unit Tests: A Complement
 
-Pure domain functions (business rules, calculations) can also be tested directly. This is behavioral testing — the domain function IS the public API. Use this for complex rules with many edge cases. For property-based testing of domain invariants with `fast-check`, see the DDD skill's `resources/testing-by-layer.md`.
+Pure domain functions (business rules, calculations) can also be tested directly. This is behavioral testing — the domain function IS the public API. Use this for complex rules with many edge cases. For property-based testing of domain invariants with `fast-check`, see `tcs-patterns:ddd` `reference/testing-by-layer.md`.
 
 ```typescript
 it('rejects contribution exceeding available balance', () => {

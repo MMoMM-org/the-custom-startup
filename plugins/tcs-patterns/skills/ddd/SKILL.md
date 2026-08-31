@@ -32,6 +32,7 @@ State {
 
 **Always:**
 - Use the bounded context's ubiquitous language in all naming — classes, methods, variables.
+- Justify every aggregate boundary by an invariant it enforces, never by an entity relationship. If you cannot name what must remain true after a state change, there is no aggregate there — see `reference/aggregate-design.md`.
 - Protect aggregate invariants: all state changes go through the aggregate root.
 - Represent domain events as immutable value objects with past-tense names.
 - Keep domain layer free of framework imports (no ORM annotations, no HTTP types).
@@ -64,6 +65,8 @@ Flag:
 - Entities with public setters → violation (bypass aggregate root)
 - Value objects with mutable state → violation
 - Domain classes importing infrastructure types → CRITICAL violation
+- **Relationship-driven aggregates** → MEDIUM violation. The tell: the aggregate's methods only add, remove, or attach children, and no business rule is enforced anywhere in it. Those relationships want to be foreign keys. Ask "what must remain true when this changes?" — if the only answer is structural, the aggregate is ceremony.
+- Aggregates carrying read-only properties that exist purely for query convenience → MEDIUM violation (a read concern leaking into a write model)
 
 ### 3. Audit Language Consistency
 

@@ -2,6 +2,50 @@
 
 Aggregates are the hardest part of DDD to get right. Start small and tighten boundaries when you hit consistency issues.
 
+## Design From Invariants, Not Relationships
+
+The most common aggregate mistake is starting from entity relationships. You see "Route has many Locations, Location has one VendingMachine" and build a hierarchy mirroring that structure. The result *looks* domain-rich — organised entities, nested value objects, accessor methods — while concealing that no business behavior is being enforced anywhere.
+
+**Aggregates are consistency boundaries, not containment hierarchies.** An aggregate exists to enforce invariants during state changes. If you cannot name the invariant, you do not need the aggregate.
+
+The litmus test for what belongs inside one:
+
+1. What commands change state in this area of the domain?
+2. What must remain true immediately after each of those changes? — these are the invariants
+3. What data is required to enforce them? — **only this** belongs in the aggregate
+
+If the answer to (2) is only structural — one-to-many, one-to-one — a database constraint enforces it more simply and more reliably than aggregate code. Reserve aggregates for behavioral invariants: limits, conditions, what is allowed when.
+
+```typescript
+// ❌ RELATIONSHIP-DRIVEN — mirrors the entity hierarchy, enforces nothing
+type Route = {
+  readonly id: RouteId;
+  readonly locations: ReadonlyArray<Location>;   // why is this here?
+  readonly addLocation: ...;                     // manages a collection
+  readonly attachVendingMachine: ...;            // manages a relationship
+  readonly getAlarmCount: ...;                   // a read concern, leaking in
+};
+
+// ✅ INVARIANT-DRIVEN — VendingMachine is its own aggregate,
+//    because the alarm limit is a behavioral responsibility
+type VendingMachine = {
+  readonly id: VendingMachineId;
+  readonly locationId: LocationId;               // referenced by ID
+  readonly alarms: ReadonlyArray<Alarm>;
+  readonly maxConcurrentAlarms: number;          // the invariant
+};
+
+const triggerAlarm = (machine: VendingMachine, alarm: NewAlarm): TriggerAlarmResult => {
+  const active = machine.alarms.filter(a => a.status === 'active');
+  if (active.length >= machine.maxConcurrentAlarms) {
+    return { success: false, reason: 'max-alarms-reached' };
+  }
+  return { success: true, machine: { ...machine, alarms: [...machine.alarms, alarm] } };
+};
+```
+
+**The tell** that an aggregate is relationship-driven: its methods only add, remove, or attach children, and no business rule is enforced anywhere in it. Those relationships want to be foreign keys, not an aggregate hierarchy.
+
 ## The Always-Valid Principle
 
 An entity must satisfy its invariants at all times — after construction, after every state transition, and when retrieved from persistence.
