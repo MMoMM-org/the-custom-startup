@@ -27,6 +27,13 @@ When you hear yourself thinking any of these — stop. Apply the law.
 | "It's already tested indirectly" | Indirect tests don't give you RED. Write a direct test. |
 | "This is a one-line fix" | One-line fixes break things. One-line tests prevent that. |
 | "We're in a hurry" | Skipping TDD makes you slower, not faster. |
+| "It's a shell script, I'll just grep the file" | Grepping the source proves the source is the source. Run it against an input and assert the exit code or output. |
+| "It's a skill/prompt, there's nothing to run" | Then the observable is the consuming agent's behavior — probe it (`tcs-helper:skill-author`). Prose for humans earns no test. |
+| "I'll assert the constant's value" | That fires on redesign and sleeps through bugs. Test the behavior that depends on the constant. |
+| "I'll compare it to what the function returns" | Then it passes no matter what the function does. Hand-derive the expected value. |
+
+The last four are the falsifiability failures — tests that pass without verifying
+anything. Full treatment in `reference/writing-good-tests.md`.
 
 ## RED-GREEN-REFACTOR
 
