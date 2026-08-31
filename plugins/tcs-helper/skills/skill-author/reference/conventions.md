@@ -343,6 +343,18 @@ Skills are **imperative instructions for an LLM**, not documentation for humans.
 
 **Before stripping:** verify the WHY is captured elsewhere (docs/ mirror, ADR, git history). Write to destination first, strip from runtime second — strip-first destroys institutional knowledge.
 
+#### Exception: rationale is load-bearing in discipline-enforcing skills
+
+In a skill that enforces a rule against pressure, the rationale **is** the mechanism. It is the counter-argument that fires at the moment the model is talking itself out of the rule, so stripping it degrades execution — measurably, not theoretically. `obra/superpowers` deleted the "Why Order Matters" section from their TDD skill as redundant prose and measured test-first behavior fall from **8/10 to 5/10** under "just write it, tests after" pressure, reproduced on two model families.
+
+So for these skills the move is **relocation, not deletion**: each argument goes into the excuse → reality row where that excuse appears (see § Discipline-Enforcing Skills). The standalone section disappears; the argument survives at its point of use, where an agent mid-rationalization actually hits it.
+
+An argument placed where the rationalization occurs beats the same argument in a section the model has already read past.
+
+**When unsure whether a cut is safe, measure it** — run the pressure scenario with and without the candidate text using the subagent-probe method in [testing-with-subagents.md](testing-with-subagents.md). Micro-testing each cut is cheap; a silent discipline regression is not. Do not resolve this by reading the text and judging it redundant. That judgement is exactly what the measurement contradicted.
+
+What stays strippable in these skills: recap sections, restatements of what the skill already did, and prose selling the skill's benefits to a reader who has already invoked it.
+
 ### Progressive Disclosure Enforcement
 
 Content belongs in `reference/` (not SKILL.md) when it is:
