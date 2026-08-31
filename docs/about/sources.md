@@ -2,11 +2,34 @@
 
 This document records the origins of The Custom Startup's components and acknowledges the work this project builds on.
 
+It has a second job: making it cheap to check those origins for improvements. Every source below carries the date we adopted it, the upstream revision we last reconciled against, and whether it is still worth watching.
+
+---
+
+## Sync Status
+
+| Source | Adopted | Last reconciled | Status |
+|---|---|---|---|
+| [rsmdt/the-startup](https://github.com/rsmdt/the-startup) | 2026-02-28 (`d36ee90`, v3.4) | 2026-08-31 — `principles.md` only, from their April 2026 rewrite | **monitored** |
+| [citypaul/.dotfiles](https://github.com/citypaul/.dotfiles) | 2026-03-27 | 2026-08-31 — defect fixes from PR #184 (`331a637`) | **monitored** |
+| [obra/superpowers](https://github.com/obra/superpowers) | 2026-03-27 (~v5.0.6) | never | **monitored** |
+| [BayramAnnakov/claude-reflect](https://github.com/BayramAnnakov/claude-reflect) | 2026-03-26 | n/a | historical |
+| [centminmod/my-claude-code-setup](https://github.com/centminmod/my-claude-code-setup) | 2026-03-26 | n/a | historical |
+| [mksglu/context-mode](https://github.com/mksglu/context-mode) | 2026-03-27 (spec-005) | n/a | historical |
+| [lasso-security/mcp-gateway](https://github.com/lasso-security/mcp-gateway) | reference only | n/a | historical |
+| [agiletec-inc/airis-mcp-gateway](https://github.com/agiletec-inc/airis-mcp-gateway) | reference only | n/a | historical |
+
+**monitored** — actively developed, and the parts we adapted still move. Check on each sweep.
+**historical** — attribution stands, but there is nothing left to pull. Reasons are recorded per source below. Skip these on a sweep.
+
 ---
 
 ## Base Fork
 
 **The Custom Startup is forked from [rsmdt/the-startup](https://github.com/rsmdt/the-startup)** by [@rsmdt](https://github.com/rsmdt).
+
+**Adopted:** 2026-02-28, at commit `d36ee90` (upstream v3.4) — the last upstream-authored commit in our history.
+**Status:** monitored. Upstream is at v3.8.0 and still active.
 
 The following concepts and structures were derived from that repository:
 
@@ -17,6 +40,8 @@ The following concepts and structures were derived from that repository:
 
 The Custom Startup extends these foundations with a full plugin architecture, an expanded agent library, the XDD specification system, and the tcs-patterns skill collection.
 
+**Reconciled so far:** `docs/about/principles.md` was rewritten on 2026-08-31 from upstream's April 2026 re-grounding (`8a43e17`, `520e0f0`), with corrections where upstream had itself gone stale. The `skill-author` / `agent-author` reference files were separately re-grounded in that same upstream revision earlier — see `plugins/tcs-helper/CHANGELOG.md`.
+
 ---
 
 ## tcs-patterns Plugin — Skill Origins
@@ -25,7 +50,11 @@ The `tcs-patterns` plugin contains 17 domain pattern skills across three origin 
 
 ### citypaul-derived (10 skills)
 
-These skills were ported from [citypaul's Claude Code skills collection](https://github.com/citypaul) and converted to PICS format (the structured skill format used throughout The Custom Startup):
+**Repository:** [citypaul/.dotfiles](https://github.com/citypaul/.dotfiles)
+**Adopted:** 2026-03-27
+**Status:** monitored. Upstream ships roughly 50 skills now and has touched all ten of ours since our port.
+
+These skills were ported from citypaul's Claude Code skills collection and converted to PICS format (the structured skill format used throughout The Custom Startup):
 
 - `ddd`
 - `frontend-testing`
@@ -39,6 +68,8 @@ These skills were ported from [citypaul's Claude Code skills collection](https:/
 - `typescript-strict`
 
 Porting to PICS format involved restructuring content into progressive disclosure sections, adding frontmatter trigger terms, and aligning with the skill conventions used in this project. The underlying knowledge and guidance originates with citypaul's work.
+
+**Reconciled so far:** on 2026-08-31, defect fixes from upstream PR #184 (`331a637`) were applied to `testing`, `frontend-testing`, and `ddd`. The remaining content changes — notably `hexagonal` reconciled against Cockburn's own write-up, and invariant-first aggregate design in `ddd` — are still outstanding.
 
 ### TCS-native (5 skills)
 
@@ -70,6 +101,8 @@ The activity-based organization pattern (grouping agents by what they do rather 
 
 These influenced the structural approach; the agent definitions, prompts, and role boundaries are original to this project.
 
+> Note: this framing is historical. Current design rationale is grounded in Anthropic primary sources — see [principles.md](principles.md) § 2.4.
+
 ---
 
 ## Output Styles
@@ -84,25 +117,32 @@ The Memory Bank system in `tcs-helper` draws on several community approaches to 
 
 ### claude-reflect
 
-**Repository:** [claude-reflect marketplace plugin](https://github.com/BayramAnnakov/claude-reflect)
+**Repository:** [BayramAnnakov/claude-reflect](https://github.com/BayramAnnakov/claude-reflect)
+**Adopted:** 2026-03-26
+**Status:** historical — the repository's last push was 2026-03-16, before we adopted it, and there have been no commits since. Nothing will arrive.
 
 Foundation for the Memory Bank capture layer. The two-stage self-learning hooks (detect corrections → queue → route to destinations) and the learning destinations model (global CLAUDE.md, project CLAUDE.md, CLAUDE.local.md) directly informed the TCS global/project/repo routing table. The `reflect-skills` session analysis — identifying repeating patterns and generating skill files — provides the promotion mechanism used by `/memory-promote`.
 
 ### John Conneely Memory System
 
 **Article:** [How I Finally Sorted My Claude Code Memory](https://www.youngleaders.tech/p/how-i-finally-sorted-my-claude-code-memory)
+**Adopted:** 2026-03-26
+**Status:** historical — a published article, not a moving target.
 
 The memory category taxonomy (general conventions, tools integrations, domain knowledge) is applied across TCS scopes instead of a single global bucket. The MEMORY.md index-only pattern with a ~200-line budget was adopted as a design constraint. The principle that routing rules belong in CLAUDE.md, not in MEMORY.md, directly informed the TCS approach.
 
 ### centminmod/my-claude-code-setup
 
 **Repository:** [centminmod/my-claude-code-setup](https://github.com/centminmod/my-claude-code-setup)
+**Adopted:** 2026-03-26
+**Status:** historical — the repository is active, but essentially all of it is version churn in its own `session-metrics` tool. The parts we adapted have not moved.
 
 The memory bank architecture (per-concern files: activeContext, patterns, decisions, troubleshooting) informed the repo-level typed memory directory at `docs/ai/memory/`. The cleanup-context workflow (token reduction, archive resolved issues) forms the core of `/memory-cleanup`. Stack-aware CLAUDE.md templates (Cloudflare Workers, Convex) provided the pattern reused in `/setup`.
 
 ### citypaul/.dotfiles (philosophy)
 
 **Repository:** [citypaul/.dotfiles](https://github.com/citypaul/.dotfiles)
+**Status:** monitored — see the pattern-skill entry above.
 
 Beyond the pattern skills (listed above), the philosophy-first CLAUDE.md approach (~100 lines core, skills on demand) justified keeping all CLAUDE.md files lean and delegating detail to skills and memory docs. The setup command concept (detect stack, generate CLAUDE.md + hooks) directly inspired `/setup`.
 
@@ -112,9 +152,13 @@ Beyond the pattern skills (listed above), the philosophy-first CLAUDE.md approac
 
 ### obra/superpowers
 
-**Repository:** [obrasuperpowers](https://github.com/obrasuperpowers) by Jesse Vincent
+**Repository:** [obra/superpowers](https://github.com/obra/superpowers) by Jesse Vincent
+**Adopted:** 2026-03-27, around upstream v5.0.6
+**Status:** monitored. Upstream is at v6.3.0 — a major version with changes to skills we derived from, including safety-relevant ones.
 
-The TDD RED-GREEN-REFACTOR iron law and the rejected-rationalizations table are embedded into the `xdd-tdd` skill and the TDD/SDD integration design. The verification-before-completion discipline (evidence-before-claims) is implemented as the `/verify` gate. The receiving-code-review rigor pattern forms the basis of `/receive-review`. Dispatching-parallel-agents patterns were absorbed into `/parallel-agents`. Systematic-debugging anti-shortcut rules strengthen `/debug`.
+The TDD RED-GREEN-REFACTOR iron law and the rejected-rationalizations table are embedded into the `xdd-tdd` skill and the TDD/SDD integration design. The verification-before-completion discipline (evidence-before-claims) is implemented as the `/verify` gate. The receiving-code-review rigor pattern forms the basis of `/receive-review`. Dispatching-parallel-agents patterns were absorbed into `/parallel-agents`. Systematic-debugging anti-shortcut rules strengthen `/debug`. Related lineage: `/finish-branch`, `/git-worktree`, and `/brainstorm`.
+
+**Reconciled so far:** nothing. This is the largest outstanding gap.
 
 ---
 
@@ -123,17 +167,56 @@ The TDD RED-GREEN-REFACTOR iron law and the rejected-rationalizations table are 
 ### context-mode
 
 **Repository:** [mksglu/context-mode](https://github.com/mksglu/context-mode) by Mert Koseoglu
+**Adopted:** 2026-03-27 (spec-005, implemented)
+**Status:** historical — the repository is busy, but the commit stream is almost entirely automated install-stats updates. The architectural idea we took has not changed.
 
 The MCP server concept — capturing tool outputs in a structured database and serving compact summaries instead of replaying full outputs — is the architectural basis for Satori's context capture layer. The reported 90-98% context reduction motivated offloading session data to a context server.
 
 ### MCP Gateway patterns
 
 **Repositories:** [lasso-security/mcp-gateway](https://github.com/lasso-security/mcp-gateway), [agiletec-inc/airis-mcp-gateway](https://github.com/agiletec-inc/airis-mcp-gateway)
+**Status:** historical — reference architecture only, never a code dependency. `lasso-security/mcp-gateway` has been inactive since 2026-01-22.
 
 The gateway design — composing multiple downstream MCP servers behind a single endpoint — provided the reference architecture for Satori's server routing layer.
 
 ---
 
+## Running a Sweep
+
+Checking sources for improvements should not require git archaeology. The procedure:
+
+```bash
+# 1. Upstream activity since our adoption date (from the Sync Status table)
+gh api "/repos/<owner>/<repo>/commits?since=<YYYY-MM-DD>T00:00:00Z&per_page=100" --paginate \
+  --jq '.[] | "\(.commit.author.date[0:10]) \(.commit.message|split("\n")[0])"'
+
+# 2. Per-file history, to see whether a specific thing we ported has moved
+gh api "/repos/<owner>/<repo>/commits?path=<path/to/FILE.md>&since=<YYYY-MM-DD>T00:00:00Z" \
+  --jq '.[] | "\(.commit.author.date[0:10]) \(.commit.message|split("\n")[0])"'
+
+# 3. The patch for a specific commit, scoped to files we care about
+gh api "/repos/<owner>/<repo>/commits/<sha>" \
+  --jq '.files[] | select(.filename|test("<pattern>")) | "===== \(.filename)\n\(.patch)"'
+
+# 4. Current upstream file content, to diff against ours
+gh api "/repos/<owner>/<repo>/contents/<path>" --jq '.content' | base64 -d
+```
+
+Two rules learned the hard way:
+
+- **Do not adopt a claim because upstream states it.** Upstream drifts too. The 2026-08-31 sweep found stale model pricing (3× off) and a closed bug listed as open in a document we were about to import.
+- **Record what was deliberately *not* adopted, and why** — otherwise the next sweep re-litigates it from zero.
+
+### Sweep log
+
+| Date | Scope | Outcome |
+|---|---|---|
+| 2026-08-31 | All eight sources | Three found still worth monitoring, five retired to historical. Tracked as epic #73 with twelve child issues. Landed: `tcs-patterns` defect fixes (#74), `principles.md` rewrite (#75), this file (#78). |
+
+---
+
 ## Why Attribution Matters
 
-Keeping this document up to date serves a practical purpose: it makes the lineage of each component visible, which makes it straightforward to check upstream sources for improvements and to give proper credit when sharing or redistributing. If you port, adapt, or extend components from other sources, add them here.
+Keeping this document up to date serves a practical purpose: it makes the lineage of each component visible, which makes it straightforward to check upstream sources for improvements and to give proper credit when sharing or redistributing.
+
+If you port, adapt, or extend components from another source, add it here — with the adoption date and the upstream revision. A source without those is a source nobody can cheaply re-check.
