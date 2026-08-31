@@ -1,6 +1,6 @@
 ---
 name: test
-description: Use when completing implementation, fixing bugs, refactoring code, or any time you need to verify the test suite passes. Also use when tests fail and you hear "pre-existing" or "not my changes" — enforces strict code ownership.
+description: Use when completing implementation, fixing bugs, refactoring code, or any time you need to verify the test suite passes. Also use when tests fail and you hear "pre-existing" or "not my changes" — enforces strict code ownership. Ensures MECE coverage (no overlap, no gaps) and that ALL test categories including E2E are executed.
 user-invocable: true
 argument-hint: "'all' to run full suite, file path for targeted tests, or 'baseline' to capture current state"
 allowed-tools: Task, TaskOutput, Bash, Read, Glob, Grep, Edit, Write, AskUserQuestion, TodoWrite, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
@@ -19,6 +19,20 @@ Act as a test execution and code ownership enforcer. Discover tests, run them, a
 If a test fails, there are only two acceptable responses:
 1. **Fix it** — resolve the root cause and make it pass
 2. **Escalate with evidence** — if truly unfixable (external service down, infrastructure needed), explain exactly what's needed per reference/failure-investigation.md
+
+### MECE Test Coverage
+
+Coverage must be **Mutually Exclusive, Collectively Exhaustive**:
+
+- **Mutually exclusive** — each behavior is tested in exactly one place. The same logic asserted at the same level in a unit test and an integration test is duplication, not depth: two tests to maintain, one signal.
+- **Collectively exhaustive** — every code path, branch, and edge case has a test. No gaps.
+
+Flag both when evaluating a suite:
+
+> **Overlap** — "This validation is asserted identically in `user.test.ts` and `user.integration.test.ts`. Consolidate to the unit test."
+> **Gap** — "The error branch at `service.ts:42` has no coverage."
+
+Coverage that is MECE can still be worthless. A test that cannot fail for a real reason fills a slot without protecting anything — see `tcs-workflow:xdd-tdd` `reference/writing-good-tests.md`. MECE is about the *shape* of the suite; falsifiability is about whether its tests mean anything.
 
 ## Interface
 
@@ -50,8 +64,11 @@ State {
 - Speed matters less than correctness — understand why a test fails before fixing it.
 - Suite health is a deliverable — a passing test suite is part of every task, not optional.
 - Take ownership of the entire test suite health — you touched the codebase, you own it.
+- Execute ALL discovered test categories — unit, integration, AND E2E. Each may have its own runner and command; discover and run every one.
+- Evaluate coverage against MECE and report overlaps and gaps alongside the pass/fail counts.
 
 **Never:**
+- Skip or silently omit E2E tests. If E2E tests exist they MUST run. If they need setup — browser install, a service running, seeded data — escalate with the specifics rather than quietly leaving them out.
 - Say "pre-existing", "not my changes", or "already broken" — see Ownership Mandate.
 - Leave failing tests for the user to deal with.
 - Settle for a failing test suite as a deliverable.
@@ -95,7 +112,8 @@ Recommend Agent Team when:
 
 ### 3. Capture Baseline
 
-Run full test suite to establish baseline. Record passing, failing, skipped counts.
+Run **every** test command discovered in step 1 — not just the primary suite. If unit tests run under `vitest` and E2E under `playwright`, both commands run. Record passing, failing, and skipped counts **per category**, so a whole category silently contributing zero is visible rather than hidden inside one total.
+
 Read reference/output-format.md and present baseline accordingly.
 
 match (baseline) {
