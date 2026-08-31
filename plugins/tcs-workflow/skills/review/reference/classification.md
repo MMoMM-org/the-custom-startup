@@ -9,9 +9,17 @@ Definitions, classification matrix, and example findings at each severity level.
 | Level | Definition | Action |
 |-------|------------|--------|
 | 🔴 **CRITICAL** | Security vulnerability, data loss risk, or system crash | **Must fix before merge** |
-| 🟠 **HIGH** | Significant bug, performance issue, or breaking change | **Should fix before merge** |
+| 🟠 **HIGH** | Significant bug or performance issue | **Should fix before merge** |
 | 🟡 **MEDIUM** | Code quality issue, maintainability concern, or missing test | **Consider fixing** |
 | ⚪ **LOW** | Style preference, minor improvement, or suggestion | **Nice to have** |
+
+## Breaking Changes Are Orthogonal to Severity
+
+Breaking-ness is not a severity level. Set the finding's `breaking` field and let severity describe the defect itself.
+
+A clean, well-implemented, well-tested API rename is **not a bug** — its severity may honestly be MEDIUM or even LOW. It still forces `REQUEST CHANGES` and still leads the report, because it affects people outside this repo.
+
+Folding breaking-ness into severity forces a false choice: either miscast a correct rename as a bug to raise its severity, or rate it honestly and watch the verdict come back APPROVE on a change that breaks every consumer. The `breaking` field exists so neither is necessary.
 
 ## Confidence Levels
 

@@ -32,6 +32,8 @@ TDDState {
 
 **Never:**
 - Allow production code to be written before RED phase is confirmed (failing tests exist).
+- Accept a test that asserts an artifact's **text** rather than its behavior — grepping a script, skill, or config for a phrase proves only that the source is the source. Run it and assert its effects. See `reference/writing-good-tests.md`.
+- Accept a test whose expected value is computed by the code under test, or one that can only fail when an intentional decision changes.
 - Accept any rationalization for skipping tests:
   - "too simple to test" — rejected
   - "it's just a config change" — rejected
@@ -59,15 +61,32 @@ From the contract or task description, produce a list of test names covering:
 - Edge cases (boundary values, empty inputs, limits)
 - Error states (invalid inputs, failures, exceptions)
 
-Present the list to the user:
+For each test, before it is written: **name the production change that would make it
+fail.** A test that cannot name one catches nothing.
+
 ```
-Tests to implement:
-[ ] test_name_1 — what it verifies
-[ ] test_name_2 — what it verifies
-[ ] test_name_3 — what it verifies
+Cannot name a change       → redesign around an observable behavior
+"The source text changed"  → run the artifact and assert its effects, not its text
+Only a deliberate decision → change detector; test the behavior that depends on it
 ```
 
-In YOLO mode: skip user review, proceed directly to Step 3.
+Expected values must be derived without the code under test — literals and
+hand-checked fixtures, never a value the implementation computes.
+
+Present the list to the user, each test with the break it catches:
+```
+Tests to implement:
+[ ] test_name_1 — fails when: <production change>
+[ ] test_name_2 — fails when: <production change>
+[ ] test_name_3 — fails when: <production change>
+```
+
+Read `reference/writing-good-tests.md` before writing tests for shell scripts, git
+hooks, or skill files — those are where the text-instead-of-behavior trap actually
+bites in this repo.
+
+In YOLO mode: skip user review, proceed directly to Step 3. The naming requirement
+still applies — it is what makes RED meaningful.
 
 ### 3. Confirm Test File Path
 
@@ -201,6 +220,7 @@ If tests fail after refactor:
 ## Reference Materials
 
 - `reference/iron-law.md` — The iron law of TDD and rationalization rejection table
+- `reference/writing-good-tests.md` — Falsifiability: naming the break, deriving expectations independently, and the string-presence and change-detector traps
 - `tcs-patterns:testing` — Test factory patterns, behavior-driven test structure, coverage theater detection
 - `tcs-patterns:mutation-testing` — Mutation analysis for MUTATE phase (optional, requires tcs-patterns plugin)
 - `tcs-patterns:test-design-reviewer` — Evaluate test quality against Dave Farley's 8 properties

@@ -37,6 +37,25 @@ When discovering and documenting, address four dimensions:
 
 **Out of scope:** Technical implementation, architecture, database schemas, API specifications — those belong in SDD.
 
+## MECE Principle
+
+Every structured enumeration in the PRD must be **Mutually Exclusive, Collectively Exhaustive**:
+
+| Section | Mutually Exclusive | Collectively Exhaustive |
+|---|---|---|
+| **Personas** | Each represents a distinct user type with unique goals and pain points. No two overlap in role or motivation. | All relevant user types appear. Ask: "who else touches this system?" |
+| **Journeys** | Each describes a distinct path. No two cover the same sequence for the same persona. | Primary, secondary, and error/recovery paths are mapped. Ask: "what other way could a user reach this goal?" |
+| **Feature Requirements** | Each story captures one distinct behavior. No two describe the same capability — including across MoSCoW categories. | Ask: "if we shipped only these, would the problem be solved for every persona?" |
+| **Acceptance Criteria** | Each tests a unique condition. No two verify the same behavior in different words. | Happy path, error path, and edge cases per feature. Ask: "what input could break this that we haven't named?" |
+
+**How to apply** — after each section, before moving on:
+
+1. **Exclusivity** — can any two items merge without losing meaning? Then merge them.
+2. **Exhaustiveness** — is a scenario, user type, or capability missing? Then add it.
+3. **Cross-section** — do "Should Have" features restate behaviors already in "Must Have"? Do two journeys differ only by which persona is walking them?
+
+The cross-section check is the one that catches real defects. Overlap inside a single list is visible; overlap across MoSCoW tiers reads as thoroughness.
+
 ## Constraints
 
 **Always:**
@@ -45,12 +64,15 @@ When discovering and documenting, address four dimensions:
 - Present ALL agent findings to user — complete responses, not summaries.
 - Wait for user confirmation before proceeding to the next cycle.
 - Run validation checklist before declaring PRD complete.
+- Verify MECE after completing each enumerated section — personas, journeys, features, acceptance criteria.
 
 **Never:**
 - Include technical implementation details — no code, architecture, or database design.
 - Include API specifications — belongs in SDD.
 - Skip the multi-angle validation before completing.
 - Remove or reorganize template sections.
+- Write overlapping user stories — if two describe the same capability, merge them.
+- Leave a coverage gap unflagged — a persona with no journey, or a feature with no acceptance criteria.
 
 ## Reference Materials
 
