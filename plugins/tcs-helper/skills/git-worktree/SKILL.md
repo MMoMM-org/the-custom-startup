@@ -113,26 +113,58 @@ On error (e.g. branch checked out elsewhere): surface the git error message and 
 
 ### 6. Cleanup mode
 
-Extract branch name and resolve path:
+Extract branch name and resolve path. Walk the porcelain records — do **not** grep
+adjacent lines. Each record is `worktree` / `HEAD` / `branch`, optionally with
+`locked` or `prunable` in between, so the two lines are never neighbours and both
+`grep -A1` and `grep -B1` return nothing:
 
 ```bash
-git worktree list --porcelain | grep -A1 "branch refs/heads/${branch}" | grep "^worktree" | awk '{print $2}'
+WORKTREE_PATH=$(git worktree list --porcelain | awk -v b="refs/heads/${branch}" '
+  /^worktree / { p = substr($0, 10) }
+  $0 == "branch " b { print p; found = 1; exit }
+  END { if (!found) exit 1 }
+')
 ```
 
-Remove the worktree:
+If no path comes back, the branch has no worktree — report that and stop, rather
+than proceeding with an empty path.
+
+Remove the worktree (from outside it), then prune stale registrations:
 
 ```bash
-git worktree remove "{path}"
+git worktree remove "$WORKTREE_PATH"
+git worktree prune
 ```
 
-If removal fails due to untracked/modified files, retry with `--force` only after:
-- **YOLO mode**: auto-force
-- **Normal mode**: AskUserQuestion: "Worktree has uncommitted changes. Force remove?" [Yes / No]
+**If removal is refused** (`contains modified or untracked files`): stop. Those files
+exist nowhere else — no commit, no reflog, nothing to recover from. Never force-remove
+on your own initiative, and never auto-force in YOLO mode: YOLO covers speed on
+recoverable operations, not the destruction of the only copy of something.
 
-Then ask about branch deletion:
+Show what is at stake, then ask:
+
+```bash
+git -C "$WORKTREE_PATH" status --porcelain -uall
+```
+
+AskUserQuestion:
+
+> Worktree removal refused — these files were never committed:
+>
+> {file list}
+>
+> 1. Commit them to `{branch}` before cleanup
+> 2. Move them to the main repo root
+> 3. Delete them (unrecoverable)
+
+Carry out the choice, then remove the worktree.
+
+Then ask about branch deletion — always after the worktree is gone, since git
+refuses to delete a branch that is still checked out in a live worktree:
 - **YOLO mode**: skip branch deletion (safe default)
 - **Normal mode**: AskUserQuestion: "Also delete branch `{branch}`?" [Yes / No]
-  - If Yes: `git branch -d {branch}` (use `-D` if `-d` fails with "not fully merged")
+  - If Yes: `git branch -d {branch}`. If that fails with "not fully merged", report
+    the unmerged state and ask before escalating to `git branch -D`.
 
 ### 7. Conclude
 
