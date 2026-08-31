@@ -18,3 +18,5 @@
 ## Critical Documentation
 <!-- Add important docs here when created — Claude loads these on demand -->
 - [Skill and Agent Design](../../about/skill-and-agent-design.md) — when to use skill vs subagent vs slash command, one-to-many extraction threshold, receptionist pattern, anti-patterns
+- [Design Principles](../../about/principles.md) — why: activation contract, progressive disclosure, what a subagent actually receives, tool scoping, model selection, evaluation-first, validation checklist
+- [Sources and Attribution](../../about/sources.md) — upstream provenance, per-source sync status, and the sweep procedure for checking sources for improvements
