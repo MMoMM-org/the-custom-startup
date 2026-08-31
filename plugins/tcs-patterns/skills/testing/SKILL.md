@@ -44,10 +44,14 @@ it('should validate CVV format', () => {
 it('should reject negative amounts', () => {
   const payment = getMockPayment({ amount: -100 });
   const result = processPayment(payment);
-  expect(result.success).toBe(false);
-  expect(result.error).toContain('Amount must be positive');
+  expect(result).toEqual({ success: false, error: expect.stringContaining('Amount must be positive') });
 });
 ```
+
+**Why assert the whole result?** Two reasons, and both bite in practice:
+
+1. `expect(result.success).toBe(false)` does **not** narrow a discriminated union. A following `result.error` is member access on the un-narrowed `Result`, which fails to compile under strict TypeScript — see `tcs-patterns:typescript-strict`.
+2. `toEqual` pins the entire result shape, so a mutation that corrupts or adds an unasserted field fails the test. Split assertions leave those fields unchecked and let such mutants survive — see `tcs-patterns:mutation-testing`.
 
 ---
 
