@@ -101,3 +101,37 @@ When `tcs-team` agents delegate specialist work, they automatically use relevant
 |-------|-------------|----------------|------------|
 | `mcp-server` | Use when building or reviewing a Model Context Protocol server — triggered by requests to audit tool definitions, input schemas, error handling, transport setup, or capability declarations. | When building an MCP server or auditing tool definitions and capability declarations. | `/mcp-server [MCP server source path to audit or implement]` |
 | `obsidian-plugin` | Use when building or reviewing Obsidian plugins — enforces plugin lifecycle patterns, proper event listener cleanup, mobile compatibility, and Obsidian API usage over raw DOM manipulation. | When building an Obsidian plugin or auditing one for lifecycle and mobile safety. | `/obsidian-plugin [plugin source path to audit]` |
+
+---
+
+## Hooks
+
+Most pattern rules are advisory — the skill tells you what good looks like when you ask. A few are different: violating them is unrecoverable later, so the plugin enforces them at write time via a `PreToolUse` hook.
+
+| Hook | Event | Scope | What it does |
+|------|-------|-------|--------------|
+| `block-eslint-disable.sh` | `PreToolUse` (`Write`/`Edit`/`NotebookEdit`) | Repos detected as Obsidian plugins | Denies any write that introduces `eslint-disable` (line, block, or file form) or a rule mapped to `"off"` in the ESLint config |
+
+### Why this one blocks
+
+The Obsidian community-plugin reviewer scans submissions for disabled ESLint rules and **rejects the plugin from official registration** if it finds any — for every rule the project's config loads, not just `obsidianmd/*`. There is no "justified disable" exception, so the fix is always code-side. The `obsidian-plugin` skill flags disables at audit time (Step 11); the hook stops them from being written in the first place.
+
+The denial message names the offending rule and, for the rules that recur in practice (`ui/sentence-case`, `prefer-active-window-timers`, `manage-class`, `no-html-element-creation`, `@typescript-eslint/prefer-import` on CJS globals), the concrete non-disable fix.
+
+### Scope gate
+
+The hook stays completely silent unless all three hold:
+
+1. the target file is inside a git repository,
+2. that repository looks like an Obsidian plugin — a `manifest.json` containing `minAppVersion`, or a `package.json` depending on `obsidian`,
+3. the target file is not Markdown (documentation legitimately quotes the pattern).
+
+Content is read from the *incoming* text only (`content` / `new_string` / `new_source`), so removing an existing disable is never blocked by its own payload.
+
+### Escape hatch
+
+For a plugin that will never be submitted to the community directory, relaunch Claude with:
+
+```bash
+CLAUDE_ALLOW_ESLINT_DISABLE=1 claude
+```
