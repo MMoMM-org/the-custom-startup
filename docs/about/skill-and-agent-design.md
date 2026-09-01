@@ -210,7 +210,7 @@ Three recent decisions, with the criterion that drove each.
 
 ## See Also
 
-- [principles.md](principles.md) — research foundation for activity-based agent specialization
+- [principles.md](principles.md) — the design principles this document sits on: activation contract, progressive disclosure, context isolation, tool scoping, model selection, evaluation-first
 - [concepts.md](concepts.md) — XDD workflow and the design philosophy behind it
 - [`reference/skills.md`](../reference/skills.md) — skill inventory and decision tree for the `tcs-workflow` plugin
 - [`reference/agents.md`](../reference/agents.md) — agent inventory across `tcs-team`

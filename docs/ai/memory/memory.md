@@ -1,15 +1,16 @@
 # Memory Index — the-custom-startup
 
 > Routing rules are in CLAUDE.md (root). This file is the index only.
-> Budget: ≤ 200 lines. Archive entries when stale. Run /memory-sync to check.
+> Budget: bank ≤ 24 KB, entries ≤ 250 chars. Archive when stale. Run /memory-sync to check.
 
 ## Files
-- [general.md](general.md) — conventions, style, naming [updated: 2026-07-02]
-- [tools.md](tools.md) — CI, build, local dev [updated: 2026-07-02]
+<!-- routing-reference.md is /memory-add's routing table, not session content — deliberately unlisted. -->
+- [general.md](general.md) — conventions, style, naming [updated: 2026-09-01]
+- [tools.md](tools.md) — CI, build, local dev [updated: 2026-09-01]
 - [domain.md](domain.md) — business rules, data models [updated: YYYY-MM-DD]
-- [decisions.md](decisions.md) — architecture choices [updated: 2026-05-22]
+- [decisions.md](decisions.md) — architecture choices [updated: 2026-09-01]
 - [context.md](context.md) — current focus [updated: YYYY-MM-DD]
-- [troubleshooting.md](troubleshooting.md) — known issues [updated: 2026-05-23]
+- [troubleshooting.md](troubleshooting.md) — known issues [updated: 2026-09-01]
 
 ## Archive
 <!-- Archived entries live in archive/YYYY-MM/. Not loaded at session start. -->
@@ -18,3 +19,5 @@
 ## Critical Documentation
 <!-- Add important docs here when created — Claude loads these on demand -->
 - [Skill and Agent Design](../../about/skill-and-agent-design.md) — when to use skill vs subagent vs slash command, one-to-many extraction threshold, receptionist pattern, anti-patterns
+- [Design Principles](../../about/principles.md) — why: activation contract, progressive disclosure, what a subagent actually receives, tool scoping, model selection, evaluation-first, validation checklist
+- [Sources and Attribution](../../about/sources.md) — upstream provenance, per-source sync status, and the sweep procedure for checking sources for improvements

@@ -1,6 +1,6 @@
 # Testing Strategy for DDD
 
-> For fakes implementation patterns, `createTestDb` helper, and the Swappability Test, see the hexagonal-architecture skill's `resources/testing-hex-arch.md`. This resource focuses on DDD-specific testing concerns.
+> For fakes implementation patterns, `createTestDb` helper, and the Swappability Test, see `tcs-patterns:hexagonal` `reference/testing-hex-arch.md`. This resource focuses on DDD-specific testing concerns.
 
 This testing approach follows Valentina Jemuović's Use Case Driven Design (UCDD) — see `../../REFERENCES.md` for sources.
 
@@ -22,8 +22,7 @@ describe('pledge contribution', () => {
       amount: createMoney(50, 'GBP'),
     });
 
-    expect(result.success).toBe(false);
-    expect(result.reason).toBe('insufficient-balance');
+    expect(result).toEqual({ success: false, reason: 'insufficient-balance' });
     expect(occasionRepo.savedEntities).toHaveLength(0);
   });
 });

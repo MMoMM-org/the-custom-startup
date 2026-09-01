@@ -1,6 +1,6 @@
 ---
 name: mutation-testing
-description: "Use when strengthening test suites — runs mutation analysis to find tests that pass without actually verifying behavior, and guides writing assertions that kill surviving mutants."
+description: "Use when strengthening test suites — runs mutation analysis to find tests that pass without actually verifying behavior, and guides writing assertions that kill surviving mutants. Use as the end-of-phase PR-readiness gate once implementation and refactoring are complete, not inside each RED-GREEN increment."
 user-invocable: true
 argument-hint: "[test directory or module to analyse]"
 allowed-tools: Read, Bash, Grep, Glob
@@ -11,6 +11,31 @@ allowed-tools: Read, Bash, Grep, Glob
 **Active skill: tcs-patterns:mutation-testing**
 
 Act as a mutation testing specialist. Every surviving mutant is a test gap. Treat a mutation score below 85% as a failing test suite.
+
+## When to Run
+
+The harness is a **PR-readiness gate**, not part of the inner loop.
+
+```
+FOR EACH TDD INCREMENT:
+    ├─► RED: write a failing test — use the mutator rules to pick a strong
+    │        example. This is cheap: reasoning, not tooling.
+    ├─► GREEN: make it pass
+    ├─► REFACTOR: if valuable
+    └─► repeat WITHOUT running the harness
+
+END-OF-PHASE PR-READINESS GATE:
+    ├─► run the harness once, over the accumulated branch scope
+    ├─► triage the report, strengthen tests for worthwhile survivors
+    ├─► re-run focused mutations until killed or classified
+    └─► present the final report
+```
+
+**Do not run the harness after each test, increment, refactor, or commit.** Its cost grows with the codebase, and paying it per increment makes the short feedback loop that TDD depends on progressively slower — which is how teams end up abandoning the loop rather than the harness.
+
+The focused re-runs during the gate are part of the gate, not a return to per-increment mutation testing.
+
+Use it when: a phase of work is ready to become a PR, reviewing changes on a branch, verifying test effectiveness after TDD *and* refactoring, or validating that a refactor did not weaken the suite.
 
 ## Interface
 

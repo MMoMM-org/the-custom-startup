@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.3.1] - 2026-08-31
+
+### Fixed
+
+- **`finish-branch` worktree cleanup never ran.** Three independent defects stacked into one silent no-op, all verified rather than inferred:
+  - `IN_WORKTREE=$(git rev-parse --git-common-dir | grep -v "^\.git$" && echo "yes" || echo "no")` captured the *pipeline's* output, so inside a worktree it evaluated to `"/abs/path\nyes"`, never the bare `"yes"` every later comparison tested for. Replaced with a `--git-dir` vs `--git-common-dir` comparison.
+  - The path lookup `git worktree list --porcelain | grep -B1 "branch refs/heads/$BRANCH" | grep "^worktree"` returns **nothing**: porcelain records are `worktree` / `HEAD` / `branch` (optionally with `locked`/`prunable`), so the two lines are never adjacent. `grep -A1` — the variant in `git-worktree` — fails for the same reason. Replaced with an `awk` walk over the records; verified against a fixture containing detached and locked entries.
+  - Even with both fixed, cleanup ran *after* `git branch -d/-D`, so a lookup by branch name could no longer match. The worktree root is now captured in Step 1 before any checkout or deletion, and removal runs before branch deletion — which is also the only correct order, since git refuses to delete a branch checked out in a live worktree.
+- **`finish-branch` and `git-worktree` could destroy uncommitted work.** Both force-removed a worktree whose removal git had refused. `finish-branch` skipped the confirmation entirely when the user had already confirmed a *branch* discard — but untracked files were never on the branch, so that confirmation never covered them. `git-worktree` auto-forced in YOLO mode with no prompt at all. Neither named the files at risk. Both now stop on refusal, run `git status --porcelain -uall` to show exactly what exists nowhere else, and offer commit / move / delete. Never `--force` on our own initiative.
+
+### Changed
+
+- **`finish-branch` no longer offers discarding as a menu option.** Option 4 sat beside merge and PR at the moment the branch had just gone green, advertising the destruction of finished, passing work. The menu is now three options; discarding survives as an explicit-request-only path with the same typed-`discard` confirmation, which now enumerates the branch, its commits, and the worktree before asking. The `description` frontmatter and `argument-hint` no longer advertise it either — the description drives auto-trigger routing. Follows the same change upstream made in `obra/superpowers` v6.2.0.
+- **`finish-branch` PR creation is forge-agnostic.** `gh pr create --fill` is used when the GitHub CLI is present; otherwise the skill points at the creation URL forges print on push, instead of assuming one tool.
+- **`skill-author` § Instruction Purity now carves out discipline-enforcing skills.** "Strip on sight: rationale" is right for a procedural skill and wrong for one that enforces a rule against pressure, where the rationale *is* the mechanism — the counter-argument that fires while the model is talking itself out of the rule. `obra/superpowers` deleted exactly such a section as redundant prose and measured test-first behaviour fall from 8/10 to 5/10 under "just write it, tests after" pressure, on two model families. The convention now prescribes **relocation, not deletion** (each argument moves into the excuse → reality row where that excuse appears), states that an argument at the point of rationalization beats the same argument in a section already read past, and requires measuring an unsure cut with the subagent-probe method in `testing-with-subagents.md` rather than judging it redundant by reading. Recaps, restatements, and benefit-selling prose stay strippable.
+
 ## [4.3.0] - 2026-07-02
 
 ### Added

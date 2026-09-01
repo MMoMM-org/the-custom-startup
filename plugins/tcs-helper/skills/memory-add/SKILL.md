@@ -41,6 +41,8 @@ State {
 **Always:**
 - Read the target file before appending (deduplication check).
 - Add date comment before new entries.
+- Write entries in the canonical form — see `reference/category-formats.md`: one falsifiable
+  rule, its tell, one pointer, **≤ 250 characters**.
 - Update memory.md index last-updated date after any repo-scope write.
 - Report clearly even when nothing was routed.
 
@@ -48,6 +50,15 @@ State {
 - Write to target files in YOLO mode — only to yolo-review.md.
 - Silently fail — always report what was done and what was skipped.
 - Create new memory files outside the 6 standard categories — use existing files or ask.
+- Carry provenance into an entry — verification dates and methods, incident history, or a
+  second pointer. The one pointer stands in for all of it.
+- Store a recipe, a correction to a neighbouring entry, or absorbed prior art as an entry.
+  `reference/category-formats.md` § "What is not an entry at all" routes these elsewhere.
+
+## Reference Materials
+
+- reference/category-formats.md — entry form, anatomy, worked before/after
+- reference/routing-rules.md — scope and category routing table
 
 ## Workflow
 
@@ -105,11 +116,16 @@ For each learning:
 
 ### 5. Write
 
-**Normal mode:** Append to target file:
+**Normal mode:** Compress the raw learning into the canonical form, then append:
 ```
 <!-- YYYY-MM-DD -->
-- [learning text]
+- **<rule>** — <tell>. → <consequence>. [<pointer>]
 ```
+
+Strip the verification story, the incident history, and every pointer but one. If the result
+still exceeds 250 characters, split it — that is usually two rules. Read
+`reference/category-formats.md` for the anatomy and a worked before/after.
+
 Then update `memory.md` index: change `[updated: YYYY-MM-DD]` for the affected file.
 
 **YOLO mode (`YOLO=true`):** Do NOT write to target files. Instead, append to `docs/ai/memory/yolo-review.md`:

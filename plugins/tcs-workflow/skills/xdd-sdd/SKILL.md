@@ -46,6 +46,7 @@ State {
 - Ensure every PRD requirement is addressable by the design.
 - Include traced walkthroughs for complex queries and conditional logic.
 - Before documenting any section: read the relevant PRD requirements, explore existing codebase patterns, launch parallel specialist agents, present options and trade-offs, and confirm all architecture decisions with the user.
+- Verify MECE after completing the components, interfaces, data models, and acceptance criteria sections.
 
 **Never:**
 - Implement code — this skill produces specifications only.
@@ -53,6 +54,8 @@ State {
 - Remove or reorganize template sections.
 - Leave [NEEDS CLARIFICATION] markers in completed SDDs.
 - Design beyond PRD scope (no scope creep).
+- Create components with overlapping responsibilities — if two share domain logic, merge them or re-partition.
+- Leave a PRD requirement unassigned — every requirement traces to exactly one owning component.
 
 ## SDD Focus
 
@@ -61,6 +64,25 @@ When designing, address four dimensions:
 - **WHERE** code lives — directory structure, components, layers
 - **WHAT** interfaces exist — APIs, data models, integrations
 - **WHY** decisions were made — ADRs with rationale and trade-offs
+
+## MECE Principle
+
+Every structural decomposition in the SDD must be **Mutually Exclusive, Collectively Exhaustive**:
+
+| Section | Mutually Exclusive | Collectively Exhaustive |
+|---|---|---|
+| **Components** | Each owns a single distinct responsibility. No two own the same domain logic. | Every PRD capability is assigned to exactly one. Ask: "which component handles X?" — an ambiguous answer means overlap. |
+| **Interfaces** | Each serves a distinct purpose. No two expose the same operation or data shape. | Every path between components, external systems, and data stores is documented. Ask: "how does A talk to B?" |
+| **Data Models** | Each entity owns a distinct slice of the domain. No two store the same business data. | All data the components and interfaces need is modelled. Ask: "where is X stored?" |
+| **Acceptance Criteria** | Each specifies a unique behavior. No two verify the same thing under different triggers. | Every PRD acceptance scenario has a system-level counterpart. Ask: "how does the system satisfy PRD/AC-X.Y?" |
+
+**How to apply** — during validation (step 5):
+
+1. **Responsibility matrix** — map each PRD requirement to exactly one component. Two owners is overlap; zero is a gap.
+2. **Interface deduplication** — no two interfaces serving the same consumer-to-provider path.
+3. **Criteria traceability** — 1:1 between PRD acceptance criteria and the SDD's.
+
+The responsibility matrix is the check worth doing literally rather than by eye. "Which component handles X?" is easy to answer plausibly and wrong.
 
 ## Reference Materials
 
@@ -99,6 +121,16 @@ Launch parallel specialist agents to investigate:
 - Security implications
 - Performance characteristics
 - Integration approaches
+
+**Depth requirement.** Findings must go beyond naming a pattern. Each one explains:
+
+- **HOW** — the concrete mechanism: the data flow or control flow the pattern introduces
+- **WHY here** — why it fits *this* context, not that it is a best practice in general
+- **Implications** — what adopting it costs: complexity, dependencies, migration, test surface
+
+"Use the repository pattern" is not a finding. "Use the repository pattern because the PRD requires swappable storage backends — here is how queries compose, here is the abstraction boundary, here is the test surface it creates" is one.
+
+If an agent returns surface-level findings, flag them as incomplete and send it back for deeper investigation before proceeding. A named pattern with no mechanism behind it survives review and fails at implementation, when the cost of re-deciding is highest.
 
 Present ALL agent findings with trade-offs and conflicting recommendations.
 

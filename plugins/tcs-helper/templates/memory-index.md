@@ -1,9 +1,10 @@
 # Memory Index — [Repo Name]
 
 > Routing rules are in CLAUDE.md (root). This file is the index only.
-> Budget: ≤ 200 lines. Archive entries when stale. Run /memory-sync to check.
+> Budget: bank ≤ 24 KB, entries ≤ 250 chars. Archive when stale. Run /memory-sync to check.
 
 ## Files
+<!-- routing-reference.md is /memory-add's routing table, not session content — deliberately unlisted. -->
 - [general.md](general.md) — conventions, style, naming [updated: YYYY-MM-DD]
 - [tools.md](tools.md) — CI, build, local dev [updated: YYYY-MM-DD]
 - [domain.md](domain.md) — business rules, data models [updated: YYYY-MM-DD]

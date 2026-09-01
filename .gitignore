@@ -31,3 +31,8 @@ modules/satori/.satori/
 # Local scratch / handoff buffers
 tmp/
 origin.git/
+.mcp.json
+/generated-images/
+/claude-docker/
+/claude-docker-home/
+/begin-code.sh

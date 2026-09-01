@@ -1,10 +1,10 @@
 # Hexagonal Architecture (Ports & Adapters)
 
-This skill applies only to projects that have opted in to hexagonal architecture. Do not apply these patterns to projects that use a different architecture. For introducing hex arch into an existing codebase incrementally, see `resources/incremental-adoption.md`.
+This skill applies only to projects that have opted in to hexagonal architecture. Do not apply these patterns to projects that use a different architecture. For introducing hex arch into an existing codebase incrementally, see `reference/incremental-adoption.md`.
 
 For domain modeling (entities, value objects, aggregates, ubiquitous language), load the `domain-driven-design` skill. Hex arch and DDD are complementary but independent — hex arch provides structural isolation (how the outside connects), DDD provides the domain model (what lives in the center). A project may use one without the other.
 
-**Deep-dive resources** are in the `resources/` directory. Load them on demand:
+**Deep-dive resources** are in the `reference/` directory. Load them on demand:
 
 | Resource | Load when... |
 |----------|-------------|
@@ -154,7 +154,7 @@ const getParticipantEventView = async (db: Database, eventId: string) => {
 
 Domain-layer pure functions can transform query results into display types — these encode business rules about what data means (e.g., "is this item claimed by the current user?"). The query fetches; the domain function interprets.
 
-For detailed CQRS-lite guidance, see `resources/cqrs-lite.md`.
+For detailed CQRS-lite guidance, see `reference/cqrs-lite.md`.
 
 ---
 
@@ -253,9 +253,9 @@ Hex arch's primary benefit is testability. The primary test boundary is the **us
 | **Secondary** | Driven adapters (real DB/MSW) | Adapter translates correctly |
 | **Verification** | E2E (full stack) | User experience works |
 
-**Fakes over mocks:** Fakes implement the real interface and maintain state. Mocks verify call sequences and break on refactoring. See `resources/testing-hex-arch.md` for detailed patterns.
+**Fakes over mocks:** Fakes implement the real interface and maintain state. Mocks verify call sequences and break on refactoring. See `reference/testing-hex-arch.md` for detailed patterns.
 
-For a complete worked example showing one feature traced through every layer (glossary → types → domain → use case → adapters → tests → file locations), see `resources/worked-example.md`.
+For a complete worked example showing one feature traced through every layer (glossary → types → domain → use case → adapters → tests → file locations), see `reference/worked-example.md`.
 
 ---
 
@@ -269,7 +269,7 @@ For a complete worked example showing one feature traced through every layer (gl
 | Transactions | Adapter / composition root | Infrastructure concern, domain unaware |
 | Error formatting | Driving adapter | Translates domain results to HTTP/gRPC |
 
-**The domain never imports a logger, catches HTTP errors, or manages transactions.** It returns results; adapters handle the rest. See `resources/cross-cutting-concerns.md` for detailed patterns.
+**The domain never imports a logger, catches HTTP errors, or manages transactions.** It returns results; adapters handle the rest. See `reference/cross-cutting-concerns.md` for detailed patterns.
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: memory-sync
-description: "Use when memory files may be out of sync with CLAUDE.md imports, the memory.md index may be stale, or after adding or removing memory category files. Triggers on: sync memory, check memory structure, memory out of sync."
+description: "Use when memory files may be out of sync with CLAUDE.md imports, the memory.md index may be stale, the memory bank may be oversized, entries may have drifted past the size budget, or after adding or removing memory category files. Triggers on: sync memory, check memory structure, memory out of sync, memory bank too big, memory entries too long."
 user-invocable: true
 argument-hint: "[--fix]"
 allowed-tools: Read, Write, Edit, Bash
@@ -43,10 +43,11 @@ State {
 ### 1. Gather state
 
 ```bash
-# List all .md files in docs/ai/memory/ (excluding archive/)
-find docs/ai/memory -maxdepth 1 -name '*.md' | sort
-# Count lines in memory.md
-wc -l docs/ai/memory/memory.md
+# List category files in docs/ai/memory/ (excluding archive/ and the non-category files)
+find docs/ai/memory -maxdepth 1 -name '*.md' \
+  ! -name 'memory.md' ! -name 'routing-reference.md' | sort
+# Size the bank in bytes — entries are single long lines, so line counts mislead
+wc -c docs/ai/memory/*.md
 # Check CLAUDE.md for @imports
 grep '@docs/ai/memory' CLAUDE.md
 ```
@@ -68,15 +69,31 @@ grep '@docs/ai/memory' CLAUDE.md
 - Compare listed files against files found in Step 1
 - WARN for each file in filesystem but not in index (orphan)
 - WARN for each file in index but not in filesystem (stale entry)
+- Two files are never orphans: `memory.md` (it *is* the index) and `routing-reference.md`
+  (routing metadata consumed by `/memory-add`, not session content). The Step 1 glob already
+  excludes both — do not reintroduce them by globbing `*.md` unfiltered.
 
 **Check 4: No routing rules in memory.md**
 - Read docs/ai/memory/memory.md
 - If it contains lines matching routing patterns (→ general.md, → tools.md, etc.): WARN
 
-**Check 5: memory.md line budget**
-- If line count ≥ 200: ERROR — "memory.md at budget limit"
-- If line count ≥ 160: WARN — "memory.md approaching budget (N/200 lines)"
+**Check 5: memory bank size budget**
+
+Measure bytes, never lines — entries are single long lines.
+
+- Sum `wc -c` across the category files (excluding `memory.md` and `archive/`)
+- If ≥ 24 KB: ERROR — "memory bank over budget (N KB) — run /memory-cleanup"
+- If ≥ 16 KB: WARN — "memory bank approaching budget (N/24 KB)"
 - Otherwise: OK
+
+**Check 6: entry form**
+
+```bash
+awk '/^- \*\*/ && length($0) > 250 {print FILENAME":"FNR"  "length($0)" chars"}' docs/ai/memory/*.md
+```
+
+- WARN for each entry over 250 characters, naming file, line, and length
+- Recommend `/memory-cleanup`, which owns the compression workflow — memory-sync only reports
 
 ### 3. Report
 
@@ -86,7 +103,9 @@ memory-sync report:
   ✓ All 6 category files listed in memory.md
   ✓ No orphaned files
   ✓ Routing rules in CLAUDE.md (not memory.md)
-  ⚠ memory.md: 164/200 lines — approaching budget
+  ⚠ Bank: 18.2/24 KB — approaching budget
+  ⚠ Form: 3 entries over 250 chars (tools.md:26 1104, general.md:7 892, tools.md:18 861)
+    → run /memory-cleanup
 ```
 
 If issues found and `--fix` passed: apply auto-fixable items (missing @import only); flag manual items.

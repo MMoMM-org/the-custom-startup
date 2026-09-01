@@ -5,7 +5,8 @@
 ## Core Philosophy
 TCS plugin ecosystem — Claude Code plugins, skills, agents, and workflow tooling.
 
-@AGENTS.md
+Repository structure, plugin inventory and agent guidance: `FOR-AGENTS.md` — read it when you
+need to locate a plugin, skill or agent, not on every session.
 
 ## Memory & Context
 @docs/ai/memory/memory.md

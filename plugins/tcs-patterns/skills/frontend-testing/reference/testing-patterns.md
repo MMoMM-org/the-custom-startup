@@ -101,13 +101,13 @@ it('creates and displays a user', async () => {
 
 ## Query Selection Priority
 
-Use queries in this order (accessibility-first):
+Use queries in this order (accessibility-first). The priority is near-identical for Browser Mode locators (`page.*`) and Testing Library queries (`screen.*`) — the two places they diverge are flagged below.
 
 1. **`getByRole`** — ARIA role + accessible name (mirrors screen reader)
 2. **`getByLabelText`** — form fields with associated `<label>`
-3. **`getByPlaceholderText`** — fallback for inputs without label
+3. **`getByPlaceholderText`** — fallback for inputs without label. Browser Mode spells this `getByPlaceholder`
 4. **`getByText`** — non-interactive content (headings, paragraphs)
-5. **`getByDisplayValue`** — current form values
+5. **`getByDisplayValue`** — current form values. Testing Library only — Browser Mode has no such locator; use `getByRole` plus `toHaveValue` instead
 6. **`getByAltText`** — images
 7. **`getByTitle`** — SVG titles
 8. **`getByTestId`** — **last resort only**
