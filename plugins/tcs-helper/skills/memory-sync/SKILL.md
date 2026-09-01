@@ -62,7 +62,8 @@ grep '@docs/ai/memory' CLAUDE.md
 **Check 2: Audit each @ import**
 - For each `@` line in CLAUDE.md: verify the file exists
 - Flag broken @imports (file doesn't exist)
-- Note: additional @imports beyond memory.md should be justified — report them for review
+- `@docs/ai/memory/active.md` is expected — the always-loaded layer. Do not report it.
+- Any other @import beyond those two: report for review
 
 **Check 3: memory.md lists all category files**
 - Read docs/ai/memory/memory.md
@@ -73,6 +74,10 @@ grep '@docs/ai/memory' CLAUDE.md
   (routing metadata consumed by `/memory-add`, not session content). The Step 1 glob already
   excludes both — do not reintroduce them by globbing `*.md` unfiltered.
 
+**Check 3b: No entry lives in two layers**
+- For each entry in `active.md`, grep the category files for the same rule
+- ERROR for each duplicate — entries move between layers, they are never copied
+
 **Check 4: No routing rules in memory.md**
 - Read docs/ai/memory/memory.md
 - If it contains lines matching routing patterns (→ general.md, → tools.md, etc.): WARN
@@ -81,7 +86,9 @@ grep '@docs/ai/memory' CLAUDE.md
 
 Measure bytes, never lines — entries are single long lines.
 
-- Sum `wc -c` across the category files (excluding `memory.md` and `archive/`)
+- Sum `wc -c` across the category files (excluding `memory.md`, `active.md` and `archive/`)
+- `active.md` has its own budget: ERROR at ≥ 2.5 KB, since every byte is paid for on
+  every subagent dispatch
 - If ≥ 24 KB: ERROR — "memory bank over budget (N KB) — run /memory-cleanup"
 - If ≥ 16 KB: WARN — "memory bank approaching budget (N/24 KB)"
 - Otherwise: OK

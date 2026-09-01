@@ -9,6 +9,7 @@ Repository structure, plugin inventory and agent guidance: `FOR-AGENTS.md` — r
 need to locate a plugin, skill or agent, not on every session.
 
 ## Memory & Context
+@docs/ai/memory/active.md
 @docs/ai/memory/memory.md
 
 ## Routing Rules

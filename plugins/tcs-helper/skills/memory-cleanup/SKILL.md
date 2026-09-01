@@ -18,7 +18,7 @@ Review and prune the memory bank. Always show candidates to the user before any 
 Candidate {
   file: string
   entry: string
-  operation: archive | prune | consolidate | compress | evict
+  operation: archive | prune | consolidate | compress | evict | demote
   approved: boolean
 }
 
@@ -42,7 +42,7 @@ State {
 - Remove TODOs or roadmap items.
 - Act without user review.
 - Drop an actionable claim while compressing — only provenance comes out.
-- Delete an evicted entry instead of relocating it.
+- Copy an entry when evicting or demoting — it moves, and ends up in exactly one place.
 
 ## Workflow
 
@@ -63,6 +63,11 @@ awk '/^- \*\*/ && length($0) > 250 {print FILENAME":"FNR"  "length($0)" chars"}'
 Propose every oversized entry regardless of age. Judge each against
 `memory-add/reference/category-formats.md`; take out provenance — verification dates and
 methods, incident history, spec and ADR references — and nothing else.
+
+**Demote candidates** — entries in `active.md` that no longer pass both admission tests, or
+any entry there once the file exceeds 2.5 KB. Rank by weakest admission case and propose the
+weakest for demotion to its category file. Criterion and the rejected-candidate table:
+`memory-add/reference/category-formats.md` § Active layer.
 
 **Evict candidates** — entries that are not memory at all. Per
 `memory-add/reference/category-formats.md` § "What is not an entry at all":
@@ -102,6 +107,9 @@ The user approves the wording, not just the operation.
 
 **Evict:** Append to the destination named in step 2, then remove from the source file. If the
 destination does not exist, ask before creating it.
+
+**Demote:** Move the entry from `active.md` into its category file. Move, never copy — the
+entry must end up in exactly one place.
 
 ### 4. Update index
 

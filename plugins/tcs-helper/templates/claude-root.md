@@ -8,6 +8,7 @@
 <!-- Delete otherwise -->
 
 ## Memory & Context
+@docs/ai/memory/active.md
 @docs/ai/memory/memory.md
 
 ## Routing Rules

@@ -52,6 +52,8 @@ State {
 - Create new memory files outside the 6 standard categories — use existing files or ask.
 - Carry provenance into an entry — verification dates and methods, incident history, or a
   spec, ADR or issue reference. `git blame` already leads to the origin.
+- Write an entry to `active.md` and its category file. It lives in one place.
+- Push `active.md` past its budget. Demote something first, or use the category file.
 - Store a recipe, a correction to a neighbouring entry, or absorbed prior art as an entry.
   `reference/category-formats.md` § "What is not an entry at all" routes these elsewhere.
 
@@ -96,11 +98,17 @@ If `TCS_SEMANTIC_VALIDATION` env var is not `false`:
 3. Remaining items get merged confidence scores (average of regex + semantic).
 4. If `claude` CLI is unavailable: skip this step silently (no error, no blocking).
 
-### 3. Determine scope
+### 3. Determine scope and layer
 
 - `personal` / `workflow` → global scope: `~/.claude/includes/memory-<category>.md`
 - Explicitly project-scoped fact → project memory (if configured in CLAUDE.md)
 - Default → repo scope: `docs/ai/memory/{category}.md`
+
+Then pick the layer. A repo-scope entry goes to `docs/ai/memory/active.md` instead of its
+category file only if **both** hold: violating the rule fails **silently**, and the trigger
+is **broad**. Read `reference/category-formats.md` § Active layer before promoting — the
+layer is budgeted and something must leave when it is full. When in doubt, use the category
+file; `/memory-cleanup` can promote later.
 
 ### 4. Deduplication check
 

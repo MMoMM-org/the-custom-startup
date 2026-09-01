@@ -75,6 +75,38 @@ Three things routinely land in memory that are not memory. Route them out:
 | A reusable recipe or pattern | Skill or test-suite material | A skill, or the tests' README |
 | Absorbed prior art from another project | Provenance | `docs/about/sources.md` |
 
+## Active layer
+
+`docs/ai/memory/active.md` is `@`-imported from `CLAUDE.md`, so it reaches every session **and
+every subagent**. Everything in it is paid for on every dispatch. Budget: **≤ 2.5 KB** — when
+it is full, something leaves before anything enters.
+
+An entry is admitted only if **both** tests pass:
+
+1. **The violation is silent.** Breaking the rule yields a wrong result with no error. A loud
+   failure teaches itself — the agent sees it and corrects. A silent one ships.
+2. **The trigger is broad.** The situation arises in work many sessions do — hooks, bats,
+   plugin code, reviewer dispatch — not one narrow specialty.
+
+"An agent would violate this by default" is **not** the criterion. Every entry in the bank
+exists because someone did exactly that; that test selects everything and discriminates
+nothing.
+
+Everything else stays in its category file, reached on demand. Moving is not copying — an
+entry lives in exactly one place, and `/memory-sync` checks that.
+
+### Rejected candidates
+
+Recorded so they are not re-argued:
+
+| Entry | Failed on |
+|---|---|
+| `mktemp -d` without a template | Silence — fails loudly with "Operation not permitted". It is the precondition for the git-init leak, which is why *that* one is admitted. |
+| `gh pr view --json mergeMethod` | Silence — returns a plain error. |
+| Perf-test dedup reset | Breadth — perf tests only. |
+| CLI stub must apply `--jq` | Breadth — stub authoring only. |
+| Parallel-team git index | Breadth — Agent Team mode only. |
+
 ## Category shapes
 
 Most files take the standard form above. Two differ:

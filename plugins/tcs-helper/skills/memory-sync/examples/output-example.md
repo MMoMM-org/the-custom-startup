@@ -6,8 +6,10 @@ memory-sync report — 2026-03-25
   ✓ @import: @docs/ai/memory/memory.md present in CLAUDE.md
   ✓ Index: all 6 category files listed, no orphans
   ✓ Routing rules: in CLAUDE.md only
-  ✓ Bank: 6.1/24 KB
-  ✓ Form: all 23 entries ≤ 250 chars
+  ✓ Bank: 6.7/24 KB
+  ✓ Active layer: 2.0/2.5 KB, 7 entries
+  ✓ Layers: no entry in both active.md and a category file
+  ✓ Form: all 19 entries ≤ 250 chars
 All checks passed.
 ```
 
@@ -46,4 +48,17 @@ memory-sync report — 2026-03-25
     Fix: create the file, or remove the import line.
   ✓ Index: in sync
 1 issue found.
+```
+
+## Active layer over budget
+```
+memory-sync report — 2026-03-25
+  ✓ @import: active.md and memory.md both present
+  ✗ Active layer: 2.9/2.5 KB — over budget
+    The layer is paid for on every subagent dispatch. Something must be demoted
+    before anything else is promoted.
+    → run /memory-cleanup
+  ✗ Layers: "jq under set -e makes a hook fail closed" is in BOTH active.md and
+    tools.md. Entries move between layers, they are never copied.
+2 issues found.
 ```

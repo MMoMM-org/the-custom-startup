@@ -79,7 +79,7 @@ Implications for TCS:
 
 - **Write the delegation prompt like a brief for a colleague who just walked in.** Targets, decisions, and constraints must be inline; the prompt string is the only parent→child channel.
 - **Never write a subagent that assumes it can "see what we discussed."** It cannot.
-- **Our Memory Bank reaches agents only partly.** `CLAUDE.md` `@`-imports `docs/ai/memory/memory.md`, which links its category files with plain Markdown links rather than `@`-imports — so an agent receives the index but must choose to read the content. Operational knowledge that every agent needs belongs in `CLAUDE.md` itself, where the hierarchy guarantees delivery.
+- **Our Memory Bank reaches agents in two layers, deliberately.** `CLAUDE.md` `@`-imports `docs/ai/memory/active.md` — a budgeted file of rules whose violation is silent and whose trigger is broad — so those reach every subagent by the hierarchy. It also imports `docs/ai/memory/memory.md`, an index that *links* its category files, so the rest is available but costs nothing until an agent chooses to read it. The split exists because an import is paid for on every dispatch, not once per session.
 - Use isolation deliberately: dispatch a subagent when the exploration output should stay out of the parent; invoke a skill inline when the result must remain visible. This is the load-bearing question in [skill-and-agent-design.md](skill-and-agent-design.md).
 
 ### 2.4 Activity specialization beats role mega-agents
