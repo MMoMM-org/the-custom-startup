@@ -165,22 +165,25 @@ If any tests fail:
 - Output: "BLOCKED — Fix failing tests before proceeding. Do not add new code; focus only on making the existing tests pass."
 - Wait for user to resolve (or in YOLO mode: stop and log the failure)
 
-### 7. MUTATE Checkpoint (optional — requires `tcs-patterns:mutation-testing`)
+### 7. Mutation Check (reasoning only — the harness runs later)
 
-If `tcs-patterns` is installed, run mutation analysis before refactoring to verify tests actually catch bugs:
+Do **not** run the mutation harness here. It belongs at the end-of-phase PR-readiness gate, over the accumulated change — see `tcs-patterns:mutation-testing`. Its cost grows with the codebase, and paying it per increment slows the short feedback loop TDD depends on, which is how teams end up abandoning the loop rather than the harness.
+
+What is worth doing per increment is the cheap version — reasoning, not tooling:
+
+> What single-character change to the production code would this suite still pass?
+
+If you can name one that matters, a test is missing. Add it now, while the code is fresh.
 
 Output:
 ```
-GREEN confirmed. Optional: MUTATE phase
+GREEN confirmed.
 
-If tcs-patterns:mutation-testing is available, run /mutation-testing against the changed code now.
-Mutation testing validates test strength BEFORE you restructure code.
-Surviving mutants should be killed with additional tests before REFACTOR.
+Mutation check: name a one-character change to the code you just wrote that
+these tests would still pass. If one exists and matters, add the test now.
 
-Skip this step if tcs-patterns is not installed.
+The mutation harness itself runs once at PR readiness, not per increment.
 ```
-
-Proceed to REFACTOR regardless — this step is advisory.
 
 ### 8. REFACTOR Checkpoint
 

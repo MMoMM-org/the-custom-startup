@@ -69,7 +69,9 @@ These skills were ported from citypaul's Claude Code skills collection and conve
 
 Porting to PICS format involved restructuring content into progressive disclosure sections, adding frontmatter trigger terms, and aligning with the skill conventions used in this project. The underlying knowledge and guidance originates with citypaul's work.
 
-**Reconciled so far:** on 2026-08-31, defect fixes from upstream PR #184 (`331a637`) were applied to `testing`, `frontend-testing`, and `ddd`. The remaining content changes — notably `hexagonal` reconciled against Cockburn's own write-up, and invariant-first aggregate design in `ddd` — are still outstanding.
+**Reconciled so far:** on 2026-08-31, defect fixes from upstream PR #184 (`331a637`) were applied to `testing`, `frontend-testing`, and `ddd`; then `hexagonal` was reconciled against Cockburn's own write-up (#187, `08d046a`), `ddd` gained invariant-first aggregate design (#168), and `mutation-testing` adopted the PR-readiness gate (#212). Still outstanding: honest E2E evidence (#210) and the #229 audit sweep.
+
+**New upstream skills:** nine were evaluated on 2026-08-31 — four accepted for porting (`observability`, `event-sourcing`, `secure-oauth-oidc`, `bff-entry-points`), one merged into `ddd` rather than added (`ubiquitous-language`), four declined. Reasoning in [ADR 0002](../XDD/adr/0002-citypaul-skill-absorption-verdicts.md) so the next sweep does not re-evaluate them from zero.
 
 ### TCS-native (5 skills)
 
