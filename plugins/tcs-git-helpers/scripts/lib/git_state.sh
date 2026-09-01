@@ -17,7 +17,8 @@
 #
 # Constraints (CON-1 / CON-9 / SDD §Worktree Behavior):
 #   - bash 3.2-compat: no `declare -A`, no `mapfile`/`readarray`, no `${var,,}`.
-#   - Regex uses POSIX ERE only: `[[:space:]]+` not `\s+`; word bounds `[[:<:]]`/`[[:>:]]` not `\b`.
+#   - Regex uses POSIX ERE only: `[[:space:]]+` not `\s+`; trailing word
+#     bound `([^[:alnum:]_]|$)` — not `\b`, and not the BSD-only `[[:>:]]`.
 #   - All git invocations use `git -C "$PWD"` (or accept a path arg) for worktree-correctness.
 # shellcheck shell=bash
 

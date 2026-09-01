@@ -794,8 +794,8 @@ _scenario_10() {
     # documentation references like `# no declare -A` don't trip the check.
     # We also use `bash -n` as a sanity gate (bash 3.2 fails to parse the
     # `${var,,}` form at all — a pre-parse is the most reliable detector).
-    pat='declare[[:space:]]+-A[[:>:]]'
-    pat="$pat|mapfile[[:>:]]|readarray[[:>:]]"
+    pat='declare[[:space:]]+-A([^[:alnum:]_]|$)'
+    pat="$pat|mapfile([^[:alnum:]_]|$)|readarray([^[:alnum:]_]|$)"
     pat="$pat"'|\$\{[A-Za-z_][A-Za-z0-9_]*,,'
     pat="$pat"'|\$\{[A-Za-z_][A-Za-z0-9_]*\^\^'
 

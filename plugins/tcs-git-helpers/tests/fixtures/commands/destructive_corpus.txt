@@ -7,7 +7,8 @@
 #   command  = exact bash command string
 #
 # Patterns are POSIX ERE (bash 3.2). All matchers MUST use [[:space:]]+
-# (NEVER \s+) and [[:<:]]/[[:>:]] (NEVER \b) per CON-9.
+# (NEVER \s+) and ([^[:alnum:]_]|$) for a trailing word boundary
+# (NEVER \b, NEVER the BSD-only [[:<:]]/[[:>:]]) per CON-9.
 #
 # Lines starting with # and blank lines are ignored by parsers.
 

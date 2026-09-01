@@ -22,6 +22,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load 'lib/helpers'
+
 # ---------------------------------------------------------------------------
 # Setup / teardown
 # ---------------------------------------------------------------------------
@@ -342,10 +344,12 @@ _default_data_dir() {
   _make_git_repo "$TEST_DIR/repo"
   _install_hooks_in_repo "$TEST_DIR/repo"
 
-  # Remove gh from PATH entirely.
+  # Remove gh from PATH entirely. The hook only needs bash, git and dirname to
+  # reach its _guard_gh call, so a PATH holding just those three proves gh is
+  # absent on every platform (see _minimal_path in lib/helpers.bash).
   run env -u CLAUDE_PLUGIN_ROOT -u CLAUDE_PLUGIN_DATA \
     bash -c "
-      PATH='/bin:/usr/bin'
+      PATH='$(_minimal_path bash git dirname)'
       export PATH
       cd '$TEST_DIR/repo' && bash .githooks/post-merge 2>&1 >/dev/null
     "

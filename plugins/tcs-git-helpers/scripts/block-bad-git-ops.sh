@@ -20,7 +20,8 @@
 #
 # Constraints (CON-1, CON-3, CON-4, CON-9):
 #   - bash 3.2 macOS-compat (no `declare -A`, no `mapfile`, no `${var,,}`)
-#   - POSIX ERE only: `[[:space:]]+` not `\s+`; `[[:>:]]` not `\b`
+#   - POSIX ERE only: `[[:space:]]+` not `\s+`; `([^[:alnum:]_]|$)` for a
+#     trailing word boundary — not `\b`, and not the BSD-only `[[:>:]]`
 #   - No coreutils-timeout dep — gh fail-open relies on `_get_pr_state`'s
 #     internal timeout (Phase 1 lib; degrades gracefully if `timeout(1)`
 #     missing — see report finding)

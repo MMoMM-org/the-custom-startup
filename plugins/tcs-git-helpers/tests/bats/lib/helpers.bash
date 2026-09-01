@@ -124,3 +124,24 @@ _build_ahead_repo() {
   done
   printf '%s\n' "$repo"
 }
+
+# Print a PATH consisting of a single throwaway directory that contains
+# symlinks to exactly the named tools and nothing else. Use it to simulate
+# "<tool> is not installed" for `command -v` guards.
+#
+# Why not PATH=/bin? That only works on macOS, where /bin is a small directory
+# holding bash and coreutils. On Linux /bin is a symlink to /usr/bin, so gh and
+# jq are right there and the guard never fires — the test then fails for a
+# reason that has nothing to do with the code under test.
+#
+# Usage: PATH="$(_minimal_path bash git dirname)"
+# bash 3.2 compatible.
+_minimal_path() {
+  local dir tool src
+  dir="$(mktemp -d "${BATS_TEST_TMPDIR:-${TMPDIR:-/tmp}}/minbin.XXXXXX")"
+  for tool in "$@"; do
+    src="$(command -v "$tool" 2>/dev/null)" || continue
+    [ -n "$src" ] && ln -s "$src" "$dir/$tool"
+  done
+  printf '%s' "$dir"
+}
