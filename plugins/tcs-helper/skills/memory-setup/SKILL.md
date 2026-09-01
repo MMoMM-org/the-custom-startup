@@ -59,6 +59,7 @@ grep -l "convex" package.json 2>/dev/null && echo "convex"
 >
 > docs/ai/memory/
 >   memory.md (index)
+>   active.md (always-loaded layer, starts empty)
 >   routing-reference.md (routing metadata for /memory-add)
 >   general.md, tools.md, domain.md, decisions.md, context.md, troubleshooting.md
 >
@@ -81,6 +82,8 @@ for cat in general tools domain decisions context troubleshooting; do
   cp "$TMPL/memory-${cat}.md" "docs/ai/memory/${cat}.md"
 done
 cp "$TMPL/memory-index.md" "docs/ai/memory/memory.md"
+# Always-loaded layer — @-imported directly from CLAUDE.md, not through the index
+cp "$TMPL/memory-active.md" "docs/ai/memory/active.md"
 # Routing metadata for /memory-add — the generated CLAUDE.md points at this path
 cp "$TMPL/routing-reference.md" "docs/ai/memory/routing-reference.md"
 # Replace placeholder with actual repo name

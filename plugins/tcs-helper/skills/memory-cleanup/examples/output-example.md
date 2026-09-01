@@ -42,6 +42,10 @@ tools.md — 1 entry that is not memory → evict:
   L10 "Boucle-framework as prior art for git-safety hooks" — absorbed provenance
     → docs/about/sources.md
 
+active.md — 2.7/2.5 KB, over budget → demote the weakest admission case:
+  "A CLI stub must apply --jq itself" — fails the breadth test; stub authoring
+  only. → docs/ai/memory/tools.md
+
 Approve compressions individually? [all / select / skip]
 > all
 
@@ -49,10 +53,11 @@ Actions:
   ✓ Archived 5 entries to docs/ai/memory/archive/2026-02/
   ✓ Compressed 2 entries in tools.md
   ✓ Evicted 1 entry → docs/about/sources.md
+  ✓ Demoted 1 entry from active.md → tools.md (layer now 2.4/2.5 KB)
   ✓ Removed archived entries from source files
   ✓ Updated docs/ai/memory/memory.md index
 
-Done. 5 archived, 2 compressed, 1 evicted, 0 deleted.
+Done. 5 archived, 2 compressed, 1 evicted, 1 demoted, 0 deleted.
 bank: 6.1 KB across 6 files (was 21.4 KB), largest entry 240 chars
 ```
 

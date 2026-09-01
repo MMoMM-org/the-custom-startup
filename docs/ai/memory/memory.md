@@ -4,6 +4,7 @@
 > Budget: bank ≤ 24 KB, entries ≤ 250 chars. Archive when stale. Run /memory-sync to check.
 
 ## Files
+<!-- active.md is @-imported directly from CLAUDE.md, not reached through this index. -->
 <!-- routing-reference.md is /memory-add's routing table, not session content — deliberately unlisted. -->
 - [general.md](general.md) — conventions, style, naming [updated: 2026-09-01]
 - [tools.md](tools.md) — CI, build, local dev [updated: 2026-09-01]

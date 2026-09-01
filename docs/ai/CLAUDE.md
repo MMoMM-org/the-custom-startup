@@ -13,6 +13,7 @@
 - decisions.md: architecture choices, ADR links (medium)
 - context.md: current sprint focus, blockers (short — prune regularly)
 - troubleshooting.md: known bugs + fixes (short — archive when resolved)
+- active.md: the always-loaded layer — @-imported from CLAUDE.md, reaches every subagent
 
 ## Entry form
 One falsifiable rule and its tell — **≤ 250 characters**:

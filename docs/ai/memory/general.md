@@ -6,7 +6,6 @@
 
 <!-- 2026-05-09 -->
 - **Teammates on one branch share the git index** — an in-flight `git add` from a sibling lands in your next `git commit`, even with explicit paths. → Accept the bundling and review per file, or give each teammate a worktree.
-- **Scope reviewer prompts to a commit range, not the working tree** — reviewers scan by path and then flag a teammate's uncommitted work as your task's extras. → Name the range, the expected files, and say to ignore the rest.
 - **Match PRD-mandated user-facing strings verbatim in tests**, punctuation and markdown included — a substring match lets the implementer drift from the spec uncaught. → Pin the exact string.
 
 <!-- 2026-05-22 -->
