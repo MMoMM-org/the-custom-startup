@@ -16,6 +16,7 @@ It has a second job: making it cheap to check those origins for improvements. Ev
 | [BayramAnnakov/claude-reflect](https://github.com/BayramAnnakov/claude-reflect) | 2026-03-26 | n/a | historical |
 | [centminmod/my-claude-code-setup](https://github.com/centminmod/my-claude-code-setup) | 2026-03-26 | n/a | historical |
 | [mksglu/context-mode](https://github.com/mksglu/context-mode) | 2026-03-27 (spec-005) | n/a | historical |
+| [Bande-a-Bonnot/Boucle-framework](https://github.com/Bande-a-Bonnot/Boucle-framework) | 2026-05-09 | never | **monitored** |
 | [lasso-security/mcp-gateway](https://github.com/lasso-security/mcp-gateway) | reference only | n/a | historical |
 | [agiletec-inc/airis-mcp-gateway](https://github.com/agiletec-inc/airis-mcp-gateway) | reference only | n/a | historical |
 
@@ -131,7 +132,7 @@ Foundation for the Memory Bank capture layer. The two-stage self-learning hooks 
 **Adopted:** 2026-03-26
 **Status:** historical — a published article, not a moving target.
 
-The memory category taxonomy (general conventions, tools integrations, domain knowledge) is applied across TCS scopes instead of a single global bucket. The MEMORY.md index-only pattern with a ~200-line budget was adopted as a design constraint. The principle that routing rules belong in CLAUDE.md, not in MEMORY.md, directly informed the TCS approach.
+The memory category taxonomy (general conventions, tools integrations, domain knowledge) is applied across TCS scopes instead of a single global bucket. The MEMORY.md index-only pattern was adopted as a design constraint; its companion size budget has since been restated in bytes, because memory entries are single long lines and a line count says nothing about their cost. The principle that routing rules belong in CLAUDE.md, not in MEMORY.md, directly informed the TCS approach.
 
 ### centminmod/my-claude-code-setup
 
@@ -161,6 +162,18 @@ Beyond the pattern skills (listed above), the philosophy-first CLAUDE.md approac
 The TDD RED-GREEN-REFACTOR iron law and the rejected-rationalizations table are embedded into the `xdd-tdd` skill and the TDD/SDD integration design. The verification-before-completion discipline (evidence-before-claims) is implemented as the `/verify` gate. The receiving-code-review rigor pattern forms the basis of `/receive-review`. Dispatching-parallel-agents patterns were absorbed into `/parallel-agents`. Systematic-debugging anti-shortcut rules strengthen `/debug`. Related lineage: `/finish-branch`, `/git-worktree`, and `/brainstorm`.
 
 **Reconciled so far:** nothing. This is the largest outstanding gap.
+
+---
+
+## Git Safety Hooks — Source Influences
+
+### Boucle-framework
+
+**Repository:** [Bande-a-Bonnot/Boucle-framework](https://github.com/Bande-a-Bonnot/Boucle-framework)
+**Adopted:** 2026-05-09 (patterns only, re-implemented rather than vendored)
+**Status:** monitored — the hooks we drew on are still the closest prior art for `tcs-git-helpers`.
+
+Three tools under `tools/` are prior art for the `tcs-git-helpers` hook set: `git-safe` (destructive-operation prevention over a regex set covering `--no-verify`, `reset --hard`, `clean -f`, `branch -D`, `stash drop/clear`, `reflog expire`), `branch-guard` (protected-branch commit blocking driven by a `.branch-guard` config), and `worktree-guard` (exit-time data-loss prevention via four `git cherry` checks). `worktree-guard` also confirmed that `PreToolUse:ExitWorktree` is the blockable event for worktree guards.
 
 ---
 

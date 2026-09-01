@@ -14,4 +14,16 @@
 - context.md: current sprint focus, blockers (short — prune regularly)
 - troubleshooting.md: known bugs + fixes (short — archive when resolved)
 
-## Index budget: ≤ 200 lines
+## Entry form
+One falsifiable rule, its tell, one pointer — **≤ 250 characters**:
+
+```
+- **<rule>** — <tell>. → <consequence>. [<pointer>]
+```
+
+No verification dates or methods, no incident history, no second pointer. Full rules and a
+worked before/after: `memory-add/reference/category-formats.md`.
+
+## Budget
+Bank ≤ 24 KB across the category files. Measure with `wc -c`, not `wc -l` — entries are single
+long lines, so line counts say nothing about cost. /memory-sync checks both.
