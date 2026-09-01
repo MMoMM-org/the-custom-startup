@@ -62,7 +62,7 @@ awk '/^- \*\*/ && length($0) > 250 {print FILENAME":"FNR"  "length($0)" chars"}'
 
 Propose every oversized entry regardless of age. Judge each against
 `memory-add/reference/category-formats.md`; take out provenance — verification dates and
-methods, incident history, surplus pointers — and nothing else.
+methods, incident history, spec and ADR references — and nothing else.
 
 **Evict candidates** — entries that are not memory at all. Per
 `memory-add/reference/category-formats.md` § "What is not an entry at all":

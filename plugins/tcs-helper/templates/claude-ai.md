@@ -15,13 +15,13 @@
 - troubleshooting.md: known bugs + fixes (short — archive when resolved)
 
 ## Entry form
-One falsifiable rule, its tell, one pointer — **≤ 250 characters**:
+One falsifiable rule and its tell — **≤ 250 characters**:
 
 ```
-- **<rule>** — <tell>. → <consequence>. [<pointer>]
+- **<rule>** — <tell>. → <consequence>.
 ```
 
-No verification dates or methods, no incident history, no second pointer. Full rules and a
+No verification dates or methods, no incident history, no spec or ADR references. Full rules and a
 worked before/after: `memory-add/reference/category-formats.md`.
 
 ## Budget

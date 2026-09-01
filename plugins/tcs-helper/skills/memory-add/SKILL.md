@@ -42,7 +42,7 @@ State {
 - Read the target file before appending (deduplication check).
 - Add date comment before new entries.
 - Write entries in the canonical form — see `reference/category-formats.md`: one falsifiable
-  rule, its tell, one pointer, **≤ 250 characters**.
+  rule and its tell, **≤ 250 characters**.
 - Update memory.md index last-updated date after any repo-scope write.
 - Report clearly even when nothing was routed.
 
@@ -51,7 +51,7 @@ State {
 - Silently fail — always report what was done and what was skipped.
 - Create new memory files outside the 6 standard categories — use existing files or ask.
 - Carry provenance into an entry — verification dates and methods, incident history, or a
-  second pointer. The one pointer stands in for all of it.
+  spec, ADR or issue reference. `git blame` already leads to the origin.
 - Store a recipe, a correction to a neighbouring entry, or absorbed prior art as an entry.
   `reference/category-formats.md` § "What is not an entry at all" routes these elsewhere.
 
@@ -119,10 +119,10 @@ For each learning:
 **Normal mode:** Compress the raw learning into the canonical form, then append:
 ```
 <!-- YYYY-MM-DD -->
-- **<rule>** — <tell>. → <consequence>. [<pointer>]
+- **<rule>** — <tell>. → <consequence>.
 ```
 
-Strip the verification story, the incident history, and every pointer but one. If the result
+Strip the verification story, the incident history, and every spec or ADR reference. If the result
 still exceeds 250 characters, split it — that is usually two rules. Read
 `reference/category-formats.md` for the anatomy and a worked before/after.
 
