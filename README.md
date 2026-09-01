@@ -213,6 +213,15 @@ See [about/sources.md](docs/about/sources.md) for full attribution.
 
 ---
 
+## Contributing
+
+Run the test suite with `./scripts/dev/test.sh` — it provisions `pytest` and
+`bats` into `.venv/` on first run and executes both. The same suites run in CI
+on every pull request. See [FOR-AGENTS.md](FOR-AGENTS.md) for the repository
+layout and development workflow.
+
+---
+
 ## License
 
 MIT License. See [LICENSE](LICENSE) for the full text.

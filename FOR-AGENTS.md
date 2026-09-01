@@ -133,6 +133,35 @@ Each agent markdown file defines:
 
 ## Development Workflow
 
+### Running the Test Suite
+
+```bash
+./scripts/dev/test.sh          # pytest + bats
+./scripts/dev/test.sh pytest   # python suites only
+./scripts/dev/test.sh bats     # bats suites only
+./scripts/dev/test.sh setup    # provision .venv and stop
+```
+
+The script provisions everything into `.venv/` on first run — `pytest` and
+`PyYAML` from `requirements-dev.txt`, and `bats` (a bash program, so it comes
+via npm and gets symlinked into `.venv/bin`). Re-runs skip provisioning.
+
+Both suites also run in CI on every pull request (`.github/workflows/tests.yml`).
+
+To run a single suite directly, activate the venv first — several bats files
+shell out to `python3` for YAML validation and need it on `PATH`:
+
+```bash
+source .venv/bin/activate
+bats plugins/tcs-git-helpers/tests/bats/lib_pattern_match.bats
+pytest tests/tcs-helper/test_capture_learning.py
+```
+
+In the Docker dev container, `.venv/` is a bind mount shared with the macOS
+host, so a venv built on one side has an interpreter path that does not exist
+on the other. `test.sh` detects that and rebuilds in place instead of failing
+with `bad interpreter`.
+
 ### Testing Changes Locally
 
 ```bash

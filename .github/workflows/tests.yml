@@ -1,0 +1,61 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch makes the in-flight run obsolete.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install python test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+
+      # Collected from the repo root, not from tests/ — the root conftest.py
+      # sets the collection rules and several suites live next to the code they
+      # cover (plugins/*/tests/, plugins/tcs-helper/scripts/lib/).
+      - name: Run pytest
+        run: pytest -q
+
+  bats:
+    name: bats
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Several bats suites shell out to `python3 -c "import yaml"` to validate
+      # YAML frontmatter and workflow files, so the python deps are needed here
+      # too — not just in the pytest job.
+      - name: Install python test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+
+      - name: Install bats
+        run: npm install -g bats@1.13.0
+
+      # Fixtures that build throwaway repos rely on a committer identity being
+      # resolvable. Most set their own, but not all.
+      - name: Configure git identity for fixtures
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+          git config --global init.defaultBranch main
+
+      - name: Run bats
+        run: bats --recursive --print-output-on-failure plugins/*/tests/bats
