@@ -63,5 +63,13 @@ jobs:
           git config --global user.name "CI"
           git config --global init.defaultBranch main
 
+      # actions/checkout leaves the working copy on a detached HEAD. Several
+      # bats suites invoke the guard hooks against the checkout itself, and the
+      # guard deliberately bypasses on a detached HEAD ("bypass: detached-HEAD")
+      # — so every deny assertion fails. Give HEAD a branch name. It must not be
+      # a protected one, or the branch-protection paths change behaviour too.
+      - name: Attach HEAD to a branch
+        run: git checkout -q -B ci/test-run
+
       - name: Run bats
         run: bats --recursive --print-output-on-failure plugins/*/tests/bats
