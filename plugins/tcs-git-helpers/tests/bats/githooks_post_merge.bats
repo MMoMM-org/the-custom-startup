@@ -24,6 +24,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load 'lib/helpers'
+
 # ---------------------------------------------------------------------------
 # Setup / teardown
 # ---------------------------------------------------------------------------
@@ -275,59 +277,40 @@ GHSTUB
 }
 
 # ---------------------------------------------------------------------------
-# Test 6: degraded mode — gh unavailable → exit 0 silently
+# Test 6: degraded mode — gh unavailable → exit 0, one structured stderr line
 #
-# PATH excludes gh entirely. Hook must exit 0 with no stderr noise about
-# the missing tool (it should silently degrade, not warn).
+# PATH excludes gh entirely. The hook must not block the merge (exit 0) and
+# must say why it did nothing, in the structured single-line format — see SDD
+# §Error Handling Table and PRD AC-F5.1 ("every guard path emits exactly one
+# stderr line"). Same contract as the post-merge case in
+# hooks-runtime-contract.bats.
 # ---------------------------------------------------------------------------
 
 @test "test_degraded_mode_gh_unavailable" {
-  # Create a stub dir that shadows gh with a non-executable placeholder,
-  # effectively making `command -v gh` fail — but keep system tools (bash, git)
-  # available by retaining the rest of PATH.
-  local no_gh_dir
-  no_gh_dir="$(mktemp -d "${TMPDIR:-/tmp}/tcs-no-gh.XXXXXX")"
-
-  # Place a non-executable file named "gh" so `command -v gh` resolves it but
-  # executing it fails — which is indistinguishable from "not found" for
-  # `command -v gh >/dev/null 2>&1`.  Actually the cleanest approach: place
-  # the stub dir FIRST in PATH so our dummy gh shadows any real gh, but the
-  # dummy gh is not executable (so `command -v gh` still finds /usr/bin/env gh
-  # wouldn't). Better: use a wrapper that exits non-0 or simply don't put a gh
-  # there at all — just prepend an empty dir that has no gh, which means
-  # `command -v gh` will still find gh from the real PATH. So we need to
-  # REMOVE all real gh from PATH.
+  # Build a PATH holding only what the hook needs to reach its gh check.
   #
-  # The correct approach: build a PATH that has all system dirs EXCEPT those
-  # containing gh. We can do this by finding where gh lives and omitting it.
-  local gh_real_dir
-  gh_real_dir="$(dirname "$(command -v gh 2>/dev/null || true)")"
-
-  # Build new PATH: no_gh_dir first, then all PATH entries except gh's dir.
-  local new_path="$no_gh_dir"
-  local IFS_ORIG="$IFS"
-  IFS=":"
-  for dir in $PATH; do
-    IFS="$IFS_ORIG"
-    [ "$dir" = "$gh_real_dir" ] && continue
-    [ -z "$dir" ] && continue
-    new_path="${new_path}:${dir}"
-    IFS=":"
-  done
-  IFS="$IFS_ORIG"
+  # The previous approach subtracted `dirname $(command -v gh)` from the real
+  # PATH, which assumes gh lives in exactly one PATH directory. On a GitHub
+  # runner it does not — removing one copy leaves another, `command -v gh`
+  # succeeds, and the hook falls through to the *unauthenticated* branch and
+  # emits "gh CLI unauthenticated" instead of degrading silently.
+  local no_gh_path
+  no_gh_path="$(_minimal_path bash git dirname)"
 
   run bash -c "
-    PATH='$new_path'
+    PATH='$no_gh_path'
     export PATH
     cd '$REPO' && bash '$HOOK' 2>&1
   "
 
   [ "$status" -eq 0 ]
 
-  # Silent degradation: output must be empty (no "gh not found" noise).
-  [ -z "$output" ]
-
-  rm -rf "$no_gh_dir"
+  # Exactly one structured line, naming the guard and the missing tool.
+  local line_count
+  line_count="$(printf '%s\n' "$output" | grep -c '^tcs-git-helpers:' 2>/dev/null || true)"
+  [ "$line_count" -eq 1 ]
+  [[ "$output" == *"gh"* ]]
+  [[ "$output" == *"skipped"* ]]
 }
 
 # ---------------------------------------------------------------------------

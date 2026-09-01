@@ -1,0 +1,18 @@
+# Test-only dependencies. Install with:
+#
+#   python3 -m pip install -r requirements-dev.txt
+#
+# or let scripts/dev/test.sh provision a .venv for you.
+#
+# Nothing in plugins/ imports these at runtime — the plugins are shell and
+# stdlib-python only. This file exists so CI and contributors provision the
+# same versions instead of relying on whatever the machine happens to have.
+
+# Test runner for tests/ and the suites that live next to the code in plugins/.
+pytest~=9.1
+
+# Not imported by any python test. Several *bats* suites shell out to
+# `python3 -c "import sys, yaml; yaml.safe_load(...)"` to assert that skill
+# frontmatter and GitHub workflow files are valid YAML; without it those
+# suites fail for a reason unrelated to the code under test.
+PyYAML~=6.0
