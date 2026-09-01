@@ -46,8 +46,14 @@ jobs:
       - name: Install python test dependencies
         run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
 
+      # Not `npm install -g`: bats ships man pages, and linking those into
+      # /usr/local/share/man fails with EACCES on the hosted runner. Installing
+      # under a prefix we own avoids needing sudo at all, and mirrors what
+      # scripts/dev/test.sh does locally.
       - name: Install bats
-        run: npm install -g bats@1.13.0
+        run: |
+          npm install --prefix "$RUNNER_TEMP/bats" --no-save bats@1.13.0
+          echo "$RUNNER_TEMP/bats/node_modules/.bin" >> "$GITHUB_PATH"
 
       # Fixtures that build throwaway repos rely on a committer identity being
       # resolvable. Most set their own, but not all.
