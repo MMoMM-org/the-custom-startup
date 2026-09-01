@@ -1,6 +1,6 @@
 ---
 name: memory-sync
-description: "Use when memory files may be out of sync with CLAUDE.md imports, the memory.md index may be stale, or after adding or removing memory category files. Triggers on: sync memory, check memory structure, memory out of sync."
+description: "Use when memory files may be out of sync with CLAUDE.md imports, the memory.md index may be stale, the memory bank may be oversized, entries may have drifted past the size budget, or after adding or removing memory category files. Triggers on: sync memory, check memory structure, memory out of sync, memory bank too big, memory entries too long."
 user-invocable: true
 argument-hint: "[--fix]"
 allowed-tools: Read, Write, Edit, Bash
@@ -79,16 +79,12 @@ grep '@docs/ai/memory' CLAUDE.md
 
 **Check 5: memory bank size budget**
 
-Measure bytes, not lines. Entries are single long lines, so a line count says nothing about
-cost — a 14-line file and a 36-line file here differ by 8 KB.
+Measure bytes, never lines — entries are single long lines.
 
 - Sum `wc -c` across the category files (excluding `memory.md` and `archive/`)
 - If ≥ 24 KB: ERROR — "memory bank over budget (N KB) — run /memory-cleanup"
 - If ≥ 16 KB: WARN — "memory bank approaching budget (N/24 KB)"
 - Otherwise: OK
-
-Calibration: a bank of entries written in canonical form lands around 6 KB. 16 KB means prose
-has crept back in; 24 KB is roughly where the bank was before it was first compressed.
 
 **Check 6: entry form**
 

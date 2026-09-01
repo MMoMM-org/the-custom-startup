@@ -55,6 +55,11 @@ State {
 - Store a recipe, a correction to a neighbouring entry, or absorbed prior art as an entry.
   `reference/category-formats.md` § "What is not an entry at all" routes these elsewhere.
 
+## Reference Materials
+
+- reference/category-formats.md — entry form, anatomy, worked before/after
+- reference/routing-rules.md — scope and category routing table
+
 ## Workflow
 
 ### 1. Detect mode
@@ -117,10 +122,9 @@ For each learning:
 - **<rule>** — <tell>. → <consequence>. [<pointer>]
 ```
 
-Session notes arrive as narrative; entries are not narrative. Before writing, strip the
-verification story, the incident history, and every pointer but one. If the result still
-exceeds 250 characters, it is usually two rules — split it. Full rules and a worked
-before/after: `reference/category-formats.md`.
+Strip the verification story, the incident history, and every pointer but one. If the result
+still exceeds 250 characters, split it — that is usually two rules. Read
+`reference/category-formats.md` for the anatomy and a worked before/after.
 
 Then update `memory.md` index: change `[updated: YYYY-MM-DD]` for the affected file.
 

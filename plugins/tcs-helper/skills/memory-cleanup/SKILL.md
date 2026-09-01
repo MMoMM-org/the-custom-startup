@@ -60,10 +60,9 @@ Read all 6 category files in `docs/ai/memory/`. Build a list of candidates for e
 awk '/^- \*\*/ && length($0) > 250 {print FILENAME":"FNR"  "length($0)" chars"}' docs/ai/memory/*.md
 ```
 
-Age and form are independent defects. A current, correct entry written as prose is still a
-defect — it costs the reader the same as a stale one. Judge every oversized entry against
-`memory-add/reference/category-formats.md`; what comes out is provenance (verification dates
-and methods, incident history, surplus pointers), never an actionable claim.
+Propose every oversized entry regardless of age. Judge each against
+`memory-add/reference/category-formats.md`; take out provenance — verification dates and
+methods, incident history, surplus pointers — and nothing else.
 
 **Evict candidates** — entries that are not memory at all. Per
 `memory-add/reference/category-formats.md` § "What is not an entry at all":
@@ -74,7 +73,7 @@ and methods, incident history, surplus pointers), never an actionable claim.
 | Reads as a how-to or a reusable pattern | Skill or test-suite material | A skill, or the tests' README |
 | Describes another project's approach | Provenance | `docs/about/sources.md` |
 
-Eviction relocates; it never deletes. Name the destination in the proposal.
+Name the destination in the proposal.
 
 ### 2. Present candidates
 
@@ -99,8 +98,7 @@ For each non-empty candidate list:
 **Consolidate duplicates:** Show both entries, ask user which wording to keep. Write winner, remove loser.
 
 **Compress:** Show the rewritten entry beside the original and the character count of each.
-The user approves the wording, not just the operation — a compression that silently drops a
-rule is worse than the bloat it removes.
+The user approves the wording, not just the operation.
 
 **Evict:** Append to the destination named in step 2, then remove from the source file. If the
 destination does not exist, ask before creating it.
