@@ -41,12 +41,11 @@ awk '/^- \*\*/ && length($0) > 250 {print FILENAME":"FNR"  "length($0)" chars"}'
 > substitution. This is the root architectural cause behind spec/012
 > (`docs/XDD/specs/012-tcs-git-helpers-hook-runtime-contract/`).
 
-**After** — 280 characters:
+**After** — 248 characters:
 
-> **`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` reach only harness-spawned plugin code.** Not
-> git-spawned hooks (`core.hooksPath`), not Bash-tool subprocesses. `CLAUDECODE=1` and
-> `CLAUDE_CODE_SESSION_ID` do propagate. → Git-hook code must self-derive its paths.
-> [spec-012]
+> **`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` reach only harness-spawned plugin code** — not
+> git-spawned hooks (`core.hooksPath`), not Bash-tool subprocesses. `CLAUDECODE=1` does
+> propagate. → Git-hook code must self-derive its paths. [spec-012]
 
 Dropped: the verification date and method (git blame has the date, the spec has the method),
 the enumeration of every harness context, and the "root architectural cause" narrative. The

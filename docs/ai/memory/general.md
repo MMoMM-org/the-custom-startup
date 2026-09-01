@@ -1,15 +1,16 @@
 # General — the-custom-startup
-<!-- Conventions, naming rules, code style, git workflow. Updated: 2026-05-22 -->
+<!-- Conventions, naming rules, code style, git workflow. Updated: 2026-09-01 -->
 <!-- What goes here: how files are named, folder structure, style choices, branch conventions -->
 <!-- What does NOT go here: tool-specific quirks (→ tools.md), domain rules (→ domain.md) -->
-
-<!-- 2026-07-02 -->
-- **Skill scaffold tests hard-code frontmatter values → a legitimate frontmatter change breaks them.** spec-016 added a batch mode whose ADR-1 required changing `rule-enforcer`'s `argument-hint` from `"[rule description]"` to `"[rule description] | --scan | --from-file <path>"`. The scaffold self-test asserted the OLD value with an exact-match (`grep -q 'argument-hint: "\[rule description\]"'` — closing quote included), so the mandated change and "keep the test green" were mutually exclusive; the test failed as a false regression. Rule: assertions on frontmatter fields that are *expected to evolve* (argument-hint, description, keyword lists) should be **prefix/contains** matches anchored on the stable substring (here `argument-hint: "\[rule description\]` without the closing quote), not full-string exact matches. This is the mirror image of the "PRD verbatim string assertions need pinning" entry below — pin spec-mandated user-facing strings exactly, but keep evolving-field assertions loose.
-
-<!-- 2026-05-22 -->
-- **SKILL.md multi-task placeholder pattern** — when authoring a SKILL.md across multiple tasks (e.g. T2.1 scaffolds structure, T2.3 fills Workflow Steps 1-7, T2.4 fills Step 8), use `<!-- T2.X will populate -->` HTML-comment placeholders inside the section bodies during scaffold. Each later task can grep-and-replace its own placeholder without touching siblings. Test assertion `grep -c "<!-- T2.X will populate -->"` cleanly tracks RED→GREEN over the multi-task evolution (zero remaining = GREEN). Pattern proven in spec-013 rule-enforcer SKILL.md across T2.1 → T2.3 → T2.4.
+<!-- Form: one rule + its tell + one pointer, ≤ 250 chars. See memory-add/reference/category-formats.md -->
 
 <!-- 2026-05-09 -->
-- **Parallel-team git staging race** — when multiple teammates work on the same branch simultaneously (Agent Team mode), they share the git index. Even with explicit `git add path1 path2`, an in-flight `git add` from a sibling teammate can be picked up by the next `git commit`. Symptom: spec-011 T1.4 (config_parser.sh) ended up bundled into T1.7 (cache.sh)'s commit `58f24c6` because impl-t14 staged between impl-t17's add and commit. Mitigations: (a) accept commit-bundling as inevitable and review per-file inside the bundled commit, (b) serialize commits via team-lead, or (c) `git worktree add` per teammate. Per-file review with explicit "ignore other teammate's files" scoping works reliably.
-- **Reviewer prompts MUST scope to commit diff, not working tree** — spec-compliance and code-quality review agents default to scanning the working tree by file path. With parallel teammates that includes uncommitted sibling work and produces false "extra" findings. Always include in the review prompt: (1) "Review only commit `<SHA>` (range `<SHA>^..<SHA>`)" or "Use `git show <SHA>`"; (2) explicit list of expected files; (3) "IGNORE any other file in your scan — it belongs to a parallel teammate's task." Caught false-positives in T1.1 (config_parser.sh + README.md flagged as T1.1 extras when they were T1.4/T1.2 work).
-- **PRD verbatim string assertions need pinning** — when the PRD specifies an exact user-facing string (e.g. M7 AC3 master-override warning with backticks around `CLAUDE_ALLOW_<X>=1`), the bats test must match it verbatim including punctuation/markdown. Don't trust substring matches like `*"MASTER OVERRIDE"*` for spec-compliance strings — they let the implementer drift away from the spec without the suite catching it. Same gap appeared twice (override.sh + block-bad-git-ops.bats) in spec-011.
+- **Teammates on one branch share the git index** — an in-flight `git add` from a sibling lands in your next `git commit`, even with explicit paths. → Accept the bundling and review per file, or give each teammate a worktree. [spec-011 T1.4]
+- **Scope reviewer prompts to a commit range, not the working tree** — reviewers scan by path and then flag a teammate's uncommitted work as your task's extras. → Name the range, the expected files, and say to ignore the rest. [spec-011 T1.1]
+- **Match PRD-mandated user-facing strings verbatim in tests**, punctuation and markdown included — a substring match lets the implementer drift from the spec uncaught. → Pin the exact string. [spec-011 M7 AC3]
+
+<!-- 2026-05-22 -->
+- **Scaffold a multi-task SKILL.md with `<!-- T2.X will populate -->` placeholders** — each later task grep-replaces its own without touching siblings, and `grep -c` on the marker tracks RED→GREEN (zero left is green). [spec-013]
+
+<!-- 2026-07-02 -->
+- **Assert evolving frontmatter fields by prefix, not exact match** — an exact `grep -q` on `argument-hint` turned a spec-mandated change into a false regression. → Anchor on the stable substring. [spec-016]
