@@ -2,10 +2,17 @@
 # tests/bats/lib_pattern_match.bats
 # Coverage for scripts/lib/pattern_match.sh — destructive-op pattern matchers.
 #
-# CON-9: All patterns must use [[:space:]]+ (NEVER \s+) and [[:>:]] (NEVER \b).
-#        Empirically: \s and \b are PCRE extensions — they do NOT match in
-#        bash 3.2 [[ =~ ]] (POSIX ERE). Patterns that "work" with \s silently
-#        never fire and the dispatcher becomes a no-op.
+# CON-9: every pattern must compile AND behave identically on both regex
+#        engines bash is built against — BSD/libc (macOS) and GNU/glibc
+#        (Linux, Docker). Two idioms break that:
+#          \s / \b   — PCRE extensions. glibc supports them, BSD does not, so
+#                      they silently stop matching on macOS.
+#          [[:<:]] / [[:>:]] — BSD word boundaries. glibc rejects them with
+#                      "Invalid character class name"; [[ =~ ]] then returns 2,
+#                      every caller reads that as "no match", and the guard
+#                      fails OPEN.
+#        Portable forms: [[:space:]]+ for whitespace, ([^[:alnum:]_]|$) for a
+#        trailing word boundary.
 #
 # Each of the 14+ canonical patterns from PRD §Feature M7 is tested against:
 #   - canonical form        (single-space)
@@ -40,14 +47,62 @@ _no_match() {
   declare -f _match_command >/dev/null
 }
 
-@test "CON-9 evidence: PCRE \\s+ does NOT match in bash 3.2 [[ =~ ]]" {
+@test "CON-9 evidence: PCRE \\s+ is platform-dependent in [[ =~ ]]" {
+  # This is the whole reason for CON-9: the same pattern gives opposite answers
+  # on the two engines. BSD/macOS treats \s as a literal 's' and does not match;
+  # GNU/glibc supports \s as an extension and does match. Assert the behaviour
+  # of the engine we are actually running on, so the split stays documented
+  # instead of the test simply failing on whichever platform it was not written
+  # for.
   run bash -c 'cmd="git push"; pat="git\\s+push"; [[ "$cmd" =~ $pat ]]'
-  [ "$status" -ne 0 ]
+  case "$(uname -s)" in
+    Darwin) [ "$status" -ne 0 ] ;;
+    *)      [ "$status" -eq 0 ] ;;
+  esac
 }
 
-@test "CON-9 evidence: POSIX [[:space:]]+ DOES match in bash 3.2 [[ =~ ]]" {
+@test "CON-9 evidence: POSIX [[:space:]]+ DOES match on this platform" {
   run bash -c 'cmd="git push"; pat="git[[:space:]]+push"; [[ "$cmd" =~ $pat ]]'
   [ "$status" -eq 0 ]
+}
+
+@test "CON-9 evidence: BSD [[:>:]] does NOT compile under glibc" {
+  # The failure mode this constraint exists to prevent. On glibc regcomp
+  # rejects the class and bash returns 2 — which reads as "no match" to every
+  # caller, so a destructive command sails through. On BSD it compiles and
+  # matches, hence the platform split.
+  run bash -c 'cmd="git reset --hard"; pat="--hard[[:>:]]"; [[ "$cmd" =~ $pat ]]'
+  case "$(uname -s)" in
+    Darwin) [ "$status" -eq 0 ] ;;
+    *)      [ "$status" -eq 2 ] ;;
+  esac
+}
+
+@test "CON-9: every PATTERN_ constant compiles on this platform" {
+  # Regression guard for the fail-open bug: a pattern that does not compile
+  # makes [[ =~ ]] exit 2, which _match_command reports as "no match".
+  local name pat
+  for name in $(grep -Eo '^PATTERN_[A-Z_]+' "${PLUGIN_ROOT}/scripts/lib/pattern_match.sh"); do
+    eval "pat=\"\${${name}}\""
+    run bash -c '[[ "probe" =~ $1 ]]' _ "$pat"
+    if [ "$status" -ge 2 ]; then
+      printf 'PATTERN %s does not compile here: %s\n' "$name" "$pat" >&2
+      return 1
+    fi
+  done
+}
+
+@test "CON-9: no PATTERN_ constant uses the BSD-only [[:<:]] / [[:>:]]" {
+  local name pat
+  for name in $(grep -Eo '^PATTERN_[A-Z_]+' "${PLUGIN_ROOT}/scripts/lib/pattern_match.sh"); do
+    eval "pat=\"\${${name}}\""
+    case "$pat" in
+      *'[[:<:]]'*|*'[[:>:]]'*)
+        printf 'PATTERN %s uses a BSD-only word boundary: %s\n' "$name" "$pat" >&2
+        return 1
+        ;;
+    esac
+  done
 }
 
 @test "no PATTERN_ regex constant uses PCRE \\s or \\b" {

@@ -1,5 +1,46 @@
 # Changelog
 
+## [2.2.14] - 2026-09-01
+
+### Fixed
+
+- **The destructive-op guard failed open on Linux/glibc (silent, since v1.0).** Seven
+  patterns in `scripts/lib/pattern_match.sh` — and two nudge patterns in
+  `scripts/nudge-hook.sh` — used the word-boundary classes `[[:<:]]` / `[[:>:]]`.
+  Those are a **BSD/macOS regex extension**. Under glibc, `regcomp` rejects them
+  (`Invalid character class name`), so `[[ =~ ]]` exits **2** — and every caller
+  reads a non-zero exit as "no match". The result: on Linux and in Docker
+  containers, `git reset --hard`, `git branch -D`, `git stash drop`,
+  `git reflog expire`, `git commit --no-verify`, `git push --delete` and the whole M1
+  closed-PR push check were **allowed without a word of warning**. `git clean -fd`
+  and the other boundary-free patterns kept working, which is why the hole went
+  unnoticed. Replaced every occurrence with the portable trailing-boundary idiom
+  `([^[:alnum:]_]|$)`, which is equivalent on both engines. Match behaviour on
+  macOS is unchanged; Linux now denies what it always should have.
+- **`tests/e2e/dogfood.sh` scenario 10 had the same defect.** Its bash-4-feature
+  detector fed `[[:>:]]` to `grep -E`, so on GNU grep the pattern errored out and
+  the scenario could never report a hit — a lint that silently lints nothing.
+
+### Added (tests)
+
+- Two regression guards in `lib_pattern_match.bats`: every `PATTERN_` constant must
+  **compile** on the running platform (catches the fail-open directly), and no
+  `PATTERN_` constant may use `[[:<:]]` / `[[:>:]]` (catches it on macOS too, where
+  the broken form still compiles). Both were verified to fail against the old code.
+
+### Fixed (test-side)
+
+- **Three tests could not distinguish "tool absent" from "tool present" on Linux.**
+  `_guard_gh` / `_guard_jq` / post-merge-without-`gh` simulated an unavailable tool
+  with `PATH=/bin`, which only works on macOS — on Linux `/bin` is a symlink to
+  `/usr/bin`, so `gh` and `jq` were still resolvable and the guards never fired.
+  New `_minimal_path` helper in `tests/bats/lib/helpers.bash` builds a PATH holding
+  symlinks to exactly the named tools.
+- **The CON-9 evidence test asserted one platform's behaviour as universal.** It
+  claimed PCRE `\s+` "does NOT match" — true on BSD, false on glibc, where `\s` is
+  a supported extension. Reframed to assert the *platform split* that CON-9 exists
+  to guard against, plus a new case pinning the `[[:>:]]` compile failure on glibc.
+
 ## [2.2.6] - 2026-06-03
 
 ### Fixed

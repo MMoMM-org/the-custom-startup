@@ -18,6 +18,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load 'lib/helpers'
+
 # ---------------------------------------------------------------------------
 # Setup / teardown
 # ---------------------------------------------------------------------------
@@ -274,18 +276,16 @@ _make_git_repo() {
 # ---------------------------------------------------------------------------
 
 @test "_guard_gh returns non-zero and emits structured skip line when gh is absent" {
-  # Use PATH=/bin so bash is reachable but gh (typically in /usr/local/bin or
-  # /opt/homebrew/bin) is not.
-  run env -i HOME="$HOME" PATH="/bin" \
+  # A PATH holding only bash — so gh is genuinely unreachable on every platform.
+  run env -i HOME="$HOME" PATH="$(_minimal_path bash)" \
     /bin/bash -c "source \"$LIB\"; _guard_gh 'my-action' 2>&1"
   [ "$status" -ne 0 ]
   [[ "$output" == "tcs-git-helpers: my-action skipped — gh CLI not installed."* ]]
 }
 
 @test "_guard_jq returns non-zero and emits structured skip line when jq is absent" {
-  # Use PATH=/bin only so bash is reachable but jq (in /usr/bin or
-  # /opt/homebrew/bin) is not.
-  run env -i HOME="$HOME" PATH="/bin" \
+  # A PATH holding only bash — so jq is genuinely unreachable on every platform.
+  run env -i HOME="$HOME" PATH="$(_minimal_path bash)" \
     /bin/bash -c "source \"$LIB\"; _guard_jq 'my-action' 2>&1"
   [ "$status" -ne 0 ]
   [[ "$output" == "tcs-git-helpers: my-action skipped — jq not installed."* ]]

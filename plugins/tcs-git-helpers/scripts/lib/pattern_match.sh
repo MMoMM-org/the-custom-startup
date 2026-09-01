@@ -3,12 +3,19 @@
 #
 # CONSTRAINTS (CON-1, CON-9 from SDD):
 #   - bash 3.2 compatible (macOS default `/bin/bash` 3.2.57).
-#   - All patterns use POSIX ERE: [[:space:]]+ for whitespace,
-#     [[:<:]] / [[:>:]] for word boundaries, [^[:space:]]+ for non-space.
-#   - NEVER use \s, \S, \b — they are PCRE/Perl extensions and silently
-#     do NOT match in bash 3.2 [[ =~ ]] (POSIX ERE only).
-#     Empirically verified: `[[ "git push" =~ git\s+push ]]` evaluates false;
-#     `[[ "git push" =~ git[[:space:]]+push ]]` evaluates true.
+#   - Patterns MUST compile on both regex engines bash is built against:
+#     BSD/libc (macOS) and GNU/glibc (Linux, Docker). A pattern that fails to
+#     compile makes `[[ =~ ]]` return 2, which every caller here reads as
+#     "no match" — the guard then fails OPEN and silently allows the command.
+#   - Whitespace: [[:space:]]+ — NEVER \s. `\s` is a PCRE extension: glibc
+#     accepts it, BSD does not, so it silently stops matching on macOS.
+#   - Word boundaries: ([^[:alnum:]_]|$) — NEVER \b, and NEVER the BSD-only
+#     [[:<:]] / [[:>:]]. glibc rejects [[:<:]]/[[:>:]] outright
+#     ("Invalid character class name"), which is the fail-open case above.
+#     ([^[:alnum:]_]|$) is equivalent for a *trailing* boundary in a substring
+#     match: it requires the next character to be a non-word char, or the end
+#     of the string. It consumes that character, so only use it pattern-final.
+#   - Non-space runs: [^[:space:]]+.
 #
 # PURPOSE:
 #   Source of truth for the regex constants used by the PreToolUse:Bash
@@ -47,7 +54,7 @@
 # ---------------------------------------------------------------------------
 
 # git reset --hard [<ref>]
-PATTERN_RESET_HARD='git[[:space:]]+reset[[:space:]]+--hard[[:>:]]'
+PATTERN_RESET_HARD='git[[:space:]]+reset[[:space:]]+--hard([^[:alnum:]_]|$)'
 
 # git clean -f / -fx / -fX / -Xf / -dfx / --force  (any bundle containing f or x, --force)
 # `-[a-zA-Z]*[fx]` allows uppercase neighbours (e.g. `-fX`, `-Xf`) — `-X` removes
@@ -67,18 +74,18 @@ PATTERN_CHECKOUT_PATH='git[[:space:]]+checkout[[:space:]]+--[[:space:]]+[^[:spac
 PATTERN_RESTORE_DESTRUCTIVE='git[[:space:]]+restore[[:space:]]+(.*--worktree.*--source.*|.*--source.*--worktree.*|.*--staged.*)'
 
 # git branch -D <name>   (capital D = force delete; lowercase -d is the safe form)
-PATTERN_BRANCH_FORCE_DELETE='git[[:space:]]+branch[[:space:]]+-D[[:>:]]'
+PATTERN_BRANCH_FORCE_DELETE='git[[:space:]]+branch[[:space:]]+-D([^[:alnum:]_]|$)'
 
 # git stash drop / git stash clear
-PATTERN_STASH_DESTROY='git[[:space:]]+stash[[:space:]]+(drop|clear)[[:>:]]'
+PATTERN_STASH_DESTROY='git[[:space:]]+stash[[:space:]]+(drop|clear)([^[:alnum:]_]|$)'
 
 # git reflog expire ...   (kills the recovery net)
-PATTERN_REFLOG_EXPIRE='git[[:space:]]+reflog[[:space:]]+expire[[:>:]]'
+PATTERN_REFLOG_EXPIRE='git[[:space:]]+reflog[[:space:]]+expire([^[:alnum:]_]|$)'
 
 # git commit ... --no-verify   |   git commit ... -n
 # Caveat: bundled-flag forms like `-nm "msg"` (shell-parsed as -n + -m) are NOT
-# detected — `[[:>:]]` requires a word→non-word transition, and `n` followed by
-# another word char (`m`) has none. Accepted trade-off: PRD M7 lists `-n` as the
+# detected — the trailing boundary requires a word→non-word transition, and
+# `n` followed by another word char (`m`) has none. Accepted trade-off: PRD M7 lists `-n` as the
 # canonical form. Widening to `-[a-zA-Z]*n` would also flag the discrete flag
 # bundle `-an` (= -a + -n) which is correct in spirit, but the design choice in
 # v1.0 is to stay specific to the canonical forms documented in the PRD.
@@ -86,25 +93,25 @@ PATTERN_REFLOG_EXPIRE='git[[:space:]]+reflog[[:space:]]+expire[[:>:]]'
 # NOTE: Dispatchers must call _match_no_verify instead of _match_command
 # directly so that compound commands like `git commit && echo -n` do not
 # produce a false-positive. See _match_no_verify below.
-PATTERN_NO_VERIFY='git[[:space:]]+commit.*(--no-verify|-n[[:>:]])'
+PATTERN_NO_VERIFY='git[[:space:]]+commit.*(--no-verify|-n([^[:alnum:]_]|$))'
 
 # ---------------------------------------------------------------------------
 # Push patterns (M1 closed-PR check + M7 destructive push variants)
 # ---------------------------------------------------------------------------
 
 # git push (any form) — used by M1 closed-PR check; not destructive on its own
-PATTERN_PUSH='git[[:space:]]+push[[:>:]]'
+PATTERN_PUSH='git[[:space:]]+push([^[:alnum:]_]|$)'
 
 # git push ... --force   (NEGATIVE: must NOT match --force-with-lease)
 #
-# Why not just [[:>:]] after --force? Because [[:>:]] matches between a word
-# char and a non-word char — and `-` is non-word, so [[:>:]] DOES match
-# between `e` and `-` in `--force-with-lease`. We instead require the next
-# char after `--force` to be whitespace OR end-of-string.
+# Why not the usual ([^[:alnum:]_]|$) boundary after `--force`? Because it
+# accepts any non-word char — and `-` is non-word, so it DOES match between
+# `e` and `-` in `--force-with-lease`. We instead require the next char
+# after `--force` to be whitespace OR end-of-string.
 PATTERN_PUSH_FORCE='git[[:space:]]+push[[:space:]].*--force([[:space:]]|$)'
 
 # git push ... --delete <branch>   (long-form remote branch delete)
-PATTERN_PUSH_DELETE_FLAG='git[[:space:]]+push[[:space:]]+(.+[[:space:]]+)?--delete[[:>:]]'
+PATTERN_PUSH_DELETE_FLAG='git[[:space:]]+push[[:space:]]+(.+[[:space:]]+)?--delete([^[:alnum:]_]|$)'
 
 # git push <remote> :<branch>   (refspec-form remote branch delete)
 PATTERN_PUSH_COLON_DELETE='git[[:space:]]+push[[:space:]]+[^[:space:]]+[[:space:]]+:[^[:space:]]+'

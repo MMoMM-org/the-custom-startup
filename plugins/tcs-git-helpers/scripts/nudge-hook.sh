@@ -12,7 +12,10 @@
 #
 # Constraints (CON-1, CON-9):
 #   - bash 3.2 macOS-compat (no declare -A, no mapfile, no ${var,,})
-#   - POSIX ERE only: [[:space:]]+, [[:<:]]/[[:>:]] — NEVER \s/\b
+#   - POSIX ERE only: [[:space:]]+ for whitespace, ([^[:alnum:]_]|$) for a
+#     trailing word boundary. NEVER \s/\b (PCRE) and NEVER the BSD-only
+#     [[:<:]]/[[:>:]] — glibc rejects those, [[ =~ ]] returns 2, and the
+#     nudge silently never fires. See scripts/lib/pattern_match.sh.
 #   - NO git, NO gh subprocess invocations
 #   - JSON stdin parsed with bash regex (NOT jq) for hot-path performance.
 #     jq was replaced to meet the ≤50ms p99 budget (deviation D1 resolved).
@@ -228,7 +231,7 @@ if _match_command "$CMD" 'gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; the
 fi
 
 # AC4: git rebase (any variant)
-if _match_command "$CMD" 'git[[:space:]]+rebase[[:>:]]'; then
+if _match_command "$CMD" 'git[[:space:]]+rebase([^[:alnum:]_]|$)'; then
   _emit_nudge "verify-history" \
     "rebase complete — verify history with git log --oneline -10" \
     "rebase-vs-merge.md"
@@ -236,7 +239,7 @@ if _match_command "$CMD" 'git[[:space:]]+rebase[[:>:]]'; then
 fi
 
 # AC5: git stash pop
-if _match_command "$CMD" 'git[[:space:]]+stash[[:space:]]+pop[[:>:]]'; then
+if _match_command "$CMD" 'git[[:space:]]+stash[[:space:]]+pop([^[:alnum:]_]|$)'; then
   _emit_nudge "verify-orig-cleanup" \
     "stash pop — verify .orig file cleanup" \
     "working-tree-hygiene.md"

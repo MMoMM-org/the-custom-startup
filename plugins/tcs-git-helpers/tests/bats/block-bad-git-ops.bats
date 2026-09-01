@@ -17,7 +17,8 @@
 #
 # Constraints exercised:
 #   - bash 3.2 compatible (no associative arrays, no mapfile)
-#   - POSIX ERE patterns ([[:space:]]+, [[:>:]]) — never \s+/\b
+#   - POSIX ERE patterns ([[:space:]]+ and ([^[:alnum:]_]|$) for a trailing
+#     word boundary) — never \s+/\b, never the BSD-only [[:<:]]/[[:>:]]
 #   - No `coreutils timeout` dependency (CON-3) — pure-bash timeout path
 #   - gh fail-open per CON-4: exit 4 / 124 / 1 → ALLOW with stderr warning
 #   - bats `! cmd` trap: use `_assert_no_match` / `run` + status checks
