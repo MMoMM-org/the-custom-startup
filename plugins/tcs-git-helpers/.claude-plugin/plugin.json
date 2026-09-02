@@ -1,6 +1,6 @@
 {
   "name": "tcs-git-helpers",
-  "version": "2.2.15",
+  "version": "2.2.16",
   "description": "Git workflow discipline for Claude Code — destructive-op blocks, worktree-exit guard, session brief, and per-repo .githooks/ setup",
   "author": {
     "name": "Marcus Breiden"
