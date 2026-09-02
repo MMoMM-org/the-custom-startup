@@ -1,5 +1,48 @@
 # Changelog
 
+## [2.2.16] - 2026-09-02
+
+### Changed (test-side)
+
+- **Removed 45 tests that could only pass, and replaced them with 8 that can fail (issue #90).**
+  The suite was full of the string-presence trap: asserting that a source file *contains* a
+  phrase proves only that the source is the source. Those tests were wrong in both directions —
+  they broke on a harmless rewording, and they passed whenever the code said the right words
+  while behaving wrongly. Net count 837 → 800.
+  - `skill_git_setup.bats` — dropped the 21-test `A11..A31 "body documents X"` block
+    (`grep -qi 'submodule'`, `grep -qiE 'not.*commit|no.*auto.*commit|...'`, and
+    `SKILL.md has at least 80 lines`). Replaced with two checks that derive their expectation
+    from the skill itself: every `${CLAUDE_PLUGIN_ROOT}/…` helper it invokes must exist, and
+    every `references/*.md` it cites must exist. A renamed helper now fails the build instead
+    of silently leaving the skill pointing at nothing.
+  - `skill_git_audit.bats` — dropped 15, including greps for the words `branch`, `stale`,
+    `suggestion`, `worktree` and a `≥ 30 lines` proxy. Replaced with a derived check that asks
+    the python backend for its own interface (`git_status_audit.py --help`) and requires the
+    skill to document every flag it reports — so a new backend flag cannot ship undocumented.
+    The "does not re-implement git state-gathering inline" check is kept and relabelled: it
+    asserts an *absence*, which is a lint, not a behavioural test.
+  - `docs_smoke.bats` — dropped the four `README has '## Skills'` style greps and the
+    `CHANGELOG has '## [1.0.0]'` grep. Headings are prose for humans; the link-integrity check,
+    which resolves every path the README claims exists, stays.
+  - `hooks-runtime-contract.bats` — dropped the four `sources lib-bundle.sh via dirname` greps.
+    Section 11 already demonstrates dirname-relative resolution by observation for the two
+    hooks that hard-exit; added three tests covering what `pre-commit` and `commit-msg`
+    actually guarantee, since they soft-source the lib and had no such coverage: without
+    `lib-bundle.sh` they still allow a clean feature-branch commit, still block a commit on
+    `main`, and still accept a conventional subject.
+  - `hooks-runtime-contract.bats` Section 9 (no `CLAUDE_PLUGIN_` in hook templates) is retained
+    and relabelled as a lint — an absence check, deliberately kept.
+
+### Fixed (test-side)
+
+- **`fixtures_sanity.bats` now derives the gh-stub scenario list instead of hard-coding four
+  names.** The old test listed `closed-pr`, `merged-pr`, `no-auth`, `rate-limited` and checked
+  the fixture README mentions them — it could never notice a scenario added to the stub and left
+  undocumented. Two already had: `merged-pr-no-sha` and `stale-3-branches`, both in active use
+  by `block-bad-git-ops.bats`, `hooks-runtime-contract.bats` and `githooks_post_merge.bats`.
+  Truth now comes from the stub (response directories plus the failure-mode `case` labels), and
+  both scenarios are documented in `gh_stubs/README.md`.
+
 ## [2.2.14] - 2026-09-01
 
 ### Fixed

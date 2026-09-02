@@ -22,24 +22,14 @@ PLUGIN_ROOT="${BATS_TEST_DIRNAME}/../.."
 }
 
 # ---------------------------------------------------------------------------
-# README — required sections (current spec-006 information architecture)
+# The four "README has '## Skills'" style greps that used to sit here are gone
+# (issue #90). A heading is prose for humans: if the information architecture
+# from spec-006 gets reorganised, the next reader notices, and asserting the
+# literal heading text only guaranteed that nobody could improve the layout
+# without also editing a test. What remains below is the link-integrity check,
+# which resolves every path the README claims exists and so catches real
+# breakage.
 # ---------------------------------------------------------------------------
-
-@test "README has '## Skills' section" {
-  grep -qE '^## Skills$' "${PLUGIN_ROOT}/README.md"
-}
-
-@test "README has '## Hooks' section" {
-  grep -qE '^## Hooks$' "${PLUGIN_ROOT}/README.md"
-}
-
-@test "README has '## Installation' section" {
-  grep -qE '^## Installation$' "${PLUGIN_ROOT}/README.md"
-}
-
-@test "README has '## References' section" {
-  grep -qE '^## References$' "${PLUGIN_ROOT}/README.md"
-}
 
 # ---------------------------------------------------------------------------
 # README — link integrity (every `](path)` resolves)
@@ -77,10 +67,4 @@ PLUGIN_ROOT="${BATS_TEST_DIRNAME}/../.."
 
 @test "CHANGELOG.md exists" {
   [ -f "${PLUGIN_ROOT}/CHANGELOG.md" ]
-}
-
-@test "CHANGELOG has '## [1.0.0] - 2026-...' entry" {
-  run grep -E '^## \[1\.0\.0\] - 2026' "${PLUGIN_ROOT}/CHANGELOG.md"
-  [ "$status" -eq 0 ]
-  [ -n "$output" ]
 }

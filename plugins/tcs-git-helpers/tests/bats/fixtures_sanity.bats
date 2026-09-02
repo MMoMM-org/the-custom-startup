@@ -300,12 +300,37 @@ _assert_trailing_newline() {
   head -n 1 "$GH_STUB" | grep -qE '^#!.*bash'
 }
 
-@test "gh_stubs README documents scenarios" {
-  [ -f "$FIXTURE_DIR/gh_stubs/README.md" ]
-  grep -q 'closed-pr'        "$FIXTURE_DIR/gh_stubs/README.md"
-  grep -q 'merged-pr'        "$FIXTURE_DIR/gh_stubs/README.md"
-  grep -q 'no-auth'          "$FIXTURE_DIR/gh_stubs/README.md"
-  grep -q 'rate-limited'     "$FIXTURE_DIR/gh_stubs/README.md"
+# Derived, not hard-coded on both sides (issue #90). The previous version
+# listed four scenario names and checked the README mentions them; it could
+# never notice a fifth scenario added to the stub and left undocumented — and
+# when this was rewritten, two such scenarios had already accumulated.
+#
+# Truth comes from the stub: a scenario is either a response directory or a
+# label in the failure-mode case block.
+@test "gh_stubs README documents every scenario the stub implements" {
+  local readme="$FIXTURE_DIR/gh_stubs/README.md"
+  [ -f "$readme" ]
+
+  local scenarios sc missing=""
+
+  # Response-backed scenarios: one directory each.
+  scenarios="$(find "$FIXTURE_DIR/gh_stubs/responses" -mindepth 1 -maxdepth 1 -type d \
+                 -exec basename {} \; | sort -u)"
+
+  # Failure-mode scenarios: the case labels between the failure-scenario
+  # marker comment and its esac.
+  scenarios="$scenarios
+$(awk '/^# --- Failure scenarios/,/^esac/' "$GH_STUB" \
+    | grep -oE '^[[:space:]]+[a-z][a-z0-9-]*\)' \
+    | tr -d ' )')"
+
+  [ -n "$(printf '%s' "$scenarios" | tr -d '[:space:]')" ] \
+    || { echo "derived no scenarios from the stub — extraction is broken" >&2; return 1; }
+
+  for sc in $scenarios; do
+    grep -qF -- "$sc" "$readme" || missing="$missing $sc"
+  done
+  [ -z "$missing" ] || { echo "scenarios missing from gh_stubs/README.md:$missing" >&2; return 1; }
 }
 
 @test "gh_stubs response files are valid JSON" {

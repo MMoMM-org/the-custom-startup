@@ -93,85 +93,57 @@ yaml.safe_load(parts[1])
 }
 
 # ---------------------------------------------------------------------------
-# Body — required sections
+# Skill <-> backend consistency (issue #90)
+#
+# What used to live here: greps for '## Persona', for each of the four mode
+# flags by name, and for the words 'branch', 'stale', 'suggestion', 'worktree',
+# '24h'. Those are the string-presence trap — a grep for 'branch' in a skill
+# about branches cannot fail for any reason worth knowing about, and all of
+# them break on a rewording that changes no behaviour.
+#
+# The skill's real contract is with the python backend it delegates to. These
+# derive the expected set from the backend and from the skill itself, so a
+# change on one side that the other does not follow fails the build.
 # ---------------------------------------------------------------------------
 
-@test "body has Persona section" {
-  grep -qE '^##[[:space:]]+Persona' "$SKILL_PATH"
+@test "every flag the backend accepts is documented in the skill" {
+  # Ask the script for its own interface rather than grepping its source, so
+  # this keeps working if the argparse setup is refactored.
+  local flags f missing=""
+  flags="$(python3 "${PLUGIN_ROOT}/scripts/git_status_audit.py" --help 2>/dev/null \
+             | grep -oE -- '--[a-z][a-z-]+' | sort -u)"
+  [ -n "$flags" ] || { echo "could not read --help from the backend" >&2; return 1; }
+
+  for f in $flags; do
+    case "$f" in --help) continue ;; esac
+    grep -qF -- "$f" "$SKILL_PATH" || missing="$missing $f"
+  done
+  [ -z "$missing" ] || { echo "backend flags undocumented in SKILL.md:$missing" >&2; return 1; }
 }
 
-@test "body has Interface section" {
-  grep -qE '^##[[:space:]]+Interface' "$SKILL_PATH"
-}
+@test "every helper the skill invokes exists" {
+  local paths p rel missing=""
+  paths="$(grep -oE '\$\{CLAUDE_PLUGIN_ROOT\}/[A-Za-z0-9._/-]+' "$SKILL_PATH" | sort -u)"
+  [ -n "$paths" ] || { echo "skill names no helper scripts at all" >&2; return 1; }
 
-@test "body has Constraints section" {
-  grep -qE '^##[[:space:]]+Constraints' "$SKILL_PATH"
-}
-
-@test "body has Workflow section" {
-  grep -qE '^##[[:space:]]+Workflow' "$SKILL_PATH"
+  for p in $paths; do
+    rel="${p#\$\{CLAUDE_PLUGIN_ROOT\}/}"
+    [ -e "${PLUGIN_ROOT}/${rel}" ] || missing="$missing $rel"
+  done
+  [ -z "$missing" ] || { echo "skill points at missing paths:$missing" >&2; return 1; }
 }
 
 # ---------------------------------------------------------------------------
-# Body — delegation to python backend
+# Architectural lint — not a behavioural test
+#
+# Kept because it asserts the ABSENCE of something: state-gathering belongs in
+# the python backend, and a skill that starts issuing git commands inline has
+# drifted from that decision. Prose mentions are fine; command invocations are
+# not.
 # ---------------------------------------------------------------------------
 
-@test "body invokes git_status_audit.py via \${CLAUDE_PLUGIN_ROOT}" {
-  grep -qE 'python3[[:space:]]+\$\{CLAUDE_PLUGIN_ROOT\}/scripts/git_status_audit\.py' "$SKILL_PATH"
-}
-
-@test "body does NOT re-implement git state-gathering inline (no 'git rev-parse' commands in body)" {
-  # State-gathering belongs in the python backend; SKILL.md should delegate.
-  # We allow mentions in prose, but disallow actual command invocations.
+@test "lint: skill does not re-implement git state-gathering inline" {
   ! grep -qE '^[[:space:]]*git[[:space:]]+(status|rev-parse|branch[[:space:]]+--show-current)' "$SKILL_PATH"
-}
-
-# ---------------------------------------------------------------------------
-# Body — all 4 modes referenced
-# ---------------------------------------------------------------------------
-
-@test "body references --brief mode" {
-  grep -q -- '--brief' "$SKILL_PATH"
-}
-
-@test "body references --cleanup mode" {
-  grep -q -- '--cleanup' "$SKILL_PATH"
-}
-
-@test "body references --json mode" {
-  grep -q -- '--json' "$SKILL_PATH"
-}
-
-@test "body references --overrides mode" {
-  grep -q -- '--overrides' "$SKILL_PATH"
-}
-
-@test "body documents default-mode structured sections (branch / PR / stale / version / suggestions)" {
-  # Spec compliance: default mode outputs structured sections
-  # (branch, PR state, stale branches, plugin version, suggestions).
-  grep -qiE 'branch'                  "$SKILL_PATH"
-  grep -qiE 'PR[[:space:]]*state|PR'  "$SKILL_PATH"
-  grep -qiE 'stale'                   "$SKILL_PATH"
-  grep -qiE 'plugin version|version'  "$SKILL_PATH"
-  grep -qiE 'suggestion'              "$SKILL_PATH"
-}
-
-# ---------------------------------------------------------------------------
-# Constraints — specific guarantees
-# ---------------------------------------------------------------------------
-
-@test "constraints note 24h cache-staleness threshold" {
-  # Either '24h', 'cache stale', or 'stale-cache' phrasing acceptable.
-  grep -qiE '24h|stale[- ]cache|cache.*stale' "$SKILL_PATH"
-}
-
-@test "constraints mention worktree-checked-out exclusion for --cleanup" {
-  grep -qiE 'worktree' "$SKILL_PATH"
-}
-
-@test "body notes graceful degradation when .githooks/ not installed" {
-  # Body should mention either "tcs-git-helpers not installed" or pointer to setup skill.
-  grep -qiE 'not installed|tcs-git-helpers:git-setup|run.*setup' "$SKILL_PATH"
 }
 
 # ---------------------------------------------------------------------------
@@ -180,9 +152,4 @@ yaml.safe_load(parts[1])
 
 @test "SKILL.md is non-empty" {
   [ -s "$SKILL_PATH" ]
-}
-
-@test "SKILL.md has at least 30 lines (substantive content)" {
-  line_count=$(wc -l < "$SKILL_PATH")
-  [ "$line_count" -ge 30 ]
 }
