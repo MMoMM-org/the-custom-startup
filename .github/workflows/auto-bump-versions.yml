@@ -7,6 +7,14 @@ on:
 permissions:
   contents: write
 
+# Queue runs instead of racing them (issue #93). Two PRs merging seconds apart
+# used to produce two concurrent runs, each checked out at its own commit;
+# whichever pushed second lost a non-fast-forward and its bump was gone. Never
+# cancel-in-progress here — a cancelled run is a dropped bump, which is the bug.
+concurrency:
+  group: auto-bump-versions-main
+  cancel-in-progress: false
+
 jobs:
   bump:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
@@ -15,22 +23,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 2
+          # Full history: each retry resets onto a moved origin/main and still
+          # has to diff the original push range.
+          fetch-depth: 0
 
-      - name: Auto-bump plugin and marketplace versions
-        env:
-          BASE_SHA: ${{ github.event.before }}
-          HEAD_SHA: ${{ github.sha }}
-        run: bash scripts/ci/auto-bump-versions.sh "$BASE_SHA" "$HEAD_SHA"
-
-      - name: Commit and push if anything was bumped
+      - name: Configure committer
         run: |
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add .claude-plugin/marketplace.json 'plugins/*/.claude-plugin/plugin.json' 2>/dev/null || true
-          if git diff --cached --quiet; then
-            echo "No version bumps needed."
-          else
-            git commit -m "chore(release): auto-bump plugin versions [skip ci]"
-            git push
-          fi
+
+      # The retry loop lives in a script rather than inline here so it can be
+      # exercised by tests/test_bump_and_push.py, which reproduces the race
+      # against a real remote that rejects the first push.
+      - name: Bump and push, retrying if main moved underneath
+        env:
+          MAX_ATTEMPTS: "5"
+        run: bash scripts/ci/bump-and-push.sh "${{ github.event.before }}" "${{ github.sha }}"
+
+      # The state this bug used to leave behind: a CHANGELOG documenting a
+      # version the manifest never carried. Strict here (--allow-ahead 0) —
+      # on main the bump has already happened, so any gap is a real one. The
+      # pull-request side runs the same script with --allow-ahead 1 via
+      # tests/test_check_changelog_version_sync.py, where an entry naming the
+      # about-to-be-produced version is expected.
+      - name: Verify every documented version actually shipped
+        if: always()
+        run: |
+          # Check what is actually on main, not the local tree: if the push
+          # loop gave up, the bump is sitting here uncommitted-to-remote and
+          # would make the check pass while main stays inconsistent.
+          git fetch --quiet origin main
+          git reset --quiet --hard origin/main
+          bash scripts/ci/check-changelog-version-sync.sh --allow-ahead 0
