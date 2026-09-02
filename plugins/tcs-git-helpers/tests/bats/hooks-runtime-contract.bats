@@ -612,8 +612,13 @@ STUB
 }
 
 # ---------------------------------------------------------------------------
-# Section 9: Verify no CLAUDE_PLUGIN_ references remain in hook templates
-# (Runtime-contract integrity — these must not exist after refactoring)
+# Section 9: lint — no CLAUDE_PLUGIN_ references in hook templates
+#
+# A source check, retained deliberately (issue #90): it asserts the ABSENCE of
+# something, which no behavioural test can do as cheaply. Section 1 already
+# proves the hooks run correctly with both variables unset; this catches a
+# reintroduced reference at the point it is written rather than waiting for a
+# case where it happens to matter.
 # ---------------------------------------------------------------------------
 
 @test "post-merge template: contains no CLAUDE_PLUGIN_ references in executable code (after refactor)" {
@@ -643,32 +648,25 @@ STUB
 }
 
 # ---------------------------------------------------------------------------
-# Section 10: lib-bundle.sh sourced by hooks (not CLAUDE_PLUGIN_ROOT)
+# Section 10: lib resolution — covered behaviourally in Section 11
+#
+# This section used to grep each template for the string 'lib-bundle.sh' near
+# 'dirname'. That proved only that the source is the source (issue #90), and it
+# would have broken on any equivalent rewrite of the same resolution.
+#
+# Section 11 settles the question by observation instead: the hooks are copied
+# into a throwaway repo with the lib beside them, the copy of the lib is
+# deleted, and post-merge and pre-push report it missing — even though the
+# original templates/githooks/lib-bundle.sh still exists on disk. A hook
+# resolving its lib through an absolute path or CLAUDE_PLUGIN_ROOT would have
+# found that one and stayed quiet. That is dirname-relative resolution,
+# demonstrated.
+#
+# pre-commit and commit-msg soft-source the lib and have no missing-lib
+# message, so nothing observable depends on how they resolve it — which is
+# precisely why grepping their source for 'dirname' asserted nothing. Section
+# 11 covers what they do guarantee: they keep guarding without it.
 # ---------------------------------------------------------------------------
-
-@test "post-merge template: sources lib-bundle.sh via dirname-relative path" {
-  run grep 'lib-bundle.sh' "$HOOK_POST_MERGE"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *'dirname'* ]] || [[ "$output" == *'$(dirname'* ]]
-}
-
-@test "pre-commit template: sources lib-bundle.sh via dirname-relative path" {
-  run grep 'lib-bundle.sh' "$HOOK_PRE_COMMIT"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *'dirname'* ]] || [[ "$output" == *'$(dirname'* ]]
-}
-
-@test "commit-msg template: sources lib-bundle.sh via dirname-relative path" {
-  run grep 'lib-bundle.sh' "$HOOK_COMMIT_MSG"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *'dirname'* ]] || [[ "$output" == *'$(dirname'* ]]
-}
-
-@test "pre-push template: sources lib-bundle.sh via dirname-relative path" {
-  run grep 'lib-bundle.sh' "$HOOK_PRE_PUSH"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *'dirname'* ]] || [[ "$output" == *'$(dirname'* ]]
-}
 
 # ---------------------------------------------------------------------------
 # Section 11: Missing lib-bundle.sh — hooks with hard exit-0 guard
@@ -684,6 +682,52 @@ STUB
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"lib-bundle.sh missing"* ]]
+}
+
+# pre-commit and commit-msg soft-source the lib (`if [ -f ]`, no message): the
+# template promises "if missing, hook still works", and the lib only backs
+# degraded paths. So their contract is not a missing-lib message — it is that
+# the guard keeps guarding. That is what these assert.
+
+@test "pre-commit: works with lib-bundle.sh absent — still allows a clean feature-branch commit" {
+  _make_git_repo "$TEST_DIR/repo"
+  _install_hooks_in_repo "$TEST_DIR/repo"
+  git -C "$TEST_DIR/repo" checkout -q -b feat/some-feature
+  rm -f "$TEST_DIR/repo/.githooks/lib-bundle.sh"
+  printf 'safe\n' > "$TEST_DIR/repo/safe.txt"
+  git -C "$TEST_DIR/repo" add safe.txt
+
+  run env -u CLAUDE_PLUGIN_ROOT -u CLAUDE_PLUGIN_DATA \
+    bash -c "cd '$TEST_DIR/repo' && bash .githooks/pre-commit"
+
+  [ "$status" -eq 0 ]
+}
+
+@test "pre-commit: works with lib-bundle.sh absent — still blocks a commit on main" {
+  _make_git_repo "$TEST_DIR/repo"
+  _install_hooks_in_repo "$TEST_DIR/repo"
+  rm -f "$TEST_DIR/repo/.githooks/lib-bundle.sh"
+  printf 'safe\n' > "$TEST_DIR/repo/safe.txt"
+  git -C "$TEST_DIR/repo" add safe.txt
+
+  run env -u CLAUDE_PLUGIN_ROOT -u CLAUDE_PLUGIN_DATA \
+    bash -c "cd '$TEST_DIR/repo' && bash .githooks/pre-commit"
+
+  [ "$status" -ne 0 ]
+}
+
+@test "commit-msg: works with lib-bundle.sh absent — still accepts a conventional subject" {
+  _make_git_repo "$TEST_DIR/repo"
+  _install_hooks_in_repo "$TEST_DIR/repo"
+  rm -f "$TEST_DIR/repo/.githooks/lib-bundle.sh"
+
+  local msg_file="$TEST_DIR/repo/.git/COMMIT_EDITMSG"
+  printf 'feat: add something useful\n' > "$msg_file"
+
+  run env -u CLAUDE_PLUGIN_ROOT -u CLAUDE_PLUGIN_DATA \
+    bash -c "cd '$TEST_DIR/repo' && bash .githooks/commit-msg '$msg_file'"
+
+  [ "$status" -eq 0 ]
 }
 
 @test "pre-push: lib-bundle.sh missing — exits 0 and emits missing-lib stderr" {

@@ -85,93 +85,46 @@ yaml.safe_load(parts[1])
 "
 }
 
-@test "A11 body has Persona section" {
-  grep -qE '^##[[:space:]]+Persona' "$SKILL_PATH"
+# ---------------------------------------------------------------------------
+# Skill body — artifact consistency (issue #90)
+#
+# The 21 "A11..A31 body documents X" greps that used to live here asserted that
+# SKILL.md contains particular prose. That is the string-presence trap: they
+# broke on a harmless rewording and passed whenever the skill said the right
+# words while behaving wrongly. Whether a skill's instructions actually steer
+# the agent is measured by running an agent against them — the subagent-probe
+# method in tcs-helper:skill-author (reference/testing-with-subagents.md) — not
+# by grepping the prose.
+#
+# What survives are the two checks that compare the skill against something
+# real, deriving the expected set from the skill itself rather than restating
+# it: every path the skill sends Claude to must exist. Those catch a genuine
+# breakage — a renamed or deleted helper leaves the skill pointing at nothing,
+# and nothing else in the suite notices.
+# ---------------------------------------------------------------------------
+
+@test "A11 every helper script the skill invokes exists" {
+  local paths p missing=""
+  # ${CLAUDE_PLUGIN_ROOT}/... occurrences in the skill body.
+  paths="$(grep -oE '\$\{CLAUDE_PLUGIN_ROOT\}/[A-Za-z0-9._/-]+' "$SKILL_PATH" | sort -u)"
+  [ -n "$paths" ] || { echo "skill names no helper scripts at all" >&2; return 1; }
+
+  for p in $paths; do
+    local rel="${p#\$\{CLAUDE_PLUGIN_ROOT\}/}"
+    [ -e "${PLUGIN_ROOT}/${rel}" ] || missing="$missing $rel"
+  done
+  [ -z "$missing" ] || { echo "skill points at missing paths:$missing" >&2; return 1; }
 }
 
-@test "A12 body has Interface section" {
-  grep -qE '^##[[:space:]]+Interface' "$SKILL_PATH"
-}
+@test "A12 every reference doc the skill cites exists" {
+  local docs d missing=""
+  docs="$(grep -oE 'references/[A-Za-z0-9._-]+\.md' "$SKILL_PATH" | sort -u)"
+  [ -n "$docs" ] || { echo "skill cites no reference docs at all" >&2; return 1; }
 
-@test "A13 body has Constraints section" {
-  grep -qE '^##[[:space:]]+Constraints' "$SKILL_PATH"
-}
-
-@test "A14 body has Workflow section" {
-  grep -qE '^##[[:space:]]+Workflow' "$SKILL_PATH"
-}
-
-@test "A15 body has Conflict matrix section" {
-  grep -qiE '^##[[:space:]]+Conflict[[:space:]]+matrix' "$SKILL_PATH"
-}
-
-@test "A16 body documents .setup.lock pattern (ADR-11 / lock serialization)" {
-  grep -q '\.setup\.lock' "$SKILL_PATH"
-}
-
-@test "A17 body documents subshell sentinel TCS_GIT_HELPERS_SETUP_ACTIVE=1" {
-  grep -q 'TCS_GIT_HELPERS_SETUP_ACTIVE=1' "$SKILL_PATH"
-}
-
-@test "A18 body documents Husky conflict signature" {
-  grep -qiE 'husky' "$SKILL_PATH"
-}
-
-@test "A19 body documents lefthook conflict signature" {
-  grep -qi 'lefthook' "$SKILL_PATH"
-}
-
-@test "A20 body documents pre-commit framework conflict signature" {
-  grep -qE 'pre-commit-config|pre-commit framework|pre-commit \(py' "$SKILL_PATH"
-}
-
-@test "A21 body documents simple-git-hooks conflict signature" {
-  grep -q 'simple-git-hooks' "$SKILL_PATH"
-}
-
-@test "A22 body documents .git/hooks/ non-sample warning" {
-  grep -qE '\.git/hooks|non-\.sample|non-sample' "$SKILL_PATH"
-}
-
-@test "A23 body documents submodules listing behavior" {
-  grep -qi 'submodule' "$SKILL_PATH"
-}
-
-@test "A24 body documents existing-no-marker conflict mode (per-file diff)" {
-  grep -qiE 'no marker|per-file diff|version marker' "$SKILL_PATH"
-}
-
-@test "A25 body documents up-to-date branch (matching version)" {
-  grep -qiE 'up to date|matching version' "$SKILL_PATH"
-}
-
-@test "A26 body documents --update mode shows per-file diff" {
-  grep -qE -- '--update' "$SKILL_PATH"
-  # The orchestration instruction must be specific: --update must be co-located
-  # with a "diff" / "per-file diff" mention so Claude knows to invoke `diff`
-  # before overwriting older-marker files.
-  grep -qiE 'per-file diff|diff' "$SKILL_PATH"
-}
-
-@test "A27 body cites references/migrating-from-husky.md" {
-  grep -q 'migrating-from-husky\.md' "$SKILL_PATH"
-}
-
-@test "A28 body documents NO auto-commit (M10 AC5)" {
-  grep -qiE 'not.*commit|no.*auto.*commit|does not.*commit|never.*commit' "$SKILL_PATH"
-}
-
-@test "A29 body documents --with-gha copies pr-title-check.yml" {
-  grep -qE 'pr-title-check\.yml' "$SKILL_PATH"
-}
-
-@test "A30 body documents --with-branch-protection delegated to T5.8 stub" {
-  grep -qE -- '--with-branch-protection' "$SKILL_PATH"
-}
-
-@test "A31 SKILL.md has at least 80 lines (substantive)" {
-  line_count=$(wc -l < "$SKILL_PATH")
-  [ "$line_count" -ge 80 ]
+  for d in $docs; do
+    [ -f "${PLUGIN_ROOT}/${d}" ] || missing="$missing $d"
+  done
+  [ -z "$missing" ] || { echo "skill cites missing reference docs:$missing" >&2; return 1; }
 }
 
 # ---------------------------------------------------------------------------
