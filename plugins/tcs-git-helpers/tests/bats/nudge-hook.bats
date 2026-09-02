@@ -19,6 +19,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load 'lib/helpers'
+
 # ----------------------------------------------------------------------
 # Setup / teardown
 # ----------------------------------------------------------------------
@@ -379,7 +381,7 @@ STUB
   rm -f "$times_file"
 
   [ -n "$p99" ] || { echo "no timing data collected" >&2; return 1; }
-  [ "$p99" -lt 50 ] \
+  [ "$p99" -lt "$(_perf_budget 50)" ] \
     || { echo "p99=${p99}ms exceeds 50ms spec budget" >&2; return 1; }
 }
 

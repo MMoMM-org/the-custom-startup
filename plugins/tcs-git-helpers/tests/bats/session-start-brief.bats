@@ -27,6 +27,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load 'lib/helpers'
+
 # ----------------------------------------------------------------------
 # Setup / teardown
 # ----------------------------------------------------------------------
@@ -360,9 +362,9 @@ STUB
 
   local ceiling_ms
   if [ "${CI:-}" = "true" ]; then
-    ceiling_ms=500
+    ceiling_ms=$(_perf_budget 500)
   else
-    ceiling_ms=300
+    ceiling_ms=$(_perf_budget 300)
   fi
 
   local n=100

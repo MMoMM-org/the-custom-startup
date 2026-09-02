@@ -16,6 +16,8 @@ PLUGIN_ROOT="${BATS_TEST_DIRNAME}/../.."
 PARSER="${PLUGIN_ROOT}/scripts/lib/config_parser.sh"
 EXAMPLE="${PLUGIN_ROOT}/.config.example"
 
+load 'lib/helpers'
+
 setup() {
   TMP="$(mktemp -d "${TMPDIR:-/tmp}/tcs-cfg-XXXXXX")"
   CFG="${TMP}/.config"
@@ -321,5 +323,5 @@ run_parser() {
   end=$(perl -MTime::HiRes=time -e 'printf "%d\n", time()*1000')
   [ "$status" -eq 0 ]
   elapsed=$((end - start))
-  [ "$elapsed" -lt 50 ]
+  [ "$elapsed" -lt "$(_perf_budget 50)" ]
 }
