@@ -873,7 +873,7 @@ EOF
   _run_hook_with_cmd "git reset --hard" >/dev/null 2>&1 || true
   t1=$(perl -MTime::HiRes -e 'printf "%d", Time::HiRes::time()*1000')
   elapsed_ms=$((t1 - t0))
-  [ "$elapsed_ms" -lt 1000 ] \
+  [ "$elapsed_ms" -lt "$(_perf_budget 1000)" ] \
     || { echo "non-push hook took ${elapsed_ms}ms (>1000ms smoke threshold)" >&2; return 1; }
 }
 

@@ -21,6 +21,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load 'lib/helpers'
+
 # ---------------------------------------------------------------------------
 # Setup / teardown
 # ---------------------------------------------------------------------------
@@ -476,5 +478,5 @@ _run_hook_with_root() {
   echo "# perf p50=${p50}ms p99=${p99}ms" >&3
 
   # D3: budget raised from 100ms to 150ms — see plan/phase-5.md § Deviations
-  [ "$p99" -lt 150 ]
+  [ "$p99" -lt "$(_perf_budget 150)" ]
 }

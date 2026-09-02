@@ -21,6 +21,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load 'lib/helpers'
+
 # ---------------------------------------------------------------------------
 # Setup / teardown
 # ---------------------------------------------------------------------------
@@ -386,7 +388,7 @@ STUB
   rm -rf "$hang_dir"
 
   # Hook must complete within 8 seconds (timeout=1s + overhead).
-  [ "$elapsed_ms" -lt 8000 ]
+  [ "$elapsed_ms" -lt "$(_perf_budget 8000)" ]
   # Fail-open: timeout => exit 0.
   [ "$hook_status" -eq 0 ]
 }
@@ -480,7 +482,7 @@ STUB
 
   # p99 must be < 200ms (subprocess overhead on macOS; spec 30ms is for in-process Claude hook).
   [ -n "$p99" ]
-  [ "$p99" -lt 200 ]
+  [ "$p99" -lt "$(_perf_budget 200)" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -519,5 +521,5 @@ STUB
 
   # p99 must be < 5000ms (timeout-bounded ceiling).
   [ -n "$p99" ]
-  [ "$p99" -lt 5000 ]
+  [ "$p99" -lt "$(_perf_budget 5000)" ]
 }
