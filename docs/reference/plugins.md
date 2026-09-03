@@ -12,7 +12,7 @@ The Custom Agentic Startup is distributed as six Claude Code marketplace plugins
 
 The core workflow plugin. It gives you a spec-driven, test-verified development lifecycle through 20 skills covering everything from specification and validation through implementation, review, and documentation. All other TCS plugins integrate with and extend the workflow that tcs-workflow defines.
 
-20 skills — full reference: [skills.md](../skills.md)
+20 skills — full reference: [skills.md](skills.md)
 
 Two output styles ship with tcs-workflow:
 
@@ -33,7 +33,7 @@ Switch anytime: `/output-style tcs-workflow:the-startup`
 
 Adds 15 activity-based agents across 8 specialist roles. They activate automatically when tcs-workflow skills delegate work that requires a specialist — you do not invoke them directly. Each agent brings focused expertise, tooling permissions, and decision protocols for its domain.
 
-15 agents across 8 roles — full reference: [agents.md](../agents.md)
+15 agents across 8 roles — full reference: [agents.md](agents.md)
 
 | Role | Agents | Focus |
 |------|--------|-------|
@@ -106,14 +106,15 @@ Optional. Provides skill authoring tools, the **[Memory Bank](../about/concepts.
 /plugin install tcs-patterns@the-custom-startup
 ```
 
-Optional. 17 pattern skills covering architecture, API design, testing, language platforms, DevOps, and integrations. Install selectively — each skill activates on trigger terms and provides interactive, opinionated guidance for its domain without requiring the whole plugin. You can install the full plugin and only use the skills relevant to your stack.
+Optional. 18 pattern skills covering architecture, security, API design, testing, language platforms, DevOps, and integrations. Install selectively — each skill activates on trigger terms and provides interactive, opinionated guidance for its domain without requiring the whole plugin. You can install the full plugin and only use the skills relevant to your stack.
 
-17 skills — full reference: [../guides/tcs-patterns.md](../guides/tcs-patterns.md)
+18 skills — full reference: [../guides/tcs-patterns.md](../guides/tcs-patterns.md)
 
 | Category | Skills |
 |----------|--------|
 | **Architecture** | `ddd` · `hexagonal` · `functional` · `event-driven` |
 | **API & Types** | `api-design` · `typescript-strict` |
+| **Security** | `secure-oauth-oidc` |
 | **Testing** | `testing` · `mutation-testing` · `frontend-testing` · `react-testing` · `test-design-reviewer` |
 | **Platforms** | `node-service` · `python-project` · `go-idiomatic` |
 | **DevOps** | `twelve-factor` |

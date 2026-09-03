@@ -173,11 +173,12 @@ Optional: `setup --with-branch-protection` (GitHub single-coder branch protectio
 
 ### Patterns Plugin (`tcs-patterns`) — Domain Pattern Skills *(optional)*
 
-**17 pattern skills** covering architecture, testing, languages, and platform. Install only what you need — they activate on trigger terms. Agents from `tcs-team` automatically use relevant pattern skills when delegating specialist work.
+**18 pattern skills** covering architecture, security, testing, languages, and platform. Install only what you need — they activate on trigger terms. Agents from `tcs-team` automatically use relevant pattern skills when delegating specialist work.
 
 | Category | Skills |
 |----------|--------|
 | **Architecture** | `/ddd` · `/hexagonal` · `/functional` · `/event-driven` |
+| **Security** | `/secure-oauth-oidc` |
 | **API & Types** | `/api-design` · `/typescript-strict` |
 | **Testing** | `/testing` · `/mutation-testing` · `/frontend-testing` · `/react-testing` · `/test-design-reviewer` |
 | **Platforms** | `/node-service` · `/python-project` · `/go-idiomatic` |

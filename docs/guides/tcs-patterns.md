@@ -37,7 +37,7 @@ When `tcs-team` agents delegate specialist work, they automatically use relevant
 | Agent | Uses patterns |
 |---|---|
 | `the-architect/design-system` | `ddd`, `hexagonal`, `event-driven`, `twelve-factor` |
-| `the-architect/review-security` | `api-design` |
+| `the-architect/review-security` | `api-design`, `secure-oauth-oidc` |
 | `the-architect/review-robustness` | `functional`, `node-service` |
 | `the-developer/build-feature` | `typescript-strict`, `api-design`, `node-service`, `go-idiomatic`, `python-project` |
 | `the-tester/test-strategy` | `testing`, `mutation-testing`, `frontend-testing`, `react-testing`, `test-design-reviewer` |
@@ -62,6 +62,18 @@ When `tcs-team` agents delegate specialist work, they automatically use relevant
 |-------|-------------|----------------|------------|
 | `api-design` | Use when designing or reviewing HTTP APIs — enforces RESTful resource modelling, correct HTTP semantics, consistent error shapes, versioning strategy, and pagination contracts. | When designing new endpoints or reviewing an existing API for contract consistency. | `/api-design [API spec file, route definitions, or controller directory]` |
 | `typescript-strict` | Use when working on TypeScript projects — triggered by requests to audit type safety, strict mode configuration, implicit any, null checks, or discriminated union patterns. | When tightening TypeScript strictness or auditing a codebase for unsafe type patterns. | `/typescript-strict [path, file, or tsconfig.json to audit]` |
+
+---
+
+## Security
+
+| Skill | What it does | When to invoke | Invocation |
+|-------|-------------|----------------|------------|
+| `secure-oauth-oidc` | Use when designing, implementing, auditing, or migrating OAuth 2.0 and OpenID Connect — covers authorization servers, clients and relying parties, resource servers, redirect URIs, PKCE, state and nonce, ID Token validation, refresh rotation, and sender-constrained tokens against the RFC 9700 / BCP 240 baseline. | When designing an auth flow, auditing one, or migrating off implicit or password grants. | `/secure-oauth-oidc [flow, component, or path]` |
+
+`the-architect/review-security` **reviews** an auth change; this skill is the reference its findings are checkable against. Findings carry a control ID from the RFC 9700 catalog so the two can be reconciled rather than double-counted.
+
+The browser-facing session layer that consumes these tokens — session cookies, CSRF policy, public/protected route classification — has no skill yet; see issue #98.
 
 ---
 
