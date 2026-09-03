@@ -246,3 +246,60 @@ def test_this_spec_records_its_own_tier():
     code, out = _read(REPO_ROOT, spec_id="017")
     assert code == 0
     assert _tier_of(out) == "incremental"
+
+
+# --- The Direct tier's "no plan artifact" contract at scaffold time ---
+#
+# Found by the spec-017 T4.2 Direct walkthrough. `create_spec` created a `plan/`
+# subdirectory for every new spec, so a Direct spec — which by ADR-1 carries no
+# decomposition artifact at all — shipped with the very directory that marks a
+# spec as Incremental. Dispatch survived it (detection keys on plan/README.md,
+# not on the bare directory), but the contract did not: `--read` announced a
+# `plan_dir` for a spec that has no plan, and implement-direct's "never write
+# plan/" rule was contradicted before the loop even started.
+
+
+def test_scaffold_writes_no_plan_directory(tmp_path):
+    """A fresh spec is unclassified, so it must carry no tier's artifact yet.
+
+    `plan/` is created on demand by --add xdd-plan, which is the only moment a
+    spec is known to be Incremental.
+    """
+    proc = subprocess.run(
+        [sys.executable, str(SPEC_PY), "no-plan-at-scaffold"],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    spec_dir = next((tmp_path / "docs" / "XDD" / "specs").iterdir())
+    assert not (spec_dir / "plan").exists(), (
+        "scaffold created plan/ — a Direct spec would carry an Incremental artifact"
+    )
+
+
+def test_adding_the_plan_template_still_creates_the_plan_directory(tmp_path):
+    """The Incremental path must keep working without the scaffold-time mkdir."""
+    proc = subprocess.run(
+        [sys.executable, str(SPEC_PY), "plan-on-demand", "--add", "xdd-plan"],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    spec_dir = next((tmp_path / "docs" / "XDD" / "specs").iterdir())
+    assert (spec_dir / "plan" / "README.md").exists()
+
+
+def test_read_ignores_an_empty_plan_directory(tmp_path):
+    """A leftover empty plan/ is not a plan.
+
+    Specs scaffolded by the released version carry one. --read must not report
+    them as having a decomposition artifact once the scaffold stops making it.
+    """
+    spec_dir = _make_spec(tmp_path)
+    (spec_dir / "plan").mkdir()
+    code, out = _read(tmp_path)
+    assert code == 0
+    assert "plan_dir" not in out, "an empty plan/ was reported as a plan artifact"
+    assert "plan = " not in out

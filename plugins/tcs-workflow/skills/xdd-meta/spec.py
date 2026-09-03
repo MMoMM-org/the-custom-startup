@@ -180,15 +180,16 @@ def read_spec(spec_id: str) -> None:
     if sdd:
         print(f'sdd = "{sdd}"')
 
-    # Plan: check for plan/ directory first, then legacy file
+    # Plan: check for plan/ directory first, then legacy file. An empty plan/
+    # is not a plan — specs scaffolded before the tier split carry one, and
+    # reporting it would claim a decomposition artifact that does not exist.
     plan_dir = spec_dir / "plan"
-    if plan_dir.is_dir():
+    plan_readme = plan_dir / "README.md"
+    phase_files = sorted(plan_dir.glob("phase-*.md")) if plan_dir.is_dir() else []
+    if plan_readme.exists() or phase_files:
         print(f'plan_dir = "{plan_dir}"')
-        plan_readme = plan_dir / "README.md"
         if plan_readme.exists():
             print(f'plan = "{plan_readme}"')
-        # List phase files
-        phase_files = sorted(plan_dir.glob("phase-*.md"))
         if phase_files:
             phases_str = ", ".join(f'"{f}"' for f in phase_files)
             print(f"phases = [{phases_str}]")
@@ -285,9 +286,10 @@ def create_spec(feature_name: str, template: Optional[str] = None) -> None:
     sanitized_name = sanitize_name(feature_name)
     spec_dir = SPECS_DIR / f"{spec_id}-{sanitized_name}"
 
-    # Create spec directory with plan/ subdirectory
+    # Create the spec directory only. `plan/` is an Incremental-tier artifact
+    # and is created on demand by create_plan_directory(); scaffolding one here
+    # would hand every Direct spec the artifact that marks a spec Incremental.
     spec_dir.mkdir(parents=True, exist_ok=True)
-    (spec_dir / "plan").mkdir(parents=True, exist_ok=True)
 
     print(f"Created spec directory: {spec_dir}")
     print(f"Spec ID: {spec_id}")
