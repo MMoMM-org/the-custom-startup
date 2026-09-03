@@ -24,6 +24,14 @@ enforces that on every merge.
 - **`xdd` step 6 is now Decompose**, not Write PLAN. It classifies, shows the signals that produced the recommendation, lets the user confirm or override, records the choice, and only then routes to `xdd-plan` or to nothing.
 - **Skill count corrected from 20 to 23.** The documented figure was already wrong before this change — 21 directories described as 20 — and nothing checked it. A test now derives the number from the filesystem.
 
+### Fixed
+
+- **A new spec no longer scaffolds an empty `plan/`.** `spec.py` created one for every spec, so a Direct spec — which carries no decomposition artifact by design — was handed the directory that marks a spec Incremental. Dispatch survived it, but `--read` reported a `plan_dir` for a spec with no plan. The directory is now created only when the plan template is added, and an empty one reads as absent.
+- **A Direct spec's `plan/` documents row now reads `skipped`.** It stayed `pending`, so a finished Direct spec looked as though a plan were still outstanding.
+- **A tier mismatch is now logged, not only reported.** The PRD counts "tier mismatch reported" as an artifact-based event; the dispatcher reported it in conversation and wrote nothing, leaving the event uncountable for the purpose it exists to serve. The cross-check now writes a Decisions Log row through `xdd-meta` before asking.
+
+All three were found by the spec's own end-to-end walkthroughs rather than by its tests.
+
 ### Note on scope
 
 `Factory` is a reserved tier name with **no implementation**. TCS has no units, holdout scenarios, information barriers or retry loop, and every piece of evidence behind this change is about work too *small* for the current ceremony. The classifier never recommends it, the dispatcher stops rather than guessing a route for it, and no surface advertises it. Adding it later changes neither the classify nor the dispatch contract.
