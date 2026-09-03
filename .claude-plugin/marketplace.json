@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Comprehensive agentic framework for Claude Code",
-    "version": "4.3.42",
+    "version": "4.3.43",
     "homepage": "https://github.com/MMoMM-org/the-custom-startup"
   },
   "plugins": [
