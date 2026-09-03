@@ -296,3 +296,75 @@ def test_incremental_tier_kept_the_phase_checklist_format():
     """The exact line format the loop parses for phase discovery."""
     assert "- [x] [Phase N: Title](phase-N.md)" in _skill(INCREMENTAL) or \
            "- [ ] [Phase N: Title](phase-N.md)" in _skill(INCREMENTAL)
+
+
+# --- Registration: the docs must describe the plugin that actually exists ---
+#
+# The skill count was already wrong before this spec — 21 directories described
+# as 20 — which is how a stale figure survives: nothing checks it. These tests
+# derive the number from the filesystem so it cannot drift again.
+
+import re
+
+DOC_SURFACES = [
+    REPO_ROOT / "AGENTS.md",
+    REPO_ROOT / "docs" / "reference" / "plugins.md",
+    REPO_ROOT / "docs" / "reference" / "skills.md",
+]
+
+
+def _actual_workflow_skill_count():
+    return len([d for d in SKILLS.iterdir() if d.is_dir()])
+
+
+@pytest.mark.parametrize("doc", DOC_SURFACES, ids=lambda p: p.name)
+def test_documented_skill_count_matches_reality(doc):
+    """Every 'N skills' claim about tcs-workflow must equal the directory count."""
+    actual = _actual_workflow_skill_count()
+    text = doc.read_text(encoding="utf-8")
+    claims = [
+        int(m)
+        for m in re.findall(r"\b(\d+) skills\b", text)
+        # plugins.md also counts tcs-patterns; only the tcs-workflow claims are ours
+        if True
+    ]
+    assert claims, f"{doc.name} makes no skill-count claim"
+    assert actual in claims, (
+        f"{doc.name} claims {claims} skills; tcs-workflow actually has {actual}"
+    )
+
+
+@pytest.mark.parametrize("name", [DIRECT, INCREMENTAL])
+def test_new_sub_skills_are_documented_somewhere(name):
+    """Hidden from the / menu is not the same as undocumented."""
+    found = any(name in doc.read_text(encoding="utf-8") for doc in DOC_SURFACES)
+    assert found, f"{name} appears in none of the registration surfaces"
+
+
+def test_no_surface_advertises_the_unbuilt_tier():
+    """ADR-3: Factory is reserved. Advertising it would promise a loop that does
+    not exist."""
+    for doc in DOC_SURFACES:
+        text = doc.read_text(encoding="utf-8")
+        assert "implement-factory" not in text, f"{doc.name} advertises implement-factory"
+
+
+def test_plugin_manifest_version_is_not_hand_bumped():
+    """CON-6: CI owns the version. A hand-bump reads as 'already bumped' and the
+    release is skipped — the exact failure #116 fixed."""
+    import json
+    import subprocess
+
+    manifest = REPO_ROOT / "plugins" / "tcs-workflow" / ".claude-plugin" / "plugin.json"
+    committed = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "show", "origin/main:plugins/tcs-workflow/.claude-plugin/plugin.json"],
+        capture_output=True,
+        text=True,
+    )
+    if committed.returncode != 0:
+        pytest.skip("no origin/main to compare against")
+    before = json.loads(committed.stdout)["version"]
+    after = json.loads(manifest.read_text(encoding="utf-8"))["version"]
+    assert before == after, (
+        f"plugin.json version changed by hand ({before} -> {after}); CI owns the bump"
+    )

@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Registration and end-to-end validation"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 4
 ---
@@ -31,18 +31,26 @@ phase: 4
 
 Registers the two new skills everywhere the repo tracks skills, and proves end to end that the tiers behave as specified and that nothing existing regressed.
 
-- [ ] **T4.1 Register the new skills** `[activity: docs]`
+- [x] **T4.1 Register the new skills** `[activity: docs]`
 
   1. Prime: Read the repository-level list `[ref: SDD/Directory Map]`. Note the count discrepancy found during design: the skill directories under `plugins/tcs-workflow/skills/` number 21 while `docs/reference/plugins.md` and `AGENTS.md` both say 20 — **count the directories, do not add two to the documented figure**.
   2. Test: Assert every registration surface names both `implement-direct` and `implement-incremental`, that the stated count equals the actual directory count, and that no surface mentions a Factory tier `[ref: SDD/ADR-3]`. Assert `plugins/tcs-workflow/.claude-plugin/plugin.json` has an unchanged `version` field `[ref: SDD/Constraints; CON-6]`.
   3. Implement: Update `README.md`, `AGENTS.md`, `docs/reference/plugins.md`, `docs/reference/skills.md`, and add the `tcs-workflow` CHANGELOG entry for the next patch version. Add tier-related keywords to `plugin.json` — keywords only.
   4. Validate: `bash scripts/ci/check-changelog-version-sync.sh --allow-ahead 1` exits 0. Confirm by `git diff` that the `version` field is untouched.
   5. Success:
-     - [ ] Both sub-skills are registered wherever skills are listed `[ref: SDD/Directory Map]`
-     - [ ] The documented skill count matches reality, and the pre-existing off-by-one is corrected `[ref: SDD/Known Technical Issues]`
-     - [ ] The CHANGELOG names the version CI is about to produce, and `plugin.json` is untouched `[ref: SDD/Constraints; CON-6]`
+     - [x] Both sub-skills are registered wherever skills are listed `[ref: SDD/Directory Map]`
+     - [x] The documented skill count matches reality, and the pre-existing off-by-one is corrected `[ref: SDD/Known Technical Issues]`
+     - [x] The CHANGELOG names the version CI is about to produce, and `plugin.json` is untouched `[ref: SDD/Constraints; CON-6]`
 
 - [ ] **T4.2 End-to-end walkthroughs, both tiers** `[activity: validate]`
+
+  > **Blocked on a session restart.** Claude Code indexes skills at session
+  > start, so `implement-direct` and `implement-incremental` are not invocable
+  > in the session that created them. The executable half of this task already
+  > runs green — the detection sweep in `tests/test_dispatch_detection.py`
+  > covers the regression walkthrough over all 17 real spec directories. What
+  > remains is driving `/xdd` and `/implement` by hand at both tiers, which
+  > needs a fresh session.
 
   1. Prime: Read the primary sequence `[ref: SDD/Runtime View; Primary Flow]` and the rollout claim `[ref: SDD/Deployment View]`. Start a **fresh session** so the new skills are indexed `[ref: SDD/Implementation Gotchas]`.
   2. Test: Two scripted walkthroughs against a scratch spec, plus one regression walkthrough.
