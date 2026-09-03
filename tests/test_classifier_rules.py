@@ -270,3 +270,23 @@ def test_xdd_forbids_recommending_the_unbuilt_tier():
 def test_xdd_never_classifies_from_the_raw_request():
     text = _xdd_text()
     assert "never from the raw request" in text
+
+
+# --- The Direct tier's plan/ row (spec-017 T4.2 walkthrough finding) ---
+#
+# The Documents table carries a `plan/` row for every spec. Nothing told the
+# workflow what to put there when the tier is Direct, so it stayed at `pending`
+# — a finished Direct spec reading as if a plan were still outstanding, which
+# is exactly the "no plan by decision, not by omission" distinction xdd-meta
+# draws in its Read Status step.
+
+
+def test_classifier_reference_says_what_the_plan_row_reads_on_direct():
+    text = _classifier_text()
+    assert "Documents table" in text
+    assert "skipped" in text
+
+
+def test_xdd_direct_branch_marks_the_plan_row_skipped():
+    step = _step_six()
+    assert "`plan/` row `skipped`" in step

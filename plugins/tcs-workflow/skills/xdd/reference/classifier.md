@@ -92,12 +92,19 @@ Whatever tier is chosen — recommendation accepted or overridden — record it 
 
 1. **The spec README Status table**, `Decomposition tier` row. This is what `spec.py --read` parses and what the implementation dispatcher cross-checks. Without this row the tier is invisible to every machine consumer.
 2. **The spec README Decisions Log**, one row carrying the date, the chosen tier, the classifier's recommendation, and the rationale.
+3. **The spec README Documents table**, `plan/` row. On **Direct**, set it to `skipped` with the tier as the note — a Direct spec has no plan *by decision*, and a row left at `pending` reads as work outstanding. On **Incremental**, it follows the plan as usual.
 
 ```
 | Date | Decision | Rationale |
 |------|----------|-----------|
 | 2026-09-03 | Decomposition tier: Incremental | Classifier recommended Incremental (2 features, 3 components). Accepted. |
 | 2026-09-03 | Decomposition tier: Incremental (override) | Classifier recommended Direct (change_type=fix, 1 component). User chose Incremental because the change touches the release path. |
+```
+
+```
+| Document | Status | Notes |
+|----------|--------|-------|
+| plan/ | skipped | Direct tier writes no decomposition artifact |
 ```
 
 The log makes the choice auditable; the Status row makes it executable. A tier recorded only in the log is a tier the dispatcher cannot see.

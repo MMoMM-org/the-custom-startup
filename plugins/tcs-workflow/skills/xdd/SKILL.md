@@ -129,7 +129,8 @@ Read `reference/classifier.md` and apply the ordered rules to `requirements.md` 
 6. **Route**:
 
 match (chosen tier) {
-  Direct      => write no decomposition artifact; go to step 7.
+  Direct      => write no decomposition artifact; mark the README Documents
+                 table's `plan/` row `skipped`, noting the tier; go to step 7.
   Incremental => Invoke `Skill(tcs-workflow:xdd-plan)`.
                  Focus: task sequencing and dependencies. Scope: what and in
                  what order — defer duration estimates.
