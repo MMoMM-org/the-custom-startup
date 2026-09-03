@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-09-03 |
-| **Current Phase** | SDD |
+| **Current Phase** | PLAN |
 | **Last Updated** | 2026-09-03 |
 
 ## Documents
@@ -13,8 +13,8 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | 5 Must / 2 Should / 2 Could / 5 Won't; 24 acceptance criteria; 0 clarification markers |
-| solution.md | in_progress | |
-| plan/ | pending | |
+| solution.md | completed | 7 ADRs all confirmed; 24 EARS criteria tracing 1:1 to the PRD |
+| plan/ | in_progress | |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -27,6 +27,12 @@
 | 2026-09-03 | Tier the PLAN only, not the documents | The two upstreams disagree: `rsmdt` keeps requirements+solution at every tier and scales only decomposition; `superpowers` scales the documents themselves. Chose `rsmdt`. Keeps the repo's spec-first rule literally true, lets the classifier read real documents instead of guessing from a raw request, and preserves the artifact that the whole feature exists to produce. Accepted cost: a one-line fix still writes two short documents. |
 | 2026-09-03 | Direct tier keeps TDD, approval and drift gates; drops the per-task reviewer chain | Issue #83 required an explicit answer rather than an omission, since dropping the TDD gate would contradict `xdd-tdd`'s iron law. The per-task spec-compliance and code-quality reviewers are the cost driver; the test-first and approval gates are the guarantees. Matches what upstream's `implement-direct` actually kept. |
 | 2026-09-03 | PRD complete | 24 acceptance criteria across 5 must-have features. 3 open questions, none blocking SDD. |
+| 2026-09-03 | Ship two tiers, reserve Factory (ADR-3) | TCS has no factory machinery — no units, holdout scenarios, information barriers or retry loop. Every piece of evidence in the PRD is about work too *small* for the current ceremony; none says heavyweight work is underserved. A thin Factory (Agent Team + parallel sections) was rejected as two names for one mechanism. PRD Feature 1 was revised back from three tiers to two. |
+| 2026-09-03 | Dispatch from artifacts, not from the recorded tier (ADR-4) | Artifacts are ground truth; a recorded tier goes stale when a run is interrupted. Detecting from artifacts and cross-checking the record makes the interrupted-run case visible instead of silently wrong. |
+| 2026-09-03 | `implement` keeps its name and becomes the dispatcher; its body moves verbatim to hidden `implement-incremental` (ADR-5) | No user-visible rename, and the riskiest part of the change becomes a file move rather than a rewrite — today's phase loop keeps working byte for byte. |
+| 2026-09-03 | Tier recorded in three places (ADR-6) | README Status row answers "what tier", decision log answers "why, and did a human override", `spec.py --read` gives the dispatcher its machine-readable cross-check. |
+| 2026-09-03 | Classifier is a reference file of `xdd`, not a skill (ADR-7) | One caller today, so extracting fails the repo's own one-to-many threshold; inlining would load thresholds into every `/xdd` run including ones that stop at PRD. |
+| 2026-09-03 | SDD complete | 7 ADRs confirmed. 24 EARS acceptance criteria tracing 1:1 to the PRD's 24. |
 
 ## Context
 

@@ -40,7 +40,7 @@ version: "1.0"
 | status | COMPLETE |
 | clarificationsRemaining | 0 |
 | acceptanceCriteria | 24 |
-| openQuestions | 3 (all non-blocking; listed in Open Questions) |
+| openQuestions | 4 (all non-blocking; listed in Open Questions) |
 
 ### SectionStatus
 
@@ -49,12 +49,12 @@ version: "1.0"
 | Product Overview | COMPLETE | |
 | User Personas | COMPLETE | |
 | User Journey Maps | COMPLETE | |
-| Feature Requirements | COMPLETE | 5 Must, 2 Should, 2 Could, 5 Won't |
+| Feature Requirements | COMPLETE | 5 Must, 2 Should, 2 Could, 6 Won't |
 | Detailed Feature Specifications | COMPLETE | Classifier is the most complex feature |
 | Success Metrics | COMPLETE | |
 | Constraints and Assumptions | COMPLETE | |
 | Risks and Mitigations | COMPLETE | |
-| Open Questions | COMPLETE | 3 open, none blocking SDD |
+| Open Questions | COMPLETE | 4 open, none blocking SDD |
 | Supporting Research | COMPLETE | Two upstreams compared |
 
 ---
@@ -105,12 +105,12 @@ Two independent upstreams converged on this shape within months of each other (`
 1. **Awareness:** The maintainer hits a bug that is one function and one test. They know `/xdd` exists and know that using it means three documents; they have skipped it for work like this before.
 2. **Consideration:** They weigh "run the workflow" against "just fix it". Today the workflow costs a PRD, an SDD, a PLAN with phases, and a phase loop with two reviewers per task — so "just fix it" wins and the artifact is never created.
 3. **Adoption:** They run `/xdd` because they have learned the classifier will recognise a fix and route it to Direct: two short documents, no plan, and an implementation path with no phase loop.
-4. **Usage:** They answer the PRD and SDD prompts briefly. The classifier reports *Direct — change_type=fix, one acceptance criterion, modifies existing surface only* and offers the three tiers with Direct highlighted. They accept. `/implement` detects no plan artifact, routes to the direct path, and runs TDD, approval and drift checks without the per-task review chain.
+4. **Usage:** They answer the PRD and SDD prompts briefly. The classifier reports *Direct — change_type=fix, one acceptance criterion, modifies existing surface only* and offers both tiers with Direct highlighted. They accept. `/implement` detects no plan artifact, routes to the direct path, and runs TDD, approval and drift checks without the per-task review chain.
 5. **Retention:** The change shipped with a real artifact for roughly the cost of skipping. Next small fix, they run `/xdd` again — which is the outcome this feature exists to produce.
 
 ### Secondary User Journeys
 
-**A large change is correctly recognised as large.** The maintainer starts a multi-plugin feature. The classifier sees several features, several components, and parallel work flagged in the design, and recommends Factory. The maintainer accepts, gets full decomposition, and nothing about the heavyweight path has been weakened — the tier system must not make big work cheaper, only small work possible.
+**A large change is correctly recognised as large.** The maintainer starts a multi-plugin feature. The classifier sees several features, several components, and parallel work flagged in the design, and recommends Incremental. The maintainer accepts, gets the full phase plan and the per-task review chain, and nothing about the heavyweight path has been weakened — the tier system must make small work possible, never big work cheaper.
 
 **A reader meets a Direct spec.** A reviewer opens a spec directory with a PRD, an SDD and no `plan/`. The README records `Decomposition tier: Direct` with the classifier's rationale, so the absence of a plan reads as intentional. Without this the reader must guess whether decomposition was skipped deliberately or the run was interrupted.
 
@@ -122,15 +122,17 @@ Two independent upstreams converged on this shape within months of each other (`
 
 The minimum for this to be valuable: a tier model, a classifier, a way to record the tier, a dispatcher that honours it, and gates that hold everywhere.
 
-#### Feature 1: Three-tier decomposition model
+#### Feature 1: Tiered decomposition model
 
 Tiering applies to **decomposition only**. Requirements and solution documents are written at every tier — what varies is the third artifact.
+
+**Two tiers ship in this phase: Direct and Incremental.** A third (Factory — parallel units with holdout scenarios) is a reserved member of the tier vocabulary, deferred to its own specification. See Won't Have for the reasoning; the constraint that survives here is that adding it later must not change the classifier's or the dispatcher's contract.
 
 - **User Story:** As a TCS maintainer, I want the ceremony to scale to the size of my change, so that small work has a path through the workflow instead of around it.
 - **Acceptance Criteria:**
   - [ ] Given a change classified Direct, When the specification completes, Then a requirements document and a solution document exist and no decomposition artifact is written
   - [ ] Given a change classified Incremental, When the specification completes, Then a phase-based plan artifact exists alongside requirements and solution
-  - [ ] Given a change classified Factory, When the specification completes, Then a parallel-unit decomposition artifact exists alongside requirements and solution
+  - [ ] Given the tier vocabulary, When a new tier is added later, Then neither the classifier's contract nor the dispatcher's contract has to change to accommodate it
   - [ ] Given any tier, When the specification completes, Then requirements and solution documents are present — no tier omits them
   - [ ] Given a Direct specification, When a reader opens the spec directory, Then the absence of a plan is explained by the recorded tier rather than being ambiguous
 
@@ -141,7 +143,7 @@ Tiering applies to **decomposition only**. Requirements and solution documents a
   - [ ] Given completed requirements and solution documents, When the classifier runs, Then it produces exactly one recommended tier
   - [ ] Given the classifier has run, When it presents its recommendation, Then it states the signals that drove it in terms the user can check against their own documents
   - [ ] Given the same pair of documents, When the classifier runs twice, Then it recommends the same tier both times
-  - [ ] Given a classifier recommendation, When the user is asked to confirm, Then all three tiers are offered and the recommendation is highlighted rather than pre-applied
+  - [ ] Given a classifier recommendation, When the user is asked to confirm, Then every tier available in this phase is offered and the recommendation is highlighted rather than pre-applied
   - [ ] Given the user selects a tier other than the recommendation, When the choice is recorded, Then both the recommendation and the override are captured
   - [ ] Given the classifier runs, When it completes, Then it required no additional user input beyond the documents already written
 
@@ -159,7 +161,7 @@ Tiering applies to **decomposition only**. Requirements and solution documents a
 - **Acceptance Criteria:**
   - [ ] Given a spec with no decomposition artifact, When implementation starts, Then it routes to the direct execution path
   - [ ] Given a spec with a phase-based plan, When implementation starts, Then it routes to the phase-loop execution path
-  - [ ] Given a spec with a parallel-unit decomposition, When implementation starts, Then it routes to the factory execution path
+  - [ ] Given a spec carrying a decomposition artifact this phase does not recognise, When implementation starts, Then it reports what it found and stops rather than guessing a route
   - [ ] Given a spec whose recorded tier and present artifacts disagree, When implementation starts, Then the mismatch is reported to the user before any work is dispatched
   - [ ] Given implementation dispatch occurs, When the route is chosen, Then the user is shown which route was selected and what triggered it
 
@@ -190,7 +192,8 @@ Two guarantees are tier-independent. Everything else may vary.
 ### Won't Have (This Phase)
 
 - **Scaling the requirements and solution documents themselves.** Considered and rejected — see Supporting Research. Documents are written at every tier; only decomposition varies.
-- **A fourth tier, or user-defined tiers.** Three tiers, fixed. More tiers multiply the surface to specify, gate and explain without evidence that a fourth is needed.
+- **The Factory tier.** Deferred to its own specification. TCS has no factory machinery today — no units, no holdout scenarios, no information barriers, no retry loop — so building it here would multiply this change's size for a tier that relieves none of the pressure this feature exists to relieve. All the evidence in the Problem Statement is about work that is too *small* for the current ceremony; none says heavyweight work is underserved. The tier vocabulary is left open so Factory can be added without reopening this design.
+- **User-defined tiers.** The tier set is fixed and closed. Letting projects define their own multiplies the surface to specify, gate and explain with no evidence anyone wants it.
 - **Automatic tier selection with no confirmation.** The classifier recommends; the human decides. Both upstreams kept a confirmation point and so does this.
 - **User-invocable tier sub-skills.** Users invoke the entry point, not the tier. A user who picks their own tier from the `/` menu bypasses the classifier, which defeats it.
 - **Deleting artifacts on tier change.** Changing tier leaves prior artifacts in place, flagged. Cleanup stays manual — automatic deletion of specification content is not a risk worth taking to save a manual step.
@@ -199,7 +202,7 @@ Two guarantees are tier-independent. Everything else may vary.
 
 ### Feature: Complexity classifier
 
-**Description:** The classifier reads the requirements and solution documents a specification has already produced, extracts a small fixed set of signals from them, and maps those signals to one of three tiers. It runs at the decomposition step — after both documents exist — which is what makes it cheap: it reads artifacts rather than interrogating the user, so it costs no additional conversation turns.
+**Description:** The classifier reads the requirements and solution documents a specification has already produced, extracts a small fixed set of signals from them, and maps those signals to a tier. It runs at the decomposition step — after both documents exist — which is what makes it cheap: it reads artifacts rather than interrogating the user, so it costs no additional conversation turns.
 
 Running it *after* the documents is the design's load-bearing choice. A classifier that ran on the raw request would have to guess at scope before anything was written, would be non-deterministic across phrasings of the same request, and would need its own clarifying questions — becoming the ceremony it exists to avoid.
 
@@ -227,7 +230,7 @@ Running it *after* the documents is the design's load-bearing choice. A classifi
 
 - Scenario 1: Requirements and solution exist but are nearly empty (a stub spec) → Expected: recommend Direct, since no evidence of breadth exists; the user may override upward.
 - Scenario 2: A refactor touching many components → Expected: not Direct. Change type says "fix-like", but breadth warrants phase boundaries; breadth wins.
-- Scenario 3: Many acceptance criteria against a single component → Expected: Incremental, not Factory. Criteria count alone does not justify parallel-unit overhead.
+- Scenario 3: Many acceptance criteria against a single component → Expected: Incremental. Criteria count alone never escalates a tier; it is one component's worth of work however long the list.
 - Scenario 4: The user overrides Direct upward after decomposition was already skipped → Expected: run the higher tier's decomposition; nothing has been lost, because Direct wrote no artifact to conflict with.
 - Scenario 5: The user overrides downward from a tier whose artifacts already exist → Expected: leave the artifacts in place, flag them as superseded in the decision log, and proceed at the lower tier.
 - Scenario 6: A spec's recorded tier and its actual artifacts disagree at implementation time → Expected: report the mismatch before dispatching any work; this usually means an interrupted specification run.
@@ -269,11 +272,11 @@ All tracking is artifact-based; nothing new needs to be instrumented.
 
 ### Assumptions
 
-- **Small changes are the common case.** If most work were genuinely Factory-scale, a cheaper tier would relieve no pressure. The gap between 16 specs and the repo's actual commit history is the evidence.
+- **Small changes are the common case.** If most work were genuinely large, a cheaper tier would relieve no pressure. The gap between 16 specs and the repo's actual commit history is the evidence.
 - **Authors skip the process because of cost, not because they reject it.** The M3 episode recorded in the memory bank supports this: the spec was intended and started, then never completed.
 - **Signals extractable from requirements and solution documents are sufficient to classify.** Both upstreams operate this way successfully.
 - **The maintainer will accept the classifier's recommendation most of the time.** If not, the override rate will show it and the thresholds get tuned — which is why override rate is tracked.
-- **Three tiers is the right number.** Both upstreams independently arrived at three.
+- **Two tiers relieve the pressure; the third is not urgent.** Both upstreams arrived at three, but their third tier serves large parallel work, and nothing in the evidence says TCS's large work is underserved today. If that assumption is wrong, the tier vocabulary is open and Factory gets its own spec.
 
 ## Risks and Mitigations
 
@@ -283,9 +286,9 @@ All tracking is artifact-based; nothing new needs to be instrumented.
 | Direct becomes the default dumping ground; everything gets classified small | High | Medium | Escalation out of Direct when the work exceeds what the tier carries; track override rate and tier distribution to detect drift |
 | Recorded tier and actual artifacts diverge | Medium | Medium | Detect and report the mismatch at implementation dispatch before any work is dispatched |
 | A cheaper tier is read as permission to skip specs entirely | High | Low | The tier still produces requirements and a solution; the spec-first rule is unchanged, and Direct is a path *through* the workflow, not around it |
-| Three tiers make the workflow harder to explain than one | Medium | Medium | The entry points stay unchanged — users still run `/xdd` and `/implement`; tier sub-skills are not user-invocable, so the surface a user sees does not grow |
+| Multiple tiers make the workflow harder to explain than one | Medium | Medium | The entry points stay unchanged — users still run `/xdd` and `/implement`; tier sub-skills are not user-invocable, so the surface a user sees does not grow |
 | Existing specs break when read by tier-aware tooling | Medium | Low | Absent tier is a valid state that reads cleanly; no backfill required |
-| Two upstreams' vocabularies get mixed in the implementation | Low | Medium | Adopt one vocabulary (Direct / Incremental / Factory) and use it consistently; the rejected alternative is recorded in Supporting Research so the choice is not silently revisited |
+| Two upstreams' vocabularies get mixed in the implementation | Low | Medium | Adopt one vocabulary (Direct / Incremental, with Factory reserved) and use it consistently; the rejected alternative is recorded in Supporting Research so the choice is not silently revisited |
 
 ## Open Questions
 
@@ -294,6 +297,7 @@ None of these block the SDD; all can be settled during design.
 - [ ] Should the escalation threshold out of Direct be a fixed number of delivery units, or a judgement the direct path makes and explains? Upstream uses a fixed number.
 - [ ] Should tier appear in the spec status table as a distinct field, or only in the decision log? The decision log is required either way.
 - [ ] Do the existing 16 specs get a recorded tier retroactively, or stay tier-absent? Recommendation is to leave them absent, since a backfilled tier is a guess presented as a record.
+- [ ] When Factory is specified later, does it reuse this classifier with new thresholds, or bring its own signals? The contract requirement above keeps both options open.
 
 ---
 
@@ -321,6 +325,8 @@ TCS adopts the `rsmdt` model — tier the plan only — for three reasons:
 3. **The artifact is the point.** The problem being solved is *no artifact at all*. A tier that skips the documents optimises the wrong thing — it makes the cheap path cheaper by removing exactly what the feature exists to preserve.
 
 The cost of this choice is honest and worth stating: a one-line fix still costs two short documents, where the superpowers model would cost one. That is the price of keeping the spec-first rule intact, and it is accepted deliberately.
+
+**A design finding, folded back into this PRD.** Drafting the solution surfaced that TCS's existing phase loop maps cleanly onto Incremental and that Direct is genuinely new — but that nothing in TCS corresponds to Factory. Building it would have meant porting units, holdout scenarios, information barriers and a retry loop in the same change that introduces the cheap path. The alternatives considered were a *thin* Factory (the phase loop in Agent Team mode with parallel-tagged sections), which was rejected because it would give two tier names to one mechanism and leave the classifier deciding a *mode* rather than an artifact shape; and a full port, rejected on size. Two tiers ship; the third stays a named, reserved, unbuilt member of the vocabulary.
 
 ### User Research
 
