@@ -43,6 +43,16 @@ State {
 - Use an event as a command (triggering behaviour that may be rejected without a command pattern).
 - Store derived state only in the event stream without a queryable projection.
 
+## Boundaries
+
+| Concern | Owner |
+|---|---|
+| Events as **messages** — schema fields, command/event naming, correlation and causation IDs, handler idempotency, ordering and partitioning, outbox, DLQ | **this skill** |
+| Events as **persistence** — the append-only log as source of truth, Decider write model, rehydration, event store and optimistic concurrency, projections, event versioning, snapshots | `tcs-patterns:event-sourcing` |
+| Read/write separation without an event log | `tcs-patterns:hexagonal` (`reference/cqrs-lite.md`) |
+
+The two are independent: a system can be event-driven over a CRUD database, and event-sourced with no message bus at all. Publishing an event to tell another service something happened needs no event store.
+
 ## Reference Materials
 
 - `reference/event-patterns.md` — event schema design, CQRS, saga patterns, transactional outbox, DLQ

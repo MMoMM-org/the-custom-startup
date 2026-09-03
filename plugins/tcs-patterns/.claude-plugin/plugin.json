@@ -25,6 +25,8 @@
     "oauth",
     "oidc",
     "security",
+    "event-sourcing",
+    "cqrs",
     "observability",
     "opentelemetry",
     "telemetry"

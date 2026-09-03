@@ -8,6 +8,18 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [1.4.2] - 2026-09-03
+
+### Added
+
+- **`event-sourcing` skill (#97)** — the append-only log as source of truth: the Decider write model, rehydration as a left fold, the event store port with optimistic concurrency, projections and read models, event versioning and upcasters, snapshots, crypto-shredding. Nine references. The workflow leads with the complexity ladder, because the most common defect is adopting the pattern at all.
+
+### Changed
+
+- **`event-driven` no longer teaches event sourcing.** Its reference carried a class-based, mutable `rehydrate` and an `EventStore` interface that contradicted the new skill's pure fold. Both are replaced by a boundary pointer, and the skill gained a Boundaries table: it owns events as *messages* (schema, naming, correlation, idempotency, ordering), `event-sourcing` owns events as *persistence*. The projection example moved for the same reason.
+- **`ddd` and `hexagonal` name the new owner.** `ddd` states that how an aggregate is persisted is out of scope; `hexagonal`'s `cqrs-lite.md` points at `event-sourcing` as the full form of the read/write split. Without these, the new skill claimed a boundary the other side did not acknowledge — the same defect the `twelve-factor` edit fixed in 1.4.1.
+- **Fat events are no longer flatly an anti-pattern** in `event-driven`'s catalogue. A *deliberate* fat event is a consumer-isolation trade-off; only the accidental one — the whole aggregate state — is the defect.
+
 ## [1.4.1] - 2026-09-03
 
 ### Added

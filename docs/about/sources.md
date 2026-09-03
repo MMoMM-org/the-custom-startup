@@ -49,7 +49,7 @@ The Custom Startup extends these foundations with a full plugin architecture, an
 
 The `tcs-patterns` plugin contains 19 domain pattern skills across three origin categories.
 
-### citypaul-derived (12 skills)
+### citypaul-derived (13 skills)
 
 **Repository:** [citypaul/.dotfiles](https://github.com/citypaul/.dotfiles)
 **Adopted:** 2026-03-27
@@ -69,6 +69,7 @@ These skills were ported from citypaul's Claude Code skills collection and conve
 - `typescript-strict`
 - `secure-oauth-oidc` — ported 2026-09-03 from `b270db1`; upstream `SKILL.md` restructured into PICS, all five references carried across with TCS cross-links added
 - `observability` — ported 2026-09-03 from `b270db1`; SLO, error-budget and alerting content deliberately left behind, since `tcs-team:the-devops:monitor-production` owns it. Three of four upstream resources carried across; `slo-alerting.md` was not
+- `event-sourcing` — ported 2026-09-03 from `c6dd90f` (the skill's own last upstream change is `8f1ebbc`, the #229 audit sweep). All nine upstream resources carried across. Trimmed where `tcs-patterns:event-driven` already owned the ground — event naming, envelope fields, correlation and causation IDs, handler idempotency — which the port defers to rather than restates. Knock-on edits in the same PR: `event-driven` lost its own event-sourcing and event-store sections to a boundary pointer and gained a Boundaries table, `ddd` and `hexagonal` name the new owner
 
 Porting to PICS format involved restructuring content into progressive disclosure sections, adding frontmatter trigger terms, and aligning with the skill conventions used in this project. The underlying knowledge and guidance originates with citypaul's work.
 
@@ -76,7 +77,7 @@ Porting to PICS format involved restructuring content into progressive disclosur
 
 **New upstream skills:** nine were evaluated on 2026-08-31 — four accepted for porting (`observability`, `event-sourcing`, `secure-oauth-oidc`, `bff-entry-points`), one merged into `ddd` rather than added (`ubiquitous-language`), four declined. Reasoning in [ADR 0002](../XDD/adr/0002-citypaul-skill-absorption-verdicts.md) so the next sweep does not re-evaluate them from zero.
 
-**Port progress:** `secure-oauth-oidc` (#95) and `observability` (#96) landed 2026-09-03. Still to port: `event-sourcing` (#97), `bff-entry-points` (#98). Each is its own pull request — the original argument for batching them was to spare the plugin repeated version bumps, and that stopped mattering once the auto-bump race in #93 was fixed.
+**Port progress:** `secure-oauth-oidc` (#95), `observability` (#96) and `event-sourcing` (#97) landed 2026-09-03. Still to port: `bff-entry-points` (#98). Each is its own pull request — the original argument for batching them was to spare the plugin repeated version bumps, and that stopped mattering once the auto-bump race in #93 was fixed.
 
 ### TCS-native (5 skills)
 
