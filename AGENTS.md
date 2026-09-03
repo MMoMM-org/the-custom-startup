@@ -56,11 +56,11 @@ the-custom-startup/
 │   │
 │   └── tcs-patterns/             # Domain pattern skills plugin (optional, selective install)
 │       ├── .claude-plugin/       # Plugin manifest (plugin.json)
-│       └── skills/               # 20 pattern skills:
+│       └── skills/               # 21 pattern skills:
 │           │                     # Architecture: ddd, hexagonal, functional, event-driven,
 │           │                     #               event-sourcing
 │           │                     # API & Types: api-design, typescript-strict
-│           │                     # Security: secure-oauth-oidc
+│           │                     # Security: secure-oauth-oidc, bff-entry-points
 │           │                     # Testing: testing, mutation-testing, frontend-testing, react-testing, test-design-reviewer
 │           │                     # Platforms: node-service, python-project, go-idiomatic
 │           │                     # DevOps: twelve-factor (→ tcs-team:the-devops:build-platform)
