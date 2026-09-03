@@ -1,6 +1,6 @@
 ---
 name: implement
-description: "Implementation entry point. Use to execute a completed specification. Detects which decomposition artifacts a spec carries and dispatches to the matching execution loop."
+description: "Implementation entry point. Use to execute a completed specification — 'implement spec 017', 'run the plan', 'build what we specified' — at whichever decomposition tier it was written for."
 user-invocable: true
 argument-hint: "spec ID to implement (e.g., 001), or file path"
 allowed-tools: Bash, Read, LS, Glob, Grep, AskUserQuestion, Skill

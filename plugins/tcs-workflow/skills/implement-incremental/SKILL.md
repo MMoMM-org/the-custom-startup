@@ -1,7 +1,6 @@
 ---
 name: implement-incremental
-description: "Incremental-tier execution loop. Runs a phase-based plan: loops through phases, delegates each task to a specialist, runs the per-task review chain, and updates phase status on completion. Supports resuming from partially-completed plans. Dispatched by the implement entry point when a plan artifact is present — not invoked directly."
-user-invocable: true
+description: "Incremental-tier execution loop, for a specification that carries a phase plan, including one only partly completed. Dispatched by the implement entry point — not invoked directly."
 argument-hint: "spec ID to implement (e.g., 001), or file path"
 user-invocable: false
 allowed-tools: Task, TaskOutput, Agent, TodoWrite, Bash, Write, Edit, Read, LS, Glob, Grep, MultiEdit, AskUserQuestion, Skill, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet

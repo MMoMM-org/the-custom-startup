@@ -1,6 +1,6 @@
 ---
 name: implement-direct
-description: "Direct-tier execution loop. Implements straight from requirements and solution with no phase plan: decomposes into a handful of delivery units, gates each on test-first discipline, delegates, then validates against the spec. Dispatched by the implement entry point when a specification carries no decomposition artifact — not invoked directly."
+description: "Direct-tier execution loop, for a specification that carries requirements and solution but no decomposition artifact. Dispatched by the implement entry point — not invoked directly."
 user-invocable: false
 argument-hint: "spec ID to implement (e.g., 018), or file path"
 allowed-tools: Task, TaskOutput, Agent, TodoWrite, Bash, Write, Edit, Read, LS, Glob, Grep, MultiEdit, AskUserQuestion, Skill
