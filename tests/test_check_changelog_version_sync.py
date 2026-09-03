@@ -86,12 +86,35 @@ def test_minor_version_ahead_is_never_tolerated(tmp_path):
     assert r.returncode == 1
 
 
-def test_plugin_without_changelog_is_skipped(tmp_path):
-    """Four of the six plugins ship no CHANGELOG; that is not a failure."""
-    _make_plugin(tmp_path, "no-changelog", "1.0.0", None)
+def test_plugin_without_a_changelog_fails(tmp_path):
+    """Every plugin needs one.
+
+    The tcs-patterns bump in #114/#115 went unnoticed partly because this check
+    had nothing to compare for that plugin — it had no CHANGELOG, so the missing
+    version was invisible to the guard built to catch missing versions.
+    """
+    p = _make_plugin(tmp_path, "no-changelog", "1.0.0", None)
     comparable = _make_plugin(tmp_path, "demo", "1.0.0", "## [1.0.0] - 2026-01-01")
-    r = _run("--allow-ahead", "0", tmp_path / "no-changelog", comparable)
+    r = _run("--allow-ahead", "0", p, comparable)
+    assert r.returncode == 1
+    assert "no CHANGELOG.md" in r.stderr
+
+
+def test_a_directory_without_a_manifest_is_not_a_plugin(tmp_path):
+    """A scaffold or stray directory must not be reported as a missing CHANGELOG."""
+    (tmp_path / "not-a-plugin").mkdir()
+    comparable = _make_plugin(tmp_path, "demo", "1.0.0", "## [1.0.0] - 2026-01-01")
+    r = _run("--allow-ahead", "0", tmp_path / "not-a-plugin", comparable)
     assert r.returncode == 0, r.stderr
+
+
+def test_every_plugin_in_this_repo_has_a_changelog():
+    """The requirement, asserted against the real plugins."""
+    plugins = [d for d in sorted((REPO_ROOT / "plugins").iterdir())
+               if (d / ".claude-plugin" / "plugin.json").exists()]
+    assert plugins, "found no plugins — the glob is wrong, not the repo"
+    missing = [d.name for d in plugins if not (d / "CHANGELOG.md").exists()]
+    assert not missing, f"plugins without a CHANGELOG: {missing}"
 
 
 def test_unreleased_heading_is_skipped(tmp_path):

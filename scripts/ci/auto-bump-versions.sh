@@ -6,7 +6,8 @@
 # Triggered by push to main (typically a PR merge). Reads the diff range and:
 #
 #   1. For each plugins/<X>/ with non-manifest changes: patch-bump
-#      plugins/<X>/.claude-plugin/plugin.json IF not already bumped in the diff.
+#      plugins/<X>/.claude-plugin/plugin.json IF its version field did not
+#      already change in the diff.
 #   2. If ANY plugin manifest changed in the diff (either bumped by step 1 or
 #      manually bumped in the PR): patch-bump .claude-plugin/marketplace.json
 #      IF not already bumped in the diff.
@@ -44,18 +45,73 @@ touched_plugins=""
 already_bumped_plugins=""
 marketplace_in_diff=0
 
+# version_changed_in_diff <manifest-path> <json-key-path>
+#   0 if the manifest's version value differs between BASE and HEAD.
+#
+# Touching a manifest is not the same as bumping it. Editing keywords, the
+# description, or the author leaves the version untouched — and treating that
+# as "the author bumped it deliberately" silently skips the bump. That is what
+# happened to tcs-patterns across #114 and #115: both PRs added keywords, both
+# were classified as already-bumped, and two skills shipped under 1.4.0.
+version_changed_in_diff() {
+  manifest_path="$1"
+  key="$2"
+
+  before="$(git show "${BASE_SHA}:${manifest_path}" 2>/dev/null \
+    | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for k in '$key'.split('.'):
+    d = d.get(k) if isinstance(d, dict) else None
+    if d is None:
+        sys.exit(0)
+print(d)
+" 2>/dev/null)"
+
+  after="$(git show "${HEAD_SHA}:${manifest_path}" 2>/dev/null \
+    | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for k in '$key'.split('.'):
+    d = d.get(k) if isinstance(d, dict) else None
+    if d is None:
+        sys.exit(0)
+print(d)
+" 2>/dev/null)"
+
+  # A manifest that is new in this diff has no BASE version; the author set
+  # whatever it carries, so treat it as deliberate.
+  [ -z "$before" ] && return 0
+
+  [ "$before" != "$after" ]
+}
+
 while IFS= read -r path; do
   [ -z "$path" ] && continue
 
   case "$path" in
     .claude-plugin/marketplace.json)
-      marketplace_in_diff=1
+      if version_changed_in_diff "$path" "metadata.version"; then
+        marketplace_in_diff=1
+      fi
       ;;
     plugins/*/.claude-plugin/plugin.json)
       plugin="${path#plugins/}"
       plugin="${plugin%%/*}"
-      already_bumped_plugins="${already_bumped_plugins}
+      if version_changed_in_diff "$path" "version"; then
+        already_bumped_plugins="${already_bumped_plugins}
 ${plugin}"
+      else
+        # Manifest edited without a version change — the plugin still needs one.
+        touched_plugins="${touched_plugins}
+${plugin}"
+      fi
       ;;
     plugins/*/*)
       plugin="${path#plugins/}"

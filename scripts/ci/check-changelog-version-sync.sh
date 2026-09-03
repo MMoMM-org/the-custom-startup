@@ -19,8 +19,14 @@
 #                     Use 1 on a pull request, where the entry names the
 #                     version the merge is about to produce.
 #
-# Plugins without a CHANGELOG.md, and CHANGELOGs whose first heading is not a
-# version (e.g. "## [Unreleased]"), are skipped — there is nothing to compare.
+# Every plugin must have a CHANGELOG.md; a missing one is a failure. Four of the
+# six had none, which is how the tcs-patterns bump in #114/#115 went unnoticed:
+# the check that would have caught a version gap had nothing to compare against
+# for exactly the plugin that had one.
+#
+# A CHANGELOG whose first heading is not a version (e.g. "## [Unreleased]") is
+# skipped for the comparison — the file exists, it just has nothing to compare
+# yet.
 #
 # Usage:
 #   check-changelog-version-sync.sh [--allow-ahead N] [<plugin-dir> ...]
@@ -124,9 +130,12 @@ for dir in $plugin_dirs; do
   changelog="$dir/CHANGELOG.md"
   manifest="$dir/.claude-plugin/plugin.json"
 
-  [ -f "$changelog" ] || continue
-  if [ ! -f "$manifest" ]; then
-    printf 'check-changelog-version-sync: %s has a CHANGELOG but no plugin.json\n' "$dir" >&2
+  # A plugin directory without a manifest is not a plugin — skip it rather than
+  # reporting a scaffold or a stray directory as a missing CHANGELOG.
+  [ -f "$manifest" ] || continue
+
+  if [ ! -f "$changelog" ]; then
+    printf '%s: no CHANGELOG.md — every plugin needs one\n' "$dir" >&2
     status=1
     continue
   fi
@@ -154,7 +163,8 @@ if [ "$checked" -eq 0 ]; then
 fi
 
 if [ "$status" -ne 0 ]; then
-  printf '\nA CHANGELOG ahead of its manifest means a documented version never shipped.\n' >&2
+  printf '\nA missing CHANGELOG means a plugin can ship a version nothing records.
+A CHANGELOG ahead of its manifest means a documented version never shipped.\n' >&2
   printf 'Usually a dropped auto-bump (issue #93) — check the Actions tab for a failed\n' >&2
   printf '"Auto-bump plugin versions" run, and repair the manifest by hand.\n' >&2
 fi
