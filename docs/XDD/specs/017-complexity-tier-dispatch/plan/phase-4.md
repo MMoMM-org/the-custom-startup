@@ -44,13 +44,29 @@ Registers the two new skills everywhere the repo tracks skills, and proves end t
 
 - [ ] **T4.2 End-to-end walkthroughs, both tiers** `[activity: validate]`
 
-  > **Blocked on a session restart.** Claude Code indexes skills at session
-  > start, so `implement-direct` and `implement-incremental` are not invocable
-  > in the session that created them. The executable half of this task already
-  > runs green — the detection sweep in `tests/test_dispatch_detection.py`
-  > covers the regression walkthrough over all 17 real spec directories. What
-  > remains is driving `/xdd` and `/implement` by hand at both tiers, which
-  > needs a fresh session.
+  > **Blocked on a session restart — after a manual plugin sync.** A session
+  > restart alone is not enough, and the earlier note here was wrong about the
+  > cause. Skills are loaded from the *installed* plugin
+  > (`~/.claude/plugins/cache/the-custom-startup/tcs-workflow/<version>/`) and
+  > validated against the marketplace clone, neither of which is this working
+  > tree. On this branch both carried only the pre-split `implement`, so no
+  > fresh session could invoke the new sub-skills until the branch merged and
+  > CI released.
+  >
+  > Unblocked by copying the five touched skill directories into both
+  > locations per the project instructions file (§ Testing Skills During
+  > Development), on Marcus's explicit call — this is the documented
+  > exception to the standing no-manual-marketplace-sync rule, taken so the
+  > walkthroughs could run before the PR rather than after. **Revert after the
+  > walkthroughs**: `git -C ~/.claude/plugins/marketplaces/the-custom-startup
+  > checkout . && git clean -fd plugins/tcs-workflow/skills`, then re-copy the
+  > reverted tree over the cache, or let the post-merge plugin update
+  > overwrite both.
+  >
+  > The executable half of this task already runs green — the detection sweep
+  > in `tests/test_dispatch_detection.py` covers the regression walkthrough
+  > over all 17 real spec directories. What remains is driving `/xdd` and
+  > `/implement` by hand at both tiers, in a session started after the sync.
 
   1. Prime: Read the primary sequence `[ref: SDD/Runtime View; Primary Flow]` and the rollout claim `[ref: SDD/Deployment View]`. Start a **fresh session** so the new skills are indexed `[ref: SDD/Implementation Gotchas]`.
   2. Test: Two scripted walkthroughs against a scratch spec, plus one regression walkthrough.
