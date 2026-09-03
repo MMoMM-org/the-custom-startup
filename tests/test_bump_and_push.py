@@ -258,3 +258,72 @@ def test_all_zero_base_sha_does_not_bump_every_plugin(world):
     assert "falling back" in r.stderr
     assert _remote_plugin_version(world, "demo") == "1.0.1"
     assert _remote_plugin_version(world, "other") == "1.0.0"
+
+
+# ---------------------------------------------------------------------------
+# Classification: touching a manifest is not the same as bumping it (#114/#115)
+# ---------------------------------------------------------------------------
+
+
+def _edit_manifest(world, plugin, **fields):
+    """Change fields in a plugin manifest without touching its version."""
+    path = world["work"] / "plugins" / plugin / ".claude-plugin" / "plugin.json"
+    data = json.loads(path.read_text())
+    data.update(fields)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def test_manifest_edited_without_a_version_change_still_bumps(world):
+    """The defect that shipped two skills under one version.
+
+    #114 and #115 both added keywords to plugins/tcs-patterns/plugin.json. The
+    old rule — "this manifest is in the diff, so the author bumped it" — read
+    that as deliberate and skipped the bump. Two skills went out under 1.4.0.
+    """
+    work, env = world["work"], world["env"]
+    (work / "plugins" / "demo" / "notes.md").write_text("a new skill\n")
+    _edit_manifest(world, "demo", keywords=["oauth", "oidc"])
+    _git(work, "add", "-A", env=env)
+    _git(work, "commit", "--quiet", "-m", "add skill and keywords", env=env)
+    head = _git(work, "rev-parse", "HEAD", env=env).stdout.strip()
+    _git(work, "push", "--quiet", "origin", "main", env=env)
+
+    r = _run_bump(world, world["base"], head)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _remote_plugin_version(world, "demo") == "1.0.1", \
+        "a manifest edit that leaves the version alone must not suppress the bump"
+
+
+def test_a_real_version_change_is_not_bumped_again(world):
+    """The behaviour the old rule was protecting — keep it."""
+    work, env = world["work"], world["env"]
+    (work / "plugins" / "demo" / "notes.md").write_text("a change\n")
+    _edit_manifest(world, "demo", version="2.0.0")
+    _git(work, "add", "-A", env=env)
+    _git(work, "commit", "--quiet", "-m", "deliberate minor bump", env=env)
+    head = _git(work, "rev-parse", "HEAD", env=env).stdout.strip()
+    _git(work, "push", "--quiet", "origin", "main", env=env)
+
+    r = _run_bump(world, world["base"], head)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _remote_plugin_version(world, "demo") == "2.0.0", \
+        "an author's deliberate bump must survive untouched"
+
+
+def test_marketplace_is_bumped_when_a_plugin_ships(world):
+    """The marketplace follows a plugin bump even when its own file was edited."""
+    work, env = world["work"], world["env"]
+    (work / "plugins" / "demo" / "notes.md").write_text("a change\n")
+    mk = work / ".claude-plugin" / "marketplace.json"
+    data = json.loads(mk.read_text())
+    data["description"] = "edited without touching metadata.version"
+    mk.write_text(json.dumps(data, indent=2) + "\n")
+    _git(work, "add", "-A", env=env)
+    _git(work, "commit", "--quiet", "-m", "change plugin and marketplace prose", env=env)
+    head = _git(work, "rev-parse", "HEAD", env=env).stdout.strip()
+    _git(work, "push", "--quiet", "origin", "main", env=env)
+
+    r = _run_bump(world, world["base"], head)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _remote_plugin_version(world, "demo") == "1.0.1"
+    assert _remote_json(world, ".claude-plugin/marketplace.json")["metadata"]["version"] == "1.0.1"
