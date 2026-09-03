@@ -8,6 +8,16 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [1.4.3] - 2026-09-03
+
+### Added
+
+- **`bff-entry-points` skill (#98)** — browser-facing HTTP entry-point hardening: an explicit public/protected classification for every production route, a composition-prepared registrar that installs the chain by construction, the session cookie profile, Origin/Fetch Metadata/CSRF/content-type policy, no-oracle failure semantics, protected SSE and WebSocket upgrades, a single browser-side authentication coordinator, and twelve automated gates. Six references. The workflow leads with enumeration and classification, because the vulnerability is the missing check (CWE-306), not the broken one.
+
+### Changed
+
+- **`secure-oauth-oidc` no longer declares the browser session layer unguided.** Its Boundaries section said to stop at "token obtained" and "name it as unguided rather than improvising past it"; that boundary now has an owner on the other side, and both skills say so in the same words.
+
 ## [1.4.2] - 2026-09-03
 
 ### Added

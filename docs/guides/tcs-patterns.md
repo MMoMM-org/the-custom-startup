@@ -1,6 +1,6 @@
 # tcs-patterns — Domain Pattern Skills
 
-tcs-patterns is an optional plugin that brings 20 opinionated, interactive pattern skills to your Claude Code sessions. Skills are organized across 6 categories — architecture, API design and types, testing, language platforms, DevOps, and integrations — and each one activates on its own trigger terms, so you get focused guidance exactly when the relevant context appears. Install the full plugin and ignore what does not apply to your stack, or install selectively using the individual skill names.
+tcs-patterns is an optional plugin that brings 21 opinionated, interactive pattern skills to your Claude Code sessions. Skills are organized across 6 categories — architecture, API design and types, testing, language platforms, DevOps, and integrations — and each one activates on its own trigger terms, so you get focused guidance exactly when the relevant context appears. Install the full plugin and ignore what does not apply to your stack, or install selectively using the individual skill names.
 
 ```
 /plugin install tcs-patterns@the-custom-startup
@@ -37,7 +37,7 @@ When `tcs-team` agents delegate specialist work, they automatically use relevant
 | Agent | Uses patterns |
 |---|---|
 | `the-architect/design-system` | `ddd`, `hexagonal`, `event-driven`, `event-sourcing`, `twelve-factor` |
-| `the-architect/review-security` | `api-design`, `secure-oauth-oidc` |
+| `the-architect/review-security` | `api-design`, `secure-oauth-oidc`, `bff-entry-points` |
 | `the-architect/review-robustness` | `functional`, `node-service` |
 | `the-developer/build-feature` | `typescript-strict`, `api-design`, `node-service`, `go-idiomatic`, `python-project` |
 | `the-tester/test-strategy` | `testing`, `mutation-testing`, `frontend-testing`, `react-testing`, `test-design-reviewer` |
@@ -74,10 +74,11 @@ When `tcs-team` agents delegate specialist work, they automatically use relevant
 | Skill | What it does | When to invoke | Invocation |
 |-------|-------------|----------------|------------|
 | `secure-oauth-oidc` | Use when designing, implementing, auditing, or migrating OAuth 2.0 and OpenID Connect — covers authorization servers, clients and relying parties, resource servers, redirect URIs, PKCE, state and nonce, ID Token validation, refresh rotation, and sender-constrained tokens against the RFC 9700 / BCP 240 baseline. | When designing an auth flow, auditing one, or migrating off implicit or password grants. | `/secure-oauth-oidc [flow, component, or path]` |
+| `bff-entry-points` | Use when adding, hardening, or auditing browser-facing HTTP entry points — an explicit public/protected classification for every production route, a composition-prepared registrar, session cookies, CSRF, Origin and Fetch Metadata policy, protected SSE and WebSocket upgrades, and the automated gates that keep it true. | When adding or reviewing an endpoint, or when nobody can say which routes are public. | `/bff-entry-points [service, route, or path]` |
 
 `the-architect/review-security` **reviews** an auth change; this skill is the reference its findings are checkable against. Findings carry a control ID from the RFC 9700 catalog so the two can be reconciled rather than double-counted.
 
-The browser-facing session layer that consumes these tokens — session cookies, CSRF policy, public/protected route classification — has no skill yet; see issue #98.
+`secure-oauth-oidc` stops at "token obtained"; `bff-entry-points` starts at "application session established". One owns the protocol, the other owns the session it produces and every route that session unlocks.
 
 ---
 

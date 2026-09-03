@@ -72,6 +72,7 @@ State {
 | Concern | Owner |
 |---|---|
 | OAuth/OIDC protocol layer — flows, bindings, token validation | **this skill** |
+| The application session the tokens produce — session cookies, CSRF, Origin policy, public/protected route classification, protected realtime | `tcs-patterns:bff-entry-points` |
 | Reviewing an auth change in a PR and reporting risk | `tcs-team:the-architect:review-security` |
 | RESTful resource modelling, HTTP semantics, error shapes, versioning | `tcs-patterns:api-design` |
 | Runtime concerns of the service hosting a callback | `tcs-patterns:node-service` |
@@ -79,7 +80,7 @@ State {
 
 `review-security` **reviews** auth changes; it does not teach how to design the flow. This skill is the reference its findings should be checkable against — a finding here carries a catalog ID, so the two can be reconciled.
 
-Out of scope here: the browser-facing session layer that consumes the tokens — session cookies, CSRF and browser-request policy, public/protected route classification, keeping tokens out of the browser. Stop at the boundary between "token obtained" and "application session established", and name it as unguided rather than improvising past it.
+Out of scope here: the browser-facing session layer that consumes the tokens — session cookies, CSRF and browser-request policy, public/protected route classification, keeping tokens out of the browser. Stop at the boundary between "token obtained" and "application session established"; `tcs-patterns:bff-entry-points` picks it up there.
 
 ## Reference Materials
 
