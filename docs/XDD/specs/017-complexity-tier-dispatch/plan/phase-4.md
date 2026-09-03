@@ -86,6 +86,21 @@ Registers the two new skills everywhere the repo tracks skills, and proves end t
 
   - Run the full suite: `.venv/bin/python -m pytest tests/ -q`, `bats plugins/*/tests/bats`, `bash scripts/ci/check-changelog-version-sync.sh --allow-ahead 1`.
   - Run the `tcs-helper:skill-author` audit over all four touched skills — `xdd`, `xdd-meta`, `implement`, and both new sub-skills — and confirm 0 findings `[ref: SDD/Constraints; CON-7]`.
+
+    **Ran 2026-09-03. Four defects found, all fixed in `09001f5`:** a duplicate
+    `user-invocable` key in `implement-incremental` (`true` then `false`, leaving
+    the hidden-skill intent to the parser), and workflow-summarising descriptions
+    on all three `implement*` skills — the CSO anti-pattern the audit reference
+    documents, where a description listing steps gets followed as a shortcut and
+    the body goes unread. Descriptions rewritten to triggering conditions.
+
+    **Three notes accepted rather than changed**, recorded so a re-audit does not
+    re-raise them: the rationale clauses in `implement-direct`'s Never list are
+    doing rationalization-counter work and stay; `xdd-meta`'s Factory rule keeps
+    its negative-existence phrasing because ADR-3 wants Factory named as reserved;
+    `xdd` and `xdd-meta` carry mildly workflow-summarising descriptions that
+    predate this spec and are out of its scope.
   - Walk the PRD's 24 acceptance criteria and the SDD's 24 EARS criteria; confirm each maps to a task that ran. Any criterion with no evidence is a gap, not a pass.
   - Confirm the dispatcher is under 100 lines `[ref: SDD/Quality Requirements; Maintainability]`.
   - Invoke `xdd-meta` with `finalize 017 -- <shipping notes>` so this spec does not become another entry in the stale-`Ready` pattern its own PRD cites as evidence.
+  - Revert the manual plugin sync recorded under T4.2, then open the PR.
