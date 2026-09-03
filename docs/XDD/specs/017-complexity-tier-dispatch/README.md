@@ -6,6 +6,7 @@
 |-------|-------|
 | **Created** | 2026-09-03 |
 | **Current Phase** | Ready |
+| **Decomposition tier** | Incremental |
 | **Last Updated** | 2026-09-03 |
 
 ## Documents

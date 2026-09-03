@@ -18,6 +18,7 @@ SpecStatus {
   name: string
   directory: string         // resolved via Path Resolution priority chain
   phase: Initialization | PRD | SDD | PLAN | Ready | Implemented
+  decomposition_tier: Direct | Incremental | None   // None = spec predates tiers, or not yet classified
   documents: {
     name: string
     status: pending | in_progress | completed | skipped
@@ -28,6 +29,7 @@ SpecStatus {
 State {
   specId = ""
   currentPhase: Initialization | PRD | SDD | PLAN | Ready | Implemented
+  decompositionTier: Direct | Incremental | None
   documents: []
 }
 
@@ -65,12 +67,14 @@ TCS_IDEAS_DIR="${TCS_DOCS_BASE}/ideas"
 - Use spec.py (co-located with this SKILL.md) for all directory operations.
 - Create README.md from template.md when scaffolding new specs.
 - Log all significant decisions with date, decision, and rationale.
+- Write a tier decision to **both** the Status table row and the Decisions Log. The Status row is what `spec.py --read` parses; the log is the audit trail.
 - Confirm next steps with user before phase transitions.
 - Treat Finalize as idempotent — re-finalizing an already-Implemented spec is a no-op, not an error.
 
 **Never:**
 - Create spec directories manually — always use spec.py.
 - Transition phases without updating README.md.
+- Record a tier the workflow cannot execute. `Factory` is a reserved name with no implementation — writing it would route work to a loop that does not exist.
 - Skip decision logging when user makes workflow choices.
 - Leave a fully implemented spec stuck on `Ready` — implement Step 7 MUST call Finalize before completion.
 
@@ -97,12 +101,15 @@ Read existing spec metadata.
 2. Parse TOML output into SpecStatus.
 3. Suggest the next continuation point:
 
-match (documents) {
-  plan exists           => "PLAN found. Proceed to implementation?"
-  sdd exists, no plan   => "SDD found. Continue to PLAN?"
-  prd exists, no sdd    => "PRD found. Continue to SDD?"
-  no documents          => "Start from PRD?"
+match (documents, decomposition_tier) {
+  plan exists                          => "PLAN found. Proceed to implementation?"
+  sdd exists, no plan, tier = Direct    => "Direct tier — no plan is expected. Proceed to implementation?"
+  sdd exists, no plan, tier = None      => "SDD found. Continue to Decomposition (the classifier will recommend a tier)?"
+  prd exists, no sdd                   => "PRD found. Continue to SDD?"
+  no documents                         => "Start from PRD?"
 }
+
+A Direct spec has no `plan/` **by decision**, not by omission. Suggesting "continue to PLAN" there would contradict the tier the user already confirmed.
 
 ### 3. Transition Phase
 
@@ -115,7 +122,11 @@ Update the spec directory to reflect the new phase.
 match (phase) {
   PRD  => xdd-prd skill
   SDD  => xdd-sdd skill
-  PLAN => xdd-plan skill
+  PLAN => route by decomposition_tier:
+            Direct      => no skill invocation — Direct writes no decomposition artifact
+            Incremental => xdd-plan skill
+            None        => the tier has not been confirmed yet; return to the caller's
+                           classification step rather than guessing a route
 }
 
 4. On completion, return here for the next phase transition.
