@@ -368,3 +368,26 @@ def test_plugin_manifest_version_is_not_hand_bumped():
     assert before == after, (
         f"plugin.json version changed by hand ({before} -> {after}); CI owns the bump"
     )
+
+
+# --- The mismatch has to leave an artifact (spec-017 T4.2 walkthrough finding) ---
+#
+# The PRD's Tracking Requirements table lists "Tier mismatch reported" as an
+# artifact-based event carrying date, spec ID, recorded tier and artifacts found,
+# under a heading promising that all tracking is artifact-based. The dispatcher
+# reported the mismatch to the user and wrote nothing, so the event existed only
+# in a conversation — uncountable, and useless for its stated purpose of
+# detecting dispatcher defects. Reporting satisfies the acceptance criterion;
+# logging is what satisfies the tracking requirement.
+
+
+def test_dispatcher_logs_a_mismatch_as_well_as_reporting_it():
+    text = _implement_text().lower()
+    assert "decisions log" in text, "a mismatch leaves no artifact to count"
+    assert "xdd-meta" in text
+
+
+def test_dispatcher_still_delegates_the_write_rather_than_doing_it():
+    """The dispatcher owns no artifact writes; xdd-meta owns README updates."""
+    text = _implement_text()
+    assert "Modify spec artifacts directly" in text

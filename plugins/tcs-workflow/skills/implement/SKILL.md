@@ -41,7 +41,7 @@ State {
 **Never:**
 - Implement, orchestrate, or review anything. The sub-skills own all execution.
 - Guess a route. An artifact this workflow does not implement stops the dispatch.
-- Modify spec artifacts. Each sub-skill owns its own updates and its own completion summary.
+- Modify spec artifacts directly. The mismatch audit row goes through `xdd-meta`; each sub-skill owns its own updates and its own completion summary.
 - Post-process a sub-skill's output. It reports directly to the user.
 
 ## Reference Materials
@@ -81,10 +81,10 @@ Compare the detected route against `recordedTier`:
 match (recordedTier) {
   None                  => proceed silently. Pre-tier specs are the normal case.
   agrees with detection => proceed.
-  disagrees             => report both — what was recorded, what was found, and
-                           what each implies — then ask before proceeding. This
-                           usually means an interrupted /xdd run, for example a
-                           tier recorded as Incremental with no plan written yet.
+  disagrees             => log the mismatch to the spec's Decisions Log through
+                           `xdd-meta`, report both — what was recorded, what was
+                           found — then ask before proceeding. Usually an
+                           interrupted /xdd run: Incremental recorded, no plan yet.
 }
 
 ### 4. Hand off
