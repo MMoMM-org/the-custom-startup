@@ -104,59 +104,11 @@ await db.query(`
 
 ---
 
-## Event Sourcing
+## Event Sourcing — Not This Skill
 
-An aggregate's state is rebuilt by replaying its event history.
+Event sourcing is a **persistence model**: the append-only log is the source of truth and state is a fold of it. This skill owns events as **messages** — schema, naming, correlation, idempotency, ordering. The two are independent: a system can be event-driven over a CRUD database, and event-sourced with no message bus at all.
 
-```typescript
-class Order {
-  id!: string;
-  status!: "pending" | "paid" | "shipped" | "cancelled";
-  total!: number;
-
-  static rehydrate(events: BaseEvent[]): Order {
-    const order = new Order();
-    for (const event of events) {
-      order.apply(event);
-    }
-    return order;
-  }
-
-  private apply(event: BaseEvent): void {
-    switch (event.eventType) {
-      case "OrderPlaced":
-        this.id = event.aggregateId;
-        this.status = "pending";
-        this.total = (event.payload as any).total;
-        break;
-      case "PaymentReceived":
-        this.status = "paid";
-        break;
-      case "OrderShipped":
-        this.status = "shipped";
-        break;
-      case "OrderCancelled":
-        this.status = "cancelled";
-        break;
-    }
-  }
-}
-```
-
-### Event Store Pattern
-
-```typescript
-interface EventStore {
-  append(
-    aggregateId: string,
-    expectedVersion: number,  // optimistic concurrency control
-    events: BaseEvent[]
-  ): Promise<void>;
-  load(aggregateId: string, fromVersion?: number): Promise<BaseEvent[]>;
-}
-```
-
-Optimistic concurrency: if current stream version ≠ `expectedVersion`, reject the append — another writer modified the aggregate concurrently.
+If the log is (or is becoming) your source of truth, use `tcs-patterns:event-sourcing`. It owns the Decider write model, rehydration, the event store port and its optimistic concurrency, projections and read models, event versioning, snapshots, and the prior question of whether event sourcing is the right rung at all.
 
 ---
 
@@ -178,27 +130,11 @@ Write side:                      Read side:
   EventStore ──────────────────────►QueryHandler
 ```
 
-### Projection Example
+### Projections
 
-```typescript
-// Projector keeps read model in sync
-async function projectOrderSummary(event: BaseEvent): Promise<void> {
-  switch (event.eventType) {
-    case "OrderPlaced":
-      await db.query(
-        "INSERT INTO order_summaries (id, status, total, created_at) VALUES ($1, 'pending', $2, $3)",
-        [event.aggregateId, event.payload.total, event.occurredAt]
-      );
-      break;
-    case "PaymentReceived":
-      await db.query(
-        "UPDATE order_summaries SET status = 'paid' WHERE id = $1",
-        [event.aggregateId]
-      );
-      break;
-  }
-}
-```
+A projector consumes events and maintains a query-shaped read model. Every projector is a message handler, so the idempotency rules above apply to it unchanged — at-least-once delivery means it will see the same event twice.
+
+Projection design itself — folds over an event log, inline vs async lifecycles, catch-up subscriptions and checkpoints, rebuilds, and read-your-writes under eventual consistency — belongs to `tcs-patterns:event-sourcing` (`reference/projections-and-read-models.md`). For read/write separation *without* an event log, see `tcs-patterns:hexagonal` (`reference/cqrs-lite.md`).
 
 ---
 
@@ -299,7 +235,7 @@ async function processWithRetry(event: BaseEvent, handler: Handler): Promise<voi
 |---|---|---|
 | Event carries mutable object reference | Handler mutates shared state | Serialize to plain object at emit time |
 | Query inside event handler | Creates ordering dependency on read model | Project event → query projection |
-| Fat event (entire aggregate state) | Tight coupling, large payload | Emit only what changed |
+| Accidental fat event (entire aggregate state) | Tight coupling to the producer's shape, large payload | Emit the fact. A *deliberate* fat event is a consumer-isolation trade-off, not a default — see `tcs-patterns:event-sourcing` (`reference/modelling-events.md`) |
 | Event as command (`PlaceOrder` event) | Recipient can't reject it | Use a command type with explicit handler |
 | Polling instead of projecting | Misses events, eventual consistency violated | Subscribe to event stream, update projection |
 | Ignoring DLQ | Silent data loss | Monitor DLQ size; alert on any items |

@@ -48,6 +48,8 @@ State {
 
 - `reference/ddd-patterns.md` — ddd patterns
 
+*How* an aggregate is persisted is out of scope here. If its events are the source of truth rather than its state, `tcs-patterns:event-sourcing` owns the write model (the Decider), the event store, and replay; `tcs-patterns:event-driven` owns publishing those events to other contexts.
+
 ## Workflow
 
 ### 1. Identify Bounded Contexts

@@ -1,6 +1,6 @@
 # tcs-patterns — Domain Pattern Skills
 
-tcs-patterns is an optional plugin that brings 17 opinionated, interactive pattern skills to your Claude Code sessions. Skills are organized across 6 categories — architecture, API design and types, testing, language platforms, DevOps, and integrations — and each one activates on its own trigger terms, so you get focused guidance exactly when the relevant context appears. Install the full plugin and ignore what does not apply to your stack, or install selectively using the individual skill names.
+tcs-patterns is an optional plugin that brings 20 opinionated, interactive pattern skills to your Claude Code sessions. Skills are organized across 6 categories — architecture, API design and types, testing, language platforms, DevOps, and integrations — and each one activates on its own trigger terms, so you get focused guidance exactly when the relevant context appears. Install the full plugin and ignore what does not apply to your stack, or install selectively using the individual skill names.
 
 ```
 /plugin install tcs-patterns@the-custom-startup
@@ -36,7 +36,7 @@ When `tcs-team` agents delegate specialist work, they automatically use relevant
 
 | Agent | Uses patterns |
 |---|---|
-| `the-architect/design-system` | `ddd`, `hexagonal`, `event-driven`, `twelve-factor` |
+| `the-architect/design-system` | `ddd`, `hexagonal`, `event-driven`, `event-sourcing`, `twelve-factor` |
 | `the-architect/review-security` | `api-design`, `secure-oauth-oidc` |
 | `the-architect/review-robustness` | `functional`, `node-service` |
 | `the-developer/build-feature` | `typescript-strict`, `api-design`, `node-service`, `go-idiomatic`, `python-project` |
@@ -54,6 +54,9 @@ When `tcs-team` agents delegate specialist work, they automatically use relevant
 | `hexagonal` | Use when auditing or designing a layered architecture — triggered by requests to review ports and adapters, dependency direction, domain isolation from frameworks, or hexagonal architecture compliance. | When auditing whether infrastructure concerns are leaking into your domain core. | `/hexagonal [path or scope to audit]` |
 | `functional` | Use when implementing or reviewing code for functional correctness — triggered by requests to audit side effects, mutation, impure functions, or error handling in functional pipelines. | When refactoring toward purity or reviewing code for hidden mutation and side effects. | `/functional [path or scope to audit]` |
 | `event-driven` | Use when designing or reviewing event-driven systems — triggered by requests to audit event schemas, command/event naming, handler idempotency, correlation IDs, or message ordering assumptions. | When designing event schemas or auditing handler idempotency and ordering assumptions. | `/event-driven [service or module to audit]` |
+| `event-sourcing` | Use when designing, implementing, or auditing an event-sourced context — the append-only log as source of truth, a Decider write model, rehydration by folding, an event store with optimistic concurrency, projections and read models, event versioning, snapshots. | When the event log is (or is becoming) your source of truth — and to decide whether it should be. | `/event-sourcing [bounded context, module, or path]` |
+
+`event-driven` owns events as **messages** — schema, naming, correlation IDs, handler idempotency, ordering. `event-sourcing` owns events as **persistence**. The two are independent: a system can be event-driven over a CRUD database, and event-sourced with no message bus at all.
 
 ---
 

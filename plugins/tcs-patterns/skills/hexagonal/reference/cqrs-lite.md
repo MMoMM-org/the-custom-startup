@@ -65,3 +65,5 @@ CQRS-lite is sufficient until you need:
 - Read-heavy workloads that need independent scaling
 
 Start with CQRS-lite. Most applications never need full CQRS.
+
+If the driver is event sourcing — the append-only log becomes the source of truth and reads are served by projections folded from it — that is the full form of this split, and `tcs-patterns:event-sourcing` owns it. Do not add projections and subscriptions to a context that has no need of event history.
