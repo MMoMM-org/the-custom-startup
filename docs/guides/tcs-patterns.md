@@ -42,6 +42,7 @@ When `tcs-team` agents delegate specialist work, they automatically use relevant
 | `the-developer/build-feature` | `typescript-strict`, `api-design`, `node-service`, `go-idiomatic`, `python-project` |
 | `the-tester/test-strategy` | `testing`, `mutation-testing`, `frontend-testing`, `react-testing`, `test-design-reviewer` |
 | `the-devops/build-platform` | `twelve-factor` |
+| `the-devops/monitor-production` | `observability` |
 
 ---
 
@@ -104,6 +105,9 @@ The browser-facing session layer that consumes these tokens — session cookies,
 | Skill | What it does | When to invoke | Invocation |
 |-------|-------------|----------------|------------|
 | `twelve-factor` | Use when auditing or designing service configuration, deployment, or runtime behaviour — triggered by requests to review environment config, stateless processes, log handling, backing services, or twelve-factor compliance. | When designing service configuration or auditing a deployment for twelve-factor compliance. | `/twelve-factor [repo path or service to audit]` |
+| `observability` | Use when instrumenting a service or reviewing its telemetry — wide events and canonical log lines, OpenTelemetry traces and metrics, context propagation, sampling and metric cardinality, where instrumentation code belongs, and testing instrumentation as behaviour. | When instrumenting a service, or when nobody can see what production is doing. | `/observability [service, module, or path]` |
+
+`twelve-factor` owns log transport and shape; `observability` owns what goes into the stream. SLOs, error budgets, alerting and dashboards belong to `the-devops/monitor-production`, not to either skill.
 
 ---
 

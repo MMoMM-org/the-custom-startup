@@ -34,7 +34,8 @@ State {
 - Store all config in environment variables — never in code or committed config files.
 - Treat backing services (DB, cache, queue) as attached resources, swappable via config.
 - Strictly separate build, release, and run stages — never modify code at runtime.
-- Export logs as event streams to stdout — never route or store logs inside the app.
+- Export logs as event streams to the process streams the platform captures — never route or store logs inside the app.
+- Require the record *shape*: machine-parseable output (JSON preferred), a recognized severity level, structured key-value context, and an ISO 8601 timestamp on every entry.
 - Make processes stateless and share-nothing — persist state in backing services only.
 
 **Never:**
@@ -64,6 +65,17 @@ Look for filesystem writes in request handlers, in-memory session state, or loca
 ### 3. Check Logs (Factor XI)
 
 Verify logs go to stdout/stderr. Flag any log file configuration or log rotation code inside the app as MEDIUM.
+
+Then check the record shape, which this factor also owns:
+
+| Property | Flag when absent |
+|---|---|
+| Machine-parseable output — JSON preferred, not free-form strings | MEDIUM |
+| Recognized severity level, threshold configurable at deploy time | MEDIUM |
+| Structured key-value context, not message strings alone | MEDIUM |
+| ISO 8601 timestamp on every entry | MEDIUM |
+
+This factor stops at transport and shape. What goes *into* the stream — wide events, trace correlation, which fields are worth carrying — is `tcs-patterns:observability`.
 
 ### 4. Audit All Twelve Factors
 

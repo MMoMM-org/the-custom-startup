@@ -24,6 +24,9 @@
     "api",
     "oauth",
     "oidc",
-    "security"
+    "security",
+    "observability",
+    "opentelemetry",
+    "telemetry"
   ]
 }

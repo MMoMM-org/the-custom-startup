@@ -173,7 +173,7 @@ Optional: `setup --with-branch-protection` (GitHub single-coder branch protectio
 
 ### Patterns Plugin (`tcs-patterns`) — Domain Pattern Skills *(optional)*
 
-**18 pattern skills** covering architecture, security, testing, languages, and platform. Install only what you need — they activate on trigger terms. Agents from `tcs-team` automatically use relevant pattern skills when delegating specialist work.
+**19 pattern skills** covering architecture, security, testing, languages, and platform. Install only what you need — they activate on trigger terms. Agents from `tcs-team` automatically use relevant pattern skills when delegating specialist work.
 
 | Category | Skills |
 |----------|--------|
@@ -182,7 +182,7 @@ Optional: `setup --with-branch-protection` (GitHub single-coder branch protectio
 | **API & Types** | `/api-design` · `/typescript-strict` |
 | **Testing** | `/testing` · `/mutation-testing` · `/frontend-testing` · `/react-testing` · `/test-design-reviewer` |
 | **Platforms** | `/node-service` · `/python-project` · `/go-idiomatic` |
-| **DevOps** | `/twelve-factor` |
+| **DevOps** | `/twelve-factor` · `/observability` |
 | **Integrations** | `/mcp-server` · `/obsidian-plugin` |
 
 Plus one write-time guard: a `PreToolUse` hook blocks `eslint-disable` from being written into Obsidian plugin repos, because the community-plugin reviewer rejects any submission that contains a disabled rule. See [Hooks](docs/guides/tcs-patterns.md#hooks).
