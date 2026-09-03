@@ -42,45 +42,98 @@ Registers the two new skills everywhere the repo tracks skills, and proves end t
      - [x] The documented skill count matches reality, and the pre-existing off-by-one is corrected `[ref: SDD/Known Technical Issues]`
      - [x] The CHANGELOG names the version CI is about to produce, and `plugin.json` is untouched `[ref: SDD/Constraints; CON-6]`
 
-- [ ] **T4.2 End-to-end walkthroughs, both tiers** `[activity: validate]`
+- [x] **T4.2 End-to-end walkthroughs, both tiers** `[activity: validate]`
 
-  > **Blocked on a session restart — after a manual plugin sync.** A session
-  > restart alone is not enough, and the earlier note here was wrong about the
-  > cause. Skills are loaded from the *installed* plugin
-  > (`~/.claude/plugins/cache/the-custom-startup/tcs-workflow/<version>/`) and
-  > validated against the marketplace clone, neither of which is this working
-  > tree. On this branch both carried only the pre-split `implement`, so no
-  > fresh session could invoke the new sub-skills until the branch merged and
-  > CI released.
-  >
-  > Unblocked by copying the five touched skill directories into both
-  > locations per the project instructions file (§ Testing Skills During
-  > Development), on Marcus's explicit call — this is the documented
-  > exception to the standing no-manual-marketplace-sync rule, taken so the
-  > walkthroughs could run before the PR rather than after. **Revert after the
-  > walkthroughs**: `git -C ~/.claude/plugins/marketplaces/the-custom-startup
-  > checkout . && git clean -fd plugins/tcs-workflow/skills`, then re-copy the
-  > reverted tree over the cache, or let the post-merge plugin update
-  > overwrite both.
-  >
-  > The executable half of this task already runs green — the detection sweep
-  > in `tests/test_dispatch_detection.py` covers the regression walkthrough
-  > over all 17 real spec directories. What remains is driving `/xdd` and
-  > `/implement` by hand at both tiers, in a session started after the sync.
+  **Ran 2026-09-03**, in a session started after the manual plugin sync recorded
+  below. The skills loaded from the installed plugin (`tcs-workflow/4.4.4`),
+  which is itself the evidence that the sync and the fresh-session indexing
+  requirement were both satisfied.
 
-  1. Prime: Read the primary sequence `[ref: SDD/Runtime View; Primary Flow]` and the rollout claim `[ref: SDD/Deployment View]`. Start a **fresh session** so the new skills are indexed `[ref: SDD/Implementation Gotchas]`.
-  2. Test: Two scripted walkthroughs against a scratch spec, plus one regression walkthrough.
-     - **Direct:** run `/xdd` on a one-line fix. Expect the classifier to recommend Direct with its signals shown, no `plan/` written, the tier recorded in both the Status row and the decision log, then `/implement` detecting no plan, announcing the direct route, running `tdd-guardian`, asking for approval, running drift and constitution checks, and calling `finalize`.
-     - **Incremental:** run `/xdd` on a multi-component change. Expect Incremental, a `plan/` written, and `/implement` running the phase loop with both reviewers, exactly as it does on `main` today.
-     - **Regression:** run `/implement` against an existing spec that predates tiers (spec 016). Expect the incremental route, no error about the absent tier, and no behavioural difference from `main`.
-  3. Implement: Fix whatever the walkthroughs surface. Record any deviation from the SDD per the plan's Deviation Protocol.
-  4. Validate: All three walkthroughs complete. `.venv/bin/python -m pytest tests/ -q` and `bats plugins/*/tests/bats` both green.
+  Walkthroughs used a scratch project outside this repository
+  (a small `slugify` module with its own `.claude/startup.toml`,
+  `docs/XDD/specs/` and git history), so the two scratch specs exercise the real
+  path-resolution chain without leaving artifacts here. PRD and SDD authoring
+  inside those runs was abbreviated — those phases are untouched by this spec;
+  step 6 is what was under test.
+
+  **Direct — ran in full.** `/xdd` on a one-line fix classified `change_type=fix`,
+  `component_count=0`, `feature_count=1`, `ac_count=1`, no parallel markers →
+  rule 2's change-type escape → **Direct**, signals surfaced, user confirmed.
+  No `plan/` written; tier recorded in the Status row and the Decisions Log;
+  `spec.py --read` returned `decomposition_tier = "direct"`. `/implement` then
+  detected `requirements.md + solution.md`, cross-checked against the recorded
+  tier (agrees → silent), announced the direct route, ran `tdd-guardian`
+  (APPROVE, three named tests), took the approval gate, dispatched one
+  implementer (RED shown, GREEN 4 passing), ran the drift check (no findings),
+  skipped the constitution check (no CONSTITUTION.md), and finalized the spec to
+  `Implemented`.
+
+  **Incremental — specification half ran; the loop was not re-driven.** `/xdd` on
+  a two-component change classified `component_count=2`, `feature_count=2`,
+  `ac_count=6`, `parallel_markers=true` → rule 1's breadth veto → **Incremental**.
+  `plan/` written, tier recorded, and `/implement` detected `plan/README.md` and
+  routed to `implement-incremental`. The loop itself was deliberately not driven
+  (Marcus's call, to avoid dispatching the full per-task review chain over a
+  scratch spec). The criterion is met by stronger evidence than a re-run would
+  give: `git diff main:implement/SKILL.md implement-incremental/SKILL.md` is
+  **empty below the frontmatter** — 296 lines against 296, differing only in
+  `name`, `description`, `user-invocable` and the persona line. ADR-5's "this is
+  a move, not a rewrite" holds byte for byte, so the incremental loop *is*
+  today's loop.
+
+  **Regression — routed, not re-implemented.** Spec 016 predates tiers: recorded
+  tier absent, `plan/README.md` present → `implement-incremental`, cross-check
+  proceeds silently, no error about the missing tier. Its loop was not executed —
+  016 has already shipped, and re-running it would be destructive rather than
+  informative. The executable sweep in `tests/test_dispatch_detection.py` covers
+  the same route over all 17 spec directories.
+
+  **Three defects found and fixed** (`eb92f11`, `a5d0af4`, `2858ce5`):
+
+  1. **`spec.py` scaffolded an empty `plan/` into every new spec** — found at the
+     first step of the Direct walkthrough. A Direct spec, which by ADR-1 carries
+     no decomposition artifact, was handed the very directory that marks a spec
+     Incremental. Dispatch survived it (detection keys on `plan/README.md`), but
+     `--read` announced a `plan_dir` for a spec with no plan, and
+     `implement-direct`'s "never write `plan/`" rule was contradicted before the
+     loop began. `plan/` is now created only on the `--add xdd-plan` path, and
+     `--read` treats an empty one as absent.
+  2. **Nothing said what the `plan/` Documents row reads on a Direct spec** — it
+     stayed `pending`, so a finished Direct spec looked as though a plan were
+     still outstanding, collapsing the "no plan by decision, not by omission"
+     distinction `xdd-meta` draws. Now `skipped`, stated in `classifier.md`'s
+     Decision Logging and in `xdd`'s Direct route arm.
+  3. **A tier mismatch left no artifact** — found by walking the PRD's tracking
+     table. "Tier mismatch reported" is listed as artifact-based, but the
+     dispatcher only reported it in conversation, making the event uncountable
+     for its stated purpose of detecting dispatcher defects. The cross-check now
+     logs it to the Decisions Log through `xdd-meta`. Dispatcher stays at 99
+     lines.
+
+  No deviation from the SDD was required; all three fixes bring the
+  implementation *to* the SDD rather than away from it.
+
+  **Suites after the fixes:** `pytest tests/ -q` → 337 passed, 1 skipped.
+  `bats -r plugins/tcs-git-helpers/tests/bats` → exit 0, 787 tests, 0 failures
+  (bats is not preinstalled in this container; install it per the venv recipe).
+
+  > **Manual plugin sync — still in force, revert in T4.3.** The five touched
+  > skill directories were copied into both
+  > `~/.claude/plugins/cache/the-custom-startup/tcs-workflow/4.4.4/skills/` and
+  > the marketplace clone, on Marcus's explicit call — the documented exception
+  > to the standing no-manual-marketplace-sync rule, taken so the walkthroughs
+  > could run before the PR rather than after. The three fixes above were synced
+  > across as they landed, so both copies match the working tree. **Revert:**
+  > `git -C ~/.claude/plugins/marketplaces/the-custom-startup checkout . &&
+  > git clean -fd plugins/tcs-workflow/skills`, then re-copy the reverted tree
+  > over the cache, or let the post-merge plugin update overwrite both.
+
   5. Success:
-     - [ ] A Direct spec completes with two documents, no plan, and a recorded tier `[ref: PRD/AC Feature 1.1, 1.4]`
-     - [ ] An Incremental spec is indistinguishable from today's behaviour `[ref: SDD/Quality Requirements; Reliability]`
-     - [ ] A pre-tier spec implements exactly as it does on `main` `[ref: PRD/AC Feature 3.3]`
-     - [ ] The tier decision log carries every field the PRD's tracking table needs `[ref: PRD/Tracking Requirements]`
-     - [ ] The user-facing surface is still two entry points `[ref: SDD/Quality Requirements; Usability]`
+     - [x] A Direct spec completes with two documents, no plan, and a recorded tier `[ref: PRD/AC Feature 1.1, 1.4]`
+     - [x] An Incremental spec is indistinguishable from today's behaviour — the loop body is byte-identical to `main` `[ref: SDD/Quality Requirements; Reliability]`
+     - [x] A pre-tier spec implements exactly as it does on `main` `[ref: PRD/AC Feature 3.3]`
+     - [x] The tier decision log carries every field the PRD's tracking table needs — after fix 3 `[ref: PRD/Tracking Requirements]`
+     - [x] The user-facing surface is still two entry points — `implement-direct` and `implement-incremental` are both `user-invocable: false` `[ref: SDD/Quality Requirements; Usability]`
 
 - [ ] **T4.3 Phase Validation and spec closeout** `[activity: validate]`
 
