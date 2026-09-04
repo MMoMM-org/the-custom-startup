@@ -148,6 +148,62 @@ plan = "pro"   # pro | max5x | max20x | api | auto
 `budget_mode = "cost"` scales session cost against the plan threshold instead —
 it renders only when the payload actually carries a cost.
 
+#### Extra-usage credits (opt-in)
+
+```
+💳 ██░░░░░░░░ 23% €34.10/€150.00
+```
+
+Spend against your monthly credit limit — what keeps accruing once a plan's
+included usage is exhausted and extra-usage credits take over. Neither of the
+bars above can show it: `rate_limits` reports window utilisation and says
+nothing about credits, and ccusage prices tokens at API list rates against a
+subscription profile, which is not the credit balance and reads reassuringly
+low while credits drain. Roughly €140 went unnoticed here over a few days of
+deliberately frugal work for exactly that reason.
+
+It is **off by default**, because it is the only part of the statusline that
+leaves your machine:
+
+```toml
+show_extra_usage = true
+usage_cache_ttl  = 300   # seconds
+```
+
+With it on, and **only when the cache has expired**, the script resolves an
+OAuth token and calls `https://api.anthropic.com/api/oauth/usage`:
+
+1. `CLAUDE_CODE_OAUTH_TOKEN`
+2. `~/.claude/.credentials.json`
+3. the system keychain — `secret-tool` on Linux, `security` on macOS
+
+A render served from cache does none of that: no keychain, no credentials file,
+no network. That ordering is deliberate rather than incidental — `security
+find-generic-password` can raise an access dialog, and Claude Code waits on the
+statusline synchronously, so a credential read on every render would be a hung
+prompt rather than a slow one. Every keychain lookup is bounded to 2s and the
+fetch to 5s, the token reaches curl through a config file on stdin rather than
+argv (where any process could read it), and concurrent sessions share one
+in-flight fetch instead of stampeding the endpoint.
+
+After a failed call the script backs off for one `usage_cache_ttl` instead of
+retrying every render, and falls back to the last good reading for up to 24
+hours — a credit figure a few hours old is still the signal; nothing is not.
+The row is drawn only when the account actually has extra usage enabled, so if
+you do not see it, that is the ordinary case.
+
+**The currency is read, not assumed.** The response states a currency and a
+decimal exponent per amount, and the account this was verified against bills in
+EUR — so the figure is rendered in whatever currency you are actually charged
+in, and an unrecognised code is printed as itself rather than given a guessed
+symbol.
+
+The endpoint is undocumented and can change without notice. Every field is read
+behind a guard, and the segment disappearing is not treated as an error. Two
+shapes are read for the same figure: `spend` first — it carries the currency,
+the exponent and a real `percent` — then the flatter `extra_usage`, whose
+`utilization` came back `null` on the account this was checked against.
+
 ---
 
 ## Configuration
@@ -197,6 +253,7 @@ format = "<path> <branch>  <model>  <context>  <session>  <help>"
 # Cache TTLs in seconds
 ccusage_cache_ttl = 60   # billing block data
 git_cache_ttl     = 15   # branch / dirty state
+usage_cache_ttl   = 300  # OAuth usage API — response TTL and failure backoff
 
 # Display toggles (enhanced variant)
 show_budget_bar  = true
@@ -204,6 +261,10 @@ show_context_bar = true
 show_duration    = true
 show_git         = true
 show_remote_url  = true
+
+# Extra-usage credits. Off by default: the only setting that makes the
+# statusline read a credential and call the network. See "Extra-usage credits".
+show_extra_usage = false
 
 [thresholds.context]
 warn   = 70   # % — yellow
@@ -423,8 +484,14 @@ The enhanced variant caches slow operations to stay under the 50ms performance t
 |---|---|---|
 | Git | 15s | Branch name, staged/modified counts, remote URL |
 | ccusage | 60s | Active block tokens, cost, remaining minutes |
+| OAuth usage | 300s | Extra-usage credit response, plus a failure marker |
 
-Cache files live in `/tmp/tcs-statusline-*`. They are keyed by directory path so different repos have independent caches. Adjust TTLs in `statusline.toml`.
+Cache files live in one per-user directory — `$XDG_RUNTIME_DIR`, else `$TMPDIR`,
+else `/tmp` — created mode `700`. If that directory is ever a symlink or owned
+by somebody else, caching is switched off rather than redirected. The git and
+ccusage entries are keyed by directory path so different repos have independent
+caches; the usage response is per user, not per repo. Adjust TTLs in
+`statusline.toml`.
 
 ---
 

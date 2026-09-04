@@ -19,7 +19,7 @@ It has a second job: making it cheap to check those origins for improvements. Ev
 | [Bande-a-Bonnot/Boucle-framework](https://github.com/Bande-a-Bonnot/Boucle-framework) | 2026-05-09 | never | **monitored** |
 | [lasso-security/mcp-gateway](https://github.com/lasso-security/mcp-gateway) | reference only | n/a | historical |
 | [agiletec-inc/airis-mcp-gateway](https://github.com/agiletec-inc/airis-mcp-gateway) | reference only | n/a | historical |
-| [dsebastien/claude-epic-status-line](https://github.com/dsebastien/claude-epic-status-line) | reviewed 2026-09-04, nothing ported yet | 2026-09-04 — first review (#72) | **monitored** |
+| [dsebastien/claude-epic-status-line](https://github.com/dsebastien/claude-epic-status-line) | statusline: single-`jq` payload read, per-uid cache dir, OAuth usage fetch | 2026-09-04 — first review (#72) | **monitored** |
 
 **monitored** — actively developed, and the parts we adapted still move. Check on each sweep.
 **historical** — attribution stands, but there is nothing left to pull. Reasons are recorded per source below. Skip these on a sweep.
@@ -234,22 +234,36 @@ Two rules learned the hard way:
 ### dsebastien/claude-epic-status-line
 
 - **Reviewed:** 2026-09-04 at `master` (pushed 2026-08-26), MIT
-- **Ported:** nothing yet — the review produced #129, #130 and #131 under #72
-- **Why it is here anyway:** three specific mechanisms were taken as *design input* for those
-  issues and will carry code if they land, so the lineage is recorded before rather than after.
+- **Ported:** 2026-09-04 — all three mechanisms the review identified, as #130, #131 and #129
 
-What the review found worth taking:
+What the review found worth taking, and where it landed:
 
-| Mechanism | Where it would land | Issue |
+| Mechanism | Where it landed | Issue |
 |---|---|---|
-| `extra_usage` from `api.anthropic.com/api/oauth/usage` — credit consumption against the monthly limit, which neither the stdin payload nor ccusage exposes | a new opt-in segment | #129 |
+| The `api.anthropic.com/api/oauth/usage` fetch — credit consumption against the monthly limit, which neither the stdin payload nor ccusage exposes | `tcs_load_extra_usage`, an opt-in segment | #129 |
 | One `jq` pass extracting every field as `@tsv`, with `-` sentinels so an empty field cannot shift the positional `read` | `read_input` | #130 |
-| Per-uid cache directory created `mode 700`, with symlink and ownership checks that disable caching rather than redirect it | the cache helpers | #131 |
+| Per-uid cache directory created `mode 700`, with symlink and ownership checks that disable caching rather than redirect it | `tcs_cache_dir` | #131 |
+
+The usage fetch brought four of their safeguards across with it, each of which answers a real
+failure rather than a hypothetical one: the token reaches curl through a **config file on stdin**
+rather than argv, where any process on the machine can read it out of the process list; the token
+is **charset-checked** before interpolation, since a quote or newline in it would open a curl
+directive of the writer's choosing; the response is **size-capped**; and a `mkdir` **single-flight
+lock** stops concurrent sessions stampeding the endpoint the moment a shared cache expires.
+
+Where it **diverges**: the reference reads `extra_usage.{utilization, used_credits, monthly_limit}`
+and divides by 100. Checking that against a live account on 2026-09-05 found `extra_usage.utilization`
+returning `null` while a parallel `spend` object carried the real `percent`, plus a `currency` and a
+per-amount `exponent` — and the account bills in EUR. So `spend` is read first and `extra_usage` is
+the fallback, the divisor comes from the stated exponent, and the currency symbol comes from the
+response. The reference would have drawn an empty bar labelled in dollars on that account.
 
 Deliberately **not** taken: their `CESL_*` environment-variable configuration with three-tier
 precedence — `statusline.toml` already covers that ground and switching would be churn without
-gain. Their percentage clamping and post-failure negative caching were arrived at independently
-here (#118, and the existing ccusage cache), so those are convergent rather than adopted.
+gain. Their `weekly_scoped` per-model limits are undocumented and the pooled 7-day window already
+covers most of the need, so they stay a separate decision. Their percentage clamping and
+post-failure negative caching were arrived at independently here (#118, and the existing ccusage
+cache), so those are convergent rather than adopted.
 
 One convergence worth noting: their `stat -c %Y || stat -f %m` puts the GNU form first, which is
 the same ordering #118 landed on after the BSD-first form was found to pollute stdout on GNU.
@@ -260,7 +274,7 @@ the same ordering #118 landed on after the BSD-first form was found to pollute s
 
 | Date | Scope | Outcome |
 |---|---|---|
-| 2026-09-04 | dsebastien/claude-epic-status-line (#72) | Reviewed on request rather than as part of a sweep. Nothing ported; three adoption candidates filed as #129, #130, #131. |
+| 2026-09-04 | dsebastien/claude-epic-status-line (#72) | Reviewed on request rather than as part of a sweep. Three adoption candidates filed as #129, #130, #131 — all three landed the same day. |
 | 2026-08-31 | All eight sources | Three found still worth monitoring, five retired to historical. Tracked as epic #73 with twelve child issues. Landed: `tcs-patterns` defect fixes (#74), `principles.md` rewrite (#75), this file (#78). |
 
 ---

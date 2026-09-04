@@ -189,6 +189,27 @@ render() {
     fi
   fi
 
+  # Extra-usage credits.
+  #
+  # Spend against the monthly credit limit once a plan's included usage is
+  # exhausted — the one figure neither rate_limits nor ccusage can produce.
+  # Off unless show_extra_usage is set, and drawn only when the account has
+  # extra usage switched on, so an absent segment is the ordinary case rather
+  # than a failure worth marking.
+  if [[ "${TCS_EXTRA_ENABLED:-false}" == "true" ]]; then
+    local ex_bar
+    ex_bar=$(tcs_block_bar \
+      "$TCS_EXTRA_PCT" "$tcs_cfg_budget_warn" "$tcs_cfg_budget_danger")
+    line2+=" | 💳 ${ex_bar} ${TCS_EXTRA_PCT}%"
+    if [[ -n "${TCS_EXTRA_USED:-}" ]]; then
+      # The symbol comes from the response, not from an assumption: accounts
+      # bill in their own currency and this figure exists to be believed.
+      line2+=" ${TCS_EXTRA_SYMBOL}${TCS_EXTRA_USED}"
+      [[ -n "${TCS_EXTRA_LIMIT:-}" ]] \
+        && line2+="/${TCS_EXTRA_SYMBOL}${TCS_EXTRA_LIMIT}"
+    fi
+  fi
+
   echo -e "$line1"
   [[ -n "$line2" ]] && echo -e "$line2"
 }
@@ -215,9 +236,16 @@ Key options:
   show_duration     = true | false
   show_git          = true | false
   show_remote_url   = true | false
+  show_extra_usage  = true | false  (off by default — see below)
+  usage_cache_ttl   = <seconds>     (default 300)
 
   [thresholds.context]  warn / danger
   [thresholds.budget]   warn / danger
+
+show_extra_usage adds a credit-consumption segment for accounts with extra
+usage enabled. It is the only part of this script that leaves the machine: it
+reads an OAuth token (CLAUDE_CODE_OAUTH_TOKEN, ~/.claude/.credentials.json, or
+the system keychain) and calls the Claude usage API once per usage_cache_ttl.
 
 Token limits per 5h window (inputTokens + outputTokens):
   pro:    ~28,450   max5x: ~57,000   max20x: ~142,500
@@ -244,5 +272,9 @@ if [[ "$tcs_cfg_show_budget_bar" == "true" && -z "${RL_5H:-}" \
     && "${tcs_cfg_budget_mode:-token}" == "token" ]]; then
   tcs_load_ccusage "$CURRENT_DIR"
 fi
+
+# Extra-usage credits. Self-guarding: does nothing at all — no credential read,
+# no network — unless show_extra_usage is set.
+tcs_load_extra_usage
 
 render
