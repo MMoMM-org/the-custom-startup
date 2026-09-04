@@ -261,6 +261,61 @@ _tcs_detect_plan() {
 }
 
 # ==============================================================================
+# Portable value helpers
+# ==============================================================================
+#
+# Both helpers exist to keep a fallback from being *appended* to output a failing
+# command has already written. `x=$(cmd || echo 0)` concatenates in exactly that
+# case, and both conversions below have a partial-output failure mode:
+#
+#   - `printf '%.0f'` parses through strtod and therefore honours LC_NUMERIC. In
+#     a comma-decimal locale (de, fr, es, it, nl) it stops at the ".", prints
+#     "23" for 23.5, warns, and exits 1 — so `|| echo 0` produced "230".
+#   - GNU `stat -f` means "file system status", not "format". It does not fail;
+#     it prints a filesystem report to stdout, which then lands in front of the
+#     fallback and breaks the arithmetic consuming it.
+#
+# Each helper writes exactly one token and assigns whole values, never chaining
+# a fallback inside the same command substitution.
+
+# Round a decimal to the nearest integer, identically under any LC_NUMERIC.
+# Prints the rounded value; prints a bare "0" and returns 1 for unusable input.
+# Usage: tcs_round_int <value>
+tcs_round_int() {
+  local value="${1:-}" rounded
+  rounded=$(LC_ALL=C awk -v v="$value" 'BEGIN {
+    if (v ~ /^[ \t]*[-+]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?[ \t]*$/) {
+      printf "%.0f", v
+      exit 0
+    }
+    exit 1
+  }') || { printf '0'; return 1; }
+  printf '%s' "$rounded"
+}
+
+# Which stat dialect this machine speaks, resolved once per shell. The probe
+# runs against "." so it cannot be misled by a missing file, and asks the GNU
+# form first because that is the one with no clean failure mode. Resolving it
+# here rather than inside the function matters: tcs_file_mtime is called from a
+# command substitution, so anything it memoised would die with the subshell and
+# the probe would run on every single lookup.
+if stat -c %Y . > /dev/null 2>&1; then
+  _TCS_STAT_MTIME_FLAG='-c%Y'   # GNU coreutils
+else
+  _TCS_STAT_MTIME_FLAG='-f%m'   # BSD / macOS
+fi
+
+# Modification time of a file in epoch seconds, on both stat dialects.
+# Prints the timestamp; prints a bare "0" and returns 1 when unavailable.
+# Usage: tcs_file_mtime <path>
+tcs_file_mtime() {
+  local file="${1:-}" mtime
+  mtime=$(stat "$_TCS_STAT_MTIME_FLAG" "$file" 2>/dev/null) || { printf '0'; return 1; }
+  [[ "$mtime" =~ ^[0-9]+$ ]] || { printf '0'; return 1; }
+  printf '%s' "$mtime"
+}
+
+# ==============================================================================
 # Cache helpers
 # ==============================================================================
 
@@ -268,7 +323,7 @@ tcs_cache_is_stale() {
   local file="$1" max_age="$2"
   [[ ! -f "$file" ]] && return 0
   local mtime
-  mtime=$(stat -f %m "$file" 2>/dev/null || stat -c %Y "$file" 2>/dev/null || echo 0)
+  mtime=$(tcs_file_mtime "$file") || mtime=0
   [[ $(( $(date +%s) - mtime )) -gt "$max_age" ]]
 }
 
@@ -288,18 +343,38 @@ tcs_cleanup_tmp_cache() {
 # Shared formatters
 # ==============================================================================
 
-# Block bar: 10 chars, █ filled / ░ empty, color-coded by percentage
+# Block bar: always exactly 10 cells, █ filled / ░ empty, coloured by percentage.
+#
+# The bar is built by appending whole characters rather than `printf %Ns | tr`:
+# `tr` maps byte to byte, and █ is three bytes (e2 96 88), so that form emitted a
+# run of bare e2 bytes — invalid UTF-8 that renders as replacement glyphs.
+#
+# The drawn value is clamped to 0..100 while the caller keeps reporting the true
+# percentage. rate_limits.spend_limit is documented as able to exceed 100, and an
+# unclamped value drew a wider bar and broke the fixed-width layout around it.
+#
+# Accepts a fractional percentage: rate_limits reports floats.
+#
 # Usage: tcs_block_bar <pct> <warn_pct> <danger_pct>
 tcs_block_bar() {
-  local pct="$1" warn="$2" danger="$3"
+  local pct warn danger
+  pct=$(tcs_round_int "${1:-0}")    || pct=0
+  warn=$(tcs_round_int "${2:-70}")  || warn=70
+  danger=$(tcs_round_int "${3:-90}") || danger=90
+
   local color="$GREEN"
   [[ "$pct" -ge "$warn" ]]   && color="$YELLOW"
   [[ "$pct" -ge "$danger" ]] && color="$RED"
 
-  local filled=$(( pct / 10 ))
+  local drawn="$pct"
+  [[ "$drawn" -lt 0   ]] && drawn=0
+  [[ "$drawn" -gt 100 ]] && drawn=100
+
+  local filled=$(( drawn / 10 ))
   local empty=$(( 10 - filled ))
-  local bar
-  bar=$(printf "%${filled}s" | tr ' ' '█')$(printf "%${empty}s" | tr ' ' '░')
+  local bar="" i
+  for (( i = 0; i < filled; i++ )); do bar+='█'; done
+  for (( i = 0; i < empty;  i++ )); do bar+='░'; done
   printf '%b%s%b' "$color" "$bar" "$RESET"
 }
 
@@ -398,7 +473,7 @@ tcs_load_ccusage() {
         local time_left=""
         if [[ -n "$remaining_mins" && "$remaining_mins" != "null" ]]; then
           local m
-          m=$(printf '%.0f' "$remaining_mins" 2>/dev/null || echo 0)
+          m=$(tcs_round_int "$remaining_mins") || m=0
           if [[ "$m" -ge 60 ]]; then
             time_left="$(( m / 60 ))h $(( m % 60 ))m left"
           else

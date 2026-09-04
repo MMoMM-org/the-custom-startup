@@ -5,7 +5,7 @@
 # Single-line, placeholder-based statusline for Claude Code.
 # Shows session cost (USD) as the budget indicator.
 #
-# Configuration: ~/.config/the-agentic-startup/statusline.toml
+# Configuration: ~/.config/the-custom-startup/statusline.toml
 #                or <repo>/.claude/statusline.toml  (per-repo override)
 #
 # Format placeholders:
@@ -178,7 +178,9 @@ format_session() {
 
   if [[ -n "$session_cost" && "$session_cost" != "null" ]]; then
     local formatted_cost cost_color
-    formatted_cost=$(awk -v c="$session_cost" 'BEGIN { printf "%.2f", c + 0 }')
+    # LC_ALL=C: awk parses the period-decimal input regardless of locale, but its
+    # *output* follows LC_NUMERIC, so a comma locale renders $12,50.
+    formatted_cost=$(LC_ALL=C awk -v c="$session_cost" 'BEGIN { printf "%.2f", c + 0 }')
     cost_color="$TCS_COLOR_SUCCESS"
 
     if tcs_decimal_gte "$session_cost" "$tcs_cfg_cost_danger"; then
@@ -226,7 +228,7 @@ The Custom Startup — Standard Statusline
 
 Usage: the-custom-startup-statusline-standard.sh [--help]
 
-Config: ~/.config/the-agentic-startup/statusline.toml
+Config: ~/.config/the-custom-startup/statusline.toml
         <repo>/.claude/statusline.toml  (per-repo override)
 
 Format placeholders:
