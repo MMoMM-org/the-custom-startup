@@ -1,10 +1,16 @@
 ---
 name: testing
-description: Testing patterns for behavior-driven tests. Use when writing tests, creating test factories, structuring test files, or deciding what to test. Do NOT use for UI-specific testing (see frontend-testing or react-testing skills).
+description: "Testing patterns for behavior-driven tests. Use when writing tests, creating test factories, structuring test files, or deciding what to test. Do NOT use for UI-specific testing (see frontend-testing or react-testing skills)."
 user-invocable: true
+argument-hint: "[module to write tests for, or test file/directory to audit]"
+allowed-tools: Read, Bash, Grep, Glob
 ---
 
+## Persona
+
 **Active skill: tcs-patterns:testing**
+
+Act as a test engineer who treats tests as executable specifications of behavior. A test that survives a refactor of the implementation's internals is doing its job; one that breaks is testing the wrong thing.
 
 For verifying test effectiveness through mutation analysis, load `tcs-patterns:mutation-testing`.
 For evaluating test quality against Dave Farley's properties, load `tcs-patterns:test-design-reviewer`.
@@ -12,207 +18,88 @@ For UI testing patterns, load `tcs-patterns:frontend-testing` or `tcs-patterns:r
 
 Adapted from citypaul/.dotfiles
 
----
+## Interface
 
-## Core Principle
+TestSmell {
+  kind: IMPLEMENTATION_DETAIL | PRIVATE_METHOD | SPLIT_ASSERTION | EXTRACTED_FOR_TESTABILITY | MIRRORED_TEST_FILE | SHARED_MUTABLE_STATE | REDEFINED_SCHEMA | COVERAGE_THEATER
+  file: string
+  line?: number
+  fix: string
+}
 
-**Test behavior, not implementation.** 100% coverage through business behavior, not implementation details.
+State {
+  target = $ARGUMENTS
+  mode: WRITE | AUDIT
+  smells: TestSmell[]
+}
 
-Validation code in `payment-validator.ts` gets 100% coverage by testing `processPayment()` behavior — NOT by directly testing validator functions.
+**In scope:** What a test asserts, how test data is built, and how test files are organized, for non-UI code.
+**Out of scope:** Component and browser tests, mutation scoring, RED-GREEN-REFACTOR cycle enforcement.
 
----
+## Constraints
 
-## Test Through Public API Only
+**Always:**
+- Test behavior through the public API — the entry point a real caller uses.
+- Assert the whole result object with `toEqual`, not one field per assertion.
+- Build test data with factory functions taking `Partial<T>` overrides.
+- Parse factory output through the real production schema, so it returns a complete, valid object.
+- Cover the error branches, not only the happy path.
 
-Never test implementation details. Test behavior through public APIs.
+**Never:**
+- Test private methods, internal state, or how a function does its work.
+- Spy on the function under test and assert only that it was called.
+- Extract a function into its own file to give it a unit test.
+- Mirror implementation files 1:1 with test files.
+- Hold test state in `let` + `beforeEach` — a factory gives each test fresh state.
+- Redefine a production schema inside a test file.
 
-```typescript
-// ❌ WRONG - testing HOW (implementation detail)
-it('should call validateAmount', () => {
-  const spy = jest.spyOn(validator, 'validateAmount');
-  processPayment(payment);
-  expect(spy).toHaveBeenCalled();
-});
+## Reference Materials
 
-// ❌ WRONG - testing private methods
-it('should validate CVV format', () => {
-  const result = validator._validateCVV('123');
-  expect(result).toBe(true);
-});
+- reference/public-api-testing.md — public-API examples, extraction rule, file layout
+- reference/test-factories.md — factory pattern, composition, anti-patterns
+- reference/coverage-theater.md — patterns that fake 100% coverage
 
-// ✅ CORRECT - testing behavior through public API
-it('should reject negative amounts', () => {
-  const payment = getMockPayment({ amount: -100 });
-  const result = processPayment(payment);
-  expect(result).toEqual({ success: false, error: expect.stringContaining('Amount must be positive') });
-});
+## Workflow
+
+### 1. Name the Behavior Under Test
+
+Identify the public entry point a caller actually invokes, and state the business behavior in the test name. If the behavior can only be reached through a private function or an internal helper, the test target is wrong — move up to the caller.
+
+Read reference/public-api-testing.md when the boundary is unclear.
+
+### 2. Construct Test Data
+
+Write or reuse a factory for each entity the behavior needs. Read reference/test-factories.md.
+
+### 3. Write the Assertion
+
+Assert the complete returned value in one `toEqual`. Add a case for each error branch the behavior can take.
+
+### 4. Audit an Existing Suite
+
+Identify the test framework first, then grep for its spy, call-assertion and shared-setup constructs. For Jest and Vitest:
+
+```bash
+grep -rn "spyOn\|toHaveBeenCalled\|beforeEach" "$TARGET" 2>/dev/null
 ```
 
-**Why assert the whole result?** Two reasons, and both bite in practice:
+The equivalents elsewhere: `unittest.mock.patch` and `assert_called*` under pytest, `setUp` under unittest, recorder assertions under gomock.
 
-1. `expect(result.success).toBe(false)` does **not** narrow a discriminated union. A following `result.error` is member access on the un-narrowed `Result`, which fails to compile under strict TypeScript — see `tcs-patterns:typescript-strict`.
-2. `toEqual` pins the entire result shape, so a mutation that corrupts or adds an unasserted field fails the test. Split assertions leave those fields unchecked and let such mutants survive — see `tcs-patterns:mutation-testing`.
+Then check by reading, since these do not grep cleanly:
+- calls into private or underscore-prefixed functions
+- test files that mirror implementation file names 1:1
+- single-caller helpers extracted into their own file with their own test
+- schemas redefined in the test file instead of imported
+- assertions split across several `expect` calls on one result
 
----
+Read reference/coverage-theater.md and classify anything matching as `COVERAGE_THEATER`.
 
-## Don't Extract for Testability
+### 5. Report
 
-Never extract a function into its own file purely to give it its own unit test. Extract for readability, DRY (same **knowledge** used in multiple places), or separation of concerns — not testability.
+Group smells by kind. Give file:line and a concrete replacement for each. Where coverage looks complete but the assertions are weak, say so and point at `tcs-patterns:mutation-testing` for the falsifiable check.
 
-If code is inline in a function, it gets coverage through that function's behavioral tests.
+### Entry Point
 
-```typescript
-// ❌ WRONG — extracted single-use helper with its own test file
-// prepare-participant-data.ts (new file, one caller)
-export const prepareParticipantData = (items: Item[]) => ({
-  yourClaims: items.filter(i => i.isClaimed && i.isClaimedByCurrentUser),
-  available: items.filter(i => !i.isClaimedByCurrentUser),
-});
-
-// ✅ CORRECT — inline in consumer, tested through its behavior
-export const loadParticipantView = async (db, eventId, userId) => {
-  const items = await getItems(db, eventId);
-  const yourClaims = items.filter(i => i.isClaimed && i.isClaimedByCurrentUser);
-  const available = items.filter(i => !i.isClaimedByCurrentUser);
-  return { yourClaims, available };
-};
-```
-
-**When extraction IS justified (DRY):** same filtering logic used by multiple consumers with the same business meaning. But still test it through each consumer's behavior, not as an isolated unit.
-
----
-
-## No 1:1 Mapping Between Tests and Implementation
-
-Don't create test files that mirror implementation files.
-
-```
-# ❌ WRONG
-tests/
-  payment-validator.test.ts  ← 1:1 mapping
-  payment-processor.test.ts  ← 1:1 mapping
-
-# ✅ CORRECT
-tests/
-  process-payment.test.ts    ← Tests behavior, not implementation files
-```
-
----
-
-## Test Factory Pattern
-
-For test data, use factory functions with optional overrides. **No `let`/`beforeEach` — use factories for fresh state.**
-
-```typescript
-// Import real schema — never redefine in tests
-import { UserSchema } from '@/schemas/user';
-
-const getMockUser = (overrides?: Partial<User>): User =>
-  UserSchema.parse({
-    id: 'user-123',
-    name: 'Test User',
-    email: 'test@example.com',
-    role: 'user',
-    isActive: true,
-    createdAt: new Date('2024-01-01'),
-    ...overrides,
-  });
-
-// Usage
-it('creates user with custom email', () => {
-  const user = getMockUser({ email: 'custom@example.com' });
-  expect(createUser(user).success).toBe(true);
-});
-```
-
-**Why validate with schema?** Ensures test data matches production schema. Schema changes fail tests immediately — no silent drift.
-
-### Factory Composition
-
-```typescript
-const getMockOrder = (overrides?: Partial<Order>): Order =>
-  OrderSchema.parse({
-    id: 'order-1',
-    items: [getMockItem()],
-    customer: getMockCustomer(),
-    payment: getMockPayment(),
-    ...overrides,
-  });
-
-// Override nested objects
-it('calculates total with multiple items', () => {
-  const order = getMockOrder({
-    items: [getMockItem({ price: 100 }), getMockItem({ price: 200 })],
-  });
-  expect(calculateTotal(order)).toBe(300);
-});
-```
-
-### Anti-Patterns
-
-```typescript
-// ❌ WRONG — shared mutable state
-let user: User;
-beforeEach(() => { user = { id: 'user-123', name: 'Test User', ... }; });
-it('test 1', () => { user.name = 'Modified'; }); // mutates shared state!
-it('test 2', () => { expect(user.name).toBe('Test User'); }); // fails!
-
-// ✅ CORRECT — fresh state per test
-it('test 1', () => { const user = getMockUser({ name: 'Modified' }); });
-it('test 2', () => { const user = getMockUser(); expect(user.name).toBe('Test User'); });
-
-// ❌ WRONG — incomplete objects
-const getMockUser = () => ({ id: 'user-123' }); // missing required fields
-
-// ❌ WRONG — redefining schemas in tests
-const UserSchema = z.object({ ... }); // already defined in src/schemas/user.ts!
-```
-
----
-
-## Coverage Theater Detection
-
-Watch for these patterns that give fake 100% coverage:
-
-**Pattern 1 — Mock the function being tested:**
-```typescript
-// ❌ Tests nothing
-it('calls validator', () => {
-  const spy = jest.spyOn(validator, 'validate');
-  validate(payment);
-  expect(spy).toHaveBeenCalled(); // meaningless
-});
-```
-
-**Pattern 2 — Only verify function was called:**
-```typescript
-// ❌ No behavior validation
-it('processes payment', () => {
-  const spy = jest.spyOn(processor, 'process');
-  handlePayment(payment);
-  expect(spy).toHaveBeenCalledWith(payment); // so what?
-});
-```
-
-**Pattern 3 — 100% line coverage, 0% branch coverage:**
-```typescript
-// ❌ Only happy path — missing all error branches
-it('validates payment', () => {
-  expect(validate(getMockPayment()).success).toBe(true);
-});
-```
-
----
-
-## Summary Checklist
-
-- [ ] Testing behavior through public API (not implementation details)
-- [ ] No mocks of the function being tested
-- [ ] No tests of private methods or internal state
-- [ ] Factory functions return complete, valid objects
-- [ ] Factories validate with real schemas (not redefined in tests)
-- [ ] `Partial<T>` for type-safe overrides
-- [ ] No `let`/`beforeEach` — factories for fresh state
-- [ ] Edge cases covered (not just happy path)
-- [ ] Tests survive refactoring of implementation internals
-- [ ] No 1:1 mapping between test files and implementation files
+- Writing new tests → steps 1–3.
+- Auditing a file, directory, or suite → steps 4–5.
+- Reviewing tests just written → steps 4–5 against those files.

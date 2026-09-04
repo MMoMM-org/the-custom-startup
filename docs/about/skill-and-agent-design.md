@@ -161,7 +161,7 @@ For agent-internal skills (e.g. `project-discovery`, `code-quality-review`), set
 
 ## Worked Examples
 
-Three recent decisions, with the criterion that drove each.
+Four recent decisions, with the criterion that drove each.
 
 ### Inline `agentic-patterns` into `build-feature`
 
@@ -182,6 +182,18 @@ Three recent decisions, with the criterion that drove each.
 **Action:** No change.
 
 **Trade-off:** Three agents to maintain instead of one + three skills. Mitigated by each agent being already lean — there's little duplication to deduplicate.
+
+### Keep `tcs-patterns:test-design-reviewer` as a forked skill (not convert to a subagent)
+
+**Inputs:** Its whole job is to produce a review report and hand it back — the Load-Bearing Question answers "No, a summary suffices", which points at a subagent. But it already carries `context: fork` + `agent: Explore`, it is reachable as `/test-design-reviewer`, and three other skills route to it by name.
+
+**Criterion:** `context: fork` resolves the Load-Bearing Question's "No" branch without leaving the skill mechanism. The skill body runs in an isolated context and only its report returns — the subagent runtime contract — while the `/` entry point and the `tcs-patterns:<name>` address that other skills cite both survive. A subagent has neither.
+
+**Action:** No change to the mechanism. Converted to PICS in place (#120).
+
+**Trade-off:** It cannot be dispatched in parallel from a workflow the way an agent can. Nothing dispatches it that way today; `tcs-workflow:xdd-tdd` and the sibling pattern skills all reference it by name for a human or the parent to invoke.
+
+**Generalises to:** a reviewer that must stay addressable by name and by `/` belongs in the plugin that owns its domain as a forked skill. Move it to an agent when parallel dispatch becomes the point — that is the property `context: fork` cannot supply.
 
 ### Keep `the-chief` as an agent (not convert to a `/triage` skill)
 
