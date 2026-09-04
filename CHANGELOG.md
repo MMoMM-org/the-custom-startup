@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **ccusage was still being fetched even when `rate_limits` supplied the bar.** The loader ran
+  unconditionally before rendering, so preferring `rate_limits` stopped *using* the result
+  without stopping the `bun x ccusage` spawn, the up-to-5s timeout stall, or the growth of
+  `~/.bun/install/cache`. It now runs only when the fallback bar will actually be drawn.
+- **The documented config path did not exist.** Script headers, `--help` output and the example
+  TOML all named `~/.config/the-agentic-startup/`, while the code reads
+  `~/.config/the-custom-startup/` — so a config placed as documented was silently ignored.
 - **The bar emitted invalid UTF-8.** It was built with `printf "%Ns" | tr ' ' '█'`, and `tr`
   maps byte to byte while `█` is three bytes (`e2 96 88`) — so a "full" bar was ten bare `e2`
   bytes, rendering as replacement glyphs in every terminal. Built by appending whole characters

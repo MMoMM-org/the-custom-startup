@@ -2,7 +2,7 @@
 #
 # Shared config for all statusline variants.
 #
-# Global:   ~/.config/the-agentic-startup/statusline.toml
+# Global:   ~/.config/the-custom-startup/statusline.toml
 # Per-repo: <repo>/.claude/statusline.toml  (overrides global, partial is fine)
 #
 # Which script reads which settings:

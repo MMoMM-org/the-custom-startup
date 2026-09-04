@@ -270,3 +270,25 @@ def test_statusline_renders_cleanly(home):
     r = _render(payload, home)
     assert "syntax error" not in r.stderr, r.stderr
     assert "command not found" not in r.stderr, r.stderr
+
+def test_ccusage_is_not_spawned_when_rate_limits_are_present(home, tmp_path):
+    """The point of preferring rate_limits is not fetching what it replaces.
+
+    A `bun` stub on PATH records any invocation. Reading rate_limits and then
+    still spawning the subprocess would keep the 5s timeout stall and the
+    unbounded ~/.bun/install/cache the change is meant to remove.
+    """
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    marker = tmp_path / "bun-was-called"
+    stub = bindir / "bun"
+    stub.write_text(f'#!/bin/sh\ntouch "{marker}"\nexit 1\n')
+    stub.chmod(0o755)
+
+    payload = dict(BASE_PAYLOAD)
+    payload["rate_limits"] = {
+        "five_hour": {"used_percentage": 23.5, "resets_at": 4102444800}
+    }
+    _render(payload, home, env={"PATH": f"{bindir}:/usr/bin:/bin:/usr/local/bin"})
+
+    assert not marker.exists(), "ccusage was spawned even though rate_limits was present"

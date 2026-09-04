@@ -2,13 +2,15 @@
 #
 # The Custom Startup — Enhanced Statusline
 #
-# Two-line statusline with git info, context bar, token budget bar (via ccusage),
-# OSC 8 hyperlinks, and session cost/duration.
+# Two-line statusline with git info, context bar, and a subscription budget bar
+# from the payload's rate_limits (ccusage token bar as the fallback), plus OSC 8
+# hyperlinks.
 #
-# Configuration: ~/.config/the-agentic-startup/statusline.toml
+# Configuration: ~/.config/the-custom-startup/statusline.toml
 #                or <repo>/.claude/statusline.toml  (per-repo override)
 #
-# Dependencies: jq, ccusage (bun x ccusage), git
+# Dependencies: jq, git. bun + ccusage only on the fallback path, and only
+#               fetched when that path will actually render.
 # Input:        JSON from Claude Code via stdin
 # Output:       Two formatted statusline lines with ANSI colors
 
@@ -180,7 +182,7 @@ The Custom Startup — Enhanced Statusline
 
 Usage: the-custom-startup-statusline-enhanced.sh [--help]
 
-Config: ~/.config/the-agentic-startup/statusline.toml
+Config: ~/.config/the-custom-startup/statusline.toml
         <repo>/.claude/statusline.toml  (per-repo override)
 
 Key options:
@@ -211,5 +213,15 @@ EOF
 tcs_load_config
 read_input
 tcs_load_git_info "$CURRENT_DIR"
-tcs_load_ccusage  "$CURRENT_DIR"
+
+# Only reach for ccusage when its number would actually be rendered. Loading it
+# regardless would keep everything preferring rate_limits is meant to avoid: a
+# `bun x ccusage` spawn per cache window, a stall of up to the 5s timeout when
+# that call cannot complete, and a ~/.bun/install/cache that never prunes old
+# versions. read_input has already run, so RL_5H is known here.
+if [[ "$tcs_cfg_show_budget_bar" == "true" && -z "${RL_5H:-}" \
+    && "${tcs_cfg_budget_mode:-token}" == "token" ]]; then
+  tcs_load_ccusage "$CURRENT_DIR"
+fi
+
 render

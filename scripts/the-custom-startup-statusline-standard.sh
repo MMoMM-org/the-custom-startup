@@ -5,7 +5,7 @@
 # Single-line, placeholder-based statusline for Claude Code.
 # Shows session cost (USD) as the budget indicator.
 #
-# Configuration: ~/.config/the-agentic-startup/statusline.toml
+# Configuration: ~/.config/the-custom-startup/statusline.toml
 #                or <repo>/.claude/statusline.toml  (per-repo override)
 #
 # Format placeholders:
@@ -228,7 +228,7 @@ The Custom Startup — Standard Statusline
 
 Usage: the-custom-startup-statusline-standard.sh [--help]
 
-Config: ~/.config/the-agentic-startup/statusline.toml
+Config: ~/.config/the-custom-startup/statusline.toml
         <repo>/.claude/statusline.toml  (per-repo override)
 
 Format placeholders:
