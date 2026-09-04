@@ -1,6 +1,6 @@
 # Skills Reference
 
-All 20 skills provided by the `tcs-workflow` plugin.
+All 23 skills provided by the `tcs-workflow` plugin. Two of them — `implement-direct` and `implement-incremental` — are dispatch targets rather than commands: `/implement` selects one for you, so they carry no slash command of their own.
 
 For the design rationale behind choosing a skill over a subagent or inlining capability into an agent, see [skill-and-agent-design.md](../about/skill-and-agent-design.md).
 
@@ -67,7 +67,7 @@ What do you need to do?
 
 | Command | Plugin | Purpose | When to use |
 |---------|--------|---------|-------------|
-| `/implement` | tcs-workflow | Executes the implementation plan from a specification | After spec is validated — loops through phases and delegates to specialists |
+| `/implement` | tcs-workflow | Entry point that detects a spec's decomposition artifacts and dispatches to the matching execution loop | After spec is validated — routes to `implement-incremental` (phase loop) or `implement-direct` (phase-less) |
 | `/validate` | tcs-workflow | Validate specifications, implementations, constitution compliance, or understanding | Before starting implementation; also after to check for drift |
 
 ### Quality

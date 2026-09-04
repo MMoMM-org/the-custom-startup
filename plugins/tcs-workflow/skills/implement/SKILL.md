@@ -1,296 +1,99 @@
 ---
 name: implement
-description: Executes the implementation plan from a specification. Loops through plan phases, delegates tasks to specialists, updates phase status on completion. Supports resuming from partially-completed plans.
+description: "Implementation entry point. Use to execute a completed specification — 'implement spec 017', 'run the plan', 'build what we specified' — at whichever decomposition tier it was written for."
 user-invocable: true
 argument-hint: "spec ID to implement (e.g., 001), or file path"
-allowed-tools: Task, TaskOutput, Agent, TodoWrite, Bash, Write, Edit, Read, LS, Glob, Grep, MultiEdit, AskUserQuestion, Skill, TeamCreate, TeamDelete, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
+allowed-tools: Bash, Read, LS, Glob, Grep, AskUserQuestion, Skill
 ---
 
 ## Persona
 
 **Active skill: tcs-workflow:implement**
 
-Act as an implementation orchestrator that executes specification plans by delegating all coding tasks to specialist agents.
+Act as the implementation entry-point dispatcher: resolve the spec, see which decomposition artifacts exist, hand off to the loop that implements them. You orchestrate nothing yourself — every loop body lives in a sub-skill.
 
 **Implementation Target**: $ARGUMENTS
 
 ## Interface
 
-Phase {
-  number: number
-  title: string
-  file: string               // path to phase-N.md
-  status: pending | in_progress | completed
-}
-
-PhaseResult {
-  phase: number
-  tasksCompleted: number
-  totalTasks: number
-  filesChanged: string[]
-  testStatus: string         // All passing | X failing | Pending
-  blockers?: string[]
+DispatchTarget {
+  tier: Direct | Incremental
+  skill: implement-direct | implement-incremental
+  artifact: string           // what triggered the dispatch, shown to the user
 }
 
 State {
   target = $ARGUMENTS
-  spec: string                   // resolved spec directory path
-  planDirectory: string          // path to plan/ directory (empty for legacy)
-  manifest: string               // plan/README.md contents (or legacy implementation-plan.md)
-  phases: Phase[]                // discovered from manifest, with status from frontmatter
-  mode: Standard | Agent Team
-  currentPhase: number
-  results: PhaseResult[]
+  specDirectory: string
+  recordedTier: Direct | Incremental | None   // from spec.py --read; None for pre-tier specs
+  dispatch: DispatchTarget
 }
 
 ## Constraints
 
 **Always:**
-- Delegate ALL implementation tasks to subagents or teammates via Task tool.
-- Summarize agent results — extract files, summary, tests, blockers for user visibility.
-- Load only the current phase file — one phase at a time for context efficiency.
-- Wait for user confirmation at phase boundaries.
-- Run Skill(tcs-workflow:validate) drift check at each phase checkpoint.
-- Run Skill(tcs-workflow:validate) constitution if CONSTITUTION.md exists.
-- Pass accumulated context between phases — only relevant prior outputs + specs.
-- Update phase file frontmatter AND plan/README.md checkbox on phase completion.
-- Skip already-completed phases when resuming an interrupted plan.
-- Dispatch tdd-guardian before every implementer subagent (4c).
-- Two-stage review: spec compliance (4f) ALWAYS before code quality (4g).
-- Fresh subagent per task: provide curated context only — no session history bleed.
-- Select cheapest model that can handle task complexity (4b).
+- Detect from the artifacts on disk. They are ground truth; a recorded tier can be stale.
+- Cross-check the detected route against the recorded tier, and report a mismatch before dispatching anything.
+- Pass `$ARGUMENTS` to the sub-skill unchanged.
+- Show which route was selected and which artifact triggered it, before handing off.
+- Invoke exactly one sub-skill per invocation.
 
 **Never:**
-- Implement code directly — you are an orchestrator ONLY.
-- Display full agent responses — extract key outputs only.
-- Skip phase boundary checkpoints.
-- Proceed past a blocking constitution violation (L1/L2).
-- Start code quality review (4g) before spec compliance (4f) passes.
-- Dispatch implementer when tdd-guardian returns BLOCK (unless YOLO=true).
-- Pass session history to implementer subagents — scene-setting only.
-- Skip Finalize on completion — a spec stuck on `Ready` after shipping is the bug this skill exists to prevent. Step 7 runs Finalize regardless of the user's commit/PR choice.
+- Implement, orchestrate, or review anything. The sub-skills own all execution.
+- Guess a route. An artifact this workflow does not implement stops the dispatch.
+- Modify spec artifacts directly. The mismatch audit row goes through `xdd-meta`; each sub-skill owns its own updates and its own completion summary.
+- Post-process a sub-skill's output. It reports directly to the user.
 
 ## Reference Materials
 
-- [Output Format](reference/output-format.md) — Task result guidelines, phase summary, completion summary
-- [Output Example](examples/output-example.md) — Concrete example of expected output format
-- [Perspectives](reference/perspectives.md) — Implementation perspectives and work stream mapping
+A dispatcher owns no references; each sub-skill owns its own:
+
+- [implement-direct](../implement-direct/SKILL.md) — phase-less loop, for a spec with no decomposition artifact
+- [implement-incremental](../implement-incremental/SKILL.md) — phase loop with the per-task review chain
 
 ## Workflow
 
-### 1. Initialize
+### 1. Resolve
 
-Invoke Skill(tcs-workflow:xdd-meta) to read the spec.
+Invoke `Skill(tcs-workflow:xdd-meta)` with `$ARGUMENTS` to resolve the spec directory and read its status. The `--read` output carries `decomposition_tier`, empty for every spec written before tiers existed. When `$ARGUMENTS` is a file path or freeform brief rather than a spec ID, skip resolution and route to `implement-direct`.
 
-Discover the plan structure:
+### 2. Detect
 
-match (spec) {
-  plan/ directory exists => {
-    Read plan/README.md (the manifest).
-    Parse phase checklist lines matching: `- [x] [Phase N: Title](phase-N.md)` or `- [ ] [Phase N: Title](phase-N.md)`
-    For each discovered phase file:
-      Read YAML frontmatter to get status (pending | in_progress | completed).
-    Populate phases[] with number, title, file path, and status.
-  }
-  implementation-plan.md exists => {
-    Read legacy monolithic plan.
-    Set planDirectory to empty (legacy mode — no phase loop, no status updates).
-  }
-  neither => Error: No implementation plan found.
-}
-
-Present discovered phases with their statuses. Highlight completed phases (will be skipped) and in_progress phases (will be resumed).
-
-Task metadata found in plan files uses: `[activity: areas]`, `[parallel: true]`, `[ref: SDD/Section X.Y]`
-
-Offer optional git setup:
-
-match (git repository) {
-  exists => AskUserQuestion: Create feature branch | Skip git integration
-  none   => proceed without version control
-}
-
-### 2. Select Mode
-
-AskUserQuestion:
-  Standard (default) — parallel fire-and-forget subagents with TodoWrite tracking
-  Agent Team — persistent teammates with shared TaskList and coordination
-
-Recommend Agent Team when:
-  phases >= 3 | cross-phase dependencies | parallel tasks >= 5 | shared state across tasks
-
-### 3. Phase Loop
-
-For each phase in phases where phase.status != completed:
-1. Mark phase status as in_progress (call step 6).
-2. Execute the phase (step 4).
-3. Validate the phase (step 5).
-4. AskUserQuestion after validation:
-
-match (user choice) {
-  "Continue to next phase" => continue loop
-  "Pause"                  => break loop (plan is resumable)
-  "Review output"          => present details, then re-ask
-  "Address issues"         => fix, then re-validate current phase
-}
-
-After the loop:
-
-match (all phases completed) {
-  true  => run step 7 (Complete)
-  false => report progress, plan is resumable from next pending phase
-}
-
-### 4. Execute Phase
-
-Read `plan/phase-{phase.number}.md` for current phase tasks.
-Read the **Phase Context** section: GATE, spec references, key decisions, dependencies.
-
-Extract all unchecked tasks:
-```bash
-grep "^- \[ \]" plan/phase-{N}.md
-```
-
-Create TodoWrite entries for ALL tasks before starting any task.
-
-For each unchecked task (in order):
-
-#### 4a. Task Validation
-
-Check that the task has:
-- An SDD reference: `[ref: SDD/...]`
-- Prime/Test/Implement/Validate/Success structure
-
-If missing: AskUserQuestion "Task [name] has no SDD ref or TDD structure. Add before dispatching?" (--fast flag skips this check)
-
-#### 4b. Model Selection
-
-Select model based on task complexity:
-- **haiku** — 1-2 files, complete spec, mechanical (isolated function, config, file rename)
-- **sonnet** — multi-file integration, cross-concern coordination, pattern matching
-- **opus** — design judgment required, broad codebase understanding, debugging complex state
-
-Signals in task text: `[parallel: true]` → haiku unless integration; `[activity: domain-modeling]` or `[activity: data-architecture]` → sonnet; no ref + complex → opus.
-
-#### 4c. tdd-guardian Dispatch
-
-Dispatch `tdd-guardian` agent (haiku) with:
-- `task_description`: full task text from plan file
-- `sdd_ref`: extracted from `[ref: SDD/...]` tag, if present
-- `proposed_approach`: ask implementer subagent for their plan before writing code
-
-Guardian result:
-- **APPROVE** → proceed to 4d
-- **BLOCK** → halt, present reason to user, do NOT dispatch implementer
-  - YOLO=true: log violation to `docs/ai/memory/yolo-review.md`, proceed as APPROVE with warning
-
-#### 4d. Implementer Subagent Dispatch
-
-Dispatch a **fresh** implementer subagent. Provide ONLY:
-1. Exact task text (copy from plan file — do not summarize)
-2. Relevant SDD section (read and include verbatim if ref present)
-3. Scene-setting (3-5 lines):
-   - Spec name and ID
-   - Current phase number and title
-   - Repo root structure (top-level dirs only)
-   - Current branch name
-4. Do NOT include session history, prior task outputs, or unrelated context
-
-Implementer subagent must:
-- Follow TDD (RED before GREEN)
-- Commit their work
-- Self-review before reporting
-
-#### 4e. Implementer Status Handling
+Inspect the resolved directory, top to bottom, first match wins:
 
 ```
-DONE                → proceed to 4f (spec compliance review)
-DONE_WITH_CONCERNS  → read concerns carefully; if about correctness/scope → address before 4f; if observational → note and proceed to 4f
-NEEDS_CONTEXT       → provide the missing context, re-dispatch with same model (see "Re-dispatch by mode" below)
-BLOCKED             → assess blocker:
-                       - Context problem → provide context, re-dispatch with same model
-                       - Complexity problem → re-dispatch with upgraded model
-                       - Task too large → break into sub-tasks, create new TodoWrite entries
-                       - Plan is wrong → escalate to user with explanation
+manifest.md or units/ present      => STOP. Report the artifact found; this
+                                      workflow implements no tier that produces
+                                      it. Do not route.
+plan/README.md present             => Incremental, triggered by "plan/README.md"
+implementation-plan.md present     => Incremental, triggered by the legacy plan
+requirements.md or solution.md      => Direct, triggered by "requirements.md + solution.md"
+nothing of the above               => ERROR. No specification artifacts found.
+                                      Run /xdd first, or pass a brief.
 ```
 
-**Never** silently ignore a BLOCKED or NEEDS_CONTEXT status.
+The unknown-artifact branch is checked first on purpose. A spec carrying both a plan and an unrecognised artifact is ambiguous, not incremental, and routing it would send work to the wrong loop.
 
-> **Re-dispatch by mode.** "Re-dispatch" does NOT mean the prior subagent resumes with its memory intact — what it means depends on the mode chosen in step 2:
-> - **Standard mode** — implementers are fire-and-forget subagents with no persistent context. A re-dispatch is a **fresh, stateless subagent**: re-supply the curated task context (per 4d) plus the new fix list or missing context. Never assume the new subagent "remembers" prior attempts.
-> - **Agent Team mode** — the implementer is a live, addressable teammate. Use `SendMessage` to continue it **in place** with its context intact, instead of rebuilding context.
->
-> `SendMessage` applies **only** in Agent Team mode. In Standard mode there is no addressable agent, so a fresh re-dispatch is the correct and only path — this is expected behavior, not a missing capability.
+### 3. Cross-check
 
-#### 4f. Spec Compliance Review
+Compare the detected route against `recordedTier`:
 
-Dispatch the `spec-compliance-reviewer` agent (Agent tool, `subagent_type: spec-compliance-reviewer`) with:
-- Full task requirements text
-- Implementer's report (what they claim they built)
-- Instruction: read actual code, do not trust the report
-
-Agent verdict (PASS or FAIL with fix list):
-- ✅ PASS → proceed to 4g
-- ❌ FAIL → re-dispatch implementer with the fix list (see "Re-dispatch by mode" in 4e) → re-dispatch `spec-compliance-reviewer` (repeat until PASS)
-
-#### 4g. Code Quality Review
-
-Dispatch the `code-quality-reviewer` agent (Agent tool, `subagent_type: code-quality-reviewer`) with BASE_SHA and HEAD_SHA of implementer's commits.
-
-Agent verdict (PASS or FAIL with fix list, scoped to BASE_SHA..HEAD_SHA):
-- ✅ PASS → proceed to 4h
-- ❌ FAIL → re-dispatch implementer with the fix list (see "Re-dispatch by mode" in 4e) → re-dispatch `code-quality-reviewer` (repeat until PASS)
-
-**Spec compliance review (4f) must pass before code quality review (4g) begins.**
-
-#### 4h. Mark Task Complete
-
-Update task checkbox in plan file: `- [ ]` → `- [x]`
-Mark TodoWrite task as completed.
-Announce: "Task [name] complete. [N] tasks remaining in phase [M]."
-
-After all tasks in phase: announce "Phase [N] complete. Run `/verify` then `/review`."
-
----
-
-YOLO mode `[ "${YOLO:-false}" = "true" ]`:
-- Skip confirmation prompts at 4a (task validation) and 4b (model selection confirmation)
-- tdd-guardian BLOCK → log to `docs/ai/memory/yolo-review.md`, proceed
-- Proceed through 4f and 4g automatically without user confirmation between reviews
-
-### 5. Validate Phase
-
-1. Run Skill(tcs-workflow:validate) drift check for spec alignment.
-2. Run Skill(tcs-workflow:validate) constitution check if CONSTITUTION.md exists.
-3. Verify all phase tasks are complete.
-4. Mark phase status as completed (call step 6).
-
-Drift types: Scope Creep, Missing, Contradicts, Extra.
-When drift is detected: AskUserQuestion — Acknowledge | Update impl | Update spec | Defer
-
-Read reference/output-format.md and present the phase summary accordingly.
-AskUserQuestion: Continue to next phase | Review output | Pause | Address issues
-
-### 6. Update Phase Status
-
-1. Edit phase file frontmatter: `status: {old}` → `status: {new}`
-2. If status is completed, edit plan/README.md:
-   `- [ ] [Phase {N}: {Title}](phase-{N}.md)` → `- [x] [Phase {N}: {Title}](phase-{N}.md)`
-
-### 7. Complete
-
-1. Run Skill(tcs-workflow:validate) for final validation (comparison mode).
-2. **Finalize the spec.** Build shippingNotes as a one-line summary:
-   - If git integration is active: list the merge commit / PR # (if known) and any version bumps detected in the diff.
-   - Otherwise: list the headline deliverables (files added/modified, tests added).
-   Invoke `Skill(tcs-workflow:xdd-meta)` with `finalize <specId> -- <shippingNotes>`.
-   The Finalize step is idempotent — safe to call even on a previously-finalized spec.
-3. Read reference/output-format.md and present completion summary accordingly. Include the Finalize result (new phase, decision-log row) so the user sees the spec is closed.
-
-match (git integration) {
-  active => AskUserQuestion: Commit + PR | Commit only | Skip
-  none   => AskUserQuestion: Run tests | Deploy to staging | Manual review
+match (recordedTier) {
+  None                  => proceed silently. Pre-tier specs are the normal case.
+  agrees with detection => proceed.
+  disagrees             => log the mismatch to the spec's Decisions Log through
+                           `xdd-meta`, report both — what was recorded, what was
+                           found — then ask before proceeding. Usually an
+                           interrupted /xdd run: Incremental recorded, no plan yet.
 }
 
-In Agent Team: send sequential shutdown_request to each teammate, then TeamDelete.
+### 4. Hand off
 
+Show one line, then invoke the sub-skill with `$ARGUMENTS` unchanged:
+
+```
+Detected: plan/README.md → routing to implement-incremental
+Detected: no decomposition artifact → routing to implement-direct
+```
+
+Each sub-skill reads its own artifacts, runs its own loop, and presents its own completion summary — nothing returns here.

@@ -14,7 +14,9 @@ the-custom-startup/
 │   ├── tcs-workflow/             # Core workflow orchestration plugin
 │   │   ├── .claude-plugin/       # Plugin manifest (plugin.json)
 │   │   ├── agents/               # Workflow agents (e.g., the-chief)
-│   │   ├── skills/               # 20 skills (user-invocable + autonomous)
+│   │   ├── skills/               # 23 skills (user-invocable + autonomous)
+│   │   │                         #   implement dispatches to implement-direct /
+│   │   │                         #   implement-incremental by decomposition tier
 │   │   │   │                     # Core: analyze, brainstorm, constitution, debug,
 │   │   │   │                     #   document, guide, implement, parallel-agents,
 │   │   │   │                     #   receive-review, refactor, review, test,

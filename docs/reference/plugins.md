@@ -10,9 +10,9 @@ The Custom Agentic Startup is distributed as six Claude Code marketplace plugins
 /plugin install tcs-workflow@the-custom-startup
 ```
 
-The core workflow plugin. It gives you a spec-driven, test-verified development lifecycle through 20 skills covering everything from specification and validation through implementation, review, and documentation. All other TCS plugins integrate with and extend the workflow that tcs-workflow defines.
+The core workflow plugin. It gives you a spec-driven, test-verified development lifecycle through 23 skills covering everything from specification and validation through implementation, review, and documentation. All other TCS plugins integrate with and extend the workflow that tcs-workflow defines.
 
-20 skills — full reference: [skills.md](skills.md)
+23 skills — full reference: [skills.md](skills.md)
 
 Two output styles ship with tcs-workflow:
 

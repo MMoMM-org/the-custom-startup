@@ -19,7 +19,10 @@ Act as an expert requirements gatherer that creates specification documents for 
 SpecStatus {
   prd: Complete | Incomplete | Skipped
   sdd: Complete | Incomplete | Skipped
-  plan: Complete | Incomplete | Skipped
+  decomposition: {
+    tier:   Direct | Incremental | None
+    status: Complete | Incomplete | Skipped
+  }
   readiness: HIGH | MEDIUM | LOW
 }
 
@@ -28,6 +31,7 @@ State {
   spec: string                   // resolved spec directory path (from xdd-meta)
   perspectives = []
   mode: Standard | Agent Team
+  tier: Direct | Incremental     // from reference/classifier.md, confirmed by the user
   status: SpecStatus
 }
 
@@ -37,7 +41,8 @@ State {
 - Delegate research tasks to specialist agents via Task tool.
 - Display ALL agent responses to user — complete findings, not summaries.
 - Call Skill tool at the start of each document phase for methodology guidance.
-- Run phases sequentially — PRD, SDD, PLAN (user can skip phases).
+- Run phases sequentially — PRD, SDD, Decomposition (user can skip phases).
+- Classify the decomposition tier from the documents, never from the raw request — the classifier runs only after PRD and SDD exist.
 - Wait for user confirmation between each document phase.
 - Track decisions in specification README via reference/output-format.md.
 - Git integration is optional — offer branch/commit as an option.
@@ -46,10 +51,13 @@ State {
 - Write specification content yourself — always delegate to specialist skills.
 - Proceed to next document phase without user approval.
 - Skip decision logging when user makes non-default choices.
+- Apply a tier without the user confirming it. The classifier recommends; the user decides.
+- Recommend or record `Factory` — it is a reserved name with no implementation.
 
 ## Reference Materials
 
 - [Perspectives](reference/perspectives.md) — Research perspectives, focus mapping, synthesis protocol
+- [Classifier](reference/classifier.md) — Signals, ordered rules, rationale format, override handling, decision logging
 - [Output Format](reference/output-format.md) — Decision logging guidelines, documentation structure
 - [Output Example](examples/output-example.md) — Concrete example of expected output format
 
@@ -63,7 +71,7 @@ match (spec status) {
   new      => AskUserQuestion:
                 Start with PRD (recommended) — define requirements first
                 Start with SDD — skip to technical design
-                Start with PLAN — skip to implementation planning
+                Start with Decomposition — skip to tier classification (requires existing PRD + SDD)
   existing => Analyze document status (check for [NEEDS CLARIFICATION] markers).
               Suggest continuation point based on incomplete documents.
 }
@@ -103,17 +111,38 @@ Focus: HOW the solution will be built. Scope: design decisions and interfaces �
 
 If CONSTITUTION.md exists: invoke `Skill(tcs-workflow:validate)` constitution to verify architecture aligns with rules.
 
-AskUserQuestion: Continue to PLAN (recommended) | Finalize SDD
+AskUserQuestion: Continue to Decomposition (recommended) | Finalize SDD
 
-### 6. Write PLAN
+### 6. Decompose
 
-Invoke `Skill(tcs-workflow:xdd-plan)`.
+Read `reference/classifier.md` and apply the ordered rules to `requirements.md` and `solution.md`.
 
-Focus: task sequencing and dependencies. Scope: what and in what order — defer duration estimates.
+1. **Extract** the five signals — `change_type`, `feature_count`, `ac_count`, `component_count`, `parallel_markers`. Read only; ask the user nothing. A signal you cannot determine takes its conservative value and is named as such in the rationale.
+2. **Recommend** one tier by applying the rules top to bottom, first match wins.
+3. **Surface** the recommendation with the signals that produced it, so the user can check them against their own documents.
+4. **Ask** the user to choose (under header "Decompose"):
+   - **Direct** — implement straight from PRD + SDD. No plan artifact. Recommended for fixes, refactors, doc changes, and single-criterion features.
+   - **Incremental** — a phase plan with TDD tasks and the per-task review chain. Recommended for anything with real breadth.
 
-After `xdd-plan` returns, invoke `Skill(tcs-workflow:validate)` with the spec ID. Surface Alignment findings — plan tasks that modify existing files may reference targets whose current state has drifted from the SDD's picture.
+   Highlight the classifier's recommendation. The user may override freely.
+5. **Record** the choice via `Skill(tcs-workflow:xdd-meta)` — the README Status table `Decomposition tier` row **and** a Decisions Log row carrying the recommendation, the choice, and the rationale.
+6. **Route**:
 
-AskUserQuestion: Finalize specification (recommended) | Revisit PLAN
+match (chosen tier) {
+  Direct      => write no decomposition artifact; mark the README Documents
+                 table's `plan/` row `skipped`, noting the tier; go to step 7.
+  Incremental => Invoke `Skill(tcs-workflow:xdd-plan)`.
+                 Focus: task sequencing and dependencies. Scope: what and in
+                 what order — defer duration estimates.
+                 Then invoke `Skill(tcs-workflow:validate)` with the spec ID and
+                 surface Alignment findings — plan tasks that modify existing
+                 files may reference targets whose current state has drifted
+                 from the SDD's picture.
+}
+
+On a tier change after artifacts already exist, leave the prior artifacts in place and flag them stale in the decision log. Never delete them.
+
+AskUserQuestion: Finalize specification (recommended) | Revisit Decomposition
 
 ### 7. Finalize
 
