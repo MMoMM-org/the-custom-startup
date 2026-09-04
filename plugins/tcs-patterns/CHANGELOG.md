@@ -8,6 +8,14 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [1.4.4] - 2026-09-04
+
+### Changed
+
+- **`testing` and `test-design-reviewer` converted to PICS (#120)** — the last two skills in the plugin that predated the convention. Both now carry a Persona section opening with the active-skill announcement, an Interface, `Always:`/`Never:` constraints, and a numbered Workflow, plus the `argument-hint` and `allowed-tools` frontmatter their nineteen siblings already declared. `test-design-reviewer` had no active-skill line at all, so a user could not tell from the terminal that it had activated.
+- **Educational content moved behind progressive disclosure.** `testing` keeps its examples in `reference/public-api-testing.md`, `reference/test-factories.md` and `reference/coverage-theater.md` (218 → 102 lines); `test-design-reviewer` keeps the eight scoring bands in `reference/farley-properties.md` and the report template in `reference/output-format.md` (151 → 89 lines). The `## Test Design Review: [File/Suite Name]` template artifact no longer sits in the skill's own heading hierarchy.
+- **`testing`'s audit step names the test framework before grepping.** Its smell patterns were Jest-shaped with nothing said about it, so a Python or Go suite would grep clean and read as passing.
+
 ## [1.4.3] - 2026-09-03
 
 ### Added
