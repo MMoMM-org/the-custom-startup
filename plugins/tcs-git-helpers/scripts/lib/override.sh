@@ -160,7 +160,7 @@ _check_and_consume_override() {
   if mkdir -p "$sentinel_dir" 2>/dev/null; then
     local now_ts
     now_ts="$(date +%s)"
-    if printf '%s\n' "$now_ts" > "${sentinel}.tmp" 2>/dev/null; then
+    if { printf '%s\n' "$now_ts" > "${sentinel}.tmp"; } 2>/dev/null; then
       mv "${sentinel}.tmp" "$sentinel" 2>/dev/null \
         || rm -f "${sentinel}.tmp" 2>/dev/null
     fi

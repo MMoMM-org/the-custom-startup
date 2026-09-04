@@ -1,5 +1,37 @@
 # Changelog
 
+## [2.2.20] - 2026-09-04
+
+### Fixed
+
+- **Best-effort cache writes printed a raw shell error when the data dir was unwritable
+  (issue #125).** Every push from a sandboxed environment emitted a line like
+
+      .githooks/pre-push: line 131: …/<hash>-pr-state.json.tmp: Operation not permitted
+
+  The push succeeded — this was noise that looked like a hook crash.
+
+  `cmd > "$f.tmp" 2>/dev/null` does not silence it. Redirections are applied left to right, so
+  the output redirection is attempted *before* stderr is pointed at `/dev/null`; the shell
+  reports the failing `>` on its own still-open stderr, and neither the `2>/dev/null` nor a
+  trailing `|| true` can catch that. The `mkdir -p "$data_dir" || return 0` guard above it does
+  not help either, because `mkdir -p` succeeds on an existing directory regardless of whether it
+  is writable.
+
+  The issue named the `pre-push` template. The same construct was in **eight** places, and three
+  of them — `cache.sh`'s TSV, JSON-sibling and no-jq PR-state writers — had no `2>/dev/null` at
+  all, so they leaked unconditionally. All eight now silence stderr before the redirection is
+  attempted, either by grouping (`{ cmd > "$f.tmp"; } 2>/dev/null`) or, where a brace group was
+  already there, by moving the `2>/dev/null` ahead of the `>`. Note that
+  `{ cmd; } > "$f.tmp" 2>/dev/null` does **not** work — the group's own redirection is applied
+  before its stderr redirection, the same trap one level up.
+
+  `tests/bats/best-effort-write-silence.bats` drives each writer against an unwritable directory
+  and fails on any stderr that is not one of the plugin's structured `tcs-git-helpers:` lines,
+  plus a static guard against the `> "…tmp" 2>/dev/null` idiom returning.
+
+  Hook bundle version `h4` → `h5`: `pre-push` and `lib-bundle.sh` changed.
+
 ## [2.2.19] - 2026-09-04
 
 ### Fixed
