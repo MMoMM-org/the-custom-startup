@@ -27,25 +27,46 @@ source "$(dirname "${BASH_SOURCE[0]}")/the-custom-startup-statusline-lib.sh"
 read_input() {
   IFS= read -r -d '' JSON_INPUT || true
 
-  MODEL=$(echo "$JSON_INPUT"        | jq -r '.model.display_name // "?"')
-  CURRENT_DIR=$(echo "$JSON_INPUT"  | jq -r '.workspace.current_dir // .cwd // ""')
-  CTX_PCT=$(tcs_round_int \
-    "$(echo "$JSON_INPUT" | jq -r '.context_window.used_percentage // 0')") || CTX_PCT=0
+  # One jq pass, not one per field: this runs on every render and the client
+  # waits for it, so seven extra process spawns are seven too many.
+  #
+  # Every field is emitted, and empty ones become "-". Without that sentinel an
+  # absent field collapses to nothing, the positional read below slides by one,
+  # and every value after it is silently the wrong one — a missing model name
+  # would arrive as the directory and a missing rate limit would be rendered
+  # from whatever followed it.
+  local fields
+  fields=$(printf '%s' "$JSON_INPUT" | jq -r '[
+      ((.model.display_name)? // ""),
+      ((.workspace.current_dir)? // (.cwd)? // ""),
+      (((.context_window.used_percentage)? // 0) | tostring),
+      (((.rate_limits.five_hour.used_percentage)? // "") | tostring),
+      (((.rate_limits.five_hour.resets_at)? // "") | tostring),
+      (((.rate_limits.seven_day.used_percentage)? // "") | tostring),
+      (((.cost.total_duration_ms)? // "") | tostring),
+      (((.cost.total_cost_usd)? // "") | tostring)
+    ] | map(if . == "" or . == "null" then "-" else . end) | @tsv' 2>/dev/null)
 
-  # Server-side subscription usage. Every read guards at the leaf: `rate_limits`
-  # appears only for subscribers after the first API response, and each window
-  # disappears independently once its resets_at passes — so the parent can be
-  # present while five_hour is not.
-  RL_5H=$(echo "$JSON_INPUT"       | jq -r '.rate_limits.five_hour.used_percentage // empty')
-  RL_5H_RESET=$(echo "$JSON_INPUT" | jq -r '.rate_limits.five_hour.resets_at // empty')
-  RL_7D=$(echo "$JSON_INPUT"       | jq -r '.rate_limits.seven_day.used_percentage // empty')
+  # Unparseable stdin degrades to the same shape rather than to an empty string,
+  # so the read below cannot scramble instead of falling back.
+  [ -n "$fields" ] || fields=$(printf -- '-\t-\t0\t-\t-\t-\t-\t-')
 
-  # `cost` is not part of the statusline payload contract — it is absent on every
-  # version checked, including 2.1.252. Read it as empty rather than 0 so the
-  # renderer can tell "no cost available" from "nothing spent", and print nothing
-  # instead of a permanent $0.00.
-  DURATION_MS=$(echo "$JSON_INPUT"  | jq -r '.cost.total_duration_ms // empty')
-  SESSION_COST=$(echo "$JSON_INPUT" | jq -r '.cost.total_cost_usd // empty')
+  IFS=$'\t' read -r MODEL CURRENT_DIR CTX_RAW \
+    RL_5H RL_5H_RESET RL_7D DURATION_MS SESSION_COST <<< "$fields"
+
+  # Turn the sentinels back into the emptiness each consumer expects. `cost` is
+  # not part of the statusline payload contract — absent on every version
+  # checked, including 2.1.252 — so an empty SESSION_COST means "no figure
+  # available" and nothing is printed, rather than a permanent $0.00.
+  [ "$MODEL" = "-" ] && MODEL="?"
+  [ "$CURRENT_DIR" = "-" ] && CURRENT_DIR=""
+  [ "$RL_5H" = "-" ] && RL_5H=""
+  [ "$RL_5H_RESET" = "-" ] && RL_5H_RESET=""
+  [ "$RL_7D" = "-" ] && RL_7D=""
+  [ "$DURATION_MS" = "-" ] && DURATION_MS=""
+  [ "$SESSION_COST" = "-" ] && SESSION_COST=""
+
+  CTX_PCT=$(tcs_round_int "$CTX_RAW") || CTX_PCT=0
 }
 
 # Time until an epoch-seconds deadline, as "2h 14m" / "43m". Empty when the

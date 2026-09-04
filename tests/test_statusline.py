@@ -292,3 +292,108 @@ def test_ccusage_is_not_spawned_when_rate_limits_are_present(home, tmp_path):
     _render(payload, home, env={"PATH": f"{bindir}:/usr/bin:/bin:/usr/local/bin"})
 
     assert not marker.exists(), "ccusage was spawned even though rate_limits was present"
+
+
+# ---------------------------------------------------------------------------
+# 5. One jq pass over the payload (#130)
+# ---------------------------------------------------------------------------
+
+
+def _jq_counting_path(tmp_path):
+    """A PATH whose `jq` records each invocation before delegating to the real one."""
+    bindir = tmp_path / "countbin"
+    bindir.mkdir()
+    counter = tmp_path / "jq-calls"
+    real = subprocess.run(["bash", "-c", "command -v jq"], capture_output=True, text=True).stdout.strip()
+    stub = bindir / "jq"
+    stub.write_text(f'#!/bin/sh\necho x >> "{counter}"\nexec "{real}" "$@"\n')
+    stub.chmod(0o755)
+    return f"{bindir}:/usr/bin:/bin:/usr/local/bin", counter
+
+
+def test_payload_is_parsed_in_a_single_jq_call(home, tmp_path):
+    """Eight spawns per render is eight too many on a path the client waits for."""
+    path, counter = _jq_counting_path(tmp_path)
+    payload = dict(BASE_PAYLOAD)
+    payload["rate_limits"] = {
+        "five_hour": {"used_percentage": 23.5, "resets_at": 4102444800}
+    }
+    _render(payload, home, env={"PATH": path})
+    calls = counter.read_text().count("x") if counter.exists() else 0
+    assert calls == 1, f"{calls} jq invocations; the payload should be read in one pass"
+
+
+def test_a_missing_field_does_not_shift_the_others(home):
+    """The sentinel guard: an empty field must not slide the positional read."""
+    payload = dict(BASE_PAYLOAD)
+    del payload["model"]                       # first field of the batch
+    payload["rate_limits"] = {
+        "five_hour": {"used_percentage": 23.5, "resets_at": 4102444800}
+    }
+    out = ANSI.sub("", _render(payload, home).stdout)
+    # The 5h reading must still be its own value, not something shifted into it.
+    assert "24% 5h" in out, out
+    # And the directory must not have been filled with the model name.
+    assert "Opus 5" not in out.split("|")[1] if "|" in out else True
+
+
+def test_unparseable_stdin_degrades_to_placeholders(home):
+    r = subprocess.run(
+        ["bash", str(ENHANCED)],
+        input="this is not json",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env={"PATH": "/usr/bin:/bin:/usr/local/bin", "HOME": str(home)},
+        cwd=str(REPO_ROOT),
+    )
+    assert r.returncode == 0, r.stderr
+    assert "syntax error" not in r.stderr, r.stderr
+    assert r.stdout.strip(), "must still render a line"
+
+
+# ---------------------------------------------------------------------------
+# 6. Caches live in an owned directory (#131)
+# ---------------------------------------------------------------------------
+
+
+def test_cache_dir_is_created_mode_700(tmp_path):
+    r = _lib('tcs_cache_dir', env={"TMPDIR": str(tmp_path), "XDG_RUNTIME_DIR": str(tmp_path)})
+    d = Path(r.stdout.strip())
+    assert d.is_dir(), f"no cache dir: {r.stdout!r} {r.stderr}"
+    assert oct(d.stat().st_mode)[-3:] == "700", oct(d.stat().st_mode)
+
+
+def test_cache_dir_is_not_a_loose_tmp_path(tmp_path):
+    r = _lib('tcs_cache_dir', env={"TMPDIR": str(tmp_path), "XDG_RUNTIME_DIR": str(tmp_path)})
+    d = Path(r.stdout.strip())
+    assert d.parent == tmp_path, f"expected a subdirectory of the runtime dir, got {d}"
+
+
+def test_cache_dir_refuses_a_symlinked_directory(tmp_path):
+    """A pre-created symlink must disable caching, not be written through."""
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    runtime = tmp_path / "runtime"
+    runtime.mkdir()
+    import os
+
+    uid = os.getuid()
+    (runtime / f"tcs-statusline-{uid}").symlink_to(elsewhere)
+    r = _lib('tcs_cache_dir; echo "rc=$?"',
+             env={"TMPDIR": str(runtime), "XDG_RUNTIME_DIR": str(runtime)})
+    # Exact: "rc=1" as a substring also matches rc=127, i.e. "function missing".
+    assert r.stdout.strip().endswith("rc=1"), \
+        f"symlinked cache dir was accepted (or tcs_cache_dir is missing): {r.stdout!r}"
+    assert str(elsewhere) not in r.stdout
+
+
+def test_no_loose_tmp_cache_paths_remain_in_the_scripts():
+    """Structural guard against a new writer reintroducing a predictable /tmp path."""
+    offenders = []
+    for path in sorted(SCRIPTS.glob("the-custom-startup-statusline-*.sh")):
+        for n, line in enumerate(path.read_text().splitlines(), 1):
+            if re.search(r'"/tmp/tcs-statusline', line):
+                offenders.append(f"{path.name}:{n}: {line.strip()}")
+    assert not offenders, "use tcs_cache_dir:\n" + "\n".join(offenders)

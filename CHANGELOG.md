@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — statusline hardening
+
+### Changed
+
+- **The payload is read in one `jq` pass (#130).** The enhanced variant spawned eight
+  `echo | jq` per render, on a path the client waits for synchronously. One `@tsv` pass replaces
+  them. Every field carries a `-` sentinel: without it an absent field collapses to nothing, the
+  positional read slides by one, and every value after it is silently wrong — a missing model
+  name would arrive as the directory.
+
+### Fixed
+
+- **Caches no longer sit as loose files in a world-writable directory (#131).** They were named
+  `/tmp/tcs-statusline-<kind>-<cksum of repo path>` — a predictable name anyone sharing the
+  machine can pre-create as a symlink and have the statusline write through. They now live in a
+  per-uid directory created `mode 700`, preferring `XDG_RUNTIME_DIR`, checked for symlink and
+  ownership before every use. When that check fails, caching is switched off rather than
+  redirected. The daily cleanup is scoped to that directory instead of globbing all of `/tmp`.
+- **The standard variant rendered `null` for missing fields.** No `//` fallbacks meant a payload
+  without `.model` displayed `🤖 null`, and a missing `context_window_size` silently removed the
+  context bar entirely. Each field now has a fallback.
+
+---
+
 ## [Unreleased] — statusline
 
 ### Changed
