@@ -51,7 +51,7 @@ version: "1.0"
 | 1 | Tier metadata foundation | IMPLEMENTED | 4 | [phase-1.md](phase-1.md) |
 | 2 | Classification in xdd | IMPLEMENTED | 3 | [phase-2.md](phase-2.md) |
 | 3 | Implementation split and dispatch | IMPLEMENTED | 5 | [phase-3.md](phase-3.md) |
-| 4 | Registration and end-to-end validation | IN_PROGRESS | 3 | [phase-4.md](phase-4.md) |
+| 4 | Registration and end-to-end validation | IMPLEMENTED | 3 | [phase-4.md](phase-4.md) |
 
 ---
 
@@ -141,7 +141,7 @@ Phase 1 (metadata) ──┬──> Phase 2 (xdd classifies) ──┬──> Ph
 - [x] [Phase 1: Tier metadata foundation](phase-1.md)
 - [x] [Phase 2: Classification in xdd](phase-2.md)
 - [x] [Phase 3: Implementation split and dispatch](phase-3.md)
-- [ ] [Phase 4: Registration and end-to-end validation](phase-4.md)
+- [x] [Phase 4: Registration and end-to-end validation](phase-4.md)
 
 ---
 

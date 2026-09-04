@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Registration and end-to-end validation"
-status: in_progress
+status: complete
 version: "1.0"
 phase: 4
 ---
@@ -135,7 +135,7 @@ Registers the two new skills everywhere the repo tracks skills, and proves end t
      - [x] The tier decision log carries every field the PRD's tracking table needs — after fix 3 `[ref: PRD/Tracking Requirements]`
      - [x] The user-facing surface is still two entry points — `implement-direct` and `implement-incremental` are both `user-invocable: false` `[ref: SDD/Quality Requirements; Usability]`
 
-- [ ] **T4.3 Phase Validation and spec closeout** `[activity: validate]`
+- [x] **T4.3 Phase Validation and spec closeout** `[activity: validate]`
 
   - Run the full suite: `.venv/bin/python -m pytest tests/ -q`, `bats plugins/*/tests/bats`, `bash scripts/ci/check-changelog-version-sync.sh --allow-ahead 1`.
   - Run the `tcs-helper:skill-author` audit over all four touched skills — `xdd`, `xdd-meta`, `implement`, and both new sub-skills — and confirm 0 findings `[ref: SDD/Constraints; CON-7]`.
@@ -200,4 +200,14 @@ Registers the two new skills everywhere the repo tracks skills, and proves end t
     this repository keeps no central spec index table for it to appear in.
   - Confirm the dispatcher is under 100 lines `[ref: SDD/Quality Requirements; Maintainability]`. **99 lines**, asserted by `test_dispatcher_stays_small`. Registration also re-checked: 23 skill directories, 23 documented, pinned by `test_documented_skill_count_matches_reality`.
   - Invoke `xdd-meta` with `finalize 017 -- <shipping notes>` so this spec does not become another entry in the stale-`Ready` pattern its own PRD cites as evidence.
+
+    **Done 2026-09-04.** Spec 017 is `Implemented`, close-out row names PR #121.
+
   - Revert the manual plugin sync recorded under T4.2, then open the PR.
+
+    **Done 2026-09-04**, in that order inverted: the PR was opened first
+    (**#121**) so the finalize note could name it, then the sync reverted. Until
+    the PR merges and CI releases the plugin, the installed `tcs-workflow` no
+    longer carries tier dispatch — `/implement` behaves exactly as it does on
+    `main`, which is the pre-tier phase loop, and `/xdd` step 6 writes a plan
+    without classifying. That is the intended state for an unmerged branch.

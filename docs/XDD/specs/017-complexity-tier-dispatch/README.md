@@ -5,16 +5,16 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-09-03 |
-| **Current Phase** | Ready |
+| **Current Phase** | Implemented |
 | **Decomposition tier** | Incremental |
-| **Last Updated** | 2026-09-03 |
+| **Last Updated** | 2026-09-04 |
 
 ## Documents
 
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | 5 Must / 2 Should / 2 Could / 5 Won't; 24 acceptance criteria; 0 clarification markers |
-| solution.md | completed | 7 ADRs all confirmed; 24 EARS criteria tracing 1:1 to the PRD |
+| solution.md | completed | 7 ADRs all confirmed; 27 EARS criteria tracing 1:1 to the PRD |
 | plan/ | completed | 4 phases, 15 tasks, 4 parallel; all 24 PRD criteria mapped |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
@@ -36,6 +36,7 @@
 | 2026-09-03 | SDD complete | 7 ADRs confirmed. 24 EARS acceptance criteria tracing 1:1 to the PRD's 24. |
 | 2026-09-03 | Real red-green coverage comes from extracting two pieces of logic to Python | TCS skills are Markdown interpreted by an agent and mostly cannot be unit-tested. Rather than pretend otherwise, the plan extracts the classifier rules (T2.1) and the dispatcher detection table (T3.1) as testable functions — the latter asserted over all 16 existing spec directories, which is the executable form of CON-5. Everything else is verified structurally and by scripted walkthroughs; broader skill evals stay with issue #84. |
 | 2026-09-03 | PLAN complete; spec Ready | 4 phases, 15 tasks. All 24 PRD acceptance criteria map to at least one task (verified mechanically). Alignment check clean: every pre-existing path the plan references exists; the 6 absent paths are the artifacts this spec creates. |
+| 2026-09-04 | Implementation complete | PR #121 — 16 commits on `spec/017-complexity-tier-dispatch`. `implement` split into a 99-line dispatcher plus hidden `implement-direct` and `implement-incremental`; `xdd` step 6 classifies; `decomposition_tier` recorded in README, decision log and `spec.py --read`. T4.2 walkthroughs found and fixed three defects the suite had missed. 337 pytest, 787 bats, changelog sync all green. |
 
 ## Context
 
