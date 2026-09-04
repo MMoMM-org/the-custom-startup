@@ -211,3 +211,16 @@ Registers the two new skills everywhere the repo tracks skills, and proves end t
     longer carries tier dispatch — `/implement` behaves exactly as it does on
     `main`, which is the pre-tier phase loop, and `/xdd` step 6 writes a plan
     without classifying. That is the intended state for an unmerged branch.
+
+    The marketplace clone reverted completely (`git checkout` plus
+    `git clean -fd` over `plugins/tcs-workflow/skills`, nothing else was dirty).
+    The cache reverted by content but not by directory listing: this sandbox
+    refuses recursive deletion anywhere under the Claude config tree, so
+    `implement/`, `xdd/` and `xdd-meta/` were restored by copy and match `main`
+    exactly, while three paths remain as inert residue —
+    `skills/implement-direct/`, `skills/implement-incremental/`, and
+    `skills/xdd/reference/classifier.md`. Nothing reaches them: the restored
+    `implement` is the pre-split orchestrator and references neither sub-skill,
+    and both sub-skills are `user-invocable: false` so they cannot be reached
+    from the menu either. A `/plugin update` clears them, and is wanted
+    regardless — the cache is pinned at 4.4.4 while `main` carries 4.4.7.
