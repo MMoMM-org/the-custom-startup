@@ -153,7 +153,51 @@ Registers the two new skills everywhere the repo tracks skills, and proves end t
     its negative-existence phrasing because ADR-3 wants Factory named as reserved;
     `xdd` and `xdd-meta` carry mildly workflow-summarising descriptions that
     predate this spec and are out of its scope.
-  - Walk the PRD's 24 acceptance criteria and the SDD's 24 EARS criteria; confirm each maps to a task that ran. Any criterion with no evidence is a gap, not a pass.
-  - Confirm the dispatcher is under 100 lines `[ref: SDD/Quality Requirements; Maintainability]`.
+
+    **Re-audited 2026-09-04**, after the three T4.2 fixes changed `implement`,
+    `xdd` and `classifier.md`. All five skills pass the mechanical checklist —
+    frontmatter, no duplicate keys, PICS structure, Always/Never lists, numbered
+    workflow steps, all under 500 lines. The duplicate-key check is now the
+    regression guard for the `implement-incremental` defect the first audit
+    found. On instruction purity: the `implement` and `xdd` edits are pure
+    instruction; `classifier.md`'s new item carries a rationale clause, but items
+    1 and 2 of that same section already do, so it matches the file's register
+    rather than introducing drift. **0 new findings.**
+  - Walk the PRD's 24 acceptance criteria and the SDD's 27 EARS criteria; confirm each maps to a task that ran. Any criterion with no evidence is a gap, not a pass.
+
+    **Walked 2026-09-04. Every criterion maps to work that ran.** (The plan's
+    Context Priming said 24 EARS criteria; the document carries 27 — 5 + 6 + 3 +
+    4 + 5 main-flow, 2 error-handling, 2 edge-case. Corrected in the manifest.)
+    Evidence falls in three classes:
+
+    - **Walked live** in T4.2 — PRD 1.1, 1.2, 1.4, 1.5, 2.2, 2.4, 2.6, 3.1, 3.2,
+      3.3, 4.1, 4.2, 4.5, 5.1, 5.2, 5.3, 5.4, 5.5.
+    - **Unit-tested**, executable — PRD 2.1 (`test_every_signal_combination_yields_a_known_tier`),
+      2.3 (`test_classification_is_deterministic`), 4.3
+      (`test_unrecognised_decomposition_artifact_stops`), 4.4
+      (`test_disagreeing_record_reports`), plus the sweeps behind 3.3 and 4.2
+      over all 17 spec directories.
+    - **Structural only — one criterion.** PRD 2.5, "when the user overrides,
+      both the recommendation and the override are captured". `classifier.md`
+      documents the override row and
+      `test_classifier_reference_requires_rationale_and_override_logging` pins
+      it, but neither walkthrough overrode the recommendation, so the path has
+      never run. A narrow gap: an override writes the same Decisions Log row as
+      an accepted recommendation, which did run, differing only in its text.
+
+    **The constitution gate was exercised deliberately.** The scratch project had
+    no `CONSTITUTION.md`, so the Direct walkthrough only took the skip branch,
+    leaving PRD 5.4 / the SDD's `WHERE a CONSTITUTION.md exists` criterion with no
+    evidence at all. One was added afterwards and the check re-run against the
+    same commit: it found an L1 violation (a public function with no docstring)
+    and returned **BLOCKING**. The gate runs and blocks; that the loop then halts
+    on it is `implement-direct` step 4 plus
+    `test_direct_tier_keeps_drift_and_constitution_checks`.
+
+    Both Should-Have features hold: escalation out of Direct is `implement-direct`
+    step 2, pinned by `test_direct_tier_escalates_rather_than_growing_phases`;
+    tier-aware status reporting is `spec.py --read`'s `decomposition_tier` key —
+    this repository keeps no central spec index table for it to appear in.
+  - Confirm the dispatcher is under 100 lines `[ref: SDD/Quality Requirements; Maintainability]`. **99 lines**, asserted by `test_dispatcher_stays_small`. Registration also re-checked: 23 skill directories, 23 documented, pinned by `test_documented_skill_count_matches_reality`.
   - Invoke `xdd-meta` with `finalize 017 -- <shipping notes>` so this spec does not become another entry in the stale-`Ready` pattern its own PRD cites as evidence.
   - Revert the manual plugin sync recorded under T4.2, then open the PR.

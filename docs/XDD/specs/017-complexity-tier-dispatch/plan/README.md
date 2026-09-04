@@ -94,7 +94,7 @@ When implementation requires changes from the specification:
 **Specification**:
 
 - `docs/XDD/specs/017-complexity-tier-dispatch/requirements.md` — Product Requirements (24 acceptance criteria)
-- `docs/XDD/specs/017-complexity-tier-dispatch/solution.md` — Solution Design (7 ADRs, 24 EARS criteria)
+- `docs/XDD/specs/017-complexity-tier-dispatch/solution.md` — Solution Design (7 ADRs, 27 EARS criteria)
 - `docs/about/skill-and-agent-design.md` — the extraction threshold behind ADR-5 and ADR-7
 - `docs/about/principles.md` — progressive disclosure, activation contract
 
