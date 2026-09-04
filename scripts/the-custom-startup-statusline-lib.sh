@@ -343,18 +343,38 @@ tcs_cleanup_tmp_cache() {
 # Shared formatters
 # ==============================================================================
 
-# Block bar: 10 chars, █ filled / ░ empty, color-coded by percentage
+# Block bar: always exactly 10 cells, █ filled / ░ empty, coloured by percentage.
+#
+# The bar is built by appending whole characters rather than `printf %Ns | tr`:
+# `tr` maps byte to byte, and █ is three bytes (e2 96 88), so that form emitted a
+# run of bare e2 bytes — invalid UTF-8 that renders as replacement glyphs.
+#
+# The drawn value is clamped to 0..100 while the caller keeps reporting the true
+# percentage. rate_limits.spend_limit is documented as able to exceed 100, and an
+# unclamped value drew a wider bar and broke the fixed-width layout around it.
+#
+# Accepts a fractional percentage: rate_limits reports floats.
+#
 # Usage: tcs_block_bar <pct> <warn_pct> <danger_pct>
 tcs_block_bar() {
-  local pct="$1" warn="$2" danger="$3"
+  local pct warn danger
+  pct=$(tcs_round_int "${1:-0}")    || pct=0
+  warn=$(tcs_round_int "${2:-70}")  || warn=70
+  danger=$(tcs_round_int "${3:-90}") || danger=90
+
   local color="$GREEN"
   [[ "$pct" -ge "$warn" ]]   && color="$YELLOW"
   [[ "$pct" -ge "$danger" ]] && color="$RED"
 
-  local filled=$(( pct / 10 ))
+  local drawn="$pct"
+  [[ "$drawn" -lt 0   ]] && drawn=0
+  [[ "$drawn" -gt 100 ]] && drawn=100
+
+  local filled=$(( drawn / 10 ))
   local empty=$(( 10 - filled ))
-  local bar
-  bar=$(printf "%${filled}s" | tr ' ' '█')$(printf "%${empty}s" | tr ' ' '░')
+  local bar="" i
+  for (( i = 0; i < filled; i++ )); do bar+='█'; done
+  for (( i = 0; i < empty;  i++ )); do bar+='░'; done
   printf '%b%s%b' "$color" "$bar" "$RESET"
 }
 

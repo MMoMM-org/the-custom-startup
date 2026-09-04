@@ -178,7 +178,9 @@ format_session() {
 
   if [[ -n "$session_cost" && "$session_cost" != "null" ]]; then
     local formatted_cost cost_color
-    formatted_cost=$(awk -v c="$session_cost" 'BEGIN { printf "%.2f", c + 0 }')
+    # LC_ALL=C: awk parses the period-decimal input regardless of locale, but its
+    # *output* follows LC_NUMERIC, so a comma locale renders $12,50.
+    formatted_cost=$(LC_ALL=C awk -v c="$session_cost" 'BEGIN { printf "%.2f", c + 0 }')
     cost_color="$TCS_COLOR_SUCCESS"
 
     if tcs_decimal_gte "$session_cost" "$tcs_cfg_cost_danger"; then

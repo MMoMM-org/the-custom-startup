@@ -59,7 +59,7 @@ Available placeholders:
 
 ### Enhanced
 
-Two-line statusline with richer git context, a token budget bar (via [ccusage](https://github.com/ryoppippi/ccusage)), and clickable OSC 8 hyperlinks to the remote repository.
+Two-line statusline with richer git context, a subscription budget bar from the statusline payload's `rate_limits` (falling back to [ccusage](https://github.com/ryoppippi/ccusage)), and clickable OSC 8 hyperlinks to the remote repository.
 
 ```
 [Opus 4.6] | 📁 my-project | 🔗 my-project | 🌿 main +2~1
@@ -67,7 +67,8 @@ Two-line statusline with richer git context, a token budget bar (via [ccusage](h
 ```
 
 **Script:** `the-custom-startup-statusline-enhanced.sh`
-**Dependencies:** `jq`, `git`, `bun` + `ccusage` (for token budget bar)
+**Dependencies:** `jq`, `git`. `bun` + `ccusage` only for the fallback token
+budget bar, which is not used when `rate_limits` is present.
 
 #### Line 1 — identity
 
@@ -84,20 +85,42 @@ Two-line statusline with richer git context, a token budget bar (via [ccusage](h
 |---|---|
 | `🧠 ██████░░░░ 62%` | Context window usage bar |
 | `⏱ 14m 30s` | Session duration |
-| `💰 ██░░░░░░░░ 9% $1.23` | Budget bar + block cost |
-| `⏳ 137m left` | Estimated time remaining in billing block |
+| `🎫 ██░░░░░░░░ 24% 5h · 41% 7d` | Subscription usage, 5-hour and 7-day windows |
+| `⏳ 2h 14m left` | Time until the 5-hour window resets |
 
-#### Token budget bar
+#### Budget bar
 
-The budget bar tracks how much of your plan's token allowance has been used in the current 5-hour billing window. It uses `inputTokens + outputTokens` from the active [ccusage](https://github.com/ryoppippi/ccusage) block — cache read tokens are excluded because they don't represent new content generation and would distort the percentage.
+The bar prefers `rate_limits` from the statusline payload — the server's own
+subscription usage, the same figures `/usage` and the Claude apps report. No
+plan constant, no subprocess, no network.
 
 ```
-💰 ██░░░░░░░░  9% $0.42    ← green: below warn threshold (70%)
-💰 ███████░░░ 74% $1.91    ← yellow: at or above warn
-💰 ██████████ 95% $2.55    ← red: at or above danger threshold (90%)
+🎫 ██░░░░░░░░ 24% 5h · 41% 7d    ← green: below the warn threshold (70%)
+🎫 ███████░░░ 74% 5h · 41% 7d    ← yellow: at or above warn
+🎫 ██████████ 95% 5h · 88% 7d    ← red: at or above danger (90%)
 ```
 
-Token limits per 5-hour window (configurable):
+A percentage above 100 is reported as-is while the bar stays ten cells wide —
+`spend_limit` is documented as able to exceed its limit.
+
+**No dollar figure sits beside it.** `cost` is not part of the statusline payload
+contract (checked through Claude Code 2.1.252), and the 5-hour window's own spend
+would need `ccusage`. For a subscriber the rate limit *is* the budget signal, so
+a permanent `$0.00` next to it would only mislead.
+
+`rate_limits` is absent in three cases, and each window disappears independently
+once its `resets_at` passes:
+
+1. API-key, Bedrock or Vertex auth — it never appears
+2. before the first API response of a session — it appears on the next render
+3. after a window resets — Claude Code drops that window rather than reporting
+   it stale, so `five_hour` and `seven_day` can vanish separately
+
+#### Fallback: the ccusage token bar
+
+When `rate_limits` is unavailable and `budget_mode = "token"`, the bar falls back
+to `inputTokens + outputTokens` from the active [ccusage](https://github.com/ryoppippi/ccusage)
+block against a per-plan constant:
 
 | Plan | Limit |
 |---|---|
@@ -105,7 +128,10 @@ Token limits per 5-hour window (configurable):
 | Max 5x ($100/mo) | ~57,000 tokens |
 | Max 20x ($200/mo) | ~142,500 tokens |
 
-These values are estimates. The Pro limit was measured (`inputTokens + outputTokens` vs `/usage`); Max 5x and Max 20x are extrapolated proportionally and have not been independently verified. If the bar seems off, override the limit in `statusline.toml`:
+These values are estimates, and the reason `rate_limits` is preferred: a heavy
+5-hour block runs past the Max 20x constant by more than 2x without throttling,
+so this bar pegs at 100% while the real window is nowhere near spent. Override it
+in `statusline.toml` if you rely on this path:
 
 ```toml
 # Calibrate: take your raw token count from ccusage and divide by the /usage percentage.
@@ -119,7 +145,8 @@ Set your plan in `statusline.toml`:
 plan = "pro"   # pro | max5x | max20x | api | auto
 ```
 
-The bar can also show session cost instead of tokens — set `budget_mode = "cost"` in `statusline.toml`. Cost thresholds are also estimates and vary by usage pattern.
+`budget_mode = "cost"` scales session cost against the plan threshold instead —
+it renders only when the payload actually carries a cost.
 
 ---
 

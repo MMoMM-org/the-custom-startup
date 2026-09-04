@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — statusline
+
+### Changed
+
+- **The budget bar reads `rate_limits` from the statusline payload (#118).** That is the
+  server's own subscription usage — the same figures `/usage` reports — so it needs no plan
+  constant, no `bun x ccusage` subprocess per cache window, no 5s timeout to stall on, and no
+  ever-growing `~/.bun/install/cache`. The ccusage token bar stays as the fallback. Both the
+  5-hour and 7-day windows are shown, with a countdown derived from `resets_at`.
+- **No dollar figure beside the rate-limit bar.** `cost` is not part of the statusline payload
+  contract — verified against the schema Claude Code ships in its own statusline authoring
+  instructions, through 2.1.252. The enhanced variant had been reading `.cost.total_cost_usd`
+  and rendering a permanent `$0.00`; it now reads the field as empty and prints nothing when it
+  is absent, so a real value lights up if the key ever appears.
+
+### Fixed
+
+- **The bar emitted invalid UTF-8.** It was built with `printf "%Ns" | tr ' ' '█'`, and `tr`
+  maps byte to byte while `█` is three bytes (`e2 96 88`) — so a "full" bar was ten bare `e2`
+  bytes, rendering as replacement glyphs in every terminal. Built by appending whole characters
+  now.
+- **The bar is clamped to ten cells.** One cell per 10% with no upper bound meant a value above
+  100 — documented as possible for `spend_limit` — drew a wider bar and broke the fixed-width
+  layout. The drawn value is clamped; the true percentage is still reported next to it.
+- **The bar accepts fractional percentages.** `rate_limits` reports floats, and the integer
+  comparison against the warn/danger thresholds could not take them.
+- **`awk`'s output honours `LC_NUMERIC` even though its parsing does not.** The remaining
+  unguarded call in the standard variant rendered `$12,50` in a comma-decimal locale. All
+  currency formatting now runs under `LC_ALL=C`.
+
+---
+
 ## [Unreleased] — spec-013
 
 ### Added
