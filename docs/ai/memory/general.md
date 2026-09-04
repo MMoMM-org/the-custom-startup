@@ -13,3 +13,6 @@
 
 <!-- 2026-07-02 -->
 - **Assert evolving frontmatter fields by prefix, not exact match** — an exact `grep -q` on `argument-hint` turned a spec-mandated change into a false regression. → Anchor on the stable substring.
+
+<!-- 2026-09-04 -->
+- **A skill's examples silently language-lock its grep step** — `testing`'s smell patterns were Jest-shaped, so a pytest suite grepped clean and read as passing. → Have the step name the framework first, then list the equivalents.
