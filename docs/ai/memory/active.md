@@ -12,3 +12,6 @@
 - **`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` reach only harness-spawned plugin code** — not git-spawned hooks (`core.hooksPath`), not Bash-tool subprocesses. `CLAUDECODE=1` does propagate. → Git-hook code must self-derive its paths.
 - **The Bash tool reaps the process group at the tool-call boundary** — `nohup`/`disown` block SIGHUP, not harness teardown, so a backgrounded server dies silently. → Run it in the foreground inside a `run_in_background: true` call.
 - **Scope reviewer prompts to a commit range, not the working tree** — reviewers scan by path and then flag a teammate's uncommitted work as your task's extras. → Name the range, the expected files, and say to ignore the rest.
+
+<!-- 2026-09-04 -->
+- **A `|| fallback` inside `$( )` appends to partial output, not replaces it** — a command that writes and *then* fails leaves both: `printf '%.0f' 23.5` in a comma locale yields `230`. → Assign whole values: `x=$(cmd) || x=0`.
