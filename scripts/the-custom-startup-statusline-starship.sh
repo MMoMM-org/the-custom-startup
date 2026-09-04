@@ -77,7 +77,11 @@ CLAUDE_SESSION=$(echo "$input" | jq -r '.session_name // empty // (.session_id /
 
 # Session cost
 export CLAUDE_COST
-CLAUDE_COST=$(printf '$%.2f' "$(echo "$input" | jq -r '.cost.total_cost_usd // 0')")
+# awk, not printf: the printf builtin parses through strtod and honours
+# LC_NUMERIC, so in a comma-decimal locale it rejects jq's period-decimal output
+# and every session cost renders as $0,00.
+CLAUDE_COST=$(echo "$input" | jq -r '.cost.total_cost_usd // 0' \
+  | LC_ALL=C awk '{ printf "$%.2f", $1 + 0 }')
 
 # Session duration
 DURATION_MS=$(echo "$input" | jq -r '.cost.total_duration_ms // 0')
