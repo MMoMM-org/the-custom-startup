@@ -110,7 +110,10 @@ _LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd)" || exit 0
 
 _REPO_DIR="${CLAUDE_PROJECT_DIR:-${HOME}}"
 _REPO_HASH=$(_repo_hash "$_REPO_DIR" 2>/dev/null || echo "unknown")
-_CACHE_DIR=$(_cache_dir 2>/dev/null || echo "${CLAUDE_PLUGIN_DATA:-${HOME}/.claude/plugin-data}/cache")
+# _cache_dir fails only outside a git repository, where there is no repo cache
+# to dedup against. Suppress the nudge rather than writing sentinels somewhere
+# nothing will ever read them.
+_CACHE_DIR=$(_cache_dir 2>/dev/null) || exit 0
 
 # ---------------------------------------------------------------------------
 # Dedup helper

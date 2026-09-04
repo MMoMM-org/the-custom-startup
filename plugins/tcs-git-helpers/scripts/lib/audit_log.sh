@@ -24,8 +24,12 @@
 #   - Rotation chain caps at .3; no .4+ files ever created.
 
 # Resolve the canonical audit-file path.
+# shellcheck source=./plugin_data.sh disable=SC1091
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plugin_data.sh"
+
 _audit_log_path() {
-  local data_dir="${CLAUDE_PLUGIN_DATA:-${HOME}/.claude/plugins/data/tcs-git-helpers}"
+  local data_dir
+  data_dir="$(_plugin_data_dir)" || return 1
   printf '%s/audit/overrides.jsonl' "$data_dir"
 }
 

@@ -95,6 +95,12 @@ setup() {
   # Point CLAUDE_PLUGIN_ROOT to the plugin root so the hook can source lib/cache.sh.
   CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
   export CLAUDE_PLUGIN_ROOT
+
+  # Stub HOME. With CLAUDE_PLUGIN_DATA unset the resolvers derive their path
+  # from $HOME, so an unstubbed run writes fixture caches into the developer's
+  # real ~/.claude/plugins/data/ and leaves them there.
+  FAKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/tcs-home.XXXXXX")"
+  export HOME="$FAKE_HOME"
 }
 
 teardown() {
@@ -105,6 +111,10 @@ teardown() {
   if [ -n "${REPO:-}" ] && [ -d "$REPO" ]; then
     chmod -R u+rwX "$REPO" 2>/dev/null || true
     rm -rf "$REPO"
+  fi
+  if [ -n "${FAKE_HOME:-}" ] && [ -d "$FAKE_HOME" ]; then
+    chmod -R u+rwX "$FAKE_HOME" 2>/dev/null || true
+    rm -rf "$FAKE_HOME"
   fi
 }
 
@@ -314,12 +324,14 @@ GHSTUB
 }
 
 # ---------------------------------------------------------------------------
-# Test 7: degraded mode — CLAUDE_PLUGIN_DATA unset
+# Test 7: CLAUDE_PLUGIN_DATA unset — the hook derives, it does not skip
 #
-# Hook still emits stderr suggestion but skips cache write.
+# git spawns post-merge, and git-spawned processes receive none of the harness
+# variables. lib-bundle.sh therefore reconstructs the harness's own path shape
+# from $HOME and the repo basename rather than giving up on the write.
 # ---------------------------------------------------------------------------
 
-@test "test_degraded_mode_no_plugin_data" {
+@test "test_derives_cache_path_when_plugin_data_unset" {
   GH_STUB_SCENARIO="stale-3-branches"
   export GH_STUB_SCENARIO
 
@@ -334,16 +346,15 @@ GHSTUB
   # Suggestion must still appear on stderr (output in bats is combined).
   echo "$output" | grep -q "feat/stale-a"
 
-  # No cache files should have been written anywhere (CLAUDE_PLUGIN_DATA was unset).
-  # The cache.sh fallback is ${HOME}/.claude/plugin-data — check that dir is clean.
-  local default_cache="${HOME}/.claude/plugin-data/cache"
-  if [ -d "$default_cache" ]; then
-    local hash
-    hash="$(_repo_hash)"
-    # These specific test-repo files must not exist.
-    [ ! -f "$default_cache/${hash}-stale-cache.tsv" ]
-    [ ! -f "$default_cache/${hash}-stale-cache.json" ]
-  fi
+  # The write lands at the derived path under this test's stubbed HOME.
+  local hash derived
+  hash="$(_repo_hash)"
+  derived="$HOME/.claude/plugins/data/tcs-git-helpers-$(basename "$REPO_CANONICAL")/cache"
+  [ -f "$derived/${hash}-stale-cache.tsv" ]
+  grep -q "feat/stale-a" "$derived/${hash}-stale-cache.tsv"
+
+  # And nothing lands in the sandboxed CLAUDE_PLUGIN_DATA, which was unset.
+  [ ! -f "$CACHE_DIR/${hash}-stale-cache.tsv" ]
 }
 
 # ---------------------------------------------------------------------------

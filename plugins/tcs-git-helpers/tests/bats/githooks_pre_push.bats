@@ -104,6 +104,12 @@ setup() {
 
   # pre-push stdin: one ref line per push (local-ref local-sha remote-ref remote-sha)
   PUSH_STDIN="refs/heads/feat/test-branch HEAD refs/heads/feat/test-branch 0000000000000000000000000000000000000000"
+
+  # Stub HOME. With CLAUDE_PLUGIN_DATA unset the resolvers derive their path
+  # from $HOME, so an unstubbed run writes fixture caches into the developer's
+  # real ~/.claude/plugins/data/ and leaves them there.
+  FAKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/tcs-home.XXXXXX")"
+  export HOME="$FAKE_HOME"
 }
 
 teardown() {
@@ -113,6 +119,10 @@ teardown() {
   fi
   if [ -n "${REPO:-}" ] && [ -d "$REPO" ]; then
     rm -rf "$REPO"
+  fi
+  if [ -n "${FAKE_HOME:-}" ] && [ -d "$FAKE_HOME" ]; then
+    chmod -R u+rwX "$FAKE_HOME" 2>/dev/null || true
+    rm -rf "$FAKE_HOME"
   fi
 }
 

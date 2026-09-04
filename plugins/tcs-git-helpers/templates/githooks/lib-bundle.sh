@@ -39,7 +39,13 @@
 _resolve_data_dir() {
   # 1. User-explicit override wins (lets tests + power users redirect).
   if [ -n "${CLAUDE_PLUGIN_DATA:-}" ]; then
-    printf '%s/cache' "$CLAUDE_PLUGIN_DATA"
+    local d="$CLAUDE_PLUGIN_DATA"
+    # Strip trailing slashes. Python's pathlib collapses them and printf does
+    # not, so an override ending in "/" would put the shell writer and the
+    # Python reader in paths that differ only by a slash — the same class of
+    # split this resolver exists to close.
+    while [ "$d" != "/" ] && [ "${d%/}" != "$d" ]; do d="${d%/}"; done
+    printf '%s/cache' "$d"
     return 0
   fi
 
