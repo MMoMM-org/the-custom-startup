@@ -53,18 +53,22 @@ IFS= read -r -d '' json_input || true
   read -r session_duration_ms
   read -r lines_added
   read -r lines_removed
+# jq emits one line per expression even when the field is missing, so this
+# positional read cannot slide the way a TSV one would. What it does need is a
+# fallback per field: without `//` an absent key prints the literal "null", and
+# a payload without `.model` rendered as "🤖 null".
 } <<< "$(echo "$json_input" | jq -r '
-  (.workspace.current_dir // .cwd),
-  .model.display_name,
-  (.output_style.name | split(":") | .[-1]),
-  .context_window.context_window_size,
+  ((.workspace.current_dir)? // (.cwd)? // ""),
+  ((.model.display_name)? // "?"),
+  (((.output_style.name)? // "default") | split(":") | .[-1]),
+  ((.context_window.context_window_size)? // 200000),
   ((.context_window.current_usage.input_tokens // 0)
     + (.context_window.current_usage.cache_creation_input_tokens // 0)
     + (.context_window.current_usage.cache_read_input_tokens // 0)),
-  .cost.total_cost_usd,
-  .cost.total_duration_ms,
-  .cost.total_lines_added,
-  .cost.total_lines_removed
+  ((.cost.total_cost_usd)? // ""),
+  ((.cost.total_duration_ms)? // ""),
+  ((.cost.total_lines_added)? // ""),
+  ((.cost.total_lines_removed)? // "")
 ' 2>/dev/null)"
 
 # ==============================================================================

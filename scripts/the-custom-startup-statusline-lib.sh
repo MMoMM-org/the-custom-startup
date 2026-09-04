@@ -316,6 +316,36 @@ tcs_file_mtime() {
 }
 
 # ==============================================================================
+# Cache directory
+# ==============================================================================
+#
+# Caches used to be loose files directly in /tmp, named from a cksum of the repo
+# path — a predictable name in a world-writable directory, which anyone sharing
+# the machine can pre-create as a symlink and have the statusline write through.
+#
+# They now live in a per-uid directory created mode 700. When that directory
+# cannot be trusted — it is a symlink, or owned by someone else — caching is
+# switched off rather than redirected somewhere else.
+
+# Print the cache directory, creating it if needed.
+# Returns 1 and prints nothing when no trustworthy directory is available;
+# callers must then run uncached rather than fall back to a guessed path.
+tcs_cache_dir() {
+  local base dir
+  base="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
+  while [ "$base" != "/" ] && [ "${base%/}" != "$base" ]; do base="${base%/}"; done
+  dir="${base}/tcs-statusline-$(id -u)"
+
+  mkdir -m 700 -p "$dir" 2>/dev/null
+  [ -d "$dir" ] || return 1
+  [ -L "$dir" ] && return 1
+  [ -O "$dir" ] || return 1
+  chmod 700 "$dir" 2>/dev/null
+
+  printf '%s' "$dir"
+}
+
+# ==============================================================================
 # Cache helpers
 # ==============================================================================
 
@@ -333,9 +363,12 @@ tcs_cache_key() {
 
 # Remove /tmp cache files older than 14 days — throttled to once per day.
 tcs_cleanup_tmp_cache() {
-  local stamp="/tmp/tcs-statusline-cleanup-stamp"
+  local dir stamp
+  dir=$(tcs_cache_dir) || return 0
+  stamp="${dir}/cleanup-stamp"
   tcs_cache_is_stale "$stamp" 86400 || return 0
-  find /tmp -maxdepth 1 -name "tcs-statusline-*" -mtime +14 -delete 2>/dev/null || true
+  # Scoped to the directory we own — the old glob swept all of /tmp.
+  find "$dir" -maxdepth 1 -type f -mtime +14 -delete 2>/dev/null || true
   touch "$stamp"
 }
 
@@ -410,7 +443,9 @@ tcs_load_git_info() {
   [[ "$tcs_cfg_show_git" != "true" ]] && return
 
   local dir="${1:-$(pwd)}"
-  local cache_file="/tmp/tcs-statusline-git-$(tcs_cache_key "$dir")"
+  local cache_dir cache_file
+  cache_dir=$(tcs_cache_dir) || cache_dir=""
+  cache_file="${cache_dir:+${cache_dir}/git-$(tcs_cache_key "$dir")}"
 
   if tcs_cache_is_stale "$cache_file" "$tcs_cfg_git_cache_ttl"; then
     if git -C "$dir" rev-parse --git-dir > /dev/null 2>&1; then
@@ -448,7 +483,12 @@ tcs_load_ccusage() {
   TCS_BLOCK_COST="0" TCS_BLOCK_TIME_LEFT="" TCS_BLOCK_TOKEN_PCT=0
 
   local dir="${1:-$(pwd)}"
-  local cache_file="/tmp/tcs-statusline-ccusage-$(tcs_cache_key "$dir")"
+  local cache_dir cache_file
+  cache_dir=$(tcs_cache_dir) || cache_dir=""
+  cache_file="${cache_dir:+${cache_dir}/ccusage-$(tcs_cache_key "$dir")}"
+  # No trustworthy cache directory: skip the whole loader rather than write
+  # somewhere unchecked. The bar simply does not render this cycle.
+  [ -n "$cache_file" ] || return 0
 
   if tcs_cache_is_stale "$cache_file" "$tcs_cfg_ccusage_cache_ttl"; then
     local timeout_cmd=""
