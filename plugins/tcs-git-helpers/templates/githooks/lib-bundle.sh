@@ -163,7 +163,7 @@ _write_stale_cache() {
   local json_file="${data_dir}/${repo_hash}-stale-cache.json"
 
   # Write TSV atomically.
-  printf '%s\n' "$tsv_rows" > "${tsv_file}.tmp" 2>/dev/null || {
+  { printf '%s\n' "$tsv_rows" > "${tsv_file}.tmp"; } 2>/dev/null || {
     _emit_skip "cache-write" \
       "TSV write failed" \
       "Check write permissions on $data_dir"
@@ -172,8 +172,8 @@ _write_stale_cache() {
   mv "${tsv_file}.tmp" "$tsv_file" 2>/dev/null || true
 
   # Build JSON array from TSV rows and write atomically.
-  _emit_stale_json "$tsv_rows" "$updated_iso" "$default_branch" \
-    > "${json_file}.tmp" 2>/dev/null || {
+  { _emit_stale_json "$tsv_rows" "$updated_iso" "$default_branch" \
+      > "${json_file}.tmp"; } 2>/dev/null || {
     rm -f "${json_file}.tmp" 2>/dev/null || true
     return 0
   }

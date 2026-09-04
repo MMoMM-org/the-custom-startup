@@ -131,6 +131,8 @@ _write_stale_cache() {
   body="$(cat)"
 
   # --- TSV (atomic mv) ---
+  # stderr is silenced BEFORE the output redirection is attempted; the other
+  # order lets the shell report a failing '>' on its own stderr (issue #125).
   {
     printf '# tcs-git-helpers stale cache v1\n'
     printf '# updated_iso=%s\n' "$updated_iso"
@@ -139,11 +141,11 @@ _write_stale_cache() {
     if [ -n "$body" ]; then
       printf '%s\n' "$body"
     fi
-  } > "${tsv}.tmp" && mv "${tsv}.tmp" "$tsv"
+  } 2>/dev/null > "${tsv}.tmp" && mv "${tsv}.tmp" "$tsv" 2>/dev/null
 
   # --- JSON sibling (atomic mv) ---
-  _emit_stale_json "$updated_iso" "$default_branch" "$body" \
-    > "${json}.tmp" && mv "${json}.tmp" "$json"
+  { _emit_stale_json "$updated_iso" "$default_branch" "$body" \
+      > "${json}.tmp"; } 2>/dev/null && mv "${json}.tmp" "$json" 2>/dev/null
 }
 
 # Build the stale-cache JSON sibling. Pure printf escaping (no jq dep).
@@ -263,7 +265,7 @@ _write_pr_state_cache() {
     else
       current='{"version":1,"updated_iso":"","branch_state":{}}'
     fi
-    printf '%s' "$current" \
+    { printf '%s' "$current" \
       | jq --arg branch "$branch" \
            --arg state "$state" \
            --arg pr_number "$pr_number" \
@@ -279,8 +281,8 @@ _write_pr_state_cache() {
                 + (if $merge_commit != ""
                    then { merge_commit: $merge_commit }
                    else {} end)
-              )' > "${f}.tmp" 2>/dev/null \
-      && mv "${f}.tmp" "$f"
+              )' > "${f}.tmp"; } 2>/dev/null \
+      && mv "${f}.tmp" "$f" 2>/dev/null
   else
     # Fallback: write a minimal single-entry JSON. Acceptable for v1 since
     # downstream readers are jq-aware; this branch only matters when jq is
@@ -305,7 +307,7 @@ _write_pr_state_cache() {
       printf '}\n'
       printf '  }\n'
       printf '}\n'
-    } > "${f}.tmp" && mv "${f}.tmp" "$f"
+    } 2>/dev/null > "${f}.tmp" && mv "${f}.tmp" "$f" 2>/dev/null
   fi
 }
 
