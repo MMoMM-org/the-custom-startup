@@ -225,37 +225,125 @@ _strip_quoted() {
   local out=""
   local i=0
   local len=${#cmd}
-  local in_sq=0 in_dq=0
-  local ch prev=""
+  local state="N"        # N=normal (code), S=single-quoted, D=double-quoted
+  local stack=""         # one saved state char per open $( — innermost first
+  local ch prev="" nxt
   while [ "$i" -lt "$len" ]; do
     ch="${cmd:$i:1}"
-    if [ "$in_sq" -eq 1 ]; then
-      if [ "$ch" = "'" ]; then
-        in_sq=0
-      fi
-      out="${out} "
-    elif [ "$in_dq" -eq 1 ]; then
-      if [ "$ch" = '"' ] && [ "$prev" != "\\" ]; then
-        in_dq=0
-      fi
-      out="${out} "
-    else
-      case "$ch" in
-        "'") in_sq=1; out="${out} " ;;
-        '"') in_dq=1; out="${out} " ;;
-        *)   out="${out}${ch}" ;;
-      esac
-    fi
+    nxt="${cmd:$((i + 1)):1}"
+    case "$state" in
+      S)
+        if [ "$ch" = "'" ]; then state="N"; fi
+        out="${out} "
+        ;;
+      D)
+        # $( ... ) inside a double-quoted string is still CODE. Enter it in
+        # normal state so its command is matched, and remember to come back
+        # to D — otherwise the substitution's own quotes desync the outer one.
+        if [ "$ch" = '$' ] && [ "$nxt" = "(" ]; then
+          stack="D${stack}"
+          state="N"
+          out="${out}  "
+          prev="("
+          i=$((i + 2))
+          continue
+        fi
+        if [ "$ch" = '"' ] && [ "$prev" != "\\" ]; then state="N"; fi
+        out="${out} "
+        ;;
+      N)
+        if [ "$ch" = '$' ] && [ "$nxt" = "(" ]; then
+          stack="N${stack}"
+          out="${out}  "
+          prev="("
+          i=$((i + 2))
+          continue
+        fi
+        case "$ch" in
+          "'") state="S"; out="${out} " ;;
+          '"') state="D"; out="${out} " ;;
+          ')')
+            if [ -n "$stack" ]; then
+              state="${stack:0:1}"
+              stack="${stack:1}"
+              out="${out} "
+            else
+              out="${out}${ch}"
+            fi
+            ;;
+          *) out="${out}${ch}" ;;
+        esac
+        ;;
+    esac
     prev="$ch"
     i=$((i + 1))
   done
   printf '%s' "$out"
 }
 
+# _strip_heredocs <command>
+#   Blanks heredoc BODIES, keeping the line that opens them.
+#
+#   A heredoc body is data on stdin — `git commit -F - <<EOF … EOF` carries a
+#   commit message, and a destructive literal described in it is prose, not an
+#   instruction. Must run BEFORE _strip_quoted: a quoted delimiter (<<'EOF')
+#   would otherwise be blanked, leaving a `<<` with nothing to match the
+#   terminator against, and the body still in scope.
+#
+#   Exception, same principle as _clausify's shell-executor guard: when the
+#   heredoc feeds a shell (`bash <<EOF`), the body is CODE. Left intact.
+#
+#   Not stripped: `<<<` here-strings — those are single-line and _strip_quoted
+#   already handles their quoting.
+#
+#   bash 3.2 compatible: read loop, no mapfile.
+_strip_heredocs() {
+  local cmd="$1"
+  local out="" NL line rest delim="" trimmed
+  NL=$'\n'
+  while IFS= read -r line; do
+    if [ -n "$delim" ]; then
+      trimmed="${line#"${line%%[![:space:]]*}"}"
+      if [ "$line" = "$delim" ] || [ "$trimmed" = "$delim" ]; then
+        delim=""
+      fi
+      out="${out}${NL}"
+      continue
+    fi
+    out="${out}${line}${NL}"
+    case "$line" in
+      *"<<"*)
+        rest="${line#*<<}"
+        # `<<<` is a here-string, not a heredoc.
+        case "$rest" in
+          "<"*) continue ;;
+        esac
+        # A heredoc feeding an interpreter carries code; leave it in scope.
+        # Named explicitly, not as [a-z]*sh — that also matches the "sh" in
+        # `git stash`, which would leave a stash command's heredoc in scope.
+        if [[ "$line" =~ (^|[^[:alnum:]_])(sh|bash|zsh|ksh|dash|csh|tcsh|fish|python[0-9.]*|perl|ruby|node|awk|sed|eval)([[:space:]]|$) ]]; then
+          continue
+        fi
+        rest="${rest#-}"
+        rest="${rest#"${rest%%[![:space:]]*}"}"
+        delim="${rest%%[[:space:]]*}"
+        delim="${delim%%[<>|;&]*}"
+        delim="${delim//\'/}"
+        delim="${delim//\"/}"
+        ;;
+    esac
+  done <<< "$cmd"
+  printf '%s' "$out"
+}
+
 # _clausify <command>
 #   Returns <command> reduced to its real command clauses, one per line:
-#     1. quoted content blanked (via _strip_quoted) so git-op literals inside
-#        commit/PR bodies, echo/printf payloads, and heredocs disappear;
+#     1. heredoc bodies blanked (via _strip_heredocs), then quoted content
+#        blanked (via _strip_quoted), so git-op literals inside commit/PR
+#        bodies, echo/printf payloads and heredocs disappear. Order matters:
+#        a quoted delimiter (<<'EOF') must survive long enough to match its
+#        own terminator. Command substitutions are NOT blanked — they execute,
+#        so their content stays in scope and only their quoting is stripped;
 #     2. shell separators (&&, ||, |, ;, &) normalized to newlines so an
 #        unbounded `.*` in a pattern cannot bridge across into a sibling command.
 #   Compute ONCE per hook invocation and reuse across patterns (the char-by-char
@@ -277,6 +365,7 @@ _clausify() {
     printf '%s' "$s"
     return 0
   fi
+  s="$(_strip_heredocs "$s")"
   s="$(_strip_quoted "$s")"
   s="${s//&&/$NL}"
   s="${s//||/$NL}"

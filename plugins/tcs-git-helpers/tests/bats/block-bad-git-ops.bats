@@ -344,17 +344,29 @@ EOF
   _assert_allow
 }
 
-@test "NO_VERIFY: known limitation — nested \" inside \$(…) may still trip (use override)" {
-  # When command substitution contains inner double-quotes (e.g. printf "x"),
-  # the naive quote-scanner reads the inner `"` as closing the outer dq, so
-  # the body text leaks back to the regex. Documented limitation — users
-  # have the v2.2.0 inline override `CLAUDE_ALLOW_NO_VERIFY=1 git commit …`
-  # as escape hatch. This test pins the current behavior so a future smarter
-  # scanner that fixes it will trip this test and force review.
+@test "NO_VERIFY: nested \" inside \$(…) no longer trips (was a known limitation)" {
+  # WAS: the quote-scanner read the inner `"` of `printf "x"` as closing the
+  # outer double-quoted argument, so the message body leaked back to the regex
+  # and a harmless commit was denied. The old test pinned that behaviour so
+  # that a smarter scanner would trip it and force this review — which is what
+  # happened (issue #23).
+  #
+  # NOW: _strip_quoted carries a nesting stack, so entering `$(` saves the
+  # enclosing quote state and the substitution's own quotes are its own. The
+  # substitution's CODE is still matched — see the deny case below — only its
+  # quoted arguments are blanked.
   run _run_hook_with_cmd 'git commit -m "$(printf "release notes\nfix: see -n flag\n")"'
   [ "$status" -eq 0 ]
+  _assert_allow
+}
+
+@test "NO_VERIFY: a genuine bypass inside \$(…) is still denied" {
+  # The counterpart that makes the test above safe: substitution content is
+  # code and stays in scope. Blanking the whole region would fail OPEN.
+  run _run_hook_with_cmd 'echo "$(git commit -m x -n)"'
+  [ "$status" -eq 0 ]
   [[ "$output" == *'"permissionDecision":"deny"'* ]] \
-    || { echo "expected deny (current behavior pinned for known limitation), got: $output" >&2; return 1; }
+    || { echo "expected deny for a real bypass inside a substitution, got: $output" >&2; return 1; }
 }
 
 @test "NO_VERIFY: positive — -n AFTER closing quote still denies" {
