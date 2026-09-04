@@ -504,3 +504,116 @@ _no_match() {
     return 1
   fi
 }
+
+
+# ---------------------------------------------------------------------------
+# Quoted-region stripping: the two gaps left by #42 (issue #23)
+# ---------------------------------------------------------------------------
+#
+# #42 moved dispatch from whole-string matching to per-clause matching over a
+# quote-stripped command, which fixed the common false positives — a commit
+# message or a PR body that merely *describes* a destructive op. Two regions
+# it does not yet strip still carry a literal through into the residual:
+#
+#   1. A heredoc body is not quoted at all, so nothing removes it.
+#   2. `$( ... )` containing its own quotes desyncs _strip_quoted's quote
+#      state, because the inner quote is read as the *closing* quote of the
+#      outer argument.
+#
+# Both are data, never a command to be judged. Both must ALLOW.
+
+# Assert that no clause of <command> matches <pattern>.
+_no_match_in_clauses() {
+  local cmd="$1" pattern="$2"
+  if _match_clauses "$(_clausify "$cmd")" "$pattern"; then
+    printf 'FALSE POSITIVE: matched inside a data region: cmd=%q pattern=%q\n' \
+      "$cmd" "$pattern" >&2
+    return 1
+  fi
+}
+
+@test "_clausify: heredoc body carrying a destructive literal does not match" {
+  local cmd
+  cmd="$(printf 'git commit -F - <<EOF\nthis explains git reset --hard\nEOF')"
+  _no_match_in_clauses "$cmd" "$PATTERN_RESET_HARD"
+}
+
+@test "_clausify: quoted heredoc delimiter is stripped the same way" {
+  local cmd
+  cmd="$(printf "git commit -F - <<'EOF'\nwhy git stash clear is bad\nEOF")"
+  _no_match_in_clauses "$cmd" "$PATTERN_STASH_DESTROY"
+}
+
+@test "_clausify: dash-suppressed heredoc (<<-) is stripped" {
+  local cmd
+  cmd="$(printf 'git commit -F - <<-EOF\n\tgit reset --hard is destructive\n\tEOF')"
+  _no_match_in_clauses "$cmd" "$PATTERN_RESET_HARD"
+}
+
+@test "_strip_quoted: command substitution containing quotes does not desync" {
+  _no_match_in_clauses 'git commit -m "$(printf "git stash clear")"' \
+    "$PATTERN_STASH_DESTROY"
+}
+
+@test "_strip_quoted: nested command substitution is stripped" {
+  _no_match_in_clauses 'git commit -m "$(echo "$(printf "git reset --hard")")"' \
+    "$PATTERN_RESET_HARD"
+}
+
+@test "_clausify: a real destructive op AFTER a heredoc still matches" {
+  # The stripper must not swallow the rest of the command line. Fail closed.
+  local cmd
+  cmd="$(printf 'git commit -F - <<EOF\nmessage body\nEOF\ngit reset --hard HEAD~1')"
+  _match_clauses "$(_clausify "$cmd")" "$PATTERN_RESET_HARD"
+}
+
+@test "_strip_quoted: a real destructive op after a command substitution still matches" {
+  _match_clauses "$(_clausify 'echo "$(date "+%F")" && git reset --hard')" \
+    "$PATTERN_RESET_HARD"
+}
+
+# --- Fail-closed guards: a data region must never swallow real code ---
+#
+# The tempting simplification is to blank $( ... ) and every heredoc body
+# outright. Both would fail OPEN. A command substitution EXECUTES, and a
+# heredoc fed to a shell IS the script. These pin the distinction.
+
+@test "_strip_quoted: destructive op inside a command substitution still matches" {
+  # `echo "$(git reset --hard)"` runs the reset. Blanking the substitution
+  # would hide it. Substitution content is code, and stays in scope.
+  _match_clauses "$(_clausify 'echo "$(git reset --hard)"')" "$PATTERN_RESET_HARD"
+}
+
+@test "_strip_quoted: destructive op in a bare command substitution still matches" {
+  _match_clauses "$(_clausify 'x=$(git stash clear)')" "$PATTERN_STASH_DESTROY"
+}
+
+@test "_strip_heredocs: heredoc feeding a shell is code, and still matches" {
+  local cmd
+  cmd="$(printf 'bash <<EOF\ngit reset --hard\nEOF')"
+  _match_clauses "$(_clausify "$cmd")" "$PATTERN_RESET_HARD"
+}
+
+@test "_strip_heredocs: here-string (<<<) is left to the quote stripper" {
+  # `<<<` is single-line; a destructive literal in an UNquoted here-string is
+  # still a real token on the command line.
+  _match_clauses "$(_clausify 'cat <<< git reset --hard')" "$PATTERN_RESET_HARD"
+}
+
+@test "_strip_heredocs: unterminated heredoc does not leak the rest of the line" {
+  # Truncated input must not re-expose the body. Blank to end of input.
+  local cmd
+  cmd="$(printf 'git commit -F - <<EOF\ndescribes git reset --hard')"
+  if _match_clauses "$(_clausify "$cmd")" "$PATTERN_RESET_HARD"; then
+    printf 'FALSE POSITIVE: unterminated heredoc body matched\n' >&2
+    return 1
+  fi
+}
+
+@test "_strip_heredocs: the 'sh' inside 'stash' is not a shell invocation" {
+  # `[a-z]*sh` would match the tail of `git stash`, leaving the body in scope.
+  local cmd
+  cmd="$(printf 'git stash list <<EOF\ndescribes git reset --hard\nEOF')"
+  _no_match_in_clauses "$cmd" "$PATTERN_RESET_HARD"
+}
+

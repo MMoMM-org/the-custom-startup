@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.2.18] - 2026-09-04
+
+### Fixed
+
+- **Heredoc bodies and command substitutions no longer trip false denials (issue #23).**
+  PR #42 moved dispatch off whole-string matching onto per-clause matching over a
+  quote-stripped command, which fixed the common case — a commit message or PR body that
+  merely *describes* a destructive op. Two data regions were still carried through into the
+  matched string:
+  - **Heredoc bodies.** A heredoc body is not quoted, so nothing stripped it. `git commit -F -
+    <<EOF` with a message mentioning `git reset --hard` was denied. `_strip_heredocs` now
+    blanks the body while keeping the line that opens it, and runs *before* quote stripping so
+    a quoted delimiter (`<<'EOF'`) survives long enough to match its own terminator.
+  - **Command substitutions containing quotes.** The inner `"` of `$(printf "…")` was read as
+    the closing quote of the outer argument, desyncing the stripper and leaking the rest of the
+    line. `_strip_quoted` is now a small state machine with a nesting stack.
+
+  **Substitutions are not blanked, deliberately.** `$( … )` executes, so `echo "$(git reset
+  --hard)"` really does reset — its content stays in scope and only its own quoting is
+  stripped. Likewise a heredoc fed to a shell (`bash <<EOF`) is code, and is left intact. Both
+  distinctions are pinned by tests, because the tempting simplification — blank the whole
+  region — fails OPEN.
+
+- **`nudge-hook.sh` matched the raw command too**, so the same literals produced spurious
+  advisory nudges. It now clausifies once and matches per clause, like the blocking hook.
+
 ## [2.2.16] - 2026-09-02
 
 ### Changed (test-side)

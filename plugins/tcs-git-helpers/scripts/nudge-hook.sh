@@ -183,9 +183,11 @@ _emit_nudge() {
 # Trigger map (PRD §Feature M9, 5 rules, first-match wins)
 # ---------------------------------------------------------------------------
 #
-# Patterns use POSIX ERE only (_match_command from lib/pattern_match.sh).
-# The full $CMD string is matched as a substring, so compound forms like
-# `cd foo && git checkout -b x` are caught without tokenization.
+# Patterns use POSIX ERE only (_match_clauses from lib/pattern_match.sh).
+# $CMD is clausified once and each pattern is matched per clause, so compound
+# forms like `cd foo && git checkout -b x` are caught without tokenization,
+# while a git-op literal quoted inside another command's argument — or sitting
+# in a heredoc body — does not fire a spurious nudge (issue #23).
 #
 # Rule ordering (tie-break comment):
 #   verify-base is checked before verify-pr-title because `git push -u` and
@@ -194,8 +196,10 @@ _emit_nudge() {
 #   branch — verify base is the most urgent nudge). All other rules are
 #   mutually exclusive in practice.
 
+_CMD_CLAUSES="$(_clausify "$CMD")"
+
 # AC1: git checkout -b <name> | git switch -c <name>
-if _match_command "$CMD" 'git[[:space:]]+(checkout[[:space:]]+-b|switch[[:space:]]+-c)[[:space:]]+[^[:space:]]+'; then
+if _match_clauses "$_CMD_CLAUSES" 'git[[:space:]]+(checkout[[:space:]]+-b|switch[[:space:]]+-c)[[:space:]]+[^[:space:]]+'; then
   _emit_nudge "verify-base" \
     "new branch — verify the base is up-to-date before working" \
     "branch-lifecycle.md"
@@ -206,7 +210,7 @@ fi
 # S1 fix: ([[:space:]]|$) instead of [[:>:]] — avoids matching gh pr create-draft
 # (hypothetical non-standard subcommand); [[:>:]] matches before any non-word char
 # including '-', which would be a false positive.
-if _match_command "$CMD" 'gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
+if _match_clauses "$_CMD_CLAUSES" 'gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
   _emit_nudge "verify-pr-title" \
     "confirm the PR title matches Conventional Commits (squash-merge implication)" \
     "pr-vs-commit-messages.md"
@@ -214,7 +218,7 @@ if _match_command "$CMD" 'gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; th
 fi
 
 # AC2b: git push -u <remote> <branch>  (first push — new PR signal)
-if _match_command "$CMD" 'git[[:space:]]+push[[:space:]]+(.*[[:space:]]+)?-u[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+'; then
+if _match_clauses "$_CMD_CLAUSES" 'git[[:space:]]+push[[:space:]]+(.*[[:space:]]+)?-u[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+'; then
   _emit_nudge "verify-pr-title" \
     "confirm the PR title matches Conventional Commits (squash-merge implication)" \
     "pr-vs-commit-messages.md"
@@ -223,7 +227,7 @@ fi
 
 # AC3: gh pr merge — cleanup-after-merge nudge with stale-branch-cleanup.md ref
 # S1 fix: ([[:space:]]|$) instead of [[:>:]] — avoids matching gh pr merge-queue.
-if _match_command "$CMD" 'gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; then
+if _match_clauses "$_CMD_CLAUSES" 'gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; then
   _emit_nudge "cleanup-after-merge" \
     "PR merged — run /tcs-git-helpers:git-audit --cleanup to surface stale branches" \
     "stale-branch-cleanup.md"
@@ -231,7 +235,7 @@ if _match_command "$CMD" 'gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; the
 fi
 
 # AC4: git rebase (any variant)
-if _match_command "$CMD" 'git[[:space:]]+rebase([^[:alnum:]_]|$)'; then
+if _match_clauses "$_CMD_CLAUSES" 'git[[:space:]]+rebase([^[:alnum:]_]|$)'; then
   _emit_nudge "verify-history" \
     "rebase complete — verify history with git log --oneline -10" \
     "rebase-vs-merge.md"
@@ -239,7 +243,7 @@ if _match_command "$CMD" 'git[[:space:]]+rebase([^[:alnum:]_]|$)'; then
 fi
 
 # AC5: git stash pop
-if _match_command "$CMD" 'git[[:space:]]+stash[[:space:]]+pop([^[:alnum:]_]|$)'; then
+if _match_clauses "$_CMD_CLAUSES" 'git[[:space:]]+stash[[:space:]]+pop([^[:alnum:]_]|$)'; then
   _emit_nudge "verify-orig-cleanup" \
     "stash pop — verify .orig file cleanup" \
     "working-tree-hygiene.md"
