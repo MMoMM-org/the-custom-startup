@@ -19,6 +19,7 @@ It has a second job: making it cheap to check those origins for improvements. Ev
 | [Bande-a-Bonnot/Boucle-framework](https://github.com/Bande-a-Bonnot/Boucle-framework) | 2026-05-09 | never | **monitored** |
 | [lasso-security/mcp-gateway](https://github.com/lasso-security/mcp-gateway) | reference only | n/a | historical |
 | [agiletec-inc/airis-mcp-gateway](https://github.com/agiletec-inc/airis-mcp-gateway) | reference only | n/a | historical |
+| [dsebastien/claude-epic-status-line](https://github.com/dsebastien/claude-epic-status-line) | reviewed 2026-09-04, nothing ported yet | 2026-09-04 — first review (#72) | **monitored** |
 
 **monitored** — actively developed, and the parts we adapted still move. Check on each sweep.
 **historical** — attribution stands, but there is nothing left to pull. Reasons are recorded per source below. Skip these on a sweep.
@@ -228,10 +229,38 @@ Two rules learned the hard way:
 - **Do not adopt a claim because upstream states it.** Upstream drifts too. The 2026-08-31 sweep found stale model pricing (3× off) and a closed bug listed as open in a document we were about to import.
 - **Record what was deliberately *not* adopted, and why** — otherwise the next sweep re-litigates it from zero.
 
+## Statusline — Source Influences
+
+### dsebastien/claude-epic-status-line
+
+- **Reviewed:** 2026-09-04 at `master` (pushed 2026-08-26), MIT
+- **Ported:** nothing yet — the review produced #129, #130 and #131 under #72
+- **Why it is here anyway:** three specific mechanisms were taken as *design input* for those
+  issues and will carry code if they land, so the lineage is recorded before rather than after.
+
+What the review found worth taking:
+
+| Mechanism | Where it would land | Issue |
+|---|---|---|
+| `extra_usage` from `api.anthropic.com/api/oauth/usage` — credit consumption against the monthly limit, which neither the stdin payload nor ccusage exposes | a new opt-in segment | #129 |
+| One `jq` pass extracting every field as `@tsv`, with `-` sentinels so an empty field cannot shift the positional `read` | `read_input` | #130 |
+| Per-uid cache directory created `mode 700`, with symlink and ownership checks that disable caching rather than redirect it | the cache helpers | #131 |
+
+Deliberately **not** taken: their `CESL_*` environment-variable configuration with three-tier
+precedence — `statusline.toml` already covers that ground and switching would be churn without
+gain. Their percentage clamping and post-failure negative caching were arrived at independently
+here (#118, and the existing ccusage cache), so those are convergent rather than adopted.
+
+One convergence worth noting: their `stat -c %Y || stat -f %m` puts the GNU form first, which is
+the same ordering #118 landed on after the BSD-first form was found to pollute stdout on GNU.
+
+---
+
 ### Sweep log
 
 | Date | Scope | Outcome |
 |---|---|---|
+| 2026-09-04 | dsebastien/claude-epic-status-line (#72) | Reviewed on request rather than as part of a sweep. Nothing ported; three adoption candidates filed as #129, #130, #131. |
 | 2026-08-31 | All eight sources | Three found still worth monitoring, five retired to historical. Tracked as epic #73 with twelve child issues. Landed: `tcs-patterns` defect fixes (#74), `principles.md` rewrite (#75), this file (#78). |
 
 ---
