@@ -28,7 +28,14 @@ setup() {
   AUDIT_LIB="$PLUGIN_ROOT/scripts/lib/audit_log.sh"
   PY_HELPER="$BATS_TEST_DIRNAME/lib/print_resolved_path.py"
 
-  TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tcs-parity.XXXXXX")"
+  # macOS exports TMPDIR with a trailing slash. Left in, every fixture path
+  # carries a "//" and the parity comparison ends up testing the test's own
+  # string building rather than the resolvers.
+  local tmpbase="${TMPDIR:-/tmp}"
+  while [ "$tmpbase" != "/" ] && [ "${tmpbase%/}" != "$tmpbase" ]; do
+    tmpbase="${tmpbase%/}"
+  done
+  TEST_DIR="$(mktemp -d "$tmpbase/tcs-parity.XXXXXX")"
   FAKE_HOME="$TEST_DIR/home"
   mkdir -p "$FAKE_HOME"
 
@@ -84,12 +91,39 @@ _via_python() {
   _run_env "$1" "cd '$REPO' && python3 '$PY_HELPER' cache"
 }
 
+# Same call, stderr only — used to explain a mismatch.
+_via_python_diag() {
+  _run_env "$1" "cd '$REPO' && python3 '$PY_HELPER' cache 2>&1 >/dev/null" | tr '\n' ' '
+}
+
 # audit_log.sh resolves <data dir>/audit/overrides.jsonl. Strip the suffix so
 # it can be compared against the other resolvers' <data dir>/cache.
 _via_audit_lib_data() {
   local p
   p="$(_run_env "$1" "cd '$REPO' && . '$AUDIT_LIB' && _audit_log_path")"
   printf '%s' "${p%/audit/overrides.jsonl}"
+}
+
+# Compare one resolver against the canonical path, reporting both sides — and
+# whatever the resolver wrote to stderr — when they differ. A parity assertion
+# that only says "not equal" cannot tell you whether the path was wrong or the
+# resolver never ran at all.
+_assert_parity() {
+  local label="$1" expected="$2" actual="$3" diag="${4:-}"
+  if [ -z "$expected" ]; then
+    echo "canonical resolver produced nothing" >&2
+    return 1
+  fi
+  if [ "$actual" != "$expected" ]; then
+    {
+      echo "$label disagrees with lib-bundle.sh"
+      echo "  expected: [$expected]"
+      echo "  actual:   [$actual]"
+      [ -n "$diag" ] && echo "  stderr:   $diag"
+    } >&2
+    return 1
+  fi
+  return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -113,53 +147,44 @@ _via_audit_lib_data() {
 # ---------------------------------------------------------------------------
 
 @test "parity: cache.sh matches the bundle with CLAUDE_PLUGIN_DATA unset" {
-  local expected actual
-  expected="$(_via_bundle unset)"
-  actual="$(_via_cache_lib unset)"
-  [ -n "$expected" ]
-  [ "$actual" = "$expected" ]
+  _assert_parity "cache.sh" "$(_via_bundle unset)" "$(_via_cache_lib unset)"
 }
 
 @test "parity: cache.sh matches the bundle with CLAUDE_PLUGIN_DATA set" {
-  local expected actual
-  expected="$(_via_bundle "$TEST_DIR/explicit")"
-  actual="$(_via_cache_lib "$TEST_DIR/explicit")"
-  [ -n "$expected" ]
-  [ "$actual" = "$expected" ]
+  _assert_parity "cache.sh" "$(_via_bundle "$TEST_DIR/explicit")" "$(_via_cache_lib "$TEST_DIR/explicit")"
 }
 
 @test "parity: git_status_audit.py matches the bundle with CLAUDE_PLUGIN_DATA unset" {
-  local expected actual
-  expected="$(_via_bundle unset)"
-  actual="$(_via_python unset)"
-  [ -n "$expected" ]
-  [ "$actual" = "$expected" ]
+  _assert_parity "git_status_audit.py" "$(_via_bundle unset)" "$(_via_python unset)" "$(_via_python_diag unset)"
 }
 
 @test "parity: git_status_audit.py matches the bundle with CLAUDE_PLUGIN_DATA set" {
-  local expected actual
-  expected="$(_via_bundle "$TEST_DIR/explicit")"
-  actual="$(_via_python "$TEST_DIR/explicit")"
-  [ -n "$expected" ]
-  [ "$actual" = "$expected" ]
+  _assert_parity "git_status_audit.py" \
+    "$(_via_bundle "$TEST_DIR/explicit")" \
+    "$(_via_python "$TEST_DIR/explicit")" \
+    "$(_via_python_diag "$TEST_DIR/explicit")"
 }
 
 @test "parity: audit_log.sh shares the data dir with CLAUDE_PLUGIN_DATA unset" {
-  local expected actual
+  local expected
   expected="$(_via_bundle unset)"
-  expected="${expected%/cache}"
-  actual="$(_via_audit_lib_data unset)"
-  [ -n "$expected" ]
-  [ "$actual" = "$expected" ]
+  _assert_parity "audit_log.sh" "${expected%/cache}" "$(_via_audit_lib_data unset)"
 }
 
 @test "parity: audit_log.sh shares the data dir with CLAUDE_PLUGIN_DATA set" {
-  local expected actual
+  local expected
   expected="$(_via_bundle "$TEST_DIR/explicit")"
-  expected="${expected%/cache}"
-  actual="$(_via_audit_lib_data "$TEST_DIR/explicit")"
-  [ -n "$expected" ]
-  [ "$actual" = "$expected" ]
+  _assert_parity "audit_log.sh" "${expected%/cache}" "$(_via_audit_lib_data "$TEST_DIR/explicit")"
+}
+
+@test "parity: a CLAUDE_PLUGIN_DATA with a trailing slash does not split them" {
+  local base="$TEST_DIR/explicit"
+  mkdir -p "$base"
+  _assert_parity "cache.sh" "$(_via_bundle "$base/")" "$(_via_cache_lib "$base/")"
+  _assert_parity "git_status_audit.py" \
+    "$(_via_bundle "$base/")" \
+    "$(_via_python "$base/")" \
+    "$(_via_python_diag "$base/")"
 }
 
 # ---------------------------------------------------------------------------

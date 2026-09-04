@@ -34,7 +34,13 @@
 _plugin_data_dir() {
   # 1. Explicit override wins — the harness sets it, and tests redirect with it.
   if [ -n "${CLAUDE_PLUGIN_DATA:-}" ]; then
-    printf '%s' "$CLAUDE_PLUGIN_DATA"
+    local d="$CLAUDE_PLUGIN_DATA"
+    # Strip trailing slashes. Python's pathlib collapses them and printf does
+    # not, so an override ending in "/" would put the shell writer and the
+    # Python reader in paths that differ only by a slash — the same class of
+    # split this resolver exists to close.
+    while [ "$d" != "/" ] && [ "${d%/}" != "$d" ]; do d="${d%/}"; done
+    printf '%s' "$d"
     return 0
   fi
 

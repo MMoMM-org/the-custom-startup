@@ -43,6 +43,17 @@
   asserting the derived path, with `HOME` stubbed in `githooks_post_merge.bats`,
   `githooks_pre_push.bats` and `lib-bundle.bats` so fixtures stop escaping the test sandbox.
 
+- **A `CLAUDE_PLUGIN_DATA` ending in `/` split the resolvers again.** `pathlib` collapses a
+  trailing slash and `printf` does not, so the shell writer and the Python reader produced paths
+  differing by one character — the same class of split this release closes. Both shell resolvers
+  now strip trailing slashes, and `cache-path-parity.bats` covers that input.
+
+  Found by the parity suite itself: it passed on ubuntu and failed on macOS, because macOS
+  exports `TMPDIR` with a trailing slash and the fixtures inherited it.
+
+  Hook bundle version `h3` → `h4`: `lib-bundle.sh` changed, so installed repos should re-run
+  `/tcs-git-helpers:git-setup --update`.
+
 ### Migration
 
 - An orphaned cache may remain at `~/.claude/plugin-data/cache/<hash>-stale-cache.{tsv,json}`.
