@@ -6,7 +6,7 @@
 # plus a PID-file lock without `flock` (POSIX-portable, bash 3.2 safe,
 # macOS-friendly).
 #
-# Files (under ${CLAUDE_PLUGIN_DATA}/cache/):
+# Files (under the cache/ dir resolved by lib/plugin_data.sh):
 #   <repo-hash>-stale-cache.tsv   Hot-path read by SessionStart (ADR-4).
 #   <repo-hash>-stale-cache.json  Sibling consumed by /tcs-git-helpers:git-audit --json.
 #   <repo-hash>-pr-state.json     60s TTL push-state cache.
@@ -24,8 +24,17 @@
 # Path helpers
 # ----------------------------------------------------------------------
 
+# Source the canonical data-dir resolver from this same directory. Sourcing by
+# ${BASH_SOURCE[0]} rather than an env var: this file is reached from git hooks
+# and Bash-tool subprocesses, neither of which gets CLAUDE_PLUGIN_ROOT.
+# shellcheck source=./plugin_data.sh disable=SC1091
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plugin_data.sh"
+
+# Print the cache directory. Returns 1 outside a git repository, matching
+# _plugin_data_dir — callers must propagate rather than build a path on "".
 _cache_dir() {
-  local data_dir="${CLAUDE_PLUGIN_DATA:-${HOME}/.claude/plugin-data}"
+  local data_dir
+  data_dir="$(_plugin_data_dir)" || return 1
   printf '%s/cache' "$data_dir"
 }
 
@@ -40,27 +49,31 @@ _repo_hash() {
 }
 
 _stale_tsv_path() {
-  local hash
+  local hash dir
   hash="$(_repo_hash)" || return 1
-  printf '%s/%s-stale-cache.tsv' "$(_cache_dir)" "$hash"
+  dir="$(_cache_dir)"  || return 1
+  printf '%s/%s-stale-cache.tsv' "$dir" "$hash"
 }
 
 _stale_json_path() {
-  local hash
+  local hash dir
   hash="$(_repo_hash)" || return 1
-  printf '%s/%s-stale-cache.json' "$(_cache_dir)" "$hash"
+  dir="$(_cache_dir)"  || return 1
+  printf '%s/%s-stale-cache.json' "$dir" "$hash"
 }
 
 _pr_state_path() {
-  local hash
+  local hash dir
   hash="$(_repo_hash)" || return 1
-  printf '%s/%s-pr-state.json' "$(_cache_dir)" "$hash"
+  dir="$(_cache_dir)"  || return 1
+  printf '%s/%s-pr-state.json' "$dir" "$hash"
 }
 
 _lock_path() {
-  local hash
+  local hash dir
   hash="$(_repo_hash)" || return 1
-  printf '%s/%s.lock' "$(_cache_dir)" "$hash"
+  dir="$(_cache_dir)"  || return 1
+  printf '%s/%s.lock' "$dir" "$hash"
 }
 
 # ----------------------------------------------------------------------
@@ -109,7 +122,7 @@ _write_stale_cache() {
   local dir tsv json
   tsv="$(_stale_tsv_path)"  || return 1
   json="$(_stale_json_path)" || return 1
-  dir="$(_cache_dir)"
+  dir="$(_cache_dir)"        || return 1
 
   mkdir -p "$dir" 2>/dev/null || return 1
 
@@ -129,23 +142,21 @@ _write_stale_cache() {
   } > "${tsv}.tmp" && mv "${tsv}.tmp" "$tsv"
 
   # --- JSON sibling (atomic mv) ---
-  _emit_stale_json "$updated_iso" "$repo_path" "$default_branch" "$body" \
+  _emit_stale_json "$updated_iso" "$default_branch" "$body" \
     > "${json}.tmp" && mv "${json}.tmp" "$json"
 }
 
 # Build the stale-cache JSON sibling. Pure printf escaping (no jq dep).
 _emit_stale_json() {
   local updated_iso="$1"
-  local repo_path="$2"
-  local default_branch="$3"
-  local body="$4"
+  local default_branch="$2"
+  local body="$3"
   local first=1
   local name pr_number merged_at
 
   printf '{\n'
   printf '  "version": 1,\n'
   printf '  "updated_iso": "%s",\n' "$(_json_escape "$updated_iso")"
-  printf '  "repo_path": "%s",\n'   "$(_json_escape "$repo_path")"
   printf '  "default_branch": "%s",\n' "$(_json_escape "$default_branch")"
   printf '  "stale_branches": ['
 
@@ -241,7 +252,7 @@ _write_pr_state_cache() {
 
   local dir f now_iso
   f="$(_pr_state_path)" || return 1
-  dir="$(_cache_dir)"
+  dir="$(_cache_dir)"   || return 1
   now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   mkdir -p "$dir" 2>/dev/null || return 1
 

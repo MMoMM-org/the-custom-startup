@@ -135,16 +135,30 @@ def _ensure_drift_check_loaded() -> None:
 
 def _plugin_data_dir(override: Path | None = None) -> Path:
     """
-    Resolve ${CLAUDE_PLUGIN_DATA}/cache or fall back to ~/.claude/plugin-data.
-    Matches cache.sh _cache_dir() exactly:
-      ${CLAUDE_PLUGIN_DATA:-${HOME}/.claude/plugin-data}
+    Resolve this repo's plugin data directory.
+
+    The canonical rule, shared with lib/plugin_data.sh and the installed
+    lib-bundle.sh: CLAUDE_PLUGIN_DATA when the harness set it, otherwise the
+    same shape reconstructed from $HOME and the repo basename. Falling back
+    anywhere else puts the reader in a different directory from the hook that
+    writes the cache, which shows up as stale data rather than as an error.
+
+    tests/bats/cache-path-parity.bats asserts this agrees with the shell copies.
     """
     if override is not None:
         return override
     raw = os.environ.get("CLAUDE_PLUGIN_DATA")
     if raw:
         return Path(raw)
-    return Path.home() / ".claude" / "plugin-data"
+    repo_path = _get_repo_toplevel()
+    if repo_path is None:
+        raise RuntimeError(
+            "cannot resolve the plugin data directory outside a git repository"
+        )
+    return (
+        Path.home() / ".claude" / "plugins" / "data"
+        / f"tcs-git-helpers-{Path(repo_path).name}"
+    )
 
 
 def _cache_dir(plugin_data: Path) -> Path:
@@ -745,13 +759,8 @@ def cmd_overrides(
 
     Per PRD M12 AC6: when the file is missing, print "no overrides recorded yet", exit 0.
 
-    Note: audit_log.sh uses a slightly different default path:
-      ${CLAUDE_PLUGIN_DATA:-${HOME}/.claude/plugins/data/tcs-git-helpers}
-    but this reader uses CLAUDE_PLUGIN_DATA if set (same env var), so both
-    the writer and reader agree when CLAUDE_PLUGIN_DATA is explicitly set.
-    When CLAUDE_PLUGIN_DATA is unset the reader falls back to cache.sh's
-    convention (${HOME}/.claude/plugin-data); if you hit that case and the
-    audit file is missing, you'll get the "no overrides recorded yet" message.
+    Writer and reader resolve the directory through the same rule
+    (_plugin_data_dir), so they agree whether or not CLAUDE_PLUGIN_DATA is set.
     """
     if plugin_data_dir is None:
         plugin_data_dir = _plugin_data_dir()

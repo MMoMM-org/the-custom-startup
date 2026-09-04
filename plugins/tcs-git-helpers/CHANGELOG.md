@@ -1,5 +1,54 @@
 # Changelog
 
+## [2.2.19] - 2026-09-04
+
+### Fixed
+
+- **The cache reader and the cache writer used different directories (issue #24, F-002).**
+  The path was derived independently in eight places with three different defaults, and they
+  diverged exactly when `CLAUDE_PLUGIN_DATA` is unset — which is the normal case, because the
+  harness sets it only for code it spawns itself. Git-spawned hooks (`core.hooksPath`) and
+  Bash-tool subprocesses get nothing.
+
+  Observed on the development machine before the fix: `post-merge` had written
+  `~/.claude/plugins/data/tcs-git-helpers-the-custom-startup/cache/` minutes earlier, while
+  `session-start-brief.sh` and `git_status_audit.py` were reading a four-day-old file under
+  `~/.claude/plugin-data/cache/`. There is no error in that state — the reader simply serves
+  old data, so `git-audit --json` and the SessionStart stale-branch count were both quietly wrong.
+
+  All resolvers now follow one rule, the one `lib-bundle.sh` already used because it is the only
+  resolver that must work with no environment at all:
+
+      CLAUDE_PLUGIN_DATA set → $CLAUDE_PLUGIN_DATA
+      otherwise              → $HOME/.claude/plugins/data/tcs-git-helpers-<repo basename>
+
+  which reconstructs the harness's own path shape. The plugin-side copy lives in the new
+  `scripts/lib/plugin_data.sh`, sourced by `lib/cache.sh` and `lib/audit_log.sh`;
+  `git_status_audit.py` mirrors it in Python. `lib-bundle.sh` keeps its own copy, unavoidably —
+  it is installed byte-verbatim into consumer repos and cannot source plugin files.
+
+  `tests/bats/cache-path-parity.bats` executes every resolver under both conditions and asserts
+  they agree, and fails on any new competing default appearing in the tree. That test is what
+  keeps the copies from drifting again.
+
+- **`audit_log.sh` used a third variant** (`…/plugins/data/tcs-git-helpers`, no repo suffix).
+  Nothing had ever been written there; override audit events landed in the suffixed directory
+  via the harness variable. Now on the shared rule.
+
+- **`test_degraded_mode_no_plugin_data` asserted a behaviour the hook never had.** It checked
+  that "no cache files were written anywhere" by looking in `~/.claude/plugin-data/cache` — the
+  wrong directory. The hook does write when `CLAUDE_PLUGIN_DATA` is unset; it derives the path.
+  The test passed because it looked where nothing was, and the writes it missed went into the
+  developer's real `$HOME`. Renamed to `test_derives_cache_path_when_plugin_data_unset` and now
+  asserting the derived path, with `HOME` stubbed in `githooks_post_merge.bats`,
+  `githooks_pre_push.bats` and `lib-bundle.bats` so fixtures stop escaping the test sandbox.
+
+### Migration
+
+- An orphaned cache may remain at `~/.claude/plugin-data/cache/<hash>-stale-cache.{tsv,json}`.
+  It is inert and safe to delete; the next merge regenerates the cache at the canonical path.
+  No re-install needed — the hooks were always writing to the right place.
+
 ## [2.2.18] - 2026-09-04
 
 ### Fixed

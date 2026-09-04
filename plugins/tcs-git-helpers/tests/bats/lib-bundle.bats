@@ -49,12 +49,22 @@ setup() {
 
   # Unset plugin env vars so tests start from a known baseline.
   unset CLAUDE_PLUGIN_DATA CLAUDE_PLUGIN_ROOT 2>/dev/null || true
+
+  # Stub HOME. With CLAUDE_PLUGIN_DATA unset the resolvers derive their path
+  # from $HOME, so an unstubbed run writes fixture caches into the developer's
+  # real ~/.claude/plugins/data/ and leaves them there.
+  FAKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/tcs-home.XXXXXX")"
+  export HOME="$FAKE_HOME"
 }
 
 teardown() {
   if [ -n "${TEST_DIR:-}" ] && [ -d "$TEST_DIR" ]; then
     chmod -R u+w "$TEST_DIR" 2>/dev/null || true
     rm -rf "$TEST_DIR"
+  fi
+  if [ -n "${FAKE_HOME:-}" ] && [ -d "$FAKE_HOME" ]; then
+    chmod -R u+rwX "$FAKE_HOME" 2>/dev/null || true
+    rm -rf "$FAKE_HOME"
   fi
 }
 

@@ -47,9 +47,6 @@
 
 set -uo pipefail
 
-# Idempotent guard (defensive; sources are rare in this file)
-: "${CLAUDE_PLUGIN_DATA:=${HOME}/.claude/plugin-data}"
-
 # Resolve script directory for relative lib sourcing.
 _SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 
