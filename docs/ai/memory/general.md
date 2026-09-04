@@ -16,3 +16,4 @@
 
 <!-- 2026-09-04 -->
 - **A skill's examples silently language-lock its grep step** — `testing`'s smell patterns were Jest-shaped, so a pytest suite grepped clean and read as passing. → Have the step name the framework first, then list the equivalents.
+- **`tr` maps byte to byte** — `tr ' ' '█'` writes only the first byte of a multibyte replacement, so a rendered bar is invalid UTF-8 shown as replacement glyphs. → Append whole characters in a loop.

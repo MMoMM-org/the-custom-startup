@@ -21,3 +21,6 @@
 
 <!-- 2026-07-02 -->
 - **`rule-enforcer --scan` follows `@`-imports but not prose "see X" pointers** — rules one hop past the import frontier, or in `~/.claude/`, fall outside default scope. → Convert the pointer to an `@`-import, or run `--scope global`.
+
+<!-- 2026-09-04 -->
+- **`gh pr merge --auto` merges at once when the branch has no required status checks** — auto-merge needs protection rules to have something to wait for. → Block on `gh pr checks` yourself when a check must gate the merge.
