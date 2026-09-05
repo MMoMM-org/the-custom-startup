@@ -62,6 +62,7 @@ grep -l "convex" package.json 2>/dev/null && echo "convex"
 >   active.md (always-loaded layer, starts empty)
 >   routing-reference.md (routing metadata for /memory-add)
 >   general.md, tools.md, domain.md, decisions.md, context.md, troubleshooting.md
+>   declined.md (structural things ruled out — read before proposing, outside the bank budget)
 >
 > CLAUDE.md (will ADD memory section — existing content preserved)
 > src/CLAUDE.md, test/CLAUDE.md, docs/CLAUDE.md, docs/ai/CLAUDE.md

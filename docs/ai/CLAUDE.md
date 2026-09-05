@@ -6,6 +6,9 @@
 - /memory-cleanup — archive resolved issues and prune stale context (run monthly)
 - /memory-promote — detect promotable domain patterns → reusable skills (run when domain.md grows)
 
+## Before proposing something structural
+Read `declined.md` first. A new layer, tool swap, restructure, automation, or upstream adoption that is already recorded there is re-pitched only when its `Revisit if` condition holds — or explicitly as a trade-off quoting the original decline. Never as a fresh idea.
+
 ## Category definitions
 - general.md: naming, code style, git workflow (longlived)
 - tools.md: CI, build, local dev quirks (longlived/medium)
@@ -14,6 +17,7 @@
 - context.md: current sprint focus, blockers (short — prune regularly)
 - troubleshooting.md: known bugs + fixes (short — archive when resolved)
 - active.md: the always-loaded layer — @-imported from CLAUDE.md, reaches every subagent
+- declined.md: structural things ruled out, with the condition that reopens each (longlived — supersede, never delete)
 
 ## Entry form
 One falsifiable rule and its tell — **≤ 250 characters**:
