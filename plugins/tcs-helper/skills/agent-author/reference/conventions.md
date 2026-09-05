@@ -94,11 +94,22 @@ worker performing a known tool sequence with an observer that dumped every diges
   observed agent, which stays free to ignore them — the probe worker was sent an instruction inside
   a report and refused it, on the grounds that an observer message is not user consent. Design an
   observer to tell the agent something true, never to control it.
-- **Delivery races the observed agent.** Reports are queued against the target's turn boundaries.
-  A report queued after the observed agent's final turn is simply never delivered: the tool still
-  answers `Report queued for <agent>`, which is an acceptance receipt and not proof of delivery. On
-  a short, fast task the observer can therefore cost a full agent's budget and change nothing —
-  observers pay off on long runs with turns left to correct.
+- **A report is delivered only while its target is running.** Reports are queued against the
+  target's turn boundaries, and a target that has finished — or is parked awaiting a subagent — gets
+  nothing: `The report target (<agent>) is not running. The report was not delivered.` The success
+  answer, `Report queued for <agent>`, is an acceptance receipt and not proof of delivery either.
+  Measured across two runs of the same fan-out probe: a coordinator parked while awaiting its child
+  dropped 5 of 7 reports, while a coordinator kept busy with its own work during the same child run
+  took 6 of 8. **This is the constraint that decides whether an observer is worth attaching**: on a
+  short task, or on an orchestrator whose whole job is to wait, the reports arrive nowhere.
+- **On a fan-out, reports go to the coordinator, not to the worker.** When an observer is inherited
+  through `observeSubagents`, its framing changes: it is told it observes worker *W* on behalf of
+  coordinator *C*, that `ObserverReport` "delivers to *C*, NOT to the worker", and to judge
+  relevance against *C*'s overall task — it is even handed *C*'s current task in a
+  `<coordinator-task>` block. That is the one shape in which an observer reaches an agent with the
+  authority to stop or redirect the work, rather than only the agent making the mistake. It is also
+  the shape most exposed to the liveness rule above, because a coordinator awaiting its worker is
+  usually parked.
 - **Digests carry tool-level detail.** Each of the observed agent's turns arrives wrapped in
   `<{agentName}-activity>` tags containing its assistant text, `<tool-call name="…">` with the full
   JSON arguments, and the matching `<tool-result>`. File paths, file contents and command lines are
