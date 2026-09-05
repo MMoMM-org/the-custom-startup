@@ -73,6 +73,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   spawned on every run of the observed agent, which is not the same thing as the review agents
   `tcs-workflow` dispatches against a finished diff.
 
+- **Agent types are indexed at session start**, so a just-authored agent is not dispatchable in the
+  session that created it — `Agent type '<name>' not found`, the same shape as the already-recorded
+  plugin cache staleness. A nested `claude -p` run indexes at its own startup and is the workaround.
+  Found while spiking #99, and true of agent authoring generally.
+
+### Changed
+
+- **§ Observers is rewritten around what the #99 spike measured**, and the description above it
+  ("a read-only background watcher") turned out to be the schema's framing rather than the
+  behaviour.
+
+  The mechanism is gated on the environment flag `CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS`, and
+  when it is unset an `observer:` declaration is a **silent no-op** — no spawn, no error, no entry
+  in `permission_denials`, no `[agentObserver]` log, because the gate sits upstream of the arming
+  code that would log. Four probe runs produced exactly that nothing before the flag was found, and
+  the hypothesis those runs supported — that observers cannot supervise a headless run — was wrong.
+
+  With the flag set, three measured behaviours differ from the framing:
+
+  - **"Read-only" describes the digest, not the observer.** An observer with no `tools:` line
+    received `Bash, Edit, Read, Write, Skill, ToolSearch, ObserverReport`, does not inherit the
+    observed agent's scoping, and used `Bash` to write into the observed agent's workspace. Ship
+    every observer with an explicit `tools:` line.
+  - **A report to the observed agent is advisory.** It arrives as a mid-run message and the agent
+    may refuse it — the probe worker did, on the grounds that an observer message is not user
+    consent. On a *fan-out* pairing the routing differs: reports go to the coordinating agent, not
+    to the worker.
+  - **Delivery races the observed agent.** `Report queued for <agent>` is an acceptance receipt,
+    not proof of delivery; a report queued after the observed agent's last turn is never seen.
+
+  Digest shape is now recorded from an observer's own transcript rather than from strings in the
+  binary: per-turn `<{agentName}-activity>` blocks carrying assistant text, `<tool-call name="…">`
+  with full JSON arguments, and the matching `<tool-result>`.
+
 ---
 
 ## [Unreleased] — git hooks
