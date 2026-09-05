@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`agent-author` warns that `memory:` silently widens an agent's tool whitelist** (#85). The
+  field auto-enables `Read`, `Write` and `Edit`, and the write access is general-purpose rather
+  than confined to the memory directory — measured on Claude Code 2.1.252 against a control
+  differing in that one line. A reviewer declaring `tools: Read, Grep, Glob` alongside
+  `memory: project` can write anywhere while every line a reader would check still says read-only.
+  Documented in `conventions.md` § Tool Scoping with the measurement, on the `memory` row of the
+  frontmatter table, and as an `anti-patterns.md` entry. Whether this gets scoped upstream is
+  tracked in #144.
+
 - **`agent-author` documents five subagent frontmatter fields it was missing** (#85): `effort`,
   `observer`, `observerMessage`, `observeSubagents`, `experimental`. Read out of the shipped schema
   in Claude Code 2.1.252 — the issue had two, a spike had three, and none of the five appear in the
