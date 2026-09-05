@@ -32,6 +32,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`.github/PULL_REQUEST_TEMPLATE.md`** — the surfaces `docs-sync` deliberately does not enforce,
   as a checklist, plus the waiver syntax.
 
+### Changed
+
+- **Auto-merge is enabled, and `main` now has a ruleset that makes six checks required:**
+  `pytest` and `bats` on both runners, `Hook bundle version check`, and `docs-sync`.
+
+  Both halves are needed, and the first without the second is what made auto-merge look broken
+  when it was switched on: `gh pr merge --auto` does not queue anything when nothing is
+  *required*, so it merged a pull request immediately while its `bats` jobs were still running.
+  Auto-merge waits only for required checks, and until this ruleset existed there were none.
+  `main` carried no branch protection and no rulesets at all.
+
+  `strict_required_status_checks_policy` is off, so a branch does not have to be rebased onto the
+  tip of `main` before merging — that setting turns every parallel pull request into a rebase
+  queue and buys little here.
+
+  **One caveat worth knowing before it bites somebody:** the ruleset has no bypass actor.
+  `auto-bump-versions.yml` pushes its version bump to `main` directly, and GitHub refused the
+  GitHub Actions integration as a bypass actor at repository level ("must be part of the ruleset
+  source or owner organization"). If a bump run starts failing on a blocked push, that is the
+  cause — the fix is an app or PAT token for that workflow with a bypass entry, not deleting the
+  ruleset.
+
 ---
 
 ## [Unreleased] — docs navigation
