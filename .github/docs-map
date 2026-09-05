@@ -1,0 +1,31 @@
+# .github/docs-map — surfaces that must move with the code they describe
+#
+# Read by scripts/ci/check-docs-sync.sh. One entry per line:
+#
+#   <glob matching changed paths>    <surface that must change too>
+#
+# The glob is matched against each changed path with shell pattern matching, so
+# `*` does not stop at a "/" — write `plugins/*/skills/*` rather than relying on
+# a stricter globstar.
+#
+# Keep this table SMALL. Every entry here is a rule that will one day fire on a
+# change it should not, and a check that is usually wrong gets switched off
+# within a week — at which point it protects nothing. Add an entry when a real
+# omission has happened, not when one seems imaginable. Remove an entry that
+# turns out to be noise rather than working around it in pull request bodies.
+#
+# Deliberately absent: README.md. Almost no code change needs it, so requiring
+# it would be wrong far more often than right. It lives in the pull request
+# template instead, where it costs a glance rather than a red build.
+
+# ---------------------------------------------------------------------------
+# Statusline (#129)
+# ---------------------------------------------------------------------------
+# The segment added there shipped with docs/guides/statusline.md written and
+# these three untouched. The last one is the sharpest: the configurator writes
+# its *own* statusline.toml, so a key missing there does not exist at all for
+# anyone who sets the statusline up through the wizard.
+
+scripts/the-custom-startup-statusline-*   docs/guides/statusline.md
+scripts/the-custom-startup-statusline-*   scripts/statusline.toml
+scripts/the-custom-startup-statusline-*   scripts/the-custom-startup-configure-statusline.sh

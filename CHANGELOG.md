@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — merge automation
+
+### Added
+
+- **`docs-sync` blocks a pull request that leaves a documentation surface unanswered.** Auto-merge
+  is now enabled on the repository, which removes the pause where somebody used to notice the docs
+  had not been updated — so the check has to exist or the habit does not.
+
+  The cheaper version of this check would not have worked. #129 *did* change
+  `docs/guides/statusline.md`, and its first commit still had no changelog entry, a README
+  describing the superseded ccusage bar, and an untouched configurator — which writes its own
+  `statusline.toml`, so the new option did not exist at all for anyone setting the statusline up
+  through the wizard. "Did any documentation change?" passes on that commit. So `docs-sync` asks
+  per surface instead: any change under `scripts/` or `plugins/` needs a `CHANGELOG.md` entry, and
+  `.github/docs-map` names, per code glob, the surfaces that must move with it. Both can be waived
+  from the pull request body — `Docs: <path> — <reason>`, at least 20 characters — because a waiver
+  should cost more than the edit it avoids, and never be silent.
+
+  The map is deliberately small and holds only entries with a demonstrated omission behind them.
+  `README.md` is left out on purpose: almost no code change needs it, and a rule that is usually
+  wrong gets switched off within a week. It lives in the new pull request template instead.
+
+- **`.github/PULL_REQUEST_TEMPLATE.md`** — the surfaces `docs-sync` deliberately does not enforce,
+  as a checklist, plus the waiver syntax.
+
+---
+
 ## [Unreleased] — docs navigation
 
 ### Fixed
