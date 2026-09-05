@@ -16,6 +16,7 @@
 | Current sprint goal | "implementing auth this week" | repo | context.md |
 | Known blocker | "bun test crashes on M1 with arm64 native modules" | repo | troubleshooting.md |
 | Proven fix | "set NODE_OPTIONS=--max-old-space-size=4096 for builds" | repo | troubleshooting.md |
+| Structural thing ruled out | "no, a PAT bypass would cover every merge you make" | repo | declined.md |
 | Agent's own accumulated observation | "this repo keeps shipping `any` in the API layer" | agent | `.claude/agent-memory/<agentType>/` |
 
 ---

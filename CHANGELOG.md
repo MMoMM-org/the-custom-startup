@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — memory
+
+### Added
+
+- **`docs/ai/memory/declined.md` — a journal of what was ruled out, and the condition that reopens
+  it.** The memory bank stores what is true now; nothing stored what we decided *not* to do. A
+  rejected idea therefore resurfaced weeks later as if fresh and was re-argued from zero by a
+  session that never saw the original conversation.
+
+  This session alone produced eight structural declines, and they were scattered across two pull
+  request bodies, two issue comments, a changelog entry and `sources.md` — a parallel session would
+  have found none of them. The journal is seeded with all eight, each with a `Revisit if` condition,
+  so a decline reopens on a stated trigger rather than on forgetting.
+
+  Wired so it fires rather than sitting there: `/memory-add` routes rejection wording to it and is
+  told that a decline is not a decision; `docs/ai/CLAUDE.md` says to read it before proposing
+  anything structural; it appears in the index, the routing reference, the shipped routing template,
+  and `/memory-setup`'s scaffold.
+
+  It sits **outside** the 24 KB bank budget, along with `routing-reference.md` — neither is
+  auto-loaded, and a journal pruned to fit a budget deletes exactly the history it exists to keep.
+  `/memory-sync` excludes both, with that reasoning recorded, so the bank number keeps tracking the
+  always-loaded cost.
+
+  Adapted from [`tonydzi/claude-bible`](https://github.com/tonydzi/claude-bible) (MIT) § 5. Their
+  frontmatter precedence scheme was evaluated in the same pass and declined — the first entry the
+  journal records about itself.
+
+---
+
 ## [Unreleased] — agent authoring
 
 ### Added

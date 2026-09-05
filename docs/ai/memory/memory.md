@@ -12,6 +12,7 @@
 - [decisions.md](decisions.md) — architecture choices [updated: 2026-09-01]
 - [context.md](context.md) — current focus [updated: 2026-09-04]
 - [troubleshooting.md](troubleshooting.md) — known issues [updated: 2026-09-01]
+- [declined.md](declined.md) — what we decided NOT to do, and the condition that reopens it [updated: 2026-09-05]
 
 ## Archive
 <!-- Archived entries live in archive/YYYY-MM/. Not loaded at session start. -->

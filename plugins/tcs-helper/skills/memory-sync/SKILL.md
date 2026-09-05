@@ -86,9 +86,15 @@ grep '@docs/ai/memory' CLAUDE.md
 
 Measure bytes, never lines — entries are single long lines.
 
-- Sum `wc -c` across the category files (excluding `memory.md`, `active.md` and `archive/`)
+- Sum `wc -c` across the category files (excluding `memory.md`, `active.md`, `declined.md`,
+  `routing-reference.md` and `archive/`)
 - `active.md` has its own budget: ERROR at ≥ 2.5 KB, since every byte is paid for on
   every subagent dispatch
+- `declined.md` and `routing-reference.md` are outside the budget on purpose. Neither is
+  auto-loaded — the journal is read before proposing something structural, the routing table
+  when `/memory-add` runs — and the journal is supposed to grow: pruning it to fit a budget
+  would delete exactly the history it exists to keep. Counting them would report a bank
+  approaching its limit while the always-loaded cost had not moved at all.
 - If ≥ 24 KB: ERROR — "memory bank over budget (N KB) — run /memory-cleanup"
 - If ≥ 16 KB: WARN — "memory bank approaching budget (N/24 KB)"
 - Otherwise: OK

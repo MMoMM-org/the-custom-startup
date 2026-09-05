@@ -4,6 +4,17 @@
 
 ### Added
 
+- **The memory skills know about `declined.md`**, the new journal of structural things ruled out.
+  `/memory-add` routes rejection wording (`rejected`, `declined`, `deferred`, `ruled out`,
+  `decided against`) to it, and is told the distinction that makes the file worth having:
+  `decisions.md` records what was chosen, `declined.md` records what was not and the condition that
+  reopens it — written in the journal's own entry form, not as a one-line memory entry.
+  `/memory-setup` scaffolds it, and the shipped `routing-reference.md` template carries a row.
+
+  `/memory-sync` excludes it — and `routing-reference.md` — from the 24 KB bank budget. Neither is
+  auto-loaded, and a journal pruned to fit a budget deletes the history it exists to keep; counting
+  them would report a bank near its limit while the always-loaded cost had not moved.
+
 - **`agent-author` warns that `memory:` silently widens the tool whitelist** (issue #85). Setting
   `memory: user|project|local` auto-enables `Read`, `Write` and `Edit`, and the write access is
   **general-purpose — not confined to the agent's memory directory**. Measured on Claude Code

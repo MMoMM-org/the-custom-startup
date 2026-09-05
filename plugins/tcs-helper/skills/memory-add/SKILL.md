@@ -82,9 +82,12 @@ For each learning, classify using these keyword signals:
 | build, CI, deploy, script, command, tool, api, client | tools | docs/ai/memory/tools.md |
 | domain, entity, rule, model, business, contract | domain | docs/ai/memory/domain.md |
 | decided, chose, decision, tradeoff, architecture, why | decisions | docs/ai/memory/decisions.md |
+| rejected, declined, deferred, not doing, ruled out, decided against | declined | docs/ai/memory/declined.md |
 | working on, focus, sprint, current, this week | context | docs/ai/memory/context.md |
 | bug, error, fix, workaround, issue, broken, resolved | troubleshooting | docs/ai/memory/troubleshooting.md |
 | personal, always prefer, never use, my workflow | global | ~/.claude/includes/ |
+
+**Declines are not decisions.** `decisions.md` records what was chosen; `declined.md` records what was ruled out and the condition that reopens it. A learning that names a rejection, a deferral or a road not taken goes to `declined.md` in the journal's entry form (Proposed / Decision / Why / Revisit if), not as a one-line memory entry. Only structural things belong there — if nobody would plausibly re-propose it, it is not a decline.
 
 **Auto-routing for tool errors:** Queue items with `item_type: 'tool_error'` are automatically routed to `troubleshooting.md` regardless of keyword signals. The `error_pattern` field (e.g., `module_not_found`, `connection_refused`) is preserved in the written entry.
 

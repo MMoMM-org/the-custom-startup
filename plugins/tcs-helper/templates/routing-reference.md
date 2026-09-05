@@ -13,6 +13,7 @@
 | Data model fact | "Order.status is always lowercase" | repo | domain.md |
 | Architecture choice | "chose hexagonal over layered" | repo | decisions.md |
 | Tech tradeoff | "using SQLite because low concurrency expected" | repo | decisions.md |
+| Structural thing ruled out | "no — a PAT bypass would cover every merge you make" | repo | declined.md |
 | Current sprint goal | "implementing auth this week" | repo | context.md |
 | Known blocker | "bun test crashes on M1 with arm64 native modules" | repo | troubleshooting.md |
 | Proven fix | "set NODE_OPTIONS=--max-old-space-size=4096 for builds" | repo | troubleshooting.md |

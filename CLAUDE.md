@@ -21,6 +21,7 @@ need to locate a plugin, skill or agent, not on every session.
 - Architectural decisions → docs/ai/memory/decisions.md
 - Current focus/blockers → docs/ai/memory/context.md
 - Bugs/fixes → docs/ai/memory/troubleshooting.md
+- Structural proposal rejected or deferred → docs/ai/memory/declined.md (read it *before* proposing, too)
 - An agent's own observation, useful only to it and only in aggregate → `.claude/agent-memory/<agentType>/` — never for a read-only agent, and never for anything a second party needs (see routing-reference.md)
 
 ## Design References
