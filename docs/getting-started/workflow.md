@@ -180,4 +180,4 @@ If you have `tcs-helper` installed, the **[Memory Bank](../about/concepts.md#mem
 
 ## All Commands
 
-See [../skills.md](../skills.md) for the full command reference and decision tree.
+See [skills.md](../reference/skills.md) for the full command reference and decision tree.

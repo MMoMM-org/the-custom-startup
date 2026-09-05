@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — docs navigation
+
+### Fixed
+
+- **Five relative links pointed outside their own directories (#137).** Fallout from the docs
+  rewrite, which moved the flat `docs/*.md` files into `getting-started/`, `guides/` and
+  `reference/` without updating the prefixes aimed at them. Every target existed one directory
+  over, so each link looked plausible while resolving to nothing. Three sat in
+  `installation.md` alone, sending anyone following the manual install to a 404 for the
+  `startup.toml` format, the output styles and the multi-AI templates — the three things that
+  section tells them to read next. A sixth of the same class, the statusline guide, was fixed in
+  #135.
+
+### Added
+
+- **`tests/test_docs_links.py` resolves every relative link in the user-facing docs.** Nothing
+  catches this class by reading a diff, so it is checked rather than remembered. It runs in the
+  existing pytest job — no new CI surface — skips fenced blocks and inline code spans (the
+  plan-file checklist in `xdd.md` and the Starship TOML in `statusline.md` are examples, not
+  links), and names where a failing link *would* have resolved without its leading `../`.
+
+---
+
 ## [Unreleased] — statusline hardening
 
 ### Added

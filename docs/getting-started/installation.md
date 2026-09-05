@@ -75,7 +75,7 @@ Download a statusline script from [`scripts/`](../../scripts/) and configure it.
 
 ### Startup Configuration
 
-Create `.claude/startup.toml` in your project (or `~/.claude/startup.toml` for a global default) to configure spec paths and other options. The install script generates this file automatically; for the expected format and available keys see [workflow.md](../workflow.md).
+Create `.claude/startup.toml` in your project (or `~/.claude/startup.toml` for a global default) to configure spec paths and other options. The install script generates this file automatically; for the expected format and available keys see [workflow.md](workflow.md).
 
 ### Output Style
 
@@ -86,11 +86,11 @@ Set your preferred output style once inside Claude:
 /output-style "tcs-workflow:The ScaleUp"   # structured, process-oriented
 ```
 
-See [output-styles.md](../output-styles.md) for a comparison of both styles.
+See [output-styles.md](../reference/output-styles.md) for a comparison of both styles.
 
 ### Multi-AI Templates
 
-Download prompt templates from [`docs/templates/`](../templates/) manually if you want to use the multi-AI workflow. See [multi-ai-workflow.md](../multi-ai-workflow.md) for how to use them.
+Download prompt templates from [`docs/templates/`](../templates/) manually if you want to use the multi-AI workflow. See [multi-ai-workflow.md](../guides/multi-ai-workflow.md) for how to use them.
 
 ### Memory Bank (requires tcs-helper)
 
