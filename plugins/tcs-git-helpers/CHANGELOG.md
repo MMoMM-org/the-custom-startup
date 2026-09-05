@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.2.21] - 2026-09-05
+
+### Fixed
+
+- **`pre-push` warned on every push when the remote is an SSH host alias (issue #136).** The hook
+  fails open *silently* for the ordinary case of a repo `gh` cannot map to a GitHub host — a
+  non-GitHub remote, or the common multi-account setup using `git@github-alias:owner/repo.git`.
+  That branch matched the string `no GitHub remote`, which `gh` has never emitted. It says:
+
+      none of the git remotes configured for this repository point to a known GitHub host.
+      To tell gh about a new GitHub host, please use `gh auth login`
+
+  So the silent branch was unreachable and every push printed the catch-all warning instead:
+
+      tcs-git-helpers: pre-push skipped — gh error (exit 1). Push allowed; check gh CLI status.
+
+  Pushing always worked — fail-open is correct — but a warning on literally every push trains
+  people to ignore hook output, which is what the hook depends on.
+
+  Both wordings now match, so a rewording in either direction stays silent instead of becoming
+  noise again. A genuine `gh` failure still warns.
+
+  The issue also reported that `2>/dev/null` discarded the message before it could be matched.
+  That held for 2.2.12 but not for the current hook — `_gh_with_timeout` merges the child's
+  stderr into its own stdout, so the text does arrive. Adding a separate stderr capture, as the
+  issue suggested, would have collected nothing and quietly re-broken the match.
+
+  Hook bundle: **h5 → h6**. Run `/tcs-git-helpers:git-setup --update` to pick it up.
+
 ## [2.2.20] - 2026-09-04
 
 ### Fixed
