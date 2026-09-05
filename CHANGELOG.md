@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — agent authoring
+
+### Added
+
+- **`agent-author` documents five subagent frontmatter fields it was missing** (#85): `effort`,
+  `observer`, `observerMessage`, `observeSubagents`, `experimental`. Read out of the shipped schema
+  in Claude Code 2.1.252 — the issue had two, a spike had three, and none of the five appear in the
+  documentation's own field reference. `observer` gained a section: a read-only background watcher
+  spawned on every run of the observed agent, which is not the same thing as the review agents
+  `tcs-workflow` dispatches against a finished diff.
+
+---
+
 ## [Unreleased] — git hooks
 
 ### Fixed

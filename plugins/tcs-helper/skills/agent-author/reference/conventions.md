@@ -51,6 +51,32 @@ Per Anthropic's official subagent schema:
 | `isolation` | No | `worktree` runs agent in fresh git worktree, auto-cleaned on no-op |
 | `initialPrompt` | No | Auto-submitted first turn when running as main session via `--agent` |
 | `user-invocable` | No | `false` to hide from `/` menu while keeping programmatic dispatch |
+| `effort` | No | `low` \| `medium` \| `high` \| `xhigh` \| `max`, or an integer — reasoning effort for this agent |
+| `observer` | No | Agent type auto-spawned as a background observer whenever this agent runs — see § Observers |
+| `observerMessage` | No | Supplemental postamble appended after the harness-owned default to each activity digest sent to the observer. Blank values are ignored |
+| `observeSubagents` | No | `false` stops subagents this agent spawns from inheriting its observer. Defaults to `true` |
+| `experimental` | No | Per-agent experimental options; unknown keys are ignored. Currently `cacheTtl`: `"5m"` \| `"1h"` prompt-cache TTL for this agent's requests, used when no `subagentPromptCacheTtl` setting or env var is set (`"1h"` is ignored while a subscription is in overage) |
+
+The last five were missing from this table until 2026-09-05, and are absent from the
+documentation's own field list too. They were read out of the shipped schema in Claude Code
+2.1.252; the wording above is the schema's, not a paraphrase of the docs.
+
+### Observers
+
+`observer` attaches a **read-only background watcher** to an agent. It is not a reviewer
+dispatched after the fact: it runs concurrently, receives activity digests rather than the task
+itself, reports through its own `ObserverReport` tool, and never participates in the work. That
+makes it a different mechanism from the review agents in `tcs-workflow`, which see a finished diff.
+
+Two consequences worth knowing before reaching for it:
+
+- The observer is spawned on **every** run of the observed agent, so it costs a second agent's
+  budget each time. That earns its keep on long autonomous runs, not on short dispatches.
+- `observeSubagents` defaults to `true`, so an observed agent's own subagents are observed as
+  well. On a fan-out that multiplies quietly — set it to `false` unless the nested work is the
+  thing being watched.
+
+No TCS agent uses an observer yet; whether one should is evaluated separately.
 
 ---
 

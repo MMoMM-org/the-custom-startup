@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.3.5] - 2026-09-05
+
+### Added
+
+- **Five subagent frontmatter fields the `agent-author` reference did not carry** (issue #85):
+  `effort`, `observer`, `observerMessage`, `observeSubagents` and `experimental`.
+
+  The issue reported two missing, a later spike found three. Reading the schema out of the shipped
+  bundle in Claude Code 2.1.252 turned up five — `observeSubagents` and the shape of
+  `experimental.cacheTtl` were on nobody's list, and none of the five appear in the documentation's
+  own field reference either. Descriptions in the table are the schema's own wording rather than a
+  paraphrase, so a later reader can tell what is quoted from what is inferred.
+
+  `observer` gained a short section of its own. It is a **read-only background watcher** spawned on
+  every run of the observed agent — concurrent with the work, fed activity digests, reporting via
+  its own `ObserverReport` tool, never participating. That is a different mechanism from the
+  `tcs-workflow` review agents, which see a finished diff, and it costs a second agent's budget per
+  run. `observeSubagents` defaults to `true`, so on a fan-out the observation multiplies quietly.
+
 ## [4.3.1] - 2026-08-31
 
 ### Fixed
