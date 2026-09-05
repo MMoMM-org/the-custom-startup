@@ -47,7 +47,7 @@
 - **[Satori Integration](docs/about/concepts.md#satori--mcp-gateway-optional)** *(optional)* — MCP gateway that captures session activity and serves compact summaries, further reducing context consumption.
 - **Resume Across Sessions** — Specs live on disk. Hit a context limit? Start a fresh session and pick up exactly where you left off.
 - **[Interactive Install Wizard](#installation)** — Choose install target, plugins, output style, statusline, and multi-AI templates — with a confirmation summary before anything is written.
-- **[3 Statusline Variants](docs/guides/statusline.md)** — Standard, enhanced with live token budget bar (via ccusage), and Starship bridge — all configurable via `statusline.toml`.
+- **[3 Statusline Variants](docs/guides/statusline.md)** — Standard, enhanced (subscription budget bar from the payload's `rate_limits`, plus an opt-in extra-usage credit bar), and Starship bridge — all configurable via `statusline.toml`.
 - **[Output Styles](docs/reference/output-styles.md)** — The Startup (high-energy, fast) and The ScaleUp (calm, educational).
 - **Configurable Spec Paths** — `.claude/startup.toml` tells all skills and scripts where your specs live.
 
@@ -198,7 +198,7 @@ The Custom Startup evolved from a fork of [the-startup](https://github.com/rsmdt
 - **[Satori gateway](docs/about/concepts.md#satori--mcp-gateway-optional)** *(optional)* — MCP gateway for session context capture, compact summaries, and downstream server routing. Further reduces context consumption.
 - **[XDD workflow](docs/reference/xdd.md)** — 6-skill spec pipeline (xdd, xdd-meta, xdd-prd, xdd-sdd, xdd-plan, xdd-tdd) with backward validation to detect spec drift after implementation
 - **[Interactive install/uninstall wizards](docs/getting-started/installation.md)** — global / repo / other path, plugin selection, output style, multi-AI templates, statusline with conflict detection, optional Satori setup
-- **[3 statusline variants](docs/guides/statusline.md)** — standard, enhanced (token budget bar via ccusage), Starship bridge — each configurable via `statusline.toml`
+- **[3 statusline variants](docs/guides/statusline.md)** — standard, enhanced (budget bar from `rate_limits`, opt-in extra-usage credit bar, ccusage fallback), Starship bridge — each configurable via `statusline.toml`
 - **[Multi-AI workflow](docs/guides/multi-ai-workflow.md)** — export specs as prompts for Claude.ai or Perplexity, import results back as PRD/SDD
 - **[tcs-patterns plugin](docs/guides/tcs-patterns.md)** — 17 optional domain pattern skills (architecture, testing, platforms, integrations)
 - **Configurable specs directory** — `.claude/startup.toml` tells skills and scripts where your specs live; fallback chain keeps backward compatibility

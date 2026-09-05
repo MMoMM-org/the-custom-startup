@@ -71,7 +71,7 @@ Marketplace installation only installs the plugins. The following extras are **n
 
 ### Statusline
 
-Download a statusline script from [`scripts/`](../../scripts/) and configure it. See [statusline.md](../statusline.md) for full setup instructions including configuration options and the `statusline.toml` format.
+Download a statusline script from [`scripts/`](../../scripts/) and configure it. See [statusline.md](../guides/statusline.md) for full setup instructions including configuration options and the `statusline.toml` format.
 
 ### Startup Configuration
 

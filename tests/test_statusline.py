@@ -397,3 +397,436 @@ def test_no_loose_tmp_cache_paths_remain_in_the_scripts():
             if re.search(r'"/tmp/tcs-statusline', line):
                 offenders.append(f"{path.name}:{n}: {line.strip()}")
     assert not offenders, "use tcs_cache_dir:\n" + "\n".join(offenders)
+
+
+# ---------------------------------------------------------------------------
+# 7. Extra-usage credits from the OAuth usage API (#129)
+# ---------------------------------------------------------------------------
+#
+# This is the only segment that leaves the machine or reads a credential, so
+# what is pinned here is mostly what it must *not* do: nothing at all unless it
+# is switched on, no credential resolution on a render served from cache (the
+# macOS keychain dialog is the reason), no second attempt after a failure until
+# the backoff expires, and never the token on a command line.
+
+TOKEN = "sk-ant-oat01-EXAMPLE.token_value~123"
+
+# The shape a live account actually returned on 2026-09-05, with the amounts
+# changed. Two things here are the reason this is not a straight port of the
+# reference implementation, which reads `extra_usage` alone:
+#
+#   - `extra_usage.utilization` comes back **null**; `spend.percent` carries the
+#     real figure, so the percentage must come from `spend` first
+#   - the account bills in **EUR**, and `spend` states currency and exponent per
+#     amount — a hardcoded "$" and a hardcoded /100 would both have been wrong
+USAGE_RESPONSE = json.dumps(
+    {
+        "five_hour": {"utilization": 2},
+        "spend": {
+            "used": {"amount_minor": 3410, "currency": "EUR", "exponent": 2},
+            "limit": {"amount_minor": 15000, "currency": "EUR", "exponent": 2},
+            "percent": 22.7,
+            "enabled": True,
+        },
+        "extra_usage": {
+            "is_enabled": True,
+            "utilization": None,
+            "used_credits": 3410,
+            "monthly_limit": 15000,
+            "currency": "EUR",
+            "decimal_places": 2,
+        },
+    }
+)
+
+# An account carrying only the older flat shape, in another currency.
+LEGACY_RESPONSE = json.dumps(
+    {
+        "five_hour": {},
+        "extra_usage": {
+            "is_enabled": True,
+            "utilization": 40,
+            "used_credits": 1000,
+            "monthly_limit": 5000,
+            "currency": "USD",
+            "decimal_places": 2,
+        },
+    }
+)
+
+
+def _usage_stubs(tmp_path, response=None):
+    """Stub curl / security / secret-tool on PATH, recording every invocation.
+
+    `response` None makes curl fail, which is how the failure paths are driven.
+    The curl stub also records its argv and its stdin separately, so the test
+    can tell *how* the token was passed rather than only that a call happened.
+    """
+    bindir = tmp_path / "usagebin"
+    bindir.mkdir(exist_ok=True)
+    log = {
+        "calls": tmp_path / "calls",
+        "argv": tmp_path / "curl-argv",
+        "stdin": tmp_path / "curl-stdin",
+    }
+
+    if response is None:
+        emit = "exit 1"
+    else:
+        body = tmp_path / "usage-response.json"
+        body.write_text(response)
+        emit = f'cat "{body}"'
+
+    curl = bindir / "curl"
+    curl.write_text(
+        "#!/bin/sh\n"
+        f'echo curl >> "{log["calls"]}"\n'
+        f'printf "%s\\n" "$*" >> "{log["argv"]}"\n'
+        f'cat >> "{log["stdin"]}"\n'
+        f"{emit}\n"
+    )
+    curl.chmod(0o755)
+
+    # Both keychain front-ends, so the test is the same on either platform.
+    for name in ("security", "secret-tool"):
+        stub = bindir / name
+        stub.write_text(f'#!/bin/sh\necho {name} >> "{log["calls"]}"\nexit 1\n')
+        stub.chmod(0o755)
+
+    return bindir, log
+
+
+def _calls(log, name=None):
+    path = log["calls"]
+    if not path.exists():
+        return 0
+    entries = path.read_text().split()
+    return len(entries) if name is None else entries.count(name)
+
+
+def _usage_env(bindir, runtime, **extra):
+    """PATH with the stubs first, and a cache directory private to one test."""
+    env = {
+        "PATH": f"{bindir}:/usr/bin:/bin:/usr/local/bin",
+        "TMPDIR": str(runtime),
+        "XDG_RUNTIME_DIR": str(runtime),
+    }
+    env.update(extra)
+    return env
+
+
+def _enable_extra_usage(home, extra=""):
+    cfg = home / ".config" / "the-custom-startup"
+    cfg.mkdir(parents=True, exist_ok=True)
+    (cfg / "statusline.toml").write_text("show_extra_usage = true\n" + extra)
+
+
+def _cache_dir(runtime):
+    import os
+
+    d = runtime / f"tcs-statusline-{os.getuid()}"
+    d.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return d
+
+
+@pytest.fixture
+def runtime(tmp_path):
+    d = tmp_path / "runtime"
+    d.mkdir()
+    return d
+
+
+def test_extra_usage_does_nothing_unless_it_is_switched_on(home, tmp_path, runtime):
+    """Default off means no network and no credential read, not a hidden row."""
+    bindir, log = _usage_stubs(tmp_path, USAGE_RESPONSE)
+    (home / ".claude" / ".credentials.json").write_text(
+        json.dumps({"claudeAiOauth": {"accessToken": TOKEN}})
+    )
+
+    out = _render(dict(BASE_PAYLOAD), home, env=_usage_env(bindir, runtime)).stdout
+
+    assert _calls(log) == 0, f"something was spawned with the feature off: {log}"
+    assert "💳" not in out, out
+
+
+def test_extra_usage_renders_credit_consumption(home, tmp_path, runtime):
+    bindir, log = _usage_stubs(tmp_path, USAGE_RESPONSE)
+    _enable_extra_usage(home)
+
+    out = ANSI.sub(
+        "",
+        _render(
+            dict(BASE_PAYLOAD),
+            home,
+            env=_usage_env(bindir, runtime, CLAUDE_CODE_OAUTH_TOKEN=TOKEN),
+        ).stdout,
+    )
+
+    assert "💳" in out, out
+    # 22.7 from spend.percent — extra_usage.utilization is null in this payload,
+    # so a reader that trusted it would draw an empty bar on a real account.
+    assert "23%" in out, out
+    assert "€34.10/€150.00" in out, out
+    assert "$" not in out, f"currency assumed rather than read: {out}"
+
+
+def test_extra_usage_reads_the_older_flat_shape_too(home, tmp_path, runtime):
+    """`spend` is preferred, but an account carrying only extra_usage still renders."""
+    bindir, _ = _usage_stubs(tmp_path, LEGACY_RESPONSE)
+    _enable_extra_usage(home)
+
+    out = ANSI.sub(
+        "",
+        _render(
+            dict(BASE_PAYLOAD),
+            home,
+            env=_usage_env(bindir, runtime, CLAUDE_CODE_OAUTH_TOKEN=TOKEN),
+        ).stdout,
+    )
+    assert "40%" in out, out
+    assert "$10.00/$50.00" in out, out
+
+
+def test_a_disabled_spend_is_not_overridden_by_a_stale_extra_usage(
+    home, tmp_path, runtime
+):
+    """In jq `false // x` yields x, so the enablement test cannot be a // chain."""
+    mixed = json.dumps(
+        {
+            "spend": {
+                "enabled": False,
+                "percent": 0,
+                "used": {"amount_minor": 0, "currency": "EUR", "exponent": 2},
+            },
+            "extra_usage": {"is_enabled": True, "used_credits": 9900},
+        }
+    )
+    bindir, _ = _usage_stubs(tmp_path, mixed)
+    _enable_extra_usage(home)
+
+    out = _render(
+        dict(BASE_PAYLOAD),
+        home,
+        env=_usage_env(bindir, runtime, CLAUDE_CODE_OAUTH_TOKEN=TOKEN),
+    ).stdout
+    assert "💳" not in out, out
+
+
+def test_no_row_when_the_account_has_no_extra_usage(home, tmp_path, runtime):
+    """is_enabled false is the common case and must be entirely unremarkable."""
+    off = json.dumps({"five_hour": {}, "extra_usage": {"is_enabled": False}})
+    bindir, _ = _usage_stubs(tmp_path, off)
+    _enable_extra_usage(home)
+
+    r = _render(
+        dict(BASE_PAYLOAD),
+        home,
+        env=_usage_env(bindir, runtime, CLAUDE_CODE_OAUTH_TOKEN=TOKEN),
+    )
+    out = ANSI.sub("", r.stdout)
+
+    assert "💳" not in out, out
+    assert out.strip(), "the rest of the statusline must still render"
+    assert "syntax error" not in r.stderr, r.stderr
+
+
+def test_a_cached_response_resolves_no_credential(home, tmp_path, runtime):
+    """The keychain guarantee: only a fetch may reach for a token.
+
+    `security find-generic-password` can raise an access dialog, and the client
+    waits on this script synchronously — so a render served from cache must not
+    touch the keychain, the credentials file, or the network.
+    """
+    bindir, log = _usage_stubs(tmp_path, USAGE_RESPONSE)
+    _enable_extra_usage(home)
+    (_cache_dir(runtime) / "usage.json").write_text(USAGE_RESPONSE)
+
+    # No CLAUDE_CODE_OAUTH_TOKEN: the only ways left to find one are the file
+    # and the keychain, and neither may be consulted.
+    out = ANSI.sub(
+        "", _render(dict(BASE_PAYLOAD), home, env=_usage_env(bindir, runtime)).stdout
+    )
+
+    assert _calls(log) == 0, f"cached render still resolved a credential: {log}"
+    assert "€34.10/€150.00" in out, out
+
+
+def test_a_failed_fetch_is_not_retried_on_the_next_render(home, tmp_path, runtime):
+    """Negative cache: a broken network costs one attempt, not one per render."""
+    bindir, log = _usage_stubs(tmp_path, response=None)   # curl fails
+    _enable_extra_usage(home)
+    env = _usage_env(bindir, runtime, CLAUDE_CODE_OAUTH_TOKEN=TOKEN)
+
+    first = _render(dict(BASE_PAYLOAD), home, env=env)
+    second = _render(dict(BASE_PAYLOAD), home, env=env)
+
+    assert _calls(log, "curl") == 1, (
+        f"{_calls(log, 'curl')} fetches across two renders — "
+        "the failure was not cached"
+    )
+    for r in (first, second):
+        assert "💳" not in r.stdout, r.stdout
+        assert r.stdout.strip(), "a failed fetch must not swallow the statusline"
+
+
+def test_the_token_is_never_passed_on_the_command_line(home, tmp_path, runtime):
+    """argv is world-readable through procfs; the token goes via curl --config."""
+    bindir, log = _usage_stubs(tmp_path, USAGE_RESPONSE)
+    _enable_extra_usage(home)
+
+    _render(
+        dict(BASE_PAYLOAD),
+        home,
+        env=_usage_env(bindir, runtime, CLAUDE_CODE_OAUTH_TOKEN=TOKEN),
+    )
+
+    argv = log["argv"].read_text()
+    assert TOKEN not in argv, f"token found in curl argv: {argv}"
+    assert TOKEN in log["stdin"].read_text(), "token never reached curl at all"
+
+
+def test_no_authorization_header_is_built_on_argv():
+    """Structural guard against a later edit moving the token back to argv."""
+    offenders = []
+    for path in sorted(SCRIPTS.glob("the-custom-startup-statusline-*.sh")):
+        for n, line in enumerate(path.read_text().splitlines(), 1):
+            if re.search(r"-H\s+['\"]?Authorization", line):
+                offenders.append(f"{path.name}:{n}: {line.strip()}")
+    assert not offenders, (
+        "pass the token through `curl --config -`, not argv:\n" + "\n".join(offenders)
+    )
+
+
+@pytest.mark.parametrize("token", ['abc"def', "abc def", "abc\nheader = evil"])
+def test_oauth_token_refuses_anything_that_could_inject_a_curl_directive(
+    token, tmp_path
+):
+    """The token is interpolated into a curl config, so it is validated first."""
+    r = _lib(
+        '_tcs_oauth_token; echo "rc=$?"',
+        env={"CLAUDE_CODE_OAUTH_TOKEN": token},
+        home=tmp_path,
+    )
+    assert r.stdout.strip() == "rc=1", f"{token!r} was accepted: {r.stdout!r}"
+
+
+def test_oauth_token_accepts_a_url_safe_token(tmp_path):
+    r = _lib("_tcs_oauth_token", env={"CLAUDE_CODE_OAUTH_TOKEN": TOKEN}, home=tmp_path)
+    assert r.stdout == TOKEN, f"{r.stdout!r} (stderr: {r.stderr})"
+
+
+def test_extra_usage_bar_stays_ten_cells_above_one_hundred(home, tmp_path, runtime):
+    over = json.dumps(
+        {
+            "five_hour": {},
+            "extra_usage": {
+                "is_enabled": True,
+                "utilization": 137.0,
+                "used_credits": 20550,
+                "monthly_limit": 15000,
+            },
+        }
+    )
+    bindir, _ = _usage_stubs(tmp_path, over)
+    _enable_extra_usage(home)
+
+    out = ANSI.sub(
+        "",
+        _render(
+            dict(BASE_PAYLOAD),
+            home,
+            env=_usage_env(bindir, runtime, CLAUDE_CODE_OAUTH_TOKEN=TOKEN),
+        ).stdout,
+    )
+    credit = [l for l in out.splitlines() if "💳" in l]
+    assert credit, out
+    assert "137%" in credit[0], credit[0]
+    # Context bar plus credit bar, and no third bar's worth of overflow.
+    assert _cells(credit[0]) == 20, f"bar widened past its ten cells: {credit[0]!r}"
+
+
+def test_a_missing_limit_is_omitted_rather_than_shown_as_zero(
+    home, tmp_path, runtime
+):
+    """"€34.10/€0.00" would read as an exhausted budget rather than an absent one."""
+    no_limit = json.dumps(
+        {
+            "spend": {
+                "enabled": True,
+                "percent": 5,
+                "used": {"amount_minor": 3410, "currency": "EUR", "exponent": 2},
+                "limit": {"amount_minor": 0, "currency": "EUR", "exponent": 2},
+            }
+        }
+    )
+    bindir, _ = _usage_stubs(tmp_path, no_limit)
+    _enable_extra_usage(home)
+
+    out = ANSI.sub(
+        "",
+        _render(
+            dict(BASE_PAYLOAD),
+            home,
+            env=_usage_env(bindir, runtime, CLAUDE_CODE_OAUTH_TOKEN=TOKEN),
+        ).stdout,
+    )
+    assert "€34.10" in out, out
+    assert "/€" not in out, f"a zero limit was rendered: {out}"
+
+
+@pytest.mark.parametrize(
+    "minor,exponent,expected",
+    [("3410", "2", "34.10"), ("500", "2", "5.00"), ("1234", "0", "1234"),
+     ("1234", "3", "1.234")],
+)
+def test_minor_units_honour_the_exponent_the_endpoint_states(
+    minor, exponent, expected
+):
+    """The divisor is read, not assumed — not every currency is two decimals."""
+    r = _lib(f'_tcs_minor_to_amount "{minor}" "{exponent}"')
+    assert r.stdout == expected, f"{r.stdout!r} (stderr: {r.stderr})"
+
+
+@pytest.mark.parametrize(
+    "code,expected", [("EUR", "€"), ("USD", "$"), ("GBP", "£"), ("", "$")]
+)
+def test_currency_symbols(code, expected):
+    r = _lib(f'_tcs_currency_symbol "{code}"')
+    assert r.stdout == expected, f"{code!r} -> {r.stdout!r}"
+
+
+def test_an_unknown_currency_is_printed_rather_than_guessed():
+    r = _lib('_tcs_currency_symbol "CHF"')
+    assert r.stdout.strip() == "CHF", f"{r.stdout!r} — a wrong symbol is worse"
+
+
+def test_a_bounded_command_cannot_outlive_its_ceiling(tmp_path):
+    """tcs_bounded is what keeps a macOS keychain dialog from hanging a render."""
+    import time
+
+    start = time.monotonic()
+    r = _lib("tcs_bounded 1 sleep 30; echo done")
+    elapsed = time.monotonic() - start
+
+    assert "done" in r.stdout, r.stderr
+    assert elapsed < 10, f"the ceiling did not apply: {elapsed:.1f}s"
+
+
+def test_bounded_still_applies_a_ceiling_with_no_timeout_installed(tmp_path):
+    """Stock macOS ships neither timeout nor gtimeout, and that is the platform
+    where the keychain dialog exists — so the emulated ceiling is the one that
+    actually has to work. A PATH holding only `sleep` forces that branch."""
+    import shutil
+    import time
+
+    bindir = tmp_path / "notimeout"
+    bindir.mkdir()
+    for tool in ("bash", "sleep"):
+        (bindir / tool).symlink_to(shutil.which(tool))
+
+    start = time.monotonic()
+    r = _lib("tcs_bounded 1 sleep 30; echo done", env={"PATH": str(bindir)})
+    elapsed = time.monotonic() - start
+
+    assert "done" in r.stdout, f"{r.stdout!r} (stderr: {r.stderr})"
+    assert elapsed < 10, f"the emulated ceiling did not apply: {elapsed:.1f}s"

@@ -168,12 +168,14 @@ tcs_cfg_budget_danger=90
 
 tcs_cfg_ccusage_cache_ttl=60
 tcs_cfg_git_cache_ttl=15
+tcs_cfg_usage_cache_ttl=300         # OAuth usage API: response TTL and failure backoff
 
 tcs_cfg_show_budget_bar=true
 tcs_cfg_show_context_bar=true
 tcs_cfg_show_duration=true
 tcs_cfg_show_git=true
 tcs_cfg_show_remote_url=true
+tcs_cfg_show_extra_usage=false      # opt-in: the only segment that leaves the machine
 
 # Standard statusline format (placeholder-based)
 tcs_cfg_format="<path> <branch>  <model>  <context>  <session>  <help>"
@@ -194,7 +196,9 @@ _tcs_load_config_file() {
   v=$(tcs_toml_get "$file" "token_limit")        && tcs_cfg_token_limit_manual="$v"
   v=$(tcs_toml_get "$file" "ccusage_cache_ttl")  && tcs_cfg_ccusage_cache_ttl="$v"
   v=$(tcs_toml_get "$file" "git_cache_ttl")      && tcs_cfg_git_cache_ttl="$v"
+  v=$(tcs_toml_get "$file" "usage_cache_ttl")    && tcs_cfg_usage_cache_ttl="$v"
   v=$(tcs_toml_get "$file" "show_budget_bar")    && tcs_cfg_show_budget_bar="$v"
+  v=$(tcs_toml_get "$file" "show_extra_usage")   && tcs_cfg_show_extra_usage="$v"
   v=$(tcs_toml_get "$file" "show_context_bar")   && tcs_cfg_show_context_bar="$v"
   v=$(tcs_toml_get "$file" "show_duration")      && tcs_cfg_show_duration="$v"
   v=$(tcs_toml_get "$file" "show_git")           && tcs_cfg_show_git="$v"
@@ -541,4 +545,302 @@ tcs_load_ccusage() {
     TCS_BLOCK_TOKEN_PCT=$(( TCS_BLOCK_TOKENS * 100 / tcs_cfg_token_limit ))
     [[ "$TCS_BLOCK_TOKEN_PCT" -gt 100 ]] && TCS_BLOCK_TOKEN_PCT=100
   fi
+}
+
+# ==============================================================================
+# Bounded execution
+# ==============================================================================
+
+# Run a command under a wall-clock ceiling, and return whatever it wrote.
+#
+# Stock macOS ships neither `timeout` nor `gtimeout`, and the one caller that
+# needs this — the keychain lookup in _tcs_oauth_token — is exactly the command
+# that can sit indefinitely waiting for someone to answer an access dialog. The
+# statusline is rendered synchronously and the client waits on it, so an
+# unbounded call there is a hung prompt, not a slow one.
+#
+# Usage: tcs_bounded <seconds> <command> [args...]
+tcs_bounded() {
+  local secs="${1:-2}"
+  shift || return 1
+
+  if command -v timeout > /dev/null 2>&1; then
+    timeout "$secs" "$@" 2>/dev/null
+    return $?
+  fi
+  if command -v gtimeout > /dev/null 2>&1; then
+    gtimeout "$secs" "$@" 2>/dev/null
+    return $?
+  fi
+
+  # No timeout(1): run the command in the background and kill it from a
+  # watchdog. Waiting on both children is what keeps the kill from being
+  # reported on stderr, which the statusline shares with the client.
+  "$@" 2>/dev/null &
+  local cmd_pid=$!
+  ( sleep "$secs"; kill "$cmd_pid" ) > /dev/null 2>&1 &
+  local watchdog_pid=$!
+  wait "$cmd_pid" 2>/dev/null
+  local rc=$?
+  kill "$watchdog_pid" > /dev/null 2>&1
+  wait "$watchdog_pid" 2>/dev/null
+  return "$rc"
+}
+
+# ==============================================================================
+# OAuth usage API — extra-usage credits (opt-in)
+# ==============================================================================
+#
+# rate_limits in the statusline payload covers the 5-hour and 7-day windows and
+# says nothing about credit consumption: the spend that accrues once a plan's
+# included usage is exhausted and extra-usage credits take over. Nothing else
+# reports it either — ccusage prices tokens at API list rates against a
+# subscription profile, which is not the credit balance and reads reassuringly
+# low while credits drain.
+#
+# This is the only part of the statusline that leaves the machine or reads a
+# credential, so it does nothing unless show_extra_usage is set, and every path
+# below returns early when it is not.
+#
+# The endpoint is undocumented. Every field is read behind a guard and the whole
+# segment being absent is unremarkable, not an error worth reporting.
+
+readonly TCS_USAGE_API_URL="https://api.anthropic.com/api/oauth/usage"
+
+# Print an OAuth token, or nothing. Environment, then the credentials file,
+# then the system keychain.
+#
+# Only ever called from the fetch path. A render served from cache resolves no
+# credential at all — which is what keeps the macOS keychain dialog off the
+# path every render takes.
+_tcs_oauth_token() {
+  local token="" blob=""
+
+  token="${CLAUDE_CODE_OAUTH_TOKEN:-}"
+
+  if [[ -z "$token" && -f "$HOME/.claude/.credentials.json" ]]; then
+    token=$(jq -r '.claudeAiOauth.accessToken // empty' \
+      "$HOME/.claude/.credentials.json" 2>/dev/null) || token=""
+  fi
+
+  if [[ -z "$token" ]] && command -v secret-tool > /dev/null 2>&1; then
+    blob=$(tcs_bounded 2 secret-tool lookup service "Claude Code-credentials") || blob=""
+    if [[ -n "$blob" ]]; then
+      token=$(printf '%s' "$blob" \
+        | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null) || token=""
+    fi
+  fi
+
+  if [[ -z "$token" ]] && command -v security > /dev/null 2>&1; then
+    blob=$(tcs_bounded 2 security find-generic-password \
+      -s "Claude Code-credentials" -w) || blob=""
+    if [[ -n "$blob" ]]; then
+      token=$(printf '%s' "$blob" \
+        | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null) || token=""
+    fi
+  fi
+
+  [[ -n "$token" && "$token" != "null" ]] || return 1
+
+  # The token is interpolated into a curl config file, where a quote or a
+  # newline would open a directive of the writer's choosing — including one
+  # that redirects the request or writes to disk. OAuth tokens are URL-safe
+  # strings, so anything else is refused rather than escaped.
+  case "$token" in
+    *[!A-Za-z0-9._~+/=-]*) return 1 ;;
+  esac
+
+  printf '%s' "$token"
+}
+
+# Minor units → a displayable amount, identically under any LC_NUMERIC.
+# The endpoint states its own exponent per amount rather than assuming cents.
+# Prints nothing and returns 1 for an unusable value.
+_tcs_minor_to_amount() {
+  local minor="${1:-}" exponent="${2:-2}" amount
+  amount=$(LC_ALL=C awk -v v="$minor" -v e="$exponent" 'BEGIN {
+    if (v ~ /^[ \t]*[-+]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?[ \t]*$/ \
+        && e ~ /^[0-9]+$/ && e <= 8) {
+      printf "%.*f", e, v / (10 ^ e)
+      exit 0
+    }
+    exit 1
+  }') || return 1
+  printf '%s' "$amount"
+}
+
+# Currency code → symbol. An unrecognised code is printed as itself rather than
+# guessed at: showing the wrong currency is worse than showing an ugly one.
+_tcs_currency_symbol() {
+  case "${1:-}" in
+    USD) printf '$' ;;
+    EUR) printf '€' ;;
+    GBP) printf '£' ;;
+    JPY) printf '¥' ;;
+    "")  printf '$' ;;
+    *)   printf '%s ' "$1" ;;
+  esac
+}
+
+# A cached response is usable only if it is small enough to have plausibly come
+# from the endpoint and still carries the shape we read. This is what stops a
+# truncated write, an error page or an HTML redirect from being rendered as a
+# credit figure.
+_tcs_usage_is_usable() {
+  local file="$1" size
+  [[ -f "$file" ]] || return 1
+  size=$(wc -c < "$file" 2>/dev/null | tr -d '[:space:]') || return 1
+  [[ "$size" =~ ^[0-9]+$ ]] || return 1
+  [[ "$size" -le 1048576 ]] || return 1
+  jq -e 'type == "object"
+         and (has("spend") or has("extra_usage") or has("five_hour"))' \
+    "$file" > /dev/null 2>&1
+}
+
+# Refresh the cached usage response. Writes the cache; prints nothing.
+_tcs_usage_fetch() {
+  local cache_file="$1" fail_marker="$2" lock_dir="$3"
+  local token="" response="" lock_mtime
+
+  # Negative cache: after a failure, back off for one TTL rather than paying
+  # token resolution plus a curl timeout on every single render.
+  tcs_cache_is_stale "$fail_marker" "$tcs_cfg_usage_cache_ttl" || return 0
+
+  # Single-flight. Concurrent sessions share this cache and must not stampede
+  # the endpoint the moment it expires. mkdir is the atomic primitive here; a
+  # lock older than 30s is treated as abandoned. tcs_cache_is_stale cannot be
+  # used for that check — it tests -f, and this is a directory.
+  if ! mkdir "$lock_dir" 2>/dev/null; then
+    lock_mtime=$(tcs_file_mtime "$lock_dir") || lock_mtime=0
+    [[ $(( $(date +%s) - lock_mtime )) -gt 30 ]] || return 0
+    rm -rf "$lock_dir" 2>/dev/null
+    mkdir "$lock_dir" 2>/dev/null || return 0
+  fi
+
+  token=$(_tcs_oauth_token) || token=""
+
+  if [[ -n "$token" ]]; then
+    # The token reaches curl through a config file on stdin, never on argv,
+    # where every process on the machine can read it out of the process list.
+    response=$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
+      | curl -s --config - \
+          --connect-timeout 2 --max-time 5 --max-filesize 1048576 \
+          -H 'Accept: application/json' \
+          -H 'anthropic-beta: oauth-2025-04-20' \
+          "$TCS_USAGE_API_URL" 2>/dev/null) || response=""
+  fi
+
+  if [[ -n "$response" ]] && printf '%s' "$response" \
+      | jq -e 'type == "object"
+               and (has("spend") or has("extra_usage") or has("five_hour"))' \
+        > /dev/null 2>&1; then
+    # Replaced atomically, so a concurrent reader never sees a half-written
+    # file — the check above would reject it, but only after a wasted parse.
+    if printf '%s\n' "$response" > "${cache_file}.$$" 2>/dev/null; then
+      chmod 600 "${cache_file}.$$" 2>/dev/null
+      mv -f "${cache_file}.$$" "$cache_file" 2>/dev/null
+    fi
+    rm -f "${cache_file}.$$" "$fail_marker" 2>/dev/null
+  else
+    touch "$fail_marker" 2>/dev/null
+  fi
+
+  rmdir "$lock_dir" 2>/dev/null
+}
+
+# Load extra-usage credit consumption into TCS_EXTRA_* variables (cached).
+# Sets: TCS_EXTRA_ENABLED, TCS_EXTRA_PCT, TCS_EXTRA_USED, TCS_EXTRA_LIMIT,
+#       TCS_EXTRA_SYMBOL
+#
+# TCS_EXTRA_ENABLED stays false unless the account actually has extra usage
+# switched on, so callers can render the segment on that alone.
+#
+# Two shapes carry the same figure and both are read, `spend` first:
+#
+#   spend.{enabled, percent, used.amount_minor, limit.amount_minor,
+#          used.currency, used.exponent}
+#   extra_usage.{is_enabled, utilization, used_credits, monthly_limit,
+#                currency, decimal_places}
+#
+# `spend` is the better source and the reason this is not a straight port of the
+# reference implementation, which reads only `extra_usage`. On a live account
+# `extra_usage.utilization` came back **null** while `spend.percent` carried the
+# real figure, and `spend` states currency and exponent per amount instead of
+# leaving both to be assumed — that account bills in EUR, so a hardcoded `$` and
+# a hardcoded divide-by-100 would each have been wrong.
+tcs_load_extra_usage() {
+  TCS_EXTRA_ENABLED=false TCS_EXTRA_PCT=0 TCS_EXTRA_USED="" TCS_EXTRA_LIMIT=""
+  TCS_EXTRA_SYMBOL=""
+
+  [[ "${tcs_cfg_show_extra_usage:-false}" == "true" ]] || return 0
+  command -v jq   > /dev/null 2>&1 || return 0
+  command -v curl > /dev/null 2>&1 || return 0
+
+  local cache_dir cache_file fail_marker lock_dir usage=""
+
+  # No trustworthy cache directory means no fetch at all. Uncached, this would
+  # resolve a credential and cross the network on every render — the cost the
+  # TTL and the negative cache exist to bound.
+  cache_dir=$(tcs_cache_dir) || return 0
+  cache_file="${cache_dir}/usage.json"
+  fail_marker="${cache_dir}/usage-fail"
+  lock_dir="${cache_dir}/usage.lock"
+
+  if tcs_cache_is_stale "$cache_file" "$tcs_cfg_usage_cache_ttl" \
+      || ! _tcs_usage_is_usable "$cache_file"; then
+    _tcs_usage_fetch "$cache_file" "$fail_marker" "$lock_dir"
+  fi
+
+  # One read covers both outcomes: a cache just refreshed is fresh, and one left
+  # behind by a failed refresh is served anyway — a credit figure a few hours
+  # old is still the signal this exists for. The 24h ceiling is what stops a
+  # revoked token or a retired endpoint from reporting last month's number
+  # forever.
+  if _tcs_usage_is_usable "$cache_file" \
+      && ! tcs_cache_is_stale "$cache_file" 86400; then
+    usage=$(cat "$cache_file" 2>/dev/null) || usage=""
+  fi
+  [[ -n "$usage" ]] || return 0
+
+  # `enabled` is picked with an explicit null test rather than `//`, because in
+  # jq `false // x` yields x — so a chain would let a disabled `spend` be
+  # overridden by a stale `extra_usage.is_enabled`. The numeric fields are safe
+  # in a `//` chain: only null and false are falsy there, so a real 0 survives.
+  local extra
+  extra=$(printf '%s' "$usage" | jq -r '[
+      ((if (.spend.enabled)? != null then .spend.enabled
+        else ((.extra_usage.is_enabled)? // false) end) | tostring),
+      (((.spend.percent)?           // (.extra_usage.utilization)?    // 0)
+        | tostring),
+      (((.spend.used.amount_minor)? // (.extra_usage.used_credits)?   // 0)
+        | tostring),
+      (((.spend.limit.amount_minor)? // (.extra_usage.monthly_limit)? // 0)
+        | tostring),
+      (((.spend.used.currency)?     // (.extra_usage.currency)?       // "")
+        | tostring),
+      (((.spend.used.exponent)?     // (.extra_usage.decimal_places)? // 2)
+        | tostring)
+    ] | map(if . == "" or . == "null" then "-" else . end) | @tsv' 2>/dev/null) \
+    || extra=""
+  [[ -n "$extra" ]] || return 0
+
+  local enabled pct used limit currency exponent
+  IFS=$'\t' read -r enabled pct used limit currency exponent <<< "$extra"
+
+  [[ "$enabled" == "true" ]] || return 0
+
+  [[ "$currency" == "-" ]] && currency=""
+  [[ "$exponent" == "-" ]] && exponent=2
+
+  TCS_EXTRA_PCT=$(tcs_round_int "$pct") || TCS_EXTRA_PCT=0
+  TCS_EXTRA_USED=$(_tcs_minor_to_amount "$used" "$exponent")
+  TCS_EXTRA_SYMBOL=$(_tcs_currency_symbol "$currency")
+
+  # A zero or missing limit is left empty so the caller can omit "/limit"
+  # entirely — "€34.10/€0.00" would read as an exhausted budget.
+  if [[ "$limit" != "0" && "$limit" != "-" ]]; then
+    TCS_EXTRA_LIMIT=$(_tcs_minor_to_amount "$limit" "$exponent")
+  fi
+
+  TCS_EXTRA_ENABLED=true
 }
