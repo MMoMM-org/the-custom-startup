@@ -30,7 +30,7 @@ The spec-driven workflow has five phases. Here is which tool to use for each:
 | Requirements (PRD) | `/xdd-prd` | Claude.ai | Use [`prd-prompt.md`](../templates/prd-prompt.md) |
 | Solution + Plan + Implement | `/implement` | Claude Code only | Requires codebase access |
 
-Each phase maps to the BUILD loop from [workflow.md](../workflow.md). Constitution and Research are pre-BUILD setup. Brainstorm and PRD produce the input for `/xdd`. The SDD and PLAN come from Claude Code's own `/xdd` run after you import the PRD. Running multi-AI phases does not replace the BUILD loop — it front-loads the thinking before you open Claude Code.
+Each phase maps to the BUILD loop from [workflow.md](../getting-started/workflow.md). Constitution and Research are pre-BUILD setup. Brainstorm and PRD produce the input for `/xdd`. The SDD and PLAN come from Claude Code's own `/xdd` run after you import the PRD. Running multi-AI phases does not replace the BUILD loop — it front-loads the thinking before you open Claude Code.
 
 The final phase (SDD, PLAN, implementation) requires reading and writing code. Use Claude Code for that.
 
