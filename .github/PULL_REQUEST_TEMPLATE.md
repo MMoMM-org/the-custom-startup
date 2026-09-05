@@ -1,8 +1,11 @@
 <!--
-Auto-merge is armed on most pull requests here, so this body is the last place
-anybody looks before the change lands. The `docs-sync` check enforces the
-surfaces it can name; the list below covers the ones it deliberately does not,
-because requiring them on every change would be wrong more often than right.
+This body is the last place anybody looks before the change lands. The
+`docs-sync` check reports on the surfaces it can name — it runs on every pull
+request and goes red when one is unanswered, but no check is currently
+*required*, so it does not block the merge (see the ruleset note in
+CHANGELOG.md). The list below covers the surfaces it deliberately does not
+name, because requiring them on every change would be wrong more often than
+right.
 -->
 
 ## What and why

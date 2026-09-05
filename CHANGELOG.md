@@ -65,25 +65,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Auto-merge is enabled, and `main` now has a ruleset that makes six checks required:**
-  `pytest` and `bats` on both runners, `Hook bundle version check`, and `docs-sync`.
+- **Auto-merge is enabled on the repository. The `main` ruleset exists but is `disabled`, so no
+  check is required and nothing blocks a merge.** It carries the six contexts — `pytest` and
+  `bats` on both runners, `Hook bundle version check`, `docs-sync` — ready to switch on once the
+  problem below is solved.
 
-  Both halves are needed, and the first without the second is what made auto-merge look broken
-  when it was switched on: `gh pr merge --auto` does not queue anything when nothing is
-  *required*, so it merged a pull request immediately while its `bats` jobs were still running.
-  Auto-merge waits only for required checks, and until this ruleset existed there were none.
-  `main` carried no branch protection and no rulesets at all.
+  It was active briefly and had to be suspended. **Required status checks in a ruleset apply to
+  direct pushes, not only to merges**, and a freshly created commit has no check runs, so the
+  push is rejected:
 
-  `strict_required_status_checks_policy` is off, so a branch does not have to be rebased onto the
-  tip of `main` before merging — that setting turns every parallel pull request into a rebase
-  queue and buys little here.
+      remote: error: GH013: Repository rule violations found for refs/heads/main.
+      remote: - 6 of 6 required status checks are expected.
 
-  **One caveat worth knowing before it bites somebody:** the ruleset has no bypass actor.
-  `auto-bump-versions.yml` pushes its version bump to `main` directly, and GitHub refused the
-  GitHub Actions integration as a bypass actor at repository level ("must be part of the ruleset
-  source or owner organization"). If a bump run starts failing on a blocked push, that is the
-  cause — the fix is an app or PAT token for that workflow with a bypass entry, not deleting the
-  ruleset.
+  `auto-bump-versions.yml` pushes its version bump straight to `main`, so every merge broke the
+  release automation. Its retry loop reports the rejection as *"origin/main moved underneath us"*,
+  which reads like a race and hides the cause — read the `remote:` lines, not the summary. The
+  first blocked run left `tcs-git-helpers` with a CHANGELOG documenting 2.2.21 against a manifest
+  carrying 2.2.20, the inconsistency `check-changelog-version-sync.sh` reports (#93).
+
+  Rulesets cannot be scoped to merges: they evaluate ref updates, and a merge is one. The only
+  levers are which branches, and who is exempt. Of the bypass actors this repository accepts,
+  only `RepositoryRole: admin` is available — GitHub refuses the GitHub Actions integration
+  ("must be part of the ruleset source or owner organization") with no app installation to name
+  instead. **A personal access token would not fix this honestly**: it acts as its owner, an
+  admin, so the bypass would cover every merge that owner makes — the checks would stop applying
+  to the case they exist for, and auto-merge would again have nothing to wait for. A GitHub App
+  is the one option that exempts only the bump push. Until then the ruleset stays off, no bypass
+  actor is stored (one left behind would silently reopen that hole the moment somebody re-enables
+  it), and merges wait on `gh pr checks` rather than on enforcement.
+
+  `strict_required_status_checks_policy` is off in the stored config, so a branch will not have
+  to be rebased onto the tip of `main` — that setting turns every parallel pull request into a
+  rebase queue and buys little here.
+
+- **`docs-sync` still runs on every pull request and still fails when a surface is unanswered.**
+  With the ruleset off it does not *block* the merge, so it is a red job to read rather than a
+  gate. That is a weaker guarantee than intended and is worth remembering before relying on it.
 
 ---
 
