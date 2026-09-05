@@ -222,6 +222,7 @@ format = "<path> <branch>  <model>  <context>  <session>  <help>"
 # Cache TTLs (seconds)
 ccusage_cache_ttl = 60
 git_cache_ttl     = 15
+usage_cache_ttl   = 300
 
 # Display toggles (enhanced statusline)
 show_budget_bar  = true
@@ -229,6 +230,14 @@ show_context_bar = true
 show_duration    = true
 show_git         = true
 show_remote_url  = true
+
+# Extra-usage credits: spend against your monthly credit limit, for accounts
+# that have extra usage enabled. Off by default because it is the only setting
+# that makes the statusline leave your machine — with it on, and only when the
+# cache above has expired, the script reads an OAuth token
+# (CLAUDE_CODE_OAUTH_TOKEN, ~/.claude/.credentials.json, or the system keychain)
+# and calls the Claude usage API. A render served from cache does neither.
+show_extra_usage = false
 
 [thresholds.context]
 warn   = 70

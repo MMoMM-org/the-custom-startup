@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — statusline hardening
 
+### Added
+
+- **Extra-usage credit consumption on the enhanced statusline (#129), opt-in.** `rate_limits`
+  covers the 5-hour and 7-day windows and says nothing about credits — the spend that accrues
+  once a plan's included usage is exhausted. Nothing else reported it either: ccusage prices
+  tokens at API list rates against a subscription profile, which is not the credit balance and
+  reads reassuringly low while credits drain. Set `show_extra_usage = true` for
+  `💳 ██░░░░░░░░ 23% €34.10/€150.00`.
+
+  It is **off by default**, because it is the only part of the statusline that leaves the machine
+  or reads a credential. Credential resolution (`CLAUDE_CODE_OAUTH_TOKEN`,
+  `~/.claude/.credentials.json`, the system keychain) happens on the fetch path only — a render
+  served from cache touches none of the three. That ordering is load-bearing rather than tidy:
+  `security find-generic-password` can raise an access dialog, and Claude Code waits on the
+  statusline synchronously, so a credential read per render would be a hung prompt rather than a
+  slow one. Keychain lookups are bounded to 2s by the new `tcs_bounded` (which emulates
+  `timeout(1)`, absent from stock macOS), the fetch to 5s; a failure backs off for one
+  `usage_cache_ttl`; the last good reading is served for up to 24h; the token reaches curl through
+  a config file on stdin rather than argv, and is charset-checked first; concurrent sessions share
+  one in-flight fetch.
+
+  **The currency is read, not assumed.** Verifying against a live account found
+  `extra_usage.utilization` returning `null` while a parallel `spend` object carried the real
+  `percent`, a `currency` and a per-amount `exponent` — and that account bills in EUR. `spend` is
+  therefore read first and `extra_usage` is the fallback. The endpoint is undocumented: every
+  field is guarded and the segment being absent is unremarkable.
+
 ### Changed
 
 - **The payload is read in one `jq` pass (#130).** The enhanced variant spawned eight
