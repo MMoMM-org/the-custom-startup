@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A routing rule for agent memory** (#85), so the fourth store does not become the fragmentation
+  `/memory-sync` exists to prevent. The discriminating question: would the main session, another
+  agent, or a human reviewing later need this? → Memory Bank. Is it useful only to this one agent,
+  built up across repetitions only it witnesses? → agent memory. Almost everything is the first
+  case.
+
+  `routing-reference.md` now also records *why* the store exists — what actually reaches a
+  subagent is narrower than it looks. The `CLAUDE.md` hierarchy and its `@`-imports arrive in full,
+  but `memory.md` links the category files as plain Markdown rather than `@`-imports, so an agent
+  must choose to read them; user auto-memory never arrives at all. And a subagent can write to none
+  of these layers — what it learns dies with it unless a human notices it in the report and runs
+  `/memory-add`. Agent memory is the only write-back channel there is.
+
+  Two hard constraints are stated with it: never on a read-only agent (the field grants unscoped
+  `Write`/`Edit` — #144), and never for anything a second party needs.
+
 - **`agent-author` warns that `memory:` silently widens an agent's tool whitelist** (#85). The
   field auto-enables `Read`, `Write` and `Edit`, and the write access is general-purpose rather
   than confined to the memory directory — measured on Claude Code 2.1.252 against a control

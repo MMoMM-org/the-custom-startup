@@ -21,6 +21,7 @@ need to locate a plugin, skill or agent, not on every session.
 - Architectural decisions → docs/ai/memory/decisions.md
 - Current focus/blockers → docs/ai/memory/context.md
 - Bugs/fixes → docs/ai/memory/troubleshooting.md
+- An agent's own observation, useful only to it and only in aggregate → `.claude/agent-memory/<agentType>/` — never for a read-only agent, and never for anything a second party needs (see routing-reference.md)
 
 ## Design References
 - Skill / subagent / slash-command granularity decisions → `docs/about/skill-and-agent-design.md` (consult before extracting a Skill or splitting/consolidating specialists; the L2 heuristics are also mirrored in `plugins/tcs-helper/skills/{skill,agent}-author/reference/decision-tree.md`)
