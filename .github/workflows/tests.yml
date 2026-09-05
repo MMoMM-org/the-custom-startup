@@ -11,6 +11,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Guards the documentation surfaces a change is expected to move with it.
+  # Only meaningful on a pull request: it reads the diff against the base and
+  # the pull request body, and neither exists on a push to main.
+  docs-sync:
+    name: docs-sync
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The check diffs against the merge base, which a shallow clone does
+          # not contain.
+          fetch-depth: 0
+
+      - name: Collect the changed files
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags origin "$BASE_REF"
+          git diff --name-only FETCH_HEAD...HEAD > "$RUNNER_TEMP/changed.txt"
+          echo "Changed in this pull request:"
+          sed 's/^/  /' "$RUNNER_TEMP/changed.txt"
+
+      # The body is text the pull request author controls. Interpolating it into
+      # `run:` with ${{ }} would paste it into the shell script the runner
+      # executes; passing it through the environment keeps it data.
+      - name: Write the pull request body to a file
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+
+      - name: Check documentation surfaces
+        run: |
+          bash scripts/ci/check-docs-sync.sh \
+            --changed-files "$RUNNER_TEMP/changed.txt" \
+            --pr-body "$RUNNER_TEMP/pr-body.md"
+
   pytest:
     name: pytest (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
