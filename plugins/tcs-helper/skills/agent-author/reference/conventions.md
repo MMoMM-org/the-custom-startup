@@ -27,6 +27,12 @@ Agents are **flat `.md` files** with YAML frontmatter. There is no `agents/foo/A
 
 For activity-scoped agents (most common case), nest under role: `agents/the-architect/design-system.md`. For role-less single-purpose agents, top-level: `agents/the-chief.md`.
 
+**Agent types are indexed at session start.** A newly written agent file is not dispatchable in
+the session that created it — `Agent type '<name>' not found` — the same way a skill is not.
+Authoring and running therefore need a session boundary between them. A nested `claude -p` run
+indexes at its own startup, which is the usable workaround when a fresh interactive session is not
+convenient. Verified in Claude Code 2.1.252.
+
 ---
 
 ## Frontmatter Reference
@@ -52,7 +58,7 @@ Per Anthropic's official subagent schema:
 | `initialPrompt` | No | Auto-submitted first turn when running as main session via `--agent` |
 | `user-invocable` | No | `false` to hide from `/` menu while keeping programmatic dispatch |
 | `effort` | No | `low` \| `medium` \| `high` \| `xhigh` \| `max`, or an integer — reasoning effort for this agent |
-| `observer` | No | Agent type auto-spawned as a background observer whenever this agent runs — see § Observers |
+| `observer` | No | Agent type auto-spawned as a background observer whenever this agent runs. Inert unless `CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS` is set — see § Observers |
 | `observerMessage` | No | Supplemental postamble appended after the harness-owned default to each activity digest sent to the observer. Blank values are ignored |
 | `observeSubagents` | No | `false` stops subagents this agent spawns from inheriting its observer. Defaults to `true` |
 | `experimental` | No | Per-agent experimental options; unknown keys are ignored. Currently `cacheTtl`: `"5m"` \| `"1h"` prompt-cache TTL for this agent's requests, used when no `subagentPromptCacheTtl` setting or env var is set (`"1h"` is ignored while a subscription is in overage) |
@@ -63,20 +69,52 @@ documentation's own field list too. They were read out of the shipped schema in 
 
 ### Observers
 
-`observer` attaches a **read-only background watcher** to an agent. It is not a reviewer
-dispatched after the fact: it runs concurrently, receives activity digests rather than the task
-itself, reports through its own `ObserverReport` tool, and never participates in the work. That
-makes it a different mechanism from the review agents in `tcs-workflow`, which see a finished diff.
+`observer` attaches a background watcher to an agent. It is not a reviewer dispatched after the
+fact: it runs concurrently, receives activity digests rather than the task itself, and reports
+through its own `ObserverReport` tool. That makes it a different mechanism from the review agents
+in `tcs-workflow`, which only ever see a finished diff.
 
-Two consequences worth knowing before reaching for it:
+**The mechanism is off by default, and fails silently when off.** It sits behind the environment
+flag `CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS`, and additionally requires background tasks to be
+enabled (`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` or the `backgroundTasksDisabled` setting turns it
+back off). With the flag unset, an `observer:` declaration is a **no-op that reports nothing**: no
+observer is spawned, no error is raised, `permission_denials` stays empty, and no `[agentObserver]`
+line is logged — because the gate sits upstream of the arming code that would log. Anyone
+debugging "my observer never ran" will find no evidence at all until they check the flag.
 
-- The observer is spawned on **every** run of the observed agent, so it costs a second agent's
-  budget each time. That earns its keep on long autonomous runs, not on short dispatches.
-- `observeSubagents` defaults to `true`, so an observed agent's own subagents are observed as
+The findings below were measured in Claude Code **2.1.252** with the flag set, by pairing a probe
+worker performing a known tool sequence with an observer that dumped every digest to disk.
+
+- **"Read-only" describes the digest, not the observer.** An observer declared with no `tools:`
+  line received `Bash, Edit, Read, Write, Skill, ToolSearch, ObserverReport` — it does *not*
+  inherit the observed agent's tool scoping, and it is not confined to `ObserverReport`. In the
+  probe it used `Bash` to append a line to a file in the observed agent's own workspace. Give every
+  observer an explicit `tools:` line; an unscoped one can write to anything the session can.
+- **A report informs, it does not steer.** Reports arrive as ordinary mid-run messages to the
+  observed agent, which stays free to ignore them — the probe worker was sent an instruction inside
+  a report and refused it, on the grounds that an observer message is not user consent. Design an
+  observer to tell the agent something true, never to control it.
+- **Delivery races the observed agent.** Reports are queued against the target's turn boundaries.
+  A report queued after the observed agent's final turn is simply never delivered: the tool still
+  answers `Report queued for <agent>`, which is an acceptance receipt and not proof of delivery. On
+  a short, fast task the observer can therefore cost a full agent's budget and change nothing —
+  observers pay off on long runs with turns left to correct.
+- **Digests carry tool-level detail.** Each of the observed agent's turns arrives wrapped in
+  `<{agentName}-activity>` tags containing its assistant text, `<tool-call name="…">` with the full
+  JSON arguments, and the matching `<tool-result>`. File paths, file contents and command lines are
+  all visible, so tool-level ordering can be supervised in principle. Turns are batched while the
+  observer is busy. The harness-owned postamble is appended to every digest, and `observerMessage`
+  after it.
+- **The observer is spawned on every run of the observed agent**, so it costs a second agent's
+  budget each time — another reason it earns its keep on long autonomous runs, not short dispatches.
+- **`observeSubagents` defaults to `true`**, so an observed agent's own subagents are observed as
   well. On a fan-out that multiplies quietly — set it to `false` unless the nested work is the
   thing being watched.
 
-No TCS agent uses an observer yet; whether one should is evaluated separately.
+Treat all of this as experimental: these fields are absent from the documented frontmatter list,
+and a mechanism behind an experimental env flag can change shape without notice.
+
+No TCS agent uses an observer yet; whether one should is evaluated in issue #99.
 
 ---
 
