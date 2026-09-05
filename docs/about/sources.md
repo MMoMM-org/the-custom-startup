@@ -18,6 +18,7 @@ It has a second job: making it cheap to check those origins for improvements. Ev
 | [mksglu/context-mode](https://github.com/mksglu/context-mode) | 2026-03-27 (spec-005) | n/a | historical |
 | [Bande-a-Bonnot/Boucle-framework](https://github.com/Bande-a-Bonnot/Boucle-framework) | 2026-05-09 | never | **monitored** |
 | [lasso-security/mcp-gateway](https://github.com/lasso-security/mcp-gateway) | reference only | n/a | historical |
+| [tonydzi/claude-bible](https://github.com/tonydzi/claude-bible) | 2026-09-05 — declined-decisions journal | 2026-09-05 — first review | **monitored** |
 | [agiletec-inc/airis-mcp-gateway](https://github.com/agiletec-inc/airis-mcp-gateway) | reference only | n/a | historical |
 | [dsebastien/claude-epic-status-line](https://github.com/dsebastien/claude-epic-status-line) | statusline: single-`jq` payload read, per-uid cache dir, OAuth usage fetch | 2026-09-04 — first review (#72) | **monitored** |
 
@@ -149,6 +150,50 @@ The memory category taxonomy (general conventions, tools integrations, domain kn
 
 The memory bank architecture (per-concern files: activeContext, patterns, decisions, troubleshooting) informed the repo-level typed memory directory at `docs/ai/memory/`. The cleanup-context workflow (token reduction, archive resolved issues) forms the core of `/memory-cleanup`. Stack-aware CLAUDE.md templates (Cloudflare Workers, Convex) provided the pattern reused in `/setup`.
 
+### tonydzi/claude-bible
+
+**Repository:** [tonydzi/claude-bible](https://github.com/tonydzi/claude-bible), MIT
+**Adopted:** 2026-09-05 — `docs/ai/memory/declined.md`
+**Status:** monitored — released twice a week by its author and pushed the day we reviewed it.
+
+A governance skeleton for running one behavioural codex across a principal, their agents and their
+human assistants. Reviewed against our own memory system on 2026-09-05; their `FOR-ROBOTS.md` ranks
+their mechanisms by transferable value, which made the comparison cheap.
+
+**Taken:** their § 5 declined-decisions journal, as `docs/ai/memory/declined.md`. The memory bank
+records what is true now and nothing recorded what was ruled *out*, so a rejected idea resurfaced
+later as if fresh. Their `Revisit if` field is the part that makes it a mechanism rather than a
+note — a decline reopens on a stated trigger instead of on forgetting — and their rule that an
+overturned entry is marked, never deleted, keeps a parallel session from citing a dead verdict as
+live. Seeded with eight real declines rather than shipped empty, on their own advice.
+
+**Deliberately not taken:** their § 2–3 frontmatter precedence — `origin: owner`,
+`date_established`, `status: superseded`, supersede-never-delete. Right for their setting (a large
+vault, five machines, human assistants reading the same rules) and wrong for a single-writer bank
+under a 24 KB budget, where keeping dead rules is what `/memory-cleanup` exists to prevent. Our
+ADRs already supersede properly, which is where that discipline belongs. Recorded as the first
+entry the new journal makes about itself.
+
+**Convergent, not adopted** — worth noting so a later sweep does not re-propose them as new:
+
+| Their mechanism | Ours |
+|---|---|
+| § 1 always-loaded line is trigger + essence + pointer | `active.md` plus the ≤ 250-character entry form, with a byte budget `/memory-sync` enforces |
+| § 4 "deterministic *every time X* → a hook, not prose" | the same conclusion, reached independently; `rule-enforcer` ships the hook rather than recommending one |
+| § 6 objections are numbered and rebuttable | `receive-review` classifies inbound feedback Accept / Push Back / Defer / Question, and requires a `file:line` for a push back |
+| § 7 intake ritual | `/memory-add` |
+| § 8 the sender owns the result, not the delivery | `miyo-outbox` tracks which handoffs a receiver confirmed done |
+
+The one half we lack is the outbound side of § 6: delivering our own no-go as a numbered,
+rebuttable list. It happens in practice and is not written down. Left that way deliberately — the
+trigger for writing it down would be a case where a verdict got buried in prose, and that has not
+happened yet.
+
+Their § 1 point does land somewhere, though: their index carries a compressed line per *rule*,
+while `memory.md` points at a *file* per category, so our index says nothing about what is inside.
+That is tracked as #147 — and it is achievable without `@`-importing any bodies, which was declined
+separately.
+
 ### citypaul/.dotfiles (philosophy)
 
 **Repository:** [citypaul/.dotfiles](https://github.com/citypaul/.dotfiles)
@@ -274,6 +319,7 @@ the same ordering #118 landed on after the BSD-first form was found to pollute s
 
 | Date | Scope | Outcome |
 |---|---|---|
+| 2026-09-05 | tonydzi/claude-bible | Reviewed on request. One gap found and closed the same day (declined-decisions journal, #148); their precedence scheme declined; five mechanisms already covered, two of them in a stronger form. |
 | 2026-09-04 | dsebastien/claude-epic-status-line (#72) | Reviewed on request rather than as part of a sweep. Three adoption candidates filed as #129, #130, #131 — all three landed the same day. |
 | 2026-08-31 | All eight sources | Three found still worth monitoring, five retired to historical. Tracked as epic #73 with twelve child issues. Landed: `tcs-patterns` defect fixes (#74), `principles.md` rewrite (#75), this file (#78). |
 
