@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — git hooks
+
+### Fixed
+
+- **`pre-push` warned on every push in any repo whose remote is an SSH host alias (#136).** The
+  hook has a branch that fails open *silently* for the ordinary case of a repo `gh` cannot map to
+  a GitHub host — a non-GitHub remote, or the common multi-account setup using
+  `git@github-alias:owner/repo.git`. That branch matched on the string `no GitHub remote`, which
+  `gh` has never emitted. What it actually says is "none of the git remotes configured for this
+  repository point to a known GitHub host". So the silent branch was unreachable and every push
+  printed the catch-all `gh error (exit 1)` warning instead. Pushing always worked — fail-open is
+  correct — but a warning that fires on literally every push trains people to ignore hook output,
+  which is the part that matters.
+
+  Both wordings are now matched, so a future rewording in either direction stays silent rather
+  than becoming noise again. A genuine `gh` failure still warns; the silent branch stays narrow
+  on purpose.
+
+  The issue diagnosed a second cause — that `2>/dev/null` discarded the message before it could
+  be matched. That was true of 2.2.12 but not of the current hook: `_gh_with_timeout` already
+  merges the child's stderr into its own stdout, so the text does arrive. Implementing the
+  suggested patch as written would have added a stderr capture that collects nothing and quietly
+  re-broken the match.
+
+  **Why it shipped:** the regression test stubbed `gh` emitting the literal string
+  `no GitHub remote`, a message `gh` does not produce. It asserted the right behaviour against a
+  fabricated wire format and stayed green while production was broken. The stub now carries the
+  real text, with the legacy wording kept as a separate case.
+
+---
+
 ## [Unreleased] — merge automation
 
 ### Added

@@ -3,7 +3,7 @@
 # tests/bats/githooks_pre_push.bats
 #
 # Coverage for templates/githooks/pre-push
-# Test count: 16
+# Test count: 18
 #
 # Spec references:
 #   - PRD M1 AC1-AC5 — block push to CLOSED/MERGED PR
@@ -253,33 +253,78 @@ WRAPPER
 }
 
 # ---------------------------------------------------------------------------
-# Degraded mode: no GitHub remote (gh exits 1, stderr "no GitHub remote")
+# Degraded mode: gh cannot map the repo to a GitHub host.
 # AC says: exit 0 SILENTLY (no warn for this common case)
+#
+# This block is why #136 shipped. The original case stubbed gh emitting the
+# literal string "no GitHub remote" — a message gh has never produced — so it
+# asserted the right behaviour against a fabricated wire format and stayed green
+# while every real push printed the catch-all warning. Per project memory
+# "test-stubs-mirror-real-wire-format", the stub now carries gh's actual text,
+# captured from `gh pr list` in a repo whose remote is an SSH host alias:
+#
+#   none of the git remotes configured for this repository point to a known
+#   GitHub host. To tell gh about a new GitHub host, please use `gh auth login`
+#
+# The legacy string keeps its own case below, because the hook still matches it
+# and a wording change in either direction must stay silent.
 # ---------------------------------------------------------------------------
 
-@test "test_degraded_mode_when_no_github_remote" {
-  GH_STUB_SCENARIO="network-fail"
-  export GH_STUB_SCENARIO
-
-  # Create a custom gh stub that exits 1 with "no GitHub remote" on stderr.
+# Run the hook against a gh stub that fails with the given stderr text.
+# Sets `status` and `output` for the caller to assert on.
+#
+# The message is written to a file and the stub cats it, rather than being
+# interpolated into the stub's source. gh's real diagnostic ends in
+# `gh auth login` — with backticks — and interpolating that into a double-quoted
+# printf inside the generated script makes the stub run a command substitution
+# when it executes, calling itself recursively until the hook's watchdog kills
+# it with SIGTERM. The hook then sees exit 143 rather than 1 and the test
+# measures the harness instead of the fix.
+_run_hook_with_failing_gh() {
+  local message="$1"
   local stub_dir
-  stub_dir="$(mktemp -d "${TMPDIR:-/tmp}/gh-stub-nogr.XXXXXX")"
+  stub_dir="$(mktemp -d "${TMPDIR:-/tmp}/gh-stub-fail.XXXXXX")"
+  printf '%s\n' "$message" > "$stub_dir/message.txt"
   cat > "$stub_dir/gh" <<'STUB'
 #!/bin/bash
-printf 'no GitHub remote\n' >&2
+cat "$(dirname "$0")/message.txt" >&2
 exit 1
 STUB
   chmod +x "$stub_dir/gh"
 
-  run bash -c "PATH='$stub_dir:$PATH' cd '$REPO' && PATH='$stub_dir:$PATH' bash '$HOOK' origin 'git@github.com:test/repo.git'" \
+  # $PATH is expanded here, by the outer shell, so the inner single-quoted
+  # assignment receives a real search path. Escaping it as \$PATH makes the
+  # inner PATH the literal three characters and even `bash` is not found.
+  run bash -c "cd '$REPO' && PATH='$stub_dir:$PATH' bash '$HOOK' origin 'git@github.com:test/repo.git'" \
     <<< "$PUSH_STDIN"
   rm -rf "$stub_dir"
+}
+
+# Avoid the bats `! cmd` mid-test trap: a non-final negation silently passes.
+_no_warn() { ! echo "$1" | grep -qi "tcs-git-helpers:\|warn\|allowing"; }
+
+@test "test_degraded_mode_when_gh_reports_an_unknown_github_host" {
+  _run_hook_with_failing_gh \
+    "none of the git remotes configured for this repository point to a known GitHub host. To tell gh about a new GitHub host, please use \`gh auth login\`"
+
   [ "$status" -eq 0 ]
-  # Output must NOT contain a warning (M1 AC3 + integration §2.1: "no GitHub remote"
-  # is the common case for non-GitHub repos and must exit 0 silently, no spam).
-  # Use a helper to avoid the bats `! cmd` mid-test trap.
-  _no_warn() { ! echo "$1" | grep -qi "tcs-git-helpers:\|warn\|allowing"; }
   _no_warn "$output"
+}
+
+@test "test_degraded_mode_still_silent_for_the_legacy_no_github_remote_wording" {
+  _run_hook_with_failing_gh "no GitHub remote"
+
+  [ "$status" -eq 0 ]
+  _no_warn "$output"
+}
+
+@test "test_a_genuine_gh_error_is_still_reported" {
+  # The silent branch must stay narrow: a real failure has to keep warning, or
+  # widening the match would trade one bug for a worse one.
+  _run_hook_with_failing_gh "error: dial tcp: lookup api.github.com: no such host"
+
+  [ "$status" -eq 0 ]                      # fail-open: the push is still allowed
+  echo "$output" | grep -qi "tcs-git-helpers:"
 }
 
 # ---------------------------------------------------------------------------
