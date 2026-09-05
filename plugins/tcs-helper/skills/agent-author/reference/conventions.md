@@ -46,7 +46,7 @@ Per Anthropic's official subagent schema:
 | `skills` | No | Preloads listed skills into the subagent at startup (full body, not just availability) |
 | `mcpServers` | No | Name reference (share parent connection) or inline definition |
 | `hooks` | No | Fires only while subagent is active |
-| `memory` | No | `user` \| `project` \| `local` for persistent cross-session memory |
+| `memory` | No | `user` \| `project` \| `local` for persistent cross-session memory. **Also grants general-purpose `Write` and `Edit`** — see § Tool Scoping before using it |
 | `background` | No | `true` for concurrent execution |
 | `isolation` | No | `worktree` runs agent in fresh git worktree, auto-cleaned on no-op |
 | `initialPrompt` | No | Auto-submitted first turn when running as main session via `--agent` |
@@ -112,6 +112,42 @@ For subagents, `tools` in frontmatter is a **whitelist applied before the first 
 - Never `tools: inherit` without explicit justification — inheriting loses the parent's approval history, so dangerous tools re-prompt every call.
 - When `Bash` is necessary, pair with a `PreToolUse` hook that validates commands (e.g., SELECT-only for a DB-query agent).
 - For sub-subagent spawning, restrict explicitly: `tools: Agent(name1, name2)`.
+
+### ⚠️ `memory:` widens the whitelist — silently
+
+The whitelist above is not the whole story. Setting `memory: user|project|local` auto-enables
+`Read`, `Write` and `Edit`, and **the write access is general-purpose — it is not confined to the
+agent's memory directory.**
+
+Measured on Claude Code 2.1.252, two agents differing in exactly one frontmatter line:
+
+| Frontmatter | Tools the agent actually had | Write inside the memory dir | Write to an absolute path outside it |
+|---|---|---|---|
+| `tools: Read` + `memory: local` | `Read, Write, Edit` | succeeded | **succeeded** |
+| `tools: Read` | none | refused | refused |
+
+So this agent is **not** read-only, and nothing in its frontmatter says so:
+
+```yaml
+tools: Read, Grep, Glob     # reads as read-only
+memory: project             # but this grants Write and Edit anywhere
+```
+
+Consequences when authoring:
+
+- **Never put `memory:` on a reviewer, explorer, security or audit agent.** Those archetypes are
+  read-only by design, and the field reverses that without touching the line that declares it.
+- If an agent genuinely needs both, the write access has to be constrained by a `PreToolUse` hook
+  limiting writes to the memory path — which then has to ship wherever the agent does.
+- The field is part of **auto memory**. With auto memory disabled (`autoMemoryEnabled`, or
+  `CLAUDE_CODE_DISABLE_AUTO_MEMORY`), `memory:` is a silent no-op: no instructions, no tool access.
+  An agent that depends on its memory must therefore still work without it — do not ship one whose
+  behaviour changes quietly based on a consumer's setting.
+
+The bundle does contain path-containment guards with symlink resolution, but they sit on the memory
+key/storage API rather than on the generic `Write`/`Edit` tools this field enables. If that changes,
+this section should be re-measured rather than assumed — the spike and its confounds are recorded
+in issue #85.
 
 ---
 

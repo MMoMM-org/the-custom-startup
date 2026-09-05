@@ -4,6 +4,24 @@
 
 ### Added
 
+- **`agent-author` warns that `memory:` silently widens the tool whitelist** (issue #85). Setting
+  `memory: user|project|local` auto-enables `Read`, `Write` and `Edit`, and the write access is
+  **general-purpose — not confined to the agent's memory directory**. Measured on Claude Code
+  2.1.252 against a control differing in exactly that one frontmatter line: with the field, an
+  agent declaring `tools: Read` had `Read, Write, Edit` and wrote to an absolute path outside its
+  memory directory; without it, the same agent had no write tool at all.
+
+  The danger is that the frontmatter denies it — `tools: Read, Grep, Glob` alongside
+  `memory: project` still reads as read-only. Reviewer, explorer, security and audit agents are
+  exactly the ones that would most benefit from remembering findings across runs, and exactly the
+  ones that must not have this. Documented in `conventions.md` § Tool Scoping (with the measurement
+  table), flagged on the `memory` row of the frontmatter reference, and added to `anti-patterns.md`.
+
+  The auto-memory dependency is recorded alongside it: with auto memory disabled, `memory:` is a
+  silent no-op, so an agent that relies on it must still work without it.
+
+  Whether Anthropic scopes this later is tracked in #144.
+
 - **Five subagent frontmatter fields the `agent-author` reference did not carry** (issue #85):
   `effort`, `observer`, `observerMessage`, `observeSubagents` and `experimental`.
 

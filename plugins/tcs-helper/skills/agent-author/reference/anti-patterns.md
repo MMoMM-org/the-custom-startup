@@ -29,6 +29,14 @@ Agent has `Write` and `Edit` and runs autonomously without `permissionMode: plan
 
 **Fix:** add `permissionMode: plan` or split into a read-only audit agent + a separate apply step that requires user confirmation.
 
+### `memory:` on a read-only agent
+
+The worst version of the pattern above, because the frontmatter denies it. `memory: user|project|local` auto-enables `Read`, `Write` and `Edit`, and the write access is **general-purpose — not confined to the memory directory** (measured on 2.1.252; see conventions.md § Tool Scoping). A reviewer declaring `tools: Read, Grep, Glob` alongside `memory: project` can write anywhere, and every line a reader would check still says read-only.
+
+Reviewer, explorer, security and audit agents are exactly the ones that would benefit most from remembering findings across runs, which is what makes this tempting.
+
+**Fix:** leave `memory:` off read-only archetypes. If an agent truly needs both, constrain writes with a `PreToolUse` hook limiting them to the memory path — and ship that hook wherever the agent ships.
+
 ### Permission-mode confusion
 
 Setting `permissionMode: auto` on a subagent assuming it loosens the parent's stricter mode. Parent mode wins when stricter; subagent mode is honored only if as-strict-or-stricter.
