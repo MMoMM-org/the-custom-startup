@@ -207,6 +207,23 @@ _call_writer() {
   ' _ "$1" "$2" "$3"
 }
 
+# Same shape as _call_writer, but forwards any additional key=value pairs
+# straight through to _observability_write — for exercising the generic
+# "any other key=value pair is written through verbatim" branch (T1.2's own
+# stated contract), which _call_writer above has no way to reach.
+_call_writer_extra() {
+  local data_dir="$1" kind="$2" session="$3"
+  shift 3
+  bash -c '
+    data_dir="$1"; kind="$2"; session="$3"; shift 3
+    cd "'"$REPO"'" || exit 90
+    . "'"$WRITER"'" || exit 91
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    _observability_write kind="$kind" session="$session" "$@"
+  ' _ "$data_dir" "$kind" "$session" "$@"
+}
+
 # Wraps a call to _observability_write between a known stdout line and a
 # known stderr line, then exits with $2 — the shape the fail-open cases need
 # to prove the CALLER's status/streams, not the writer's, are what matters.
@@ -872,6 +889,14 @@ assert val == ('€' * 85) + '?', 'expected 85 intact euro signs plus one healed
 #    test reads fields via jq's `.field` lookup or `has()`, which is
 #    order-independent and cannot fail no matter what order the writer
 #    emits keys in. This test reads the raw line as TEXT instead.
+#
+# Caveat, same candour as the sed/jq/awk grep test above: the `grep -oE`
+# key-order check below is a plain regex over raw text, not a JSON parser —
+# it cannot see an escaping backslash. A value containing an escaped
+# sequence like `\"ts\":` could in principle register as a spurious key
+# match. Not a live defect with this test's fixed, backslash-free value
+# ("sess-order"); worth stating rather than assuming no one will ever widen
+# this test with a value that could trip it.
 # ---------------------------------------------------------------------------
 
 @test "write: the frozen field order is ts, kind, session, repo, checked as raw text" {
@@ -932,4 +957,91 @@ assert val == ('€' * 85) + '?', 'expected 85 intact euro signs plus one healed
   [ "$output" = "OLD_ONE" ]
   run wc -c < "$file.1"
   [ "${output// /}" = "1024000" ]
+}
+
+# ---------------------------------------------------------------------------
+# 19. The generic key=value branch — T1.2's own stated contract ("any other
+#    key=value pair is written through verbatim, after the four frozen
+#    fields") — had no test at all. A mutation swapping $key and $val in
+#    that branch left all 35 tests green. Asserts the CORRECT VALUE, not
+#    merely presence (a $key/$val swap would still make the field
+#    "present", just backwards), and that extras land after the frozen
+#    four, as raw text.
+# ---------------------------------------------------------------------------
+
+@test "write: a generic key=value pair is written verbatim, with the correct value, after the frozen fields" {
+  local data_dir="$TEST_DIR/recextra1"
+  run _call_writer_extra "$data_dir" hook sess-extra "myfield=myvalue" "second=anothervalue"
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not available to verify extra field values"
+  fi
+  # The value, not just the key's existence: a $key/$val swap would still
+  # produce a record with SOME field present, just holding the wrong thing
+  # (or the key and value transposed) — has()/existence checks alone would
+  # not catch that.
+  run jq -r '.myfield' "$file"
+  [ "$output" = "myvalue" ]
+  run jq -r '.second' "$file"
+  [ "$output" = "anothervalue" ]
+
+  # Ordering: extras appear AFTER ts, kind, session, repo, in the order
+  # given — as raw text, not via jq's order-independent lookup (same
+  # rationale as test 17 above).
+  local line keys expected
+  line="$(cat "$file")"
+  keys="$(printf '%s' "$line" | grep -oE '"(ts|kind|session|repo|myfield|second)":' | tr -d '":')"
+  expected="$(printf 'ts\nkind\nsession\nrepo\nmyfield\nsecond')"
+  [ "$keys" = "$expected" ]
+}
+
+# ---------------------------------------------------------------------------
+# 20. C0 control bytes below 0x20 (other than tab/newline/CR, already
+#    escaped) must become \u00XX, not pass through raw. `jq` parses a raw
+#    control byte in a JSON string leniently; Python's json.loads does not
+#    — and report.py (ADR-6) is Python. Checked with Python's own parser,
+#    not jq, because jq accepting the line would prove nothing about the
+#    actual failure this fix exists to prevent. The byte is constructed at
+#    runtime via `chr(27)`/`printf` rather than written literally in this
+#    source file.
+# ---------------------------------------------------------------------------
+
+@test "write: a C0 control byte is escaped so Python's json.loads accepts the record" {
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 not available to verify JSON legality"
+  fi
+  local data_dir="$TEST_DIR/recctrl1"
+  local esc
+  esc="$(printf '\033')"
+  local val="esc${esc}ape"
+  run _call_writer "$data_dir" hook "$val"
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  run python3 -c "
+import json
+data = open('$file', 'rb').read()
+text = data.decode('utf-8')
+obj = json.loads(text.strip())    # raises 'Invalid control character' if unescaped
+expected = 'esc' + chr(27) + 'ape'
+assert obj['session'] == expected, repr(obj['session'])
+"
+  [ "$status" -eq 0 ]
+
+  # The raw byte must not appear literally on disk either -- it has to
+  # actually be the six-byte escape sequence, not merely something
+  # json.loads tolerated by accident. The expected marker is built at
+  # runtime from chr(92) (backslash) plus plain digits, rather than
+  # typed as a literal escape token in this source file.
+  run python3 -c "
+data = open('$file', 'rb').read()
+assert bytes([27]) not in data, 'raw ESC byte reached the record'
+marker = (chr(92) + 'u001b').encode('ascii')
+assert marker in data, 'expected the backslash-u-001b escape sequence on disk'
+"
+  [ "$status" -eq 0 ]
 }
