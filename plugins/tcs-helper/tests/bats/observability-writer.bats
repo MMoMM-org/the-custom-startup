@@ -26,8 +26,13 @@ bats_require_minimum_version 1.5.0
 # bash 3.2 compatible.
 
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
-  WRITER="$REPO_ROOT/.claude/observability/logwrite.sh"
+  # Derived via git rather than a relative "../.." count: this file now
+  # lives three levels under the repo root (plugins/tcs-helper/tests/bats/),
+  # one deeper than a top-level tests/bats/ suite, and a fixed relative path
+  # would silently break again if the suite ever moves. git rev-parse is
+  # robust to that and to being invoked from any cwd.
+  REPO_ROOT="$(git -C "$BATS_TEST_DIRNAME" rev-parse --show-toplevel)"
+  WRITER="$REPO_ROOT/plugins/tcs-helper/scripts/observability/logwrite.sh"
   PLUGIN_DATA_LIB="$REPO_ROOT/plugins/tcs-git-helpers/scripts/lib/plugin_data.sh"
 
   # macOS exports TMPDIR with a trailing slash. Left in, every fixture path
