@@ -32,6 +32,21 @@ phase: 2
 **Dependencies**: Phase 1 (T1.1–T1.3). The adapters call the writer; without it they have nothing to
 call. T1.4 does not block this phase.
 
+**BINDING NOTE, added after phase 1 (T1.3) — the reduction mechanism, not just the keep/drop table**
+`[ref: SDD/Complex Logic — the reduction mechanism]`:
+- Call `_observability_field`, the writer's actual extractor. Do not write a second one, and do not
+  call it `_field` (the name the SDD's Implementation Examples sketches it under) — that name is
+  deliberately avoided in `logwrite.sh` to prevent a silent collision with a sourced adapter.
+- Every field the keep/drop table forbids for a given kind must be passed to the writer with a
+  `detail:` prefix (e.g. `detail:command`). The prefix is the interface; it is what makes a field
+  detail-only.
+- Do **not** rely on the writer's bare-name deny list (`command`, `full_command`, `hook_command`,
+  `content`, `file_content`, `transcript_path`, `cwd`, `prompt`, `prompt_text`, `response`,
+  `response_text`) to keep a sensitive field out of reduced mode. It is a fail-safe for a field an
+  adapter forgot to prefix, not a substitute for prefixing — it is an EXACT match on the bare field
+  name, so a field like `new_string` or a nested-looking name such as `tool_input.command` bypasses
+  it entirely.
+
 ---
 
 ## Tasks

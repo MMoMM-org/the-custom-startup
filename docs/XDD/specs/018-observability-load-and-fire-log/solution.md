@@ -370,8 +370,14 @@ concurrency: append-only single-line writes; two sessions interleave lines but n
 | `CLAUDE_OBSERVABILITY_ENABLED=1` | recording happens at all. Unset: the adapter exits 0 immediately and no directory or file is created |
 | `CLAUDE_OBSERVABILITY_DETAIL=1` | adds the sensitive fields. Requires the first to have any effect — two affirmative steps, as the harness's own telemetry requires |
 
-**Field length limit**: 256 characters, single-line, matching the precedent in `audit_log.sh`.
-Anything longer is cut at 256 and the record carries `truncated: true`.
+**Field length limit**: 256 BYTES, single-line, matching the precedent in `audit_log.sh`. Anything
+longer is cut at 256 bytes and the record carries `truncated: true`.
+
+**Correction**: an earlier draft of this line said "256 characters." It is bytes. `LC_ALL=C` (CON-3)
+makes bash's length (`${#s}`) and slice (`${s:0:N}`) operators byte-oriented, so counting characters
+instead would mean hand-decoding UTF-8 on every field of every record — a cost the hot-path budget
+in CON-7 cannot absorb. `audit_log.sh`'s own 256-limit is effectively byte-counted the same way,
+under the same `LC_ALL=C`, so this is the unit its precedent actually uses.
 
 #### Application Data Models
 
@@ -398,8 +404,24 @@ ENTITY: Event (NEW)                       # one JSON object per line
 
   # Budget note for `bytes`: stat'ing the file costs one fork per instruction load. Instruction
   # loads happen at session start and on file reads — tens per session, not per tool call — so this
-  # is outside CON-7's per-tool-call concern. It is the one deliberate fork in the hook path, and it
-  # exists because the byte cost of the always-loaded layer is the number #147 actually needs.
+  # is outside CON-7's per-tool-call concern. It exists because the byte cost of the always-loaded
+  # layer is the number #147 actually needs.
+  #
+  # Correction: this note used to call the `bytes` stat "the one deliberate fork in the hook path."
+  # That is no longer true (see ADR-5's accepted deviation, below) — the common `ts` field above
+  # already forks `date` once per record, because bash 3.2 has no fork-free wall clock. The `bytes`
+  # stat is a second, independent fork, not the only one.
+  #
+  # Type/serialization gap, found at T2.1, flagged for phase 2 rather than resolved here: `bytes` is
+  # typed `number?` here, but `logwrite.sh`'s writer is generic over key=value pairs and quotes every
+  # value uniformly — there is no per-field type in the record shape. The record therefore carries
+  # `"bytes":"2048"`, a quoted string, never a bare JSON number. `report.py` (ADR-6) is Python and
+  # needs `int(...)` on it regardless of which side changes. Two ways to close this, deliberately not
+  # chosen here: (a) T2.1 adds a numeric-field path to the writer — a change to the frozen record
+  # shape this SDD pins above; or (b) `report.py` casts on read — no change to this shape at all.
+  # (b) is the lower-cost option since it touches only the offline reader, but the choice is left
+  # for phase 2 to make deliberately rather than have it fall out of whichever adapter is written
+  # first.
 
   WHEN kind = skill:
     skill:         string   # from tool_input
@@ -498,6 +520,16 @@ _json_escape() {                     # bash 3.2 supports ${var//x/y}
 }
 ```
 
+**Escaping goes further than this sketch, and further than `audit_log.sh`.** The shipped writer
+also escapes every remaining C0 control byte (0x01–0x1F, beyond the `\n`/`\r`/`\t` shown above) as
+`\u00XX`. That exceeds `audit_log.sh`'s own escaping scope, which handles only backslash and
+double-quote — not even `\n`. The reason is the downstream reader, not caution for its own sake:
+`report.py` (ADR-6) is Python, and `json.loads` rejects a raw control character inside a string
+outright, where a more lenient tool would accept it. An unescaped control byte surviving into a
+field would not just look odd on inspection — it would make `report.py` silently drop the whole
+record as unparseable, which is exactly the "records wrong things" failure CON-9 says this design
+must degrade away from, not into.
+
 **Why not reuse `_audit_log` directly — corrected after tracing it.** An earlier draft of this SDD
 said it forks `sed` once per field, "roughly nine processes per line". That describes its *fallback*
 path only: with `jq` present, `_audit_log_build_jq` runs and there are **zero** `sed` forks. Traced
@@ -534,10 +566,48 @@ _field() {                            # _field <payload> <key>
 `${1#*"load_reason":"}` yields `session_start"}` → `${body%%\"*}` yields `session_start`.
 
 `_field "$payload" globs` → the prefix removal finds no match, so `$body` equals `$1`, the guard
-fires, and the result is the empty string rather than the whole payload. That guard is the
-difference between an absent field and a record containing the entire payload — including, on a
-Bash `PreToolUse`, the full command line. **This is the redaction-critical line of the whole
-design**, and it has its own test.
+fires, and the result is the empty string rather than the whole payload.
+
+**Correction (the more serious of two found at T1.3) — the `_field` as specified above is
+incomplete: it leaks on an empty key.** As written, `_field` has only the absent-key guard shown
+above. Given `key = ""` and a payload that happens to carry a legal empty-string key —
+`"":"value"`, which JSON permits and `tool_input` is free to emit — the prefix-removal pattern
+becomes `*"":"`, which MATCHES: `$body` differs from `$1`, the absent-key guard never fires, and the
+extractor returns that value instead of the empty string a caller asking for `""` should get.
+Verified directly:
+
+```
+payload = {"tool_name":"Bash","tool_input":{"":"sk-ant-EMPTYKEYCANARY-42","command":"echo hi"},"session_id":"sess-empty"}
+key     = ""
+→ body != payload  (absent-key guard does NOT fire)
+→ result: sk-ant-EMPTYKEYCANARY-42
+```
+
+The absent-key guard does not subsume this: it guards against a key that never appears at all, not
+against an empty key name coincidentally matching unrelated structure. The required fix is a second,
+independent guard placed BEFORE the prefix removal — `[ -n "$key" ] || return` (prints empty,
+returns 0). No caller in this design legitimately asks for the empty key, so the guard costs
+nothing real. **This empty-key guard is now part of the specified contract, not an optional
+hardening** — an implementation of `_field` without it is non-compliant — and it is pinned by a
+dedicated test.
+
+**Correction (the second, smaller one) — the missing-guard consequence, as this walkthrough
+originally described the absent-key guard alone, was overstated.** The text here used to say that
+without that guard, the result is "a record containing the entire payload — including, on a Bash
+`PreToolUse`, the full command line," and called that line "the redaction-critical line of the whole
+design." Measured: with the absent-key guard removed, `_field` returns `{` for any well-formed JSON
+payload, not the payload's full content — `${body%%\"*}` truncates at the first `"` byte, and a JSON
+object's first quote sits immediately after the opening brace. The "entire payload" outcome is
+reachable only for a payload with ZERO double-quote characters, i.e. malformed or non-JSON input.
+The guard is still correct and worth keeping — it distinguishes an absent key from an empty value,
+and keeps a bare `{` out of records — but its consequence is corrected here rather than left
+standing overstated. (This is the same class of error the spec's own validation round already
+recorded about an earlier overstated justification — see this file's `_audit_log` `sed`-forks
+correction, above, and the README's Validation round entry.) Both guards — absent-key and
+empty-key — now have their own tests.
+
+The extractor is implemented under the name `_observability_field`, not `_field` as sketched above —
+see Building Block View / reduction mechanism, below, for why the naming matters to phase 2.
 
 #### Test Examples as Interface Documentation
 
@@ -595,6 +665,53 @@ The keep/drop split mirrors the harness's own `bash_command` (always) versus `fu
 distinction — chosen because it is the split someone has already thought about, and because keeping
 the verb is what makes a reduced record diagnostic rather than merely safe.
 
+#### The reduction mechanism — binding on phase 2
+
+The table above says WHAT reduced mode keeps and drops; it does not say HOW an adapter marks a field
+as sensitive. That gap was found at T1.3: the SDD had specified a category table with no mechanism
+underneath it, and phase 1's implementer had to invent one. It is written here now, as the interface
+every phase-2 adapter must use, so the three adapters do not each invent a third, incompatible
+convention.
+
+```
+GIVEN a key=value pair an adapter hands to the writer (`_observability_write`)
+THE FIELD SURVIVES REDUCED MODE UNLESS EITHER LAYER BELOW MARKS IT SENSITIVE:
+
+  1. PRIMARY — an explicit `detail:` key prefix. An adapter marks a field sensitive by naming it
+     `detail:<field>` (e.g. `detail:command`). Such a field is written only when detail mode is on;
+     otherwise it is dropped entirely — the prefix is stripped before the field name is even
+     considered for writing, so it never reaches the record either as a name or as a value.
+
+  2. FAIL-SAFE — a bare-name deny list, for an adapter that forgets to prefix a field it should
+     have. Exact match on the bare field name, checked after the `detail:` prefix (if any) is
+     stripped:
+         command  full_command  hook_command  content  file_content  transcript_path
+         cwd  prompt  prompt_text  response  response_text
+     A name on this list is dropped in reduced mode even without the `detail:` prefix.
+```
+
+Both layers are independently load-bearing — verified by mutation: disabling either one alone (the
+prefix check, or the deny-list check) leaks a field the other does not catch. Neither is redundant
+with the other.
+
+**Limitation that matters for phase 2: the deny list is an EXACT match on bare field names.** An
+adapter that emits a field named `new_string` (Edit's replacement text) or a nested-looking name
+such as `tool_input.command` bypasses the fail-safe entirely — neither string is in the list above,
+and the list does no pattern or substring matching. Such a field would only be caught by the
+`detail:` prefix.
+
+**Recommendation binding on phase 2, carried forward from this finding:** every field the keep/drop
+table forbids must be passed to `_observability_write` with the `detail:` prefix. The deny list is a
+backstop against an adapter that forgets — it is not the interface, and it must not be relied on as
+one. (See `plan/phase-2.md` for the same instruction placed where phase 2's implementer will read
+it directly.)
+
+The function is named `_observability_field`, not `_field` as the earlier sketch in Implementation
+Examples wrote it — deliberately, to avoid a silent collision with a name a sourced phase-2 adapter
+might define for itself, the same reasoning that renamed `_json_escape` to
+`_observability_json_escape`. **Phase 2 adapters must call `_observability_field`, not reimplement
+extraction.**
+
 ## Deployment View
 
 ### Single Application Deployment
@@ -646,7 +763,7 @@ Not applicable — there is no UI. The two human-facing surfaces are `report.py`
 | **ADR-2** | Our own hook for instruction loading; harness telemetry cannot substitute | Measured: the `InstructionsLoaded` payload never enters telemetry — only "a batch ran" does. The `claude_code.hook` span that would have carried more is unreachable (`vj()` is hard-coded false) | We depend on an experimental event. CON-9 covers the degradation path |
 | **ADR-3** | Phase 1 registers all three adapters | They share one writer, so the marginal cost of skills and agents is one config entry each, and it delivers the "which skills ever fire" number immediately | Slightly wider first cut than the Must-Have alone |
 | **ADR-4** | Redaction is implemented by us, with two independent switches, both default off | The `OTEL_LOG_*` family governs only Anthropic's own export; hook stdin arrives complete regardless. A design that assumed otherwise would record everything while looking safe | Redaction logic we must test ourselves — hence the dedicated bats cases |
-| **ADR-5** | No `jq` and no `date` in the hook path | Measured: `jq` ~21 ms per call — 25× the budget, and enough to trip the harness's own slow-hook warning *because of the instrument*. `date +%s%N` is additionally broken on BSD | Hand-rolled extraction and escaping, which is why `_field`'s absent-key guard is separately tested |
+| **ADR-5** | No `jq` and no `date` in the hook path | Measured: `jq` ~21 ms per call — 25× the budget, and enough to trip the harness's own slow-hook warning *because of the instrument*. `date +%s%N` is additionally broken on BSD | Hand-rolled extraction and escaping, which is why `_field`'s absent-key guard is separately tested. **Accepted deviation, found at T1.2**: the `ts` field still costs one `date -u` fork per record. bash 3.2 has no fork-free wall clock — `printf '%()T'` needs bash 4.2, `EPOCHSECONDS` needs 5.0 — so a wall-clock timestamp string cannot be produced for free under CON-1's target shell. Measured: `date` ≈ 370 µs, `git rev-parse` ≈ 567 µs, so one record already costs ~937 µs of CON-7's 1 ms budget before script startup even runs, and T2.1's `bytes` stat adds a fourth fork on top of that. This is a deviation from ADR-5's own "no `date`" title, named here rather than left to be discovered by re-reading the code |
 | **ADR-6** | `report.py` in Python, covered by pytest | Runs offline where CON-7 does not apply; the repo already runs pytest on both OSes in CI, so the analysis becomes testable rather than merely runnable | A second language in the feature. Justified by the hot/cold split the strategy is built on |
 | **ADR-7** | Per-hook attribution is not expressible as configuration; F6 and F7 are both served by one `timed-wrapper.sh` | T1.4's verification spike ran six hook arrangements (A–F) through nested `claude -p` sessions against a local OTLP receiver. Decisive: arrangement B — two entries with two *distinct* matcher strings still collapse into one `hook_execution_complete` record with `num_hooks=2`. Also found: `hook_name` is `${event}:${toolName}`, not `${event}:${matcher}` (D, E: matchers `Read\|Glob` and `.*` both report `PreToolUse:Read`); hooks in a group run in parallel, so subtraction cannot recover per-hook duration either (F: two 0.40s hooks total 406 ms, not ~800). Reproducible from the artifacts referenced in the README's T1.4 section | The harness-ingest route for F6 is dropped: reliable capture now needs a local OTLP receiver, which the wrapper avoids. F6's original promise — durations "without installing anything into the hook path" — is given up; F6 and F7 collapse into one deliverable |
 | **ADR-8** | Storage per repo, outside the working tree, rotated. **Ground truth is `audit_log.sh` itself, not spec 011's ADR-7 text** | Out-of-tree is structurally safe against `git add -A`; per-repo keeps client contexts apart; size rotation needs no scheduled job. Note a pre-existing drift found while validating this spec: spec 011's ADR-7 text says "1 MB → `.1`/`.2`, 2-rotation retention", while the shipped `audit_log.sh` implements a three-generation chain capped at `.3`. This spec follows the code | Cross-repo questions ("which skills do I use anywhere") need the report to aggregate several files later. The spec-011 text/code drift is reported, not fixed here — fixing it is spec 011's business |
@@ -696,6 +813,16 @@ Not applicable — there is no UI. The two human-facing surfaces are `report.py`
   values. The skill adapter reads `tool_input`, which *is* nested — so it extracts only the scalar
   it needs and must never be extended to walk that object without switching to a real parser
   offline.
+- **The adversarial case, named explicitly (implicit above, but not previously spelled out):** the
+  extractor matches the FIRST occurrence of `"key":"` anywhere in the payload. A payload whose VALUE
+  happens to contain that exact byte sequence — for example an escaped quote inside a Bash command
+  line, followed by text that reads `"load_reason":"` — matches inside the value rather than at the
+  real key, and the wrong value is extracted. The redaction guarantee still holds: the result is
+  always some value taken from within the payload, never the payload itself, so nothing is leaked
+  that was not already present. But the record can be made to report a wrong value for a real key.
+  Accepted for the same reason as the point above — a real parser belongs offline (CON-7), not in
+  the hot path — but a failure mode this specific should be named, not left to be rediscovered as a
+  surprise.
 - Two concurrent sessions in one repo append to one file. Single-line appends under the pipe-buffer
   size are effectively atomic on both target platforms, but this is an assumption, not a guarantee;
   the `session` field is what makes interleaving harmless.
