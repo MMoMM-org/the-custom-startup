@@ -37,7 +37,7 @@ phase: 1
 Establishes the storage contract, the writer, and the answer to whether Feature 7 can exist as
 configuration rather than as code.
 
-- [ ] **T1.1 Data-directory resolver with plugin parity** `[activity: infrastructure]`
+- [x] **T1.1 Data-directory resolver with plugin parity** `[activity: infrastructure]`
 
   1. Prime: read `plugin_data.sh` in full, including the comment explaining why the fallback must
      reproduce the harness's shape rather than invent one `[ref: SDD/ADR-1]`
