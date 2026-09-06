@@ -314,6 +314,15 @@ _caller_wrapper() {
 # 5. No forking in the write path
 # ---------------------------------------------------------------------------
 
+# This is a static grep over the source TEXT — a lightweight proxy for "no
+# stream-editor process is forked while escaping", not equivalent to the
+# runtime fork-COUNTING done by tests 21/22 below (which shadow `git` and
+# count actual invocations). A word that merely contains "sed"/"jq"/"awk"
+# as a substring inside a longer identifier would still be missed by \b
+# word-boundary matching in the wrong direction, and this test would not
+# catch a helper that forks one of these tools indirectly through another
+# function it calls — it only proves the literal words are absent from
+# this file's own text.
 @test "write: escaping forks no sed, jq or awk process" {
   run grep -nE '\b(sed|jq|awk)\b' "$WRITER"
   [ "$status" -eq 1 ]
@@ -665,6 +674,188 @@ assert b'\xed\x9f\xbf' in data, 'U+D7FF (ED 9F BF) was altered'
 assert b'\xf0\x90\x80\x80' in data, 'U+10000 (F0 90 80 80) was altered'
 assert b'\xf4\x8f\xbf\xbf' in data, 'U+10FFFF (F4 8F BF BF) was altered'
 data.decode('utf-8')
+"
+  [ "$status" -eq 0 ]
+}
+
+# ---------------------------------------------------------------------------
+# 14. The writer must not fail CLOSED under a `set -e` caller. Real hooks in
+#    this repo already run under `set -euo pipefail`
+#    (claude-docker-home/.claude/hooks/block-main-edits.sh,
+#    session-start.sh) — this is not hypothetical. _caller_wrapper above
+#    never sets `set -e`, so tests 17-19 cannot see this failure mode; these
+#    three source the writer into a genuinely `set -euo pipefail` shell and
+#    assert a line placed AFTER _observability_write still runs.
+# ---------------------------------------------------------------------------
+
+@test "set -e survival: outside a git repo, a line after the call still runs" {
+  local outside="$TEST_DIR/outside_repo_sete"
+  mkdir -p "$outside"
+
+  run env -u CLAUDE_OBSERVABILITY_DATA "HOME=$FAKE_HOME" \
+    "GIT_CEILING_DIRECTORIES=$TEST_DIR" \
+    bash -c "
+      set -euo pipefail
+      cd '$outside'
+      . '$WRITER'
+      export CLAUDE_OBSERVABILITY_ENABLED=1
+      echo BEFORE
+      _observability_write kind=hook session=sete-outside
+      echo AFTER
+    "
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'BEFORE\nAFTER')" ]
+}
+
+@test "set -e survival: an unwritable PARENT directory (mkdir fails), a line after still runs" {
+  local parent="$TEST_DIR/sete_unwritable_parent"
+  mkdir -p "$parent"
+  chmod 500 "$parent"
+  local data_dir="$parent/child"
+
+  run bash -c "
+    set -euo pipefail
+    cd '$REPO'
+    . '$WRITER'
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA='$data_dir'
+    echo BEFORE
+    _observability_write kind=hook session=sete-unwritable-parent
+    echo AFTER
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'BEFORE\nAFTER')" ]
+
+  chmod 700 "$parent"
+}
+
+# This is the coordinator's literal reproduction: the directory EXISTS (so
+# `mkdir -p ... || return 0` above is a no-op success, never even reached as
+# a failure), but is not writable — the abort happens at the FINAL APPEND
+# (`printf ... >>"$events_file"`), the one line the original bug report
+# named directly ("the return 0 at :348 is never reached when the append
+# fails. That is literally SDD-AC-12's scenario").
+@test "set -e survival: an existing unwritable directory (append fails), a line after still runs" {
+  local data_dir="$TEST_DIR/sete_unwritable_existing"
+  mkdir -p "$data_dir/observability"
+  chmod 555 "$data_dir/observability"
+
+  run bash -c "
+    set -euo pipefail
+    cd '$REPO'
+    . '$WRITER'
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA='$data_dir'
+    echo BEFORE
+    _observability_write kind=hook session=sete-unwritable-existing
+    echo AFTER
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'BEFORE\nAFTER')" ]
+
+  chmod 755 "$data_dir/observability"
+}
+
+@test "set -e survival: a failing date, a line after the call still runs" {
+  local data_dir="$TEST_DIR/sete_faildate"
+
+  run bash -c "
+    set -euo pipefail
+    cd '$REPO'
+    . '$WRITER'
+    date() { return 1; }
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA='$data_dir'
+    echo BEFORE
+    _observability_write kind=hook session=sete-faildate
+    echo AFTER
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'BEFORE\nAFTER')" ]
+
+  # The dead-code-under-errexit trap this pins: `ts="$(date ...)"` (bare,
+  # unguarded) would abort BEFORE the fallback line `[ -z "$ts" ] &&
+  # ts="1970-..."` ever ran — so the fallback existing in the source proves
+  # nothing on its own without this test actually forcing date to fail.
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+  if command -v jq >/dev/null 2>&1; then
+    run jq -r '.ts' "$file"
+    [ "$output" = "1970-01-01T00:00:00Z" ]
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# 15. CON-10/field-limit: the 256 limit is bytes, not characters (LC_ALL=C
+#    makes ${#clean} and ${clean:0:256} byte-oriented already; this pins
+#    that as deliberate, not accidental). 150 'Ā' (U+0100, 2 bytes each) is
+#    150 characters — comfortably under 256 characters — but 300 bytes,
+#    comfortably OVER 256 bytes. Byte-aligned (256 / 2 = 128 exactly) so
+#    this test is isolated from the mid-sequence healing concern below.
+# ---------------------------------------------------------------------------
+
+@test "write: the 256 limit is bytes — 150 two-byte characters (300 bytes) still truncates" {
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 not available to verify byte length"
+  fi
+  local data_dir="$TEST_DIR/recbytes1"
+  local a_with_macron=$'\xc4\x80'    # U+0100, LATIN CAPITAL LETTER A WITH MACRON
+  local val="" i
+  for ((i = 0; i < 150; i++)); do val="$val$a_with_macron"; done
+
+  run _call_writer "$data_dir" hook "$val"
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  run python3 -c "
+import json
+data = open('$file', 'rb').read()
+text = data.decode('utf-8')
+obj = json.loads(text.strip())
+val = obj['session']
+# 150 characters is well under a 256-CHARACTER limit — if truncation were
+# character-counted, this value would pass through unmodified. It must not.
+assert obj.get('truncated') is True, 'a 300-byte value was not truncated'
+assert len(val.encode('utf-8')) == 256, 'expected exactly 256 bytes, got %d' % len(val.encode('utf-8'))
+assert len(val) == 128, 'expected exactly 128 characters (256 bytes / 2), got %d' % len(val)
+assert val == 'Ā' * 128
+"
+  [ "$status" -eq 0 ]
+}
+
+# ---------------------------------------------------------------------------
+# 16. The sanitize -> cut -> re-sanitize ordering: a cut that lands INSIDE a
+#    multi-byte sequence must be healed, not left as a broken tail. 87 '€'
+#    (U+20AC, 3 bytes each) = 261 bytes; cutting at byte 256 lands after 85
+#    complete '€' (255 bytes) plus the lead byte only of the 86th — the
+#    second sanitize pass must replace that dangling lead byte with '?'.
+# ---------------------------------------------------------------------------
+
+@test "write: a 256-byte cut landing mid-sequence is healed, not left broken" {
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 not available to verify raw bytes"
+  fi
+  local data_dir="$TEST_DIR/recheal1"
+  local euro=$'\xe2\x82\xac'    # U+20AC, EURO SIGN
+  local val="" i
+  for ((i = 0; i < 87; i++)); do val="$val$euro"; done
+
+  run _call_writer "$data_dir" hook "$val"
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  run python3 -c "
+import json
+data = open('$file', 'rb').read()
+text = data.decode('utf-8')    # fails outright if a raw broken byte reached the record
+obj = json.loads(text.strip())
+val = obj['session']
+assert obj.get('truncated') is True
+encoded = val.encode('utf-8')
+assert len(encoded) == 256, 'expected exactly 256 bytes, got %d' % len(encoded)
+assert val == ('€' * 85) + '?', 'expected 85 intact euro signs plus one healed ?, got %r' % val
 "
   [ "$status" -eq 0 ]
 }
