@@ -635,3 +635,36 @@ data.decode('utf-8')
 "
   [ "$status" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# 13. CON-10 well-formedness, accept side: the four boundary-valid sequences
+#    that sit exactly one byte away from the four rejected cases above. A
+#    later edit that tightens one bound by a single value would start
+#    replacing legitimate non-ASCII path bytes with '?' and every existing
+#    test would still pass, since none of them feeds valid multi-byte UTF-8
+#    through the sanitizer. This is what would catch that regression.
+# ---------------------------------------------------------------------------
+
+@test "write: boundary-valid multi-byte UTF-8 sequences survive unchanged" {
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 not available to verify raw bytes"
+  fi
+  local data_dir="$TEST_DIR/recutf5"
+  # U+0800 (E0 A0 80), U+D7FF (ED 9F BF), U+10000 (F0 90 80 80),
+  # U+10FFFF (F4 8F BF BF) — one byte away from the four rejected cases.
+  local good=$'a\xe0\xa0\x80b\xed\x9f\xbfc\xf0\x90\x80\x80d\xf4\x8f\xbf\xbfe'
+  run _call_writer "$data_dir" hook "$good"
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  run python3 -c "
+data = open('$file', 'rb').read()
+assert b'\xe0\xa0\x80' in data, 'U+0800 (E0 A0 80) was altered'
+assert b'\xed\x9f\xbf' in data, 'U+D7FF (ED 9F BF) was altered'
+assert b'\xf0\x90\x80\x80' in data, 'U+10000 (F0 90 80 80) was altered'
+assert b'\xf4\x8f\xbf\xbf' in data, 'U+10FFFF (F4 8F BF BF) was altered'
+data.decode('utf-8')
+"
+  [ "$status" -eq 0 ]
+}
