@@ -239,20 +239,21 @@ _caller_wrapper() {
   run wc -l < "$file"
   [ "${output// /}" = "1" ]
 
-  if command -v jq >/dev/null 2>&1; then
-    run jq -e -c . "$file"
-    [ "$status" -eq 0 ]
-    run jq -r '.kind' "$file"
-    [ "$output" = "hook" ]
-    run jq -r '.session' "$file"
-    [ "$output" = "sess-1" ]
-    run jq -r 'has("ts")' "$file"
-    [ "$output" = "true" ]
-    run jq -r 'has("repo")' "$file"
-    [ "$output" = "true" ]
-    run jq -r '.repo' "$file"
-    [ "$output" = "$REPO_NAME" ]
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not available to verify record content"
   fi
+  run jq -e -c . "$file"
+  [ "$status" -eq 0 ]
+  run jq -r '.kind' "$file"
+  [ "$output" = "hook" ]
+  run jq -r '.session' "$file"
+  [ "$output" = "sess-1" ]
+  run jq -r 'has("ts")' "$file"
+  [ "$output" = "true" ]
+  run jq -r 'has("repo")' "$file"
+  [ "$output" = "true" ]
+  run jq -r '.repo' "$file"
+  [ "$output" = "$REPO_NAME" ]
 }
 
 @test "write: ts is UTC RFC3339 at second precision" {
@@ -261,12 +262,11 @@ _caller_wrapper() {
   [ "$status" -eq 0 ]
   local file="$data_dir/observability/events.jsonl"
 
-  local ts
-  if command -v jq >/dev/null 2>&1; then
-    ts="$(jq -r '.ts' "$file")"
-  else
-    ts="$(grep -o '"ts":"[^"]*"' "$file" | head -1 | sed -e 's/^"ts":"//' -e 's/"$//')"
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not available to extract ts"
   fi
+  local ts
+  ts="$(jq -r '.ts' "$file")"
   [[ "$ts" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
 }
 
@@ -284,12 +284,13 @@ _caller_wrapper() {
   run wc -l < "$file"
   [ "${output// /}" = "1" ]
 
-  if command -v jq >/dev/null 2>&1; then
-    run jq -e -c . "$file"
-    [ "$status" -eq 0 ]
-    run jq -r '.session' "$file"
-    [ "$output" = "$val" ]
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not available to verify the escaped value round-trips"
   fi
+  run jq -e -c . "$file"
+  [ "$status" -eq 0 ]
+  run jq -r '.session' "$file"
+  [ "$output" = "$val" ]
 }
 
 @test "write: a literal newline, CR and tab are escaped so one record never splits" {
@@ -302,12 +303,13 @@ _caller_wrapper() {
   run wc -l < "$file"
   [ "${output// /}" = "1" ]
 
-  if command -v jq >/dev/null 2>&1; then
-    run jq -e -c . "$file"
-    [ "$status" -eq 0 ]
-    run jq -r '.session' "$file"
-    [ "$output" = "$val" ]
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not available to verify the escaped value round-trips"
   fi
+  run jq -e -c . "$file"
+  [ "$status" -eq 0 ]
+  run jq -r '.session' "$file"
+  [ "$output" = "$val" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -342,12 +344,13 @@ _caller_wrapper() {
   [ "$status" -eq 0 ]
   local file="$data_dir/observability/events.jsonl"
 
-  if command -v jq >/dev/null 2>&1; then
-    run jq -r '.session | length' "$file"
-    [ "$output" = "256" ]
-    run jq -r '.truncated' "$file"
-    [ "$output" = "true" ]
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not available to verify truncation"
   fi
+  run jq -r '.session | length' "$file"
+  [ "$output" = "256" ]
+  run jq -r '.truncated' "$file"
+  [ "$output" = "true" ]
 }
 
 @test "write: a field at or under 256 characters carries no truncated field" {
@@ -356,10 +359,11 @@ _caller_wrapper() {
   [ "$status" -eq 0 ]
   local file="$data_dir/observability/events.jsonl"
 
-  if command -v jq >/dev/null 2>&1; then
-    run jq -r 'has("truncated")' "$file"
-    [ "$output" = "false" ]
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not available to verify the absence of truncated"
   fi
+  run jq -r 'has("truncated")' "$file"
+  [ "$output" = "false" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -779,10 +783,11 @@ data.decode('utf-8')
   # nothing on its own without this test actually forcing date to fail.
   local file="$data_dir/observability/events.jsonl"
   [ -f "$file" ]
-  if command -v jq >/dev/null 2>&1; then
-    run jq -r '.ts' "$file"
-    [ "$output" = "1970-01-01T00:00:00Z" ]
+  if ! command -v jq >/dev/null 2>&1; then
+    skip "jq not available to verify the ts fallback value"
   fi
+  run jq -r '.ts' "$file"
+  [ "$output" = "1970-01-01T00:00:00Z" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -858,4 +863,73 @@ assert len(encoded) == 256, 'expected exactly 256 bytes, got %d' % len(encoded)
 assert val == ('€' * 85) + '?', 'expected 85 intact euro signs plus one healed ?, got %r' % val
 "
   [ "$status" -eq 0 ]
+}
+
+# ---------------------------------------------------------------------------
+# 17. The frozen field order (ts, kind, session, repo) is a real contract —
+#    "a reader that positionally inspects a line must not break when a
+#    later kind adds fields" (SDD/Application Data Models). Every other
+#    test reads fields via jq's `.field` lookup or `has()`, which is
+#    order-independent and cannot fail no matter what order the writer
+#    emits keys in. This test reads the raw line as TEXT instead.
+# ---------------------------------------------------------------------------
+
+@test "write: the frozen field order is ts, kind, session, repo, checked as raw text" {
+  local data_dir="$TEST_DIR/recorder1"
+  run _call_writer "$data_dir" hook sess-order
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  local line
+  line="$(cat "$file")"
+
+  # A plain regex over the raw text, not jq's order-independent field
+  # lookup: this is what actually catches a writer that emits, say, kind
+  # before ts while every value stays correct.
+  local keys
+  keys="$(printf '%s' "$line" | grep -oE '"(ts|kind|session|repo)":' | tr -d '":')"
+  local expected
+  expected="$(printf 'ts\nkind\nsession\nrepo')"
+  [ "$keys" = "$expected" ]
+}
+
+# ---------------------------------------------------------------------------
+# 18. Rotation: does the explicit `rm -f "$f.3"` discard actually do
+#    anything? `mv "$f.2" "$f.3"` overwrites unconditionally regardless of
+#    whether .3 pre-existed, so in every FULL-chain state (.1/.2/.3 all
+#    present, what every other rotation test constructs) the discard is a
+#    no-op — a mutation that deletes it leaves the whole suite green. It
+#    only diverges in a PARTIAL chain: .3 present, .2 ABSENT (e.g. left
+#    behind by an earlier failed/interrupted rotation). In that state
+#    nothing else ever touches .3, so the discard is what actually clears
+#    a stale .3 rather than leaving it stranded.
+# ---------------------------------------------------------------------------
+
+@test "write: rotation discards a stale .3 when .2 is absent (partial-chain divergence)" {
+  local data_dir="$TEST_DIR/recrot_partial"
+  local dir="$data_dir/observability"
+  local file="$dir/events.jsonl"
+  mkdir -p "$dir"
+
+  printf 'STALE_THREE\n' > "$file.3"
+  # Deliberately no .2 — this is the one state where the discard and the
+  # unconditional-overwrite-via-mv genuinely disagree.
+  printf 'OLD_ONE\n' > "$file.1"
+  dd if=/dev/zero of="$file" bs=1024 count=1000 status=none
+
+  run _call_writer "$data_dir" hook sess-partial-rot
+  [ "$status" -eq 0 ]
+
+  # With the discard: .3 is removed and nothing replaces it (no .2 existed
+  # to move into it). Without the discard, "STALE_THREE" would still be
+  # sitting in .3 right now.
+  [ ! -f "$file.3" ]
+
+  # The rest of the chain still shifts normally regardless.
+  [ -f "$file.2" ]
+  run cat "$file.2"
+  [ "$output" = "OLD_ONE" ]
+  run wc -c < "$file.1"
+  [ "${output// /}" = "1024000" ]
 }
