@@ -485,3 +485,153 @@ data.decode('utf-8')
 "
   [ "$status" -eq 0 ]
 }
+
+
+# ---------------------------------------------------------------------------
+# 11. CON-7: the write path forks `git rev-parse` at most once per record,
+#    in BOTH the override and default data-dir paths (spec-compliance
+#    finding: _observability_data_dir and _observability_repo_field used to
+#    each fork it independently — up to two forks per record on the default,
+#    real-world path where CLAUDE_OBSERVABILITY_DATA is unset).
+# ---------------------------------------------------------------------------
+
+@test "write: git rev-parse is forked at most once per record (override path)" {
+  local data_dir="$TEST_DIR/recgit1"
+  local counter="$TEST_DIR/recgit1_calls"
+  : > "$counter"
+
+  bash -c '
+    data_dir="$1"; counter="$2"
+    cd "'"$REPO"'" || exit 90
+    . "'"$WRITER"'" || exit 91
+    git() {
+      if [ "$1" = "rev-parse" ]; then
+        printf "x" >> "$counter"
+      fi
+      command git "$@"
+    }
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    _observability_write kind=hook session=sess-gitcount-override
+  ' _ "$data_dir" "$counter"
+
+  local calls
+  calls="$(wc -c < "$counter")"
+  # Exactly one: the `repo` field always needs the toplevel, override or
+  # not — "one fork in both paths is the goal, not zero".
+  [ "${calls// /}" -eq 1 ]
+}
+
+@test "write: git rev-parse is forked at most once per record (default path)" {
+  local counter="$TEST_DIR/recgit2_calls"
+  : > "$counter"
+
+  bash -c '
+    counter="$1"
+    cd "'"$REPO"'" || exit 90
+    export HOME="'"$FAKE_HOME"'"
+    . "'"$WRITER"'" || exit 91
+    git() {
+      if [ "$1" = "rev-parse" ]; then
+        printf "x" >> "$counter"
+      fi
+      command git "$@"
+    }
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    unset CLAUDE_OBSERVABILITY_DATA
+    _observability_write kind=hook session=sess-gitcount-default
+  ' _ "$counter"
+
+  local calls
+  calls="$(wc -c < "$counter")"
+  # This is the path the finding was about: _observability_data_dir's own
+  # repo-derived branch and _observability_repo_field must now share one
+  # resolved toplevel instead of each forking independently.
+  [ "${calls// /}" -eq 1 ]
+}
+
+# ---------------------------------------------------------------------------
+# 12. CON-10 well-formedness: sequence-length checks alone accept four
+#    structurally invalid byte patterns (RFC 3629 Table 3-7). Each must
+#    still be replaced with '?', not passed through.
+# ---------------------------------------------------------------------------
+
+@test "write: an overlong 3-byte sequence (E0 80 80) is replaced with ?" {
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 not available to verify raw bytes"
+  fi
+  local data_dir="$TEST_DIR/recutf1"
+  local bad=$'ab\xe0\x80\x80cd'
+  run _call_writer "$data_dir" hook "$bad"
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  run python3 -c "
+data = open('$file', 'rb').read()
+assert b'\xe0\x80\x80' not in data, 'overlong 3-byte sequence reached the record'
+assert b'ab' in data and b'cd' in data
+data.decode('utf-8')
+"
+  [ "$status" -eq 0 ]
+}
+
+@test "write: a UTF-16 surrogate half (ED A0 80) is replaced with ?" {
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 not available to verify raw bytes"
+  fi
+  local data_dir="$TEST_DIR/recutf2"
+  local bad=$'ab\xed\xa0\x80cd'
+  run _call_writer "$data_dir" hook "$bad"
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  run python3 -c "
+data = open('$file', 'rb').read()
+assert b'\xed\xa0\x80' not in data, 'surrogate-half sequence reached the record'
+assert b'ab' in data and b'cd' in data
+data.decode('utf-8')
+"
+  [ "$status" -eq 0 ]
+}
+
+@test "write: an overlong 4-byte sequence (F0 80 80 80) is replaced with ?" {
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 not available to verify raw bytes"
+  fi
+  local data_dir="$TEST_DIR/recutf3"
+  local bad=$'ab\xf0\x80\x80\x80cd'
+  run _call_writer "$data_dir" hook "$bad"
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  run python3 -c "
+data = open('$file', 'rb').read()
+assert b'\xf0\x80\x80\x80' not in data, 'overlong 4-byte sequence reached the record'
+assert b'ab' in data and b'cd' in data
+data.decode('utf-8')
+"
+  [ "$status" -eq 0 ]
+}
+
+@test "write: a codepoint above U+10FFFF (F4 90 80 80) is replaced with ?" {
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 not available to verify raw bytes"
+  fi
+  local data_dir="$TEST_DIR/recutf4"
+  local bad=$'ab\xf4\x90\x80\x80cd'
+  run _call_writer "$data_dir" hook "$bad"
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  run python3 -c "
+data = open('$file', 'rb').read()
+assert b'\xf4\x90\x80\x80' not in data, 'out-of-range codepoint sequence reached the record'
+assert b'ab' in data and b'cd' in data
+data.decode('utf-8')
+"
+  [ "$status" -eq 0 ]
+}
