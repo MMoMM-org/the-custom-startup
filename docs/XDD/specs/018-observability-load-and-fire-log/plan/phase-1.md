@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Writer foundation, and the attribution question"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 1
 ---
@@ -79,7 +79,7 @@ configuration rather than as code.
   5. Success: `[ref: SDD/SDD-AC-8, SDD-AC-9, SDD-AC-11]`; `[ref: PRD/F3]`; both switches default off
      `[ref: SDD/ADR-4]`
 
-- [ ] **T1.4 Answer the attribution question** `[activity: research]`
+- [x] **T1.4 Answer the attribution question** `[activity: research]`
 
   1. Prime: read ADR-7 and the note that `tcs-helper` already registers two commands under one
      `UserPromptSubmit` matcher `[ref: SDD/ADR-7]` `[ref: SDD/Implementation Context — Code Context]`
@@ -97,6 +97,17 @@ configuration rather than as code.
 
   > This task gates nothing else in phase 1 and can run at any point in it. It is placed here
   > because its answer changes phase 3's scope, and finding that out late is the expensive case.
+
+  > **Finding (2026-09-06):** six arrangements (A–F) run through nested `claude -p` sessions against
+  > a local OTLP receiver. Decisive negative: arrangement B — two entries with two distinct matcher
+  > strings still produce one `hook_execution_complete` record with `num_hooks=2`. Also found:
+  > `hook_name` is `${event}:${toolName}`, not `${event}:${matcher}` (corrects the README); hooks in
+  > a group run in parallel, so subtraction cannot recover per-hook duration (two 0.40s hooks totalled
+  > 406ms, not ~800). Configuration-only attribution is impossible. Result: Feature 7 is routed to
+  > `timed-wrapper.sh` (no longer deferred); Feature 6's harness-telemetry route is dropped in favour
+  > of the same wrapper, because reliable capture would need a local OTLP receiver — infrastructure
+  > this spec's Won't-Have list rules out. Full detail, the six-arrangement table and reproduction
+  > artifacts are in `README.md`'s T1.4 section; ADR-7 in `solution.md` is updated accordingly.
 
 - [ ] **T1.5 Wire the new suite into CI** `[activity: infrastructure]`
 

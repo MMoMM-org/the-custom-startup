@@ -252,19 +252,28 @@ guessing, which is the failure mode this whole spec exists to eliminate.
         mechanism as F8; validation flagged the overlap. It stays because it is what makes F5 worth
         shipping, and is cross-traced to SDD-AC-18 rather than duplicated.)*
 
-#### Feature 6: Hook duration from the harness
+#### Feature 6: Hook duration, measured directly
 
-- **User Story:** As the session diagnostician, I want hook durations without installing anything
-  into the hook path, so that I can tell whether hooks are the problem before instrumenting them.
+- **User Story:** As the session diagnostician, I want to measure how long hooks actually take, so
+  that I can tell whether hooks are the problem before diagnosing further.
+- **What changed, and why:** the original story asked for this "without installing anything into the
+  hook path" — a route that would have captured the harness's own telemetry from a redirected
+  diagnostic run. A verification spike (T1.4, spec 018 README) found that route requires a locally
+  running OTLP receiver, because `OTEL_LOGS_EXPORTER=console` is inert in the shipped harness. A
+  receiver is itself standing infrastructure — exactly what this spec's Won't-Have list rules out
+  ("no server component") — so the promise of zero installation is given up. Feature 6 now shares its
+  mechanism with Feature 7: a timing wrapper installed only for the duration of an investigation and
+  removed afterward.
 - **Acceptance Criteria:**
-  - [ ] Given a deliberately started diagnostic run with harness telemetry enabled and its output
-        redirected to a file, When hooks run, Then their batch duration is captured into the record.
-  - [ ] Given an ordinary interactive session, When it runs, Then harness telemetry output never
-        appears in the terminal — this capture mode is not enabled by default.
-  - [ ] Given that capture is enabled, When it is configured, Then the configuration is documented
-        together with an explicit statement of what it does and does not send, and to whom.
-  - [ ] Given a batch duration is recorded, When several hooks share one matcher, Then the record
-        states that the figure covers the batch rather than implying per-hook attribution.
+  - [ ] Given a hook has been wrapped for an investigation, When it runs, Then its own duration is
+        recorded, distinct from any other hook sharing its event.
+  - [ ] Given the wrapper is not installed, When an ordinary session runs, Then no hook timing is
+        captured and nothing extra runs in the hook path.
+  - [ ] Given the wrapper is installed for an investigation, When it is configured, Then the
+        configuration is documented together with an explicit statement of what it records and
+        where — entirely local; nothing is transmitted anywhere.
+  - [ ] Given a hook's duration is recorded, When the report shows it, Then the figure is labelled as
+        that one hook's own duration, never as a total shared across hooks.
 
 ### Could Have Features
 
@@ -277,11 +286,15 @@ guessing, which is the failure mode this whole spec exists to eliminate.
         hook's own duration is recorded separately.
   - [ ] Given attribution is switched on, When a hook runs, Then its exit status, its output and its
         ability to block are unchanged — the instrument must be transparent to the hook protocol.
-  - [ ] Given attribution is switched off again, When sessions run, Then nothing remains in the hook
-        execution path.
-  - [ ] Given the cheaper alternative of separating hooks so that each has its own matcher, When
+  - [ ] Given attribution is switched off again, When sessions run, Then the wrapper is removed from
+        hook registration and nothing remains in the hook execution path.
+  - [x] Given the cheaper alternative of separating hooks so that each has its own matcher, When
         attribution is designed, Then that option is evaluated first and the reason for the choice
-        recorded.
+        recorded. **Satisfied.** T1.4 (spec 018 README) found that separating hooks onto distinct
+        matchers does not produce separate measurement groups — arrangement B registered two entries
+        under two distinct matcher strings and the harness still collapsed them into one
+        `hook_execution_complete` record with `num_hooks=2`. Per-command matchers cannot serve as the
+        mechanism; `timed-wrapper.sh` is used instead.
 
 #### Feature 8: Usage report against the inventory
 
@@ -298,8 +311,10 @@ guessing, which is the failure mode this whole spec exists to eliminate.
 - A live dashboard, web UI, server, database or Docker component. Every surveyed prior-art project
   has one; all of them are heavier than the question warrants.
 - Any transmission off the machine, and any dependency on an external observability backend.
-- A permanently installed per-hook timing layer. Measurement showed even a disabled wrapper still
-  taxes every hook invocation, because it remains a process in the path.
+- A permanently installed per-hook timing layer. Measurement showed even a wrapper merely toggled off
+  via an env var still taxes every hook invocation, because it remains a process registered in the
+  path. The timing wrapper this spec ships (Features 6 and 7) is installed and then removed from hook
+  registration for the duration of one investigation — never left in place switched off.
 - Restructuring the memory bank. This spec produces the evidence; #147 makes that decision.
 - Recording prompt or response text.
 - Shipping the capability to plugin consumers in this phase. It stays repo-local configuration until
@@ -363,8 +378,7 @@ where telemetry is off by default and command-line detail requires a second, sep
 | Instruction file loaded | path, scope, load reason, parent, triggering file, session, timestamp | The denominator #147 needs; distinguishes always-loaded from conditionally loaded |
 | Skill invoked | skill name, session, timestamp | Which shipped skills are ever used |
 | Agent dispatched | agent type, agent id, parent, session, timestamp | Which agents are used, and nesting |
-| Hook batch executed | event, matcher, hook count, duration, success and failure counts | Whether hooks are a latency problem at all |
-| Hook executed (investigation only) | hook identity, duration, exit status | Which individual hook is slow |
+| Hook duration (investigation only) | hook identity, matcher, duration, exit status | Whether a specific hook is the latency problem — the mechanism for both F6 and F7 after T1.4 found that batch capture from the harness would require a locally running collector |
 | Recording state | enabled, detail mode, record location, last write | Lets the report distinguish "nothing happened" from "nothing was recorded" |
 
 ---
@@ -427,10 +441,15 @@ with their trade-offs so the SDD implements a choice rather than rediscovering o
       of defaults before either has been used in anger, and every later change would become a
       breaking change for people who never asked for the feature. Revisit once the record has
       answered a real question.
-- [x] **Harness hook timing — targeted diagnostic runs only.** The no-infrastructure export mode
+- [x] **Harness hook timing — targeted diagnostic runs only.** ~~The no-infrastructure export mode
       writes to the terminal, which is unacceptable in an interactive session. Feature 6 therefore
       applies to deliberately started diagnostic runs with output redirected to a file, not to
-      everyday sessions. Rejected: filtering the noise out of interactive output, which adds a
+      everyday sessions.~~ **Superseded 2026-09-06** (T1.4, spec 018 README): the "no-infrastructure
+      export mode" does not exist — `OTEL_LOGS_EXPORTER=console` is inert in the shipped harness, and
+      the only working export needs a locally running OTLP receiver, which this spec's Won't-Have
+      list rules out. Feature 6 instead applies the same targeted-investigation posture to
+      `timed-wrapper.sh`: installed only for a deliberate investigation, removed afterward, never run
+      by default. Rejected, unchanged: filtering the noise out of interactive output, which adds a
       filter that can break and floods the terminal when it does.
 - [x] **Detail level in this repo — start reduced.** Begin without command arguments or file
       contents. Widen only if the report proves too thin — at which point we will know *which* field

@@ -21,13 +21,19 @@ phase: 3
 **Key Decisions**:
 - The report is offline, so the hook-path budget does not apply. Clarity and test coverage win over
   cleverness here `[ref: SDD/Solution Strategy]`.
-- A hook duration ingested from the harness is a **batch** figure and must be labelled as such. The
+- **Superseded 2026-09-06 (T1.4 finding, see README and ADR-7):** the bullet below described ingesting
+  a **batch** figure from the harness's own telemetry. That route is dropped — it would require a
+  locally running OTLP receiver, which collides with CON-6 and the Won't-Have "no server component".
+  ~~A hook duration ingested from the harness is a batch figure and must be labelled as such. The
   report may never present it as per-hook attribution — that is the misreading the whole ADR-7
-  question exists to prevent.
+  question exists to prevent.~~ Hook durations now come only from `timed-wrapper.sh`, always
+  `scope_note: single`; see `solution.md`'s Integration Points. **T3.4 below is written around the
+  dropped route and needs the maintainer's decision on how to change it — not rewritten here.**
 - An empty record is a statement about recording, not about loading.
 
-**Dependencies**: Phase 2 (records must exist to report on). T1.4's finding decides whether T3.5
-exists at all.
+**Dependencies**: Phase 2 (records must exist to report on). T1.4 has run (see `plan/phase-1.md`):
+configuration-only attribution is impossible, so T3.5 is not skipped — it builds the wrapper as
+designed. T3.4's dependence on the harness-ingest route is now the open question in this phase.
 
 ---
 
@@ -69,6 +75,14 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   5. Success: `[ref: SDD/SDD-AC-18]`; `[ref: PRD/F8]`
 
 - [ ] **T3.4 Ingest harness hook durations** `[activity: integration]`
+
+  > **Flagged 2026-09-06, not rewritten here.** This task's entire premise — ingesting the harness's
+  > own `hook_execution_complete` output from a redirected diagnostic run — is the route T1.4 found
+  > requires a locally running OTLP receiver, and that route has been dropped (see `README.md`'s T1.4
+  > section, `solution.md`'s Integration Points, and the superseded Key Decision above). F6 now gets
+  > its durations from `timed-wrapper.sh` (T3.5) instead. This task as written should not be
+  > implemented; it needs the maintainer's decision on whether to repurpose it (e.g. as the wrapper's
+  > `report.py` ingest path) or drop it and fold its acceptance criteria into T3.5.
 
   1. Prime: read the integration point and the batch caveat `[ref: SDD/Integration Points]`
   2. Test: given captured `hook_execution_complete` output, produces `kind: hook` records carrying

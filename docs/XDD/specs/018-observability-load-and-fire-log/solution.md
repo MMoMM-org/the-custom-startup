@@ -49,7 +49,7 @@ version: "1.0"
 | Field | Value |
 |---|---|
 | pattern | Thin adapters over one shared append-only writer, with all analysis offline |
-| keyComponents | `logwrite.sh`, `log_instructions.sh`, `log_skill.sh`, `log_agent.sh`, `report.py`, `selfcheck.sh`, `timed-wrapper.sh` (deferred) |
+| keyComponents | `logwrite.sh`, `log_instructions.sh`, `log_skill.sh`, `log_agent.sh`, `report.py`, `selfcheck.sh`, `timed-wrapper.sh` |
 | externalIntegrations | Claude Code hook events (inbound only); local filesystem. No network, no service, no database |
 
 ### SectionStatus
@@ -71,7 +71,10 @@ version: "1.0"
 | Risks and Technical Debt | COMPLETE | |
 | Glossary | COMPLETE | |
 
-**nextSteps**: implement Phase 1 of `plan/`; T1.4's finding decides whether Feature 7 survives.
+**nextSteps**: implement Phases 2 and 3 of `plan/`. T1.4 has run: configuration-only attribution is
+empirically impossible, so F6 and F7 both route through `timed-wrapper.sh` (ADR-7). Phase 3's T3.4
+was written around the now-dropped harness-ingest route and needs the maintainer's decision on how
+to change it (see `plan/phase-3.md`).
 
 ### ADR Status
 
@@ -83,7 +86,7 @@ version: "1.0"
 | ADR-4 | Redaction is ours; two independent switches, both default off | CONFIRMED (PRD business rule) |
 | ADR-5 | No `jq` and no `date` in the hook path | CONFIRMED (forced by measurement) |
 | ADR-6 | Report in Python, covered by pytest | CONFIRMED |
-| ADR-7 | Per-hook attribution deferred behind a verification task | CONFIRMED |
+| ADR-7 | Per-hook attribution is not expressible as configuration; F6 and F7 both served by `timed-wrapper.sh` | CONFIRMED (measured, T1.4) |
 | ADR-8 | Storage follows spec 011 ADR-7: per-repo, out of tree, rotated | CONFIRMED |
 
 ---
@@ -118,7 +121,10 @@ version: "1.0"
   re-derive it before adding a fourth event.
 - **CON-9 — experimental contract.** The hook events and payload fields were read out of the shipped
   binary (2.1.252) and are absent from the documented event list. The design must degrade to
-  "records nothing, says so" rather than to "records wrong things" if the contract moves.
+  "records nothing, says so" rather than to "records wrong things" if the contract moves. A concrete
+  instance of exactly this drift, found rather than merely anticipated: `hook_name`'s actual format,
+  `${event}:${toolName}`, differs from `${event}:${matcher}` as originally read out of the binary and
+  recorded in the README (T1.4, see ADR-7).
 
 ## Implementation Context
 
@@ -257,7 +263,7 @@ Test:    bats tests/bats/...  # shell suites, run on ubuntu and macos in CI
   written for clarity and covered by tests. Splitting on that boundary is what lets both halves be
   right, instead of compromising the analysis to keep it shell-cheap.
 - **Key Decisions:** ADR-1 (self-contained writer), ADR-5 (no `jq`/`date` in the hook path),
-  ADR-8 (out-of-tree storage), ADR-7 (attribution deferred behind a verification task).
+  ADR-8 (out-of-tree storage), ADR-7 (attribution is not expressible as configuration; `timed-wrapper.sh` serves both F6 and F7).
 
 ## Building Block View
 
@@ -291,7 +297,7 @@ graph LR
 | `log_agent.sh` | Adapt the `SubagentStart` payload | agent identity and parentage |
 | `report.py` | Answer the questions in PRD Feature 4 and 8 | counting, joining against the inventories below, byte accounting |
 | `selfcheck.sh` | Say whether recording is on and working | distinguishing "nothing happened" from "nothing recorded" |
-| `timed-wrapper.sh` *(deferred, ADR-7)* | Per-hook duration for one investigation | timing only; never redaction or schema |
+| `timed-wrapper.sh` | Per-hook duration, for both F6 and F7, installed only for an investigation | timing only; never redaction or schema |
 
 **Responsibility matrix (PRD requirement → owning component):**
 
@@ -302,8 +308,8 @@ graph LR
 | F3 Safe by default, detailed by choice | `logwrite.sh` |
 | F4 The report | `report.py` |
 | F5 Skill and agent firing | `log_skill.sh`, `log_agent.sh` |
-| F6 Hook duration from the harness | documented run recipe + `report.py` ingest |
-| F7 Per-hook attribution | `timed-wrapper.sh` (deferred) |
+| F6 Hook duration, measured directly | `timed-wrapper.sh` |
+| F7 Per-hook attribution | `timed-wrapper.sh` |
 | F8 Usage against inventory | `report.py` |
 | "Recording state" tracking event | `selfcheck.sh` |
 
@@ -403,12 +409,14 @@ ENTITY: Event (NEW)                       # one JSON object per line
     agent_id:      string
     parent_agent:  string?
 
-  WHEN kind = hook:         # only populated by the deferred timing wrapper, or ingested from
-    hook_event:    string   # the harness's own hook_execution_complete records
+  WHEN kind = hook:         # populated only by timed-wrapper.sh — the harness-ingest route was
+    hook_event:    string   # dropped after T1.4 found it requires a local OTLP receiver (ADR-7)
     matcher:       string
     ms:            number
     exit:          number
-    scope_note:    enum     # batch | single — states what the number actually covers
+    scope_note:    enum     # batch | single — the wrapper always writes `single`; `batch` is kept
+                            # in the enum only as a label for the harness's own aggregate warning,
+                            # never written by this design
 
   WHEN kind = state:        # written by selfcheck, so an empty record is self-explaining
     enabled:       bool
@@ -421,10 +429,19 @@ ENTITY: Event (NEW)                       # one JSON object per line
 
 #### Integration Points
 
-The harness's own hook-duration records (`hook_execution_complete`, carrying `total_duration_ms`)
-are produced by a **separate, deliberately started diagnostic run** (ADR from PRD review: not
-interactive). `report.py` ingests that output as `kind: hook` records with `scope_note: batch`, so
-batch figures can never be mistaken for per-hook attribution in the report.
+**Dropped, per the T1.4 finding (ADR-7).** The original design ingested the harness's own
+`hook_execution_complete` records (carrying `total_duration_ms`) from a separate, deliberately
+started, non-interactive diagnostic run. That route is abandoned: T1.4 found `OTEL_LOGS_EXPORTER=console`
+inert in Claude Code 2.1.252 — it initializes zero log exporters and silently drops every event — so
+a durable capture needs `OTEL_LOGS_EXPORTER=otlp` plus a listening receiver, i.e. a local collector
+process. That collides with CON-6 ("no collector, no daemon, no database") and the PRD's Won't-Have
+"no server component". `timed-wrapper.sh` now supplies hook duration directly, for both F6 and F7,
+without that infrastructure.
+
+`scope_note: batch | single` still means something even though nothing is ingested any more: with
+the wrapper measuring one hook invocation at a time, every `kind: hook` record it writes carries
+`scope_note: single`. `batch` remains in the enum only as a label for what the harness's own
+aggregate "Slow PreToolUse hooks" warning reports — this design never writes it.
 
 #### The two inventories — where the denominator comes from
 
@@ -451,6 +468,13 @@ skill and agent inventory:        # for PRD F8's "exists but never fired"
 
 The report states which inventory it used and how many entries it found, so a surprising coverage
 figure can be traced to the denominator rather than assumed to be about usage.
+
+**Possible future source, not designed in.** T1.4 found an undocumented `hook_registered` log event
+that fires once per registered command at session start, carrying `hook_event`, `hook_matcher`,
+`hook_source` and `hook_type` — a free load-time inventory of registered hooks. It carries no command
+string, so it cannot by itself solve per-command attribution, but it could one day supply a hook
+denominator analogous to the two inventories above. Recorded as a candidate; not implemented this
+phase.
 
 ### Implementation Examples
 
@@ -624,7 +648,7 @@ Not applicable — there is no UI. The two human-facing surfaces are `report.py`
 | **ADR-4** | Redaction is implemented by us, with two independent switches, both default off | The `OTEL_LOG_*` family governs only Anthropic's own export; hook stdin arrives complete regardless. A design that assumed otherwise would record everything while looking safe | Redaction logic we must test ourselves — hence the dedicated bats cases |
 | **ADR-5** | No `jq` and no `date` in the hook path | Measured: `jq` ~21 ms per call — 25× the budget, and enough to trip the harness's own slow-hook warning *because of the instrument*. `date +%s%N` is additionally broken on BSD | Hand-rolled extraction and escaping, which is why `_field`'s absent-key guard is separately tested |
 | **ADR-6** | `report.py` in Python, covered by pytest | Runs offline where CON-7 does not apply; the repo already runs pytest on both OSes in CI, so the analysis becomes testable rather than merely runnable | A second language in the feature. Justified by the hot/cold split the strategy is built on |
-| **ADR-7** | Per-hook attribution deferred behind a verification task | It is not yet established that "one matcher per command" produces separate measurement groups — the harness groups by `(event, matcher)`, and this repo's own `hooks.json` already puts two commands under one matcher. Deciding now risks specifying something inexpressible | Feature 7 stays open into the plan. The verification task is named in the plan's first phase |
+| **ADR-7** | Per-hook attribution is not expressible as configuration; F6 and F7 are both served by one `timed-wrapper.sh` | T1.4's verification spike ran six hook arrangements (A–F) through nested `claude -p` sessions against a local OTLP receiver. Decisive: arrangement B — two entries with two *distinct* matcher strings still collapse into one `hook_execution_complete` record with `num_hooks=2`. Also found: `hook_name` is `${event}:${toolName}`, not `${event}:${matcher}` (D, E: matchers `Read\|Glob` and `.*` both report `PreToolUse:Read`); hooks in a group run in parallel, so subtraction cannot recover per-hook duration either (F: two 0.40s hooks total 406 ms, not ~800). Reproducible from the artifacts referenced in the README's T1.4 section | The harness-ingest route for F6 is dropped: reliable capture now needs a local OTLP receiver, which the wrapper avoids. F6's original promise — durations "without installing anything into the hook path" — is given up; F6 and F7 collapse into one deliverable |
 | **ADR-8** | Storage per repo, outside the working tree, rotated. **Ground truth is `audit_log.sh` itself, not spec 011's ADR-7 text** | Out-of-tree is structurally safe against `git add -A`; per-repo keeps client contexts apart; size rotation needs no scheduled job. Note a pre-existing drift found while validating this spec: spec 011's ADR-7 text says "1 MB → `.1`/`.2`, 2-rotation retention", while the shipped `audit_log.sh` implements a three-generation chain capped at `.3`. This spec follows the code | Cross-repo questions ("which skills do I use anywhere") need the report to aggregate several files later. The spec-011 text/code drift is reported, not fixed here — fixing it is spec 011's business |
 
 ## Quality Requirements
@@ -658,7 +682,7 @@ Not applicable — there is no UI. The two human-facing surfaces are `report.py`
 | SDD-AC-14 | Given a record, when the report runs, then it states the measured byte cost of the always-loaded layer separately from conditional loads | PRD F4 |
 | SDD-AC-15 | Given an empty or stale record, when the report runs, then it reports the recording state rather than presenting emptiness as a finding | PRD F4 |
 | SDD-AC-16 | Given a session with skill and agent activity, when it ends, then `kind: skill` and `kind: agent` records exist naming the skill and the agent type | PRD F5 |
-| SDD-AC-17 | Given ingested harness hook records, when the report shows durations, then each is labelled `batch` and is not presented as per-hook attribution | PRD F6 |
+| SDD-AC-17 | Given a hook run under `timed-wrapper.sh`, when the report shows its duration, then the record is labelled `scope_note: single` and traceable to that one hook invocation | PRD F6 |
 | SDD-AC-18 | Given the shipped inventory and a record, when the report runs, then it names skills and agents that exist but never fired | PRD F8 |
 | SDD-AC-19 | Given the resolver, when run against the same repo as the plugin's resolver, then both produce the same directory | ADR-1 |
 | SDD-AC-20 | Given the verification task from ADR-7 has run, when its result is recorded, then Feature 7's mechanism is chosen with evidence — and if `one matcher per command` cannot produce separate measurement groups, that finding is written down rather than the option quietly dropped | PRD F7, ADR-7 |
@@ -710,7 +734,7 @@ Not applicable — there is no UI. The two human-facing surfaces are `report.py`
 | Term | Definition | Context |
 |---|---|---|
 | **Adapter** | A hook script that translates one event payload into writer arguments | Deliberately thin; anything more belongs in the report |
-| **Batch (of hooks)** | All hook commands sharing one `(event, matcher)` pair | The unit the harness times; why per-hook attribution is an open question |
+| **Batch (of hooks)** | All hook commands sharing one `(event, matcher)` pair | The unit the harness times; T1.4 established this cannot be split by configuration, which is why per-hook attribution needs `timed-wrapper.sh` |
 | **Record** (or **entry**) | One JSON line in `events.jsonl` | The two words are interchangeable; both mean exactly one line |
 | **The log** | The whole of `events.jsonl` plus its rotated generations, read as one sequence | Used wherever the collective is meant. Earlier drafts overloaded "record" for both; this settles it |
 | **Fail open** | A failure leaves the caller's exit status, stdout and stderr untouched | The opposite failure once made a hook in this repo deny tool calls |
@@ -723,4 +747,4 @@ Not applicable — there is no UI. The two human-facing surfaces are `report.py`
 | `CLAUDE_OBSERVABILITY_DETAIL` | Switch that adds sensitive fields | Unset by default; requires the first switch to have any effect |
 | `CLAUDE_OBSERVABILITY_DATA` | Data-directory override | Set by tests to redirect the record; mirrors `CLAUDE_PLUGIN_DATA`'s role |
 | `kind` | Discriminator on every record | `instruction` \| `skill` \| `agent` \| `hook` \| `state` |
-| `scope_note` | States what a duration covers | `batch` \| `single` — prevents a batch figure being read as per-hook attribution |
+| `scope_note` | States what a duration covers | `batch` \| `single` — the wrapper always writes `single`; `batch` remains only as a label for the harness's own aggregate warning, never written by this design |

@@ -40,6 +40,9 @@
 | 2026-09-06 | ADR-7: per-hook attribution deferred behind a verification task | It is not established that one-matcher-per-command yields separate measurement groups; the harness groups by (event, matcher) and `tcs-helper` already puts two commands under one matcher. Specifying a mechanism now risks specifying something inexpressible |
 | 2026-09-06 | Decomposition tier: **Incremental** (classifier recommended Incremental; user confirmed) | Rule 1 fired on breadth: 6 new components in the Building Block View and 4 Must-Have features, 32 acceptance criteria. `parallel_markers` was taken as false conservatively — the three adapters are independent but the SDD does not declare parallel streams. Direct was rejected because redaction and fail-open behaviour span several components, and those are the parts with safety consequences if one slips |
 | 2026-09-06 | **Correction**: the `claude_code.hook` OTel span is NOT reachable and must not be designed around | Its guard is `gt() = Lb() \|\| vj()`, and `vj(){return!1}` is hard-coded false with a single definition in the binary. `Lb()` additionally needs the undocumented `ENABLE_BETA_TRACING_DETAILED` + `BETA_TRACING_ENDPOINT` **and** an Anthropic-side statsig gate. An earlier note in this file assumed the span was usable; it is not |
+| 2026-09-06 | **Correction** (T1.4): `hook_name` is `${event}:${toolName}`, not `${event}:${matcher}`; `OTEL_LOGS_EXPORTER=console` is inert in Claude Code 2.1.252 | The verification spike measured all six arrangements directly against captured OTLP payloads. Both were previously stated as verified in this file's research findings; they were not — see the T1.4 section above |
+| 2026-09-06 | Feature 7 (per-hook attribution) is routed to `timed-wrapper.sh`; no longer deferred | T1.4 found configuration-only attribution empirically impossible — arrangement B shows two entries with distinct matchers still collapsing into one measurement group |
+| 2026-09-06 | Feature 6's mechanism changes to the same timing wrapper; the harness-telemetry ingest route is dropped | Reliable capture now needs a local OTLP receiver, which collides with CON-6 ("no collector, no daemon, no database") and the Won't-Have "no server component". F6's user story explicitly asked for durations "without installing anything into the hook path" — that promise is given up. F6 and F7 now collapse into one deliverable served by one component |
 
 ## Validation round — 2026-09-06
 
@@ -99,14 +102,74 @@ routing without a denominator.
 
 | Source | Native coverage | Mechanism |
 |---|---|---|
-| **Hooks** | yes, incl. duration — but per *(event:matcher)* **batch**, not per command | OTel **log events** `hook_execution_start` / `hook_execution_complete`, the latter carrying `total_duration_ms`, `num_success`, `num_blocking`, `num_non_blocking_error`, `num_cancelled`. Reachable via the documented `CLAUDE_CODE_ENABLE_TELEMETRY=1` + `OTEL_LOGS_EXPORTER=console`. `hook_definitions` (the configured command strings) additionally needs `OTEL_LOG_TOOL_DETAILS=1` |
+| **Hooks** | yes, incl. duration — but per *(event:tool)* **batch**, not per command, and not per matcher either | OTel **log events** `hook_execution_start` / `hook_execution_complete`, the latter carrying `total_duration_ms`, `num_success`, `num_blocking`, `num_non_blocking_error`, `num_cancelled`. Reachable **only** via the documented `CLAUDE_CODE_ENABLE_TELEMETRY=1` + `OTEL_LOGS_EXPORTER=otlp` against a listening receiver — `OTEL_LOGS_EXPORTER=console` is inert in 2.1.252 (see the T1.4 finding below). `hook_definitions` (the configured command strings) never appears, even with `OTEL_LOG_TOOL_DETAILS=1` |
 | **Skills** | yes | `claude_code.tool.execution` span carries `skill_name`; reachable via the documented `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` + `OTEL_TRACES_EXPORTER` |
 | **Agents** | **no** | `claude_code.subagent.spawn` exists but is dead code — its only guard is `vj()`, hard-coded `false`. Agent identity must come from our own `SubagentStart` hook payload |
 | **Instructions** | **no** | The `InstructionsLoaded` payload never enters telemetry; only "a batch ran" does. Our own hook is required — which is the original purpose of #153 |
 
-`hook_name` is `` `${event}:${matcher}` ``, never the individual command. `num_hooks` is the count
-sharing that matcher. **Consequence:** if two hook commands share one matcher, no native signal can
-say which was slow.
+`hook_name` is `` `${event}:${toolName}` ``, **not** `` `${event}:${matcher}` `` as an earlier version
+of this table stated — see the T1.4 finding below. `num_hooks` is the count of registered commands
+sharing that *tool*, not that matcher: two entries with two distinct matcher strings that both match
+the same tool still collapse into one measurement group. **Consequence:** hooks sharing a tool can
+never be told apart by configuration alone, regardless of how their matchers are written.
+
+### T1.4 — the ADR-7 verification spike: per-hook attribution is not configurable
+
+Six hook configurations run through nested `claude -p` sessions against a local OTLP receiver,
+capturing the harness's own `hook_execution_complete` log records, with payloads independently
+verified. Reproduction artifacts (settings, collector, run script, raw OTLP capture, marker files,
+debug logs) are at
+`/tmp/claude-1001/-Volumes-Moon-Coding-the-custom-startup/c6f9a186-9dd6-4fe8-b0ff-02ae99c27674/scratchpad/t14/`
+— not checked into the repo.
+
+| Arr. | configuration | `hook_name` | `num_hooks` | `total_duration_ms` |
+|---|---|---|---|---|
+| A | 2 entries, both matcher `Read` | `PreToolUse:Read` | 2 | 407 |
+| B | 2 entries, matchers `Read` and `Read\|Glob` | `PreToolUse:Read` | 2 | 410 |
+| C | 1 entry, matcher `Read`, 2 commands | `PreToolUse:Read` | 2 | 406 |
+| D | 1 entry, matcher `Read\|Glob`, 1 command | `PreToolUse:Read` | 1 | 56 |
+| E | 1 entry, matcher `.*`, 1 command | `PreToolUse:Read` | 1 | 63 |
+| F | 2 entries, both matcher `Read`, both sleeping 0.40s | `PreToolUse:Read` | 2 | 406 |
+
+Hook commands slept 0.05s and 0.40s except in F. Exactly one `hook_execution_start`/
+`hook_execution_complete` pair fired per run in every arrangement; marker files confirm both
+commands actually ran in A, B, C and F.
+
+**Finding 1 — one measurement group; a per-command matcher is not expressible.** B is the decisive
+negative: two entries with two *distinct* matcher strings still collapse into ONE record with
+`num_hooks=2`. Splitting hooks onto separate matchers — the cheaper alternative PRD F7's fourth
+acceptance criterion asked to evaluate first — does not produce separate measurement groups.
+
+**Finding 2 — `hook_name` is `${event}:${toolName}`, not `${event}:${matcher}`.** D and E prove it:
+matcher `Read|Glob` and matcher `.*` both report `PreToolUse:Read`. The matcher string can never
+appear in the label. This corrects the claim previously stated as verified in the table above.
+
+**Finding 3 — hooks in a group run in parallel; subtraction cannot recover per-hook duration
+either.** F: two 0.40s hooks total 406 ms, not ~800 ms, with marker timestamps 1.02 ms apart.
+`total_duration_ms` is approximately the max of the group, not the sum.
+
+Every captured OTLP payload was grepped for the hook command strings: zero hits. `hook_definitions`
+never appears, even with `OTEL_LOG_TOOL_DETAILS=1`. The complete attribute set on hook events is:
+`hook_event, hook_name, hook_matcher, hook_source, hook_type, num_hooks, num_success, num_blocking,
+num_non_blocking_error, num_cancelled, total_duration_ms, managed_only, safe_mode, prompt.id,
+session.id, event.{name,sequence,timestamp}, user.*, organization.id, terminal.type`. `hook_matcher`
+does exist as an attribute — but per Finding 1, two entries sharing an event still collapse into one
+record regardless of matcher, so it still yields no per-command identity.
+
+**A new discovery worth recording**: an undocumented `hook_registered` log event fires once per
+registered command at session start, carrying `hook_event`, `hook_matcher`, `hook_source`
+(`userSettings` / `flagSettings` / `merged`) and `hook_type` — a free load-time inventory of
+registered hooks, directly relevant to the "never fired" denominator PRD F8 needs. It carries no
+command string, so two commands sharing an entry remain indistinguishable by it.
+
+**A second correction, independently verified: `OTEL_LOGS_EXPORTER=console` is inert in Claude Code
+2.1.252.** It yields `getOtlpLogExporters: types=[], protocol=undefined, endpoint=undefined`, then
+`Created 0 log exporter(s)`, then `[WARN] [3P telemetry] Event dropped (no event logger
+initialized)`. Nothing is ever printed. Only `otlp` is accepted, and that requires a listening
+receiver — which is why Feature 6's original harness-telemetry route (see Decisions Log below) is
+dropped in favour of the timing wrapper. Also confirmed: `--debug-file` output carries no hook
+durations at all (only `tool_dispatch_end … durationMs` for tool calls), so it cannot substitute
+either.
 
 ### `InstructionsLoaded` — the load-bearing primitive
 
