@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-09-06 |
-| **Current Phase** | SDD |
-| **Decomposition tier** | {{DECOMPOSITION_TIER}} |
+| **Current Phase** | PLAN |
+| **Decomposition tier** | Incremental |
 | **Last Updated** | 2026-09-06 |
 
 ## Documents
@@ -15,7 +15,7 @@
 |----------|--------|-------|
 | requirements.md | completed | 8 features across all MoSCoW tiers, 32 acceptance criteria, 4 review decisions folded in |
 | solution.md | completed | 7 components, 8 ADRs (4 user-confirmed), 20 acceptance criteria, full PRD traceability |
-| plan/ | pending | |
+| plan/ | in_progress | |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -38,6 +38,7 @@
 | 2026-09-06 | ADR-3: phase 1 covers instructions, skills and agents | All three share one writer, so skills and agents cost one config entry each and deliver the "which skills ever fire" number immediately |
 | 2026-09-06 | ADR-6: report in Python with pytest coverage | It runs offline where the hook-path budget does not apply, and the repo already runs pytest on both OSes — the analysis becomes testable rather than merely runnable |
 | 2026-09-06 | ADR-7: per-hook attribution deferred behind a verification task | It is not established that one-matcher-per-command yields separate measurement groups; the harness groups by (event, matcher) and `tcs-helper` already puts two commands under one matcher. Specifying a mechanism now risks specifying something inexpressible |
+| 2026-09-06 | Decomposition tier: **Incremental** (classifier recommended Incremental; user confirmed) | Rule 1 fired on breadth: 6 new components in the Building Block View and 4 Must-Have features, 32 acceptance criteria. `parallel_markers` was taken as false conservatively — the three adapters are independent but the SDD does not declare parallel streams. Direct was rejected because redaction and fail-open behaviour span several components, and those are the parts with safety consequences if one slips |
 | 2026-09-06 | **Correction**: the `claude_code.hook` OTel span is NOT reachable and must not be designed around | Its guard is `gt() = Lb() \|\| vj()`, and `vj(){return!1}` is hard-coded false with a single definition in the binary. `Lb()` additionally needs the undocumented `ENABLE_BETA_TRACING_DETAILED` + `BETA_TRACING_ENDPOINT` **and** an Anthropic-side statsig gate. An earlier note in this file assumed the span was usable; it is not |
 
 ## Context
