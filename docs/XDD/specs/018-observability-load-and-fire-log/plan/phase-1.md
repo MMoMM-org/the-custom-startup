@@ -49,7 +49,7 @@ configuration rather than as code.
   5. Success: resolved path is outside the repository working tree `[ref: SDD/SDD-AC-10]`;
      parity with the plugin resolver holds `[ref: SDD/SDD-AC-19]`
 
-- [ ] **T1.2 Append, escape and rotate — the durable write** `[activity: infrastructure]`
+- [x] **T1.2 Append, escape and rotate — the durable write** `[activity: infrastructure]`
 
   1. Prime: read `audit_log.sh`'s rotation chain and printf builder, and the record shape
      `[ref: SDD/Application Data Models]`
