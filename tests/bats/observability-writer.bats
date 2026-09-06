@@ -143,6 +143,22 @@ _via_plugin() {
   [ "$(basename "$plugin_path")" = "tcs-git-helpers-${REPO_NAME}" ]
 }
 
+@test "parity: trailing-slash stripping agrees under override" {
+  local override obs_path plugin_path
+  override="$TEST_DIR/explicit///"
+
+  obs_path="$(_via_writer "$override")"
+  plugin_path="$(_via_plugin "$override")"
+
+  # Both resolvers strip the same override the same way — the case test 1
+  # only exercised for the writer alone. If either copy's stripping loop
+  # ever diverges (e.g. one starts collapsing internal "//" too), this is
+  # the assertion that catches it.
+  [ "$obs_path" = "$TEST_DIR/explicit" ]
+  [ "$plugin_path" = "$TEST_DIR/explicit" ]
+  [ "$obs_path" = "$plugin_path" ]
+}
+
 # ---------------------------------------------------------------------------
 # 5. SDD-AC-10 — resolved path is outside the repository working tree
 # ---------------------------------------------------------------------------
