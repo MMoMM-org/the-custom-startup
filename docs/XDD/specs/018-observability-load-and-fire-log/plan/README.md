@@ -1,6 +1,6 @@
 ---
 title: "Observability: log what actually loads and fires"
-status: draft
+status: complete
 version: "1.0"
 ---
 
@@ -38,19 +38,23 @@ version: "1.0"
 |---|---|
 | specId | 018-observability-load-and-fire-log |
 | title | Observability: log what actually loads and fires |
-| status | IN_REVIEW |
-| totalTasks | 16 |
+| status | COMPLETE |
+| totalTasks | 17 |
 | parallelTasks | 3 |
-| specReferences | 66 |
+| specReferences | 69 |
 | clarificationsRemaining | 0 |
 
 ### PhaseStatus
 
 | Phase | Name | Status | Tasks | File |
 |---|---|---|---|---|
-| 1 | Writer foundation, and the attribution question | IN_PROGRESS | 5 | [phase-1.md](phase-1.md) |
-| 2 | Adapters and registration | IN_PROGRESS | 5 | [phase-2.md](phase-2.md) |
-| 3 | Report, self-check and end-to-end validation | IN_PROGRESS | 6 | [phase-3.md](phase-3.md) |
+| 1 | Writer foundation, and the attribution question | COMPLETE | 6 | [phase-1.md](phase-1.md) |
+| 2 | Adapters and registration | COMPLETE | 5 | [phase-2.md](phase-2.md) |
+| 3 | Report, self-check and end-to-end validation | COMPLETE | 6 | [phase-3.md](phase-3.md) |
+
+`COMPLETE` here means the phase is fully **defined**. Implementation status is the `status:` field in
+each `phase-N.md`, which stays `pending` until that phase is executed — the two were reported as
+contradictory in validation, and this is the distinction that resolves it.
 
 ---
 
@@ -125,6 +129,9 @@ bats plugins/tcs-git-helpers/tests/bats/   # must stay green — ADR-1 touches i
 
 # Local run of the whole gate
 pytest -q && bats tests/bats/
+
+# NOTE: CI's bats job currently runs `bats --recursive … plugins/*/tests/bats`, a glob that does
+# NOT reach tests/bats. T1.5 extends it. Until that task lands, the new suite runs locally only.
 ```
 
 ---
@@ -180,4 +187,4 @@ graph LR
 | 15 | T3.2 |
 | 17 | T3.4 |
 | 18 | T3.3 |
-| 20 | T1.4 |
+| 20 | T1.4 (finding), T3.5 (implementation) |

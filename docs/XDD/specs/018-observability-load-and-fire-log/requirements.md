@@ -220,7 +220,8 @@ guessing, which is the failure mode this whole spec exists to eliminate.
   - [ ] Given any configuration, When entries are written, Then the record is stored outside the
         repository working tree, so it cannot be committed by a wildcard `git add`.
   - [ ] Given any configuration, When the feature operates, Then no data is transmitted off the
-        machine.
+        machine — verified by inspection: no component performs a network call, and the design
+        introduces no client, endpoint or service.
 
 #### Feature 4: The report that answers the question
 
@@ -246,8 +247,10 @@ guessing, which is the failure mode this whole spec exists to eliminate.
   - [ ] Given recording is enabled, When a skill is invoked, Then an entry names the skill.
   - [ ] Given recording is enabled, When a subagent is dispatched, Then an entry names its type and
         links it to the dispatching session.
-  - [ ] Given a report over such a record, When it runs, Then it distinguishes skills that fired
-        from skills that exist but never fired — the second set being the point.
+  - [ ] Given a report over such a log, When it runs, Then it distinguishes skills that fired from
+        skills that exist but never fired — the second set being the point. *(Satisfied by the same
+        mechanism as F8; validation flagged the overlap. It stays because it is what makes F5 worth
+        shipping, and is cross-traced to SDD-AC-18 rather than duplicated.)*
 
 #### Feature 6: Hook duration from the harness
 

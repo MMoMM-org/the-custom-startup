@@ -45,10 +45,14 @@ Delivers the three capture paths and turns the feature on in this repo for the f
   2. Test: a `session_start` payload yields one record with `reason: session_start`, the file's
      scope, and a repo-relative path; a payload carrying `globs` yields `reason: path_glob_match`
      with `trigger` populated; a payload carrying a parent yields `reason: include` with `parent`
-     populated; an absolute path outside the repo is reduced to its basename, never emitted whole
+     populated; an absolute path outside the repo is reduced to its basename, never emitted whole;
+     **the record carries `bytes`, the size of the loaded file** — the harness payload does not
+     contain it, so the adapter stats the path itself, and a file that cannot be stat'ed yields a
+     record without the field rather than no record at all
   3. Implement: `.claude/observability/log_instructions.sh`
   4. Validate: bats green; the adapter writes nothing to stdout (CON-4)
-  5. Success: `[ref: SDD/SDD-AC-2, SDD-AC-3, SDD-AC-4]`; `[ref: PRD/F1]`
+  5. Success: `[ref: SDD/SDD-AC-2, SDD-AC-3, SDD-AC-4]`; `[ref: PRD/F1]`; `bytes` is populated,
+     without which PRD F4's byte-cost report has no input `[ref: SDD/SDD-AC-14]`
 
 - [ ] **T2.2 Skill adapter** `[activity: backend-api]` `[parallel: true]`
 
@@ -74,16 +78,19 @@ Delivers the three capture paths and turns the feature on in this repo for the f
 
   1. Prime: read the hook registration shape in `plugins/tcs-helper/hooks/hooks.json` and the
      directory map `[ref: SDD/Directory Map]`
-  2. Test: with the enable switch unset, a session creates no data directory and no file; with it
+  2. Test: with `CLAUDE_OBSERVABILITY_ENABLED` unset, a session creates no data directory and no file; with it
      set, a real session start produces at least one instruction record; `selfcheck` reports
      enabled state, detail state, record path and last-write time, and says "not recording" rather
      than reporting an empty result as a finding
-  3. Implement: `.claude/settings.json` registration for the three events, plus
-     `.claude/observability/selfcheck.sh`
+  3. Implement: `.claude/settings.json` registration for the three events,
+     `.claude/observability/selfcheck.sh`, and `.claude/observability/README.md` — the user-facing
+     note the PRD promises three times: the two switch names, where the record lives, how to read
+     it, and how to delete it
   4. Validate: run a real session in this repo and inspect the produced records by hand — the first
      point at which the design meets the actual harness rather than a fixture
   5. Success: `[ref: SDD/SDD-AC-1]`; the `kind: state` record exists `[ref: SDD/Application Data Models]`;
-     `[ref: PRD/F3]` (nothing recorded while off)
+     `[ref: PRD/F3]` (nothing recorded while off); a reader who has never seen this spec can enable,
+     locate and delete the record from the written note alone
 
 - [ ] **T2.5 Phase Validation** `[activity: validate]`
 

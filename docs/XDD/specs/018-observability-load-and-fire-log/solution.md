@@ -1,6 +1,6 @@
 ---
 title: "Observability: log what actually loads and fires"
-status: draft
+status: complete
 version: "1.0"
 ---
 
@@ -44,6 +44,35 @@ version: "1.0"
 | validationPassed | 15 |
 | validationPending | 0 |
 
+### ArchitectureSummary
+
+| Field | Value |
+|---|---|
+| pattern | Thin adapters over one shared append-only writer, with all analysis offline |
+| keyComponents | `logwrite.sh`, `log_instructions.sh`, `log_skill.sh`, `log_agent.sh`, `report.py`, `selfcheck.sh`, `timed-wrapper.sh` (deferred) |
+| externalIntegrations | Claude Code hook events (inbound only); local filesystem. No network, no service, no database |
+
+### SectionStatus
+
+| Section | Status | Detail |
+|---|---|---|
+| Constraints | COMPLETE | |
+| Implementation Context | COMPLETE | |
+| Solution Strategy | COMPLETE | |
+| Building Block View | COMPLETE | |
+| Interface Specifications | COMPLETE | |
+| Implementation Examples | COMPLETE | |
+| Runtime View | COMPLETE | |
+| Deployment View | COMPLETE | Repo-local; no deployment pipeline exists to change |
+| Cross-Cutting Concepts | COMPLETE | |
+| Architecture Decisions | COMPLETE | 8 ADRs, 4 user-confirmed |
+| Quality Requirements | COMPLETE | |
+| Acceptance Criteria | COMPLETE | |
+| Risks and Technical Debt | COMPLETE | |
+| Glossary | COMPLETE | |
+
+**nextSteps**: implement Phase 1 of `plan/`; T1.4's finding decides whether Feature 7 survives.
+
 ### ADR Status
 
 | ID | Name | Status |
@@ -78,6 +107,15 @@ version: "1.0"
   real hook's own runtime. Measured basis: `jq` costs ~21 ms per invocation, `date +%s%N` ~0.37 ms
   each, the bash `time` builtin ~0.
 - **CON-8 — repo-local this phase.** Nothing ships to plugin consumers (PRD Won't Have).
+- **CON-10 — text is bytes, not necessarily UTF-8.** POSIX paths may contain arbitrary byte
+  sequences that are not valid UTF-8; JSON requires UTF-8. The writer replaces any such byte with
+  `?` before it reaches a field, and `report.py` reads with `errors="replace"` and skips a line it
+  cannot parse, counting the skips. A record that cannot be read is worse than one that is slightly
+  lossy.
+- **CON-11 — the instrument must not observe itself.** Hook execution is not itself a tool call, so
+  none of the three registered events can be triggered by this feature's own scripts. This is true
+  by construction rather than by guard; it is written down so a future reader does not have to
+  re-derive it before adding a fourth event.
 - **CON-9 — experimental contract.** The hook events and payload fields were read out of the shipped
   binary (2.1.252) and are absent from the documented event list. The design must degrade to
   "records nothing, says so" rather than to "records wrong things" if the contract moves.
@@ -251,7 +289,7 @@ graph LR
 | `log_instructions.sh` | Adapt the `InstructionsLoaded` payload to the writer's vocabulary | which payload fields become which record fields |
 | `log_skill.sh` | Adapt the `PreToolUse`/`Skill` payload | extracting the skill name from `tool_input` |
 | `log_agent.sh` | Adapt the `SubagentStart` payload | agent identity and parentage |
-| `report.py` | Answer the questions in PRD Feature 4 and 8 | counting, joining against the inventory, byte accounting |
+| `report.py` | Answer the questions in PRD Feature 4 and 8 | counting, joining against the inventories below, byte accounting |
 | `selfcheck.sh` | Say whether recording is on and working | distinguishing "nothing happened" from "nothing recorded" |
 | `timed-wrapper.sh` *(deferred, ADR-7)* | Per-hook duration for one investigation | timing only; never redaction or schema |
 
@@ -308,9 +346,26 @@ path: "<data_dir>/observability/events.jsonl"
 data_dir resolution (ADR-1, mirroring plugin_data.sh):
   1. "$CLAUDE_OBSERVABILITY_DATA" if set   # tests redirect with it
   2. "$HOME/.claude/plugins/data/observability-<repo basename>"
+  symlinks: the resolved directory is used as given; it is NOT realpath-resolved, matching
+            plugin_data.sh. A symlinked ~/.claude therefore merges nothing that the harness
+            would not already merge.
 rotation: at 1024000 bytes → .jsonl → .1 → .2 → .3; .3 is overwritten, no .4 is ever created
-concurrency: append-only single-line writes; two sessions interleave lines but never lose one
+concurrency: append-only single-line writes; two sessions interleave lines but never lose one.
+             Rotation is NOT locked: if two sessions cross the threshold together, one generation
+             can be lost. Accepted — this is a diagnostic record, not an audit trail, and a lock
+             file would add a fork to the hot path (CON-7) to protect a rare, low-consequence case.
+             Named here so it is a decision rather than a surprise.
 ```
+
+**The two switches**, both read at hook-invocation time, both default off (ADR-4):
+
+| Variable | Effect |
+|---|---|
+| `CLAUDE_OBSERVABILITY_ENABLED=1` | recording happens at all. Unset: the adapter exits 0 immediately and no directory or file is created |
+| `CLAUDE_OBSERVABILITY_DETAIL=1` | adds the sensitive fields. Requires the first to have any effect — two affirmative steps, as the harness's own telemetry requires |
+
+**Field length limit**: 256 characters, single-line, matching the precedent in `audit_log.sh`.
+Anything longer is cut at 256 and the record carries `truncated: true`.
 
 #### Application Data Models
 
@@ -331,7 +386,14 @@ ENTITY: Event (NEW)                       # one JSON object per line
     reason:        enum     # session_start | compact | nested_traversal | include | path_glob_match
     parent:        string?  # present only when reason = include
     trigger:       string?  # present only when reason = path_glob_match
-    bytes:         number?  # size of the loaded file, for the always-loaded cost accounting
+    bytes:         number?  # size of the loaded file. NOT in the harness payload — the adapter
+                            # stats the path itself (one fork, see below). Kept in reduced mode:
+                            # a size is not content.
+
+  # Budget note for `bytes`: stat'ing the file costs one fork per instruction load. Instruction
+  # loads happen at session start and on file reads — tens per session, not per tool call — so this
+  # is outside CON-7's per-tool-call concern. It is the one deliberate fork in the hook path, and it
+  # exists because the byte cost of the always-loaded layer is the number #147 actually needs.
 
   WHEN kind = skill:
     skill:         string   # from tool_input
@@ -364,6 +426,32 @@ are produced by a **separate, deliberately started diagnostic run** (ADR from PR
 interactive). `report.py` ingests that output as `kind: hook` records with `scope_note: batch`, so
 batch figures can never be mistaken for per-hook attribution in the report.
 
+#### The two inventories — where the denominator comes from
+
+A hook supplies only the numerator. Both "never loaded" and "never fired" need a list of what
+*could* have. Neither was stated in the first draft of this SDD; both are now fixed, because two
+implementers would otherwise produce different — and equally compliant — answers.
+
+```yaml
+instruction inventory:            # for PRD F4's "configured but never loaded"
+  - the CLAUDE.md hierarchy from the repo root upward, plus every `@`-import reachable from it,
+    resolved transitively
+  - docs/ai/memory/*.md
+  - .claude/rules/**/*.md and ~/.claude/rules/**/*.md
+  - ~/.claude/CLAUDE.md
+  method: filesystem walk at report time, not a maintained manifest — a manifest would drift, and
+          the walk is exactly the set the loader itself can reach
+
+skill and agent inventory:        # for PRD F8's "exists but never fired"
+  - plugins/*/skills/*/SKILL.md            → skill name from the directory
+  - plugins/*/agents/**/*.md               → agent name from frontmatter `name:`
+  - .claude/agents/*.md                    → same
+  method: glob at report time
+```
+
+The report states which inventory it used and how many entries it found, so a surprising coverage
+figure can be traced to the denominator rather than assumed to be about usage.
+
 ### Implementation Examples
 
 #### Example: the writer's hot path, and why it looks like this
@@ -379,15 +467,25 @@ _json_escape() {                     # bash 3.2 supports ${var//x/y}
   local s="$1"
   s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"               # a literal newline in a path would split the record
+  s="${s//$'\r'/\\r}"               # across two lines and break every reader
+  s="${s//$'\t'/\\t}"
   printf '%s' "$s"
 }
 ```
 
-**Why not reuse `_audit_log` directly:** it forks `date` once, `git` twice and `sed` once per field
-— roughly nine processes per line. That is correct for an override audit that fires rarely, and
-over budget for a path that fires on every tool call. The *contract* is copied (ADR-8); the
-*implementation* is leaner, and the parity test in ADR-1 pins the one thing that must not diverge:
-the resolved directory.
+**Why not reuse `_audit_log` directly — corrected after tracing it.** An earlier draft of this SDD
+said it forks `sed` once per field, "roughly nine processes per line". That describes its *fallback*
+path only: with `jq` present, `_audit_log_build_jq` runs and there are **zero** `sed` forks. Traced
+with `bash -x`, the real cost with `jq` available is `date`×1, `git`×2–3 (three when
+`CLAUDE_PLUGIN_DATA` is unset, because `_plugin_data_dir` calls `git rev-parse` again — precisely
+the Bash-subprocess case this feature runs in), `jq`×1, `mkdir`×1.
+
+So the saving is **the `jq` fork (~21 ms), not the `sed` forks**, plus avoiding `date` for anything
+time-related on BSD. That is still decisive against CON-7, but the reason had to be stated correctly
+— an over-stated justification is one a later reader will check, disprove, and then distrust the
+rest of. The *contract* is copied (ADR-8); the *implementation* is leaner; the parity test in ADR-1
+pins the one thing that must not diverge: the resolved directory.
 
 #### Example: extracting one field without `jq`
 
@@ -437,7 +535,7 @@ design**, and it has its own test.
    passing the payload on stdin with `load_reason: session_start`.
 3. `log_instructions.sh` reads stdin once into a variable, extracts `file_path`, `memory_type`,
    `load_reason`, `session_id` by parameter expansion, and converts the path to repo-relative.
-4. `logwrite.sh` checks the enable switch; if unset it exits 0 having done nothing.
+4. `logwrite.sh` checks `CLAUDE_OBSERVABILITY_ENABLED`; if unset it exits 0 having done nothing.
 5. It resolves the data directory, rotates if oversized, escapes, and appends one line.
 6. Any failure in 4–5 is swallowed; the adapter exits 0 regardless (CON-5).
 
@@ -450,6 +548,9 @@ design**, and it has its own test.
 | Payload malformed or field absent | record what could be extracted; never emit the raw payload as a field value |
 | Not inside a git repo | fall back to `$PWD` basename, as `_audit_log` does |
 | Rotation fails mid-chain | swallow; the next write appends to whatever exists |
+| Two sessions rotate simultaneously | a generation may be lost; accepted and documented rather than locked (see Data Storage) |
+| A path contains non-UTF-8 bytes | the writer replaces them before the field is built (CON-10); `report.py` reads with `errors="replace"` and counts unparseable lines instead of failing |
+| A pathologically large payload | extraction is a string scan over the whole payload, so cost grows with payload size. Bounded in practice by the harness's own payloads; if a hook event ever carries megabytes, the budget in CON-7 no longer holds and the adapter for that event must be reconsidered. Stated rather than guarded — a guard would cost more than the case is worth |
 | Enable switch unset | no file is created at all — absence is the "off" signal `selfcheck` reads |
 
 ### Complex Logic: what reduced mode keeps
@@ -459,7 +560,9 @@ GIVEN a record about to be written
 WHEN detail mode is off (default)
 THEN  keep:  event identity, timing, scope, reason, skill/agent names,
              the program name of a Bash call (argv[0] only),
-             file paths made repo-relative
+             file paths made repo-relative,
+             `bytes` — a file's size is metadata, not content, and PRD F4's headline
+             number cannot be produced without it in the only mode this phase enables
       drop:  Bash arguments, file contents, hook command strings,
              transcript_path, absolute cwd, any prompt or response text
 ```
@@ -470,11 +573,29 @@ the verb is what makes a reduced record diagnostic rather than merely safe.
 
 ## Deployment View
 
-Repo-local, no deployment. Registration lives in this repo's `.claude/settings.json`; enabling is
-one environment variable in the user's own environment. Nothing is installed for anyone else, and
-uninstalling is deleting the directory. No consumer of the plugins is affected (CON-8).
+### Single Application Deployment
+
+There is no deployment pipeline to change — this phase is repo-local (CON-8). The four fields the
+template asks for, stated for completeness:
+
+- **Environment**: the maintainer's own machine only. No staging, no CI runtime, no consumer repo.
+- **Configuration**: hook registration in this repo's `.claude/settings.json`; behaviour governed by
+  `CLAUDE_OBSERVABILITY_ENABLED` and `CLAUDE_OBSERVABILITY_DETAIL`, both unset by default.
+- **Dependencies**: bash and coreutils for the hook path; Python 3.11 and the repo's existing
+  `requirements-dev.txt` for the report. Nothing new is introduced.
+- **Performance**: governed by CON-7 and verified at T1.5 and T3.6 on macOS.
+
+**Uninstalling** is two steps: remove the three entries from `.claude/settings.json`, and delete the
+data directory. Both are documented for the user by the task added under Phase 2.
 
 ## Cross-Cutting Concepts
+
+### Pattern Documentation
+
+No existing `docs/patterns/*.md` applies to this feature, and none is created by it. The patterns it
+does reuse are carried by code and by another spec rather than by a pattern document — the
+append-only JSONL writer and its resolver in `plugins/tcs-git-helpers/scripts/lib/`, and spec 011's
+ADR-7. Recorded explicitly so the absence reads as a decision rather than an omission.
 
 ### System-Wide Patterns
 
@@ -504,7 +625,7 @@ Not applicable — there is no UI. The two human-facing surfaces are `report.py`
 | **ADR-5** | No `jq` and no `date` in the hook path | Measured: `jq` ~21 ms per call — 25× the budget, and enough to trip the harness's own slow-hook warning *because of the instrument*. `date +%s%N` is additionally broken on BSD | Hand-rolled extraction and escaping, which is why `_field`'s absent-key guard is separately tested |
 | **ADR-6** | `report.py` in Python, covered by pytest | Runs offline where CON-7 does not apply; the repo already runs pytest on both OSes in CI, so the analysis becomes testable rather than merely runnable | A second language in the feature. Justified by the hot/cold split the strategy is built on |
 | **ADR-7** | Per-hook attribution deferred behind a verification task | It is not yet established that "one matcher per command" produces separate measurement groups — the harness groups by `(event, matcher)`, and this repo's own `hooks.json` already puts two commands under one matcher. Deciding now risks specifying something inexpressible | Feature 7 stays open into the plan. The verification task is named in the plan's first phase |
-| **ADR-8** | Storage per repo, outside the working tree, rotated — inheriting spec 011 ADR-7 | Out-of-tree is structurally safe against `git add -A`; per-repo keeps client contexts apart; size rotation needs no scheduled job | Cross-repo questions ("which skills do I use anywhere") need the report to aggregate several files later |
+| **ADR-8** | Storage per repo, outside the working tree, rotated. **Ground truth is `audit_log.sh` itself, not spec 011's ADR-7 text** | Out-of-tree is structurally safe against `git add -A`; per-repo keeps client contexts apart; size rotation needs no scheduled job. Note a pre-existing drift found while validating this spec: spec 011's ADR-7 text says "1 MB → `.1`/`.2`, 2-rotation retention", while the shipped `audit_log.sh` implements a three-generation chain capped at `.3`. This spec follows the code | Cross-repo questions ("which skills do I use anywhere") need the report to aggregate several files later. The spec-011 text/code drift is reported, not fixed here — fixing it is spec 011's business |
 
 ## Quality Requirements
 
@@ -521,7 +642,7 @@ Not applicable — there is no UI. The two human-facing surfaces are `report.py`
 
 | # | Criterion | Traces to |
 |---|---|---|
-| SDD-AC-1 | Given the enable switch is unset, when a session runs, then no data directory and no file are created | PRD F1, F3 |
+| SDD-AC-1 | Given `CLAUDE_OBSERVABILITY_ENABLED` is unset, when a session runs, then no data directory and no file are created | PRD F1, F3 |
 | SDD-AC-2 | Given the switch is set, when a session starts, then one `kind: instruction` record exists per loaded file, each with `reason: session_start` | PRD F1 |
 | SDD-AC-3 | Given a rule with `globs`, when a matching file is read, then a record with `reason: path_glob_match` and a populated `trigger` exists | PRD F1 |
 | SDD-AC-4 | Given an imported instruction file, when it loads, then the record carries `reason: include` and a populated `parent` | PRD F1 |
@@ -575,11 +696,31 @@ Not applicable — there is no UI. The two human-facing surfaces are `report.py`
 
 ## Glossary
 
-| Term | Meaning |
-|---|---|
-| **Adapter** | A hook script that translates one event payload into writer arguments and does nothing else |
-| **Batch (of hooks)** | All hook commands sharing one `(event, matcher)` pair; the unit the harness times |
-| **Detail mode** | The second, independent switch that adds sensitive fields; off by default |
-| **Load reason** | Why an instruction file entered context: `session_start`, `compact`, `nested_traversal`, `include`, `path_glob_match` |
-| **Reduced mode** | The default: identity, timing and verb are kept; content and arguments are not |
-| **Record** | One JSON line in `events.jsonl` |
+### Domain Terms
+
+| Term | Definition | Context |
+|---|---|---|
+| **Load reason** | Why an instruction file entered context | One of `session_start`, `compact`, `nested_traversal`, `include`, `path_glob_match` |
+| **Denominator** | The set of things that *could* have loaded or fired | Supplied by the two inventories, never by a hook |
+| **Reduced mode** | The default: identity, timing and verb kept; content and arguments not | `CLAUDE_OBSERVABILITY_DETAIL` unset |
+| **Detail mode** | The second switch, adding sensitive fields | Off by default; requires recording to be on first |
+
+### Technical Terms
+
+| Term | Definition | Context |
+|---|---|---|
+| **Adapter** | A hook script that translates one event payload into writer arguments | Deliberately thin; anything more belongs in the report |
+| **Batch (of hooks)** | All hook commands sharing one `(event, matcher)` pair | The unit the harness times; why per-hook attribution is an open question |
+| **Record** (or **entry**) | One JSON line in `events.jsonl` | The two words are interchangeable; both mean exactly one line |
+| **The log** | The whole of `events.jsonl` plus its rotated generations, read as one sequence | Used wherever the collective is meant. Earlier drafts overloaded "record" for both; this settles it |
+| **Fail open** | A failure leaves the caller's exit status, stdout and stderr untouched | The opposite failure once made a hook in this repo deny tool calls |
+
+### API/Interface Terms
+
+| Term | Definition | Context |
+|---|---|---|
+| `CLAUDE_OBSERVABILITY_ENABLED` | Switch that turns recording on | Unset by default; nothing is written and no directory is created |
+| `CLAUDE_OBSERVABILITY_DETAIL` | Switch that adds sensitive fields | Unset by default; requires the first switch to have any effect |
+| `CLAUDE_OBSERVABILITY_DATA` | Data-directory override | Set by tests to redirect the record; mirrors `CLAUDE_PLUGIN_DATA`'s role |
+| `kind` | Discriminator on every record | `instruction` \| `skill` \| `agent` \| `hook` \| `state` |
+| `scope_note` | States what a duration covers | `batch` \| `single` — prevents a batch figure being read as per-hook attribution |

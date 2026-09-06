@@ -22,8 +22,9 @@ phase: 1
 
 **Key Decisions**:
 - The resolver is duplicated on purpose (ADR-1); the parity test is what makes that safe.
-- The writer forks nothing per field. `audit_log.sh` forks `sed` per field and `git` twice per line;
-  that is correct there and over budget here (CON-7).
+- The writer forks nothing per field. Note the corrected justification in the SDD: `audit_log.sh`'s
+  `sed`-per-field path is its *fallback*; with `jq` present it forks `jq` once instead. The saving
+  that matters is the `jq` fork (~21 ms) and avoiding `date` for timing on BSD, not `sed`.
 - Nothing in this phase is registered as a hook yet. Phase 1 delivers a library and its tests, so a
   defect cannot reach a real session.
 
@@ -56,7 +57,7 @@ configuration rather than as code.
      escaped without forking; rotation at 1024000 bytes through `.1`/`.2`/`.3` with **no `.4` ever
      created**; over-long fields shortened with `truncated: true` set; an unwritable directory,
      a full disk and a failed rotation each leave the caller's exit status, stdout and stderr
-     untouched; no file is created at all while the enable switch is unset
+     untouched; no file is created at all while `CLAUDE_OBSERVABILITY_ENABLED` is unset
   3. Implement: the append, escape, truncate and rotate portions of `logwrite.sh`
   4. Validate: bats green; `LC_ALL=C` set before any formatting (CON-3); `#!/usr/bin/env bash`
      present (CON-2)
@@ -72,7 +73,7 @@ configuration rather than as code.
      token-shaped string, asserting that string never appears in the record; reduced mode keeps a
      Bash call's program name and drops its arguments; reduced mode emits no file content, no hook
      command string, no `transcript_path` and no absolute home path; detail mode adds the extra
-     fields and requires its own switch, separate from the enable switch
+     fields and requires `CLAUDE_OBSERVABILITY_DETAIL`, separate from `CLAUDE_OBSERVABILITY_ENABLED`
   3. Implement: the extraction and reduction portions of `logwrite.sh`
   4. Validate: bats green, including a deny-list scan over a produced record
   5. Success: `[ref: SDD/SDD-AC-8, SDD-AC-9, SDD-AC-11]`; `[ref: PRD/F3]`; both switches default off
@@ -97,7 +98,22 @@ configuration rather than as code.
   > This task gates nothing else in phase 1 and can run at any point in it. It is placed here
   > because its answer changes phase 3's scope, and finding that out late is the expensive case.
 
-- [ ] **T1.5 Phase Validation** `[activity: validate]`
+- [ ] **T1.5 Wire the new suite into CI** `[activity: infrastructure]`
+
+  1. Prime: read `.github/workflows/tests.yml`, specifically the bats job's command
+  2. Test: the check is the CI run itself — after the change, the new suite must appear in the bats
+     job's output on both `ubuntu-latest` and `macos-latest`
+  3. Implement: the bats job currently runs `bats --recursive … plugins/*/tests/bats`, a glob that
+     **cannot** reach a suite at the repo root. Extend it to cover `tests/bats` as well. The pytest
+     job needs no change — it already collects from the repo root
+  4. Validate: push and confirm the suite ran; a green build that never executed the tests is the
+     failure mode being closed here
+  5. Success: `tests/bats/observability-writer.bats` executes in CI on both operating systems
+
+  > Found in validation: without this the suite would pass locally and be silently invisible in CI,
+  > under a plan checklist that claimed the project commands were accurate.
+
+- [ ] **T1.6 Phase Validation** `[activity: validate]`
 
   - Run `bats tests/bats/observability-writer.bats` and the full `plugins/tcs-git-helpers/tests/bats/`
     suite — the latter must stay green, since ADR-1 duplicates one of its contracts. Verify the

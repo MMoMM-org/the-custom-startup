@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-09-06 |
-| **Current Phase** | PLAN |
+| **Current Phase** | Ready |
 | **Decomposition tier** | Incremental |
 | **Last Updated** | 2026-09-06 |
 
@@ -14,8 +14,8 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | 8 features across all MoSCoW tiers, 32 acceptance criteria, 4 review decisions folded in |
-| solution.md | completed | 7 components, 8 ADRs (4 user-confirmed), 20 acceptance criteria, full PRD traceability |
-| plan/ | in_progress | |
+| solution.md | completed | 7 components, 8 ADRs (4 user-confirmed), 20 acceptance criteria, full PRD traceability; revised after validation |
+| plan/ | completed | 3 phases, 17 tasks, 69 spec references, 3 parallel |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -40,6 +40,51 @@
 | 2026-09-06 | ADR-7: per-hook attribution deferred behind a verification task | It is not established that one-matcher-per-command yields separate measurement groups; the harness groups by (event, matcher) and `tcs-helper` already puts two commands under one matcher. Specifying a mechanism now risks specifying something inexpressible |
 | 2026-09-06 | Decomposition tier: **Incremental** (classifier recommended Incremental; user confirmed) | Rule 1 fired on breadth: 6 new components in the Building Block View and 4 Must-Have features, 32 acceptance criteria. `parallel_markers` was taken as false conservatively — the three adapters are independent but the SDD does not declare parallel streams. Direct was rejected because redaction and fail-open behaviour span several components, and those are the parts with safety consequences if one slips |
 | 2026-09-06 | **Correction**: the `claude_code.hook` OTel span is NOT reachable and must not be designed around | Its guard is `gt() = Lb() \|\| vj()`, and `vj(){return!1}` is hard-coded false with a single definition in the binary. `Lb()` additionally needs the undocumented `ENABLE_BETA_TRACING_DETAILED` + `BETA_TRACING_ENDPOINT` **and** an Anthropic-side statsig gate. An earlier note in this file assumed the span was usable; it is not |
+
+## Validation round — 2026-09-06
+
+Four validators ran against the finished spec (completeness, consistency, coverage/ambiguity,
+alignment). Combined: **29 PASS, 20 WARN, 10 FAIL**. Every FAIL and every actionable WARN is fixed;
+the findings are recorded here because several were defects in *my own* reasoning and are worth not
+repeating.
+
+**The sharpest defect — the headline number had no source.** `bytes` (the size of a loaded
+instruction file) is what PRD F4's byte-cost accounting reports, and it is the number #147 actually
+needs. It is **not** in the harness payload, no task computed it, and the reduced-mode keep/drop
+table did not mention it — so under the only configuration this phase enables, the central promise
+could not have been met. Fixed: the adapter now stats the path itself (one deliberate fork, budgeted
+and justified), `bytes` is classified reduced-mode-safe, and T2.1 carries it as a success criterion.
+
+**Four values were used as if defined and were not**: the truncation limit (now 256, matching
+`audit_log.sh`), the two switch names (now `CLAUDE_OBSERVABILITY_ENABLED` and
+`CLAUDE_OBSERVABILITY_DETAIL`), and the two inventories that supply the denominator for "never
+loaded" and "never fired" (now specified as filesystem walks with their exact globs). None of these
+would have failed review as vague prose — they sat inside otherwise crisp Gherkin, which is the more
+dangerous shape.
+
+**A plan defect that would have shipped green**: the new bats suite was placed at `tests/bats/`,
+which CI's `plugins/*/tests/bats` glob cannot reach. The tests would have passed locally and never
+run in CI — under a checklist where I had ticked "project commands are accurate". T1.5 now extends
+the glob.
+
+**A justification of mine was overstated.** The SDD claimed `audit_log.sh` forks `sed` once per
+field, "roughly nine processes per line", to justify a leaner writer. Traced with `bash -x`: that is
+its *fallback* path; with `jq` present there are zero `sed` forks. The real saving is the `jq` fork
+(~21 ms) and avoiding BSD `date`. Corrected in place, with the correction left visible.
+
+**Two gaps in edge-case coverage**: non-UTF-8 bytes in POSIX paths (JSON requires UTF-8 — now CON-10,
+with a stated strategy at both write and read time) and control characters in the JSON escaper (a
+literal newline in a path would have split a record across two lines and broken every reader).
+
+**Also fixed**: rotation under concurrent sessions (documented as an accepted loss rather than
+locked, with the reason), recursion stated as impossible by construction (CON-11), template sections
+that had been silently merged in `solution.md`, terminology overloading "record" for both one line
+and the whole file, and a missing task for the user-facing documentation the PRD promises three
+times.
+
+**One pre-existing drift, reported not fixed**: spec 011's ADR-7 text says rotation keeps two
+generations; its shipped `audit_log.sh` keeps three. This spec follows the code and says so — fixing
+spec 011's text is spec 011's business.
 
 ## Context
 

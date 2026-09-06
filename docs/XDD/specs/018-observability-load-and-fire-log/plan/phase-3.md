@@ -12,8 +12,8 @@ phase: 3
 **GATE**: Read all referenced files before starting this phase.
 
 **Specification References**:
-- `[ref: PRD/Feature 4]` — the report that answers the question
-- `[ref: PRD/Feature 8]` — usage against the inventory
+- `[ref: PRD/F4]` — the report that answers the question
+- `[ref: PRD/F8]` — usage against the inventory
 - `[ref: SDD/Integration Points]` — ingesting the harness's own hook records, and the `batch` label
 - `[ref: SDD/Architecture Decisions — ADR-6]` — Python, pytest-covered, offline
 - `[ref: SDD/Quality Requirements]` — the honesty requirement
@@ -38,8 +38,9 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
 - [ ] **T3.1 Load report — what loaded, how often, and what never did** `[activity: backend-api]`
 
   1. Prime: read the record schema and PRD Feature 4 `[ref: SDD/Application Data Models]`
-  2. Test: over a fixture record, lists each instruction file with its load count and the reasons
-     observed; names configured instruction files that never appear; distinguishes always-loaded
+  2. Test: over a fixture log, lists each instruction file with its load count and the reasons
+     observed; names configured instruction files that never appear, enumerated from the instruction
+     inventory `[ref: SDD/The two inventories]`; distinguishes always-loaded
      from conditionally loaded entries; handles a rotated chain (`.jsonl` plus `.1`–`.3`) as one
      logical record without double-counting
   3. Implement: `scripts/observability/report.py`
@@ -58,8 +59,8 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
 
 - [ ] **T3.3 Inventory join — what never fired** `[activity: backend-api]`
 
-  1. Prime: read PRD Feature 8 and the note that a hook supplies only the numerator
-     `[ref: PRD/Feature 8]`
+  1. Prime: read PRD F8, the note that a hook supplies only the numerator, and the two inventory
+     definitions `[ref: PRD/F8]` `[ref: SDD/The two inventories]`
   2. Test: given the shipped skill and agent inventory and a record, reports coverage as a fraction
      and names the entries that never fired; a skill present in the inventory but absent from the
      record appears as **unused**, not as missing
@@ -75,7 +76,7 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
      `num_hooks > 1` is never rendered as a single hook's duration
   3. Implement: the ingest path in `report.py`, plus the documented recipe for the diagnostic run
      (enable variables, redirection to a file, and an explicit statement of what is and is not sent,
-     and to whom) `[ref: PRD/Feature 6]`
+     and to whom) `[ref: PRD/F6]`
   4. Validate: `pytest -q` green
   5. Success: `[ref: SDD/SDD-AC-17]`; `[ref: PRD/F6]`
 
