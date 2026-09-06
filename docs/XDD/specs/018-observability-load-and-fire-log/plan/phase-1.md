@@ -34,6 +34,16 @@ phase: 1
 
 ## Tasks
 
+> **Path note, added after the fact.** Task text below still names
+> `.claude/observability/logwrite.sh` — the path the SDD specified and against which T1.1-T1.4 were
+> actually executed. That location proved untracked and uninstallable: CI could not see the file and
+> all 50 tests failed on both runners. The writer now lives, tracked, at
+> `plugins/tcs-helper/scripts/observability/logwrite.sh`, with its suite at
+> `plugins/tcs-helper/tests/bats/`. The task text is left as the historical record of what was
+> specified; see the T1.5 note below and the README Decisions Log for the correction. **Read every
+> `.claude/observability/` path in this file as the new location.**
+
+
 Establishes the storage contract, the writer, and the answer to whether Feature 7 can exist as
 configuration rather than as code.
 
