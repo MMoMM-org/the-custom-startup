@@ -116,3 +116,23 @@ would plausibly re-propose it, leave it out.
   then `~/.claude/.credentials.json`, then the system keychain — was chosen for convenience, with
   the cost accepted knowingly.
 - **Revisit if:** —
+
+### 2026-09-06 — turn `tdd-guardian` into an observer, and run Gate 1 to decide it
+
+- **Proposed:** re-shape `tdd-guardian` from a pre-dispatch gate into an in-flight observer on the
+  implementer (#99), and first run Gate 1 — an observer attached to ~5 real `implement` dispatches,
+  reports logged not acted on, to measure detection value.
+- **Decision:** rejected (the re-shaping), deferred (Gate 1)
+- **Why:** the spike measured the blocker as structural, not one of signal quality. A report to the
+  observed agent is advisory — a worker refused one, calling it "not user consent" — and on a
+  fan-out the report goes to the *coordinator* instead, which is only delivered while that
+  coordinator is **running**. An orchestrator awaiting an implementer is parked by definition: the
+  probe lost 5 of 7 reports parked, against 2 of 8 when the same coordinator was kept busy. So the
+  escalation path is closed in exactly our topology, and Gate 1's number — how often an observer
+  has something useful to say — cannot change that in either direction. Gate 1 also is not free
+  the way the plan assumed: it attaches a write-capable agent to real implementation runs.
+- **Revisit if:** the fields leave experimental and the liveness behaviour changes so a parked
+  target still receives reports; or we want an observer for a topology where the target stays awake
+  — an agent doing long work *itself* rather than waiting on a subagent, where delivery measured
+  5 of 5. In that case run Gate 1 restricted to that shape, with an explicit `tools:` line on the
+  observer. Full evidence: #99 and its two Gate 0 comments.
