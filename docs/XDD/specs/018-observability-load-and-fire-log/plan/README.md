@@ -130,8 +130,12 @@ bats plugins/tcs-git-helpers/tests/bats/   # must stay green — ADR-1 touches i
 # Local run of the whole gate
 pytest -q && bats tests/bats/
 
-# NOTE: CI's bats job currently runs `bats --recursive … plugins/*/tests/bats`, a glob that does
-# NOT reach tests/bats. T1.5 extends it. Until that task lands, the new suite runs locally only.
+# NOTE: bats is not on PATH in the container; the repo's copy is .venv/node_modules/bats/bin/bats.
+# Several plugin bats suites shell out to `python3 -c "import yaml"`, and the container's BASE
+# python3 has no PyYAML — run them with .venv/bin on PATH or six pr-title-check cases fail for
+# environmental reasons rather than real ones.
+# T1.5 (landed, 5950bf6) extended CI's glob to `plugins/*/tests/bats tests/bats`; before that the
+# new suite could pass locally and never run in CI.
 ```
 
 ---
@@ -144,7 +148,7 @@ context), **Test** (red), **Implement** (green), **Validate** (refactor + verify
 > **Tracking Principle**: track logical units that produce verifiable outcomes. The TDD cycle is the
 > method, not separate tracked items.
 
-- [ ] [Phase 1: Writer foundation, and the attribution question](phase-1.md)
+- [x] [Phase 1: Writer foundation, and the attribution question](phase-1.md)
 - [ ] [Phase 2: Adapters and registration](phase-2.md)
 - [ ] [Phase 3: Report, self-check and end-to-end validation](phase-3.md)
 

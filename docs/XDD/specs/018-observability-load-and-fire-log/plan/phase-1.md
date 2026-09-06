@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Writer foundation, and the attribution question"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -135,10 +135,32 @@ configuration rather than as code.
   > hollow out part of the suite while the job still reported green. Hardening that is proposed,
   > not done.
 
-- [ ] **T1.6 Phase Validation** `[activity: validate]`
+- [x] **T1.6 Phase Validation** `[activity: validate]`
 
   - Run `bats tests/bats/observability-writer.bats` and the full `plugins/tcs-git-helpers/tests/bats/`
     suite — the latter must stay green, since ADR-1 duplicates one of its contracts. Verify the
     writer against `[ref: SDD/Quality Requirements]`: measure per-invocation overhead and confirm it
     is within the 1 ms budget **on macOS**, not only in the Linux container where the original
     figures were taken.
+
+  > **Result — two suites green, CON-7 NOT met.**
+  > `tests/bats/observability-writer.bats` 50/50; `plugins/tcs-git-helpers/tests/bats` 821/821
+  > (the ADR-1 neighbourhood is intact). Six apparent failures in the plugin suite were traced to
+  > the container's base `python3` lacking PyYAML, not to any code defect — they pass with the
+  > repo's venv interpreter on PATH, and CI installs `requirements-dev.txt`.
+  >
+  > **CON-7 (≤ 1 ms per hook invocation) is exceeded by roughly 9×**: 9030 µs per record over 200
+  > records. Exec forks account for only ~2679 µs of that (`git rev-parse` 756, `stat -c%s` 689,
+  > `date -u` 453, a failed BSD `stat -f%z` 439 wasted on Linux before the fallback, `mkdir -p` 342).
+  > The remaining ~6350 µs is **command substitution** — roughly 20 `$( )` subshells per record,
+  > because the field helpers return values by echoing. The design's fork-free property is real for
+  > `jq`/`sed` execs, which is what ADR-5 optimised against; the dominant cost turned out to be
+  > somewhere else.
+  >
+  > Caveats: this repo sits on a mounted filesystem under a Linux container, so absolute figures are
+  > inflated; and **CON-7's target platform is macOS, which could not be measured here** — the task's
+  > own requirement to measure on macOS is therefore UNMET.
+  >
+  > **Decision (user, 2026-09-06): record and defer to phase 2.** The writer is correct, tested and
+  > fail-open; it is only slow. Phase 2's adapters are where the hot path is genuinely exercised, and
+  > a restructure is better informed by real hook traffic than by a synthetic loop.
