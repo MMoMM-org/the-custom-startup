@@ -1213,6 +1213,51 @@ _assert_present() {             # _assert_present <needle> <file>
 }
 
 # ---------------------------------------------------------------------------
+# 21b. The extractor's OTHER guard: an empty key.
+#
+# `_observability_field`'s first line refuses an empty key, with a comment
+# claiming the pattern would otherwise be `*"":"` and would match unrelated
+# text. That claim went untested when the guard was written — the same shape
+# of defect as the absent-key guard before test 38 existed: a protection
+# asserted in a comment with nothing behind it.
+#
+# The claim is TRUE and the guard is REACHABLE. `"":"` is a legal JSON byte
+# sequence — an empty-string key, which `tool_input` is free to carry — and
+# against the payload below an unguarded call returns
+# `sk-ant-EMPTYKEYCANARY-42`, not the empty string. (The absent-key guard
+# does NOT cover this case: the prefix removal genuinely matches, so `$body`
+# differs from the payload and that guard never fires.)
+#
+# The payload is built so the test cannot be vacuous. If the empty-key guard
+# is removed, the extractor returns the canary and both the field assertion
+# and the raw-bytes scan below fail.
+# ---------------------------------------------------------------------------
+
+@test "extract: an empty key yields empty, even when the payload contains an empty-key sequence" {
+  local payload
+  payload='{"tool_name":"Bash","tool_input":{"":"sk-ant-EMPTYKEYCANARY-42","command":"echo hi"},"session_id":"sess-empty"}'
+
+  run _call_field "$payload" ""
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+
+  # And through the writer, scanned as raw record bytes — the same discipline
+  # test 38 uses, for the same reason: a field that merely reads empty proves
+  # nothing about what landed elsewhere in the line.
+  local data_dir="$TEST_DIR/red21b"
+  run _field_then_write "$data_dir" "$payload" "" session_id
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  # The extractor is working on THIS payload, so the absence below is a real
+  # result and not the silence of a function that did nothing.
+  _assert_present '"seen":"sess-empty"' "$file"
+  _assert_present '"probe":""' "$file"
+  _assert_absent 'sk-ant-EMPTYKEYCANARY-42' "$file"
+}
+
+# ---------------------------------------------------------------------------
 # 22. SDD-AC-8 — reduced mode keeps a Bash call's program name (argv[0]) and
 #    drops every argument. The keep/drop split mirrors the harness's own
 #    `bash_command` (always) vs `full_command` (gated) distinction.
