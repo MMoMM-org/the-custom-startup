@@ -100,7 +100,10 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   2. Test: **only if T1.4 found configuration insufficient** — a wrapped hook's exit status, stdout
      and stderr are byte-identical to the unwrapped hook's, including the exit-2 blocking case; the
      wrapper adds under 1 ms; timing is absent from the record when the wrapper is not installed
-  3. Implement: `.claude/observability/timed-wrapper.sh`, built around the three protocol
+  3. Implement: `plugins/tcs-helper/scripts/observability/timed-wrapper.sh` (tracked, alongside
+     `logwrite.sh` and the adapters — relocated 2026-09-06, see `solution.md`'s Directory Map and
+     the README's Decisions Log; `.claude/observability/` no longer exists as a path), built around
+     the three protocol
      constraints — the benchmarked candidate from the research pass discards stdout and stderr and
      loses the exit code, so it is a cost measurement, **not** a template
   4. Validate: bats green; install, reproduce, read, uninstall — and confirm nothing remains in the

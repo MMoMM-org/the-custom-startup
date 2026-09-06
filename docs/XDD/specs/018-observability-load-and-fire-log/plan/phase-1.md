@@ -124,16 +124,32 @@ configuration rather than as code.
   > Found in validation: without this the suite would pass locally and be silently invisible in CI,
   > under a plan checklist that claimed the project commands were accurate.
 
-  > **Done, with one criterion outstanding.** Commits `5950bf6` (glob) and `5efb281` (comment).
-  > Collection verified locally: the bats invocation collected 840 tests before the change and
-  > 889 after, a delta of exactly 49 — the whole of `tests/bats`. Asserting on the collected
-  > count rather than on exit status is deliberate: "CI is green" cannot distinguish "ran and
-  > passed" from "never ran", which is the defect this task exists to close.
-  > **Step 5 (executes on both `ubuntu-latest` and `macos-latest`) remains UNVERIFIED** — it
-  > needs a push, which has not been authorised. `jq` and `python3` are preinstalled on both
-  > runner images today, but the suite `skip`s without them, so a future image change could
-  > hollow out part of the suite while the job still reported green. Hardening that is proposed,
-  > not done.
+  > **Done, then reverted 2026-09-06 — the glob widening is no longer needed and would now break
+  > CI.** Commits `5950bf6` (glob) and `5efb281` (comment) originally extended the bats job to
+  > `plugins/*/tests/bats tests/bats`, and collection was verified locally: 840 tests before the
+  > change, 889 after — a delta of exactly 49, the whole of `tests/bats`. Asserting on the
+  > collected count rather than on exit status was deliberate: "CI is green" cannot distinguish
+  > "ran and passed" from "never ran", which is the defect this task existed to close, and that
+  > finding stands.
+  >
+  > What changed: the suite that motivated the widening — `tests/bats/observability-writer.bats`
+  > — was itself relocated to `plugins/tcs-helper/tests/bats/observability-writer.bats` (see the
+  > README's Decisions Log, 2026-09-06, and `solution.md`'s Directory Map), because its writer had
+  > been placed at the gitignored, untracked `.claude/observability/logwrite.sh` and did not exist
+  > on a fresh CI checkout — which is exactly what step 5 below found. With the suite now under
+  > `plugins/tcs-helper/tests/bats/`, the ORIGINAL glob `plugins/*/tests/bats` reaches it without
+  > modification, and `tests/bats` no longer exists as a path at all. Leaving the widened
+  > invocation in place would therefore break CI on its own — bats errors on a nonexistent path
+  > argument rather than skipping it silently. `.github/workflows/tests.yml` is reverted to
+  > `bats --recursive --print-output-on-failure plugins/*/tests/bats`.
+  >
+  > **Step 5 is now MET, for the reason that exposed all of this**: the suite DID execute on both
+  > `ubuntu-latest` and `macos-latest` once pushed under the widened glob — and failed on both, all
+  > 50 tests, with `logwrite.sh: No such file or directory`, because the writer was untracked and
+  > CI's checkout never had it. That failure is what surfaced the SDD's Directory Map defect; this
+  > task's finding (a suite outside the glob is invisible to CI) is what made the failure visible
+  > instead of silently absent. The previously-flagged risk about `jq`/`python3` preinstallation on
+  > runner images is unaffected by this revert and remains proposed, not done.
 
 - [x] **T1.6 Phase Validation** `[activity: validate]`
 

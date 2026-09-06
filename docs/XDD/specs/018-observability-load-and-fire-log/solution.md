@@ -320,26 +320,59 @@ No requirement has two owners; no component is without one.
 ```
 .
 ├── .claude/
-│   ├── settings.json                      # MODIFY: register the three adapters (repo-local, gitignored)
-│   └── observability/                     # NEW: repo-local, not shipped
-│       ├── logwrite.sh                    # NEW: the shared writer
-│       ├── log_instructions.sh            # NEW: InstructionsLoaded adapter
-│       ├── log_skill.sh                   # NEW: PreToolUse/Skill adapter
-│       ├── log_agent.sh                   # NEW: SubagentStart adapter
-│       └── selfcheck.sh                   # NEW: is it recording?
+│   └── settings.json                      # MODIFY (phase 2): register the three adapters, repo-local
+├── plugins/
+│   └── tcs-helper/
+│       ├── scripts/
+│       │   └── observability/
+│       │       ├── logwrite.sh            # NEW: the shared writer
+│       │       ├── log_instructions.sh    # NEW: InstructionsLoaded adapter
+│       │       ├── log_skill.sh           # NEW: PreToolUse/Skill adapter
+│       │       ├── log_agent.sh           # NEW: SubagentStart adapter
+│       │       └── selfcheck.sh           # NEW: is it recording?
+│       └── tests/
+│           └── bats/
+│               └── observability-writer.bats   # NEW: writer behaviour + data-dir parity with the plugin resolver
 ├── scripts/
 │   └── observability/
 │       └── report.py                      # NEW: offline analysis, pytest-covered
 └── tests/
-    ├── test_observability_report.py       # NEW: pytest over report.py
-    └── bats/
-        └── observability-writer.bats      # NEW: writer behaviour + data-dir parity with the plugin resolver
+    └── test_observability_report.py       # NEW: pytest over report.py
 ```
 
-`.claude/` is already ignored wholesale by this repo's `.gitignore`, which suits a repo-local phase —
-but note that `report.py` and its tests live under tracked paths precisely because they must be
-reviewable and CI-covered. The scripts that run in the hook path stay untracked for this phase; a
-later phase that ships them moves them into a plugin (out of scope, PRD Won't Have).
+**Correction (2026-09-06)**: an earlier draft of this map placed the writer and its suite at
+`.claude/observability/logwrite.sh` and `tests/bats/observability-writer.bats`. `.gitignore` ignores
+`.claude/` wholesale, so the writer was untracked — it existed on one developer's machine only, with
+no installer to recreate it on a fresh clone. This surfaced when T1.5 wired the suite into CI: all 50
+tests failed on both `ubuntu-latest` and `macos-latest` with `logwrite.sh: No such file or directory`,
+because CI's checkout does not contain an untracked file. The tests had only ever passed locally. See
+the README's Decisions Log entry dated 2026-09-06 for the full account, and `plan/phase-1.md`'s T1.5
+note for what this did to the CI-wiring task.
+
+The writer and its suite now live under `plugins/tcs-helper/`, tracked like every other hook script
+with tests in this repo — the convention this design had departed from: a hook script with a test
+suite lives under `plugins/<name>/`, with its tests under `plugins/<name>/tests/bats/`, which is
+exactly the shape CI's `plugins/*/tests/bats` glob already expects. That glob is therefore unchanged;
+the widening T1.5 added to reach `tests/bats` is reverted (see `plan/phase-1.md`). `report.py` and its
+pytest suite were already tracked paths for the same reason — CI-coverage and reviewability, per this
+Map's own original note — and are unaffected by the move.
+
+`.claude/settings.json` is still where phase 2 registers the three hooks; that has not changed. A
+repo's own `.claude/settings.json` hook entry gets no `CLAUDE_PLUGIN_ROOT` at invocation time (that
+variable reaches only code a plugin's own `hooks.json` spawns), so phase 2 must point the entry at the
+writer by an absolute or `$CLAUDE_PROJECT_DIR`-relative path — see ADR-1's corrected premise, below.
+No installation step is needed in this repo: the path is a repo path, present on every clone once the
+files are tracked, which is the property the original placement lacked.
+
+The test suite's `setup()` derives `REPO_ROOT` via `git -C "$BATS_TEST_DIRNAME" rev-parse
+--show-toplevel` rather than counting `../..` levels from the test file, so a future move of the
+suite cannot silently break its own path resolution the way this one did.
+
+**This does not ship the capability.** The files above are tracked, but publication requires merging
+this PR and bumping `plugins/tcs-helper/.claude-plugin/plugin.json`; neither has happened as of this
+writing. CON-8 and the PRD's Won't-Have both still hold — a reader seeing these paths under
+`plugins/tcs-helper/` would otherwise reasonably assume the feature already ships to plugin
+consumers.
 
 ### Interface Specifications
 
@@ -504,7 +537,8 @@ phase.
 
 ```bash
 #!/usr/bin/env bash
-# .claude/observability/logwrite.sh — sourced by the adapters, never executed directly.
+# plugins/tcs-helper/scripts/observability/logwrite.sh — sourced by the adapters, never executed
+# directly. (Relocated 2026-09-06 from .claude/observability/ — see Directory Map, above.)
 export LC_ALL=C                      # CON-3: comma locales corrupt formatted numbers
 
 # JSON-escape without forking. audit_log.sh forks `sed` per field; at 3 hook
@@ -759,7 +793,7 @@ Not applicable — there is no UI. The two human-facing surfaces are `report.py`
 
 | ID | Decision | Rationale | Trade-off accepted |
 |---|---|---|---|
-| **ADR-1** | A self-contained writer under `.claude/observability/`, duplicating `plugin_data.sh`'s resolver contract, with a bats parity test | `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` do not reach Bash-tool subprocesses, and the plugin cache resolves stale within a session — both already documented in this repo. Sourcing from the plugin would make the hook silently write nowhere | Two copies of one resolver. Mitigated by the parity test, which is the same mitigation spec 011 chose for the same reason |
+| **ADR-1** | A self-contained writer, duplicating `plugin_data.sh`'s resolver contract, with a bats parity test. Tracked under `plugins/tcs-helper/scripts/observability/` (relocated 2026-09-06; originally `.claude/observability/` — see the Directory Map correction, above) | `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` do not reach Bash-tool subprocesses, and the plugin cache resolves stale within a session — both already documented in this repo. Sourcing from the plugin would make the hook silently write nowhere | Two copies of one resolver. Mitigated by the parity test, which is the same mitigation spec 011 chose for the same reason |
 | **ADR-2** | Our own hook for instruction loading; harness telemetry cannot substitute | Measured: the `InstructionsLoaded` payload never enters telemetry — only "a batch ran" does. The `claude_code.hook` span that would have carried more is unreachable (`vj()` is hard-coded false) | We depend on an experimental event. CON-9 covers the degradation path |
 | **ADR-3** | Phase 1 registers all three adapters | They share one writer, so the marginal cost of skills and agents is one config entry each, and it delivers the "which skills ever fire" number immediately | Slightly wider first cut than the Must-Have alone |
 | **ADR-4** | Redaction is implemented by us, with two independent switches, both default off | The `OTEL_LOG_*` family governs only Anthropic's own export; hook stdin arrives complete regardless. A design that assumed otherwise would record everything while looking safe | Redaction logic we must test ourselves — hence the dedicated bats cases |
@@ -767,6 +801,29 @@ Not applicable — there is no UI. The two human-facing surfaces are `report.py`
 | **ADR-6** | `report.py` in Python, covered by pytest | Runs offline where CON-7 does not apply; the repo already runs pytest on both OSes in CI, so the analysis becomes testable rather than merely runnable | A second language in the feature. Justified by the hot/cold split the strategy is built on |
 | **ADR-7** | Per-hook attribution is not expressible as configuration; F6 and F7 are both served by one `timed-wrapper.sh` | T1.4's verification spike ran six hook arrangements (A–F) through nested `claude -p` sessions against a local OTLP receiver. Decisive: arrangement B — two entries with two *distinct* matcher strings still collapse into one `hook_execution_complete` record with `num_hooks=2`. Also found: `hook_name` is `${event}:${toolName}`, not `${event}:${matcher}` (D, E: matchers `Read\|Glob` and `.*` both report `PreToolUse:Read`); hooks in a group run in parallel, so subtraction cannot recover per-hook duration either (F: two 0.40s hooks total 406 ms, not ~800). Reproducible from the artifacts referenced in the README's T1.4 section | The harness-ingest route for F6 is dropped: reliable capture now needs a local OTLP receiver, which the wrapper avoids. F6's original promise — durations "without installing anything into the hook path" — is given up; F6 and F7 collapse into one deliverable |
 | **ADR-8** | Storage per repo, outside the working tree, rotated. **Ground truth is `audit_log.sh` itself, not spec 011's ADR-7 text** | Out-of-tree is structurally safe against `git add -A`; per-repo keeps client contexts apart; size rotation needs no scheduled job. Note a pre-existing drift found while validating this spec: spec 011's ADR-7 text says "1 MB → `.1`/`.2`, 2-rotation retention", while the shipped `audit_log.sh` implements a three-generation chain capped at `.3`. This spec follows the code | Cross-repo questions ("which skills do I use anywhere") need the report to aggregate several files later. The spec-011 text/code drift is reported, not fixed here — fixing it is spec 011's business |
+
+**Correction to ADR-1's premise (2026-09-06).** ADR-1's rationale is still correct about the thing it
+was arguing against: sourcing the writer *at runtime* from the installed plugin cache, via
+`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA`, would make the hook silently write nowhere, because those
+variables never reach a Bash-tool subprocess and the plugin cache can resolve stale within a session.
+That finding stands, and so does ADR-1's core decision — do not source `plugin_data.sh` at runtime;
+duplicate its resolver contract instead, pinned by a parity test.
+
+What the original text conflated is two separate questions: where the source file lives in git, and
+what a hook command points at when it runs. Living in a tracked plugin directory is not the same as
+sourcing from the plugin cache at runtime — the relocation to `plugins/tcs-helper/scripts/observability/`
+changes only the first. Precisely:
+
+- A hook registered in a repo's own `.claude/settings.json` gets **no** `CLAUDE_PLUGIN_ROOT` at
+  invocation time, so it must address the writer by an absolute path or a `$CLAUDE_PROJECT_DIR`-relative
+  one — which is what phase 2 does here, regardless of which tracked directory the file sits under.
+- A hook registered by a plugin's own `hooks.json` **does** get `CLAUDE_PLUGIN_ROOT` — this is already
+  how `plugins/tcs-helper/hooks/hooks.json` addresses its own scripts today.
+
+The same file works in both worlds, addressed differently by whichever mechanism registers it. No
+installation step is needed in this repo because `.claude/settings.json`'s path to the writer is just
+a repo-relative path, present on every clone once the file is tracked — which is the property the
+original untracked placement lacked, and the reason this correction exists at all.
 
 ## Quality Requirements
 
@@ -831,8 +888,13 @@ Not applicable — there is no UI. The two human-facing surfaces are `report.py`
 
 - Deliberate duplication of the data-directory resolver (ADR-1), repaid if and when this feature
   moves into a plugin.
-- The scripts in the hook path are untracked this phase (CON-8), so they carry no CI coverage of
-  their own beyond the bats suite that exercises them from a tracked test file.
+- **Resolved 2026-09-06** (was: "the scripts in the hook path are untracked this phase (CON-8), so
+  they carry no CI coverage of their own beyond the bats suite that exercises them from a tracked
+  test file"). That was the defect this relocation fixed: the hook-path scripts are now tracked
+  under `plugins/tcs-helper/scripts/observability/` and CI-covered directly, for the same reason the
+  Directory Map already required of `report.py` — a script with a test suite must be reviewable and
+  reachable by CI, not merely exercised from one. See the Directory Map correction and the README's
+  Decisions Log entry dated 2026-09-06.
 
 ### Implementation Gotchas
 
