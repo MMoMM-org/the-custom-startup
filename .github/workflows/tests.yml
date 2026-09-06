@@ -140,4 +140,5 @@ jobs:
       - name: Run bats
         env:
           TCS_PERF_SLACK: "4"
+        # tests/bats is listed separately because it is flat (no subdirectories) and so cannot be reached by the plugins/*/tests/bats glob, no matter what --recursive does.
         run: bats --recursive --print-output-on-failure plugins/*/tests/bats tests/bats
