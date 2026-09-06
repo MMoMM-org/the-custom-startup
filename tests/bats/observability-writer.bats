@@ -1045,3 +1045,483 @@ assert marker in data, 'expected the backslash-u-001b escape sequence on disk'
 "
   [ "$status" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# T1.3 — extraction and reduction.
+#
+# Drivers for the three helpers this task adds. They deliberately do NOT go
+# through _call_writer above: T1.3's contract is about what a value looks
+# like BEFORE it becomes a field, and about which caller-supplied fields the
+# writer refuses to emit — neither is reachable through T1.2's three-argument
+# driver.
+# ---------------------------------------------------------------------------
+
+# _observability_field <payload> <key>, run in a fresh shell with the writer
+# sourced. Payload and key are passed as POSITIONAL arguments, never
+# interpolated into the snippet, so a payload containing quotes, backslashes
+# or shell metacharacters reaches the function byte-for-byte as the harness
+# would deliver it on stdin.
+_call_field() {
+  bash -c '
+    cd "$1" || exit 90
+    . "$2" || exit 91
+    _observability_field "$3" "$4"
+  ' _ "$REPO" "$WRITER" "$1" "$2"
+}
+
+# _observability_program_name <command string>
+_call_program_name() {
+  bash -c '
+    cd "$1" || exit 90
+    . "$2" || exit 91
+    _observability_program_name "$3"
+  ' _ "$REPO" "$WRITER" "$1"
+}
+
+# _observability_redact_path <path> <toplevel>
+_call_redact_path() {
+  bash -c '
+    cd "$1" || exit 90
+    . "$2" || exit 91
+    _observability_redact_path "$3" "$4"
+  ' _ "$REPO" "$WRITER" "$1" "$2"
+}
+
+# Same as _call_writer_extra, but with CLAUDE_OBSERVABILITY_DETAIL under the
+# caller's control: $1 is "1" (detail on) or anything else (detail off, the
+# default — the variable is explicitly UNSET, not set to 0, so the test
+# exercises the real default rather than a falsy value).
+_call_writer_detail() {
+  local detail="$1" data_dir="$2" kind="$3" session="$4"
+  shift 4
+  bash -c '
+    detail="$1"; data_dir="$2"; kind="$3"; session="$4"; repo="$5"; writer="$6"
+    shift 6
+    cd "$repo" || exit 90
+    . "$writer" || exit 91
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    if [ "$detail" = "1" ]; then
+      export CLAUDE_OBSERVABILITY_DETAIL=1
+    else
+      unset CLAUDE_OBSERVABILITY_DETAIL
+    fi
+    _observability_write kind="$kind" session="$session" "$@"
+  ' _ "$detail" "$data_dir" "$kind" "$session" "$REPO" "$WRITER" "$@"
+}
+
+# Extract TWO keys from one payload and write both as fields, in one shell:
+# $3, the key under test, becomes `probe`; $4, a key known to be present,
+# becomes `seen`. The second extraction is not decoration — without it the
+# absent-key test would pass with no extractor on disk at all (a missing
+# function yields an empty value, and an empty value leaks nothing). `seen`
+# is what makes the test demand a WORKING extractor before it will accept the
+# absence of a leak.
+#
+# The extracted `probe` value is also dropped in extracted.txt so a test can
+# assert on it directly as well as scanning the record.
+_field_then_write() {
+  bash -c '
+    data_dir="$1"; payload="$2"; key="$3"; present_key="$4"
+    repo="$5"; writer="$6"
+    cd "$repo" || exit 90
+    . "$writer" || exit 91
+    mkdir -p "$data_dir" || exit 92
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    v="$(_observability_field "$payload" "$key")" || v=""
+    s="$(_observability_field "$payload" "$present_key")" || s=""
+    printf "%s" "$v" > "$data_dir/extracted.txt"
+    _observability_write kind=skill session=sess-guard "probe=$v" "seen=$s"
+  ' _ "$1" "$2" "$3" "$4" "$REPO" "$WRITER"
+}
+
+# bats runs a test body under `set -e`, and a function returning non-zero as a
+# simple command DOES fail the test — but `! grep -q ...` does NOT unless it is
+# the body's last command. Every absence assertion below therefore goes through
+# these helpers, never through a bare `! grep`.
+_assert_absent() {              # _assert_absent <needle> <file>
+  if grep -qF -- "$1" "$2"; then
+    printf 'LEAK: %s found in %s\n' "$1" "$2" >&2
+    return 1
+  fi
+  return 0
+}
+
+_assert_present() {             # _assert_present <needle> <file>
+  if grep -qF -- "$1" "$2"; then
+    return 0
+  fi
+  printf 'MISSING: %s not found in %s\n' "$1" "$2" >&2
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# 21. SDD-AC-11 — the redaction-critical line of the whole design.
+#
+# `_field`'s guard is `[ "$body" = "$1" ]`. Prefix removal that finds no match
+# returns the string UNCHANGED, so without that guard a request for an absent
+# key returns the ENTIRE payload — which, on a Bash PreToolUse, is the full
+# command line including any credential on it.
+#
+# Asserted by scanning the RAW RECORD BYTES for the canary, not by looking up
+# a field: a test that only checked `field == ""` would stay green even if the
+# payload leaked into some other field. The canary sits ~74 bytes into the
+# payload, comfortably inside the writer's 256-byte field cut, so a removed
+# guard cannot hide behind truncation.
+# ---------------------------------------------------------------------------
+
+@test "extract: a payload missing the requested key yields empty, never the whole payload" {
+  local data_dir="$TEST_DIR/red21"
+  local payload
+  payload='{"tool_name":"Bash","tool_input":{"command":"curl -H \"Authorization: Bearer sk-ant-LEAKCANARY-0123456789\" https://example.com"},"session_id":"sess-abc","transcript_path":"/Users/nobody/.claude/projects/p/t.jsonl","cwd":"/x"}'
+
+  run _field_then_write "$data_dir" "$payload" globs session_id
+  [ "$status" -eq 0 ]
+
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  # 1. The extractor is real and working on THIS payload — asserted first, so
+  #    that the three absence checks below cannot be satisfied by an extractor
+  #    that does not exist and therefore extracts nothing at all.
+  _assert_present '"seen":"sess-abc"' "$file"
+
+  # 2. The absent key returned nothing.
+  run cat "$data_dir/extracted.txt"
+  [ "$output" = "" ]
+  _assert_present '"probe":""' "$file"
+
+  # 3. And nothing from the payload reached the record, under any field name.
+  _assert_absent 'sk-ant-LEAKCANARY-0123456789' "$file"
+  _assert_absent 'Authorization' "$file"
+  _assert_absent 'example.com' "$file"
+  _assert_absent '/Users/nobody' "$file"
+}
+
+@test "extract: a present key is extracted, so the guard test above is not vacuous" {
+  local payload
+  payload='{"session_id":"sess-abc","memory_type":"Project","load_reason":"session_start"}'
+
+  run _call_field "$payload" session_id
+  [ "$status" -eq 0 ]
+  [ "$output" = "sess-abc" ]
+
+  run _call_field "$payload" load_reason
+  [ "$status" -eq 0 ]
+  [ "$output" = "session_start" ]
+}
+
+# ---------------------------------------------------------------------------
+# 22. SDD-AC-8 — reduced mode keeps a Bash call's program name (argv[0]) and
+#    drops every argument. The keep/drop split mirrors the harness's own
+#    `bash_command` (always) vs `full_command` (gated) distinction.
+# ---------------------------------------------------------------------------
+
+@test "reduce: reduced mode keeps a Bash call's program name and drops its arguments" {
+  local cmd
+  cmd='curl -H "Authorization: Bearer sk-ant-ARGCANARY-9876543210" https://example.com'
+
+  run _call_program_name "$cmd"
+  [ "$status" -eq 0 ]
+  [ "$output" = "curl" ]
+
+  # And that value, written as a field, carries the program and nothing else
+  # off that command line.
+  local data_dir="$TEST_DIR/red22"
+  run _call_writer_detail 0 "$data_dir" skill sess-prog "program=$output"
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  _assert_present '"program":"curl"' "$file"
+  _assert_absent 'sk-ant-ARGCANARY-9876543210' "$file"
+  _assert_absent 'Authorization' "$file"
+  _assert_absent 'example.com' "$file"
+}
+
+@test "reduce: a path-qualified program is reduced to its name, leaking no directory" {
+  # argv[0] can itself be an absolute path under \$HOME. "Program name" is the
+  # name; the directory is exactly the absolute-home-path leak reduced mode
+  # exists to prevent.
+  run _call_program_name "/Users/nobody/.local/bin/deploy --token sk-ant-PATHCANARY"
+  [ "$status" -eq 0 ]
+  [ "$output" = "deploy" ]
+
+  run _call_program_name "   npm  run build"
+  [ "$status" -eq 0 ]
+  [ "$output" = "npm" ]
+
+  run _call_program_name ""
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}
+
+# ---------------------------------------------------------------------------
+# 23. Repo-relative paths (R-3): inside the repo a path becomes relative;
+#    anywhere else it is reduced to its basename. Never an absolute path, so
+#    never an absolute home path.
+# ---------------------------------------------------------------------------
+
+@test "reduce: a path inside the repo becomes repo-relative, one outside becomes a basename" {
+  run _call_redact_path "$REPO_CANONICAL/docs/ai/memory/active.md" "$REPO_CANONICAL"
+  [ "$status" -eq 0 ]
+  [ "$output" = "docs/ai/memory/active.md" ]
+
+  run _call_redact_path "/Users/nobody/.claude/CLAUDE.md" "$REPO_CANONICAL"
+  [ "$status" -eq 0 ]
+  [ "$output" = "CLAUDE.md" ]
+
+  # Already relative: left alone.
+  run _call_redact_path "docs/notes.md" "$REPO_CANONICAL"
+  [ "$status" -eq 0 ]
+  [ "$output" = "docs/notes.md" ]
+
+  # The toplevel itself.
+  run _call_redact_path "$REPO_CANONICAL" "$REPO_CANONICAL"
+  [ "$status" -eq 0 ]
+  [ "$output" = "." ]
+
+  run _call_redact_path "" "$REPO_CANONICAL"
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}
+
+# ---------------------------------------------------------------------------
+# 24. SDD-AC-9 — the deny-list scan. One record, built exactly as a Phase 2
+#    adapter would build it, then scanned for every category the keep/drop
+#    table forbids: file content, a hook command string, `transcript_path`,
+#    and any absolute home path.
+# ---------------------------------------------------------------------------
+
+@test "reduce: a reduced record carries no file content, no hook command, no transcript_path, no absolute home path" {
+  local data_dir="$TEST_DIR/red24"
+  local home_path="/Users/nobody/.claude/settings.json"
+  local transcript="/Users/nobody/.claude/projects/p/transcript.jsonl"
+  local hook_cmd='bash .claude/observability/log_skill.sh --secret sk-ant-HOOKCANARY'
+  local content='FILECONTENTCANARY the entire body of the loaded instruction file'
+  local rel outside
+  rel="$(_call_redact_path "$REPO_CANONICAL/docs/ai/memory/active.md" "$REPO_CANONICAL")"
+  # A second path, this one OUTSIDE the repo and under a home directory — the
+  # `parent` field of an `include` load is routinely a user-global CLAUDE.md.
+  # Without it the deny-list scan would never exercise the branch that turns an
+  # absolute outside path into a basename, and "no absolute home path" would be
+  # pinned only by the redaction helper's own unit test.
+  outside="$(_call_redact_path "$home_path" "$REPO_CANONICAL")"
+
+  run _call_writer_detail 0 "$data_dir" instruction sess-deny \
+    "path=$rel" \
+    "parent=$outside" \
+    "scope=Project" \
+    "reason=session_start" \
+    "bytes=2048" \
+    "transcript_path=$transcript" \
+    "cwd=$REPO_CANONICAL" \
+    "detail:content=$content" \
+    "detail:hook_command=$hook_cmd" \
+    "detail:absolute=$home_path"
+  [ "$status" -eq 0 ]
+
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  # Kept: identity, scope, reason, the repo-relative path, and `bytes`
+  # (a size is metadata, not content — PRD F4 cannot be produced without it).
+  _assert_present '"kind":"instruction"' "$file"
+  _assert_present '"path":"docs/ai/memory/active.md"' "$file"
+  _assert_present '"parent":"settings.json"' "$file"
+  _assert_present '"scope":"Project"' "$file"
+  _assert_present '"reason":"session_start"' "$file"
+  _assert_present '"bytes":"2048"' "$file"
+
+  # Dropped, every category in the keep/drop table.
+  _assert_absent 'FILECONTENTCANARY' "$file"
+  _assert_absent 'sk-ant-HOOKCANARY' "$file"
+  _assert_absent 'log_skill.sh' "$file"
+  _assert_absent "$transcript" "$file"
+  _assert_absent 'transcript_path' "$file"
+  _assert_absent '/Users/nobody' "$file"
+
+  # No absolute path of ANY kind: the record must not carry the repo toplevel
+  # either (that is the `cwd` the table drops), nor the real \$HOME.
+  _assert_absent "$REPO_CANONICAL" "$file"
+  _assert_absent "$HOME/" "$file"
+}
+
+# ---------------------------------------------------------------------------
+# 25. ADR-4 — detail mode adds the extra fields and needs its OWN switch.
+#    Same call, same fields, twice: once with CLAUDE_OBSERVABILITY_DETAIL
+#    unset and once with it set.
+# ---------------------------------------------------------------------------
+
+@test "detail: the extra fields appear only when CLAUDE_OBSERVABILITY_DETAIL is set" {
+  local content='FILECONTENTCANARY body text'
+  local transcript='/Users/nobody/.claude/projects/p/transcript.jsonl'
+
+  local off_dir="$TEST_DIR/red25off"
+  run _call_writer_detail 0 "$off_dir" instruction sess-d1 \
+    "path=docs/a.md" "detail:content=$content" "transcript_path=$transcript"
+  [ "$status" -eq 0 ]
+  local off_file="$off_dir/observability/events.jsonl"
+  _assert_present '"path":"docs/a.md"' "$off_file"
+  _assert_absent 'FILECONTENTCANARY' "$off_file"
+  _assert_absent 'transcript' "$off_file"
+
+  local on_dir="$TEST_DIR/red25on"
+  run _call_writer_detail 1 "$on_dir" instruction sess-d1 \
+    "path=docs/a.md" "detail:content=$content" "transcript_path=$transcript"
+  [ "$status" -eq 0 ]
+  local on_file="$on_dir/observability/events.jsonl"
+  _assert_present '"path":"docs/a.md"' "$on_file"
+  _assert_present '"content":"FILECONTENTCANARY body text"' "$on_file"
+  _assert_present '"transcript_path":"/Users/nobody/.claude/projects/p/transcript.jsonl"' "$on_file"
+}
+
+# ---------------------------------------------------------------------------
+# 26. ADR-4 — both switches default off, and DETAIL is subordinate: it cannot
+#    turn recording on by itself. Test 8 above pins "ENABLED unset -> nothing";
+#    this pins the other half, that DETAIL=1 alone does not undo it.
+# ---------------------------------------------------------------------------
+
+@test "detail: CLAUDE_OBSERVABILITY_DETAIL alone records nothing at all" {
+  local data_dir="$TEST_DIR/red26"
+  run env -u CLAUDE_OBSERVABILITY_ENABLED "CLAUDE_OBSERVABILITY_DETAIL=1" \
+    "CLAUDE_OBSERVABILITY_DATA=$data_dir" \
+    bash -c "cd '$REPO' && . '$WRITER' && _observability_write kind=hook session=sess-detail-only content=SHOULDNOTEXIST"
+  [ "$status" -eq 0 ]
+  [ ! -e "$data_dir" ]
+}
+
+# $1/$2 are the values to give ENABLED/DETAIL, or "unset". Both are cleared
+# from the environment first, so a variable that happens to be set in the
+# session running bats cannot decide the result.
+_gate_says() {
+  local enabled="$1" detail="$2"
+  local -a pre=(env -u CLAUDE_OBSERVABILITY_ENABLED -u CLAUDE_OBSERVABILITY_DETAIL)
+  [ "$enabled" = "unset" ] || pre[${#pre[@]}]="CLAUDE_OBSERVABILITY_ENABLED=$enabled"
+  [ "$detail" = "unset" ]  || pre[${#pre[@]}]="CLAUDE_OBSERVABILITY_DETAIL=$detail"
+  "${pre[@]}" bash -c "cd '$REPO' && . '$WRITER' && \
+    if _observability_detail_enabled; then echo ON; else echo OFF; fi"
+}
+
+@test "detail: the gate helper requires BOTH switches" {
+  run _gate_says unset unset
+  [ "$output" = "OFF" ]
+  run _gate_says 1 unset
+  [ "$output" = "OFF" ]
+  run _gate_says unset 1
+  [ "$output" = "OFF" ]
+  run _gate_says 1 1
+  [ "$output" = "ON" ]
+}
+
+# ---------------------------------------------------------------------------
+# 27. The two ways prefix-removal extraction fails while still LOOKING right.
+#    Neither is named in the task text; both are properties the SDD's `_field`
+#    shape either has or does not, and a reviewer cannot tell by reading it.
+#
+#    (a) An ESCAPED QUOTE inside a value. `${body%%\"*}` stops at the first
+#        `"` byte, and a backslash-escaped quote is still a `"` byte. The
+#        extractor therefore UNDER-captures — it stops early. That is a known
+#        and accepted limitation (SDD/Known Technical Issues: "a string
+#        operation, not a JSON parser"); what must never happen is the
+#        opposite, OVER-capture, where the rest of the payload rides along.
+#        Both directions are asserted here. If the extractor is ever taught
+#        about `\"`, the exact-value assertion below is the one to update —
+#        deliberately, not by accident.
+#
+#    (b) A key that is a SUBSTRING of another key. The search pattern is
+#        `*"key":"`, INCLUDING the opening quote, so `path` cannot match
+#        inside `"file_path":"` — the byte before `path` there is `_`, not a
+#        quote. Dropping that opening quote from the pattern would make
+#        `_field "$payload" path` return the file path, and every short key
+#        would silently pick up a longer neighbour's value.
+# ---------------------------------------------------------------------------
+
+@test "extract: an escaped quote in a value under-captures but never over-captures" {
+  local payload
+  payload='{"file_path":"/tmp/we\"ird/name.md","memory_type":"Project","load_reason":"session_start"}'
+
+  run _call_field "$payload" file_path
+  [ "$status" -eq 0 ]
+
+  # Under-capture, documented: the scan stops at the escaped quote's `"` byte,
+  # leaving the backslash as the last character.
+  [ "$output" = '/tmp/we\' ]
+
+  # Over-capture is the failure that matters, and it did not happen: nothing
+  # after the value's closing quote came along.
+  case "$output" in
+    *memory_type*|*Project*|*load_reason*|*session_start*)
+      printf 'OVER-CAPTURE: %s\n' "$output" >&2
+      return 1
+      ;;
+  esac
+
+  # A trailing lone backslash must still leave the record legal JSON — the
+  # escaper, not the extractor, is what makes that true, and this is the one
+  # case that reaches it with a dangling backslash.
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 not available to verify JSON legality"
+  fi
+  local data_dir="$TEST_DIR/red27a"
+  run _field_then_write "$data_dir" "$payload" file_path load_reason
+  [ "$status" -eq 0 ]
+  local file="$data_dir/observability/events.jsonl"
+  run python3 -c "
+import json
+obj = json.loads(open('$file', 'rb').read().decode('utf-8').strip())
+assert obj['probe'] == '/tmp/we' + chr(92), repr(obj['probe'])
+"
+  [ "$status" -eq 0 ]
+}
+
+@test "extract: a key that is a substring of another key does not match the wrong field" {
+  local payload
+  payload='{"file_path":"/repo/docs/a.md","memory_type":"Project","parent_file_path":"/repo/CLAUDE.md"}'
+
+  # `path` is a suffix of `file_path`; `type` is a suffix of `memory_type`.
+  # Both must miss, because the pattern carries the opening quote.
+  run _call_field "$payload" path
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+
+  run _call_field "$payload" type
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+
+  # And the real keys still resolve — including the one whose name CONTAINS
+  # another key's name, which must return its own value, not the shorter
+  # key's.
+  run _call_field "$payload" file_path
+  [ "$status" -eq 0 ]
+  [ "$output" = "/repo/docs/a.md" ]
+
+  run _call_field "$payload" parent_file_path
+  [ "$status" -eq 0 ]
+  [ "$output" = "/repo/CLAUDE.md" ]
+}
+
+# ---------------------------------------------------------------------------
+# 28. CON-5: nothing added by T1.3 may fail CLOSED. Every helper is called
+#    under `set -euo pipefail` in its worst case — absent key, empty command,
+#    empty path — and a line after the call must still run.
+# ---------------------------------------------------------------------------
+
+@test "set -e survival: the extraction and reduction helpers never abort a strict caller" {
+  local data_dir="$TEST_DIR/red28"
+  run bash -c "
+    set -euo pipefail
+    cd '$REPO'
+    . '$WRITER'
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA='$data_dir'
+    a=\"\$(_observability_field '{\"k\":\"v\"}' absent)\"
+    b=\"\$(_observability_field '' anything)\"
+    c=\"\$(_observability_program_name '')\"
+    d=\"\$(_observability_redact_path '' '')\"
+    e=\"\$(_observability_redact_path '/x/y' '')\"
+    _observability_write kind=hook session=sess-strict 'detail:content=x' 'cwd=/y'
+    echo REACHED
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "REACHED" ]
+}
