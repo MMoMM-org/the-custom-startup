@@ -140,4 +140,4 @@ jobs:
       - name: Run bats
         env:
           TCS_PERF_SLACK: "4"
-        run: bats --recursive --print-output-on-failure plugins/*/tests/bats
+        run: bats --recursive --print-output-on-failure plugins/*/tests/bats tests/bats
