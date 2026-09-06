@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-09-06 |
-| **Current Phase** | PRD |
+| **Current Phase** | SDD |
 | **Decomposition tier** | {{DECOMPOSITION_TIER}} |
 | **Last Updated** | 2026-09-06 |
 
@@ -14,7 +14,7 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | 8 features across all MoSCoW tiers, 32 acceptance criteria, 4 review decisions folded in |
-| solution.md | pending | |
+| solution.md | completed | 7 components, 8 ADRs (4 user-confirmed), 20 acceptance criteria, full PRD traceability |
 | plan/ | pending | |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
@@ -34,6 +34,10 @@
 | 2026-09-06 | Repo-local configuration this phase; not shipped in a plugin | #147 needs the evidence here. Shipping would bind us to a schema and defaults before either has been used in anger, and make every later change breaking for people who never asked for the feature |
 | 2026-09-06 | Harness hook timing only in deliberate diagnostic runs | Its no-infrastructure export writes to the terminal, which is unacceptable interactively. Rejected: filtering the noise, which adds a filter that floods the terminal when it breaks |
 | 2026-09-06 | Start in reduced (non-detailed) mode | Widen only when the report proves thin — then we know which field was actually missing, instead of recording everything on the assumption some of it matters |
+| 2026-09-06 | ADR-1: self-contained writer in the repo, not sourced from the plugin | `CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` never reach Bash-tool subprocesses and the plugin cache resolves stale in-session — both already documented here. Sourcing would make the hook silently write nowhere. A bats parity test holds the duplicated resolver honest |
+| 2026-09-06 | ADR-3: phase 1 covers instructions, skills and agents | All three share one writer, so skills and agents cost one config entry each and deliver the "which skills ever fire" number immediately |
+| 2026-09-06 | ADR-6: report in Python with pytest coverage | It runs offline where the hook-path budget does not apply, and the repo already runs pytest on both OSes — the analysis becomes testable rather than merely runnable |
+| 2026-09-06 | ADR-7: per-hook attribution deferred behind a verification task | It is not established that one-matcher-per-command yields separate measurement groups; the harness groups by (event, matcher) and `tcs-helper` already puts two commands under one matcher. Specifying a mechanism now risks specifying something inexpressible |
 | 2026-09-06 | **Correction**: the `claude_code.hook` OTel span is NOT reachable and must not be designed around | Its guard is `gt() = Lb() \|\| vj()`, and `vj(){return!1}` is hard-coded false with a single definition in the binary. `Lb()` additionally needs the undocumented `ENABLE_BETA_TRACING_DETAILED` + `BETA_TRACING_ENDPOINT` **and** an Anthropic-side statsig gate. An earlier note in this file assumed the span was usable; it is not |
 
 ## Context
