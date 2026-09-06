@@ -64,7 +64,7 @@ configuration rather than as code.
   5. Success: `[ref: SDD/SDD-AC-1, SDD-AC-5, SDD-AC-6, SDD-AC-7, SDD-AC-12]`;
      `[ref: PRD/F2, PRD/F3]`
 
-- [ ] **T1.3 Redaction, and the absent-key guard** `[activity: security]`
+- [x] **T1.3 Redaction, and the absent-key guard** `[activity: security]`
 
   1. Prime: read the reduced-mode keep/drop table and the traced `_field` walkthrough
      `[ref: SDD/Complex Logic]` `[ref: SDD/Implementation Examples]`
