@@ -261,11 +261,15 @@ override. There is no separate file for wrapper records.
 Everything this records stays on this machine: the record is a line appended to a file under your
 home directory, and nothing about it is transmitted anywhere. What the record does **not** contain —
 the real hook command's own command line, any of its arguments, or anything from the hook payload
-(the wrapper never reads that payload; see "How to install it"). The only strings in a hook record
-that are not a measurement are the `--event` and `--matcher` values you yourself typed when you
-installed the wrapper — nothing is copied or inferred from the wrapped command. Every other field is
-a number (a duration, an exit status) or a fixed label (`kind`, `scope_note`). Every one of these
-claims is checkable directly against `timed-wrapper.sh`'s own source: it contains no `read` and no
+(the wrapper never reads that payload; see "How to install it"). Each hook record contains nine
+fields: `ts` (UTC timestamp), `kind` (fixed as `"hook"`), `session` (the session identifier from
+`$CLAUDE_CODE_SESSION_ID` — see "Caveats, stated plainly" below for its unverified status), `repo`
+(the repository's directory name only, not its full path — deliberate redaction per the spec's R-3
+rule), `hook_event` (from `--event`), `matcher` (from `--matcher`), `ms` (duration in milliseconds),
+`exit` (exit status), and `scope_note` (always `"single"`). The only strings that come from what you
+yourself typed are `hook_event` and `matcher`; all other fields are system-generated, measurements,
+or fixed labels. Nothing is copied or inferred from the wrapped command. Every one of these claims
+is checkable directly against `timed-wrapper.sh`'s own source: it contains no `read` and no
 `cat` of stdin, and never touches file descriptor 0.
 
 ### `scope_note: single` — read this before trusting a number
