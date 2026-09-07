@@ -19,6 +19,7 @@ real $HOME or a real events.jsonl.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -26,6 +27,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "observability"))
 
 import report  # noqa: E402  (sys.path must be extended first)
+
+REPORT_PY = REPO_ROOT / "scripts" / "observability" / "report.py"
+LOGWRITE_SH = REPO_ROOT / "plugins" / "tcs-helper" / "scripts" / "observability" / "logwrite.sh"
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -161,6 +165,17 @@ def test_missing_reason_key_also_counted_as_unknown(tmp_path):
     records, _ = report.read_events(events)
     stats = report.instruction_stats(records)
     entry = stats["docs/ai/memory/active.md"]
+    assert entry.load_count == 1
+    assert entry.unknown_count == 1
+    assert entry.reason_counts == {}
+
+
+def test_non_string_reason_is_counted_as_unknown_not_folded(tmp_path):
+    """A malformed record (producer bug) with a non-string truthy `reason` must not
+    become a non-string key in `reason_counts` -- it must fall through to unknown,
+    the same as an empty or missing reason (module's stated defensive posture)."""
+    entry = report.InstructionFileStats(path="a.md")
+    entry.record(7)  # a truthy non-string, e.g. from a malformed producer
     assert entry.load_count == 1
     assert entry.unknown_count == 1
     assert entry.reason_counts == {}
@@ -355,3 +370,196 @@ def test_build_load_report_mentions_counts_reasons_and_never_loaded(tmp_path):
 def test_build_load_report_states_unparseable_count():
     text = report.build_load_report({}, [], unparseable=3)
     assert "3" in text
+
+
+# --- CLI wiring (main / _resolve_events_path) -------------------------------
+#
+# Everything above drives the pure functions directly. Nothing calls
+# report.main(...), so a wiring bug -- a wrong argument order into
+# build_load_report, or a --data-dir override that resolves to a different
+# shape than the writer's -- would ship undetected. This follows the
+# subprocess-against-the-real-script pattern of tests/test_spec_tier.py
+# (another stdlib-only Python CLI script in this repo) rather than
+# tests/test_check_docs_sync.py's bash-script variant of the same idea: it
+# exercises the actual `__main__` / argparse / sys.exit path a user hits from
+# the command line, not just an imported function call.
+
+
+def _run_report_cli(args: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(REPORT_PY), *args],
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_cli_end_to_end_prints_report_for_fixture_events(tmp_path):
+    events = tmp_path / "events.jsonl"
+    _write_jsonl(
+        events,
+        [
+            _instruction("docs/ai/memory/active.md", "session_start"),
+            _instruction("docs/ai/memory/active.md", "session_start"),
+        ],
+    )
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+
+    result = _run_report_cli(
+        ["--events", str(events), "--repo-root", str(repo_root), "--home", str(home_dir)]
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "docs/ai/memory/active.md: 2 load(s)" in result.stdout
+    assert "session_start=2" in result.stdout
+    assert "Configured but never loaded (0):" in result.stdout
+
+
+def test_cli_default_events_path_matches_writer_directory_shape(tmp_path):
+    """No --events and no --data-dir: main() must resolve the events path the
+    same way logwrite.sh's writer lays its directory out (ADR-1) -- checked
+    here by placing the fixture at that exact resolved path and confirming
+    the CLI actually reads it, not merely that the two resolvers agree in
+    the abstract."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    home_dir = tmp_path / "home"
+    events_dir = (
+        home_dir / ".claude" / "plugins" / "data" / f"observability-{repo_root.name}" / "observability"
+    )
+    events_dir.mkdir(parents=True)
+    _write_jsonl(events_dir / "events.jsonl", [_instruction("a.md", "session_start")])
+
+    result = _run_report_cli(["--repo-root", str(repo_root), "--home", str(home_dir)])
+
+    assert result.returncode == 0, result.stderr
+    assert "a.md: 1 load(s)" in result.stdout
+
+
+def test_cli_data_dir_override_is_honoured(tmp_path):
+    """--data-dir must win over the default derivation -- the fixture is only
+    reachable through the override, never through --home's default shape."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    home_dir = tmp_path / "home"  # left empty: must not be consulted
+    home_dir.mkdir()
+    data_dir = tmp_path / "custom-data"
+    (data_dir / "observability").mkdir(parents=True)
+    _write_jsonl(data_dir / "observability" / "events.jsonl", [_instruction("b.md", "compact")])
+
+    result = _run_report_cli(
+        ["--repo-root", str(repo_root), "--home", str(home_dir), "--data-dir", str(data_dir)]
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "b.md: 1 load(s)" in result.stdout
+
+
+def test_cli_missing_events_reports_none_found_and_exits_zero(tmp_path):
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    missing_events = tmp_path / "nope.jsonl"
+
+    result = _run_report_cli(
+        ["--events", str(missing_events), "--repo-root", str(repo_root), "--home", str(home_dir)]
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "No record found" in result.stdout
+
+
+# --- the import-cycle guard (_collect_claude_md_imports / `seen`) ----------
+#
+# The reviewer hand-verified that a two-file @-import cycle and a self-import
+# both terminate today. Nothing pinned that: a future edit that stops
+# threading `seen` through the recursive call, or that adds to `found`
+# before checking `seen`, would hang or blow the recursion limit against a
+# real repo's CLAUDE.md hierarchy. These assert on the actual returned
+# inventory (`found`), not merely that the call returned at all.
+
+
+def test_collect_claude_md_imports_two_file_cycle_terminates(tmp_path):
+    a = tmp_path / "a.md"
+    b = tmp_path / "b.md"
+    a.write_text("@b.md\n", encoding="utf-8")
+    b.write_text("@a.md\n", encoding="utf-8")
+
+    found: set[Path] = set()
+    report._collect_claude_md_imports(a, tmp_path, found)
+
+    assert found == {a.resolve(), b.resolve()}
+
+
+def test_collect_claude_md_imports_self_import_terminates(tmp_path):
+    a = tmp_path / "a.md"
+    a.write_text("@a.md\n", encoding="utf-8")
+
+    found: set[Path] = set()
+    report._collect_claude_md_imports(a, tmp_path, found)
+
+    assert found == {a.resolve()}
+
+
+# --- redaction parity with logwrite.sh's _observability_redact_path --------
+#
+# report._redact_path (the reader) must produce the same string as
+# _observability_redact_path in logwrite.sh (the writer) for the same path:
+# the writer puts `path` into a record, this reader builds the inventory
+# that record is matched against, and a divergence between the two makes a
+# loaded file silently read as "never loaded" -- a wrong answer, not a
+# missing one (CON-9). Same precedent as
+# plugins/tcs-helper/tests/bats/observability-writer.bats's resolver-parity
+# assertion and plugins/tcs-git-helpers/tests/bats/cache-path-parity.bats:
+# both sides are actually executed, not restated as two copies of the same
+# expected string. Kept in this file (not a new bats suite) because one side
+# under test -- report._redact_path -- is a Python function this suite
+# already imports; shelling out from here to bash mirrors the direction
+# cache-path-parity.bats's print_resolved_path.py helper shells out from
+# bats into python3, just reversed.
+
+
+def _bash_redact_path(path: str, top: str) -> str:
+    result = subprocess.run(
+        ["bash", "-c", '. "$1"; _observability_redact_path "$2" "$3"',
+         "_", str(LOGWRITE_SH), path, top],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
+
+
+def _assert_redact_parity(path: Path, repo_root: Path) -> None:
+    python_result = report._redact_path(path, repo_root)
+    bash_result = _bash_redact_path(str(path), str(repo_root))
+    assert python_result == bash_result, (
+        f"reader/writer redaction diverge for {path!r} under {repo_root!r}: "
+        f"python={python_result!r} bash={bash_result!r}"
+    )
+
+
+def test_redact_path_parity_nested_inside_repo(tmp_path):
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    nested = repo_root / "docs" / "ai" / "memory" / "active.md"
+    _assert_redact_parity(nested, repo_root)
+    assert report._redact_path(nested, repo_root) == "docs/ai/memory/active.md"
+
+
+def test_redact_path_parity_repo_root_itself(tmp_path):
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    _assert_redact_parity(repo_root, repo_root)
+    assert report._redact_path(repo_root, repo_root) == "."
+
+
+def test_redact_path_parity_absolute_path_outside_repo(tmp_path):
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    outside = tmp_path / "home" / ".claude" / "CLAUDE.md"
+    _assert_redact_parity(outside, repo_root)
+    assert report._redact_path(outside, repo_root) == "CLAUDE.md"

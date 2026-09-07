@@ -63,7 +63,7 @@ class InstructionFileStats:
 
     def record(self, reason: str | None) -> None:
         self.load_count += 1
-        if reason:
+        if isinstance(reason, str) and reason:
             self.reason_counts[reason] = self.reason_counts.get(reason, 0) + 1
         else:
             self.unknown_count += 1
@@ -170,6 +170,13 @@ def never_loaded(inventory: Iterable[str], stats: dict[str, InstructionFileStats
 # An `@`-import token: `@` preceded by start-of-line or whitespace (so an
 # email-shaped "user@host" mid-line is never mistaken for one), followed by
 # a non-whitespace path.
+#
+# This also matches a non-import `@token` (a markdown table cell, a stray
+# mention) that was never meant as an import. That is safe only because
+# `_collect_claude_md_imports` below drops any candidate that does not
+# resolve to a real file (`resolved.is_file()`), and the inventory this
+# feeds is documented to over-list rather than under-list (SDD/The two
+# inventories) -- a false-positive token simply never makes it into `found`.
 _IMPORT_RE = re.compile(r"(?:^|(?<=\s))@(\S+)", re.MULTILINE)
 
 
