@@ -558,26 +558,39 @@ def test_walk_instruction_inventory_tracked_nested_claude_md_is_included(tmp_pat
 
 
 def test_walk_instruction_inventory_outside_repo_path_not_dropped_by_filter(tmp_path):
-    """A `home_dir` entry sits outside the repo's working tree entirely -- it
-    is out of scope for `git check-ignore`, not ignored by it, and asking
-    git about an out-of-repo path can itself return a fatal error rather
-    than a clean answer. The filter must never conflate 'out of scope' with
-    'ignored' (SDD amendment: 'this is the subtlest part')."""
+    """When partitioning candidates into inside-repo and outside-repo before
+    calling git, the filter must never drop the outside-repo partition.
+
+    Outside-repo paths (e.g., home_dir entries) sit outside the repository's
+    working tree entirely -- they are out of scope for `git check-ignore`, not
+    ignored by it. Asking git about an out-of-repo path can itself fail with
+    a fatal "outside repository" error rather than a clean answer. The
+    implementation must partition inside/outside BEFORE calling git to avoid
+    that error entirely, and this test pins that the outside-repo partition
+    is retained in the result.
+
+    This test distinguishes the outside-repo file with a unique basename
+    (`only-outside.md` vs `CLAUDE.md`) so its presence is directly observable,
+    unlike a name collision where both redact to the same string.
+    (SDD amendment: 'this is the subtlest part')
+    """
     repo_root = tmp_path / "repo"
     home_dir = tmp_path / "home"
     _init_git_repo(repo_root)
     (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
-    (home_dir / ".claude").mkdir(parents=True)
-    (home_dir / ".claude" / "CLAUDE.md").write_text("# home\n", encoding="utf-8")
+
+    # Outside-repo file with a unique basename
+    (home_dir / ".claude" / "rules").mkdir(parents=True)
+    (home_dir / ".claude" / "rules" / "only-outside.md").write_text("# home\n", encoding="utf-8")
 
     inventory = report.walk_instruction_inventory(repo_root, home_dir)
 
-    # Both the repo root and the home CLAUDE.md redact to the same basename
-    # (R-3), and filtering did not silently drop the outside-repo one. Both
-    # are found, but de-duplicated after redaction to a single entry.
-    assert "CLAUDE.md" in inventory.entries
-    assert inventory.entries.count("CLAUDE.md") == 1  # de-duplicated
+    # The outside-repo entry must be present with its distinct name
+    assert "only-outside.md" in inventory.entries
+    # Confirms the filter genuinely ran (otherwise fail-open would trivially pass)
     assert inventory.git_filtered is True
+    # Confirm the inside-repo file is also found (exercises the partition)
+    assert "CLAUDE.md" in inventory.entries
 
 
 def test_walk_instruction_inventory_not_a_git_repo_is_unfiltered(tmp_path):
