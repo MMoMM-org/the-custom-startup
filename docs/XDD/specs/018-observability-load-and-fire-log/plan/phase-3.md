@@ -129,6 +129,16 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
      loses the exit code, so it is a cost measurement, **not** a template
   4. Validate: bats green; install, reproduce, read, uninstall — and confirm nothing remains in the
      hook path afterwards
+  4b. Document the wrapper in `plugins/tcs-helper/scripts/observability/README.md`: how to install it
+     for an investigation, what it records and where the record goes, an explicit statement that
+     everything is local and nothing is transmitted anywhere, and how to remove it so nothing remains
+     in the hook path `[ref: PRD/F6 AC3]` `[ref: PRD/F7 AC3]`
+
+     > **Added 2026-09-07.** These two criteria previously sat in T3.4's step 3, as part of the
+     > "documented recipe for the diagnostic run". When T3.4 was repurposed away from the dropped
+     > harness-ingest route, that step went with it and no task was left owning F6 AC3 or F7 AC3 —
+     > an error in the repurposing, found by the T3.5 spec-compliance reviewer. The duty belongs
+     > with the wrapper, so it lands here rather than back in T3.4.
   5. Success: `[ref: SDD/SDD-AC-20]`; `[ref: PRD/F7]`
   6. **Skip condition**: if T1.4 found that per-command matchers do produce separate measurement
      groups, this task is replaced by a configuration change and a note in the SDD. Record which
