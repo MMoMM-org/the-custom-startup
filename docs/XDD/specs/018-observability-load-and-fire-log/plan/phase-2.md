@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Adapters and registration"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -143,9 +143,34 @@ Delivers the three capture paths and turns the feature on in this repo for the f
   > populated correctly.
 
 
-- [ ] **T2.5 Phase Validation** `[activity: validate]`
+- [x] **T2.5 Phase Validation** `[activity: validate]`
 
   - Run the full bats and pytest suites. Then verify the thing fixtures cannot: start a real session,
     confirm records appear for all three kinds, and confirm **no existing hook changed behaviour** —
     exit statuses, blocking behaviour and stdout of this repo's existing hooks are unchanged
     `[ref: SDD/Implementation Boundaries — Must Preserve]`.
+
+  > **Result — both suites green, all three record kinds seen live.**
+  > `pytest -q`: 539 passed, 1 skipped. Observability bats: 102/102. The full CI invocation
+  > (`bats --recursive plugins/*/tests/bats`): **942/942** under CI's own `TCS_PERF_SLACK=4`.
+  >
+  > One failure appeared without that slack: `test_perf_cache_hit_under_30ms` in `tcs-git-helpers`.
+  > Investigated rather than dismissed — it passes 3/3 in isolation and is a 30 ms budget reached
+  > while 942 tests and several background agents ran concurrently. Load artefact, not a regression;
+  > this repo's `TCS_PERF_SLACK` convention exists for exactly this and CI sets it.
+  >
+  > **Records confirmed for all three kinds from a live session**, not fixtures: `instruction`
+  > (`CLAUDE.md`, scope `Project`, reason `session_start`, `bytes` 36 matching the file exactly; a
+  > `User`-scope path outside the repo correctly reduced to its basename), `agent` (`Explore`,
+  > `general-purpose`, and a genuinely nested dispatch), and `skill` (`dataviz`, from a real
+  > `PreToolUse` payload).
+  >
+  > **"No existing hook changed behaviour" — stated precisely.** In THIS repo the criterion is
+  > trivially met because the hooks were deliberately not registered: that is an absence of risk,
+  > not evidence. The real evidence comes from the scratch repo, where all three ran registered and
+  > active through several sessions that behaved normally — exit 0, correct answers, subagents
+  > dispatched, nested dispatch working. That demonstrates CON-4/CON-5 hold against the live harness.
+  > **What remains unobserved**: these three adapters running alongside this repo's OWN existing
+  > hooks (`tcs-git-helpers`' guards, `tcs-helper`'s). The harness runs hooks in a group in parallel
+  > (T1.4's finding), and that combination has not been exercised. It becomes testable the moment
+  > the maintainer registers them here.
