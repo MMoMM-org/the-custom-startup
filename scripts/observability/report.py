@@ -8,7 +8,10 @@ configured files never did (SDD-AC-13). T3.2 adds this file's honesty
 layer: the always-loaded layer's measured byte cost, separate from
 conditional loads (SDD-AC-14), and reporting the recording state itself --
 never a load figure -- when the record is empty, has no `kind: state`
-probe, or is stale (SDD-AC-15).
+probe, or is stale (SDD-AC-15). T3.3 adds the second join PRD F8 needs:
+coverage of the shipped skill/agent inventory against what actually fired,
+naming the unused entries rather than treating an unfired one as missing
+(SDD-AC-18).
 
 ADR-6: this file is Python, pytest-covered, and runs offline -- nowhere near
 the hook path, so the sub-millisecond budget (CON-7) does not apply here.
@@ -675,6 +678,286 @@ def walk_instruction_inventory(repo_root: Path, home_dir: Path) -> InstructionIn
 
 
 # ---------------------------------------------------------------------------
+# The skill and agent inventory: what never fired (T3.3, SDD-AC-18, PRD F8).
+# ---------------------------------------------------------------------------
+#
+# SDD/The two inventories' second table says, literally, "agent name from
+# frontmatter `name:`". Taken alone that is NOT a safe join key against a
+# real record: verified in this repo, a plugin agent's frontmatter `name:`
+# is a short, bare identifier (`test-strategy`,
+# plugins/tcs-team/agents/the-tester/test-strategy.md) but Claude Code
+# dispatches it under a QUALIFIED form, `<plugin>:<path under agents/,
+# without extension, "/" -> ":">` (`tcs-team:the-tester:test-strategy`) --
+# confirmed against this session's own agent-type listing. A join built on
+# the bare frontmatter name alone would report every plugin skill and agent
+# as never-fired the instant a real record carries the qualified form
+# instead: a confident 0% coverage figure that would be pure artifact, not a
+# finding.
+#
+# Which form a REAL record carries has not been directly measured for a
+# plugin-dispatched skill or agent as of this task -- T3.6 does that, against
+# a live session. A real measured `kind: agent` record so far only proves a
+# BUILT-IN agent's `agent_type` is bare (`"Explore"`). So every inventory
+# entry below carries both its `qualified` name (always derivable from the
+# file's own path, always unambiguous) and its `bare` name (the frontmatter
+# `name:`, or -- when that is absent -- the file/directory's own name), and
+# `firing_coverage` accepts a match on EITHER rather than guessing which one
+# is real and silently discarding the other.
+#
+# Two different entries can legitimately share a bare name (two plugins each
+# shipping a "testing" skill, say). The qualified name is what disambiguates
+# them, so a record naming only the shared bare form must never mark BOTH --
+# or either -- as fired; see `firing_coverage`'s `bare_counts` guard below.
+
+
+class InventoryEntry(NamedTuple):
+    """One shipped skill or agent, named two ways for the firing join.
+
+    `qualified` is always unique and always derivable from the file's own
+    path alone -- see the module comment above -- and is what this report
+    renders an entry by, because it is never ambiguous. `bare` is the short
+    form a real record might carry instead (SDD/The two inventories'
+    literal "agent name from frontmatter `name:`", or a skill's own
+    directory name).
+    """
+
+    qualified: str
+    bare: str
+    kind: str  # "skill" or "agent"
+
+
+class SkillAgentInventory(NamedTuple):
+    """`walk_skill_agent_inventory`'s result: every shipped entry, plus the
+    per-kind counts `build_load_report` states alongside them -- the same
+    "say which count produced this denominator" posture as
+    `InstructionInventory.git_filtered`.
+    """
+
+    entries: list[InventoryEntry]
+    skill_count: int
+    agent_count: int
+
+
+def _read_frontmatter_name(path: Path) -> str | None:
+    """The `name:` value from a Markdown file's YAML frontmatter, or `None`.
+
+    Stdlib only (no YAML parser, per the task constraint): a bounded
+    line-by-line scan between the opening and closing `---` fences, looking
+    for a top-level `name:` key. Returns `None` -- never raises -- for a
+    file with no frontmatter at all, an unterminated or otherwise malformed
+    frontmatter block, or a frontmatter block with no `name:` line.
+
+    `plugins/tcs-team/agents/the-architect/reference/robustness-checklists.md`
+    is a real file in this repo with NO frontmatter at all -- a reference
+    checklist meant to be `Read` by another agent, not dispatched itself --
+    and this function must not crash on it. Claude Code's own harness still
+    lists it as a real, dispatchable agent
+    (`tcs-team:the-architect:reference:robustness-checklists`), deriving
+    both a name and a description from the file's path when frontmatter
+    supplies neither (verified directly in the session that authored this
+    function). Callers (`_plugin_agent_entry`, `_local_agent_entry`)
+    therefore fall back to a path-derived bare name rather than dropping the
+    file from the inventory when this returns `None`.
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    for line in lines[1:]:
+        stripped = line.strip()
+        if stripped == "---":
+            break
+        if stripped.startswith("name:"):
+            value = stripped[len("name:"):].strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            return value or None
+    return None
+
+
+def _skill_entry(skill_dir: Path, plugin_name: str) -> InventoryEntry:
+    """One `plugins/<plugin>/skills/<name>/SKILL.md` entry.
+
+    SDD/The two inventories' skill glob is one level deep
+    (`skills/*/SKILL.md`), so there is no nested-path ambiguity to resolve
+    here -- `bare` and the tail of `qualified` are the same directory name.
+    """
+    bare = skill_dir.name
+    return InventoryEntry(qualified=f"{plugin_name}:{bare}", bare=bare, kind="skill")
+
+
+def _plugin_agent_entry(agent_path: Path, agents_root: Path, plugin_name: str) -> InventoryEntry:
+    """One `plugins/<plugin>/agents/**/*.md` entry.
+
+    `qualified` is built from the file's OWN path -- `<plugin>:<relative
+    path under agents/, without extension, "/" -> ":">` -- matching how
+    Claude Code actually dispatches a plugin agent (see the module comment
+    above), never from the frontmatter `name:` alone. `bare` is the
+    frontmatter `name:` when present; when it is not (`_read_frontmatter_name`
+    returned `None`), it falls back to the file's own stem rather than
+    dropping the entry.
+    """
+    relative = agent_path.relative_to(agents_root).with_suffix("")
+    qualified = f"{plugin_name}:" + ":".join(relative.parts)
+    bare = _read_frontmatter_name(agent_path) or relative.parts[-1]
+    return InventoryEntry(qualified=qualified, bare=bare, kind="agent")
+
+
+def _local_agent_entry(agent_path: Path) -> InventoryEntry:
+    """One `.claude/agents/*.md` entry -- repo-local, never plugin-namespaced.
+
+    Unlike a plugin agent there is no plugin prefix to disambiguate it, so
+    `qualified` and `bare` are the same value: the frontmatter `name:` when
+    present, else the file's own stem.
+    """
+    bare = _read_frontmatter_name(agent_path) or agent_path.stem
+    return InventoryEntry(qualified=bare, bare=bare, kind="agent")
+
+
+def walk_skill_agent_inventory(repo_root: Path) -> SkillAgentInventory:
+    """The skill and agent inventory: what could fire (SDD/The two
+    inventories, second table; PRD F8; SDD-AC-18).
+
+    A glob at report time, per the SDD -- `plugins/*/skills/*/SKILL.md`,
+    `plugins/*/agents/**/*.md` (genuinely recursive: this repo has agents
+    nested one level deep, e.g. `the-tester/test-strategy.md`, and two deep,
+    e.g. `the-architect/reference/robustness-checklists.md`), and
+    `.claude/agents/*.md` -- the last of which does not exist in this repo
+    at all today and must not error when absent, nor when `plugins/` itself
+    is absent.
+
+    Pure over `repo_root`: no reliance on `cwd`, matching
+    `walk_instruction_inventory`'s posture.
+    """
+    entries: list[InventoryEntry] = []
+
+    plugins_dir = repo_root / "plugins"
+    if plugins_dir.is_dir():
+        for plugin_dir in sorted(p for p in plugins_dir.iterdir() if p.is_dir()):
+            plugin_name = plugin_dir.name
+
+            skills_dir = plugin_dir / "skills"
+            if skills_dir.is_dir():
+                for skill_dir in sorted(p for p in skills_dir.iterdir() if p.is_dir()):
+                    if (skill_dir / "SKILL.md").is_file():
+                        entries.append(_skill_entry(skill_dir, plugin_name))
+
+            agents_dir = plugin_dir / "agents"
+            if agents_dir.is_dir():
+                for agent_path in sorted(agents_dir.rglob("*.md")):
+                    if agent_path.is_file():
+                        entries.append(_plugin_agent_entry(agent_path, agents_dir, plugin_name))
+
+    local_agents_dir = repo_root / ".claude" / "agents"
+    if local_agents_dir.is_dir():
+        for agent_path in sorted(local_agents_dir.glob("*.md")):
+            if agent_path.is_file():
+                entries.append(_local_agent_entry(agent_path))
+
+    return SkillAgentInventory(
+        entries=entries,
+        skill_count=sum(1 for e in entries if e.kind == "skill"),
+        agent_count=sum(1 for e in entries if e.kind == "agent"),
+    )
+
+
+def fired_names(records: Iterable[dict]) -> set[str]:
+    """Distinct `skill`/`agent_type` values named by `kind: skill` /
+    `kind: agent` records -- the numerator PRD F8's coverage fraction needs.
+
+    An empty string counts as unknown and is excluded here -- never folded
+    into a named entry -- the same posture T3.1 took for an empty `reason`
+    and T3.2 took for an unmeasurable `bytes` (module docstring points 1-2).
+    """
+    names: set[str] = set()
+    for rec in records:
+        kind = rec.get("kind")
+        if kind == "skill":
+            value = rec.get("skill")
+        elif kind == "agent":
+            value = rec.get("agent_type")
+        else:
+            continue
+        if isinstance(value, str) and value:
+            names.add(value)
+    return names
+
+
+class FiringCoverage(NamedTuple):
+    """The inventory join result: what fired, what did not, and what a
+    record named that this inventory does not recognize at all.
+
+    `fired`/`unused` partition `entries` completely -- SDD-AC-18: an
+    inventory entry absent from the record is UNUSED, never reported as
+    missing. `unmatched_record_names` is the opposite case (Other
+    constraints: "a record naming something absent from the inventory") --
+    a record naming something this inventory glob never found at all (a
+    built-in agent like `Explore`, or a skill/agent this report's glob does
+    not cover) -- reported rather than silently dropped.
+    `ambiguous_record_names` is the third case: a bare name shared by two or
+    more entries, present in a record, that could not be attributed to any
+    one of them (see `firing_coverage`) -- distinct from "not found at all"
+    so a reader is not misled into thinking the inventory has no such name.
+    """
+
+    fired: list[InventoryEntry]
+    unused: list[InventoryEntry]
+    unmatched_record_names: list[str]
+    ambiguous_record_names: list[str]
+
+    @property
+    def numerator(self) -> int:
+        return len(self.fired)
+
+    @property
+    def denominator(self) -> int:
+        return len(self.fired) + len(self.unused)
+
+
+def firing_coverage(entries: Sequence[InventoryEntry], fired: set[str]) -> FiringCoverage:
+    """Join `entries` against `fired` (the raw names a record actually carried).
+
+    A record matches an entry by its `qualified` name (always safe), or by
+    its `bare` name ONLY when that bare name is unique across `entries` --
+    two entries sharing one bare name (two plugins each shipping a
+    same-named skill, say) can never both be marked fired by one ambiguous
+    bare-name record; only the qualified form can single one of them out.
+    See the module comment above `InventoryEntry` for why both forms must be
+    accepted at all: which form a real record carries is confirmed at T3.6.
+    """
+    bare_counts: dict[str, int] = {}
+    for entry in entries:
+        bare_counts[entry.bare] = bare_counts.get(entry.bare, 0) + 1
+
+    fired_entries: list[InventoryEntry] = []
+    unused_entries: list[InventoryEntry] = []
+    matched_names: set[str] = set()
+
+    for entry in entries:
+        if entry.qualified in fired:
+            fired_entries.append(entry)
+            matched_names.add(entry.qualified)
+        elif bare_counts[entry.bare] == 1 and entry.bare in fired:
+            fired_entries.append(entry)
+            matched_names.add(entry.bare)
+        else:
+            unused_entries.append(entry)
+
+    unresolved = fired - matched_names
+    ambiguous_bare = {bare for bare, count in bare_counts.items() if count > 1}
+
+    return FiringCoverage(
+        fired=sorted(fired_entries, key=lambda e: e.qualified),
+        unused=sorted(unused_entries, key=lambda e: e.qualified),
+        unmatched_record_names=sorted(n for n in unresolved if n not in ambiguous_bare),
+        ambiguous_record_names=sorted(n for n in unresolved if n in ambiguous_bare),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Assembling the text report (SDD-AC-13 / PRD F4).
 # ---------------------------------------------------------------------------
 
@@ -736,6 +1019,47 @@ def _render_byte_accounting(byte_stats: ByteAccounting) -> list[str]:
     return lines
 
 
+def _render_firing_coverage(inventory: SkillAgentInventory, coverage: FiringCoverage) -> list[str]:
+    """The skill/agent inventory join: coverage as a fraction, and the
+    entries that never fired -- named as UNUSED, never as missing or absent
+    (SDD-AC-18, PRD F8).
+    """
+    lines = [
+        f"Skill and agent inventory (glob at report time): {len(inventory.entries)} entries found "
+        f"({inventory.skill_count} skill(s), {inventory.agent_count} agent(s)).",
+        "Matching rule: a record fires an entry when it names either that entry's qualified "
+        "name (<plugin>:<path under skills/ or agents/>) or its bare name (a skill's directory "
+        "name, or an agent's frontmatter `name:`) -- but a bare name is only ever used to credit "
+        "an entry when that bare name is unique across the whole inventory; two entries sharing "
+        "one bare name are never both marked fired by an ambiguous bare-name record. Which form a "
+        "real record actually carries is confirmed at T3.6 against a live session -- this join "
+        "accepts either deliberately until then.",
+        f"Coverage: {coverage.numerator}/{coverage.denominator} fired.",
+        "",
+        f"Never fired -- unused, not missing ({len(coverage.unused)}):",
+    ]
+    for entry in coverage.unused:
+        lines.append(f"  {entry.qualified} [{entry.kind}]")
+    if coverage.ambiguous_record_names:
+        lines.append("")
+        lines.append(
+            f"{len(coverage.ambiguous_record_names)} record(s) named a bare skill/agent shared by "
+            "two or more inventory entries and could not be attributed to one of them:"
+        )
+        for name in coverage.ambiguous_record_names:
+            lines.append(f"  {name}")
+    if coverage.unmatched_record_names:
+        lines.append("")
+        lines.append(
+            f"{len(coverage.unmatched_record_names)} record(s) named a skill/agent not found in "
+            "this inventory at all (a built-in agent, or one this glob does not cover):"
+        )
+        for name in coverage.unmatched_record_names:
+            lines.append(f"  {name}")
+    lines.append("")
+    return lines
+
+
 def build_load_report(
     stats: dict[str, InstructionFileStats],
     inventory: Sequence[str],
@@ -749,6 +1073,11 @@ def build_load_report(
     # is what pins that it stays wired.
     byte_stats: ByteAccounting | None = None,
     recording: RecordingStatus | None = None,
+    # T3.3: same optional-pair posture as byte_stats/recording above -- both
+    # `None` by default so every pre-existing caller/test keeps working
+    # unchanged, both required together to render the section at all.
+    skill_agent_inventory: SkillAgentInventory | None = None,
+    firing: FiringCoverage | None = None,
 ) -> str:
     """Render the load report: per-file counts and reasons, and what never loaded.
 
@@ -766,6 +1095,11 @@ def build_load_report(
     everything else -- the honesty rule (SDD-AC-15) is that an empty or
     stale record must lead with the recording state, never with a load
     figure presented as if it were a finding.
+
+    `skill_agent_inventory` and `firing` are optional (T3.3, same posture):
+    when both are given, a final section states the skill/agent inventory
+    size, coverage as a fraction, and every entry that never fired --
+    reported as UNUSED, never as missing (SDD-AC-18, PRD F8).
     """
     lines: list[str] = []
 
@@ -809,6 +1143,10 @@ def build_load_report(
     lines.append(f"Configured but never loaded ({len(missing)}):")
     for path in missing:
         lines.append(f"  {path}")
+
+    if skill_agent_inventory is not None and firing is not None:
+        lines.append("")
+        lines.extend(_render_firing_coverage(skill_agent_inventory, firing))
 
     return "\n".join(lines)
 
@@ -867,6 +1205,8 @@ def main(argv: list[str] | None = None) -> int:
     # untestable-by-construction, exactly like `Path.cwd()`/`Path.home()`
     # above.
     recording = recording_status(records, datetime.now(timezone.utc))
+    skill_agent_inventory = walk_skill_agent_inventory(args.repo_root)
+    firing = firing_coverage(skill_agent_inventory.entries, fired_names(records))
     print(
         build_load_report(
             stats,
@@ -875,6 +1215,8 @@ def main(argv: list[str] | None = None) -> int:
             inventory.git_filtered,
             byte_stats=byte_stats,
             recording=recording,
+            skill_agent_inventory=skill_agent_inventory,
+            firing=firing,
         )
     )
     return 0

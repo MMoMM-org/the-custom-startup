@@ -1249,6 +1249,314 @@ def _assert_redact_parity(path: Path, repo_root: Path) -> None:
     )
 
 
+# --- the skill and agent inventory (T3.3, SDD/The two inventories, second
+# table; PRD F8; SDD-AC-18) ---------------------------------------------------
+#
+# The namespace hazard this task exists to avoid: SDD/The two inventories
+# says literally "agent name from frontmatter `name:`", but a real plugin
+# agent is DISPATCHED under a qualified form, `<plugin>:<path under agents/,
+# without extension, "/" -> ":">` (verified in this repo:
+# plugins/tcs-team/agents/the-tester/test-strategy.md has frontmatter
+# `name: test-strategy` but dispatches as `tcs-team:the-tester:test-strategy`).
+# Every test below either pins that both forms are carried, or that the join
+# accepts either without ever double-crediting an ambiguous bare name.
+
+
+def _skill_record(skill: str, session: str = "s1", ts: str = "2026-09-06T16:43:28Z") -> dict:
+    return {"ts": ts, "kind": "skill", "session": session, "repo": "the-custom-startup", "skill": skill}
+
+
+def _agent_record(agent_type: str, session: str = "s1", ts: str = "2026-09-06T16:43:28Z") -> dict:
+    return {
+        "ts": ts, "kind": "agent", "session": session, "repo": "the-custom-startup",
+        "agent_type": agent_type, "agent_id": "1",
+    }
+
+
+def _make_skill(repo_root: Path, plugin: str, name: str) -> Path:
+    skill_dir = repo_root / "plugins" / plugin / "skills" / name
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
+    return skill_dir
+
+
+def _make_agent(repo_root: Path, plugin: str, relative: str, frontmatter_name: str | None) -> Path:
+    agent_path = repo_root / "plugins" / plugin / "agents" / relative
+    agent_path.parent.mkdir(parents=True, exist_ok=True)
+    if frontmatter_name is None:
+        agent_path.write_text("# no frontmatter here\n", encoding="utf-8")
+    else:
+        agent_path.write_text(f"---\nname: {frontmatter_name}\ndescription: x\n---\nbody\n", encoding="utf-8")
+    return agent_path
+
+
+# --- walk_skill_agent_inventory: building the inventory ---------------------
+
+
+def test_walk_skill_agent_inventory_finds_skill_qualified_and_bare(tmp_path):
+    _make_skill(tmp_path, "tcs-patterns", "observability")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    entry = next(e for e in inventory.entries if e.kind == "skill")
+    assert entry.qualified == "tcs-patterns:observability"
+    assert entry.bare == "observability"
+    assert inventory.skill_count == 1
+    assert inventory.agent_count == 0
+
+
+def test_walk_skill_agent_inventory_skill_dir_without_skill_md_excluded(tmp_path):
+    """A category directory that merely CONTAINS skill dirs (tcs-team's real
+    layout: plugins/tcs-team/skills/the-tester/test-strategy/SKILL.md is two
+    levels deep) must not itself be counted as a skill -- SDD/The two
+    inventories' glob is one level (`skills/*/SKILL.md`), not recursive."""
+    category_dir = tmp_path / "plugins" / "tcs-team" / "skills" / "quality"
+    category_dir.mkdir(parents=True)
+    (category_dir / "nested-skill").mkdir()
+    (category_dir / "nested-skill" / "SKILL.md").write_text("nested\n", encoding="utf-8")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    assert inventory.skill_count == 0
+    assert all(e.qualified != "tcs-team:quality" for e in inventory.entries)
+
+
+def test_walk_skill_agent_inventory_agent_name_from_frontmatter_not_filename(tmp_path):
+    _make_agent(tmp_path, "tcs-team", "leader.md", frontmatter_name="the-leader")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    entry = next(e for e in inventory.entries if e.kind == "agent")
+    assert entry.bare == "the-leader"  # from frontmatter, not the "leader" filename
+    assert entry.qualified == "tcs-team:leader"  # path-derived, disambiguating
+
+
+def test_walk_skill_agent_inventory_nested_agent_qualified_name(tmp_path):
+    """Mirrors the real repo: plugins/tcs-team/agents/the-tester/test-strategy.md
+    has frontmatter `name: test-strategy` but dispatches qualified as
+    `tcs-team:the-tester:test-strategy` -- the exact namespace hazard this
+    task exists to close."""
+    _make_agent(tmp_path, "tcs-team", "the-tester/test-strategy.md", frontmatter_name="test-strategy")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    entry = next(e for e in inventory.entries if e.kind == "agent")
+    assert entry.bare == "test-strategy"
+    assert entry.qualified == "tcs-team:the-tester:test-strategy"
+
+
+def test_walk_skill_agent_inventory_deeply_nested_agent_is_found(tmp_path):
+    """The `**` glob under agents/ must genuinely recurse two levels deep,
+    mirroring the real
+    plugins/tcs-team/agents/the-architect/reference/robustness-checklists.md."""
+    _make_agent(
+        tmp_path, "tcs-team", "the-architect/reference/robustness-checklists.md",
+        frontmatter_name=None,
+    )
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    entry = next(e for e in inventory.entries if e.kind == "agent")
+    assert entry.qualified == "tcs-team:the-architect:reference:robustness-checklists"
+
+
+def test_walk_skill_agent_inventory_missing_frontmatter_name_falls_back_to_filename(tmp_path):
+    """A real file in this repo
+    (plugins/tcs-team/agents/the-architect/reference/robustness-checklists.md)
+    has no frontmatter at all. It must not crash the walk, and must still be
+    included -- Claude Code's own harness lists it as a real dispatchable
+    agent, deriving a name from its path when frontmatter supplies none."""
+    _make_agent(tmp_path, "tcs-team", "reference/robustness-checklists.md", frontmatter_name=None)
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    entry = next(e for e in inventory.entries if e.kind == "agent")
+    assert entry.bare == "robustness-checklists"  # falls back to the file stem
+    assert entry.qualified == "tcs-team:reference:robustness-checklists"
+
+
+def test_walk_skill_agent_inventory_local_claude_agents_dir(tmp_path):
+    local_dir = tmp_path / ".claude" / "agents"
+    local_dir.mkdir(parents=True)
+    (local_dir / "helper.md").write_text("---\nname: helper\n---\nbody\n", encoding="utf-8")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    entry = next(e for e in inventory.entries if e.kind == "agent")
+    assert entry.qualified == "helper"  # no plugin prefix -- repo-local
+    assert entry.bare == "helper"
+
+
+def test_walk_skill_agent_inventory_missing_local_agents_dir_does_not_crash(tmp_path):
+    """`.claude/agents/` does not exist in this repo at all -- the real case
+    this glob must handle without error."""
+    tmp_path.mkdir(exist_ok=True)
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+    assert inventory.entries == []
+
+
+def test_walk_skill_agent_inventory_missing_plugins_dir_does_not_crash(tmp_path):
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+    assert inventory.entries == []
+    assert inventory.skill_count == 0
+    assert inventory.agent_count == 0
+
+
+def test_walk_skill_agent_inventory_states_skill_and_agent_counts(tmp_path):
+    _make_skill(tmp_path, "tcs-patterns", "observability")
+    _make_skill(tmp_path, "tcs-patterns", "testing")
+    _make_agent(tmp_path, "tcs-team", "the-chief.md", frontmatter_name="the-chief")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    assert inventory.skill_count == 2
+    assert inventory.agent_count == 1
+    assert len(inventory.entries) == 3
+
+
+# --- fired_names: the numerator, empty values counted as unknown -----------
+
+
+def test_fired_names_collects_skill_and_agent_values():
+    records = [_skill_record("tcs-patterns:observability"), _agent_record("Explore")]
+    assert report.fired_names(records) == {"tcs-patterns:observability", "Explore"}
+
+
+def test_fired_names_empty_skill_value_counted_as_unknown_not_a_named_entry():
+    records = [_skill_record("")]
+    assert report.fired_names(records) == set()
+
+
+def test_fired_names_empty_agent_type_value_counted_as_unknown_not_a_named_entry():
+    records = [_agent_record("")]
+    assert report.fired_names(records) == set()
+
+
+def test_fired_names_ignores_non_skill_agent_kinds():
+    records = [_instruction("a.md", "session_start"), _state("1")]
+    assert report.fired_names(records) == set()
+
+
+# --- firing_coverage: the join, and the ambiguity guard ---------------------
+
+
+def test_firing_coverage_record_with_qualified_name_matches():
+    entries = [report.InventoryEntry(qualified="tcs-team:the-tester:test-strategy", bare="test-strategy", kind="agent")]
+    coverage = report.firing_coverage(entries, {"tcs-team:the-tester:test-strategy"})
+    assert coverage.fired == entries
+    assert coverage.unused == []
+
+
+def test_firing_coverage_record_with_bare_name_matches():
+    entries = [report.InventoryEntry(qualified="tcs-team:the-tester:test-strategy", bare="test-strategy", kind="agent")]
+    coverage = report.firing_coverage(entries, {"test-strategy"})
+    assert coverage.fired == entries
+    assert coverage.unused == []
+
+
+def test_firing_coverage_unused_entry_is_unused_not_missing():
+    entries = [report.InventoryEntry(qualified="tcs-patterns:observability", bare="observability", kind="skill")]
+    coverage = report.firing_coverage(entries, set())
+    assert coverage.unused == entries
+    assert coverage.fired == []
+
+
+def test_firing_coverage_ambiguous_bare_name_collision_marks_neither_fired():
+    """Two plugins each ship a same-named skill -- an ambiguous bare-name
+    record must not mark BOTH (or either) as fired."""
+    a = report.InventoryEntry(qualified="plugin-a:testing", bare="testing", kind="skill")
+    b = report.InventoryEntry(qualified="plugin-b:testing", bare="testing", kind="skill")
+    coverage = report.firing_coverage([a, b], {"testing"})
+
+    assert coverage.fired == []
+    assert set(coverage.unused) == {a, b}
+    assert "testing" in coverage.ambiguous_record_names
+
+
+def test_firing_coverage_qualified_name_disambiguates_collision():
+    """The same collision as above, but the record carries the qualified
+    name -- exactly one of the two entries must be marked fired."""
+    a = report.InventoryEntry(qualified="plugin-a:testing", bare="testing", kind="skill")
+    b = report.InventoryEntry(qualified="plugin-b:testing", bare="testing", kind="skill")
+    coverage = report.firing_coverage([a, b], {"plugin-a:testing"})
+
+    assert coverage.fired == [a]
+    assert coverage.unused == [b]
+
+
+def test_firing_coverage_record_naming_absent_entry_is_reported_not_dropped():
+    entries = [report.InventoryEntry(qualified="tcs-patterns:observability", bare="observability", kind="skill")]
+    coverage = report.firing_coverage(entries, {"Explore"})
+
+    assert coverage.unused == entries
+    assert coverage.unmatched_record_names == ["Explore"]
+
+
+def test_firing_coverage_is_a_fraction():
+    entries = [
+        report.InventoryEntry(qualified="a:x", bare="x", kind="skill"),
+        report.InventoryEntry(qualified="a:y", bare="y", kind="skill"),
+        report.InventoryEntry(qualified="a:z", bare="z", kind="skill"),
+    ]
+    coverage = report.firing_coverage(entries, {"a:x"})
+
+    assert coverage.numerator == 1
+    assert coverage.denominator == 3
+
+
+# --- the report renders the join: coverage, unused entries, and the
+# inventory size (SDD-AC-18, PRD F8) -----------------------------------------
+
+
+def test_build_load_report_states_skill_agent_inventory_size_and_coverage():
+    inventory = report.SkillAgentInventory(
+        entries=[report.InventoryEntry(qualified="a:x", bare="x", kind="skill")],
+        skill_count=1,
+        agent_count=0,
+    )
+    coverage = report.firing_coverage(inventory.entries, set())
+
+    text = report.build_load_report({}, [], skill_agent_inventory=inventory, firing=coverage)
+
+    assert "1 entries found" in text or "1 entrie" in text  # inventory size stated
+    assert "0/1" in text  # coverage as a fraction
+
+
+def test_build_load_report_never_fired_skill_reported_as_unused_not_missing():
+    inventory = report.SkillAgentInventory(
+        entries=[report.InventoryEntry(qualified="tcs-patterns:observability", bare="observability", kind="skill")],
+        skill_count=1,
+        agent_count=0,
+    )
+    coverage = report.firing_coverage(inventory.entries, set())
+
+    text = report.build_load_report({}, [], skill_agent_inventory=inventory, firing=coverage)
+
+    assert "tcs-patterns:observability" in text
+    assert "unused" in text.lower()
+
+
+def test_build_load_report_fired_skill_not_listed_as_unused():
+    inventory = report.SkillAgentInventory(
+        entries=[report.InventoryEntry(qualified="tcs-patterns:observability", bare="observability", kind="skill")],
+        skill_count=1,
+        agent_count=0,
+    )
+    coverage = report.firing_coverage(inventory.entries, {"tcs-patterns:observability"})
+
+    text = report.build_load_report({}, [], skill_agent_inventory=inventory, firing=coverage)
+
+    assert "1/1" in text
+
+
+def test_build_load_report_without_skill_agent_inventory_omits_section():
+    """Pre-existing callers/tests that never pass skill_agent_inventory=/
+    firing= must keep working unchanged -- same posture as byte_stats=/
+    recording= in T3.2."""
+    text = report.build_load_report({}, [])
+    assert "never fired" not in text.lower()
+
+
 def test_redact_path_parity_nested_inside_repo(tmp_path):
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
