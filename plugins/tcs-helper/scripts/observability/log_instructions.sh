@@ -65,11 +65,17 @@ _load_reason="$(_observability_field "$_payload" load_reason)" || _load_reason="
 _trigger_file_path="$(_observability_field "$_payload" trigger_file_path)" || _trigger_file_path=""
 _parent_file_path="$(_observability_field "$_payload" parent_file_path)" || _parent_file_path=""
 
-# Eager loads at session start: the SDD documents session_start as the
-# default reason (README, "eager: session_start (default) and compact") —
-# applied here only when the payload omits the field entirely, never
-# overriding a value the payload actually carries.
-[ -n "$_load_reason" ] || _load_reason="session_start"
+# No fallback here on purpose. The README's "eager: session_start (default)
+# and compact" describes what the REAL harness does at its emission sites —
+# load_reason is verified always present there — not a license for this
+# adapter to invent a value when a payload lacks the field. A payload
+# missing load_reason entirely is an anomaly (a harness version drift, a
+# malformed payload), and fabricating "session_start" would make that
+# anomaly permanently indistinguishable from a genuine session-start load
+# once it reaches report.py — exactly the "records wrong things" failure
+# this design exists to avoid. Left as extracted: empty when absent, which
+# `reason=$_load_reason` below still WRITES (the schema has no `?` on
+# `reason`), just with an empty value the report can flag as unknown.
 
 _path="$(_observability_redact_path "$_file_path" "$_toplevel")" || _path=""
 

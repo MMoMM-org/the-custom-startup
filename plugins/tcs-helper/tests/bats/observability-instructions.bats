@@ -151,6 +151,41 @@ _assert_present() {             # _assert_present <needle> <file>
 }
 
 # ---------------------------------------------------------------------------
+# 1b. A payload that omits load_reason entirely must not have the adapter
+#    INVENT a value. session_start is the harness's real default for eager
+#    loads, but the SDD's own emission-site contract says the field is
+#    always present on a real payload — so a payload missing it entirely is
+#    an anomaly, not a normal eager load. Fabricating "session_start" would
+#    make that anomaly indistinguishable from a genuine one downstream (the
+#    report cannot tell an invented value from a real one). The record still
+#    carries `reason` (the schema has no `?` on it), just empty — honest
+#    about not knowing, the same posture `bytes` already takes on a stat
+#    failure.
+# ---------------------------------------------------------------------------
+
+@test "a payload with no load_reason at all yields reason empty, never a fabricated session_start" {
+  local data_dir="$TEST_DIR/rec1b"
+  local payload
+  payload="$(_payload_json \
+    session_id=sess-1b \
+    file_path="$REPO_CANONICAL/base.txt" \
+    memory_type=Project)"
+    # load_reason deliberately omitted
+
+  run _run_adapter "$data_dir" "$payload"
+  [ "$status" -eq 0 ]
+
+  local file
+  file="$(_events_file "$data_dir")"
+  [ -f "$file" ]
+  run wc -l < "$file"
+  [ "${output// /}" = "1" ]
+
+  _assert_present '"reason":""' "$file"
+  _assert_absent '"reason":"session_start"' "$file"
+}
+
+# ---------------------------------------------------------------------------
 # 2. path_glob_match: trigger populated from trigger_file_path.
 # ---------------------------------------------------------------------------
 
@@ -266,6 +301,30 @@ _assert_present() {             # _assert_present <needle> <file>
 # 6. A path that cannot be stat'ed yields a record WITHOUT the bytes field —
 #    not zero, not empty, absent — and the record itself still exists.
 # ---------------------------------------------------------------------------
+
+@test "bytes is 0, not absent, for a genuinely empty file" {
+  local data_dir="$TEST_DIR/rec6b"
+  local fixture="$REPO_CANONICAL/empty-fixture.txt"
+  : > "$fixture"   # genuinely empty: 0 bytes, distinct from a missing file
+
+  local payload
+  payload="$(_payload_json \
+    session_id=sess-6b \
+    file_path="$fixture" \
+    memory_type=Project \
+    load_reason=session_start)"
+
+  run _run_adapter "$data_dir" "$payload"
+  [ "$status" -eq 0 ]
+
+  local file
+  file="$(_events_file "$data_dir")"
+  [ -f "$file" ]
+  # Present, with the value "0" — never absent (that would be indistinguishable
+  # from a stat failure) and never the empty string.
+  _assert_present '"bytes":"0"' "$file"
+  _assert_absent '"bytes":""' "$file"
+}
 
 @test "a path that cannot be stat'ed yields a record without bytes, not a missing record" {
   local data_dir="$TEST_DIR/rec6"
