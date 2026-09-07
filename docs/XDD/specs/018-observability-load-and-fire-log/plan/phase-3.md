@@ -69,7 +69,7 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   4. Validate: `pytest -q` green; the module is importable and unit-testable without a live session
   5. Success: `[ref: SDD/SDD-AC-13]`; `[ref: PRD/F4]`
 
-- [ ] **T3.2 Byte accounting and the honesty rule** `[activity: backend-api]`
+- [x] **T3.2 Byte accounting and the honesty rule** `[activity: backend-api]`
 
   1. Prime: read the honesty requirement `[ref: SDD/Quality Requirements]`
   2. Test: reports the measured byte cost of the always-loaded layer separately from conditional
