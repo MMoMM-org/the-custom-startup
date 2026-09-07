@@ -334,6 +334,27 @@ _ms_value() {
   [ "$ms" -lt 150 ]
 }
 
+@test "a multi-second duration records ms with the integer multiplier exercised (not 1000x skipped)" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+
+  "$WRAPPER" --event PreToolUse --matcher Skill -- "$(command -v sleep)" 1.3 \
+    >/dev/null 2>/dev/null
+  [ "$?" -eq 0 ]
+
+  [ -f "$EVENTS_FILE" ]
+  local ms
+  ms="$(_ms_value "$EVENTS_FILE")"
+  [ -n "$ms" ]
+  # 1.3 seconds = ~1300ms. With the formula broken (int + frac instead of int*1000 + frac),
+  # the result would be ~301ms. Our lower bound of 1150 catches the mutation while our upper
+  # bound of 1800 allows for system load without flaking. This ensures the * 1000 multiplier
+  # on the integer seconds term is actually exercised by the test, not hidden by int=0.
+  [ "$ms" -ge 1150 ]
+  [ "$ms" -le 1800 ]
+}
+
 # ---------------------------------------------------------------------------
 # 7. hook_event/matcher in the record match whatever CLI flags were given,
 #    even when they look nothing like a real event/matcher pair -- proof the
