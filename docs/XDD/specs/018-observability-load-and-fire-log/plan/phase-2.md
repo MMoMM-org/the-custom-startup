@@ -99,7 +99,7 @@ Delivers the three capture paths and turns the feature on in this repo for the f
   4. Validate: bats green; nothing on stdout
   5. Success: `[ref: SDD/SDD-AC-16]`; `[ref: PRD/F5]`
 
-- [ ] **T2.4 Registration and self-check** `[activity: infrastructure]`
+- [x] **T2.4 Registration and self-check** `[activity: infrastructure]`
 
   1. Prime: read the hook registration shape in `plugins/tcs-helper/hooks/hooks.json` and the
      directory map `[ref: SDD/Directory Map]`
@@ -120,6 +120,28 @@ Delivers the three capture paths and turns the feature on in this repo for the f
   5. Success: `[ref: SDD/SDD-AC-1]`; the `kind: state` record exists `[ref: SDD/Application Data Models]`;
      `[ref: PRD/F3]` (nothing recorded while off); a reader who has never seen this spec can enable,
      locate and delete the record from the written note alone
+
+  > **Done, with the registration deliberately left to the maintainer.** `selfcheck.sh`, the
+  > user-facing `README.md` and 8 tests landed in `468f340`; the registration snippet is documented
+  > in that README rather than written into `.claude/settings.json`, because registering an
+  > `InstructionsLoaded` hook switches on the harness's eager-load bookkeeping in every session in
+  > this repo, recording on or off. That is the maintainer's call, not an implementation detail.
+  >
+  > **Step 4 ran for real** — a live session in an isolated scratch repo with all three adapters
+  > registered, `CLAUDE_OBSERVABILITY_ENABLED=1`. It settled both UNVERIFIED payload assumptions:
+  >
+  > - **`skill` is the right key** — CONFIRMED. A real `PreToolUse` payload produced
+  >   `{"kind":"skill","skill":"dataviz"}`. Previously only inferred from 358 transcript observations.
+  > - **`parent_agent` does not exist** — DISPROVEN. A genuinely nested dispatch (the session's own
+  >   answer confirms the chain, and the timestamps show the child five seconds after its parent)
+  >   produced a record with no parent field. Removed from the record shape in `5e05b97`, together
+  >   with the binary and live-doc evidence.
+  >
+  > Also confirmed against real payloads: `agent_type`/`agent_id` are correct; `bytes` matched the
+  > fixture file exactly (36 bytes); an outside-the-repo path was reduced to its basename while a
+  > repo-local one stayed repo-relative; `reason: session_start` and `scope: Project`/`User` both
+  > populated correctly.
+
 
 - [ ] **T2.5 Phase Validation** `[activity: validate]`
 
