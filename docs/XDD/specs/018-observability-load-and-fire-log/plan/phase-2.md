@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Adapters and registration"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 2
 ---
@@ -53,7 +53,7 @@ call. T1.4 does not block this phase.
 
 Delivers the three capture paths and turns the feature on in this repo for the first time.
 
-- [ ] **T2.1 Instruction-load adapter** `[activity: backend-api]` `[parallel: true]`
+- [x] **T2.1 Instruction-load adapter** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: read the `InstructionsLoaded` payload contract and the five load reasons
      `[ref: SDD/Interface Specifications]`
@@ -71,7 +71,7 @@ Delivers the three capture paths and turns the feature on in this repo for the f
   5. Success: `[ref: SDD/SDD-AC-2, SDD-AC-3, SDD-AC-4]`; `[ref: PRD/F1]`; `bytes` is populated,
      without which PRD F4's byte-cost report has no input `[ref: SDD/SDD-AC-14]`
 
-- [ ] **T2.2 Skill adapter** `[activity: backend-api]` `[parallel: true]`
+- [x] **T2.2 Skill adapter** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: read the `PreToolUse` payload shape and the nested-`tool_input` caveat
      `[ref: SDD/Known Technical Issues]`
