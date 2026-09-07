@@ -374,6 +374,35 @@ def test_walk_instruction_inventory_missing_sources_do_not_crash(tmp_path):
     assert report.walk_instruction_inventory(repo_root, home_dir).entries == []
 
 
+def test_walk_instruction_inventory_deduplicates_redacted_paths(tmp_path):
+    """Paths redacting to the same string must appear only once in entries.
+
+    _redact_path is many-to-one by design: paths outside the repo collapse to
+    their basename (R-3), so ~/path/CLAUDE.md and repo_root/CLAUDE.md both
+    redact to "CLAUDE.md". De-duplicating Path objects before redaction is
+    insufficient -- the redaction itself must produce a set to remove duplicates.
+    """
+    repo_root = tmp_path / "repo"
+    home_dir = tmp_path / "home"
+    repo_root.mkdir(parents=True)
+    (home_dir / ".claude" / "rules").mkdir(parents=True)
+
+    # Create repo-root CLAUDE.md
+    (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
+
+    # Create home-dir CLAUDE.md -- will redact to the same string
+    (home_dir / ".claude" / "CLAUDE.md").write_text("# home\n", encoding="utf-8")
+
+    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+
+    # Both files exist but redact to "CLAUDE.md"
+    assert "CLAUDE.md" in inventory.entries
+    # The critical assertion: no duplicates in the entries list
+    assert len(inventory.entries) == len(set(inventory.entries))
+    # And "CLAUDE.md" should appear exactly once
+    assert inventory.entries.count("CLAUDE.md") == 1
+
+
 # --- nested CLAUDE.md files (SDD amendment, 2026-09-07, T3.1 review) --------
 #
 # A nested CLAUDE.md is one of the five verified `load_reason` values
@@ -544,8 +573,10 @@ def test_walk_instruction_inventory_outside_repo_path_not_dropped_by_filter(tmp_
     inventory = report.walk_instruction_inventory(repo_root, home_dir)
 
     # Both the repo root and the home CLAUDE.md redact to the same basename
-    # (R-3); the point is that filtering did not silently drop either.
-    assert inventory.entries.count("CLAUDE.md") == 2
+    # (R-3), and filtering did not silently drop the outside-repo one. Both
+    # are found, but de-duplicated after redaction to a single entry.
+    assert "CLAUDE.md" in inventory.entries
+    assert inventory.entries.count("CLAUDE.md") == 1  # de-duplicated
     assert inventory.git_filtered is True
 
 

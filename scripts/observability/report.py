@@ -404,7 +404,11 @@ def walk_instruction_inventory(repo_root: Path, home_dir: Path) -> InstructionIn
         kept = (inside_repo - ignored) | outside_repo
 
     return InstructionInventory(
-        entries=sorted(_redact_path(p, repo_root) for p in kept),
+        # De-duplicate after redaction: _redact_path is many-to-one by design
+        # (outside-repo paths collapse to basename), so distinct Path objects
+        # can redact to the same string. De-duplicating Path objects upstream
+        # is insufficient -- the set here removes the redacted duplicates.
+        entries=sorted({_redact_path(p, repo_root) for p in kept}),
         git_filtered=git_filtered,
     )
 
