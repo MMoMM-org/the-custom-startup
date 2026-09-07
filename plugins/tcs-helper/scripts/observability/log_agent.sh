@@ -20,8 +20,8 @@
 #     invoked by a `set -euo pipefail` caller must never abort it, and its
 #     own stdout must stay empty (CON-4: a hook's stdout is parsed as JSON).
 #   - CON-7: `_observability_write` already forks `git rev-parse` (and
-#     `date`) once per record; this adapter adds no fork of its own beyond
-#     the one unavoidable read of its own stdin.
+#     `date`) once per record; this adapter adds no fork of its own -- its
+#     own stdin read is fork-free (see below).
 #
 # ---------------------------------------------------------------------------
 # PAYLOAD KEYS -- verification status, read this before touching them.
@@ -62,12 +62,16 @@ _LOG_AGENT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 # shellcheck disable=SC1091
 . "$_LOG_AGENT_SCRIPT_DIR/logwrite.sh" || exit 0
 
-# Read the whole hook payload in one shot. `cat` is the one unavoidable fork
-# here (bash 3.2's `read` builtin only reads one line at a time, and hook
-# JSON is not guaranteed to arrive as a single line) -- every adapter in
-# this spec pays it once, matching the rest of this repo's hook scripts
-# (e.g. plugins/tcs-git-helpers/scripts/nudge-hook.sh's `INPUT=$(cat)`).
-_payload="$(cat 2>/dev/null)" || _payload=""
+# Read the whole hook payload in one shot, fork-free (CON-7): `read -d ''`
+# reads to EOF and reports non-zero when no NUL delimiter was found, which
+# is always, for a JSON payload -- the `|| true` is what makes that expected
+# outcome, not a real failure. Matches log_skill.sh's own stdin read
+# exactly. (Corrects an earlier version of this comment, which forked
+# `cat` here on the mistaken claim that bash 3.2's `read` builtin can only
+# read stdin one line at a time -- `read -r -d ''` reads the whole stream
+# regardless of embedded newlines, so that fork was never necessary.)
+_payload=""
+IFS= read -r -d '' _payload || true
 
 _session_id="$(_observability_field "$_payload" session_id)" || _session_id=""
 _agent_type="$(_observability_field "$_payload" "$AGENT_PAYLOAD_KEY_TYPE")" || _agent_type=""

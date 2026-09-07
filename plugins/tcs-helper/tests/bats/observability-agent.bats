@@ -367,3 +367,161 @@ assert val == '', 'agent_type should be absent or empty, got %r' % (val,)
 
   _assert_absent "$canary" "$file"
 }
+
+# ---------------------------------------------------------------------------
+# 8. Test 7's canary protection only reaches the two fields its fixture
+#    happens to seed (cwd, transcript_path) -- it says nothing about a
+#    deny-listed field extracted and emitted under a DIFFERENT name, which
+#    is exactly the blind spot the phase-2 BINDING NOTE calls out: the
+#    writer's bare-name deny list is an exact-match fail-safe, so a field
+#    like `prompt` re-emitted as `psummary` bypasses it entirely. This test
+#    seeds the canary in `prompt` (bare-name deny-listed) instead, so the
+#    guarantee generalises past the two names test 7 happens to cover.
+#
+#    Confirmed RED against a scratch mutation: temporarily adding
+#      _prompt="$(_observability_field "$_payload" prompt)" || _prompt=""
+#      ... psummary="$_prompt" ...
+#    to log_agent.sh (extracting `prompt` and re-emitting it under the
+#    unlisted name `psummary`) makes this test fail while test 7 stays
+#    green -- proving test 7 alone would not have caught it.
+# ---------------------------------------------------------------------------
+
+@test "a canary in the deny-listed 'prompt' field never leaks into the record under any field name" {
+  local data_dir="$TEST_DIR/rec8"
+  local canary="CANARY-PROMPT-9b4e21ac"
+  local payload
+  payload="$(_payload_json \
+    session_id=sess-8 \
+    cwd="$REPO_CANONICAL" \
+    prompt="do the thing $canary" \
+    agent_type=Explore \
+    agent_id=agent-0008)"
+
+  run _run_adapter "$data_dir" "$payload"
+  [ "$status" -eq 0 ]
+
+  local file
+  file="$(_events_file "$data_dir")"
+  [ -f "$file" ]
+
+  _assert_absent "$canary" "$file"
+}
+
+# ---------------------------------------------------------------------------
+# 9. Large-payload path. `_observability_field` (logwrite.sh, phase 1) is
+#    quadratic when the sought key is ABSENT from a large payload -- this
+#    adapter calls it unconditionally for AGENT_PAYLOAD_KEY_PARENT, a key
+#    absent on every non-nested dispatch (the common case). The quadratic
+#    mechanism itself lives in logwrite.sh and is out of scope for this
+#    file (being fixed centrally); this test exists so the large-payload
+#    path is exercised by something, and so a further regression in THIS
+#    adapter's own extraction calls (e.g. an accidental second full-payload
+#    scan added here) would be caught rather than silently accepted.
+#
+#    Bound chosen: a 150 KB payload (agent_type/agent_id present near the
+#    front, no parent key -- realistic shape, worst-case absent-key search
+#    over the padding) measured at ~6.6s on the machine this suite was
+#    authored on, against the CURRENT, still-quadratic logwrite.sh. 30s
+#    leaves roughly 4x headroom for slower CI runners while still failing
+#    hard on a real regression -- the reviewer's own measurement put a
+#    2 MB payload at "did not finish inside two minutes", four orders of
+#    magnitude past this bound.
+# ---------------------------------------------------------------------------
+
+_LARGE_PAYLOAD_TIMEOUT_SECS=30
+
+# Portable bounded run: no dependency on GNU `timeout`/`gtimeout`, which
+# this repo's own macOS CI runners do not ship (CON-1's BSD-userland
+# concern applies to the TEST too, not just the adapter). Backgrounds the
+# adapter and a watchdog subshell side by side; whichever the plain
+# foreground `wait` on the adapter's pid returns from first decides the
+# outcome -- a normal exit reports its real status, a watchdog kill makes
+# `wait` return a signal-based nonzero status, which the assertion below
+# treats the same as "did not finish correctly". bash 3.2 compatible: no
+# `wait -n` (bash 4.3+) and no fractional `sleep` (BSD sleep has none).
+#
+# The watchdog's own stdout/stderr/fd3/fd4 are all closed off up front --
+# NOT cosmetic, and not just `2>&1`. Without this, every call was measured
+# to take the FULL `secs` bound even on the fast path: `kill
+# "$watchdog_pid"` (below) kills the watchdog SUBSHELL, but not the
+# `sleep` it is currently blocked in -- that grandchild is reparented and
+# keeps running to completion, and for as long as it still holds an
+# inherited output fd open, bats' `run` (which captures via `$(...)`,
+# itself reading a pipe that only reports EOF once every holder of the
+# write end has closed it) blocks until that fd's last writer closes, i.e.
+# until the orphaned sleep finishes on its own. `>/dev/null 2>&1` alone was
+# NOT enough here: bats-core (libexec/bats-core/bats-exec-test) also keeps
+# fd 3 as a duplicate of the original stdout (`exec 3<&1`, bypassing
+# `run`'s own redirection) and tracing.bash keeps fd 4 for the same
+# purpose -- both still get inherited by anything backgrounded unless
+# closed explicitly. Closing all four is what lets `run` return as soon as
+# the real work (the `wait "$target_pid"` below) actually finishes, rather
+# than whenever the watchdog's last orphaned descendant happens to exit.
+_run_adapter_bounded() {
+  local secs="$1" data_dir="$2" payload_file="$3"
+  bash -c '
+    secs="$1"; data_dir="$2"; payload_file="$3"
+    cd "'"$REPO"'" || exit 90
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    "'"$ADAPTER"'" < "$payload_file" &
+    target_pid=$!
+    ( sleep "$secs"
+      kill -TERM "$target_pid" 2>/dev/null
+      sleep 1
+      kill -KILL "$target_pid" 2>/dev/null
+    ) >/dev/null 2>&1 3>&- 4>&- &
+    watchdog_pid=$!
+    if wait "$target_pid"; then
+      result=0
+    else
+      result=$?
+    fi
+    kill "$watchdog_pid" 2>/dev/null
+    wait "$watchdog_pid" 2>/dev/null
+    exit "$result"
+  ' _ "$secs" "$data_dir" "$payload_file"
+}
+
+@test "a large payload (150 KB, parent key absent) completes within the bound and writes a well-formed record" {
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 not available to build the large fixture payload"
+  fi
+
+  local data_dir="$TEST_DIR/rec9"
+  local payload_file="$TEST_DIR/large_payload.json"
+
+  # agent_type/agent_id sit near the FRONT, matching a real payload's
+  # shape; the padding stands in for the rest of a large real payload and
+  # is what makes the ABSENT parent-key search expensive under the
+  # current, still-quadratic extractor. Compact separators -- a space
+  # after ':' would stop `_observability_field`'s own `"key":"` match from
+  # ever landing, silently turning this into a no-op test.
+  python3 -c "
+import json
+pad = 'x' * 150000
+obj = {
+    'session_id': 'sess-large',
+    'cwd': '$REPO_CANONICAL',
+    'agent_type': 'Explore',
+    'agent_id': 'agent-large',
+    'padding': pad,
+}
+with open('$payload_file', 'w') as f:
+    f.write(json.dumps(obj, separators=(',', ':')))
+"
+  [ -f "$payload_file" ]
+
+  run _run_adapter_bounded "$_LARGE_PAYLOAD_TIMEOUT_SECS" "$data_dir" "$payload_file"
+  [ "$status" -eq 0 ]
+
+  local file
+  file="$(_events_file "$data_dir")"
+  [ -f "$file" ]
+  run wc -l < "$file"
+  [ "${output// /}" = "1" ]
+
+  _assert_present '"kind":"agent"' "$file"
+  _assert_present '"agent_type":"Explore"' "$file"
+  _assert_present '"agent_id":"agent-large"' "$file"
+}
