@@ -219,6 +219,62 @@ def _collect_claude_md_imports(
         _collect_claude_md_imports(candidate, home_dir, found, seen)
 
 
+# Directories never descended into while walking the repo for nested
+# CLAUDE.md files -- version control internals and dependency trees the
+# loader itself never reads as instructions.
+_WALK_SKIP_DIRS = frozenset({".git", "node_modules", ".venv"})
+
+
+def _is_test_fixture_path(relative: Path) -> bool:
+    """True if `relative`'s parts contain a `tests` segment immediately
+    followed by a `fixtures` segment.
+
+    SDD/The two inventories, exclusion: a CLAUDE.md under a `tests/fixtures/`
+    path segment is test data, not configuration. Matched by path *segment*,
+    not substring, so a directory named e.g. `tests-fixtures` or
+    `my-tests/fixtures-sample` -- which merely contains the words -- is not
+    wrongly excluded, at any depth.
+    """
+    parts = relative.parts
+    return any(
+        parts[i] == "tests" and parts[i + 1] == "fixtures" for i in range(len(parts) - 1)
+    )
+
+
+def _walk_nested_claude_md(repo_root: Path) -> set[Path]:
+    """Every CLAUDE.md under `repo_root`, excluding the root file itself and
+    any under a `tests/fixtures/` path segment (test data, not
+    configuration).
+
+    Amendment, 2026-09-07 (T3.1 review, SDD/The two inventories): the
+    original inventory only walked the CLAUDE.md hierarchy from `repo_root`
+    upward, missing nested subdirectory CLAUDE.md files entirely -- even
+    though `nested_traversal` is a verified `load_reason`, so the record can
+    demonstrably show one loading. A nested file that never loads was
+    therefore invisible to "configured but never loaded" (PRD F4). This
+    closes that gap with a plain filesystem walk, skipping `.git`,
+    `node_modules`, and `.venv`.
+    """
+    found: set[Path] = set()
+    root_resolved = repo_root.resolve()
+    for candidate in repo_root.rglob("CLAUDE.md"):
+        if not candidate.is_file():
+            continue
+        resolved = candidate.resolve()
+        if resolved == root_resolved / "CLAUDE.md":
+            continue
+        try:
+            relative = resolved.relative_to(root_resolved)
+        except ValueError:
+            continue
+        if any(part in _WALK_SKIP_DIRS for part in relative.parts):
+            continue
+        if _is_test_fixture_path(relative):
+            continue
+        found.add(resolved)
+    return found
+
+
 def walk_instruction_inventory(repo_root: Path, home_dir: Path) -> list[str]:
     """The instruction inventory: what could load, enumerated by filesystem walk.
 
@@ -228,6 +284,10 @@ def walk_instruction_inventory(repo_root: Path, home_dir: Path) -> list[str]:
 
       - the CLAUDE.md hierarchy from `repo_root` upward, plus every
         `@`-import reachable from it, resolved transitively
+      - every nested CLAUDE.md within the repo, excluding any under a
+        `tests/fixtures/` path segment (amendment, 2026-09-07, T3.1 review --
+        see docs/XDD/specs/018-observability-load-and-fire-log/solution.md,
+        "The two inventories")
       - docs/ai/memory/*.md
       - .claude/rules/**/*.md, in the repo and under `home_dir`
       - `home_dir`/.claude/CLAUDE.md
@@ -241,6 +301,9 @@ def walk_instruction_inventory(repo_root: Path, home_dir: Path) -> list[str]:
     root_claude = repo_root / "CLAUDE.md"
     if root_claude.is_file():
         _collect_claude_md_imports(root_claude, home_dir, found)
+
+    if repo_root.is_dir():
+        found.update(_walk_nested_claude_md(repo_root))
 
     memory_dir = repo_root / "docs" / "ai" / "memory"
     if memory_dir.is_dir():

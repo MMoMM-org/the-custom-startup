@@ -346,6 +346,115 @@ def test_walk_instruction_inventory_missing_sources_do_not_crash(tmp_path):
     assert report.walk_instruction_inventory(repo_root, home_dir) == []
 
 
+# --- nested CLAUDE.md files (SDD amendment, 2026-09-07, T3.1 review) --------
+#
+# A nested CLAUDE.md is one of the five verified `load_reason` values
+# (`nested_traversal`). Before the amendment, a nested file could appear in
+# the numerator (a real load record) but never in the denominator, so a
+# nested file that never loaded was invisible to "configured but never
+# loaded". The exclusion keeps a `tests/fixtures/` CLAUDE.md -- test data,
+# not configuration -- from inflating the count.
+
+
+def test_walk_instruction_inventory_finds_nested_claude_md(tmp_path):
+    repo_root = tmp_path / "repo"
+    home_dir = tmp_path / "home"
+    (repo_root / "docs").mkdir(parents=True)
+    home_dir.mkdir()
+    (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
+    (repo_root / "docs" / "CLAUDE.md").write_text("# docs\n", encoding="utf-8")
+
+    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+
+    assert "docs/CLAUDE.md" in inventory
+
+
+def test_walk_instruction_inventory_excludes_tests_fixtures_claude_md(tmp_path):
+    repo_root = tmp_path / "repo"
+    home_dir = tmp_path / "home"
+    fixtures_dir = repo_root / "plugins" / "example" / "tests" / "fixtures" / "sample-docs"
+    fixtures_dir.mkdir(parents=True)
+    home_dir.mkdir()
+    (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
+    (fixtures_dir / "CLAUDE.md").write_text("# fixture\n", encoding="utf-8")
+
+    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+
+    assert "plugins/example/tests/fixtures/sample-docs/CLAUDE.md" not in inventory
+
+
+def test_walk_instruction_inventory_similarly_named_dir_is_not_wrongly_excluded(tmp_path):
+    """`tests/fixtures` must be matched as path segments, not a substring.
+
+    A directory legitimately named `tests-fixtures` (one segment, hyphenated)
+    or `my-tests/fixtures-sample` (segments that merely contain the words)
+    must not trip the exclusion -- only an exact `tests` segment immediately
+    followed by an exact `fixtures` segment does.
+    """
+    repo_root = tmp_path / "repo"
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    (repo_root / "CLAUDE.md").parent.mkdir(parents=True, exist_ok=True)
+    (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
+
+    one_segment = repo_root / "tests-fixtures"
+    one_segment.mkdir(parents=True)
+    (one_segment / "CLAUDE.md").write_text("# one-segment\n", encoding="utf-8")
+
+    two_segments = repo_root / "my-tests" / "fixtures-sample"
+    two_segments.mkdir(parents=True)
+    (two_segments / "CLAUDE.md").write_text("# two-segments\n", encoding="utf-8")
+
+    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+
+    assert "tests-fixtures/CLAUDE.md" in inventory
+    assert "my-tests/fixtures-sample/CLAUDE.md" in inventory
+
+
+def test_walk_instruction_inventory_reaches_deeply_nested_claude_md(tmp_path):
+    repo_root = tmp_path / "repo"
+    home_dir = tmp_path / "home"
+    deep = repo_root / "a" / "b" / "c"
+    deep.mkdir(parents=True)
+    home_dir.mkdir()
+    (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
+    (deep / "CLAUDE.md").write_text("# deep\n", encoding="utf-8")
+
+    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+
+    assert "a/b/c/CLAUDE.md" in inventory
+
+
+def test_walk_instruction_inventory_root_claude_md_not_double_counted(tmp_path):
+    repo_root = tmp_path / "repo"
+    home_dir = tmp_path / "home"
+    repo_root.mkdir()
+    home_dir.mkdir()
+    (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
+
+    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+
+    assert inventory.count("CLAUDE.md") == 1
+
+
+def test_walk_instruction_inventory_nested_entries_are_redacted(tmp_path):
+    """Nested CLAUDE.md entries go through the same `_redact_path` as everything
+    else, so they compare equal to what the bash writer puts in a record's
+    `path` field -- a repo-relative posix path, not an absolute one."""
+    repo_root = tmp_path / "repo"
+    home_dir = tmp_path / "home"
+    nested = repo_root / "docs" / "ai" / "CLAUDE.md"
+    nested.parent.mkdir(parents=True)
+    home_dir.mkdir()
+    (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
+    nested.write_text("# nested\n", encoding="utf-8")
+
+    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+
+    assert "docs/ai/CLAUDE.md" in inventory
+    assert not any(str(repo_root) in entry for entry in inventory)
+
+
 # --- the assembled text report ---------------------------------------------
 
 
