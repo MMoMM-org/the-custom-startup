@@ -193,10 +193,18 @@ exec 3>&- 4>&-
 # logging path, including a total failure to write, can change what is
 # finally returned. `_observability_write` is fail-open by its own contract
 # (logwrite.sh) and never touches stdout or stderr either.
+#
+# SESSION CAVEAT (SDD-AC-5, T3.5): the `session` field is taken from
+# $CLAUDE_CODE_SESSION_ID, an environment variable set by the harness.
+# UNVERIFIED: that this variable reaches a harness-spawned hook (memory
+# records CLAUDE_PLUGIN_ROOT does NOT; CLAUDECODE does — propagation is
+# variable), and that its value equals the payload's session_id. Both are
+# confirmed in T3.6 against a live session. When unset, field is empty.
 _observability_write \
   kind=hook \
   hook_event="$_timed_wrapper_event" \
   matcher="$_timed_wrapper_matcher" \
+  session="${CLAUDE_CODE_SESSION_ID:-}" \
   ms="$_timed_wrapper_ms" \
   exit="$_timed_wrapper_status" \
   scope_note=single

@@ -562,3 +562,78 @@ _line_count() {
   # onto the wrapped command's stdout.
   [ ! -s "$wrapped_out" ]
 }
+
+# ---------------------------------------------------------------------------
+# T3.5 SESSION CAVEAT: the hook record's `session` field comes from the
+# environment variable $CLAUDE_CODE_SESSION_ID, not from the payload stdin.
+# It is taken as-is when present, and empty when absent. This test suite
+# verifies that assumption (marked UNVERIFIED in the SDD, T3.6 confirms it
+# against live sessions).
+# ---------------------------------------------------------------------------
+
+@test "T3.5: with CLAUDE_CODE_SESSION_ID set, the hook record carries that session value" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+  export CLAUDE_CODE_SESSION_ID="test-session-abc123"
+
+  printf 'payload-with-session' | \
+    "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    >/dev/null 2>/dev/null
+
+  [ -f "$EVENTS_FILE" ]
+  _assert_present '"session":"test-session-abc123"' "$EVENTS_FILE"
+}
+
+@test "T3.5: with CLAUDE_CODE_SESSION_ID unset, the hook record carries an empty session" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+  unset CLAUDE_CODE_SESSION_ID
+
+  printf 'payload-no-session' | \
+    "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    >/dev/null 2>/dev/null
+
+  [ -f "$EVENTS_FILE" ]
+  _assert_present '"session":""' "$EVENTS_FILE"
+  # Verify the wrapper still functioned correctly despite empty session
+  _assert_present '"kind":"hook"' "$EVENTS_FILE"
+  _assert_present '"exit":"0"' "$EVENTS_FILE"
+}
+
+@test "T3.5: session comes from the env var, not parsed from stdin payload" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+  export CLAUDE_CODE_SESSION_ID="env-var-session"
+
+  # Feed a different session_id in the payload on stdin
+  printf '{"session_id":"payload-session-different","tool_input":{"skill":"test"}}' | \
+    "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    >"$TEST_DIR/payload_pass_check.out" 2>/dev/null
+
+  [ -f "$EVENTS_FILE" ]
+  # The record must carry the env var's value, not the payload's
+  _assert_present '"session":"env-var-session"' "$EVENTS_FILE"
+  _assert_absent '"session":"payload-session-different"' "$EVENTS_FILE"
+
+  # Verify stdin was passed through byte-identically (it reached the fixture)
+  [ "$(cat "$TEST_DIR/payload_pass_check.out")" = '{"session_id":"payload-session-different","tool_input":{"skill":"test"}}' ]
+}
+
+@test "T3.5: stdin is passed through byte-identically with CLAUDE_CODE_SESSION_ID set" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+  export CLAUDE_CODE_SESSION_ID="test-session"
+
+  local input_file="$TEST_DIR/stdin_with_session_env.bin"
+  printf 'multi-line\nstdin\nwith\ttabs\xc3\xa9' > "$input_file"
+
+  local wrapped_out="$TEST_DIR/stdin_with_session_env.out"
+  "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    <"$input_file" >"$wrapped_out" 2>/dev/null
+
+  cmp -s "$input_file" "$wrapped_out"
+}
