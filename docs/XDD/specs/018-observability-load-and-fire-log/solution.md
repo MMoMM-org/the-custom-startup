@@ -551,6 +551,16 @@ skill and agent inventory:        # for PRD F8's "exists but never fired"
   - plugins/*/agents/**/*.md               → agent name from frontmatter `name:`
   - .claude/agents/*.md                    → same
   method: glob at report time
+  unreachable: a SKILL.md nested deeper than one level under `skills/` is NOT counted in the
+               coverage denominator — the harness discovers only `skills/<name>/SKILL.md`, so a
+               deeper file cannot fire at all. The report names these separately as UNREACHABLE,
+               never as "never fired" — see the third amendment below
+  matching:    an entry is credited as fired when a record names it by either its bare frontmatter
+               name or its qualified `<plugin>:<path>` form; a bare-name match is credited only
+               when that bare name is unique across the inventory. Which form a real
+               plugin-dispatched record carries is unmeasured until T3.6 — the join is
+               deliberately tolerant until then, rather than guessing one and reporting the other
+               as never fired
 ```
 
 The report states which inventory it used and how many entries it found, so a surprising coverage
@@ -587,6 +597,24 @@ subprocess in a report that is offline by ADR-6, where CON-7's budget explicitly
 Degradation is fail-open and stated, not silent: with no git, or outside a repository, the walk runs
 unfiltered and the report says which mode it used — consistent with the rule that the report always
 names the inventory it used, so a surprising figure stays traceable to the denominator.
+
+**Third amendment, 2026-09-07 (T3.3).** The skill glob is one level deep, and that is correct — but
+it silently hid something worth naming. `plugins/tcs-team/` ships **15** `SKILL.md` files two levels
+deep (`skills/<category>/<name>/SKILL.md`) and no one-level skills at all. Measured evidence that the
+harness cannot see them: every one declares `user-invocable: true`, yet no `tcs-team` skill appears
+in a live session's available-skills listing, while `tcs-team`'s **agents** do appear — so the plugin
+is installed and only the skills are invisible. The one structural difference from plugins whose
+skills do appear (`tcs-patterns`, `tcs-helper`) is nesting depth; neither manifest declares skills
+explicitly, so discovery is by convention alone.
+
+Counting them in the denominator would be wrong: they would sit in "never fired" permanently, which
+reads as *unused* when the truth is *unreachable*. Those are different problems with different fixes,
+and collapsing them is the same category error the `batch` / `single` distinction exists to prevent
+for hook durations. So they stay out of the coverage fraction — but the report names them separately
+as unreachable, with a count, because 15 dead files is exactly the dead weight #147 exists to find,
+and silently excluding them would hide it. Tracked independently of this spec as a repo issue, since
+the fix (restructuring `tcs-team`, or its agents' now-dangling `skills:` references) is not this
+spec's business.
 
 **Possible future source, not designed in.** T1.4 found an undocumented `hook_registered` log event
 that fires once per registered command at session start, carrying `hook_event`, `hook_matcher`,
