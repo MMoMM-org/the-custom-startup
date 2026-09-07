@@ -1087,6 +1087,21 @@ this phase; recorded as Technical Debt, below.
   removes it.
 - Deliberate duplication of the data-directory resolver (ADR-1), repaid if and when this feature
   moves into a plugin.
+- **`report.py` is ~1630 lines and should be split — deferred deliberately, not overlooked.** It
+  accumulated four tasks' worth of concerns (rotation-chain reading, per-file load stats, two
+  independent filesystem inventories, byte accounting, recording status, firing coverage, hook
+  durations, seven render functions and a CLI). The T3.4 code review judged it coherent — everything
+  in it genuinely serves "assemble one report" — and advisory rather than a defect, so it was not
+  split during the phase: T3.4 was the last code task, only validation remained, and a refactor of
+  that size at that point would have been risk without payoff. The seams are already clean, with
+  almost no coupling beyond `main()`:
+  - `_redact_path` through `walk_skill_agent_inventory` (~474 lines) — filesystem walking and
+    inventory discovery, with no dependency on record parsing. **The safest first cut**, and the
+    largest single block: → `observability_inventory.py`.
+  - `_render_recording_status` through `_render_hook_durations` (~311 lines) — pure rendering, each
+    function taking an already-computed stats object and returning `list[str]`.
+  - The remainder (record parsing and stats, plus `build_load_report`/`main` as orchestration) stays.
+  Reopen when the next feature needs to touch this file, rather than as standalone churn.
 - **Resolved 2026-09-06** (was: "the scripts in the hook path are untracked this phase (CON-8), so
   they carry no CI coverage of their own beyond the bats suite that exercises them from a tracked
   test file"). That was the defect this relocation fixed: the hook-path scripts are now tracked
