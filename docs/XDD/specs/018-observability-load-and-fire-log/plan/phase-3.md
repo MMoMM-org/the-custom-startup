@@ -81,7 +81,7 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   4. Validate: `pytest -q` green, including the empty-input and stale-input cases
   5. Success: `[ref: SDD/SDD-AC-14, SDD-AC-15]`; `[ref: PRD/F4]`
 
-- [ ] **T3.3 Inventory join — what never fired** `[activity: backend-api]`
+- [x] **T3.3 Inventory join — what never fired** `[activity: backend-api]`
 
   1. Prime: read PRD F8, the note that a hook supplies only the numerator, and the two inventory
      definitions `[ref: PRD/F8]` `[ref: SDD/The two inventories]`
