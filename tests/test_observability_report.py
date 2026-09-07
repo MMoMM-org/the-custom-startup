@@ -727,6 +727,20 @@ def test_byte_accounting_non_numeric_bytes_is_unmeasurable_not_zero_not_fatal():
     assert totals.unmeasurable_count == 1
 
 
+def test_byte_accounting_boolean_bytes_is_unmeasurable_not_a_measurement():
+    # `int(True) == 1` and `int(False) == 0` both succeed in plain Python --
+    # so a mis-serialized `"bytes": false` must not be recorded as a
+    # measured zero (or a measured one). `bool` is a subtype of `int`, so
+    # this only holds if the bool check runs before the `int()` cast.
+    records = [_instruction("a.md", "session_start", bytes_value=False)]
+
+    totals = report.byte_accounting(records)  # must not raise
+
+    assert totals.always_loaded_bytes == 0
+    assert totals.conditional_bytes == 0
+    assert totals.unmeasurable_count == 1
+
+
 def test_byte_accounting_unknown_reason_bytes_not_silently_dropped():
     records = [_instruction("a.md", "", bytes_value="42")]
 
@@ -828,6 +842,30 @@ def test_recording_status_not_stale_when_newest_entry_recent():
     assert status.stale is False
 
 
+def test_recording_status_not_stale_at_exactly_the_threshold():
+    # Finding 4 (T3.2 code review): pin the `>` (not `>=`) semantics at
+    # STALE_THRESHOLD_SECONDS exactly -- the pre-existing tests (36h and 5m)
+    # are both far from the 6h line, so `>` and `>=` pass either one
+    # equally. Exactly at the threshold must NOT be stale.
+    assert report.STALE_THRESHOLD_SECONDS == 6 * 60 * 60
+    boundary_ts = "2026-09-07T06:00:00Z"  # exactly 6h before _NOW
+    records = [_state("1", ts=boundary_ts)]
+
+    status = report.recording_status(records, _NOW)
+
+    assert status.stale is False
+
+
+def test_recording_status_stale_one_second_past_the_threshold():
+    assert report.STALE_THRESHOLD_SECONDS == 6 * 60 * 60
+    just_past_ts = "2026-09-07T05:59:59Z"  # 6h and 1s before _NOW
+    records = [_state("1", ts=just_past_ts)]
+
+    status = report.recording_status(records, _NOW)
+
+    assert status.stale is True
+
+
 def test_recording_status_newest_ts_is_max_across_all_records_not_last_in_list():
     records = [
         _instruction("a.md", "session_start", ts="2026-09-07T11:59:00Z"),
@@ -838,6 +876,35 @@ def test_recording_status_newest_ts_is_max_across_all_records_not_last_in_list()
 
     assert status.newest_ts == "2026-09-07T11:59:00Z"
     assert status.stale is False
+
+
+def test_recording_status_enabled_reflects_newest_state_record_by_ts_not_position():
+    # Two `state` records, interleaved the way the SDD says concurrent
+    # sessions' append-only writes can be: the list-LAST record carries the
+    # EARLIER `ts`. The chronologically newer record (`enabled="1"`, listed
+    # first) must win, not the positionally-last one (`enabled="0"`).
+    records = [
+        _state("1", ts="2026-09-07T11:00:00Z"),  # chronologically newer, listed first
+        _state("0", ts="2026-09-06T00:00:00Z"),  # chronologically older, listed last
+    ]
+
+    status = report.recording_status(records, _NOW)
+
+    assert status.enabled is True
+
+
+def test_recording_status_enabled_ignores_state_record_with_unusable_ts():
+    # A `state` record with a missing/malformed `ts` must not crash the
+    # selection and must not win over a record with a valid, newer `ts`,
+    # regardless of list position.
+    records = [
+        _state("0", ts="not-a-timestamp"),  # unusable ts, listed first
+        _state("1", ts="2026-09-07T11:00:00Z"),  # usable, actually newest
+    ]
+
+    status = report.recording_status(records, _NOW)  # must not raise
+
+    assert status.enabled is True
 
 
 def test_recording_status_unparseable_ts_is_ignored_not_fatal():
@@ -863,8 +930,12 @@ def test_build_load_report_states_byte_cost_always_vs_conditional():
 
     text = report.build_load_report({}, [], byte_stats=byte_stats)
 
-    assert "1000" in text
-    assert "300" in text
+    # Finding 5 (T3.2 code review): assert the number is attached to its
+    # own label, not merely present anywhere in the text -- a bare "1000"
+    # / "300" check would still pass if `_render_byte_accounting` swapped
+    # which figure it calls always-loaded vs. conditional.
+    assert "always-loaded layer: 1000" in text
+    assert "conditional loads: 300" in text
 
 
 def test_build_load_report_states_unmeasurable_count():
@@ -1005,8 +1076,8 @@ def test_cli_end_to_end_prints_report_for_fixture_events(tmp_path):
     _write_jsonl(
         events,
         [
-            _instruction("docs/ai/memory/active.md", "session_start"),
-            _instruction("docs/ai/memory/active.md", "session_start"),
+            _instruction("docs/ai/memory/active.md", "session_start", bytes_value="123"),
+            _instruction("docs/ai/memory/active.md", "session_start", bytes_value="123"),
         ],
     )
     repo_root = tmp_path / "repo"
@@ -1022,6 +1093,17 @@ def test_cli_end_to_end_prints_report_for_fixture_events(tmp_path):
     assert "docs/ai/memory/active.md: 2 load(s)" in result.stdout
     assert "session_start=2" in result.stdout
     assert "Configured but never loaded (0):" in result.stdout
+
+    # Finding 3 (T3.2 code review): main() is the only real caller that
+    # wires byte_stats=/recording= into build_load_report -- every other
+    # test in this file calls build_load_report directly with hand-built
+    # objects, bypassing main() entirely. Assert the actual CLI stdout
+    # carries both honesty sections (with their computed values, not just
+    # the section headers) so a future edit that drops or misorders those
+    # keyword arguments fails here, rather than silently shipping the
+    # "half a report" mode this task exists to prevent.
+    assert "Recording state: UNKNOWN" in result.stdout
+    assert "Byte cost -- always-loaded layer: 246 byte(s)" in result.stdout
 
 
 def test_cli_default_events_path_matches_writer_directory_shape(tmp_path):

@@ -186,8 +186,14 @@ def _parse_bytes(value: object) -> int | None:
     could not be stat'ed) and the key is PRESENT but not a valid integer (a
     producer bug). Both are "unmeasurable", never a silent zero -- callers
     must exclude a `None` from any total rather than adding it in.
+
+    `bool` is checked and rejected before the `int()` cast: `bool` is a
+    subtype of `int` in Python, so `int(True) == 1` and `int(False) == 0`
+    both succeed silently. A mis-serialized `"bytes": false` is exactly the
+    "present but not a valid integer" producer bug above, and must be
+    unmeasurable -- never a measured zero (or worse, a measured one).
     """
-    if value is None:
+    if value is None or isinstance(value, bool):
         return None
     try:
         return int(value)
@@ -324,14 +330,34 @@ def latest_state_record(records: Sequence[dict]) -> dict | None:
     """The most recent `kind: state` record (selfcheck's probe), or `None`
     if the log carries none at all.
 
-    "Most recent" by position: `read_events` returns records in
-    chronological order (oldest generation first, lines in file order), so
-    the last `kind: state` record encountered is the newest one.
+    "Most recent" by `ts`, mirroring `newest_ts` above -- NOT by position.
+    The SDD's append-only, single-line-write log lets two concurrent
+    sessions interleave their lines (never losing one, but also never
+    guaranteeing global chronological order across sessions), so the
+    positionally-last `state` record is not guaranteed to be the
+    chronologically newest one. Trusting position here would let a stale
+    toggle be reported as the current `enabled` verdict -- the exact
+    silent-wrongness this module exists to prevent.
+
+    A `state` record with an absent or malformed `ts` is never selected
+    over one with a valid, newer `ts`, and never crashes the comparison
+    (`_parse_ts` returns `None` for it, same as `newest_ts`'s handling).
+    If NO `state` record has a usable `ts` at all, this falls back to
+    positional order (the last `state` record encountered) rather than
+    reporting `None` -- a record with no other signal is still worth
+    surfacing, and this fallback is the one place position is trusted.
     """
-    for rec in reversed(records):
-        if rec.get("kind") == "state":
-            return rec
-    return None
+    best: datetime | None = None
+    best_rec: dict | None = None
+    for rec in records:
+        if rec.get("kind") != "state":
+            continue
+        best_rec = best_rec if best is not None else rec  # positional fallback
+        parsed = _parse_ts(rec.get("ts"))
+        if parsed is not None and (best is None or parsed > best):
+            best = parsed
+            best_rec = rec
+    return best_rec
 
 
 def _state_enabled(state: dict) -> bool:
@@ -715,6 +741,12 @@ def build_load_report(
     inventory: Sequence[str],
     unparseable: int = 0,
     git_filtered: bool = True,
+    # `None` defaults keep T3.1's pre-existing callers/tests working unchanged
+    # (see docstring), but this wiring is load-bearing: `main()` is the only
+    # real caller, a future caller that forgets `recording=` silently loses
+    # the one section this task guarantees, and the CLI test asserting on
+    # actual stdout (test_cli_end_to_end_prints_report_for_fixture_events)
+    # is what pins that it stays wired.
     byte_stats: ByteAccounting | None = None,
     recording: RecordingStatus | None = None,
 ) -> str:
