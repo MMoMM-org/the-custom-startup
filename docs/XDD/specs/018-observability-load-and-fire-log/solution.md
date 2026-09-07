@@ -534,9 +534,12 @@ implementers would otherwise produce different — and equally compliant — ans
 instruction inventory:            # for PRD F4's "configured but never loaded"
   - the CLAUDE.md hierarchy from the repo root upward, plus every `@`-import reachable from it,
     resolved transitively
+  - every nested CLAUDE.md within the repo   # AMENDED 2026-09-07, see the note below
   - docs/ai/memory/*.md
   - .claude/rules/**/*.md and ~/.claude/rules/**/*.md
   - ~/.claude/CLAUDE.md
+  exclusion: a CLAUDE.md under a `tests/fixtures/` path segment is test data, not configuration,
+             and is not counted — it would inflate the denominator with files no session ever loads
   method: filesystem walk at report time, not a maintained manifest — a manifest would drift, and
           the walk is exactly the set the loader itself can reach
 
@@ -549,6 +552,18 @@ skill and agent inventory:        # for PRD F8's "exists but never fired"
 
 The report states which inventory it used and how many entries it found, so a surprising coverage
 figure can be traced to the denominator rather than assumed to be about usage.
+
+**Amendment, 2026-09-07 (T3.1 review).** The first bullet originally stood alone, and "from the repo
+root upward" is literal: it reaches the root `CLAUDE.md`, its parent directories, and `~/.claude/`.
+That left **nested** subdirectory `CLAUDE.md` files out of the denominator entirely — even though
+`nested_traversal` is one of the five verified `load_reason` values, i.e. the record demonstrably
+captures these files loading. The asymmetry is the bug: a nested `CLAUDE.md` could appear in the
+numerator but never in the denominator, so one that *never* loads was invisible to PRD F4's
+"configured but never loaded" — and a never-loaded nested instruction file is precisely the dead
+weight #147 exists to find. This repo has two real ones (`docs/CLAUDE.md`, `docs/ai/CLAUDE.md`).
+The second bullet closes it, and the `tests/fixtures/` exclusion keeps a third, `doc-product`'s
+sample fixture, from inflating the count. Found by the T3.1 spec-compliance reviewer as an ambiguity
+flagged for awareness; escalated and confirmed as a real gap rather than a wording preference.
 
 **Possible future source, not designed in.** T1.4 found an undocumented `hook_registered` log event
 that fires once per registered command at session start, carrying `hook_event`, `hook_matcher`,
