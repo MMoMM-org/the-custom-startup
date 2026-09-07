@@ -55,7 +55,7 @@ runs before T3.4** even though it is numbered after it. T3.1–T3.3 all extend t
 
 Turns the record into the answers #147 needs, and proves the whole path end to end.
 
-- [ ] **T3.1 Load report — what loaded, how often, and what never did** `[activity: backend-api]`
+- [x] **T3.1 Load report — what loaded, how often, and what never did** `[activity: backend-api]`
 
   1. Prime: read the record schema and PRD Feature 4 `[ref: SDD/Application Data Models]`
   2. Test: over a fixture log, lists each instruction file with its load count and the reasons
