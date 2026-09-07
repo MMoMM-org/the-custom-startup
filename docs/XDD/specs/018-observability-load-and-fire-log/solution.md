@@ -475,21 +475,20 @@ ENTITY: Event (NEW)                       # one JSON object per line
   WHEN kind = agent:
     agent_type:    string
     agent_id:      string
-    parent_agent:  string?
 
-  # SPEC DEFECT, found at T2.3 (2026-09-07): `parent_agent`'s source is unestablished.
-  # `log_agent.sh` carries it as `AGENT_PAYLOAD_KEY_PARENT="parent_agent_type"`, marked
-  # UNVERIFIED in that file's own header comment — a guess by analogy with `agent_type` (the
-  # sibling field this adapter already trusts) and with `log_instructions.sh`'s `parent_file_path`,
-  # not a confirmed payload key. The official hooks documentation states plainly that `agent_id`
-  # and `agent_type` identify only the CURRENT subagent, never its parent. The shipped binary's one
-  # `parent_agent_id` string sits inside `claude_code.subagent.spawn` — team/inbox message routing —
-  # which T1.4 already established is dead code (`vj()` hard-coded `false`); it is not evidence for
-  # a hook stdin field. This is the same failure mode T1.4 named: designing around telemetry that
-  # never fires. T2.4 — the first run against a real nested dispatch — settles it one of two ways:
-  # either the payload carries a parent field under some name and `AGENT_PAYLOAD_KEY_PARENT` is
-  # corrected to match it, or no such field exists and `parent_agent` must be removed from this
-  # record shape as unobtainable, not shipped as a field that is always empty.
+  # REMOVED (2026-09-07, T2.4): `parent_agent` was specified here as `string?`, investigated, and
+  # found unobtainable — not merely unverified. Three independent lines of evidence agree: (1) the
+  # shipped CLI binary's only `parent_agent_id` string sits inside `claude_code.subagent.spawn`,
+  # telemetry T1.4 already proved dead (`vj()` hard-coded `false`); (2) the official hooks
+  # documentation lists only `agent_id`/`agent_type` for a subagent, identifying the CURRENT agent
+  # only, never a parent; (3) a real nested dispatch, captured live in a scratch repo (a
+  # `general-purpose` subagent that itself dispatched an `Explore` subagent five seconds later),
+  # produced a `SubagentStart` payload for the nested one carrying no parent-shaped field under any
+  # name — the adapter correctly omitted it rather than emitting an empty one. This supersedes the
+  # T2.3 SPEC DEFECT note this comment used to carry, which left the question open pending T2.4;
+  # T2.4 has now closed it. Nested dispatches are linked by `session` plus timestamp ordering in
+  # the record, not by a parent field — there is nothing to extract. See the README's Decisions Log,
+  # 2026-09-07, for the full evidence.
 
   WHEN kind = hook:         # populated only by timed-wrapper.sh — the harness-ingest route was
     hook_event:    string   # dropped after T1.4 found it requires a local OTLP receiver (ADR-7)
@@ -890,6 +889,13 @@ a `case` glob pre-check costs 1 ms; a bash `=~` regex costs 1 ms; scanning only 
 prefix-removal expansion runs. See Known Technical Issues, below, for a related correctness hazard
 found while designing this fix — quoting the key to close that hazard belongs in the same change,
 not a separate one.
+
+**Update (2026-09-07, T2.4):** `log_agent.sh` no longer performs the unconditional `parent_agent`
+lookup described above at all — T2.4 established that no such field exists to look up (see the
+Application Data Models' `kind = agent` note and the README Decisions Log). This removes that
+adapter's own worst-case trigger entirely; the `case` presence pre-check in `logwrite.sh` remains
+in place as the general fix, since any adapter's own absent-key lookup can still hit the same
+quadratic shape.
 
 ## Quality Requirements
 

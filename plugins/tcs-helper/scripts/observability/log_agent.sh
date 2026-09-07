@@ -44,26 +44,21 @@
 # the SDD's own Interface Specifications field list for SubagentStart
 # (`fields: [session_id, cwd, agent_id, agent_type]`).
 #
-# AGENT_PAYLOAD_KEY_PARENT ("parent_agent_type") is UNVERIFIED. The same
-# documentation page was checked explicitly for a field identifying a parent
-# agent or a nested-dispatch marker (parent_agent, parent_agent_id,
-# parent_type, ...) and states plainly that none is documented: agent_id and
-# agent_type identify the CURRENT subagent only, never its parent. The
-# shipped CLI binary (bin/claude.exe) does contain a bare `parent_agent_id`
-# string, but only in an unrelated context (team/inbox message routing,
-# near "Converting Stop hook to SubagentStop") -- not evidence for a hook
-# stdin field. `parent_agent_type` here is the most likely NAME by analogy
-# with `agent_type` (the sibling field this adapter already trusts) and
-# with log_instructions.sh's own `parent_file_path` (the established
-# parent-of-a-load-event field elsewhere in this same spec) -- but it is a
-# guess, not a verified fact. MUST BE CONFIRMED AT T2.4 against a real
-# nested subagent dispatch. If T2.4 finds a different key, only this
-# constant needs to change -- tests/bats/observability-agent.bats reads it
-# back out of this file rather than hard-coding the guess a second time.
+# There is no parent-agent field, at T2.4 confirmed unobtainable rather than
+# merely undocumented -- three independent lines agree: (1) the shipped CLI
+# binary's only `parent_agent_id` string sits inside
+# `claude_code.subagent.spawn`, telemetry T1.4 already proved dead
+# (`vj()` hard-coded `false`); (2) the official hooks docs list only
+# `agent_id`/`agent_type` for a subagent, identifying the CURRENT agent
+# only; (3) a real nested dispatch, captured live (a `general-purpose`
+# subagent that itself dispatched an `Explore` subagent five seconds
+# later), produced a `SubagentStart` payload for the nested one with no
+# parent-shaped field at all. Nested dispatches are therefore linked by
+# `session` plus timestamp ordering in the record, not by a parent field --
+# there is nothing to extract.
 # ---------------------------------------------------------------------------
 AGENT_PAYLOAD_KEY_TYPE="agent_type"
 AGENT_PAYLOAD_KEY_ID="agent_id"
-AGENT_PAYLOAD_KEY_PARENT="parent_agent_type"   # UNVERIFIED -- see above
 
 _LOG_AGENT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)" || _LOG_AGENT_SCRIPT_DIR=""
 # shellcheck disable=SC1091
@@ -91,21 +86,14 @@ IFS= read -r -d '' _payload || true
 _session_id="$(_observability_field "$_payload" session_id)" || _session_id=""
 _agent_type="$(_observability_field "$_payload" "$AGENT_PAYLOAD_KEY_TYPE")" || _agent_type=""
 _agent_id="$(_observability_field "$_payload" "$AGENT_PAYLOAD_KEY_ID")" || _agent_id=""
-_parent_agent="$(_observability_field "$_payload" "$AGENT_PAYLOAD_KEY_PARENT")" || _parent_agent=""
 
 # agent_type and agent_id are the record's required fields (SDD/Application
 # Data Models: both plain `string`, no `?`) -- always passed through, even
 # empty, so a payload missing one still yields a well-formed record rather
-# than no record at all. parent_agent is optional (`string?`) and, like
-# log_instructions.sh's own optional `parent`/`trigger` fields, is passed
-# only when actually populated -- an absent key, not an empty one.
-if [ -n "$_parent_agent" ]; then
-  _observability_write kind=agent session="$_session_id" \
-    agent_type="$_agent_type" agent_id="$_agent_id" \
-    parent_agent="$_parent_agent" || true
-else
-  _observability_write kind=agent session="$_session_id" \
-    agent_type="$_agent_type" agent_id="$_agent_id" || true
-fi
+# than no record at all. There is no parent field to extract (see the
+# header comment above) -- nested dispatches are linked by session plus
+# timestamp ordering, not by a parent_agent field in the record.
+_observability_write kind=agent session="$_session_id" \
+  agent_type="$_agent_type" agent_id="$_agent_id" || true
 
 exit 0

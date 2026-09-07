@@ -88,6 +88,12 @@ Delivers the three capture paths and turns the feature on in this repo for the f
   1. Prime: read the `SubagentStart` payload shape `[ref: SDD/Interface Specifications]`
   2. Test: a dispatch yields one `kind: agent` record with the agent type and id; a nested dispatch
      records the parent agent; a payload missing `agent_type` still produces a well-formed line
+     — **superseded by measurement (2026-09-07, T2.4):** "a nested dispatch records the parent
+     agent" described a payload shape no harness produces. A real nested dispatch, captured live,
+     carries no parent-identifying field under any name (see README Decisions Log, 2026-09-07, and
+     `solution.md`'s `kind = agent` record note). The test now pins the opposite: a parent-looking
+     payload field must never produce a `parent_agent` record. This line is not rewritten — it
+     records what T2.3 originally set out to test
   3. Implement: `plugins/tcs-helper/scripts/observability/log_agent.sh` (relocated 2026-09-06, see
      T2.1 above)
   4. Validate: bats green; nothing on stdout

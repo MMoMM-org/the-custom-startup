@@ -1636,8 +1636,15 @@ _time_field() {
 
 # Build the 150 KB fixture: the keys a real adapter looks up sit near the
 # FRONT, the padding stands in for the rest of a large payload, and the key
-# under test is ABSENT — the exact shape log_agent.sh hits on every
-# non-nested dispatch. Compact separators: a space after ':' would stop
+# under test is ABSENT — an agent-shaped payload has no `parent_file_path`
+# (that field belongs to log_instructions.sh's own payload, never an
+# agent's), which is exactly the shape an absent-key lookup takes in
+# practice: a real field name from elsewhere in this spec, genuinely
+# missing from THIS payload. (log_agent.sh itself no longer performs any
+# absent-key lookup at all — T2.4 established there is no parent-agent
+# field to look up, spec 018 correction 2026-09-07 — so this test pins the
+# writer-level fix on its own merits rather than on that adapter's now-gone
+# call site.) Compact separators: a space after ':' would stop
 # `_observability_field`'s `"key":"` match from ever landing and silently turn
 # every assertion below into a no-op.
 _write_large_payload() {
@@ -1676,7 +1683,7 @@ with open('$out', 'w') as f:
   [ "$status" -eq 0 ]
   [ "${output#* }" = "Explore" ]
 
-  run _time_field "$payload_file" parent_agent_type
+  run _time_field "$payload_file" parent_file_path
   [ "$status" -eq 0 ]
   local elapsed="${output%% *}"
   local value="${output#* }"
@@ -1721,7 +1728,7 @@ with open('$out', 'w') as f:
     export CLAUDE_OBSERVABILITY_ENABLED=1
     export CLAUDE_OBSERVABILITY_DATA="$data_dir"
     payload="$(cat "$payload_file")" || payload=""
-    v="$(_observability_field "$payload" parent_agent_type)" || v=""
+    v="$(_observability_field "$payload" parent_file_path)" || v=""
     s="$(_observability_field "$payload" agent_id)" || s=""
     printf "%s" "$v" > "$data_dir/extracted.txt"
     _observability_write kind=agent session=sess-biglead "probe=$v" "seen=$s"

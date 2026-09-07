@@ -16,12 +16,12 @@
 #
 # `agent_type` and `agent_id` are the two payload keys confirmed against the
 # official Claude Code hooks documentation (see log_agent.sh's own header
-# comment for the citation). The parent-agent payload key is UNVERIFIED --
-# T2.4 is where that gets confirmed against a real nested dispatch -- so this
-# suite fixes its fixtures to whatever constant log_agent.sh currently
-# declares (read via _agent_parent_key below) rather than hard-coding a guess
-# a second time; if T2.4 changes the constant, this suite keeps passing
-# without a rewrite.
+# comment for the citation). A parent-agent payload key was investigated at
+# T2.4 against a real, live-captured nested dispatch and found not to exist
+# -- SubagentStart carries no parent-identifying field under any name. This
+# suite therefore pins the DELIBERATE ABSENCE of `parent_agent` from the
+# record rather than testing for its presence (see the test below named
+# "a parent-looking payload field never produces a parent_agent record").
 #
 # bash 3.2 compatible; LC_ALL=C in effect via the sourced writer.
 
@@ -30,12 +30,6 @@ bats_require_minimum_version 1.5.0
 setup() {
   REPO_ROOT="$(git -C "$BATS_TEST_DIRNAME" rev-parse --show-toplevel)"
   ADAPTER="$REPO_ROOT/plugins/tcs-helper/scripts/observability/log_agent.sh"
-
-  # The one payload key this suite cannot pin by citation (see header above)
-  # -- read straight out of the adapter's own source so a future correction
-  # to the constant (T2.4) does not silently desync the fixtures from it.
-  PARENT_KEY="$(sed -n 's/^AGENT_PAYLOAD_KEY_PARENT="\([^"]*\)".*/\1/p' "$ADAPTER" | head -n1)"
-  [ -n "$PARENT_KEY" ]
 
   local tmpbase="${TMPDIR:-/tmp}"
   while [ "$tmpbase" != "/" ] && [ "${tmpbase%/}" != "$tmpbase" ]; do
@@ -173,10 +167,28 @@ _assert_present() {             # _assert_present <needle> <file>
 }
 
 # ---------------------------------------------------------------------------
-# 2. A nested dispatch (payload carrying a parent) records parent_agent.
+# 2. A parent-looking payload field never produces a parent_agent record.
+#
+# T2.4 measured a real, live nested subagent dispatch (a `general-purpose`
+# subagent that itself dispatched an `Explore` subagent five seconds later)
+# and found its SubagentStart payload carries no parent-identifying field
+# under any name -- see log_agent.sh's own header comment and the README
+# Decisions Log entry dated 2026-09-07 for the three lines of evidence. This
+# replaces an earlier version of this test, which fed the adapter a payload
+# shape ("parent_agent_type": "...") no harness has ever been observed to
+# produce and asserted that a `parent_agent` field appeared in the record --
+# testing a fiction rather than the real payload contract.
+#
+# This test pins the opposite, now-settled behaviour: even a payload that
+# DOES carry a plausible parent-shaped field must not cause the adapter to
+# invent a `parent_agent` record field, so a future edit cannot quietly
+# reintroduce one the harness never supplies. The fixture uses
+# `parent_agent_type` -- the very key this adapter used to (wrongly) guess
+# at -- specifically because it is the most tempting name to accidentally
+# wire back up.
 # ---------------------------------------------------------------------------
 
-@test "a nested dispatch payload records parent_agent" {
+@test "a parent-looking payload field never produces a parent_agent record" {
   local data_dir="$TEST_DIR/rec2"
   local payload
   payload="$(_payload_json \
@@ -184,7 +196,7 @@ _assert_present() {             # _assert_present <needle> <file>
     cwd="$REPO_CANONICAL" \
     agent_type=security-reviewer \
     agent_id=agent-0002 \
-    "$PARENT_KEY"=general-purpose)"
+    parent_agent_type=general-purpose)"
 
   run _run_adapter "$data_dir" "$payload"
   [ "$status" -eq 0 ]
@@ -198,7 +210,11 @@ _assert_present() {             # _assert_present <needle> <file>
   _assert_present '"kind":"agent"' "$file"
   _assert_present '"agent_type":"security-reviewer"' "$file"
   _assert_present '"agent_id":"agent-0002"' "$file"
-  _assert_present '"parent_agent":"general-purpose"' "$file"
+
+  # The deliberate absence: no parent_agent field, and the parent-looking
+  # value never leaks into the record under any name.
+  _assert_absent '"parent_agent"' "$file"
+  _assert_absent 'general-purpose' "$file"
 }
 
 # ---------------------------------------------------------------------------
@@ -410,15 +426,19 @@ assert val == '', 'agent_type should be absent or empty, got %r' % (val,)
 # ---------------------------------------------------------------------------
 # 9. Large-payload path. `_observability_field` (logwrite.sh) used to be
 #    quadratic when the sought key is ABSENT from a large payload -- this
-#    adapter calls it unconditionally for AGENT_PAYLOAD_KEY_PARENT, a key
-#    absent on every non-nested dispatch (the common case), so the common
-#    case paid the worst case. That has been fixed centrally in logwrite.sh
-#    with a `case` presence pre-check (pinned by
-#    observability-writer.bats); this test is the ADAPTER-level guard: the
-#    whole 150 KB payload must still go through this script's four
-#    extraction calls in milliseconds, and a further regression in THIS
-#    adapter's own calls (e.g. an accidental second full-payload scan added
-#    here) is caught rather than silently accepted.
+#    adapter used to call it unconditionally for AGENT_PAYLOAD_KEY_PARENT, a
+#    key absent on every non-nested dispatch (the common case), so the
+#    common case paid the worst case. That extraction is gone now (spec 018
+#    correction, 2026-09-07: T2.4 established no parent field exists to
+#    extract -- see log_agent.sh's header comment), which removes this
+#    adapter's own trigger for the defect entirely; the underlying fix still
+#    stands centrally in logwrite.sh with a `case` presence pre-check
+#    (pinned by observability-writer.bats), since another adapter's own
+#    absent-key lookups can still hit the same shape. This test is the
+#    ADAPTER-level guard: the whole 150 KB payload must still go through
+#    this script's three extraction calls in milliseconds, and a further
+#    regression in THIS adapter's own calls (e.g. an accidental
+#    full-payload scan added here) is caught rather than silently accepted.
 #
 #    THE BOUND, and why it is not 30s any more. The original bound was
 #    calibrated against the BROKEN baseline: this exact payload shape
@@ -429,7 +449,7 @@ assert val == '', 'agent_type should be absent or empty, got %r' % (val,)
 #
 #    Re-measured after the fix, on the same machine: the same payload
 #    through the same adapter completes end to end in ~30 ms (process
-#    spawn, sourcing the writer, four extractions, one `git rev-parse`, one
+#    spawn, sourcing the writer, three extractions, one `git rev-parse`, one
 #    `date`, the append). The base bound below is 1000 ms -- ~33x above the
 #    measured cost -- scaled by $TCS_PERF_SLACK, which CI sets to 4. The
 #    base is 1000 and not 2000 precisely because of that multiplier: the
