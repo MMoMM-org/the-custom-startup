@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Report, self-check and end-to-end validation"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 3
 ---
@@ -14,21 +14,23 @@ phase: 3
 **Specification References**:
 - `[ref: PRD/F4]` — the report that answers the question
 - `[ref: PRD/F8]` — usage against the inventory
-- `[ref: SDD/Integration Points]` — ingesting the harness's own hook records, and the `batch` label
+- `[ref: SDD/Integration Points]` — why the harness-ingest route is dropped, and what `batch`
+  survives as
 - `[ref: SDD/Architecture Decisions — ADR-6]` — Python, pytest-covered, offline
 - `[ref: SDD/Quality Requirements]` — the honesty requirement
 
 **Key Decisions**:
 - The report is offline, so the hook-path budget does not apply. Clarity and test coverage win over
   cleverness here `[ref: SDD/Solution Strategy]`.
-- **Superseded 2026-09-06 (T1.4 finding, see README and ADR-7):** the bullet below described ingesting
-  a **batch** figure from the harness's own telemetry. That route is dropped — it would require a
-  locally running OTLP receiver, which collides with CON-6 and the Won't-Have "no server component".
-  ~~A hook duration ingested from the harness is a batch figure and must be labelled as such. The
-  report may never present it as per-hook attribution — that is the misreading the whole ADR-7
-  question exists to prevent.~~ Hook durations now come only from `timed-wrapper.sh`, always
-  `scope_note: single`; see `solution.md`'s Integration Points. **T3.4 below is written around the
-  dropped route and needs the maintainer's decision on how to change it — not rewritten here.**
+- **Superseded 2026-09-06 (T1.4 finding, see README and ADR-7), resolved 2026-09-07:** this bullet
+  once described ingesting a **batch** figure from the harness's own telemetry. That route is
+  dropped — it would require a locally running OTLP receiver, which collides with CON-6 and the
+  Won't-Have "no server component". Hook durations now come only from `timed-wrapper.sh`, always
+  `scope_note: single`; see `solution.md`'s Integration Points. The rule the dropped bullet carried
+  still holds in its new form: **the report may never present a duration as per-hook attribution
+  unless the record says `scope_note: single`** — that is the misreading the whole ADR-7 question
+  exists to prevent. T3.4 has been repurposed as the report-side half of SDD-AC-17 and is no longer
+  an open question.
 - An empty record is a statement about recording, not about loading.
 - **Added after phase 2 (T2.1, T2.2), three cases `report.py` did not previously have to handle**
   `[ref: solution.md/Application Data Models]`: (1) `reason` may be an empty string — T2.1 dropped
@@ -42,7 +44,10 @@ phase: 3
 
 **Dependencies**: Phase 2 (records must exist to report on). T1.4 has run (see `plan/phase-1.md`):
 configuration-only attribution is impossible, so T3.5 is not skipped — it builds the wrapper as
-designed. T3.4's dependence on the harness-ingest route is now the open question in this phase.
+designed. T3.4 no longer depends on the harness-ingest route (repurposed 2026-09-07) and now
+depends on T3.5 instead: the wrapper writes the `kind: hook` records the report reads, so **T3.5
+runs before T3.4** even though it is numbered after it. T3.1–T3.3 all extend the same
+`report.py` and are strictly sequential.
 
 ---
 
@@ -87,23 +92,26 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   4. Validate: `pytest -q` green
   5. Success: `[ref: SDD/SDD-AC-18]`; `[ref: PRD/F8]`
 
-- [ ] **T3.4 Ingest harness hook durations** `[activity: integration]`
+- [ ] **T3.4 Wrapper-sourced hook durations in the report** `[activity: backend-api]`
 
-  > **Flagged 2026-09-06, not rewritten here.** This task's entire premise — ingesting the harness's
-  > own `hook_execution_complete` output from a redirected diagnostic run — is the route T1.4 found
-  > requires a locally running OTLP receiver, and that route has been dropped (see `README.md`'s T1.4
-  > section, `solution.md`'s Integration Points, and the superseded Key Decision above). F6 now gets
-  > its durations from `timed-wrapper.sh` (T3.5) instead. This task as written should not be
-  > implemented; it needs the maintainer's decision on whether to repurpose it (e.g. as the wrapper's
-  > `report.py` ingest path) or drop it and fold its acceptance criteria into T3.5.
+  > **Repurposed 2026-09-07**, maintainer decision (see the Decisions Log). This task previously
+  > ingested the harness's own `hook_execution_complete` output. T1.4 found that route needs a
+  > locally running OTLP receiver, which collides with CON-6 and the Won't-Have "no server
+  > component", so it is dropped. `solution.md` has already moved on — SDD-AC-17 and the
+  > `kind = hook` record shape both read against `timed-wrapper.sh` with `scope_note: single`.
+  > This task is now the **report-side half** of SDD-AC-17; T3.5 remains the wrapper itself.
 
-  1. Prime: read the integration point and the batch caveat `[ref: SDD/Integration Points]`
-  2. Test: given captured `hook_execution_complete` output, produces `kind: hook` records carrying
-     `scope_note: batch`; the report labels every such figure as covering a batch; a batch with
-     `num_hooks > 1` is never rendered as a single hook's duration
-  3. Implement: the ingest path in `report.py`, plus the documented recipe for the diagnostic run
-     (enable variables, redirection to a file, and an explicit statement of what is and is not sent,
-     and to whom) `[ref: PRD/F6]`
+  **Order**: run this task *after* T3.5, so the report is written against records the wrapper
+  actually produces rather than against a shape read only from the SDD.
+
+  1. Prime: read the `kind = hook` record shape and the single-scope rule
+     `[ref: SDD/Application Data Models]` `[ref: SDD/Integration Points]`
+  2. Test: given `kind: hook` records written by `timed-wrapper.sh`, the report shows each duration
+     against the one hook invocation that produced it, labelled `scope_note: single`; a record
+     carrying `scope_note: batch` — or no `scope_note` at all — is **never** rendered as a single
+     hook's duration, which is the misreading ADR-7 exists to prevent; a record with no `kind: hook`
+     entries reports that hook timing is not installed, rather than reporting zero hooks
+  3. Implement: the hook-duration section of `scripts/observability/report.py`
   4. Validate: `pytest -q` green
   5. Success: `[ref: SDD/SDD-AC-17]`; `[ref: PRD/F6]`
 
