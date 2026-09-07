@@ -1,0 +1,564 @@
+#!/usr/bin/env bats
+#
+# tests/bats/observability-timed-wrapper.bats
+#
+# spec 018 (observability of what loads and fires), phase 3, T3.5: the
+# per-hook timing wrapper. File under test:
+#   plugins/tcs-helper/scripts/observability/timed-wrapper.sh
+#
+# T1.4 (see docs/XDD/specs/018-.../README.md) measured six hook
+# configurations and found configuration-only per-hook attribution
+# empirically impossible: two entries under two DISTINCT matcher strings
+# still collapse into one `hook_execution_complete` measurement group
+# (arrangement B), and hooks sharing a group run in parallel, so subtraction
+# cannot recover a single hook's duration either (arrangement F). The skip
+# condition on T3.5 does not apply; this wrapper is the mechanism.
+#
+# This wrapper sits IN THE HOOK PATH. Two protocol hazards drive most of the
+# tests below:
+#
+#   Hazard 1 (stdin): the wrapper must never read the hook payload itself --
+#   `hook_event`/`matcher` come only from its own CLI flags. Reading stdin
+#   here would silently empty the payload for every wrapped hook, in every
+#   session, for as long as the wrapper stayed installed.
+#
+#   Hazard 2 (streams): CON-4 says a hook's stdout is parsed as JSON by the
+#   harness and CON-5 says a hook's exit status must never change because of
+#   a recording failure. `time` itself writes to stderr, so timing must be
+#   captured without perturbing the wrapped command's own stdout, stderr or
+#   exit status -- including the blocking case, exit 2.
+#
+# CLI shape (fixed by the task spec, not otherwise documented in the SDD):
+#   timed-wrapper.sh --event <event> --matcher <matcher> -- <cmd> [args...]
+#
+# Every test invokes the wrapper as the harness would invoke a hook command:
+# an external process, nothing sourced. Byte-identical claims are checked by
+# redirecting to files and comparing with `cmp`, never through bats' own
+# `run` (which normalises trailing newlines and would hide exactly the bugs
+# this suite exists to catch).
+#
+# bash 3.2 compatible; this suite itself runs under whatever bash `bats` is
+# installed under and can use modern bash freely -- only the script under
+# test has to survive bash 3.2 / BSD userland.
+
+bats_require_minimum_version 1.5.0
+
+setup() {
+  REPO_ROOT="$(git -C "$BATS_TEST_DIRNAME" rev-parse --show-toplevel)"
+  WRAPPER="$REPO_ROOT/plugins/tcs-helper/scripts/observability/timed-wrapper.sh"
+  LOGWRITE="$REPO_ROOT/plugins/tcs-helper/scripts/observability/logwrite.sh"
+
+  local tmpbase="${TMPDIR:-/tmp}"
+  while [ "$tmpbase" != "/" ] && [ "${tmpbase%/}" != "$tmpbase" ]; do
+    tmpbase="${tmpbase%/}"
+  done
+  TEST_DIR="$(mktemp -d "$tmpbase/tcs-observability-timed-wrapper.XXXXXX")"
+
+  REPO="$TEST_DIR/myrepo"
+  mkdir -p "$REPO"
+  export GIT_CONFIG_GLOBAL=/dev/null
+  git -C "$REPO" init -q -b main
+  git -C "$REPO" config user.email "t@t"
+  git -C "$REPO" config user.name "t"
+  git -C "$REPO" config commit.gpgsign false
+  printf 'base\n' > "$REPO/base.txt"
+  git -C "$REPO" add base.txt
+  git -C "$REPO" commit -q -m "base"
+
+  DATA_DIR="$TEST_DIR/data"
+  EVENTS_FILE="$DATA_DIR/observability/events.jsonl"
+
+  # --- fixture "hooks" -------------------------------------------------
+  #
+  # cat_and_exit.sh: streams stdin straight to stdout (never through a
+  # variable, so it is safe for content with embedded newlines and no
+  # trailing newline), writes a marker to stderr, then exits with the code
+  # given as $1. One fixture covers stdin passthrough, stdout passthrough,
+  # exit-status preservation and the no-trailing-newline case together.
+  FIXTURE_CAT="$TEST_DIR/cat_and_exit.sh"
+  cat > "$FIXTURE_CAT" <<'EOF'
+#!/usr/bin/env bash
+cat
+printf 'STDERR-MARKER-%s' "${2:-x}" 1>&2
+exit "${1:-0}"
+EOF
+  chmod +x "$FIXTURE_CAT"
+
+  # interleaved.sh: ignores stdin, writes distinguishable chunks to both
+  # streams, for the interleaved-output case.
+  FIXTURE_INTERLEAVED="$TEST_DIR/interleaved.sh"
+  cat > "$FIXTURE_INTERLEAVED" <<'EOF'
+#!/usr/bin/env bash
+printf 'OUT-A'
+printf 'ERR-A' 1>&2
+printf 'OUT-B'
+printf 'ERR-B' 1>&2
+exit "${1:-0}"
+EOF
+  chmod +x "$FIXTURE_INTERLEAVED"
+}
+
+teardown() {
+  [ -n "${TEST_DIR:-}" ] && [ -d "$TEST_DIR" ] && rm -rf "$TEST_DIR"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_assert_present() {             # _assert_present <needle> <file>
+  if grep -qF -- "$1" "$2"; then
+    return 0
+  fi
+  printf 'MISSING: %s not found in %s\n' "$1" "$2" >&2
+  return 1
+}
+
+_assert_absent() {               # _assert_absent <needle> <file>
+  if grep -qF -- "$1" "$2"; then
+    printf 'LEAK: %s found in %s\n' "$1" "$2" >&2
+    return 1
+  fi
+  return 0
+}
+
+_line_count() {
+  local f="$1" n
+  [ -f "$f" ] || { printf '0'; return 0; }
+  n="$(wc -l <"$f" 2>/dev/null)" || n=0
+  printf '%s' "${n// /}"
+}
+
+# ---------------------------------------------------------------------------
+# 1. stdout passthrough byte-identical (including a trailing newline case)
+#    and exit status 0 preserved. cwd is inside the fixture repo, matching
+#    where a real hook runs.
+# ---------------------------------------------------------------------------
+
+@test "stdout is byte-identical to the unwrapped command, exit 0 preserved" {
+  cd "$REPO"
+  local direct_out="$TEST_DIR/direct.out"
+  local wrapped_out="$TEST_DIR/wrapped.out"
+
+  printf 'payload-line-one\npayload-line-two\n' | "$FIXTURE_CAT" 0 marker \
+    >"$direct_out" 2>/dev/null
+  local direct_status=$?
+
+  unset CLAUDE_OBSERVABILITY_ENABLED
+  printf 'payload-line-one\npayload-line-two\n' | \
+    "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 marker \
+    >"$wrapped_out" 2>/dev/null
+  local wrapped_status=$?
+
+  [ "$wrapped_status" -eq "$direct_status" ]
+  [ "$wrapped_status" -eq 0 ]
+  cmp -s "$direct_out" "$wrapped_out"
+}
+
+# ---------------------------------------------------------------------------
+# 2. stderr passthrough byte-identical.
+# ---------------------------------------------------------------------------
+
+@test "stderr is byte-identical to the unwrapped command" {
+  cd "$REPO"
+  local direct_err="$TEST_DIR/direct.err"
+  local wrapped_err="$TEST_DIR/wrapped.err"
+
+  printf 'x' | "$FIXTURE_CAT" 0 zzz >/dev/null 2>"$direct_err"
+
+  unset CLAUDE_OBSERVABILITY_ENABLED
+  printf 'x' | "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 zzz \
+    >/dev/null 2>"$wrapped_err"
+
+  cmp -s "$direct_err" "$wrapped_err"
+}
+
+# ---------------------------------------------------------------------------
+# 3-5. Exit status preserved: 0, 1, and the blocking case, 2.
+# ---------------------------------------------------------------------------
+
+# NOTE on `set +e`/`set -e` below: bats runs each test body under `set -e`
+# (confirmed empirically -- a bare nonzero-exit command aborts the test
+# immediately, before a later `[ "$?" -eq N ]` line ever runs). Every
+# invocation below that is EXPECTED to return non-zero must therefore be
+# fenced with `set +e` / `set -e` so the real exit status can be captured
+# and asserted on, rather than the test aborting on the very statement it
+# means to check.
+
+@test "exit status 0 is preserved" {
+  cd "$REPO"
+  unset CLAUDE_OBSERVABILITY_ENABLED
+  set +e
+  printf '' | "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    >/dev/null 2>/dev/null
+  local got=$?
+  set -e
+  [ "$got" -eq 0 ]
+}
+
+@test "exit status 1 is preserved" {
+  cd "$REPO"
+  unset CLAUDE_OBSERVABILITY_ENABLED
+  set +e
+  printf '' | "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 1 m \
+    >/dev/null 2>/dev/null
+  local got=$?
+  set -e
+  [ "$got" -eq 1 ]
+}
+
+@test "exit status 2 (the blocking case) is preserved" {
+  cd "$REPO"
+  unset CLAUDE_OBSERVABILITY_ENABLED
+  set +e
+  printf '' | "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 2 m \
+    >/dev/null 2>/dev/null
+  local got=$?
+  set -e
+  [ "$got" -eq 2 ]
+}
+
+@test "exit status 2 is preserved with recording enabled too" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+  set +e
+  printf '' | "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 2 m \
+    >/dev/null 2>/dev/null
+  local got=$?
+  set -e
+  [ "$got" -eq 2 ]
+}
+
+# ---------------------------------------------------------------------------
+# 6. A kind:hook record is written, carrying scope_note=single, and the
+#    hook_event/matcher fields match the CLI flags given -- never read from
+#    stdin.
+# ---------------------------------------------------------------------------
+
+@test "recording enabled: a kind:hook record is written with scope_note single" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+
+  printf 'irrelevant-payload' | \
+    "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    >/dev/null 2>/dev/null
+  [ "$?" -eq 0 ]
+
+  [ -f "$EVENTS_FILE" ]
+  [ "$(_line_count "$EVENTS_FILE")" = "1" ]
+
+  _assert_present '"kind":"hook"' "$EVENTS_FILE"
+  _assert_present '"scope_note":"single"' "$EVENTS_FILE"
+  _assert_present '"hook_event":"PreToolUse"' "$EVENTS_FILE"
+  _assert_present '"matcher":"Skill"' "$EVENTS_FILE"
+  _assert_present '"exit":"0"' "$EVENTS_FILE"
+  _assert_present '"ms":"' "$EVENTS_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# 7. hook_event/matcher in the record match whatever CLI flags were given,
+#    even when they look nothing like a real event/matcher pair -- proof the
+#    values come from argv, not from guessing or from stdin content.
+# ---------------------------------------------------------------------------
+
+@test "the record's hook_event and matcher come from the CLI flags given" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+
+  printf '{"hook_event":"SomethingElse","matcher":"NotThis"}' | \
+    "$WRAPPER" --event SubagentStart --matcher '.*' -- "$FIXTURE_CAT" 0 m \
+    >/dev/null 2>/dev/null
+
+  _assert_present '"hook_event":"SubagentStart"' "$EVENTS_FILE"
+  _assert_present '"matcher":".*"' "$EVENTS_FILE"
+  _assert_absent '"hook_event":"SomethingElse"' "$EVENTS_FILE"
+  _assert_absent '"matcher":"NotThis"' "$EVENTS_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# 8. Recording disabled: no record, and no behaviour change at all (stdout,
+#    stderr and exit status all match the unwrapped run exactly).
+# ---------------------------------------------------------------------------
+
+@test "recording disabled: no record and no behaviour change" {
+  cd "$REPO"
+  local direct_out="$TEST_DIR/direct2.out"
+  local wrapped_out="$TEST_DIR/wrapped2.out"
+  local direct_err="$TEST_DIR/direct2.err"
+  local wrapped_err="$TEST_DIR/wrapped2.err"
+
+  set +e
+  printf 'stdin-payload\nwith two lines' | "$FIXTURE_CAT" 1 mkr \
+    >"$direct_out" 2>"$direct_err"
+  local direct_status=$?
+  set -e
+
+  unset CLAUDE_OBSERVABILITY_ENABLED
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+  set +e
+  printf 'stdin-payload\nwith two lines' | \
+    "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 1 mkr \
+    >"$wrapped_out" 2>"$wrapped_err"
+  local wrapped_status=$?
+  set -e
+
+  [ "$wrapped_status" -eq "$direct_status" ]
+  cmp -s "$direct_out" "$wrapped_out"
+  cmp -s "$direct_err" "$wrapped_err"
+
+  # No record at all -- the data directory must not even have been created,
+  # matching PRD F3's "off costs nothing".
+  [ ! -e "$EVENTS_FILE" ]
+}
+
+# ---------------------------------------------------------------------------
+# 9. The wrapper is absent from the hook path after "uninstall": running the
+#    real fixture directly (as a session would once the wrapper entry is
+#    removed from hook registration) behaves identically to running it
+#    through the wrapper, and adds no kind:hook record -- nothing of the
+#    wrapper's own bookkeeping remains once it is no longer in the chain.
+# ---------------------------------------------------------------------------
+
+@test "wrapper absent from the hook path after uninstall: direct run is unaffected and adds no record" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+
+  # "install" + "reproduce": one run through the wrapper writes one record.
+  printf 'p' | "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    >/dev/null 2>/dev/null
+  [ -f "$EVENTS_FILE" ]
+  [ "$(_line_count "$EVENTS_FILE")" = "1" ]
+
+  # "uninstall": the hook is now invoked directly, wrapper out of the chain.
+  local direct_out="$TEST_DIR/uninstalled.out"
+  local direct_err="$TEST_DIR/uninstalled.err"
+  printf 'p' | "$FIXTURE_CAT" 0 m >"$direct_out" 2>"$direct_err"
+  local direct_status=$?
+
+  [ "$direct_status" -eq 0 ]
+  [ "$(cat "$direct_out")" = "p" ]
+
+  # "read": no new record appeared from the direct run.
+  [ "$(_line_count "$EVENTS_FILE")" = "1" ]
+}
+
+# ---------------------------------------------------------------------------
+# 10. Stdin passed through byte-identically (Hazard 1) -- including no
+#     trailing newline and an embedded NUL-free binary-ish byte sequence.
+#     This is the test that would catch the wrapper reading the payload for
+#     itself instead of taking event/matcher from argv.
+# ---------------------------------------------------------------------------
+
+@test "stdin is passed through byte-identically, no trailing newline" {
+  cd "$REPO"
+  unset CLAUDE_OBSERVABILITY_ENABLED
+
+  local input_file="$TEST_DIR/stdin_payload.bin"
+  printf 'line-one\nline-two\twith-tab\xc3\xa9-accented-no-trailing-newline' > "$input_file"
+
+  local wrapped_out="$TEST_DIR/stdin_echo.out"
+  "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    <"$input_file" >"$wrapped_out" 2>/dev/null
+
+  cmp -s "$input_file" "$wrapped_out"
+}
+
+@test "stdin is passed through byte-identically with recording enabled" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+
+  local input_file="$TEST_DIR/stdin_payload2.bin"
+  printf '{"session_id":"abc","tool_input":{"skill":"x"}}' > "$input_file"
+
+  local wrapped_out="$TEST_DIR/stdin_echo2.out"
+  "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    <"$input_file" >"$wrapped_out" 2>/dev/null
+
+  cmp -s "$input_file" "$wrapped_out"
+}
+
+# ---------------------------------------------------------------------------
+# 11. Output with no trailing newline, and interleaved stdout/stderr, are
+#     both preserved exactly (each stream separately byte-identical).
+# ---------------------------------------------------------------------------
+
+@test "output with no trailing newline is preserved exactly" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+
+  local wrapped_out="$TEST_DIR/notrail.out"
+  printf 'no-trailing-newline-in' | \
+    "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    >"$wrapped_out" 2>/dev/null
+
+  [ "$(cat "$wrapped_out")" = "no-trailing-newline-in" ]
+  # Byte-exact, not just string-equal after $()-style trimming.
+  local expected_bytes wrapped_bytes
+  expected_bytes="$(printf 'no-trailing-newline-in' | wc -c)"
+  wrapped_bytes="$(wc -c <"$wrapped_out")"
+  [ "${expected_bytes// /}" = "${wrapped_bytes// /}" ]
+}
+
+@test "interleaved stdout and stderr are each preserved byte-identically" {
+  cd "$REPO"
+  local direct_out="$TEST_DIR/inter_direct.out"
+  local direct_err="$TEST_DIR/inter_direct.err"
+  local wrapped_out="$TEST_DIR/inter_wrapped.out"
+  local wrapped_err="$TEST_DIR/inter_wrapped.err"
+
+  "$FIXTURE_INTERLEAVED" 0 >"$direct_out" 2>"$direct_err" </dev/null
+
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+  "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_INTERLEAVED" 0 \
+    >"$wrapped_out" 2>"$wrapped_err" </dev/null
+
+  cmp -s "$direct_out" "$wrapped_out"
+  cmp -s "$direct_err" "$wrapped_err"
+}
+
+# ---------------------------------------------------------------------------
+# 12. CON-5: a failure inside the logging path (the events directory cannot
+#     be created because a plain file already occupies that path) leaves the
+#     wrapped command's exit status and both streams completely untouched.
+# ---------------------------------------------------------------------------
+
+@test "CON-5: a logging-path failure leaves exit status and streams untouched" {
+  cd "$REPO"
+  local blocked="$TEST_DIR/blocked_data_dir"
+  printf 'not a directory' > "$blocked"
+
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$blocked"
+
+  local direct_out="$TEST_DIR/con5_direct.out"
+  local direct_err="$TEST_DIR/con5_direct.err"
+  local wrapped_out="$TEST_DIR/con5_wrapped.out"
+  local wrapped_err="$TEST_DIR/con5_wrapped.err"
+
+  set +e
+  printf 'payload' | "$FIXTURE_CAT" 2 mk >"$direct_out" 2>"$direct_err"
+  local direct_status=$?
+  set -e
+
+  set +e
+  printf 'payload' | \
+    "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 2 mk \
+    >"$wrapped_out" 2>"$wrapped_err"
+  local wrapped_status=$?
+  set -e
+
+  [ "$wrapped_status" -eq "$direct_status" ]
+  [ "$wrapped_status" -eq 2 ]
+  cmp -s "$direct_out" "$wrapped_out"
+  cmp -s "$direct_err" "$wrapped_err"
+}
+
+# ---------------------------------------------------------------------------
+# 13. The wrapper still runs the hook correctly (transparent passthrough)
+#     when logwrite.sh cannot be sourced at all -- copy the wrapper alone to
+#     a directory with no logwrite.sh alongside it.
+# ---------------------------------------------------------------------------
+
+@test "the wrapper still runs the hook when logwrite.sh cannot be sourced" {
+  local lonely_dir="$TEST_DIR/lonely"
+  mkdir -p "$lonely_dir"
+  cp "$WRAPPER" "$lonely_dir/timed-wrapper.sh"
+  chmod +x "$lonely_dir/timed-wrapper.sh"
+  # Deliberately no logwrite.sh here.
+
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+
+  local direct_out="$TEST_DIR/lonely_direct.out"
+  local wrapped_out="$TEST_DIR/lonely_wrapped.out"
+
+  printf 'payload-for-lonely' | "$FIXTURE_CAT" 0 lm >"$direct_out" 2>/dev/null
+  local direct_status=$?
+
+  printf 'payload-for-lonely' | \
+    "$lonely_dir/timed-wrapper.sh" --event PreToolUse --matcher Skill -- \
+    "$FIXTURE_CAT" 0 lm >"$wrapped_out" 2>/dev/null
+  local wrapped_status=$?
+
+  [ "$wrapped_status" -eq "$direct_status" ]
+  [ "$wrapped_status" -eq 0 ]
+  cmp -s "$direct_out" "$wrapped_out"
+}
+
+# ---------------------------------------------------------------------------
+# 14. The wrapper does not abort a strict `set -euo pipefail` caller (same
+#     posture as the other adapters -- CON-5's spirit applied to the
+#     wrapper's own invocation).
+# ---------------------------------------------------------------------------
+
+@test "set -e survival: the wrapper does not abort a strict caller" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+
+  run env "CLAUDE_OBSERVABILITY_ENABLED=1" "CLAUDE_OBSERVABILITY_DATA=$DATA_DIR" \
+    bash -c "
+      set -euo pipefail
+      cd '$REPO'
+      echo BEFORE
+      printf 'x' | '$WRAPPER' --event PreToolUse --matcher Skill -- '$FIXTURE_CAT' 0 m >/dev/null 2>/dev/null
+      echo AFTER
+    "
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'BEFORE\nAFTER')" ]
+}
+
+# ---------------------------------------------------------------------------
+# 15. CON-3: the recorded `ms` value uses a dot decimal separator even under
+#     a comma-decimal locale. This is the exact bug class recorded in this
+#     repo's own memory (printf '%.0f' under a comma locale) applied to
+#     `time`'s TIMEFORMAT output instead.
+# ---------------------------------------------------------------------------
+
+@test "CON-3: ms uses a dot decimal separator even under a comma-decimal locale" {
+  if ! locale -a 2>/dev/null | grep -qi '^de_DE'; then
+    skip "de_DE locale not available on this machine"
+  fi
+
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+  export LC_ALL
+  LC_ALL="$(locale -a 2>/dev/null | grep -i '^de_DE' | head -n1)"
+
+  printf 'p' | "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    >/dev/null 2>/dev/null
+
+  [ -f "$EVENTS_FILE" ]
+  _assert_absent '"ms":"0,' "$EVENTS_FILE"
+  _assert_absent '"ms":"1,' "$EVENTS_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# 16. Never writes to stdout from the logging path -- the wrapper's own
+#     stdout carries only what the wrapped command itself produced.
+# ---------------------------------------------------------------------------
+
+@test "the wrapper's logging path never writes to stdout" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+
+  local wrapped_out="$TEST_DIR/nostdout.out"
+  printf '' | "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    >"$wrapped_out" 2>/dev/null
+
+  # FIXTURE_CAT with empty stdin produces empty stdout -- so the wrapper's
+  # own file must be empty too, proving nothing from the logging path leaked
+  # onto the wrapped command's stdout.
+  [ ! -s "$wrapped_out" ]
+}
