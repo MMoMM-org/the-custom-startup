@@ -188,6 +188,56 @@ if [ -z "$_timed_wrapper_dir" ] || ! . "$_timed_wrapper_dir/logwrite.sh" 2>/dev/
   exec "$@"
 fi
 
+# Convert `time`'s TIMEFORMAT='%3R' output -- decimal SECONDS with EXACTLY
+# three fraction digits, e.g. "0.504", "12.345", "0.000" -- into an integer
+# MILLISECONDS string, e.g. "504", "12345", "0". The record's field is named
+# `ms` (README, report.py both read it as milliseconds); writing raw `%3R`
+# seconds straight into it understated every duration by 1000x -- a 500 ms
+# hook read back as "0.5 ms", comfortably inside CON-7's 1 ms budget when it
+# was 500x over it. Fixed here, in the wrapper, so the record on disk is
+# honest and every reader (including a human looking at the raw JSON) sees
+# the truth, rather than papering over it by having a reader multiply.
+#
+# Pure parameter expansion and arithmetic -- no awk/bc/python/date -- CON-7
+# forbids a fork in the hook path. `10#` forces base-10 arithmetic so a
+# leading zero (e.g. frac "004") is never misread as octal.
+#
+# Fails safe rather than fabricate: prints nothing and returns 1 for
+# anything that is not EXACTLY `<digits>.<3 digits>` -- an empty/unset
+# value, a comma-decimal value (CON-3 is supposed to prevent this upstream,
+# but this function does not trust that and rejects it too), or any other
+# unexpected `time` output. The caller below omits the `ms=` field entirely
+# on failure rather than writing a wrong or fabricated number -- this
+# phase's established "absent, never fabricated" posture (T2.1's dropped
+# default, `bytes`/`reason` in log_instructions.sh), and report.py already
+# treats a record with no `ms` key as unmeasurable, never as zero.
+_timed_wrapper_secs_to_ms() {
+  local secs="$1" int frac
+
+  case "$secs" in
+    *[!0-9.]*) return 1 ;;   # anything other than a digit or a dot
+  esac
+  case "$secs" in
+    *.*) ;;                  # must contain exactly the one decimal point
+    *) return 1 ;;
+  esac
+
+  int="${secs%%.*}"
+  frac="${secs#*.}"
+
+  case "$frac" in
+    [0-9][0-9][0-9]) ;;      # exactly 3 digits -- %3R's own guarantee; also
+                             # rejects a second dot (leaves a non-digit char
+                             # here) and anything %3R would never produce
+    *) return 1 ;;
+  esac
+  case "$int" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+
+  echo "$(( 10#$int * 1000 + 10#$frac ))"
+}
+
 # From here on, LC_ALL=C is in effect (logwrite.sh exports it above) --
 # before TIMEFORMAT is ever used to format anything (CON-3).
 TIMEFORMAT='%3R'
@@ -199,9 +249,11 @@ TIMEFORMAT='%3R'
 # yet (see the header comment's measured explanation of why the more
 # obvious trailing-redirection form does not work here).
 exec 3>&1 4>&2
-_timed_wrapper_ms=$( { time "$@" 1>&3 2>&4; } 2>&1 )
+_timed_wrapper_secs=$( { time "$@" 1>&3 2>&4; } 2>&1 )
 _timed_wrapper_status=$?
 exec 3>&- 4>&-
+
+_timed_wrapper_ms="$(_timed_wrapper_secs_to_ms "$_timed_wrapper_secs")" || _timed_wrapper_ms=""
 
 # CON-5: the write happens strictly AFTER the status above was captured,
 # and this script's own `exit` (bottom of file) uses that saved variable,
@@ -216,13 +268,23 @@ exec 3>&- 4>&-
 # records CLAUDE_PLUGIN_ROOT does NOT; CLAUDECODE does — propagation is
 # variable), and that its value equals the payload's session_id. Both are
 # confirmed in T3.6 against a live session. When unset, field is empty.
-_observability_write \
-  kind=hook \
-  hook_event="$_timed_wrapper_event" \
-  matcher="$_timed_wrapper_matcher" \
-  session="${CLAUDE_CODE_SESSION_ID:-}" \
-  ms="$_timed_wrapper_ms" \
-  exit="$_timed_wrapper_status" \
-  scope_note=single
+_timed_wrapper_args=(
+  kind=hook
+  hook_event="$_timed_wrapper_event"
+  matcher="$_timed_wrapper_matcher"
+  session="${CLAUDE_CODE_SESSION_ID:-}"
+)
+# `ms` is omitted entirely -- never written as an empty string or a
+# fabricated 0 -- when `_timed_wrapper_secs_to_ms` above could not parse
+# `time`'s own output. Same "absent, never fabricated" posture `bytes` and
+# `reason` already follow in log_instructions.sh; report.py's `_parse_ms`
+# already treats a record with no `ms` key as unmeasurable.
+if [ -n "$_timed_wrapper_ms" ]; then
+  _timed_wrapper_args[${#_timed_wrapper_args[@]}]="ms=$_timed_wrapper_ms"
+fi
+_timed_wrapper_args[${#_timed_wrapper_args[@]}]="exit=$_timed_wrapper_status"
+_timed_wrapper_args[${#_timed_wrapper_args[@]}]="scope_note=single"
+
+_observability_write "${_timed_wrapper_args[@]}"
 
 exit "$_timed_wrapper_status"

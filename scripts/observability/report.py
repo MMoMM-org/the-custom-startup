@@ -1084,17 +1084,25 @@ def _parse_ms(value: object) -> float | None:
     """Cast a `kind: hook` record's `ms` field to `float`, or `None`.
 
     Same posture as `_parse_bytes`: `timed-wrapper.sh`'s generic writer
-    quotes every value uniformly, so a real record carries `"ms": "0.001"`,
-    never a bare JSON number (confirmed against a real record produced by
-    the shipped wrapper). A value that cannot be cast -- absent, or present
-    but not numeric (a producer bug) -- is unmeasurable, never a fabricated
-    `0.0`; callers must exclude a `None` from any total rather than adding
-    it in. `bool` is checked and rejected before the `float()` cast for the
-    same reason `_parse_bytes` rejects it before `int()`: `bool` is a
-    subtype of `int` (and coerces cleanly to `float`), so `float(True) ==
-    1.0` and `float(False) == 0.0` would both succeed silently on a
-    mis-serialized `"ms": false` -- a "present but not a valid number"
-    producer bug, not a measurement.
+    quotes every value uniformly, so a real record carries `"ms": "504"`
+    (integer MILLISECONDS as of the wrapper's own %3R-seconds-to-ms fix --
+    see `timed-wrapper.sh`'s `_timed_wrapper_secs_to_ms`; a record carrying
+    fractional seconds under this field name was the 1000x unit bug this
+    fix corrects), never a bare JSON number (confirmed against a real
+    record produced by the shipped wrapper). This function still casts to
+    `float`, not `int`: it is the generic numeric parse for whatever
+    string actually arrives, and must not reject a value merely because it
+    has a fractional part (a hand-built test fixture, or a future producer,
+    may legitimately carry one) -- `_render_hook_durations` is what decides
+    how to display a whole-number result. A value that cannot be cast --
+    absent, or present but not numeric (a producer bug) -- is unmeasurable,
+    never a fabricated `0.0`; callers must exclude a `None` from any total
+    rather than adding it in. `bool` is checked and rejected before the
+    `float()` cast for the same reason `_parse_bytes` rejects it before
+    `int()`: `bool` is a subtype of `int` (and coerces cleanly to `float`),
+    so `float(True) == 1.0` and `float(False) == 0.0` would both succeed
+    silently on a mis-serialized `"ms": false` -- a "present but not a
+    valid number" producer bug, not a measurement.
     """
     if value is None or isinstance(value, bool):
         return None
@@ -1202,9 +1210,21 @@ def hook_duration_stats(records: Iterable[dict]) -> HookDurationReport:
             continue
         hook_event = rec.get("hook_event")
         matcher = rec.get("matcher")
+        # An empty-string matcher is NOT unknown -- it is the correct,
+        # documented value for `SubagentStart` and `InstructionsLoaded`
+        # (observability README: "an empty string here means 'every load,
+        # regardless of reason'"). Calling a known, legitimate value
+        # "unknown" tells the reader data is missing when it is not, so a
+        # genuine empty string gets its own label, distinct from the
+        # missing/malformed case (matcher absent entirely, or present but
+        # not even a string) that "(unknown matcher)" still describes.
+        if isinstance(matcher, str):
+            matcher_label = matcher if matcher else "(no matcher)"
+        else:
+            matcher_label = "(unknown matcher)"
         key = (
             hook_event if isinstance(hook_event, str) and hook_event else "(unknown event)",
-            matcher if isinstance(matcher, str) and matcher else "(unknown matcher)",
+            matcher_label,
         )
         invocation = HookInvocation(ms=_parse_ms(rec.get("ms")), exit=_parse_exit(rec.get("exit")))
         grouped.setdefault(key, []).append(invocation)
@@ -1359,6 +1379,24 @@ def _render_firing_coverage(inventory: SkillAgentInventory, coverage: FiringCove
     return lines
 
 
+def _format_ms(value: float) -> str:
+    """Render one hook duration's `ms` value for display.
+
+    A real record now always carries a whole number of milliseconds
+    (`timed-wrapper.sh`'s `_timed_wrapper_secs_to_ms` converts %3R seconds
+    to integer ms before writing), and `f"{value} ms"` on a `float` like
+    `502.0` would print "502.0 ms" -- correct, but noisier than it needs to
+    be. `504 ms` reads better than `504.0 ms`, matching how `_parse_bytes`
+    results render elsewhere in this file (as plain integers, never with a
+    trailing `.0`). A genuinely fractional value -- only ever seen from a
+    hand-built test fixture, since no real record produces one any more --
+    still prints in full rather than losing precision by truncating it.
+    """
+    if value == int(value):
+        return str(int(value))
+    return str(value)
+
+
 def _render_hook_durations(hooks: HookDurationReport) -> list[str]:
     """Wrapper-sourced hook durations, single-invocation-scoped (SDD-AC-17).
 
@@ -1386,7 +1424,7 @@ def _render_hook_durations(hooks: HookDurationReport) -> list[str]:
     for entry in hooks.entries:
         lines.append(f"  {entry.hook_event} / {entry.matcher} ({len(entry.invocations)} invocation(s)):")
         for invocation in entry.invocations:
-            ms_text = f"{invocation.ms} ms" if invocation.ms is not None else "unmeasurable"
+            ms_text = f"{_format_ms(invocation.ms)} ms" if invocation.ms is not None else "unmeasurable"
             exit_text = str(invocation.exit) if invocation.exit is not None else "unmeasurable"
             lines.append(f"    {ms_text} (exit {exit_text})")
     if hooks.batch_count:

@@ -258,6 +258,82 @@ _line_count() {
   _assert_present '"ms":"' "$EVENTS_FILE"
 }
 
+# Pull an integer `"ms":"<digits>"` value out of the (single-line) events
+# file. Deliberately requires the value to be pure digits -- a leftover
+# decimal point or a comma would fail this extraction rather than silently
+# produce a wrong number, which is exactly the shape of bug this test file
+# exists to catch permanently.
+_ms_value() {
+  local f="$1" line
+  line="$(grep -o '"ms":"[0-9]*"' "$f" | head -n1)" || return 1
+  [ -n "$line" ] || return 1
+  line="${line#*:\"}"
+  line="${line%\"}"
+  printf '%s' "$line"
+}
+
+# ---------------------------------------------------------------------------
+# 6b. THE unit regression test. `TIMEFORMAT='%3R'` reports decimal SECONDS
+#     with exactly three fraction digits (e.g. "0.204"); the on-disk field
+#     is named `ms` and both the README and report.py read it as
+#     MILLISECONDS. Writing raw %3R output straight into `ms` understates
+#     every duration by exactly 1000x -- a 500 ms hook would read back as
+#     "0.5 ms", comfortably under CON-7's 1 ms budget instead of 500x over
+#     it. Every other test in this file wraps a sub-millisecond fixture
+#     command, where "0.001" (seconds, wrong) and "1" (ms, right) both look
+#     like "basically instant" -- which is exactly how this shipped
+#     unnoticed. `sleep 0.2` is slow enough that seconds and milliseconds
+#     are never visually confusable.
+#
+#     Margin is deliberately WIDE (150-600, nominally 200) to survive a
+#     loaded CI runner without flaking: this test's entire job is to catch
+#     a 1000x unit error, not to pin a precise duration, and a test that
+#     flakes gets silenced rather than fixed. Confirmed failing against the
+#     pre-fix wrapper: `sleep 0.2` wrote the raw, unconverted %3R value
+#     ("0.204" or similar) straight into `ms`, so `_ms_value`'s digits-only
+#     extraction below cannot even find a pure-integer `"ms":"..."` value in
+#     the record and returns empty -- failing this test's `[ -n "$ms" ]`
+#     line before the range check is ever reached, which is itself proof
+#     the field was carrying seconds, not milliseconds.
+# ---------------------------------------------------------------------------
+
+@test "REGRESSION (1000x unit bug): a known ~200ms command records ms in a plausible millisecond range" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+
+  "$WRAPPER" --event PreToolUse --matcher Skill -- "$(command -v sleep)" 0.2 \
+    >/dev/null 2>/dev/null
+  [ "$?" -eq 0 ]
+
+  [ -f "$EVENTS_FILE" ]
+  local ms
+  ms="$(_ms_value "$EVENTS_FILE")"
+  [ -n "$ms" ]
+  [ "$ms" -ge 150 ]
+  [ "$ms" -le 600 ]
+}
+
+@test "a near-zero duration records ms as 0, never empty or garbage" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+
+  printf 'p' | "$WRAPPER" --event PreToolUse --matcher Skill -- "$FIXTURE_CAT" 0 m \
+    >/dev/null 2>/dev/null
+
+  [ -f "$EVENTS_FILE" ]
+  local ms
+  ms="$(_ms_value "$EVENTS_FILE")"
+  [ -n "$ms" ]
+  case "$ms" in
+    ''|*[!0-9]*) false ;;
+    *) ;;
+  esac
+  [ "$ms" -ge 0 ]
+  [ "$ms" -lt 150 ]
+}
+
 # ---------------------------------------------------------------------------
 # 7. hook_event/matcher in the record match whatever CLI flags were given,
 #    even when they look nothing like a real event/matcher pair -- proof the

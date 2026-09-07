@@ -248,7 +248,7 @@ lives" and "How to read it" (above) already describe — `ts`, `kind`, `session`
 |---|---|
 | `hook_event` | whatever you passed to `--event` |
 | `matcher` | whatever you passed to `--matcher` |
-| `ms` | the wrapped command's own wall-clock duration, in milliseconds |
+| `ms` | the wrapped command's own wall-clock duration, in whole milliseconds (an integer string, e.g. `"504"` for roughly half a second) |
 | `exit` | the wrapped command's own exit status |
 | `scope_note` | always `single` — see below |
 
@@ -265,7 +265,7 @@ the real hook command's own command line, any of its arguments, or anything from
 fields: `ts` (UTC timestamp), `kind` (fixed as `"hook"`), `session` (the session identifier from
 `$CLAUDE_CODE_SESSION_ID` — see "Caveats, stated plainly" below for its unverified status), `repo`
 (the repository's directory name only, not its full path — deliberate redaction per the spec's R-3
-rule), `hook_event` (from `--event`), `matcher` (from `--matcher`), `ms` (duration in milliseconds),
+rule), `hook_event` (from `--event`), `matcher` (from `--matcher`), `ms` (duration in whole milliseconds),
 `exit` (exit status), and `scope_note` (always `"single"`). The only strings that come from what you
 yourself typed are `hook_event` and `matcher`; all other fields are system-generated, measurements,
 or fixed labels. Nothing is copied or inferred from the wrapped command. Every one of these claims

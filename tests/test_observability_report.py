@@ -2080,6 +2080,51 @@ def test_build_load_report_single_scope_hook_duration_traceable_to_hook_event_an
     assert "0.5" in text
 
 
+def test_build_load_report_renders_known_whole_millisecond_value_without_trailing_zero():
+    # REGRESSION (1000x unit bug, #153): `timed-wrapper.sh` now converts
+    # %3R seconds to integer milliseconds before writing `ms`, so a real
+    # record for a ~500ms hook carries `"ms": "502"`, not `"ms": "0.502"`.
+    # Assert the report renders that known value as "502 ms" -- proving
+    # both that the magnitude survived (not 1000x off in either direction)
+    # and that a whole-number ms value prints without a noisy ".0".
+    hooks = report.hook_duration_stats([_hook("PreToolUse", "Skill", ms="502", exit_value="0")])
+
+    text = report.build_load_report({}, [], hooks=hooks)
+
+    assert "502 ms" in text
+    assert "502.0 ms" not in text
+
+
+def test_build_load_report_empty_matcher_rendered_as_no_matcher_not_unknown():
+    # An empty-string matcher is the correct, documented value for
+    # `SubagentStart` (and `InstructionsLoaded`) -- it means "every load,
+    # regardless of reason/subagent type" (observability README), not
+    # "we don't know the matcher". Rendering it as "(unknown matcher)"
+    # would tell the reader data is missing when it is not.
+    hooks = report.hook_duration_stats(
+        [_hook("SubagentStart", "", ms="10", exit_value="0")]
+    )
+
+    text = report.build_load_report({}, [], hooks=hooks)
+
+    assert "SubagentStart / (no matcher)" in text
+    assert "(unknown matcher)" not in text
+
+
+def test_build_load_report_missing_matcher_still_rendered_as_unknown():
+    # Contrast case: a matcher that is genuinely ABSENT (not an explicit
+    # empty string) is a malformed/anomalous record, and stays "(unknown
+    # matcher)" -- distinct from the legitimate empty-string case above.
+    record = _hook("SubagentStart", "", ms="10", exit_value="0")
+    del record["matcher"]
+    hooks = report.hook_duration_stats([record])
+
+    text = report.build_load_report({}, [], hooks=hooks)
+
+    assert "SubagentStart / (unknown matcher)" in text
+    assert "(no matcher)" not in text
+
+
 def test_build_load_report_batch_scope_never_shown_as_single_duration():
     hooks = report.hook_duration_stats([_hook(ms="999.0", scope_note="batch")])
 

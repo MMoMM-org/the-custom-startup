@@ -504,7 +504,17 @@ ENTITY: Event (NEW)                       # one JSON object per line
                             # live session. When the variable is absent the field is empty, and a
                             # hook record simply does not join across kinds; it is never faked.
     matcher:       string
-    ms:            number
+    ms:            number   # WHOLE milliseconds, as an integer (e.g. "504"). CORRECTION
+                            # (2026-09-07, #153): the wrapper originally wrote `time`'s raw
+                            # TIMEFORMAT='%3R' output -- decimal SECONDS to 3 places -- straight
+                            # into this field, understating every duration by exactly 1000x (a
+                            # 500 ms hook read back as "0.5 ms", 500x under CON-7's 1 ms budget
+                            # instead of 500x over it). Fixed in the wrapper itself
+                            # (`_timed_wrapper_secs_to_ms`), which converts before writing, so the
+                            # record on disk is honest. Omitted entirely (never a fabricated 0 or
+                            # empty string) if that conversion cannot parse `time`'s own output --
+                            # same "absent, never fabricated" posture as `bytes`/`reason` elsewhere
+                            # in this shape.
     exit:          number
     scope_note:    enum     # batch | single — the wrapper always writes `single`; `batch` is kept
                             # in the enum only as a label for the harness's own aggregate warning,
