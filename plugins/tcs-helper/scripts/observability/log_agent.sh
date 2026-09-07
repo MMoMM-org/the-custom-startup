@@ -21,7 +21,14 @@
 #     own stdout must stay empty (CON-4: a hook's stdout is parsed as JSON).
 #   - CON-7: `_observability_write` already forks `git rev-parse` (and
 #     `date`) once per record; this adapter adds no fork of its own -- its
-#     own stdin read is fork-free (see below).
+#     own stdin read is fork-free (see below). It deliberately does NOT pass
+#     the writer's reserved `_observability_toplevel=` pair: this adapter
+#     redacts no paths and so has no toplevel of its own, and resolving one
+#     just to hand it over would ADD the fork that pair exists to remove.
+#     Letting the writer resolve it keeps the count at exactly one.
+#   - LC_ALL=C is not re-exported here: logwrite.sh exports it, and nothing
+#     this script does before sourcing it is locale-sensitive. See
+#     log_instructions.sh for the reasoning; all three adapters share it.
 #
 # ---------------------------------------------------------------------------
 # PAYLOAD KEYS -- verification status, read this before touching them.
@@ -58,9 +65,17 @@ AGENT_PAYLOAD_KEY_TYPE="agent_type"
 AGENT_PAYLOAD_KEY_ID="agent_id"
 AGENT_PAYLOAD_KEY_PARENT="parent_agent_type"   # UNVERIFIED -- see above
 
-_LOG_AGENT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
+_LOG_AGENT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)" || _LOG_AGENT_SCRIPT_DIR=""
 # shellcheck disable=SC1091
-. "$_LOG_AGENT_SCRIPT_DIR/logwrite.sh" || exit 0
+if [ -z "$_LOG_AGENT_SCRIPT_DIR" ] || ! . "$_LOG_AGENT_SCRIPT_DIR/logwrite.sh" 2>/dev/null; then
+  # Cannot even load the writer: nothing to record with, but this must still
+  # never fail loudly (CON-4/CON-5) -- drain stdin first so the harness's own
+  # write of the payload never lands on a closed pipe, then get out of the
+  # way. The drain is a `cat` fork, but only on this already-broken path;
+  # the success path below stays fork-free. Same form in all three adapters.
+  cat >/dev/null 2>&1
+  exit 0
+fi
 
 # Read the whole hook payload in one shot, fork-free (CON-7): `read -d ''`
 # reads to EOF and reports non-zero when no NUL delimiter was found, which

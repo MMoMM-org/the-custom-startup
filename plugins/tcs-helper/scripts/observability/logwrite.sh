@@ -96,7 +96,7 @@ _observability_data_dir() {
 # T1.2 — append, escape, truncate, rotate.
 #
 # Public entry point: _observability_write kind=<kind> session=<session_id>
-#   [key=value ...]
+#   [_observability_toplevel=<pre-resolved toplevel>] [key=value ...]
 # `ts` and `repo` are computed here and cannot be overridden by a caller —
 # they are frozen, always-present fields (SDD/Application Data Models).
 # Any other key=value pair is written through verbatim, in the order given,
@@ -410,12 +410,53 @@ _observability_repo_field() {
 #   - A key name appearing inside another field's VALUE can be matched. The
 #     result is still a value from within the payload, never the payload
 #     itself, so the redaction guarantee holds; the field could be wrong.
+#
+# THE PRESENCE PRE-CHECK — a cost fix, not a semantic one. Prefix removal that
+# finds NO match is quadratic in bash: it tries every split point in the
+# payload before concluding there is none. Measured on this function with the
+# key ABSENT: 197 ms at 25 KB, 771 ms at 50 KB, 3377 ms at 100 KB, 6630 ms at
+# 150 KB — against CON-7's 1 ms-per-hook-invocation budget. log_agent.sh asks
+# for a parent key that is absent on every non-nested dispatch, i.e. the
+# COMMON case paid the WORST case, and a hook stalling for seconds blocks the
+# session. A `case` glob test short-circuits on the first attempt: 1 ms at
+# 150 KB, the identical answer roughly 6600x faster. (A bash `=~` regex also
+# measured 1 ms; scanning only the first 4 KB measured 9 ms but changes what
+# the function finds, so it was rejected.) The `[ "$body" = "$payload" ]`
+# guard below is KEPT as a backstop — the pre-check is now the first line of
+# the redaction defence, not its replacement.
+#
+# KEYS ARE LITERAL, NOT PATTERNS — a deliberate BEHAVIOUR CHANGE that came
+# with the pre-check. Both the `case` test and the prefix removal now quote
+# "$key", so a key is matched byte for byte. Previously the removal's `$key`
+# was UNQUOTED inside the pattern, so glob metacharacters in a KEY acted as
+# wildcards. A quoted `case` and an unquoted removal disagree on exactly
+# these inputs (all measured):
+#     {"axb":"1"}  / key a*b     quoted: absent    unquoted: MATCHED
+#     {"aXb":"1"}  / key a?b     quoted: absent    unquoted: MATCHED
+#     {"a[b]":"1"} / key a[b]    quoted: PRESENT   unquoted: no match
+# Quoting only one of the two sites would make this function's answer depend
+# on which site decided — a silent break in the redaction-critical path.
+# Quoting BOTH is the only consistent option, and it is also the correct one:
+# a field name is a literal, not a pattern. Under the old form a key
+# containing `*` could walk PAST the field it names and return a NEIGHBOURING
+# field's value ({"aaa":"first","bbb":"second"} with key `a*b` returned
+# "second") — a latent hazard in a redaction path. No current caller passes
+# such a key (every field name in this spec is a plain identifier), so nothing
+# observable changes for real traffic. Pinned by
+# tests/bats/observability-writer.bats, "a key containing glob metacharacters
+# is matched literally, not as a pattern".
 _observability_field() {
   local payload="${1:-}" key="${2:-}"
   # An empty key would make the pattern `*"":"`, which matches unrelated
   # text. Nothing legitimately asks for it.
   [ -n "$key" ] || { printf '' || true; return 0; }
-  local body="${payload#*\"$key\":\"}"
+  # Presence first. The quoted `"\"$key\":\""` is matched literally; the
+  # bare `*` on either side are the only wildcards in the pattern.
+  case "$payload" in
+    *"\"$key\":\""*) ;;                 # present — the fast path below
+    *) printf '' || true; return 0 ;;   # absent — same answer, no O(n^2) scan
+  esac
+  local body="${payload#*"\"$key\":\""}"
   if [ "$body" = "$payload" ]; then   # key absent — NOT the whole payload
     printf '' || true
     return 0
@@ -531,6 +572,32 @@ _observability_field_is_detail_only() {
 # Always returns 0 and never writes to stdout or stderr (CON-4, CON-5): a
 # hook's stdout is parsed as JSON and its exit status must never change
 # because recording failed, so every error path below is silent.
+#
+# Optional pre-resolved toplevel, passed as the RESERVED key=value pair
+#     _observability_toplevel=<git rev-parse --show-toplevel value>
+# anywhere among the caller's pairs. Present (even with an empty value,
+# meaning "outside a repo"), it skips this function's own git fork; absent,
+# this function resolves the toplevel itself exactly as before. That is the
+# same "pass it, even empty, to skip the fork" convention
+# _observability_data_dir, _observability_repo_field and
+# _observability_redact_path already use — but it CANNOT be a positional
+# argument here, because this function's positional arguments ARE the
+# record's fields, so a bare extra positional would be indistinguishable
+# from `key=value` data. A reserved key is the only mechanism that fits the
+# existing calling convention.
+#
+# Why that NAME cannot collide with a real record field: it carries this
+# file's `_observability_` prefix, the same collision-avoidance namespace
+# that made `_field` into `_observability_field` and `_json_escape` into
+# `_observability_json_escape`; and no field in the SDD's Application Data
+# Models — for any `kind` — begins with an underscore, because these names
+# are JSON keys a report reads, not internals. The pair is consumed here and
+# dropped in the dispatch below, so it can never be emitted even if some
+# future adapter did pass it as data. That is pinned by
+# tests/bats/observability-writer.bats ("a pre-resolved toplevel is used and
+# forks git zero times" asserts the name is absent from the record, and
+# "with and without a pre-resolved toplevel produce identical records"
+# compares the two whole lines).
 _observability_write() {
   [ "${CLAUDE_OBSERVABILITY_ENABLED:-}" = "1" ] || return 0
 
@@ -543,9 +610,22 @@ _observability_write() {
   # rev-parse again"); this writer exists to not repeat it. When
   # CLAUDE_OBSERVABILITY_DATA is set, _observability_data_dir below does no
   # git fork of its own either way — but the `repo` field still needs the
-  # toplevel, so this one fork happens on every call, override or not.
-  local repo_toplevel
-  repo_toplevel="$(git rev-parse --show-toplevel 2>/dev/null)" || repo_toplevel=""
+  # toplevel, so this fork happens on every call, override or not, UNLESS
+  # the caller already resolved one and handed it in (see the header above).
+  # An adapter that redacts paths has resolved it anyway; without this, the
+  # writer forked the very same command a second time on every record.
+  local repo_toplevel="" toplevel_given=0 pre_kv
+  for pre_kv in "$@"; do
+    case "$pre_kv" in
+      _observability_toplevel=*)
+        repo_toplevel="${pre_kv#_observability_toplevel=}"
+        toplevel_given=1
+        ;;
+    esac
+  done
+  if [ "$toplevel_given" -ne 1 ]; then
+    repo_toplevel="$(git rev-parse --show-toplevel 2>/dev/null)" || repo_toplevel=""
+  fi
 
   local data_dir
   data_dir="$(_observability_data_dir "$repo_toplevel" 2>/dev/null)" || data_dir=""
@@ -613,6 +693,9 @@ _observability_write() {
       kind)    field_values[1]="$val" ;;
       session) field_values[2]="$val" ;;
       ts|repo) : ;;  # frozen — computed above, not caller-settable
+      # The reserved pre-resolved-toplevel pair was consumed before the git
+      # fork above; dropping it here is what keeps it out of the record.
+      _observability_toplevel) : ;;
       *)
         field_names[${#field_names[@]}]="$key"
         field_values[${#field_values[@]}]="$val"

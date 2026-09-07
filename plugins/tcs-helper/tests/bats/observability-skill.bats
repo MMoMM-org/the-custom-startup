@@ -296,28 +296,62 @@ _assert_absent() {              # _assert_absent <needle> <file>
 }
 
 # ---------------------------------------------------------------------------
-# 10. Performance hazard pin (found by review, fixed upstream elsewhere —
-#    NOT in this file's scope). _observability_field's absent-key path was
-#    measured quadratic in payload size: 40 ms / 130 ms / 490 ms / 1918 ms
-#    for 10 / 20 / 40 / 80 KB tails when the sought key is missing. This
-#    adapter is safe TODAY only because tool_name, session_id and skill all
-#    appear ahead of the free-text `args` tail in a real payload — nothing
-#    pins that fact, so a key becoming optional or the fields reordering
-#    would turn a working hook into a multi-minute stall with every test
-#    above still green (none of them carries a realistically large payload).
+# 10. Performance hazard pin (found by review, fixed centrally in
+#    logwrite.sh — NOT in this file's scope). _observability_field's
+#    absent-key path was measured quadratic in payload size: 40 ms / 130 ms /
+#    490 ms / 1918 ms for 10 / 20 / 40 / 80 KB tails when the sought key is
+#    missing. This adapter was safe only because tool_name, session_id and
+#    skill all appear ahead of the free-text `args` tail in a real payload —
+#    nothing pinned that fact, so a key becoming optional or the fields
+#    reordering would have turned a working hook into a multi-minute stall
+#    with every test above still green (none of them carries a realistically
+#    large payload). The extractor now short-circuits an absent key with a
+#    `case` presence check, so field order no longer decides the cost; this
+#    test keeps the adapter honest either way.
 #
 #    Bound chosen from measurement, not guessed: a real-shaped 200 KB+
 #    payload with this adapter's actual field order measured ~20-50 ms
 #    end-to-end on this machine (a 2 MB payload of the same shape measured
-#    ~0.4 s). The 3-second bound below leaves that ~60-150x of headroom for
-#    a slower CI runner while still catching the failure mode this test
-#    exists for: per the measured curve above, an accidental fall onto the
-#    absent-key quadratic path at this payload size would take single-digit
-#    to tens of seconds, not fail-at-the-margin — so this bound cannot pass
-#    by accident on a hung extraction.
+#    ~0.4 s). The 3000 ms base below leaves that ~60-150x of headroom while
+#    still catching the failure mode this test exists for: per the measured
+#    curve above, an accidental fall onto a quadratic path at this payload
+#    size would take single-digit to tens of seconds, not fail-at-the-margin.
+#
+#    Measured with a SUB-SECOND clock. `date +%s` (whole seconds) carries
+#    +/-1s of ambiguity, so a run that printed "3" against a `-le 3` bound
+#    could have been anything from 2.001s to 3.999s — the assertion was
+#    genuinely undecided at its own boundary. BSD `date` has no %N; perl's
+#    Time::HiRes is in the base install everywhere this suite runs.
+#    $TCS_PERF_SLACK (4 in CI, see .github/workflows/tests.yml) scales the
+#    base, and 3000x4 = 12000 ms still sits an order of magnitude below the
+#    multi-minute stall this test guards against.
 # ---------------------------------------------------------------------------
 
+# Scale a wall-clock budget (in ms) by $TCS_PERF_SLACK, the convention
+# plugins/tcs-git-helpers/tests/bats/lib/helpers.bash established. Duplicated
+# rather than sourced: these observability suites are deliberately
+# standalone, and reaching into another plugin's test library for ten lines
+# would couple two suites with no other relationship.
+_perf_budget_ms() {
+  local budget="$1" slack="${TCS_PERF_SLACK:-1}"
+  case "$slack" in
+    ''|*[!0-9]*) slack=1 ;;
+  esac
+  [ "$slack" -lt 1 ] && slack=1
+  printf '%d' $((budget * slack))
+}
+
+# Milliseconds since the epoch. q{} rather than single quotes so the same
+# one-liner can be pasted inside a single-quoted `bash -c` body elsewhere.
+_now_ms() {
+  perl -MTime::HiRes=time -e 'printf q{%d}, time()*1000'
+}
+
 @test "skill: a 200KB+ args payload in real field order completes quickly and records correctly" {
+  if ! command -v perl >/dev/null 2>&1; then
+    skip "perl not available for a sub-second clock"
+  fi
+
   local payload_file="$TEST_DIR/large_payload.json"
   local big
   big="$(printf 'x%.0s' $(seq 1 300000))"
@@ -326,14 +360,18 @@ _assert_absent() {              # _assert_absent <needle> <file>
   run wc -c < "$payload_file"
   [ "${output// /}" -gt 300000 ]
 
-  local start end elapsed
-  start="$(date +%s)"
+  local start end elapsed budget
+  start="$(_now_ms)"
   run _run_adapter_enabled_from_file "$payload_file"
-  end="$(date +%s)"
+  end="$(_now_ms)"
   [ "$status" -eq 0 ]
 
   elapsed=$((end - start))
-  [ "$elapsed" -le 3 ]
+  budget="$(_perf_budget_ms 3000)"
+  if [ "$elapsed" -gt "$budget" ]; then
+    printf 'SLOW: %s ms against a %s ms budget\n' "$elapsed" "$budget" >&2
+    return 1
+  fi
 
   [ -f "$EVENTS_FILE" ]
   if command -v jq >/dev/null 2>&1; then

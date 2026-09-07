@@ -555,3 +555,88 @@ _make_fork_shim() {
   [ "$status" -eq 0 ]
   [ ! -d "$data_dir" ]
 }
+
+# ---------------------------------------------------------------------------
+# 12. The toplevel itself as `file_path` — the one legitimate empty-LOOKING
+#    case the phantom-record guard's own comment names by hand
+#    ("`_observability_redact_path` reduces it to `.`, and `.` is non-empty").
+#    That comment was the only thing standing behind the behaviour: no test
+#    constructed the case, so a guard rewritten to check `_file_path` instead
+#    of `_path`, or a redactor that returned "" instead of ".", would have
+#    dropped a real load with the whole suite green.
+# ---------------------------------------------------------------------------
+
+@test "file_path equal to the repo toplevel yields path \".\" and a record IS written" {
+  local data_dir="$TEST_DIR/rec_toplevel"
+  local payload
+  payload="$(_payload_json \
+    session_id=sess-toplevel \
+    file_path="$REPO_CANONICAL" \
+    memory_type=Project \
+    load_reason=session_start)"
+
+  run _run_adapter "$data_dir" "$payload"
+  [ "$status" -eq 0 ]
+
+  local file
+  file="$(_events_file "$data_dir")"
+  [ -f "$file" ]
+  run wc -l < "$file"
+  [ "${output// /}" = "1" ]
+
+  _assert_present '"path":"."' "$file"
+  _assert_present '"reason":"session_start"' "$file"
+  # The absolute toplevel is what was redacted away; it must not survive
+  # anywhere in the line.
+  _assert_absent "$REPO_CANONICAL" "$file"
+}
+
+# ---------------------------------------------------------------------------
+# 13. CON-7 end to end: ONE `git rev-parse` per record, not two.
+#
+#    This adapter resolves the toplevel itself (it needs one for every
+#    `_observability_redact_path` call) and `_observability_write` used to
+#    resolve it AGAIN, independently, on every call — two forks of the same
+#    command per recorded event, on the hot path of a hook that fires once
+#    per instruction file loaded. Test 10's shim sanity check only asserted
+#    the counter was non-empty, which is satisfied by one fork or by five.
+# ---------------------------------------------------------------------------
+
+@test "the adapter and the writer share ONE git rev-parse per record" {
+  local shim_dir="$TEST_DIR/shim_once"
+  local git_counter="$TEST_DIR/once_git_calls"
+  local stat_counter="$TEST_DIR/once_stat_calls"
+  _make_fork_shim "$shim_dir" "$git_counter" "$stat_counter"
+  local data_dir="$TEST_DIR/shim_once_data"
+
+  local payload
+  payload="$(_payload_json \
+    session_id=sess-once \
+    file_path="$REPO_CANONICAL/base.txt" \
+    memory_type=Project \
+    load_reason=session_start)"
+
+  run bash -c '
+    shim_dir="$1"; payload="$2"; adapter="$3"; data_dir="$4"
+    cd "'"$REPO"'" || exit 90
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    PATH="$shim_dir:$PATH"
+    printf "%s" "$payload" | "$adapter"
+  ' _ "$shim_dir" "$payload" "$ADAPTER" "$data_dir"
+  [ "$status" -eq 0 ]
+
+  # The shim prints nothing and exits 0, so the resolved toplevel is empty —
+  # which is exactly the "pass it even when empty" case the writer's
+  # pre-resolved-toplevel contract has to honour, or it would fork again to
+  # "fix" the empty value. A record is still written (the path falls back to
+  # its basename), so this is not a vacuous count over a skipped write.
+  local file
+  file="$(_events_file "$data_dir")"
+  [ -f "$file" ]
+  _assert_present '"path":"base.txt"' "$file"
+
+  local calls
+  calls="$(wc -c < "$git_counter")"
+  [ "${calls// /}" -eq 1 ]
+}

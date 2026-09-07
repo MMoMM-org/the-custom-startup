@@ -56,33 +56,52 @@ _OBSERVABILITY_SKILL_KEY="skill"
 #
 # bash 3.2 / BSD userland (CON-1); see logwrite.sh's header for the full
 # list of constraints this file inherits by sourcing it.
+#
+# LC_ALL=C is not re-exported here: logwrite.sh exports it, and nothing this
+# script does before sourcing it is locale-sensitive. See log_instructions.sh
+# for the full reasoning — all three adapters follow the same rule.
+#
+# STRUCTURE: a flat top-level script, matching log_instructions.sh and
+# log_agent.sh. This file previously wrapped its body in a function under
+# `set -uo pipefail`. That is dropped deliberately, not for uniformity's own
+# sake: `set -u` makes any unbound-variable reference exit the shell
+# NON-ZERO with a message on stderr, which is precisely the pair of things
+# CON-4/CON-5 say a hook adapter must never do — the very failure mode the
+# `|| ...` guard on every line below exists to prevent. Without it an
+# unbound name expands to empty, the guards absorb it, and the script still
+# reaches `exit 0`. The function wrapper bought `local` scoping, which is
+# worth nothing in a script that is EXECUTED as its own process rather than
+# sourced.
 
-set -uo pipefail
+_log_skill_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" >/dev/null 2>&1 && pwd)" || _log_skill_dir=""
+# shellcheck source=./logwrite.sh
+if [ -z "$_log_skill_dir" ] || ! . "$_log_skill_dir/logwrite.sh" 2>/dev/null; then
+  # Cannot even load the writer: nothing to record with, but this must still
+  # never fail loudly (CON-4/CON-5) — drain stdin first so the harness's own
+  # write of the payload never lands on a closed pipe, then get out of the
+  # way. The drain is a `cat` fork, but only on this already-broken path;
+  # the success path below stays fork-free.
+  cat >/dev/null 2>&1
+  exit 0
+fi
 
-_log_skill_main() {
-  local script_dir
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)" || return 0
-  # shellcheck source=./logwrite.sh
-  . "$script_dir/logwrite.sh" 2>/dev/null || return 0
+# Slurp stdin once, fork-free (CON-7): `read -d ''` reads to EOF and
+# reports non-zero when no NUL delimiter was found, which is always, for
+# a JSON payload — the `|| true` is what makes that expected outcome, not
+# a real failure.
+_payload=""
+IFS= read -r -d '' _payload || true
 
-  # Slurp stdin once, fork-free (CON-7): `read -d ''` reads to EOF and
-  # reports non-zero when no NUL delimiter was found, which is always, for
-  # a JSON payload — the `|| true` is what makes that expected outcome, not
-  # a real failure.
-  local payload=""
-  IFS= read -r -d '' payload || true
+_tool_name="$(_observability_field "$_payload" tool_name)" || _tool_name=""
+[ "$_tool_name" = "Skill" ] || exit 0
 
-  local tool_name=""
-  tool_name="$(_observability_field "$payload" tool_name)" || tool_name=""
-  [ "$tool_name" = "Skill" ] || return 0
+_session_id="$(_observability_field "$_payload" session_id)" || _session_id=""
+_skill_name="$(_observability_field "$_payload" "$_OBSERVABILITY_SKILL_KEY")" || _skill_name=""
 
-  local session_id="" skill_name=""
-  session_id="$(_observability_field "$payload" session_id)" || session_id=""
-  skill_name="$(_observability_field "$payload" "$_OBSERVABILITY_SKILL_KEY")" || skill_name=""
+# No `_observability_toplevel=` pair here. This adapter redacts no paths, so
+# it has no toplevel of its own to thread through — resolving one just to
+# hand it over would ADD the fork the reserved pair exists to remove. Letting
+# the writer resolve it keeps the count at exactly one per record.
+_observability_write kind=skill session="$_session_id" skill="$_skill_name"
 
-  _observability_write kind=skill session="$session_id" skill="$skill_name"
-  return 0
-}
-
-_log_skill_main
 exit 0

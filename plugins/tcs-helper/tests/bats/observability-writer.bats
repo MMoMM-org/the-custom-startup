@@ -1575,3 +1575,321 @@ assert obj['probe'] == '/tmp/we' + chr(92), repr(obj['probe'])
   [ "$status" -eq 0 ]
   [ "$output" = "REACHED" ]
 }
+
+# ---------------------------------------------------------------------------
+# 29-32. Cross-cutting fix to `_observability_field` and `_observability_write`.
+#
+# 29 pins the absent-key COST, 30 re-pins the absent-key SEMANTICS at a size
+# where the cost fix could plausibly have changed them, 31 pins the literal-key
+# tightening the cost fix required, and 32 pins the writer's pre-resolved
+# toplevel argument together with its backward compatibility.
+# ---------------------------------------------------------------------------
+
+# Scale a wall-clock budget (in ms) by $TCS_PERF_SLACK, the convention
+# plugins/tcs-git-helpers/tests/bats/lib/helpers.bash established and
+# .github/workflows/tests.yml sets to 4. Duplicated here rather than sourced:
+# these suites are deliberately standalone (they source nothing but the file
+# under test), and reaching across into another plugin's test library for ten
+# lines would couple two suites that have no other relationship.
+#
+# The base budgets below are chosen so that base x 4 still sits comfortably
+# BELOW the broken baseline each bound exists to catch — a slack factor that
+# lifts the ceiling past the regression makes the test decorative.
+_perf_budget_ms() {
+  local budget="$1" slack="${TCS_PERF_SLACK:-1}"
+  case "$slack" in
+    ''|*[!0-9]*) slack=1 ;;
+  esac
+  [ "$slack" -lt 1 ] && slack=1
+  printf '%d' $((budget * slack))
+}
+
+# Time ONE `_observability_field` call, in-process, and print
+# "<elapsed_ms> <extracted value>".
+#
+# The payload is read from a FILE inside the subshell, never passed as an
+# argv element: a 150 KB argument overflows the argument list on some of the
+# environments this suite runs in ("Argument list too long"), which would turn
+# a timing test into an exec failure that still exits non-zero for the wrong
+# reason. The clock is read inside the same shell that makes the call, so the
+# measured interval is the extraction itself plus one `perl` fork — not the
+# cost of standing the subshell up and sourcing the writer.
+#
+# perl, not `date +%s`: whole seconds carry +/-1s of ambiguity, which is most
+# of a bound measured in hundreds of milliseconds. BSD `date` has no %N, so a
+# sub-second clock has to come from elsewhere; perl's Time::HiRes is in the
+# base install on macOS and on every runner this suite meets. The one-liner
+# uses q{} rather than single quotes so it can sit inside the single-quoted
+# `bash -c` body below without any escaping.
+_time_field() {
+  local payload_file="$1" key="$2"
+  bash -c '
+    writer="$1"; payload_file="$2"; key="$3"
+    . "$writer" || exit 91
+    payload="$(cat "$payload_file")" || payload=""
+    start="$(perl -MTime::HiRes=time -e "printf q{%d}, time()*1000")"
+    value="$(_observability_field "$payload" "$key")" || value=""
+    end="$(perl -MTime::HiRes=time -e "printf q{%d}, time()*1000")"
+    printf "%s %s\n" "$((end - start))" "$value"
+  ' _ "$WRITER" "$payload_file" "$key"
+}
+
+# Build the 150 KB fixture: the keys a real adapter looks up sit near the
+# FRONT, the padding stands in for the rest of a large payload, and the key
+# under test is ABSENT — the exact shape log_agent.sh hits on every
+# non-nested dispatch. Compact separators: a space after ':' would stop
+# `_observability_field`'s `"key":"` match from ever landing and silently turn
+# every assertion below into a no-op.
+_write_large_payload() {
+  local out="$1" canary="$2"
+  python3 -c "
+import json
+obj = {
+    'session_id': 'sess-large',
+    'agent_type': 'Explore',
+    'agent_id': 'agent-large',
+    'command': 'curl -H \"Authorization: Bearer $canary\" https://example.com',
+    'padding': 'x' * 150000,
+}
+with open('$out', 'w') as f:
+    f.write(json.dumps(obj, separators=(',', ':')))
+"
+}
+
+@test "extract: an absent key on a 150 KB payload costs milliseconds, not seconds" {
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 not available to build the large fixture payload"
+  fi
+  if ! command -v perl >/dev/null 2>&1; then
+    skip "perl not available for a sub-second clock"
+  fi
+
+  local payload_file="$TEST_DIR/perf_payload.json"
+  _write_large_payload "$payload_file" "sk-ant-PERFCANARY-0123456789"
+  [ -f "$payload_file" ]
+
+  # Sanity first: the harness measures a REAL extraction. A present key near
+  # the front is the cheap path and must return its value — without this, a
+  # writer that failed to source would "pass" the bound below by doing
+  # nothing at all.
+  run _time_field "$payload_file" agent_type
+  [ "$status" -eq 0 ]
+  [ "${output#* }" = "Explore" ]
+
+  run _time_field "$payload_file" parent_agent_type
+  [ "$status" -eq 0 ]
+  local elapsed="${output%% *}"
+  local value="${output#* }"
+  [ "$value" = "" ]
+
+  # Bound: 250 ms, x $TCS_PERF_SLACK (4 in CI, so 1000 ms there).
+  #
+  # Measured on the machine this test was written on: the quadratic
+  # absent-key path costs 6630 ms at this payload size (25 KB / 50 KB /
+  # 100 KB / 150 KB measured at 197 / 771 / 3377 / 6630 ms — the curve is
+  # quadratic, so a bigger payload is worse, never better). The fixed path
+  # measures single-digit milliseconds including the `perl` fork inside the
+  # timed region. 250 ms is therefore ~25x above the fixed cost and ~26x
+  # below the broken one; even the CI ceiling of 1000 ms stays 6.6x below the
+  # broken baseline, so the slack factor cannot swallow the regression this
+  # test exists to catch. CON-7 budgets 1 ms per hook invocation; this bound
+  # is not that budget, it is the far coarser "a hook must not stall a
+  # session for seconds" line.
+  [ "$elapsed" -le "$(_perf_budget_ms 250)" ]
+}
+
+@test "extract: an absent key on a 150 KB payload still yields empty, never the payload" {
+  if ! command -v python3 >/dev/null 2>&1; then
+    skip "python3 not available to build the large fixture payload"
+  fi
+
+  # The redaction-critical guarantee, re-asserted at the size the cost fix
+  # changes the code path for. Test 21 pins it on a small payload; a
+  # presence pre-check that got its pattern wrong would fail HERE and nowhere
+  # else, because only here does the pre-check decide the outcome on its own.
+  local canary="sk-ant-BIGLEAKCANARY-0123456789"
+  local payload_file="$TEST_DIR/leak_payload.json"
+  _write_large_payload "$payload_file" "$canary"
+  [ -f "$payload_file" ]
+
+  local data_dir="$TEST_DIR/red30"
+  run bash -c '
+    data_dir="$1"; payload_file="$2"; repo="$3"; writer="$4"
+    cd "$repo" || exit 90
+    . "$writer" || exit 91
+    mkdir -p "$data_dir" || exit 92
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    payload="$(cat "$payload_file")" || payload=""
+    v="$(_observability_field "$payload" parent_agent_type)" || v=""
+    s="$(_observability_field "$payload" agent_id)" || s=""
+    printf "%s" "$v" > "$data_dir/extracted.txt"
+    _observability_write kind=agent session=sess-biglead "probe=$v" "seen=$s"
+  ' _ "$data_dir" "$payload_file" "$REPO" "$WRITER"
+  [ "$status" -eq 0 ]
+
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+
+  # The extractor is alive on THIS payload, so the absences below are a real
+  # result and not the silence of a function that did nothing.
+  _assert_present '"seen":"agent-large"' "$file"
+
+  run cat "$data_dir/extracted.txt"
+  [ "$output" = "" ]
+  _assert_present '"probe":""' "$file"
+
+  _assert_absent "$canary" "$file"
+  _assert_absent 'Authorization' "$file"
+  _assert_absent 'xxxxxxxxxx' "$file"
+}
+
+# ---------------------------------------------------------------------------
+# 31. Keys are LITERAL, not glob patterns.
+#
+# `_observability_field`'s presence check and its prefix removal must agree on
+# every input, or the function's result depends on which of the two decides —
+# a silent divergence in the redaction-critical helper. They can only agree if
+# BOTH treat the key literally, so this pins the tightening rather than the
+# mechanism: a field name is a name, and today an unquoted `$key` inside the
+# pattern made `*`, `?` and `[...]` behave as wildcards.
+#
+# Each case below is a real divergence, measured before the fix:
+#   {"axb":"1"} / a*b    quoted: absent   unquoted removal: matched "1"
+#   {"aXb":"1"} / a?b    quoted: absent   unquoted removal: matched "1"
+#   {"a[b]":"1"} / a[b]  quoted: PRESENT  unquoted removal: no match, empty
+# The fourth is the hazard that makes this a fix and not a preference: with a
+# glob key, prefix removal can walk PAST the field it names and return a
+# NEIGHBOURING field's value.
+# ---------------------------------------------------------------------------
+
+@test "extract: a key containing glob metacharacters is matched literally, not as a pattern" {
+  # * does not stand for "any bytes"
+  run _call_field '{"axb":"1","other":"2"}' 'a*b'
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+
+  # ? does not stand for "any one byte"
+  run _call_field '{"aXb":"1","other":"2"}' 'a?b'
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+
+  # [...] is a real key name, not a character class — this one must MATCH.
+  run _call_field '{"a[b]":"1","other":"2"}' 'a[b]'
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+
+  # The hazard: `a*b` used to match from the first `"a` to the last `b":"`
+  # before it, i.e. across two unrelated fields, and returned the SECOND
+  # field's value. In a redaction path that means a mistyped or
+  # attacker-influenced key name returning a value nobody asked for.
+  run _call_field '{"aaa":"first","bbb":"second"}' 'a*b'
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}
+
+# ---------------------------------------------------------------------------
+# 32. CON-7: `_observability_write` accepts a pre-resolved toplevel through the
+#    reserved `_observability_toplevel=` pair, so an adapter that already
+#    resolved one (log_instructions.sh, for its path redaction) does not pay
+#    for a second `git rev-parse` inside the writer.
+#
+#    The three sibling helpers (_observability_data_dir,
+#    _observability_repo_field, _observability_redact_path) already take a
+#    pre-resolved toplevel as a positional argument. The writer cannot: its
+#    positional arguments ARE the record's `key=value` pairs, so a bare extra
+#    positional would be indistinguishable from a field. A reserved key is the
+#    only mechanism that fits the existing calling convention.
+# ---------------------------------------------------------------------------
+
+@test "write: a pre-resolved toplevel is used and forks git zero times" {
+  local data_dir="$TEST_DIR/toplevel_zero"
+  local counter="$TEST_DIR/toplevel_zero_calls"
+  : > "$counter"
+
+  bash -c '
+    data_dir="$1"; counter="$2"; top="$3"; repo="$4"; writer="$5"
+    cd "$repo" || exit 90
+    . "$writer" || exit 91
+    git() {
+      if [ "$1" = "rev-parse" ]; then
+        printf "x" >> "$counter"
+      fi
+      command git "$@"
+    }
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    _observability_write kind=hook session=sess-top-zero \
+      _observability_toplevel="$top"
+  ' _ "$data_dir" "$counter" "$REPO_CANONICAL" "$REPO" "$WRITER"
+
+  local calls
+  calls="$(wc -c < "$counter")"
+  [ "${calls// /}" -eq 0 ]
+
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+  _assert_present "\"repo\":\"$REPO_NAME\"" "$file"
+  # The reserved pair is consumed, never emitted as a field of its own.
+  _assert_absent '_observability_toplevel' "$file"
+}
+
+@test "write: the pre-resolved toplevel is the one actually used, not a fork's result" {
+  # A toplevel the writer could not possibly have resolved itself: if the
+  # value were accepted and then ignored, `repo` would read myrepo and this
+  # would fail. This is what stops the zero-fork test above from passing on a
+  # writer that merely swallowed the argument.
+  local data_dir="$TEST_DIR/toplevel_used"
+  bash -c '
+    data_dir="$1"; repo="$2"; writer="$3"
+    cd "$repo" || exit 90
+    . "$writer" || exit 91
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    _observability_write kind=hook session=sess-top-used \
+      _observability_toplevel=/nowhere/elsewhererepo
+  ' _ "$data_dir" "$REPO" "$WRITER"
+
+  local file="$data_dir/observability/events.jsonl"
+  [ -f "$file" ]
+  _assert_present '"repo":"elsewhererepo"' "$file"
+}
+
+@test "write: with and without a pre-resolved toplevel produce identical records" {
+  # Backward compatibility, stated as an equality rather than as a list of
+  # spot checks: 50 existing tests call _observability_write with no reserved
+  # pair, and every one of them must keep seeing the record it saw before.
+  # Comparing the two whole lines (minus the timestamp, the one field that
+  # legitimately differs between two calls) catches a leaked field, a changed
+  # field ORDER, and a toplevel that is accepted but ignored.
+  local dir_without="$TEST_DIR/compat_without"
+  local dir_with="$TEST_DIR/compat_with"
+
+  bash -c '
+    data_dir="$1"; repo="$2"; writer="$3"
+    cd "$repo" || exit 90
+    . "$writer" || exit 91
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    _observability_write kind=hook session=sess-compat path=docs/a.md bytes=12
+  ' _ "$dir_without" "$REPO" "$WRITER"
+
+  bash -c '
+    data_dir="$1"; repo="$2"; writer="$3"; top="$4"
+    cd "$repo" || exit 90
+    . "$writer" || exit 91
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    _observability_write kind=hook session=sess-compat \
+      _observability_toplevel="$top" path=docs/a.md bytes=12
+  ' _ "$dir_with" "$REPO" "$WRITER" "$REPO_CANONICAL"
+
+  local a b
+  a="$(sed 's/"ts":"[^"]*"/"ts":"T"/' "$dir_without/observability/events.jsonl")"
+  b="$(sed 's/"ts":"[^"]*"/"ts":"T"/' "$dir_with/observability/events.jsonl")"
+  [ -n "$a" ]
+  if [ "$a" != "$b" ]; then
+    printf 'without: %s\nwith:    %s\n' "$a" "$b" >&2
+    return 1
+  fi
+}

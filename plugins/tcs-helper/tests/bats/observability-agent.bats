@@ -408,27 +408,58 @@ assert val == '', 'agent_type should be absent or empty, got %r' % (val,)
 }
 
 # ---------------------------------------------------------------------------
-# 9. Large-payload path. `_observability_field` (logwrite.sh, phase 1) is
+# 9. Large-payload path. `_observability_field` (logwrite.sh) used to be
 #    quadratic when the sought key is ABSENT from a large payload -- this
 #    adapter calls it unconditionally for AGENT_PAYLOAD_KEY_PARENT, a key
-#    absent on every non-nested dispatch (the common case). The quadratic
-#    mechanism itself lives in logwrite.sh and is out of scope for this
-#    file (being fixed centrally); this test exists so the large-payload
-#    path is exercised by something, and so a further regression in THIS
-#    adapter's own extraction calls (e.g. an accidental second full-payload
-#    scan added here) would be caught rather than silently accepted.
+#    absent on every non-nested dispatch (the common case), so the common
+#    case paid the worst case. That has been fixed centrally in logwrite.sh
+#    with a `case` presence pre-check (pinned by
+#    observability-writer.bats); this test is the ADAPTER-level guard: the
+#    whole 150 KB payload must still go through this script's four
+#    extraction calls in milliseconds, and a further regression in THIS
+#    adapter's own calls (e.g. an accidental second full-payload scan added
+#    here) is caught rather than silently accepted.
 #
-#    Bound chosen: a 150 KB payload (agent_type/agent_id present near the
-#    front, no parent key -- realistic shape, worst-case absent-key search
-#    over the padding) measured at ~6.6s on the machine this suite was
-#    authored on, against the CURRENT, still-quadratic logwrite.sh. 30s
-#    leaves roughly 4x headroom for slower CI runners while still failing
-#    hard on a real regression -- the reviewer's own measurement put a
-#    2 MB payload at "did not finish inside two minutes", four orders of
-#    magnitude past this bound.
+#    THE BOUND, and why it is not 30s any more. The original bound was
+#    calibrated against the BROKEN baseline: this exact payload shape
+#    measured ~6.6s against the quadratic extractor, and 30s was chosen to
+#    sit above it with headroom for slow runners. That makes the test blind
+#    to the very defect it exercises -- reintroducing the quadratic path
+#    costs ~6.6s again and sails straight through a 30s ceiling.
+#
+#    Re-measured after the fix, on the same machine: the same payload
+#    through the same adapter completes end to end in ~30 ms (process
+#    spawn, sourcing the writer, four extractions, one `git rev-parse`, one
+#    `date`, the append). The base bound below is 1000 ms -- ~33x above the
+#    measured cost -- scaled by $TCS_PERF_SLACK, which CI sets to 4. The
+#    base is 1000 and not 2000 precisely because of that multiplier: the
+#    ceiling has to stay below the 6.6s reversion signal on every runner,
+#    and 1000x4 = 4000 ms does while 2000x4 = 8000 ms would not. A slack
+#    factor that lifts the ceiling past the regression makes the test
+#    decorative.
+#
+#    The watchdog below is no longer the assertion, only a hang-stopper: a
+#    truly pathological payload (the reviewer measured a 2 MB one at "did
+#    not finish inside two minutes") must not stall the suite while the
+#    elapsed-time assertion waits for it.
 # ---------------------------------------------------------------------------
 
-_LARGE_PAYLOAD_TIMEOUT_SECS=30
+_LARGE_PAYLOAD_WATCHDOG_SECS=20
+
+# Scale a wall-clock budget (in ms) by $TCS_PERF_SLACK, the convention
+# plugins/tcs-git-helpers/tests/bats/lib/helpers.bash established and
+# .github/workflows/tests.yml sets to 4. Duplicated rather than sourced:
+# these observability suites are deliberately standalone, and reaching into
+# another plugin's test library for ten lines would couple two suites with no
+# other relationship.
+_perf_budget_ms() {
+  local budget="$1" slack="${TCS_PERF_SLACK:-1}"
+  case "$slack" in
+    ''|*[!0-9]*) slack=1 ;;
+  esac
+  [ "$slack" -lt 1 ] && slack=1
+  printf '%d' $((budget * slack))
+}
 
 # Portable bounded run: no dependency on GNU `timeout`/`gtimeout`, which
 # this repo's own macOS CI runners do not ship (CON-1's BSD-userland
@@ -457,6 +488,16 @@ _LARGE_PAYLOAD_TIMEOUT_SECS=30
 # closed explicitly. Closing all four is what lets `run` return as soon as
 # the real work (the `wait "$target_pid"` below) actually finishes, rather
 # than whenever the watchdog's last orphaned descendant happens to exit.
+#
+# It also MEASURES the run and prints the elapsed milliseconds as its only
+# line of stdout (the adapter itself writes nothing there -- test 4 pins
+# that), so the caller can assert a real duration instead of inferring one
+# from "the watchdog did not fire". perl's Time::HiRes, not `date +%s`:
+# whole seconds carry +/-1s of ambiguity, which is most of a bound measured
+# in hundreds of milliseconds, and BSD `date` has no %N. The one-liner uses
+# q{} rather than single quotes so it can sit inside this single-quoted
+# `bash -c` body without escaping. The clock is stopped the instant the
+# adapter is reaped, before the watchdog teardown.
 _run_adapter_bounded() {
   local secs="$1" data_dir="$2" payload_file="$3"
   bash -c '
@@ -464,6 +505,7 @@ _run_adapter_bounded() {
     cd "'"$REPO"'" || exit 90
     export CLAUDE_OBSERVABILITY_ENABLED=1
     export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    start="$(perl -MTime::HiRes=time -e "printf q{%d}, time()*1000")"
     "'"$ADAPTER"'" < "$payload_file" &
     target_pid=$!
     ( sleep "$secs"
@@ -477,8 +519,10 @@ _run_adapter_bounded() {
     else
       result=$?
     fi
+    end="$(perl -MTime::HiRes=time -e "printf q{%d}, time()*1000")"
     kill "$watchdog_pid" 2>/dev/null
     wait "$watchdog_pid" 2>/dev/null
+    printf "%s\n" "$((end - start))"
     exit "$result"
   ' _ "$secs" "$data_dir" "$payload_file"
 }
@@ -487,14 +531,17 @@ _run_adapter_bounded() {
   if ! command -v python3 >/dev/null 2>&1; then
     skip "python3 not available to build the large fixture payload"
   fi
+  if ! command -v perl >/dev/null 2>&1; then
+    skip "perl not available for a sub-second clock"
+  fi
 
   local data_dir="$TEST_DIR/rec9"
   local payload_file="$TEST_DIR/large_payload.json"
 
   # agent_type/agent_id sit near the FRONT, matching a real payload's
   # shape; the padding stands in for the rest of a large real payload and
-  # is what makes the ABSENT parent-key search expensive under the
-  # current, still-quadratic extractor. Compact separators -- a space
+  # is what made the ABSENT parent-key search expensive before the
+  # extractor's presence pre-check landed. Compact separators -- a space
   # after ':' would stop `_observability_field`'s own `"key":"` match from
   # ever landing, silently turning this into a no-op test.
   python3 -c "
@@ -512,8 +559,19 @@ with open('$payload_file', 'w') as f:
 "
   [ -f "$payload_file" ]
 
-  run _run_adapter_bounded "$_LARGE_PAYLOAD_TIMEOUT_SECS" "$data_dir" "$payload_file"
+  run _run_adapter_bounded "$_LARGE_PAYLOAD_WATCHDOG_SECS" "$data_dir" "$payload_file"
   [ "$status" -eq 0 ]
+
+  # The measured duration, in milliseconds, against the bound argued for in
+  # this section's header. Asserted on the number rather than on "the
+  # watchdog did not fire", so the failure message names the real cost.
+  local elapsed_ms="${output// /}"
+  local budget_ms
+  budget_ms="$(_perf_budget_ms 1000)"
+  if [ "$elapsed_ms" -gt "$budget_ms" ]; then
+    printf 'SLOW: %s ms against a %s ms budget\n' "$elapsed_ms" "$budget_ms" >&2
+    return 1
+  fi
 
   local file
   file="$(_events_file "$data_dir")"

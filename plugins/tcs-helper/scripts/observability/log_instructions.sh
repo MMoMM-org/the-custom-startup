@@ -26,8 +26,14 @@
 # see solution.md's ADR-1 premise correction). Resolving our own directory
 # keeps this script correct regardless of $PWD or $CLAUDE_PROJECT_DIR at
 # call time.
-
-export LC_ALL=C
+#
+# LC_ALL=C is NOT re-exported here. logwrite.sh exports it at the top of the
+# file, so it is in effect from the moment the source below succeeds, and
+# nothing this script does BEFORE that point is locale-sensitive (`dirname`,
+# `cd`, `pwd`) — nor does the failure path (drain stdin, exit) touch a number
+# or a collation order. A second export would be a second place for the
+# setting to drift from the one that actually governs the write path. All
+# three adapters follow this rule.
 
 _log_instructions_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)" || _log_instructions_dir=""
 if [ -z "$_log_instructions_dir" ] || ! . "$_log_instructions_dir/logwrite.sh" 2>/dev/null; then
@@ -50,12 +56,14 @@ fi
 _payload="$(cat)" || _payload=""
 
 # Resolve the repo toplevel ONCE (CON-7) and thread it into every
-# _observability_redact_path call below, exactly as _observability_write
-# does internally for its own `repo` field. See this task's report for the
-# one fork this adapter cannot avoid without changing logwrite.sh itself
-# (out of scope here): _observability_write resolves the toplevel AGAIN,
-# independently, on every call — that is a second, unavoidable-from-here
-# fork of the same command.
+# _observability_redact_path call below AND into _observability_write, via
+# the writer's reserved `_observability_toplevel=` pair (see that function's
+# header). Before that pair existed, the writer resolved the toplevel again,
+# independently, on every call — two forks of the same command per recorded
+# event, on a hook that fires once per instruction file loaded. Passing it
+# even when EMPTY is deliberate and part of the contract: empty means
+# "outside a repo, already determined", not "not supplied", so the writer
+# does not fork to re-check.
 _toplevel="$(git rev-parse --show-toplevel 2>/dev/null)" || _toplevel=""
 
 _session="$(_observability_field "$_payload" session_id)" || _session=""
@@ -110,6 +118,7 @@ fi
 
 _args=(
   kind=instruction
+  "_observability_toplevel=$_toplevel"
   "session=$_session"
   "path=$_path"
   "scope=$_memory_type"
