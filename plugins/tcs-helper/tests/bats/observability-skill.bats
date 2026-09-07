@@ -78,6 +78,17 @@ _run_adapter_disabled() {
       "CLAUDE_OBSERVABILITY_DATA=$DATA_DIR" "$ADAPTER" )
 }
 
+# Same as _run_adapter_enabled, but the payload comes from a FILE rather
+# than a shell argument — for the large-payload test below, where passing
+# a 200 KB+ string through a positional parameter is unnecessary indirection
+# a fixture file avoids.
+_run_adapter_enabled_from_file() {
+  ( cd "$REPO" && \
+    env -u CLAUDE_OBSERVABILITY_DETAIL \
+      "CLAUDE_OBSERVABILITY_ENABLED=1" "CLAUDE_OBSERVABILITY_DATA=$DATA_DIR" \
+      "$ADAPTER" < "$1" )
+}
+
 # bats runs a test body under `set -e`, and `! grep -q ...` only fails the
 # test as the body's LAST command — not in the middle of one. Every absence
 # assertion below goes through this helper instead of a bare `! grep`
@@ -176,11 +187,12 @@ _assert_absent() {              # _assert_absent <needle> <file>
 
   run _run_adapter_enabled "$payload"
   [ "$status" -eq 0 ]
-  [ ! -e "$EVENTS_FILE" ]
-
-  if [ -e "$DATA_DIR" ]; then
-    _assert_absent 'CANARY-BASHTOKEN-424242' "$EVENTS_FILE"
-  fi
+  # No file at all is created — a Bash tool_name returns before the writer's
+  # mkdir -p ever runs, so there is nowhere for the canary to leak into.
+  # (Not an `if [ -e "$DATA_DIR" ]; then ...` guard around the grep: that
+  # branch can never execute given the assertion above, so it would never
+  # actually run the check it claims to make.)
+  [ ! -e "$DATA_DIR" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -233,4 +245,101 @@ _assert_absent() {              # _assert_absent <needle> <file>
   run _run_adapter_disabled "$payload"
   [ "$status" -eq 0 ]
   [ ! -e "$DATA_DIR" ]
+}
+
+# ---------------------------------------------------------------------------
+# 8. Mutation-survivor fix: the tool-name gate must be an EXACT match, not a
+#    prefix match. `[ "$tool_name" = "Skill" ]` widened to a `Skill*` glob
+#    left every test above green, because no fixture used a tool_name that
+#    is Skill-prefixed but a genuinely different tool.
+# ---------------------------------------------------------------------------
+
+@test "skill: a Skill-prefixed but different tool_name produces no record" {
+  local payload
+  payload='{"session_id":"sess-skill-8","cwd":"/x","tool_name":"SkillOther","tool_input":{"skill":"tcs-helper:memory-add"}}'
+
+  run _run_adapter_enabled "$payload"
+  [ "$status" -eq 0 ]
+  [ ! -e "$EVENTS_FILE" ]
+}
+
+# ---------------------------------------------------------------------------
+# 9. Mutation-survivor fix: `args` must never be emitted, even when a real
+#    value is present. This is more than a coverage gap — `args` is free
+#    text a user typed (paths, quoted content, secrets) and it is NOT on the
+#    writer's bare-name deny list (command full_command hook_command content
+#    file_content transcript_path cwd prompt prompt_text response
+#    response_text), so the fail-safe would not catch an adapter that starts
+#    emitting it. This test is the only thing standing between a future edit
+#    and a silent leak.
+# ---------------------------------------------------------------------------
+
+@test "skill: args is never emitted, even when tool_input carries a real args value" {
+  local payload
+  payload='{"session_id":"sess-skill-9","cwd":"/x","tool_name":"Skill","tool_input":{"skill":"tcs-helper:memory-add","args":"CANARY-ARGS-9182736450"}}'
+
+  run _run_adapter_enabled "$payload"
+  [ "$status" -eq 0 ]
+  [ -f "$EVENTS_FILE" ]
+
+  if command -v jq >/dev/null 2>&1; then
+    run jq -e -c . "$EVENTS_FILE"
+    [ "$status" -eq 0 ]
+    run jq -r '.skill' "$EVENTS_FILE"
+    [ "$output" = "tcs-helper:memory-add" ]
+    run jq -r 'has("args")' "$EVENTS_FILE"
+    [ "$output" = "false" ]
+  fi
+
+  _assert_absent 'CANARY-ARGS-9182736450' "$EVENTS_FILE"
+  _assert_absent '"args"' "$EVENTS_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# 10. Performance hazard pin (found by review, fixed upstream elsewhere —
+#    NOT in this file's scope). _observability_field's absent-key path was
+#    measured quadratic in payload size: 40 ms / 130 ms / 490 ms / 1918 ms
+#    for 10 / 20 / 40 / 80 KB tails when the sought key is missing. This
+#    adapter is safe TODAY only because tool_name, session_id and skill all
+#    appear ahead of the free-text `args` tail in a real payload — nothing
+#    pins that fact, so a key becoming optional or the fields reordering
+#    would turn a working hook into a multi-minute stall with every test
+#    above still green (none of them carries a realistically large payload).
+#
+#    Bound chosen from measurement, not guessed: a real-shaped 200 KB+
+#    payload with this adapter's actual field order measured ~20-50 ms
+#    end-to-end on this machine (a 2 MB payload of the same shape measured
+#    ~0.4 s). The 3-second bound below leaves that ~60-150x of headroom for
+#    a slower CI runner while still catching the failure mode this test
+#    exists for: per the measured curve above, an accidental fall onto the
+#    absent-key quadratic path at this payload size would take single-digit
+#    to tens of seconds, not fail-at-the-margin — so this bound cannot pass
+#    by accident on a hung extraction.
+# ---------------------------------------------------------------------------
+
+@test "skill: a 200KB+ args payload in real field order completes quickly and records correctly" {
+  local payload_file="$TEST_DIR/large_payload.json"
+  local big
+  big="$(printf 'x%.0s' $(seq 1 300000))"
+  printf '{"session_id":"sess-skill-perf","cwd":"/x","tool_name":"Skill","tool_input":{"skill":"tcs-helper:memory-add","args":"%s"}}' \
+    "$big" > "$payload_file"
+  run wc -c < "$payload_file"
+  [ "${output// /}" -gt 300000 ]
+
+  local start end elapsed
+  start="$(date +%s)"
+  run _run_adapter_enabled_from_file "$payload_file"
+  end="$(date +%s)"
+  [ "$status" -eq 0 ]
+
+  elapsed=$((end - start))
+  [ "$elapsed" -le 3 ]
+
+  [ -f "$EVENTS_FILE" ]
+  if command -v jq >/dev/null 2>&1; then
+    run jq -e -c . "$EVENTS_FILE"
+    [ "$status" -eq 0 ]
+    run jq -r '.skill' "$EVENTS_FILE"
+    [ "$output" = "tcs-helper:memory-add" ]
+  fi
 }
