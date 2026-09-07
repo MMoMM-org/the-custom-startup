@@ -189,3 +189,120 @@ is set. In other words: recording being off means no *records* are written, not 
 nothing to have registered at all. If that eager-load cost matters to you and you are not currently
 recording, the honest move is to not register the `InstructionsLoaded` hook until you actually want
 to turn recording on.
+
+## Investigating one slow hook: `timed-wrapper.sh`
+
+The three adapters above answer "did X load/fire" questions. They cannot answer "which specific hook
+is slow" — and neither can the harness's own telemetry. The spec's README (its T1.4 section) measured
+six hook configurations directly and found per-hook duration is not recoverable from configuration
+alone: hooks sharing one `(event, matcher)` pair collapse into a single measurement group no matter
+how many distinct matcher strings are registered, and hooks within a group run in parallel, so
+subtracting the group total does not recover an individual hook's duration either.
+
+`timed-wrapper.sh` exists to answer that one question directly, by standing in for the real hook
+command while you investigate. It is not meant to stay installed — put it in place for the duration
+of one investigation, read what it wrote, then take it back out (see "How to remove it", below).
+
+### How to install it
+
+Wrap the real hook command in this repository's own `.claude/settings.json` — the same file the
+"Registering the hooks" snippet above uses, and for the same reason: a repo's own registration gets
+no `$CLAUDE_PLUGIN_ROOT`. Say you want to know whether a `PreToolUse`/`Bash` hook at
+`/abs/path/to/real-hook.sh` is the slow one:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/timed-wrapper.sh\" --event PreToolUse --matcher Bash -- /abs/path/to/real-hook.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The CLI shape is fixed: `timed-wrapper.sh --event <hook_event> --matcher <matcher> -- <real hook
+command> [args...]`. `--event` and `--matcher` are what label the resulting record, and they arrive as
+command-line arguments — never read from the hook's own payload — because the wrapper must never
+touch stdin at all: a hook's JSON payload arrives there, and consuming any of it would silently hand
+the wrapped command an empty payload for as long as the wrapper stayed installed. Everything after
+`--` is the real hook command, run exactly as it would have run directly, with its own stdin, stdout,
+stderr and exit status passed through unchanged.
+
+Recording also needs `CLAUDE_OBSERVABILITY_ENABLED=1` set, the same switch the three adapters use —
+without it, the wrapper runs the real hook command transparently and writes nothing.
+
+### What it records, and where
+
+Each invocation writes one `kind: hook` record, carrying the four common fields "Where the record
+lives" and "How to read it" (above) already describe — `ts`, `kind`, `session`, `repo` — plus:
+
+| Field | Value |
+|---|---|
+| `hook_event` | whatever you passed to `--event` |
+| `matcher` | whatever you passed to `--matcher` |
+| `ms` | the wrapped command's own wall-clock duration, in milliseconds |
+| `exit` | the wrapped command's own exit status |
+| `scope_note` | always `single` — see below |
+
+It lands in the same `events.jsonl` everything else in this recorder writes to, at the path "Where
+the record lives" describes, with the same rotation and the same `CLAUDE_OBSERVABILITY_DATA`
+override. There is no separate file for wrapper records.
+
+### Privacy: what is, and is not, in that record
+
+Everything this records stays on this machine: the record is a line appended to a file under your
+home directory, and nothing about it is transmitted anywhere. What the record does **not** contain —
+the real hook command's own command line, any of its arguments, or anything from the hook payload
+(the wrapper never reads that payload; see "How to install it"). The only strings in a hook record
+that are not a measurement are the `--event` and `--matcher` values you yourself typed when you
+installed the wrapper — nothing is copied or inferred from the wrapped command. Every other field is
+a number (a duration, an exit status) or a fixed label (`kind`, `scope_note`). Every one of these
+claims is checkable directly against `timed-wrapper.sh`'s own source: it contains no `read` and no
+`cat` of stdin, and never touches file descriptor 0.
+
+### `scope_note: single` — read this before trusting a number
+
+Every record `timed-wrapper.sh` writes carries `scope_note: single`: the duration is one hook
+invocation's own wall-clock time, not pooled with anything else. The record schema's `scope_note`
+field also has a `batch` value in its enum, but this design never writes it — `batch` exists only as
+a label for the harness's own aggregate `hook_execution_complete` figure, the number the T1.4 spike
+found cannot be split into per-hook durations by configuration alone. If you ever see `batch`
+attached to a duration, it describes several hooks' combined time, not one hook's; reading it as one
+hook's own cost is exactly the misreading this whole mechanism exists to prevent, which is why every
+duration in the report is labelled with which kind it is rather than left for you to guess.
+
+### How to remove it
+
+Edit `.claude/settings.json` again and put the original hook command back exactly where the wrapped
+one was — that is the entire removal procedure. There is nothing else to undo: `timed-wrapper.sh` is
+not a daemon, it installs nothing outside that one registration line, and it leaves no running
+process or cached state behind. Once the registration is reverted, nothing of it remains anywhere in
+the hook execution path. The only trace left behind is the records it already wrote while it was
+installed — ordinary `kind: hook` lines in `events.jsonl`, no different in kind from the records the
+three adapters above write, and removed the same way (see "How to delete it").
+
+### Caveats, stated plainly
+
+- **`session` is unverified.** The `session` field comes from the `$CLAUDE_CODE_SESSION_ID`
+  environment variable, not from the hook payload — the wrapper never reads the payload at all. Two
+  things about that variable are not yet confirmed: whether it reaches a hook the harness itself
+  spawns, and whether its value actually matches the payload's own `session_id`. Treat `session` on a
+  hook record as unverified until both are checked against a live session. When the variable is
+  absent, the field is left empty rather than filled with a guess, so a hook record may simply fail to
+  join to that session's other records — it does not silently join to the wrong one.
+- **Overhead is two different numbers, and only one of them is specific to this wrapper.** The
+  wrapper's own marginal cost — what it adds on top of running the real hook directly — was measured
+  at roughly 0.85 ms on Linux (aarch64), against this feature's 1 ms budget. That is not the same
+  number as the cost of actually writing a record: using the same shared writer path this wrapper also
+  calls, the measured end-to-end cost of writing one record (measured for an instruction-load event,
+  in the same research pass) came out close to 13 ms — `solution.md`'s Quality Requirements section
+  has the full breakdown. Both figures are from a Linux container; the macOS figure has not been
+  measured yet, and neither number should be assumed to transfer.
