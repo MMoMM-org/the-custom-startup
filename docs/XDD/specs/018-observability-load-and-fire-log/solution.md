@@ -540,6 +540,9 @@ instruction inventory:            # for PRD F4's "configured but never loaded"
   - ~/.claude/CLAUDE.md
   exclusion: a CLAUDE.md under a `tests/fixtures/` path segment is test data, not configuration,
              and is not counted — it would inflate the denominator with files no session ever loads
+  exclusion: a path git ignores is not this repo's configuration and is not counted — see the second
+             amendment below. Determined with `git check-ignore` at walk time; when git is absent or
+             the root is not a repository, the walk proceeds unfiltered and the report says so
   method: filesystem walk at report time, not a maintained manifest — a manifest would drift, and
           the walk is exactly the set the loader itself can reach
 
@@ -564,6 +567,26 @@ weight #147 exists to find. This repo has two real ones (`docs/CLAUDE.md`, `docs
 The second bullet closes it, and the `tests/fixtures/` exclusion keeps a third, `doc-product`'s
 sample fixture, from inflating the count. Found by the T3.1 spec-compliance reviewer as an ambiguity
 flagged for awareness; escalated and confirmed as a real gap rather than a wording preference.
+
+**Second amendment, 2026-09-07 (T3.1, found while landing the first).** The walk had no `.gitignore`
+awareness, and widening it to nested files made that visible: a gitignored `claude-docker-home/`
+mount inside the repo root contains a full marketplace checkout *of this same repo*, so the walk
+counted `CLAUDE.md`, `docs/CLAUDE.md` and `docs/ai/CLAUDE.md` a second time each, plus the mount's
+own — 4 of 21 entries, a 19% inflation, every one of which would then be reported as "never loaded".
+Two things make this worse than ordinary noise. First, the duplicates are of the very files the
+report is trying to reason about, so they corrupt the specific answer rather than merely padding a
+total. Second, the mount exists only on one developer's machine: a fresh clone or a CI run would
+compute a different denominator from the same source tree, which defeats the point of having a
+denominator at all and sits badly with this design's own honesty requirement.
+
+A path git ignores is, by definition, not this repo's configuration. `git check-ignore` answers that
+at walk time, so the rule stays a walk rather than becoming the maintained manifest the `method:`
+line above rejects — extending a hard-coded skip list instead would have been that manifest under
+another name, and would drift the moment a local mount is named something else. The cost is one
+subprocess in a report that is offline by ADR-6, where CON-7's budget explicitly does not apply.
+Degradation is fail-open and stated, not silent: with no git, or outside a repository, the walk runs
+unfiltered and the report says which mode it used — consistent with the rule that the report always
+names the inventory it used, so a surprising figure stays traceable to the denominator.
 
 **Possible future source, not designed in.** T1.4 found an undocumented `hook_registered` log event
 that fires once per registered command at session start, carrying `hook_event`, `hook_matcher`,
