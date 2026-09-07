@@ -1102,6 +1102,7 @@ def test_cli_end_to_end_prints_report_for_fixture_events(tmp_path):
     repo_root.mkdir()
     home_dir = tmp_path / "home"
     home_dir.mkdir()
+    _make_nested_skill(repo_root, "tcs-team", "quality", "test-strategy")
 
     result = _run_report_cli(
         ["--events", str(events), "--repo-root", str(repo_root), "--home", str(home_dir)]
@@ -1111,6 +1112,12 @@ def test_cli_end_to_end_prints_report_for_fixture_events(tmp_path):
     assert "docs/ai/memory/active.md: 2 load(s)" in result.stdout
     assert "session_start=2" in result.stdout
     assert "Configured but never loaded (0):" in result.stdout
+
+    # T3.4 wiring: main() must pass the unreachable nested-skill data through
+    # to build_load_report -- assert it actually reaches real stdout, same
+    # posture as the Recording state/Byte cost assertions below.
+    assert "unreachable" in result.stdout.lower()
+    assert "plugins/tcs-team/skills/quality/test-strategy/SKILL.md" in result.stdout
 
     # Finding 3 (T3.2 code review): main() is the only real caller that
     # wires byte_stats=/recording= into build_load_report -- every other
@@ -1412,6 +1419,141 @@ def test_walk_skill_agent_inventory_states_skill_and_agent_counts(tmp_path):
     assert inventory.skill_count == 2
     assert inventory.agent_count == 1
     assert len(inventory.entries) == 3
+
+
+# --- unreachable nested skills (SDD/The two inventories, third amendment,
+# 2026-09-07 / T3.3): a SKILL.md nested deeper than one level under
+# `skills/` cannot be discovered by the harness at all, so it must never be
+# counted in the coverage denominator and never reported as "never fired" --
+# but it must not be silently dropped either. -------------------------------
+
+
+def _make_nested_skill(repo_root: Path, plugin: str, *segments: str) -> Path:
+    """A SKILL.md nested `len(segments)` levels deep under `skills/` --
+    e.g. `_make_nested_skill(root, "tcs-team", "quality", "test-strategy")`
+    mirrors the real `plugins/tcs-team/skills/quality/test-strategy/SKILL.md`."""
+    skill_dir = repo_root / "plugins" / plugin / "skills"
+    for segment in segments:
+        skill_dir = skill_dir / segment
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("nested\n", encoding="utf-8")
+    return skill_dir / "SKILL.md"
+
+
+def test_walk_skill_agent_inventory_two_levels_deep_is_unreachable(tmp_path):
+    _make_nested_skill(tmp_path, "tcs-team", "quality", "test-strategy")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    assert len(inventory.unreachable) == 1
+    assert "quality/test-strategy/SKILL.md" in inventory.unreachable[0]
+
+
+def test_walk_skill_agent_inventory_unreachable_skill_not_in_entries(tmp_path):
+    """It must not be in the coverage denominator -- i.e. never one of the
+    entries `firing_coverage` joins against at all."""
+    _make_nested_skill(tmp_path, "tcs-team", "quality", "test-strategy")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    assert inventory.skill_count == 0
+    assert inventory.entries == []
+
+
+def test_walk_skill_agent_inventory_unreachable_skill_does_not_change_denominator(tmp_path):
+    """Requirement 1: the coverage fraction and its denominator are
+    unchanged by an unreachable entry's presence -- assert the SAME
+    denominator with and without the nested file."""
+    _make_skill(tmp_path, "tcs-patterns", "observability")
+    before = report.walk_skill_agent_inventory(tmp_path)
+    before_coverage = report.firing_coverage(before.entries, set())
+
+    _make_nested_skill(tmp_path, "tcs-team", "quality", "test-strategy")
+    after = report.walk_skill_agent_inventory(tmp_path)
+    after_coverage = report.firing_coverage(after.entries, set())
+
+    assert after_coverage.denominator == before_coverage.denominator == 1
+    assert len(after.unreachable) == 1
+
+
+def test_walk_skill_agent_inventory_three_levels_deep_is_also_unreachable(tmp_path):
+    """Don't hard-code exactly two levels -- three (or more) must also be
+    caught."""
+    _make_nested_skill(tmp_path, "tcs-team", "quality", "batch", "test-strategy")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    assert len(inventory.unreachable) == 1
+    assert inventory.entries == []
+
+
+def test_walk_skill_agent_inventory_one_level_deep_still_counted_normally(tmp_path):
+    """The normal case must keep working: a one-level-deep SKILL.md is a
+    real entry, not unreachable, alongside an unreachable nested one."""
+    _make_skill(tmp_path, "tcs-patterns", "observability")
+    _make_nested_skill(tmp_path, "tcs-team", "quality", "test-strategy")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    assert inventory.skill_count == 1
+    assert len(inventory.unreachable) == 1
+    entry = next(e for e in inventory.entries if e.kind == "skill")
+    assert entry.qualified == "tcs-patterns:observability"
+
+
+def test_walk_skill_agent_inventory_no_nested_skills_reports_zero_unreachable(tmp_path):
+    _make_skill(tmp_path, "tcs-patterns", "observability")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    assert inventory.unreachable == ()
+
+
+def test_build_load_report_unreachable_not_in_never_fired_list(tmp_path):
+    """It must not appear in the 'never fired' / unused list at all --
+    unreachable and unused are different findings with different fixes."""
+    nested = _make_nested_skill(tmp_path, "tcs-team", "quality", "test-strategy")
+    _make_skill(tmp_path, "tcs-patterns", "observability")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+    coverage = report.firing_coverage(inventory.entries, set())
+
+    text = report.build_load_report({}, [], skill_agent_inventory=inventory, firing=coverage)
+
+    # the unreachable path appears (named, not dropped) ...
+    redacted = report._redact_path(nested, tmp_path)
+    assert redacted in text
+    # ... but never inside the "never fired" section as if it were unused
+    never_fired_start = text.lower().index("never fired")
+    unreachable_start = text.lower().index("unreachable")
+    never_fired_section = text[never_fired_start:unreachable_start]
+    assert redacted not in never_fired_section
+
+
+def test_build_load_report_unreachable_section_names_them_as_unreachable_not_unused(tmp_path):
+    _make_nested_skill(tmp_path, "tcs-team", "quality", "test-strategy")
+    _make_skill(tmp_path, "tcs-patterns", "observability")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+    coverage = report.firing_coverage(inventory.entries, set())
+
+    text = report.build_load_report({}, [], skill_agent_inventory=inventory, firing=coverage)
+
+    assert "unreachable" in text.lower()
+    assert "cannot" in text.lower()  # states they cannot be discovered/fire
+
+
+def test_build_load_report_zero_unreachable_omits_awkward_empty_section(tmp_path):
+    """No nested skills at all: no empty/awkward 'Unreachable (0):' section
+    with nothing under it -- the section is omitted entirely."""
+    _make_skill(tmp_path, "tcs-patterns", "observability")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+    coverage = report.firing_coverage(inventory.entries, set())
+
+    text = report.build_load_report({}, [], skill_agent_inventory=inventory, firing=coverage)
+
+    assert "unreachable" not in text.lower()
 
 
 # --- fired_names: the numerator, empty values counted as unknown -----------

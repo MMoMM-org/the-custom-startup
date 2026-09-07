@@ -731,11 +731,25 @@ class SkillAgentInventory(NamedTuple):
     per-kind counts `build_load_report` states alongside them -- the same
     "say which count produced this denominator" posture as
     `InstructionInventory.git_filtered`.
+
+    `unreachable` (third amendment, 2026-09-07, T3.3) is a DIFFERENT list,
+    never merged into `entries`: a `SKILL.md` nested deeper than one level
+    under a plugin's `skills/` directory cannot be discovered by the harness
+    at all (it only ever looks at `skills/<name>/SKILL.md`), so it cannot
+    fire -- it belongs in neither the coverage numerator nor its
+    denominator. It is still worth naming, because a file the harness can
+    never reach is exactly the dead weight this whole report exists to
+    find; each entry is a repo-relative path (via `_redact_path`), not a
+    bare name, so a human can go find and fix it. Defaults to `()` so every
+    pre-existing caller/test that builds a `SkillAgentInventory` without it
+    keeps working unchanged (same posture as `byte_stats`/`recording` in
+    `build_load_report`).
     """
 
     entries: list[InventoryEntry]
     skill_count: int
     agent_count: int
+    unreachable: tuple[str, ...] = ()
 
 
 def _read_frontmatter_name(path: Path) -> str | None:
@@ -831,8 +845,18 @@ def walk_skill_agent_inventory(repo_root: Path) -> SkillAgentInventory:
 
     Pure over `repo_root`: no reliance on `cwd`, matching
     `walk_instruction_inventory`'s posture.
+
+    A `SKILL.md` nested deeper than one level under `skills/` -- e.g.
+    `skills/<category>/<name>/SKILL.md`, `tcs-team`'s real layout -- is
+    found by this same walk but is NOT added to `entries`: the harness only
+    ever discovers `skills/<name>/SKILL.md`, so a deeper file cannot fire at
+    all (third amendment, 2026-09-07, T3.3). It is recorded instead in the
+    returned `unreachable` list, by its repo-relative path, so it is named
+    rather than silently dropped -- see `SkillAgentInventory.unreachable`
+    and `_render_unreachable_skills`.
     """
     entries: list[InventoryEntry] = []
+    unreachable: list[str] = []
 
     plugins_dir = repo_root / "plugins"
     if plugins_dir.is_dir():
@@ -841,9 +865,19 @@ def walk_skill_agent_inventory(repo_root: Path) -> SkillAgentInventory:
 
             skills_dir = plugin_dir / "skills"
             if skills_dir.is_dir():
-                for skill_dir in sorted(p for p in skills_dir.iterdir() if p.is_dir()):
-                    if (skill_dir / "SKILL.md").is_file():
-                        entries.append(_skill_entry(skill_dir, plugin_name))
+                for skill_md in sorted(skills_dir.rglob("SKILL.md")):
+                    if not skill_md.is_file():
+                        continue
+                    # `skills/<name>/SKILL.md` is 2 parts relative to
+                    # skills_dir -- exactly the one-level-deep glob the SDD
+                    # specifies. Anything deeper (3+ parts) is unreachable;
+                    # deliberately not hard-coded to "== 3" so a third,
+                    # fourth, ... level is caught the same way.
+                    relative_parts = skill_md.relative_to(skills_dir).parts
+                    if len(relative_parts) == 2:
+                        entries.append(_skill_entry(skill_md.parent, plugin_name))
+                    else:
+                        unreachable.append(_redact_path(skill_md, repo_root))
 
             agents_dir = plugin_dir / "agents"
             if agents_dir.is_dir():
@@ -861,6 +895,7 @@ def walk_skill_agent_inventory(repo_root: Path) -> SkillAgentInventory:
         entries=entries,
         skill_count=sum(1 for e in entries if e.kind == "skill"),
         agent_count=sum(1 for e in entries if e.kind == "agent"),
+        unreachable=tuple(sorted(unreachable)),
     )
 
 
@@ -1019,6 +1054,38 @@ def _render_byte_accounting(byte_stats: ByteAccounting) -> list[str]:
     return lines
 
 
+def _render_unreachable_skills(unreachable: Sequence[str]) -> list[str]:
+    """Nested `SKILL.md` files the harness cannot discover at all (SDD/The
+    two inventories, third amendment, 2026-09-07, T3.3).
+
+    Deliberately a DIFFERENT section from "Never fired -- unused, not
+    missing" above: unused means discoverable, real, and simply never
+    invoked -- more usage would fix it. Unreachable means the harness never
+    had a chance to find it in the first place, so no amount of usage would
+    change anything; the fix is moving or flattening the file. Collapsing
+    the two would be the same category error the `scope_note: batch` /
+    `single` distinction exists to prevent for hook durations elsewhere in
+    this design.
+
+    Omitted entirely when empty -- a "(0):" header with nothing under it
+    would be an awkward, information-free section, unlike "Never fired"
+    above where zero is itself a meaningful finding worth stating.
+    """
+    if not unreachable:
+        return []
+    lines = [
+        "Unreachable nested skills -- found on disk but the harness cannot discover them at "
+        "all (nested deeper than one level under a plugin's skills/ directory), so they can "
+        "NEVER fire. This is NOT the same finding as \"never fired\" above: do not try to fix "
+        "these by using them more -- the fix is moving or flattening the file. NOT counted in "
+        f"the coverage fraction above ({len(unreachable)}):",
+    ]
+    for path in unreachable:
+        lines.append(f"  {path}")
+    lines.append("")
+    return lines
+
+
 def _render_firing_coverage(inventory: SkillAgentInventory, coverage: FiringCoverage) -> list[str]:
     """The skill/agent inventory join: coverage as a fraction, and the
     entries that never fired -- named as UNUSED, never as missing or absent
@@ -1057,6 +1124,7 @@ def _render_firing_coverage(inventory: SkillAgentInventory, coverage: FiringCove
         for name in coverage.unmatched_record_names:
             lines.append(f"  {name}")
     lines.append("")
+    lines.extend(_render_unreachable_skills(inventory.unreachable))
     return lines
 
 
@@ -1099,7 +1167,11 @@ def build_load_report(
     `skill_agent_inventory` and `firing` are optional (T3.3, same posture):
     when both are given, a final section states the skill/agent inventory
     size, coverage as a fraction, and every entry that never fired --
-    reported as UNUSED, never as missing (SDD-AC-18, PRD F8).
+    reported as UNUSED, never as missing (SDD-AC-18, PRD F8). When
+    `skill_agent_inventory.unreachable` is non-empty, that same section also
+    names each nested `SKILL.md` the harness cannot discover at all --
+    reported as UNREACHABLE, never as unused or never-fired, and never
+    folded into the coverage fraction (third amendment, 2026-09-07, T3.3).
     """
     lines: list[str] = []
 
