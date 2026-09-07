@@ -115,7 +115,7 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   4. Validate: `pytest -q` green
   5. Success: `[ref: SDD/SDD-AC-17]`; `[ref: PRD/F6]`
 
-- [ ] **T3.5 Per-hook attribution — scope decided by T1.4** `[activity: infrastructure]`
+- [x] **T3.5 Per-hook attribution — scope decided by T1.4** `[activity: infrastructure]`
 
   1. Prime: read T1.4's recorded finding and the updated ADR-7
   2. Test: **only if T1.4 found configuration insufficient** — a wrapped hook's exit status, stdout
