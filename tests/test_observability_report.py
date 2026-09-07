@@ -1113,7 +1113,7 @@ def test_cli_end_to_end_prints_report_for_fixture_events(tmp_path):
     assert "session_start=2" in result.stdout
     assert "Configured but never loaded (0):" in result.stdout
 
-    # T3.4 wiring: main() must pass the unreachable nested-skill data through
+    # T3.3 wiring: main() must pass the unreachable nested-skill data through
     # to build_load_report -- assert it actually reaches real stdout, same
     # posture as the Recording state/Byte cost assertions below.
     assert "unreachable" in result.stdout.lower()
@@ -1509,6 +1509,21 @@ def test_walk_skill_agent_inventory_no_nested_skills_reports_zero_unreachable(tm
     assert inventory.unreachable == ()
 
 
+def test_walk_skill_agent_inventory_skill_md_directly_under_skills_dir_is_unreachable(tmp_path):
+    """T3.3 code review, advisory finding A: a SKILL.md placed directly at
+    `skills/SKILL.md` (one relative part, SHALLOWER than the discoverable
+    `skills/<name>/SKILL.md` shape) is neither a normal entry nor a crash --
+    it lands in `unreachable`, the same bucket as a too-deep nested one,
+    because it likewise cannot be discovered by the harness."""
+    _make_nested_skill(tmp_path, "tcs-team")
+
+    inventory = report.walk_skill_agent_inventory(tmp_path)
+
+    assert inventory.entries == []
+    assert len(inventory.unreachable) == 1
+    assert inventory.unreachable[0].endswith("skills/SKILL.md")
+
+
 def test_build_load_report_unreachable_not_in_never_fired_list(tmp_path):
     """It must not appear in the 'never fired' / unused list at all --
     unreachable and unused are different findings with different fixes."""
@@ -1561,7 +1576,7 @@ def test_build_load_report_zero_unreachable_omits_awkward_empty_section(tmp_path
 
 def test_fired_names_collects_skill_and_agent_values():
     records = [_skill_record("tcs-patterns:observability"), _agent_record("Explore")]
-    assert report.fired_names(records) == {"tcs-patterns:observability", "Explore"}
+    assert report.fired_names(records) == {("skill", "tcs-patterns:observability"), ("agent", "Explore")}
 
 
 def test_fired_names_empty_skill_value_counted_as_unknown_not_a_named_entry():
@@ -1584,14 +1599,14 @@ def test_fired_names_ignores_non_skill_agent_kinds():
 
 def test_firing_coverage_record_with_qualified_name_matches():
     entries = [report.InventoryEntry(qualified="tcs-team:the-tester:test-strategy", bare="test-strategy", kind="agent")]
-    coverage = report.firing_coverage(entries, {"tcs-team:the-tester:test-strategy"})
+    coverage = report.firing_coverage(entries, {("agent", "tcs-team:the-tester:test-strategy")})
     assert coverage.fired == entries
     assert coverage.unused == []
 
 
 def test_firing_coverage_record_with_bare_name_matches():
     entries = [report.InventoryEntry(qualified="tcs-team:the-tester:test-strategy", bare="test-strategy", kind="agent")]
-    coverage = report.firing_coverage(entries, {"test-strategy"})
+    coverage = report.firing_coverage(entries, {("agent", "test-strategy")})
     assert coverage.fired == entries
     assert coverage.unused == []
 
@@ -1608,7 +1623,7 @@ def test_firing_coverage_ambiguous_bare_name_collision_marks_neither_fired():
     record must not mark BOTH (or either) as fired."""
     a = report.InventoryEntry(qualified="plugin-a:testing", bare="testing", kind="skill")
     b = report.InventoryEntry(qualified="plugin-b:testing", bare="testing", kind="skill")
-    coverage = report.firing_coverage([a, b], {"testing"})
+    coverage = report.firing_coverage([a, b], {("skill", "testing")})
 
     assert coverage.fired == []
     assert set(coverage.unused) == {a, b}
@@ -1620,15 +1635,31 @@ def test_firing_coverage_qualified_name_disambiguates_collision():
     name -- exactly one of the two entries must be marked fired."""
     a = report.InventoryEntry(qualified="plugin-a:testing", bare="testing", kind="skill")
     b = report.InventoryEntry(qualified="plugin-b:testing", bare="testing", kind="skill")
-    coverage = report.firing_coverage([a, b], {"plugin-a:testing"})
+    coverage = report.firing_coverage([a, b], {("skill", "plugin-a:testing")})
 
     assert coverage.fired == [a]
     assert coverage.unused == [b]
 
 
+def test_firing_coverage_cross_kind_bare_name_is_not_a_collision():
+    """T3.3 code review, finding 1: a skill and an agent sharing a bare name
+    is NOT the same hazard as two same-kind entries sharing one -- the
+    record's own `kind` already says which one it means. A `kind: skill`
+    record naming the shared bare name must credit the SKILL as fired, must
+    NOT credit the agent, and must mark neither as ambiguous."""
+    skill_entry = report.InventoryEntry(qualified="plugin-a:shared", bare="shared", kind="skill")
+    agent_entry = report.InventoryEntry(qualified="plugin-b:shared", bare="shared", kind="agent")
+    coverage = report.firing_coverage([skill_entry, agent_entry], {("skill", "shared")})
+
+    assert coverage.fired == [skill_entry]
+    assert coverage.unused == [agent_entry]
+    assert coverage.ambiguous_record_names == []
+    assert coverage.unmatched_record_names == []
+
+
 def test_firing_coverage_record_naming_absent_entry_is_reported_not_dropped():
     entries = [report.InventoryEntry(qualified="tcs-patterns:observability", bare="observability", kind="skill")]
-    coverage = report.firing_coverage(entries, {"Explore"})
+    coverage = report.firing_coverage(entries, {("agent", "Explore")})
 
     assert coverage.unused == entries
     assert coverage.unmatched_record_names == ["Explore"]
@@ -1640,7 +1671,7 @@ def test_firing_coverage_is_a_fraction():
         report.InventoryEntry(qualified="a:y", bare="y", kind="skill"),
         report.InventoryEntry(qualified="a:z", bare="z", kind="skill"),
     ]
-    coverage = report.firing_coverage(entries, {"a:x"})
+    coverage = report.firing_coverage(entries, {("skill", "a:x")})
 
     assert coverage.numerator == 1
     assert coverage.denominator == 3
@@ -1684,7 +1715,7 @@ def test_build_load_report_fired_skill_not_listed_as_unused():
         skill_count=1,
         agent_count=0,
     )
-    coverage = report.firing_coverage(inventory.entries, {"tcs-patterns:observability"})
+    coverage = report.firing_coverage(inventory.entries, {("skill", "tcs-patterns:observability")})
 
     text = report.build_load_report({}, [], skill_agent_inventory=inventory, firing=coverage)
 
@@ -1697,6 +1728,45 @@ def test_build_load_report_without_skill_agent_inventory_omits_section():
     recording= in T3.2."""
     text = report.build_load_report({}, [])
     assert "never fired" not in text.lower()
+
+
+def test_build_load_report_ambiguous_and_unmatched_render_under_correct_headings():
+    """T3.3 code review, finding 2: `ambiguous_record_names` and
+    `unmatched_record_names` render under two DIFFERENT headings. A
+    mutation swapping which list is iterated under which heading would pass
+    every other test in this file (they only assert on the `FiringCoverage`
+    NamedTuple's fields, never on the rendered text) -- populate both lists
+    at once, with distinguishable names, and pin each name to its own
+    heading's section of the rendered text."""
+    inventory = report.SkillAgentInventory(
+        entries=[report.InventoryEntry(qualified="a:x", bare="x", kind="skill")],
+        skill_count=1,
+        agent_count=0,
+    )
+    coverage = report.FiringCoverage(
+        fired=[],
+        unused=inventory.entries,
+        unmatched_record_names=["totally-unknown-name"],
+        ambiguous_record_names=["shared-bare-name"],
+    )
+
+    text = report.build_load_report({}, [], skill_agent_inventory=inventory, firing=coverage)
+    lowered = text.lower()
+
+    ambiguous_heading_idx = lowered.index("shared by two or more inventory entries")
+    unmatched_heading_idx = lowered.index("not found in this inventory at all")
+
+    if ambiguous_heading_idx < unmatched_heading_idx:
+        ambiguous_section = text[ambiguous_heading_idx:unmatched_heading_idx]
+        unmatched_section = text[unmatched_heading_idx:]
+    else:
+        unmatched_section = text[unmatched_heading_idx:ambiguous_heading_idx]
+        ambiguous_section = text[ambiguous_heading_idx:]
+
+    assert "shared-bare-name" in ambiguous_section
+    assert "totally-unknown-name" not in ambiguous_section
+    assert "totally-unknown-name" in unmatched_section
+    assert "shared-bare-name" not in unmatched_section
 
 
 def test_redact_path_parity_nested_inside_repo(tmp_path):

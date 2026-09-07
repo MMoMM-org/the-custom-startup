@@ -704,10 +704,15 @@ def walk_instruction_inventory(repo_root: Path, home_dir: Path) -> InstructionIn
 # `firing_coverage` accepts a match on EITHER rather than guessing which one
 # is real and silently discarding the other.
 #
-# Two different entries can legitimately share a bare name (two plugins each
-# shipping a "testing" skill, say). The qualified name is what disambiguates
-# them, so a record naming only the shared bare form must never mark BOTH --
-# or either -- as fired; see `firing_coverage`'s `bare_counts` guard below.
+# Two different entries of the SAME kind can legitimately share a bare name
+# (two plugins each shipping a "testing" skill, say). The qualified name is
+# what disambiguates them, so a record naming only the shared bare form must
+# never mark BOTH -- or either -- as fired; see `firing_coverage`'s
+# `bare_counts` guard below. A skill and an agent sharing a bare name is a
+# DIFFERENT case: the record's own `kind` already says which one it means,
+# so `firing_coverage` scopes its uniqueness check to `(kind, bare)`, not
+# `bare` alone -- a cross-kind share is not a collision (fourth amendment,
+# 2026-09-07, T3.3 code review, finding 1).
 
 
 class InventoryEntry(NamedTuple):
@@ -733,15 +738,18 @@ class SkillAgentInventory(NamedTuple):
     `InstructionInventory.git_filtered`.
 
     `unreachable` (third amendment, 2026-09-07, T3.3) is a DIFFERENT list,
-    never merged into `entries`: a `SKILL.md` nested deeper than one level
-    under a plugin's `skills/` directory cannot be discovered by the harness
-    at all (it only ever looks at `skills/<name>/SKILL.md`), so it cannot
-    fire -- it belongs in neither the coverage numerator nor its
-    denominator. It is still worth naming, because a file the harness can
-    never reach is exactly the dead weight this whole report exists to
-    find; each entry is a repo-relative path (via `_redact_path`), not a
-    bare name, so a human can go find and fix it. Defaults to `()` so every
-    pre-existing caller/test that builds a `SkillAgentInventory` without it
+    never merged into `entries`: a `SKILL.md` NOT exactly one level deep
+    under a plugin's `skills/` directory -- nested deeper (e.g.
+    `skills/<category>/<name>/SKILL.md`), or placed directly at
+    `skills/SKILL.md` with no `<name>` directory at all -- cannot be
+    discovered by the harness, which only ever looks at
+    `skills/<name>/SKILL.md`, so it cannot fire either way -- it belongs in
+    neither the coverage numerator nor its denominator. It is still worth
+    naming, because a file the harness can never reach is exactly the dead
+    weight this whole report exists to find; each entry is a repo-relative
+    path (via `_redact_path`), not a bare name, so a human can go find and
+    fix it. Defaults to `()` so every pre-existing caller/test that builds a
+    `SkillAgentInventory` without it
     keeps working unchanged (same posture as `byte_stats`/`recording` in
     `build_load_report`).
     """
@@ -772,6 +780,16 @@ def _read_frontmatter_name(path: Path) -> str | None:
     function). Callers (`_plugin_agent_entry`, `_local_agent_entry`)
     therefore fall back to a path-derived bare name rather than dropping the
     file from the inventory when this returns `None`.
+
+    Ordering assumption (T3.3 code review, advisory finding B): this is a
+    bounded line scan, not a YAML parser (stdlib-only is a hard constraint),
+    so it returns the FIRST line inside the fences that starts with `name:`
+    after stripping -- including an indented line that is actually inside a
+    `description: |` block scalar, if `name:` happened to come after such a
+    block and a line within it started with the literal text `name:`. Every
+    agent file in this repo puts `name:` before `description:`, so this
+    cannot trigger here today; a `name:` placed after a block scalar
+    containing a `name:`-prefixed line would misparse.
     """
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -846,12 +864,14 @@ def walk_skill_agent_inventory(repo_root: Path) -> SkillAgentInventory:
     Pure over `repo_root`: no reliance on `cwd`, matching
     `walk_instruction_inventory`'s posture.
 
-    A `SKILL.md` nested deeper than one level under `skills/` -- e.g.
-    `skills/<category>/<name>/SKILL.md`, `tcs-team`'s real layout -- is
-    found by this same walk but is NOT added to `entries`: the harness only
-    ever discovers `skills/<name>/SKILL.md`, so a deeper file cannot fire at
-    all (third amendment, 2026-09-07, T3.3). It is recorded instead in the
-    returned `unreachable` list, by its repo-relative path, so it is named
+    A `SKILL.md` NOT exactly one level deep under `skills/` -- e.g. nested
+    deeper (`skills/<category>/<name>/SKILL.md`, `tcs-team`'s real layout),
+    or shallower (`skills/SKILL.md` directly, no `<name>` directory at all)
+    -- is found by this same walk but is NOT added to `entries`: the
+    harness only ever discovers `skills/<name>/SKILL.md`, so neither shape
+    can fire (third amendment, 2026-09-07, T3.3; both shapes share this one
+    bucket per finding A of the T3.3 code review). It is recorded instead in
+    the returned `unreachable` list, by its repo-relative path, so it is named
     rather than silently dropped -- see `SkillAgentInventory.unreachable`
     and `_render_unreachable_skills`.
     """
@@ -899,15 +919,22 @@ def walk_skill_agent_inventory(repo_root: Path) -> SkillAgentInventory:
     )
 
 
-def fired_names(records: Iterable[dict]) -> set[str]:
-    """Distinct `skill`/`agent_type` values named by `kind: skill` /
-    `kind: agent` records -- the numerator PRD F8's coverage fraction needs.
+def fired_names(records: Iterable[dict]) -> set[tuple[str, str]]:
+    """Distinct `(kind, name)` pairs named by `kind: skill` / `kind: agent`
+    records -- the numerator PRD F8's coverage fraction needs.
+
+    Carries `kind` alongside the name (rather than the bare name alone, as
+    an earlier version did) so `firing_coverage` can join on `(kind, name)`
+    instead of discarding which inventory a bare name came from -- see the
+    fourth amendment note above `firing_coverage`'s `bare_counts` guard: a
+    `kind: skill` record can only ever mean a skill, never an agent that
+    happens to share its bare name.
 
     An empty string counts as unknown and is excluded here -- never folded
     into a named entry -- the same posture T3.1 took for an empty `reason`
     and T3.2 took for an unmeasurable `bytes` (module docstring points 1-2).
     """
-    names: set[str] = set()
+    names: set[tuple[str, str]] = set()
     for rec in records:
         kind = rec.get("kind")
         if kind == "skill":
@@ -917,7 +944,7 @@ def fired_names(records: Iterable[dict]) -> set[str]:
         else:
             continue
         if isinstance(value, str) and value:
-            names.add(value)
+            names.add((kind, value))
     return names
 
 
@@ -952,43 +979,61 @@ class FiringCoverage(NamedTuple):
         return len(self.fired) + len(self.unused)
 
 
-def firing_coverage(entries: Sequence[InventoryEntry], fired: set[str]) -> FiringCoverage:
-    """Join `entries` against `fired` (the raw names a record actually carried).
+def firing_coverage(
+    entries: Sequence[InventoryEntry], fired: set[tuple[str, str]]
+) -> FiringCoverage:
+    """Join `entries` against `fired` (the `(kind, name)` pairs `fired_names`
+    extracted -- see its docstring).
 
-    A record matches an entry by its `qualified` name (always safe), or by
-    its `bare` name ONLY when that bare name is unique across `entries` --
-    two entries sharing one bare name (two plugins each shipping a
-    same-named skill, say) can never both be marked fired by one ambiguous
-    bare-name record; only the qualified form can single one of them out.
-    See the module comment above `InventoryEntry` for why both forms must be
-    accepted at all: which form a real record carries is confirmed at T3.6.
+    A record matches an entry by its `(kind, qualified)` pair (always safe),
+    or by its `(kind, bare)` pair ONLY when that pair is unique across
+    `entries` -- two entries of the SAME kind sharing one bare name (two
+    plugins each shipping a same-named skill, say) can never both be marked
+    fired by one ambiguous bare-name record; only the qualified form can
+    single one of them out. Matching is scoped by `kind` throughout
+    (fourth amendment, 2026-09-07, T3.3 code review, finding 1): a `kind:
+    skill` record naming "testing" can only ever mean the skill, never an
+    agent that happens to share that bare name, so a skill/agent bare-name
+    collision across kinds is not a collision at all here -- each is
+    tracked under its own `(kind, bare)` key and neither blocks the other
+    from being credited. A collision WITHIN one kind (two skills, or two
+    agents, sharing a bare name) is still real and still marks neither
+    fired. See the module comment above `InventoryEntry` for why both the
+    qualified and bare forms must be accepted at all: which form a real
+    record carries is confirmed at T3.6.
     """
-    bare_counts: dict[str, int] = {}
+    bare_counts: dict[tuple[str, str], int] = {}
     for entry in entries:
-        bare_counts[entry.bare] = bare_counts.get(entry.bare, 0) + 1
+        key = (entry.kind, entry.bare)
+        bare_counts[key] = bare_counts.get(key, 0) + 1
 
     fired_entries: list[InventoryEntry] = []
     unused_entries: list[InventoryEntry] = []
-    matched_names: set[str] = set()
+    matched: set[tuple[str, str]] = set()
 
     for entry in entries:
-        if entry.qualified in fired:
+        qualified_key = (entry.kind, entry.qualified)
+        bare_key = (entry.kind, entry.bare)
+        if qualified_key in fired:
             fired_entries.append(entry)
-            matched_names.add(entry.qualified)
-        elif bare_counts[entry.bare] == 1 and entry.bare in fired:
+            matched.add(qualified_key)
+        elif bare_counts[bare_key] == 1 and bare_key in fired:
             fired_entries.append(entry)
-            matched_names.add(entry.bare)
+            matched.add(bare_key)
         else:
             unused_entries.append(entry)
 
-    unresolved = fired - matched_names
-    ambiguous_bare = {bare for bare, count in bare_counts.items() if count > 1}
+    unresolved = fired - matched
+    ambiguous_bare_keys = {key for key, count in bare_counts.items() if count > 1}
+
+    unmatched_names = {name for (kind, name) in unresolved if (kind, name) not in ambiguous_bare_keys}
+    ambiguous_names = {name for (kind, name) in unresolved if (kind, name) in ambiguous_bare_keys}
 
     return FiringCoverage(
         fired=sorted(fired_entries, key=lambda e: e.qualified),
         unused=sorted(unused_entries, key=lambda e: e.qualified),
-        unmatched_record_names=sorted(n for n in unresolved if n not in ambiguous_bare),
-        ambiguous_record_names=sorted(n for n in unresolved if n in ambiguous_bare),
+        unmatched_record_names=sorted(unmatched_names),
+        ambiguous_record_names=sorted(ambiguous_names),
     )
 
 
@@ -1075,7 +1120,8 @@ def _render_unreachable_skills(unreachable: Sequence[str]) -> list[str]:
         return []
     lines = [
         "Unreachable nested skills -- found on disk but the harness cannot discover them at "
-        "all (nested deeper than one level under a plugin's skills/ directory), so they can "
+        "all (not exactly one level deep under a plugin's skills/ directory -- nested deeper, "
+        "or a SKILL.md placed directly at skills/SKILL.md with no name directory), so they can "
         "NEVER fire. This is NOT the same finding as \"never fired\" above: do not try to fix "
         "these by using them more -- the fix is moving or flattening the file. NOT counted in "
         f"the coverage fraction above ({len(unreachable)}):",
