@@ -492,6 +492,17 @@ ENTITY: Event (NEW)                       # one JSON object per line
 
   WHEN kind = hook:         # populated only by timed-wrapper.sh — the harness-ingest route was
     hook_event:    string   # dropped after T1.4 found it requires a local OTLP receiver (ADR-7)
+                            #
+                            # SESSION CAVEAT (T3.5, 2026-09-07): the COMMON `session` field on a
+                            # `kind = hook` record does NOT come from the payload, because the
+                            # wrapper must never read stdin — a hook's payload arrives there, and
+                            # consuming it would hand every wrapped hook an empty payload. It is
+                            # taken from `$CLAUDE_CODE_SESSION_ID` instead, which costs no fork and
+                            # is absent-safe. **UNVERIFIED**: that this variable reaches a
+                            # harness-spawned hook, and that its value equals the payload's
+                            # `session_id`, are both assumptions — T3.6 confirms them against a
+                            # live session. When the variable is absent the field is empty, and a
+                            # hook record simply does not join across kinds; it is never faked.
     matcher:       string
     ms:            number
     exit:          number
@@ -995,7 +1006,7 @@ this phase; recorded as Technical Debt, below.
 | SDD-AC-2 | Given the switch is set, when a session starts, then one `kind: instruction` record exists per loaded file, each with `reason: session_start` | PRD F1 |
 | SDD-AC-3 | Given a rule with `globs`, when a matching file is read, then a record with `reason: path_glob_match` and a populated `trigger` exists | PRD F1 |
 | SDD-AC-4 | Given an imported instruction file, when it loads, then the record carries `reason: include` and a populated `parent` | PRD F1 |
-| SDD-AC-5 | Given records of several kinds, when they are read, then each parses as one JSON object and carries `ts`, `kind`, `session`, `repo` | PRD F2 |
+| SDD-AC-5 | Given records of several kinds, when they are read, then each parses as one JSON object and carries `ts`, `kind`, `session`, `repo` — with one stated exception: a `kind = hook` record's `session` is sourced from `$CLAUDE_CODE_SESSION_ID`, not the payload, and is empty when that variable is absent (see the record shape's session caveat; T3.5, confirmed at T3.6) | PRD F2 |
 | SDD-AC-6 | Given a field over the length limit, when written, then it is shortened and `truncated: true` is set | PRD F2 |
 | SDD-AC-7 | Given the file exceeds 1024000 bytes, when the next record is written, then the chain rotates and no `.4` exists | PRD F2 |
 | SDD-AC-8 | Given detail mode off, when a Bash tool call is recorded, then the program name is present and no argument is | PRD F3 |
