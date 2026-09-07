@@ -83,7 +83,7 @@ Delivers the three capture paths and turns the feature on in this repo for the f
   4. Validate: bats green; nothing on stdout
   5. Success: `[ref: SDD/SDD-AC-16]`; `[ref: PRD/F5]`
 
-- [ ] **T2.3 Agent adapter** `[activity: backend-api]` `[parallel: true]`
+- [x] **T2.3 Agent adapter** `[activity: backend-api]` `[parallel: true]`
 
   1. Prime: read the `SubagentStart` payload shape `[ref: SDD/Interface Specifications]`
   2. Test: a dispatch yields one `kind: agent` record with the agent type and id; a nested dispatch
