@@ -963,6 +963,14 @@ class FiringCoverage(NamedTuple):
     more entries, present in a record, that could not be attributed to any
     one of them (see `firing_coverage`) -- distinct from "not found at all"
     so a reader is not misled into thinking the inventory has no such name.
+
+    Both `unmatched_record_names` and `ambiguous_record_names` render each
+    entry as `f"{name} [{kind}]"` (the same convention `_render_firing_coverage`
+    already uses for `unused` entries) rather than the bare name alone --
+    fourth amendment, T3.3 code review round 2, finding 1: a same-named
+    skill and agent are two distinct findings and must render as two lines,
+    never collapsed into one bare name that discards which inventory each
+    came from.
     """
 
     fired: list[InventoryEntry]
@@ -1026,14 +1034,23 @@ def firing_coverage(
     unresolved = fired - matched
     ambiguous_bare_keys = {key for key, count in bare_counts.items() if count > 1}
 
-    unmatched_names = {name for (kind, name) in unresolved if (kind, name) not in ambiguous_bare_keys}
-    ambiguous_names = {name for (kind, name) in unresolved if (kind, name) in ambiguous_bare_keys}
+    unmatched_pairs = {pair for pair in unresolved if pair not in ambiguous_bare_keys}
+    ambiguous_pairs = {pair for pair in unresolved if pair in ambiguous_bare_keys}
+
+    # `kind` is carried all the way to the rendered string -- see the
+    # FiringCoverage docstring above `unmatched_record_names` -- so a
+    # same-named skill and agent render as two distinct lines, never
+    # collapsed into one bare name (fourth amendment, T3.3 code review
+    # round 2, finding 1). Sort by name first so same-named pairs across
+    # kinds land next to each other in the rendered output.
+    def _render_pairs(pairs: set[tuple[str, str]]) -> list[str]:
+        return [f"{name} [{kind}]" for kind, name in sorted(pairs, key=lambda pair: (pair[1], pair[0]))]
 
     return FiringCoverage(
         fired=sorted(fired_entries, key=lambda e: e.qualified),
         unused=sorted(unused_entries, key=lambda e: e.qualified),
-        unmatched_record_names=sorted(unmatched_names),
-        ambiguous_record_names=sorted(ambiguous_names),
+        unmatched_record_names=_render_pairs(unmatched_pairs),
+        ambiguous_record_names=_render_pairs(ambiguous_pairs),
     )
 
 
@@ -1119,7 +1136,7 @@ def _render_unreachable_skills(unreachable: Sequence[str]) -> list[str]:
     if not unreachable:
         return []
     lines = [
-        "Unreachable nested skills -- found on disk but the harness cannot discover them at "
+        "Unreachable skill files -- found on disk but the harness cannot discover them at "
         "all (not exactly one level deep under a plugin's skills/ directory -- nested deeper, "
         "or a SKILL.md placed directly at skills/SKILL.md with no name directory), so they can "
         "NEVER fire. This is NOT the same finding as \"never fired\" above: do not try to fix "

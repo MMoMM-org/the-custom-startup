@@ -1627,7 +1627,7 @@ def test_firing_coverage_ambiguous_bare_name_collision_marks_neither_fired():
 
     assert coverage.fired == []
     assert set(coverage.unused) == {a, b}
-    assert "testing" in coverage.ambiguous_record_names
+    assert "testing [skill]" in coverage.ambiguous_record_names
 
 
 def test_firing_coverage_qualified_name_disambiguates_collision():
@@ -1662,7 +1662,54 @@ def test_firing_coverage_record_naming_absent_entry_is_reported_not_dropped():
     coverage = report.firing_coverage(entries, {("agent", "Explore")})
 
     assert coverage.unused == entries
-    assert coverage.unmatched_record_names == ["Explore"]
+    assert coverage.unmatched_record_names == ["Explore [agent]"]
+
+
+def test_firing_coverage_unmatched_records_of_different_kinds_render_as_two_lines():
+    """T3.3 code review, finding 1 (reopened): a `kind: skill` record and a
+    `kind: agent` record that share a bare name and BOTH fail to match any
+    inventory entry are two distinct findings -- collapsing them to one bare
+    name throws away exactly the `kind` information `fired_names` carries
+    for this purpose (see its docstring). Assert on the RENDERED text, not
+    just the NamedTuple fields -- a prior round's bug was a render-layer
+    collapse that field-level assertions alone did not catch."""
+    coverage = report.firing_coverage([], {("skill", "Explore"), ("agent", "Explore")})
+    inventory = report.SkillAgentInventory(entries=[], skill_count=0, agent_count=0)
+
+    text = report.build_load_report({}, [], skill_agent_inventory=inventory, firing=coverage)
+
+    unmatched_start = text.lower().index("not found in this inventory at all")
+    unmatched_section = text[unmatched_start:]
+    rendered_lines = [line.strip() for line in unmatched_section.splitlines() if line.strip()]
+
+    assert rendered_lines.count("Explore [skill]") == 1
+    assert rendered_lines.count("Explore [agent]") == 1
+    assert "('agent', 'Explore')" not in text
+    assert "('skill', 'Explore')" not in text
+
+
+def test_firing_coverage_ambiguous_records_of_different_kinds_render_as_two_lines():
+    """Same collapse, other bucket: two ambiguous skill entries named `dup`
+    and two ambiguous agent entries named `dup` must surface as two
+    ambiguity findings, not one. Assert on the RENDERED text."""
+    skill_a = report.InventoryEntry(qualified="plugin-a:dup", bare="dup", kind="skill")
+    skill_b = report.InventoryEntry(qualified="plugin-b:dup", bare="dup", kind="skill")
+    agent_a = report.InventoryEntry(qualified="plugin-a:dup", bare="dup", kind="agent")
+    agent_b = report.InventoryEntry(qualified="plugin-b:dup", bare="dup", kind="agent")
+    entries = [skill_a, skill_b, agent_a, agent_b]
+    coverage = report.firing_coverage(entries, {("skill", "dup"), ("agent", "dup")})
+    inventory = report.SkillAgentInventory(entries=entries, skill_count=2, agent_count=2)
+
+    text = report.build_load_report({}, [], skill_agent_inventory=inventory, firing=coverage)
+
+    ambiguous_start = text.lower().index("shared by two or more inventory entries")
+    ambiguous_section = text[ambiguous_start:]
+    rendered_lines = [line.strip() for line in ambiguous_section.splitlines() if line.strip()]
+
+    assert rendered_lines.count("dup [skill]") == 1
+    assert rendered_lines.count("dup [agent]") == 1
+    assert "('agent', 'dup')" not in text
+    assert "('skill', 'dup')" not in text
 
 
 def test_firing_coverage_is_a_fraction():
