@@ -79,6 +79,20 @@ _parent_file_path="$(_observability_field "$_payload" parent_file_path)" || _par
 
 _path="$(_observability_redact_path "$_file_path" "$_toplevel")" || _path=""
 
+# A record with no usable path carries no information: PRD F4's "configured
+# vs. loaded" denominator would be inflated by a phantom load that never
+# named a file. This can happen on an empty or malformed payload (no test
+# in this suite constructs one deliberately outside this guard's own
+# tests) — an anomaly, not a real instruction load. Same posture as
+# `bytes` and `reason` above: write nothing rather than something the
+# report cannot tell apart from a genuine event. Checked on `_path`, not
+# `_file_path`, so the one legitimate empty-looking case — the toplevel
+# itself, which `_observability_redact_path` reduces to "." — is never
+# mistaken for "no path": "." is non-empty.
+if [ -z "$_path" ]; then
+  exit 0
+fi
+
 # bytes: stat the loaded file's ORIGINAL path, before redaction — the
 # record only ever gets the resulting number, never the path used to
 # obtain it. A file that cannot be stat'ed (missing, permission denied, a

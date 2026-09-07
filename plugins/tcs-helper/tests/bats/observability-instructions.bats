@@ -431,3 +431,127 @@ _assert_present() {             # _assert_present <needle> <file>
   [ "$status" -eq 0 ]
   [ ! -d "$data_dir" ]
 }
+
+# ---------------------------------------------------------------------------
+# 10. PRD F3 — "off costs nothing" is not just "writes nothing", it is
+#    "forks nothing". The writer's own gate (checked inside
+#    _observability_write) already makes the two versions of this adapter —
+#    with and without its OWN early gate at the top of the file — externally
+#    identical: same exit status, same (absent) file, same (empty) stdout.
+#    Only a fork-counting shim on PATH can tell them apart, mirroring
+#    observability-writer.bats's own git-fork-counting tests.
+# ---------------------------------------------------------------------------
+
+# Prepend a shim directory to PATH with counting stand-ins for `git` and
+# `stat`. Each invocation appends one byte to its counter file; the shim
+# never touches the real binaries, so a call that reaches here would never
+# reach the genuine git/stat either — this is a strict upper bound on what
+# the adapter invoked, not a passthrough wrapper.
+_make_fork_shim() {
+  local shim_dir="$1" git_counter="$2" stat_counter="$3"
+  mkdir -p "$shim_dir"
+  : > "$git_counter"
+  : > "$stat_counter"
+
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'printf x >> %q\n' "$git_counter"
+    printf 'exit 0\n'
+  } > "$shim_dir/git"
+  chmod +x "$shim_dir/git"
+
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'printf x >> %q\n' "$stat_counter"
+    printf 'exit 1\n'
+  } > "$shim_dir/stat"
+  chmod +x "$shim_dir/stat"
+}
+
+@test "CLAUDE_OBSERVABILITY_ENABLED unset forks neither git nor stat (PRD F3)" {
+  local shim_dir="$TEST_DIR/shim_off"
+  local git_counter="$TEST_DIR/off_git_calls"
+  local stat_counter="$TEST_DIR/off_stat_calls"
+  _make_fork_shim "$shim_dir" "$git_counter" "$stat_counter"
+
+  local payload
+  payload="$(_payload_json \
+    session_id=sess-off \
+    file_path="$REPO_CANONICAL/base.txt" \
+    memory_type=Project \
+    load_reason=session_start)"
+
+  run bash -c '
+    shim_dir="$1"; payload="$2"; adapter="$3"
+    cd "'"$REPO"'" || exit 90
+    unset CLAUDE_OBSERVABILITY_ENABLED
+    PATH="$shim_dir:$PATH"
+    printf "%s" "$payload" | "$adapter"
+  ' _ "$shim_dir" "$payload" "$ADAPTER"
+  [ "$status" -eq 0 ]
+
+  [ ! -s "$git_counter" ]
+  [ ! -s "$stat_counter" ]
+}
+
+# Same shim, same payload, ENABLED=1 this time — proves the shim actually
+# intercepts calls the adapter makes, so the disabled-path assertion above
+# is not vacuously true because the shim was never reached at all.
+@test "CLAUDE_OBSERVABILITY_ENABLED=1 does fork git and attempt stat (shim sanity check)" {
+  local shim_dir="$TEST_DIR/shim_on"
+  local git_counter="$TEST_DIR/on_git_calls"
+  local stat_counter="$TEST_DIR/on_stat_calls"
+  _make_fork_shim "$shim_dir" "$git_counter" "$stat_counter"
+  local data_dir="$TEST_DIR/shim_on_data"
+
+  local payload
+  payload="$(_payload_json \
+    session_id=sess-on \
+    file_path="$REPO_CANONICAL/base.txt" \
+    memory_type=Project \
+    load_reason=session_start)"
+
+  run bash -c '
+    shim_dir="$1"; payload="$2"; adapter="$3"; data_dir="$4"
+    cd "'"$REPO"'" || exit 90
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    PATH="$shim_dir:$PATH"
+    printf "%s" "$payload" | "$adapter"
+  ' _ "$shim_dir" "$payload" "$ADAPTER" "$data_dir"
+  [ "$status" -eq 0 ]
+
+  [ -s "$git_counter" ]
+  [ -s "$stat_counter" ]
+}
+
+# ---------------------------------------------------------------------------
+# 11. A record with no usable path carries no information: PRD F4's
+#    denominator (instructions configured vs. loaded) would be inflated by
+#    a phantom load that never named a file. Same posture as `bytes` and
+#    `reason` above — better to write nothing than something the report
+#    cannot distinguish from a real event. No data directory should even be
+#    created, since that would itself be an observable side effect of a
+#    payload that named no file.
+# ---------------------------------------------------------------------------
+
+@test "an entirely empty payload produces no phantom record" {
+  local data_dir="$TEST_DIR/rec_phantom_empty"
+  run _run_adapter "$data_dir" ""
+  [ "$status" -eq 0 ]
+  [ ! -d "$data_dir" ]
+}
+
+@test "a well-formed payload missing file_path produces no phantom record" {
+  local data_dir="$TEST_DIR/rec_phantom_nofile"
+  local payload
+  payload="$(_payload_json \
+    session_id=sess-phantom \
+    memory_type=Project \
+    load_reason=session_start)"
+    # file_path deliberately omitted
+
+  run _run_adapter "$data_dir" "$payload"
+  [ "$status" -eq 0 ]
+  [ ! -d "$data_dir" ]
+}
