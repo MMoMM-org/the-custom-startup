@@ -637,3 +637,96 @@ _line_count() {
 
   cmp -s "$input_file" "$wrapped_out"
 }
+
+# ---------------------------------------------------------------------------
+# CRITICAL DEFECT (found live): `shift 2` in the argument parser is a no-op
+# when only one positional parameter remains (bash leaves $@ unchanged and
+# returns non-zero, which this parser ignores) -- so a `--event` or
+# `--matcher` flag with no following value never advances $1, and the
+# `while [ $# -gt 0 ]` loop spins forever. A hang in the hook path blocks the
+# tool call indefinitely: not fail-open, not fail-closed. Every test below is
+# bounded by `timeout` so a regression fails the suite instead of wedging the
+# run.
+# ---------------------------------------------------------------------------
+
+@test "malformed: --event with no value does not hang (bounded by timeout)" {
+  cd "$REPO"
+  unset CLAUDE_OBSERVABILITY_ENABLED
+  run timeout 5 "$WRAPPER" --event
+  [ "$status" -ne 124 ]
+  [ "$status" -eq 0 ]
+}
+
+@test "malformed: --matcher trailing with no value, no --, does not hang and does not exec the flag" {
+  cd "$REPO"
+  unset CLAUDE_OBSERVABILITY_ENABLED
+  run timeout 5 "$WRAPPER" --event PreToolUse --matcher
+  [ "$status" -ne 124 ]
+  [ "$status" -ne 127 ]
+  [ "$status" -eq 0 ]
+}
+
+@test "malformed: --event with no value does not hang, recording enabled" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+  run timeout 5 "$WRAPPER" --matcher Skill --event
+  [ "$status" -ne 124 ]
+  [ "$status" -eq 0 ]
+}
+
+@test "regression guard: --matcher \"\" (legitimate empty matcher) with a proper command still runs" {
+  cd "$REPO"
+  unset CLAUDE_OBSERVABILITY_ENABLED
+
+  local wrapped_out="$TEST_DIR/emptymatcher.out"
+  set +e
+  printf 'x' | timeout 5 "$WRAPPER" --event PreToolUse --matcher "" -- "$FIXTURE_CAT" 0 m \
+    >"$wrapped_out" 2>/dev/null
+  local got=$?
+  set -e
+
+  [ "$got" -eq 0 ]
+  [ "$(cat "$wrapped_out")" = "x" ]
+}
+
+@test "regression guard: --matcher \"\" with recording enabled still writes the record with an empty matcher" {
+  cd "$REPO"
+  export CLAUDE_OBSERVABILITY_ENABLED=1
+  export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
+
+  printf 'x' | timeout 5 "$WRAPPER" --event PreToolUse --matcher "" -- "$FIXTURE_CAT" 0 m \
+    >/dev/null 2>/dev/null
+
+  [ -f "$EVENTS_FILE" ]
+  _assert_present '"matcher":""' "$EVENTS_FILE"
+}
+
+@test "malformed: no -- separator at all still runs the command via the existing fallthrough" {
+  cd "$REPO"
+  unset CLAUDE_OBSERVABILITY_ENABLED
+
+  local direct_out="$TEST_DIR/noSep_direct.out"
+  local wrapped_out="$TEST_DIR/noSep_wrapped.out"
+
+  printf 'y' | "$FIXTURE_CAT" 0 m >"$direct_out" 2>/dev/null
+  local direct_status=$?
+
+  set +e
+  printf 'y' | timeout 5 "$WRAPPER" --event PreToolUse --matcher Skill "$FIXTURE_CAT" 0 m \
+    >"$wrapped_out" 2>/dev/null
+  local wrapped_status=$?
+  set -e
+
+  [ "$wrapped_status" -ne 124 ]
+  [ "$wrapped_status" -eq "$direct_status" ]
+  cmp -s "$direct_out" "$wrapped_out"
+}
+
+@test "malformed: -- with no command after it exits 0 without hanging" {
+  cd "$REPO"
+  unset CLAUDE_OBSERVABILITY_ENABLED
+  run timeout 5 "$WRAPPER" --event PreToolUse --matcher Skill --
+  [ "$status" -ne 124 ]
+  [ "$status" -eq 0 ]
+}

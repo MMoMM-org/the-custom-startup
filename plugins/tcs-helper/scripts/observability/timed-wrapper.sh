@@ -127,11 +127,27 @@ _timed_wrapper_matcher=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --event)
-      _timed_wrapper_event="${2:-}"
+      # `shift 2` is a no-op in bash when only one positional parameter
+      # remains (it leaves $@ untouched and returns non-zero, which this
+      # loop does not otherwise check) -- so a `--event` with no following
+      # value would leave $1 == "--event" forever and spin the loop. Detect
+      # the missing value explicitly rather than defaulting it via
+      # `${2:-}`, which is what let this hang in the first place: consume
+      # the flag itself and stop, so the "nothing to run" check below (fail
+      # open, CON-5) is what handles it -- never fall through to executing
+      # the flag as if it were the command.
+      [ $# -ge 2 ] || { shift; break; }
+      _timed_wrapper_event="$2"
       shift 2
       ;;
     --matcher)
-      _timed_wrapper_matcher="${2:-}"
+      # Same guard, same reasoning. Note `--matcher ""` (an explicit empty
+      # string as $2) is the legitimate, expected case for real adapters and
+      # must keep working: `$# -ge 2` is true there because the empty value
+      # is still a positional parameter, so only a genuinely MISSING value
+      # (flag is the last remaining arg) takes this branch.
+      [ $# -ge 2 ] || { shift; break; }
+      _timed_wrapper_matcher="$2"
       shift 2
       ;;
     --)
