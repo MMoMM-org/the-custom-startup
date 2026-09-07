@@ -130,6 +130,25 @@ _line_count() {
   printf '%s' "${n// /}"
 }
 
+# Scale a wall-clock budget (in ms) by $TCS_PERF_SLACK, the convention
+# plugins/tcs-git-helpers/tests/bats/lib/helpers.bash established and
+# .github/workflows/tests.yml sets to 4. Duplicated here for the same reason
+# the three sibling observability suites duplicate it: they source nothing but
+# the file under test.
+#
+# This suite went in without it and the near-zero bound below failed under
+# ordinary CPU contention on a developer machine -- a shared CI runner is the
+# same condition. The base budget is chosen so base x 4 still sits far below
+# the 1000x unit regression these bounds exist to catch.
+_perf_budget_ms() {
+  local budget="$1" slack="${TCS_PERF_SLACK:-1}"
+  case "$slack" in
+    ''|*[!0-9]*) slack=1 ;;
+  esac
+  [ "$slack" -lt 1 ] && slack=1
+  printf '%d' $((budget * slack))
+}
+
 # ---------------------------------------------------------------------------
 # 1. stdout passthrough byte-identical (including a trailing newline case)
 #    and exit status 0 preserved. cwd is inside the fixture repo, matching
@@ -311,7 +330,7 @@ _ms_value() {
   ms="$(_ms_value "$EVENTS_FILE")"
   [ -n "$ms" ]
   [ "$ms" -ge 150 ]
-  [ "$ms" -le 600 ]
+  [ "$ms" -le "$(_perf_budget_ms 600)" ]
 }
 
 @test "a near-zero duration records ms as 0, never empty or garbage" {
@@ -331,7 +350,7 @@ _ms_value() {
     *) ;;
   esac
   [ "$ms" -ge 0 ]
-  [ "$ms" -lt 150 ]
+  [ "$ms" -lt "$(_perf_budget_ms 150)" ]
 }
 
 @test "a multi-second duration records ms with the integer multiplier exercised (not 1000x skipped)" {
@@ -352,7 +371,7 @@ _ms_value() {
   # bound of 1800 allows for system load without flaking. This ensures the * 1000 multiplier
   # on the integer seconds term is actually exercised by the test, not hidden by int=0.
   [ "$ms" -ge 1150 ]
-  [ "$ms" -le 1800 ]
+  [ "$ms" -le "$(_perf_budget_ms 1800)" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -736,6 +755,47 @@ _ms_value() {
 }
 
 # ---------------------------------------------------------------------------
+# `timeout` is GNU coreutils and is NOT on macOS -- neither is `gtimeout`
+# unless someone installed coreutils. The bats CI matrix includes
+# macos-latest, where every `timeout`-bounded test below exited 127 (command
+# not found) rather than exercising the wrapper at all. `_timeout` keeps
+# coreutils' contract (124 on expiry, otherwise the command's own status) and
+# falls back to perl, which ships on both runners.
+#
+# The fallback forks rather than exec'ing: an alarm timer survives exec but
+# the ALRM handler does not, so an exec'd child would die with SIGALRM (142)
+# instead of reporting 124. stdin is inherited by the child, which the
+# pipeline-fed tests below depend on.
+# ---------------------------------------------------------------------------
+
+_timeout() {
+  local secs="$1"
+  shift
+
+  if command -v timeout >/dev/null 2>&1; then
+    command timeout "$secs" "$@"
+    return $?
+  fi
+  if command -v gtimeout >/dev/null 2>&1; then
+    command gtimeout "$secs" "$@"
+    return $?
+  fi
+
+  perl -e '
+    my $secs = shift @ARGV;
+    my $pid  = fork();
+    die "fork failed\n" unless defined $pid;
+    if ($pid == 0) { exec { $ARGV[0] } @ARGV; exit 127; }
+    $SIG{ALRM} = sub { kill "KILL", $pid; waitpid($pid, 0); exit 124 };
+    alarm $secs;
+    waitpid($pid, 0);
+    my $st = $?;
+    alarm 0;
+    exit(($st & 127) ? 128 + ($st & 127) : ($st >> 8));
+  ' "$secs" "$@"
+}
+
+# ---------------------------------------------------------------------------
 # CRITICAL DEFECT (found live): `shift 2` in the argument parser is a no-op
 # when only one positional parameter remains (bash leaves $@ unchanged and
 # returns non-zero, which this parser ignores) -- so a `--event` or
@@ -749,7 +809,7 @@ _ms_value() {
 @test "malformed: --event with no value does not hang (bounded by timeout)" {
   cd "$REPO"
   unset CLAUDE_OBSERVABILITY_ENABLED
-  run timeout 5 "$WRAPPER" --event
+  run _timeout 5 "$WRAPPER" --event
   [ "$status" -ne 124 ]
   [ "$status" -eq 0 ]
 }
@@ -757,7 +817,7 @@ _ms_value() {
 @test "malformed: --matcher trailing with no value, no --, does not hang and does not exec the flag" {
   cd "$REPO"
   unset CLAUDE_OBSERVABILITY_ENABLED
-  run timeout 5 "$WRAPPER" --event PreToolUse --matcher
+  run _timeout 5 "$WRAPPER" --event PreToolUse --matcher
   [ "$status" -ne 124 ]
   [ "$status" -ne 127 ]
   [ "$status" -eq 0 ]
@@ -767,7 +827,7 @@ _ms_value() {
   cd "$REPO"
   export CLAUDE_OBSERVABILITY_ENABLED=1
   export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
-  run timeout 5 "$WRAPPER" --matcher Skill --event
+  run _timeout 5 "$WRAPPER" --matcher Skill --event
   [ "$status" -ne 124 ]
   [ "$status" -eq 0 ]
 }
@@ -778,7 +838,7 @@ _ms_value() {
 
   local wrapped_out="$TEST_DIR/emptymatcher.out"
   set +e
-  printf 'x' | timeout 5 "$WRAPPER" --event PreToolUse --matcher "" -- "$FIXTURE_CAT" 0 m \
+  printf 'x' | _timeout 5 "$WRAPPER" --event PreToolUse --matcher "" -- "$FIXTURE_CAT" 0 m \
     >"$wrapped_out" 2>/dev/null
   local got=$?
   set -e
@@ -792,7 +852,7 @@ _ms_value() {
   export CLAUDE_OBSERVABILITY_ENABLED=1
   export CLAUDE_OBSERVABILITY_DATA="$DATA_DIR"
 
-  printf 'x' | timeout 5 "$WRAPPER" --event PreToolUse --matcher "" -- "$FIXTURE_CAT" 0 m \
+  printf 'x' | _timeout 5 "$WRAPPER" --event PreToolUse --matcher "" -- "$FIXTURE_CAT" 0 m \
     >/dev/null 2>/dev/null
 
   [ -f "$EVENTS_FILE" ]
@@ -810,7 +870,7 @@ _ms_value() {
   local direct_status=$?
 
   set +e
-  printf 'y' | timeout 5 "$WRAPPER" --event PreToolUse --matcher Skill "$FIXTURE_CAT" 0 m \
+  printf 'y' | _timeout 5 "$WRAPPER" --event PreToolUse --matcher Skill "$FIXTURE_CAT" 0 m \
     >"$wrapped_out" 2>/dev/null
   local wrapped_status=$?
   set -e
@@ -823,7 +883,7 @@ _ms_value() {
 @test "malformed: -- with no command after it exits 0 without hanging" {
   cd "$REPO"
   unset CLAUDE_OBSERVABILITY_ENABLED
-  run timeout 5 "$WRAPPER" --event PreToolUse --matcher Skill --
+  run _timeout 5 "$WRAPPER" --event PreToolUse --matcher Skill --
   [ "$status" -ne 124 ]
   [ "$status" -eq 0 ]
 }
