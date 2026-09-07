@@ -11,7 +11,12 @@ never a load figure -- when the record is empty, has no `kind: state`
 probe, or is stale (SDD-AC-15). T3.3 adds the second join PRD F8 needs:
 coverage of the shipped skill/agent inventory against what actually fired,
 naming the unused entries rather than treating an unfired one as missing
-(SDD-AC-18).
+(SDD-AC-18). T3.4 adds the report-side half of SDD-AC-17: wrapper-sourced
+hook durations, each traceable to the one hook invocation that produced it
+via `scope_note: single` -- a `batch`-scoped or unscoped record is counted
+but never rendered as if it were one hook's own duration (ADR-7), and no
+`kind: hook` record at all reports hook timing as not installed, never as
+zero hooks.
 
 ADR-6: this file is Python, pytest-covered, and runs offline -- nowhere near
 the hook path, so the sub-millisecond budget (CON-7) does not apply here.
@@ -1055,6 +1060,169 @@ def firing_coverage(
 
 
 # ---------------------------------------------------------------------------
+# Hook durations: wrapper-sourced, single-invocation-scoped (T3.4, SDD-AC-17).
+# ---------------------------------------------------------------------------
+#
+# `timed-wrapper.sh` (T3.5) is the only producer of a `kind: hook` record,
+# and it always writes `scope_note: single` -- it times exactly one
+# invocation of one wrapped hook command (see its own header comment,
+# HAZARD 2). `batch` remains in the record shape's enum only as a label for
+# the HARNESS's own aggregate "Slow PreToolUse hooks" warning, never written
+# by this design (solution.md, Integration Points). ADR-7's whole point is
+# that a batch figure -- several hooks sharing one event collapsed into one
+# measurement group, T1.4's finding -- must never be presented as if it were
+# one hook's own duration. So a record with `scope_note: batch`, or with no
+# `scope_note` at all, is excluded from every per-hook duration below rather
+# than defaulted to `single`: defaulting would make a fabricated attribution
+# permanently indistinguishable from a real one downstream, the same T2.1
+# precedent `reason`/`bytes` follow elsewhere in this file. Neither is
+# silently dropped either -- both are counted so a reader can see they
+# existed at all (`batch_count`/`unscoped_count`).
+
+
+def _parse_ms(value: object) -> float | None:
+    """Cast a `kind: hook` record's `ms` field to `float`, or `None`.
+
+    Same posture as `_parse_bytes`: `timed-wrapper.sh`'s generic writer
+    quotes every value uniformly, so a real record carries `"ms": "0.001"`,
+    never a bare JSON number (confirmed against a real record produced by
+    the shipped wrapper). A value that cannot be cast -- absent, or present
+    but not numeric (a producer bug) -- is unmeasurable, never a fabricated
+    `0.0`; callers must exclude a `None` from any total rather than adding
+    it in. `bool` is checked and rejected before the `float()` cast for the
+    same reason `_parse_bytes` rejects it before `int()`: `bool` is a
+    subtype of `int` (and coerces cleanly to `float`), so `float(True) ==
+    1.0` and `float(False) == 0.0` would both succeed silently on a
+    mis-serialized `"ms": false` -- a "present but not a valid number"
+    producer bug, not a measurement.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_exit(value: object) -> int | None:
+    """Cast a `kind: hook` record's `exit` field to `int`, or `None`.
+
+    `exit` legitimately takes the value `"0"` (a clean exit) -- a plain
+    truthiness check on the parsed result (`if exit_code:`) would treat that
+    as "no exit code recorded" and is exactly the inversion this phase
+    already shipped once, for `enabled="0"` in `_state_enabled`. Every use
+    of this value elsewhere in this module is therefore an explicit
+    comparison (`is None`, `== 0`), never bare truthiness. `bool` is
+    rejected before the `int()` cast for the same reason `_parse_bytes`
+    rejects it: `int(True)`/`int(False)` succeed silently and would turn a
+    mis-serialized `"exit": false` into a measured (wrong) `0`.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+class HookInvocation(NamedTuple):
+    """One `kind: hook` record's own, single-invocation-scoped measurement.
+
+    `ms` and `exit` are already cast (`_parse_ms`/`_parse_exit`) and either
+    may be `None` when the record's own value was absent or non-numeric --
+    an unmeasurable reading, rendered as such, never as a fabricated `0`.
+    """
+
+    ms: float | None
+    exit: int | None
+
+
+class HookDurationEntry(NamedTuple):
+    """Every `scope_note: single` invocation observed for one
+    `(hook_event, matcher)` pair -- the two operator-supplied labels that
+    identify which hook a duration belongs to, so each one is traceable to
+    the one hook invocation that produced it (SDD-AC-17's own wording).
+    """
+
+    hook_event: str
+    matcher: str
+    invocations: list[HookInvocation]
+
+
+class HookDurationReport(NamedTuple):
+    """`hook_duration_stats`'s result: per-hook durations, plus the
+    batch-scoped and unscoped records ADR-7 says must never be rendered as
+    one hook's own duration.
+
+    `installed` is False ONLY when the log carries no `kind: hook` record at
+    all -- distinct from zero MEASURED single-scope durations, which can
+    happen even with the wrapper installed (every record present turns out
+    to be batch-scoped or unscoped, say; `entries` is then empty but
+    `installed` is still True). Rendered as "hook timing is not installed",
+    never as "0 hooks": `timed-wrapper.sh` is installed only for the
+    duration of a deliberate investigation (T3.5's own docstring), so its
+    total absence is the normal, unremarkable state and says nothing about
+    whether any hook took time -- exactly T3.2's honesty rule for an empty
+    record, applied to this section.
+    """
+
+    installed: bool
+    entries: list[HookDurationEntry]
+    batch_count: int
+    unscoped_count: int
+
+
+def hook_duration_stats(records: Iterable[dict]) -> HookDurationReport:
+    """Group `kind: hook` records by `(hook_event, matcher)`, keeping only
+    `scope_note: single` records as one hook invocation's own duration.
+
+    A `scope_note: batch` record, or one with no `scope_note` at all (or any
+    other value -- defensively, never assumed to mean `single`), is counted
+    in `batch_count`/`unscoped_count` but never added to `entries`. See the
+    module comment above this section for why: folding either into a
+    per-hook duration is precisely the misreading ADR-7 exists to prevent,
+    and dropping either silently instead would hide that a batch-scoped or
+    malformed record existed at all.
+    """
+    grouped: dict[tuple[str, str], list[HookInvocation]] = {}
+    batch_count = 0
+    unscoped_count = 0
+    installed = False
+
+    for rec in records:
+        if rec.get("kind") != "hook":
+            continue
+        installed = True
+        scope_note = rec.get("scope_note")
+        if scope_note == "batch":
+            batch_count += 1
+            continue
+        if scope_note != "single":
+            unscoped_count += 1
+            continue
+        hook_event = rec.get("hook_event")
+        matcher = rec.get("matcher")
+        key = (
+            hook_event if isinstance(hook_event, str) and hook_event else "(unknown event)",
+            matcher if isinstance(matcher, str) and matcher else "(unknown matcher)",
+        )
+        invocation = HookInvocation(ms=_parse_ms(rec.get("ms")), exit=_parse_exit(rec.get("exit")))
+        grouped.setdefault(key, []).append(invocation)
+
+    entries = [
+        HookDurationEntry(hook_event=event, matcher=matcher, invocations=invocations)
+        for (event, matcher), invocations in sorted(grouped.items())
+    ]
+
+    return HookDurationReport(
+        installed=installed,
+        entries=entries,
+        batch_count=batch_count,
+        unscoped_count=unscoped_count,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Assembling the text report (SDD-AC-13 / PRD F4).
 # ---------------------------------------------------------------------------
 
@@ -1191,6 +1359,51 @@ def _render_firing_coverage(inventory: SkillAgentInventory, coverage: FiringCove
     return lines
 
 
+def _render_hook_durations(hooks: HookDurationReport) -> list[str]:
+    """Wrapper-sourced hook durations, single-invocation-scoped (SDD-AC-17).
+
+    Leads with the honesty case (no `kind: hook` record at all -> "not
+    installed", never "0 hooks" -- same posture as `_render_recording_status`
+    for an empty record). Otherwise lists each `(hook_event, matcher)` pair's
+    own `scope_note: single` durations -- traceable to the one hook
+    invocation that produced each one -- and states, rather than hides, how
+    many records were excluded as batch-scoped or unscoped.
+    """
+    if not hooks.installed:
+        return [
+            "Hook timing: NOT INSTALLED -- no `kind: hook` record was found in this log. "
+            "This does not mean no hook took time; timed-wrapper.sh is installed only for "
+            "the duration of a deliberate investigation, so its absence is the normal state.",
+            "",
+        ]
+
+    lines = ["Hook durations (timed-wrapper.sh, scope_note: single only):"]
+    if not hooks.entries:
+        lines.append(
+            "  none -- every `kind: hook` record present was batch-scoped or carried no "
+            "scope_note (see below); none is a single hook's own duration."
+        )
+    for entry in hooks.entries:
+        lines.append(f"  {entry.hook_event} / {entry.matcher} ({len(entry.invocations)} invocation(s)):")
+        for invocation in entry.invocations:
+            ms_text = f"{invocation.ms} ms" if invocation.ms is not None else "unmeasurable"
+            exit_text = str(invocation.exit) if invocation.exit is not None else "unmeasurable"
+            lines.append(f"    {ms_text} (exit {exit_text})")
+    if hooks.batch_count:
+        lines.append(
+            f"  {hooks.batch_count} record(s) carried scope_note: batch and are EXCLUDED above -- "
+            "a batch figure covers several hooks collapsed into one measurement group (ADR-7) and "
+            "must never be shown as any single hook's own duration."
+        )
+    if hooks.unscoped_count:
+        lines.append(
+            f"  {hooks.unscoped_count} record(s) carried no usable scope_note at all and are "
+            "EXCLUDED above for the same reason -- never assumed to mean a single invocation."
+        )
+    lines.append("")
+    return lines
+
+
 def build_load_report(
     stats: dict[str, InstructionFileStats],
     inventory: Sequence[str],
@@ -1209,6 +1422,11 @@ def build_load_report(
     # unchanged, both required together to render the section at all.
     skill_agent_inventory: SkillAgentInventory | None = None,
     firing: FiringCoverage | None = None,
+    # T3.4: same optional-parameter posture as byte_stats/recording/
+    # skill_agent_inventory above -- `None` by default so every pre-existing
+    # caller/test keeps working unchanged; `main()` is the only real caller,
+    # pinned by the CLI end-to-end test asserting on actual stdout.
+    hooks: HookDurationReport | None = None,
 ) -> str:
     """Render the load report: per-file counts and reasons, and what never loaded.
 
@@ -1235,6 +1453,13 @@ def build_load_report(
     names each nested `SKILL.md` the harness cannot discover at all --
     reported as UNREACHABLE, never as unused or never-fired, and never
     folded into the coverage fraction (third amendment, 2026-09-07, T3.3).
+
+    `hooks` is optional (T3.4, same posture): when given, a final section
+    states each wrapper-sourced `scope_note: single` hook duration against
+    its `hook_event`/`matcher` (SDD-AC-17), or -- when the log carries no
+    `kind: hook` record at all -- that hook timing is not installed, never
+    "0 hooks". A `scope_note: batch` or unscoped record is counted but never
+    shown as a single hook's own duration (ADR-7).
     """
     lines: list[str] = []
 
@@ -1282,6 +1507,10 @@ def build_load_report(
     if skill_agent_inventory is not None and firing is not None:
         lines.append("")
         lines.extend(_render_firing_coverage(skill_agent_inventory, firing))
+
+    if hooks is not None:
+        lines.append("")
+        lines.extend(_render_hook_durations(hooks))
 
     return "\n".join(lines)
 
@@ -1342,6 +1571,7 @@ def main(argv: list[str] | None = None) -> int:
     recording = recording_status(records, datetime.now(timezone.utc))
     skill_agent_inventory = walk_skill_agent_inventory(args.repo_root)
     firing = firing_coverage(skill_agent_inventory.entries, fired_names(records))
+    hooks = hook_duration_stats(records)
     print(
         build_load_report(
             stats,
@@ -1352,6 +1582,7 @@ def main(argv: list[str] | None = None) -> int:
             recording=recording,
             skill_agent_inventory=skill_agent_inventory,
             firing=firing,
+            hooks=hooks,
         )
     )
     return 0

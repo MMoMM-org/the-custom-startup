@@ -111,6 +111,42 @@ def _state(
     }
 
 
+def _hook(
+    hook_event: str = "PreToolUse",
+    matcher: str = "Skill",
+    ms: str | bool | None = "0.001",
+    exit_value: str | bool | None = "0",
+    scope_note: str | None = "single",
+    session: str = "s1",
+    ts: str = "2026-09-07T12:56:26Z",
+) -> dict:
+    """A `kind: hook` record, as `timed-wrapper.sh` writes it (T3.5).
+
+    `ms` and `exit_value` default to the quoted-string shape the wrapper's
+    generic writer actually produces (`"0.001"`, `"0"`) -- never bare JSON
+    numbers -- the same convention `_instruction`'s `bytes_value` uses above.
+    `scope_note` defaults to `"single"` (the only value the wrapper itself
+    ever writes); tests exercising ADR-7's `batch`/absent cases override it
+    explicitly, including passing `None` to omit the key entirely (a real
+    pre-T3.5 or corrupted record would simply lack it).
+    """
+    record = {
+        "ts": ts,
+        "kind": "hook",
+        "session": session,
+        "repo": "the-custom-startup",
+        "hook_event": hook_event,
+        "matcher": matcher,
+    }
+    if ms is not None:
+        record["ms"] = ms
+    if exit_value is not None:
+        record["exit"] = exit_value
+    if scope_note is not None:
+        record["scope_note"] = scope_note
+    return record
+
+
 # --- per-file load counts and reasons observed -----------------------------
 
 
@@ -1096,6 +1132,8 @@ def test_cli_end_to_end_prints_report_for_fixture_events(tmp_path):
         [
             _instruction("docs/ai/memory/active.md", "session_start", bytes_value="123"),
             _instruction("docs/ai/memory/active.md", "session_start", bytes_value="123"),
+            _hook("PreToolUse", "Skill", ms="0.001", exit_value="0", scope_note="single"),
+            _hook("PreToolUse", "Skill", ms="77.0", scope_note="batch"),
         ],
     )
     repo_root = tmp_path / "repo"
@@ -1129,6 +1167,17 @@ def test_cli_end_to_end_prints_report_for_fixture_events(tmp_path):
     # "half a report" mode this task exists to prevent.
     assert "Recording state: UNKNOWN" in result.stdout
     assert "Byte cost -- always-loaded layer: 246 byte(s)" in result.stdout
+
+    # T3.4 wiring: main() must pass hook_duration_stats(records) through to
+    # build_load_report -- assert the single-scope duration reaches real
+    # stdout, traceable to its hook_event/matcher, and that the batch-scoped
+    # record's own figure (77.0) never appears as if it were a single hook's
+    # own duration (ADR-7's misreading).
+    assert "PreToolUse" in result.stdout
+    assert "Skill" in result.stdout
+    assert "0.001" in result.stdout
+    assert "77.0" not in result.stdout
+    assert "batch" in result.stdout.lower()
 
 
 def test_cli_default_events_path_matches_writer_directory_shape(tmp_path):
@@ -1837,3 +1886,237 @@ def test_redact_path_parity_absolute_path_outside_repo(tmp_path):
     outside = tmp_path / "home" / ".claude" / "CLAUDE.md"
     _assert_redact_parity(outside, repo_root)
     assert report._redact_path(outside, repo_root) == "CLAUDE.md"
+
+
+# ---------------------------------------------------------------------------
+# Hook durations: wrapper-sourced, single-invocation-scoped (T3.4, SDD-AC-17)
+# ---------------------------------------------------------------------------
+#
+# `timed-wrapper.sh` (T3.5) is the only producer of `kind: hook` records, and
+# it always writes `scope_note: single` -- it times exactly one invocation.
+# `batch` remains in the enum only as a label for the HARNESS's own aggregate
+# "Slow PreToolUse hooks" warning, never written by this design (solution.md,
+# Integration Points). ADR-7's whole point: a record that does not carry
+# `scope_note: single` must never be rendered as if it were one hook's own
+# duration -- whether it says `batch` or says nothing about scope at all.
+#
+# `ms` and `exit` arrive as quoted strings ("0.001", "0"), never bare JSON
+# numbers (confirmed against a real record produced by the shipped wrapper) --
+# the same typing hazard `_parse_bytes` exists to catch for `bytes`, and this
+# phase's `enabled="0"` bug for `exit`'s legitimate zero value.
+
+
+def test_hook_duration_stats_single_scope_recorded_against_its_hook():
+    records = [_hook("PreToolUse", "Skill", ms="12.5", exit_value="0", scope_note="single")]
+
+    result = report.hook_duration_stats(records)
+
+    assert result.installed is True
+    assert len(result.entries) == 1
+    entry = result.entries[0]
+    assert entry.hook_event == "PreToolUse"
+    assert entry.matcher == "Skill"
+    assert entry.invocations == [report.HookInvocation(ms=12.5, exit=0)]
+
+
+def test_hook_duration_stats_batch_scope_never_rendered_as_single():
+    records = [_hook("PreToolUse", "Skill", ms="99.9", scope_note="batch")]
+
+    result = report.hook_duration_stats(records)
+
+    assert result.entries == []
+    assert result.batch_count == 1
+
+
+def test_hook_duration_stats_missing_scope_note_refused_as_single():
+    records = [_hook("PreToolUse", "Skill", ms="5.0", scope_note=None)]
+
+    result = report.hook_duration_stats(records)
+
+    assert result.entries == []
+    assert result.unscoped_count == 1
+
+
+def test_hook_duration_stats_non_single_non_batch_scope_note_is_excluded_too():
+    # Defensive: any value other than the two documented ones must still
+    # never be folded into `entries` as if it meant "single".
+    records = [_hook(scope_note="weird")]
+
+    result = report.hook_duration_stats(records)
+
+    assert result.entries == []
+    assert result.unscoped_count == 1
+
+
+def test_hook_duration_stats_no_hook_records_reports_not_installed():
+    records = [_instruction("a.md", "session_start"), _state("1")]
+
+    result = report.hook_duration_stats(records)
+
+    assert result.installed is False
+    assert result.entries == []
+    assert result.batch_count == 0
+    assert result.unscoped_count == 0
+
+
+def test_hook_duration_stats_casts_quoted_string_ms_to_float():
+    # A naive comparison against the raw string would never equal 0.001 --
+    # this pins the cast, not just presence.
+    records = [_hook(ms="0.001")]
+
+    result = report.hook_duration_stats(records)
+
+    assert result.entries[0].invocations[0].ms == 0.001
+    assert isinstance(result.entries[0].invocations[0].ms, float)
+
+
+def test_hook_duration_stats_non_numeric_ms_is_unmeasurable_not_zero():
+    records = [_hook(ms="not-a-number")]
+
+    result = report.hook_duration_stats(records)  # must not raise
+
+    assert result.entries[0].invocations[0].ms is None
+
+
+def test_hook_duration_stats_absent_ms_is_unmeasurable_not_zero():
+    records = [_hook(ms=None)]
+
+    result = report.hook_duration_stats(records)
+
+    assert result.entries[0].invocations[0].ms is None
+
+
+def test_hook_duration_stats_boolean_ms_is_rejected_not_coerced():
+    # `float(True) == 1.0` / `float(False) == 0.0` both succeed silently in
+    # plain Python -- a mis-serialized `"ms": false` must not become a
+    # measured 0.0 (or 1.0).
+    records = [_hook(ms=False)]
+
+    result = report.hook_duration_stats(records)
+
+    assert result.entries[0].invocations[0].ms is None
+
+
+def test_hook_duration_stats_exit_zero_string_parsed_as_int_zero_not_falsy():
+    records = [_hook(exit_value="0")]
+
+    result = report.hook_duration_stats(records)
+
+    invocation = result.entries[0].invocations[0]
+    # Pin against the truthiness trap this phase already hit once
+    # (`enabled="0"` read as True): a clean exit 0 must parse to the int
+    # 0, distinguishable from "no exit code recorded" (`None`).
+    assert invocation.exit == 0
+    assert invocation.exit is not None
+
+
+def test_hook_duration_stats_boolean_exit_is_rejected_not_coerced():
+    records = [_hook(exit_value=True)]
+
+    result = report.hook_duration_stats(records)
+
+    assert result.entries[0].invocations[0].exit is None
+
+
+def test_hook_duration_stats_non_numeric_exit_is_unmeasurable_not_fatal():
+    records = [_hook(exit_value="not-a-number")]
+
+    result = report.hook_duration_stats(records)  # must not raise
+
+    assert result.entries[0].invocations[0].exit is None
+
+
+def test_hook_duration_stats_multiple_hooks_kept_distinct():
+    records = [
+        _hook("PreToolUse", "Skill", ms="1.0"),
+        _hook("PostToolUse", "Bash", ms="2.0"),
+        _hook("PreToolUse", "Skill", ms="3.0"),
+    ]
+
+    result = report.hook_duration_stats(records)
+
+    keyed = {(e.hook_event, e.matcher): e for e in result.entries}
+    assert set(keyed) == {("PreToolUse", "Skill"), ("PostToolUse", "Bash")}
+    assert len(keyed[("PreToolUse", "Skill")].invocations) == 2
+    assert len(keyed[("PostToolUse", "Bash")].invocations) == 1
+
+
+def test_hook_duration_stats_ignores_non_hook_kinds():
+    records = [_instruction("a.md", "session_start"), _state("1"), {"kind": "skill", "skill": "x"}]
+
+    result = report.hook_duration_stats(records)
+
+    assert result.installed is False
+    assert result.entries == []
+
+
+# --- the report renders hook durations, honestly (SDD-AC-17) ---------------
+
+
+def test_build_load_report_without_hooks_omits_hook_section():
+    """Pre-existing callers/tests that never pass `hooks=` must keep working
+    unchanged -- same posture as byte_stats=/recording=/skill_agent_inventory=
+    above."""
+    text = report.build_load_report({}, [])
+    assert "hook" not in text.lower()
+
+
+def test_build_load_report_no_hook_records_states_timing_not_installed():
+    hooks = report.hook_duration_stats([_instruction("a.md", "session_start")])
+
+    text = report.build_load_report({}, [], hooks=hooks)
+
+    assert "not installed" in text.lower()
+    assert "0 hooks" not in text.lower()
+
+
+def test_build_load_report_single_scope_hook_duration_traceable_to_hook_event_and_matcher():
+    hooks = report.hook_duration_stats([_hook("PreToolUse", "Skill", ms="0.5", exit_value="0")])
+
+    text = report.build_load_report({}, [], hooks=hooks)
+
+    assert "PreToolUse" in text
+    assert "Skill" in text
+    assert "0.5" in text
+
+
+def test_build_load_report_batch_scope_never_shown_as_single_duration():
+    hooks = report.hook_duration_stats([_hook(ms="999.0", scope_note="batch")])
+
+    text = report.build_load_report({}, [], hooks=hooks)
+
+    assert "999.0" not in text
+
+
+def test_build_load_report_batch_count_is_surfaced_not_silently_dropped():
+    hooks = report.hook_duration_stats([_hook(scope_note="batch"), _hook(scope_note="batch")])
+
+    text = report.build_load_report({}, [], hooks=hooks)
+
+    assert "batch" in text.lower()
+    assert "2" in text
+
+
+def test_build_load_report_missing_scope_note_never_shown_as_single_duration():
+    hooks = report.hook_duration_stats([_hook(ms="42.0", scope_note=None)])
+
+    text = report.build_load_report({}, [], hooks=hooks)
+
+    assert "42.0" not in text
+
+
+def test_build_load_report_unscoped_count_is_surfaced_not_silently_dropped():
+    hooks = report.hook_duration_stats([_hook(scope_note=None)])
+
+    text = report.build_load_report({}, [], hooks=hooks)
+
+    assert "1" in text
+    assert "scope_note" in text.lower()
+
+
+def test_build_load_report_hook_section_appears_after_no_hooks_call_too():
+    # Symmetry check: the "not installed" branch and the populated branch
+    # both go through the same optional-parameter posture.
+    hooks_none = report.hook_duration_stats([])
+    text = report.build_load_report({}, [], hooks=hooks_none)
+    assert "not installed" in text.lower()
