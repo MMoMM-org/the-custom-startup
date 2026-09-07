@@ -612,7 +612,7 @@ reads as *unused* when the truth is *unreachable*. Those are different problems 
 and collapsing them is the same category error the `batch` / `single` distinction exists to prevent
 for hook durations. So they stay out of the coverage fraction — but the report names them separately
 as unreachable, with a count, because 15 dead files is exactly the dead weight #147 exists to find,
-and silently excluding them would hide it. Tracked independently of this spec as a repo issue, since
+and silently excluding them would hide it. Tracked independently of this spec as issue #155, since
 the fix (restructuring `tcs-team`, or its agents' now-dangling `skills:` references) is not this
 spec's business.
 
