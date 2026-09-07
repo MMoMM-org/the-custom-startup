@@ -30,6 +30,15 @@ phase: 3
   `scope_note: single`; see `solution.md`'s Integration Points. **T3.4 below is written around the
   dropped route and needs the maintainer's decision on how to change it — not rewritten here.**
 - An empty record is a statement about recording, not about loading.
+- **Added after phase 2 (T2.1, T2.2), three cases `report.py` did not previously have to handle**
+  `[ref: solution.md/Application Data Models]`: (1) `reason` may be an empty string — T2.1 dropped
+  a fabricated `session_start` default for a payload missing `load_reason`, so an empty `reason`
+  must be counted as unknown, never folded into any named reason's count; (2) `bytes` may be
+  absent — a file that could not be stat'ed is written with no `bytes` field at all, never `0`, so
+  it must be excluded from a byte-cost total rather than counted as zero cost; (3) a payload with no
+  usable `path` produces no `kind: instruction` record at all (T2.1's guard against a phantom entry
+  inflating PRD F4's denominator) — `report.py` does not need to filter for this itself, but must
+  not assume every record it reads once existed unfiltered upstream.
 
 **Dependencies**: Phase 2 (records must exist to report on). T1.4 has run (see `plan/phase-1.md`):
 configuration-only attribution is impossible, so T3.5 is not skipped — it builds the wrapper as
@@ -48,7 +57,9 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
      observed; names configured instruction files that never appear, enumerated from the instruction
      inventory `[ref: SDD/The two inventories]`; distinguishes always-loaded
      from conditionally loaded entries; handles a rotated chain (`.jsonl` plus `.1`–`.3`) as one
-     logical record without double-counting
+     logical record without double-counting; **a record with an empty `reason` is counted as
+     unknown, never folded into any named reason's count** (T2.1 dropped the fabricated
+     `session_start` default — see this phase's Key Decisions)
   3. Implement: `scripts/observability/report.py`
   4. Validate: `pytest -q` green; the module is importable and unit-testable without a live session
   5. Success: `[ref: SDD/SDD-AC-13]`; `[ref: PRD/F4]`
@@ -58,7 +69,9 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   1. Prime: read the honesty requirement `[ref: SDD/Quality Requirements]`
   2. Test: reports the measured byte cost of the always-loaded layer separately from conditional
      loads; **given an empty record, reports the recording state rather than "nothing loaded"**;
-     given a record whose newest entry is older than the current session, says so
+     given a record whose newest entry is older than the current session, says so; **a record with
+     no `bytes` field (T2.1: the file could not be stat'ed) is excluded from the byte-cost total,
+     never counted as zero**, and the report states how many records had no measurable size
   3. Implement: extend `report.py`; read the `kind: state` record written by `selfcheck`
   4. Validate: `pytest -q` green, including the empty-input and stale-input cases
   5. Success: `[ref: SDD/SDD-AC-14, SDD-AC-15]`; `[ref: PRD/F4]`

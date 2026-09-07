@@ -455,6 +455,19 @@ ENTITY: Event (NEW)                       # one JSON object per line
   # (b) is the lower-cost option since it touches only the offline reader, but the choice is left
   # for phase 2 to make deliberately rather than have it fall out of whichever adapter is written
   # first.
+  #
+  # Correction (2026-09-07, T2.1): `reason` is declared above as a bare `enum`, with no `?`, but it
+  # can now be an empty string. T2.1 removed an earlier default of `session_start` for a payload
+  # that omits `load_reason`: that value is verified always present at both real emission sites
+  # (README, `InstructionsLoaded`), so its absence is an anomaly — harness drift, a malformed
+  # payload, a rename — and defaulting would make the anomaly permanently indistinguishable from a
+  # genuine `session_start` once it reaches `report.py`, which is exactly the "records wrong things
+  # rather than records nothing" failure CON-9 forbids. `report.py` (phase 3) must count an empty
+  # `reason` as unknown, never as a load reason. The same posture now applies consistently across
+  # three fields: `bytes` is absent, never `0`, when the file cannot be stat'ed; `reason` is empty,
+  # never fabricated, when the payload omits `load_reason`; and a record with no usable `path` is
+  # not written at all — T2.1 added that guard, because a phantom record with no identifiable file
+  # would inflate the denominator PRD F4's "configured but never loaded" count depends on.
 
   WHEN kind = skill:
     skill:         string   # from tool_input
@@ -463,6 +476,20 @@ ENTITY: Event (NEW)                       # one JSON object per line
     agent_type:    string
     agent_id:      string
     parent_agent:  string?
+
+  # SPEC DEFECT, found at T2.3 (2026-09-07): `parent_agent`'s source is unestablished.
+  # `log_agent.sh` carries it as `AGENT_PAYLOAD_KEY_PARENT="parent_agent_type"`, marked
+  # UNVERIFIED in that file's own header comment — a guess by analogy with `agent_type` (the
+  # sibling field this adapter already trusts) and with `log_instructions.sh`'s `parent_file_path`,
+  # not a confirmed payload key. The official hooks documentation states plainly that `agent_id`
+  # and `agent_type` identify only the CURRENT subagent, never its parent. The shipped binary's one
+  # `parent_agent_id` string sits inside `claude_code.subagent.spawn` — team/inbox message routing —
+  # which T1.4 already established is dead code (`vj()` hard-coded `false`); it is not evidence for
+  # a hook stdin field. This is the same failure mode T1.4 named: designing around telemetry that
+  # never fires. T2.4 — the first run against a real nested dispatch — settles it one of two ways:
+  # either the payload carries a parent field under some name and `AGENT_PAYLOAD_KEY_PARENT` is
+  # corrected to match it, or no such field exists and `parent_agent` must be removed from this
+  # record shape as unobtainable, not shipped as a field that is always empty.
 
   WHEN kind = hook:         # populated only by timed-wrapper.sh — the harness-ingest route was
     hook_event:    string   # dropped after T1.4 found it requires a local OTLP receiver (ADR-7)
@@ -734,6 +761,21 @@ such as `tool_input.command` bypasses the fail-safe entirely — neither string 
 and the list does no pattern or substring matching. Such a field would only be caught by the
 `detail:` prefix.
 
+**A concrete instance of this limitation, found at T2.2: `args`.** A `Skill` payload's `tool_input`
+carries `{"skill":"<name>","args":"<free text>"}`. `args` is whatever a user typed into the skill
+invocation — paths, quoted content, potentially secrets — and it is not on the bare-name deny list
+above, so if an adapter ever emitted it unprefixed, nothing downstream would stop it. `log_skill.sh`
+correctly never emits it, and T2.2 now carries a canary test pinning that absence. `args` should be
+added to the deny list as a further backstop; recorded here rather than left to be rediscovered the
+way `new_string` already was, above.
+
+Mutation testing at T2.2 confirmed the general blind spot this limitation describes, not just the
+`args` instance: a deny-listed field emitted under a DIFFERENT name — `prompt` written as `psummary`
+— bypasses the fail-safe entirely, because the check is exact-match and nothing here does substring
+or fuzzy matching. This restates, with evidence, why the `detail:` prefix is THE interface (see the
+Recommendation immediately below) and the deny list is only ever a backstop for a name it happens to
+recognise.
+
 **Recommendation binding on phase 2, carried forward from this finding:** every field the keep/drop
 table forbids must be passed to `_observability_write` with the `detail:` prefix. The deny list is a
 backstop against an adapter that forgets — it is not the interface, and it must not be relied on as
@@ -825,6 +867,30 @@ installation step is needed in this repo because `.claude/settings.json`'s path 
 a repo-relative path, present on every clone once the file is tracked — which is the property the
 original untracked placement lacked, and the reason this correction exists at all.
 
+**Correction to ADR-5 — a measured performance defect in `_observability_field` on an absent key
+(2026-09-07).** ADR-5's own measurement compared `jq` against bash-native extraction and found the
+latter ~0 ms; that comparison used a payload where the requested key is PRESENT. On an ABSENT key,
+`_observability_field`'s `${payload#*\"$key\":\"}` degrades badly: bash tries every possible split
+point before concluding no match exists, so the no-match case is quadratic in payload size, not the
+~0 ms the ADR's table implies:
+
+| payload | absent key | key present near the front |
+|---|---|---|
+| 25 KB | 197 ms | 1 ms |
+| 50 KB | 771 ms | 1 ms |
+| 100 KB | 3377 ms | 2 ms |
+| 150 KB | 7035 ms | 3 ms |
+
+CON-7 budgets 1 ms per hook invocation. `log_agent.sh` calls `_observability_field` for
+`parent_agent` unconditionally, and that key is absent on every non-nested dispatch — the common
+case — so the common case pays the worst case. A hook stalling for seconds blocks the session: this
+is a usability defect, not merely a budget miss. Measured alternatives at 150 KB with an absent key:
+a `case` glob pre-check costs 1 ms; a bash `=~` regex costs 1 ms; scanning only the first 4 KB costs
+9 ms but changes semantics and is rejected. The fix is a `case` presence pre-check before the
+prefix-removal expansion runs. See Known Technical Issues, below, for a related correctness hazard
+found while designing this fix — quoting the key to close that hazard belongs in the same change,
+not a separate one.
+
 ## Quality Requirements
 
 | Quality | Requirement | How it is verified |
@@ -835,6 +901,19 @@ original untracked placement lacked, and the reason this correction exists at al
 | Privacy | Reduced mode contains no Bash arguments, file contents, hook command strings or absolute home paths | bats case scanning a produced record against a deny-list |
 | Durability | The record never exceeds 4 generations; no `.4` is created | bats rotation case, mirroring the existing audit-log suite |
 | Honesty | An empty record reports "not recording", never "nothing loaded" | pytest case over `report.py` with an empty and a stale input |
+
+**Measured end-to-end (2026-09-07), not just the writer alone.** Phase 1 measured `logwrite.sh`'s
+writer alone at ~9030 µs per record against a 1000 µs budget (ADR-5's accepted `date` deviation).
+With a real adapter in front of it, measured end-to-end per instruction-load event: **~13.3 ms**.
+Fork breakdown per record: 2× `git rev-parse` (`log_instructions.sh` resolves the toplevel itself
+for path redaction, then `_observability_write` resolves it again internally, because it accepts no
+pre-resolved value), 1–2× `stat` (the BSD form `stat -f%z` is probed first and always fails on
+Linux, so a GNU `stat -c%s` fork follows it there), 1× `date`. `_observability_data_dir`,
+`_observability_repo_field` and `_observability_redact_path` already accept an optional
+pre-resolved-toplevel argument for exactly this reason; `_observability_write` does not, so it still
+forks `git rev-parse` unconditionally even when its caller already has the answer. Giving it the
+same optional parameter removes one fork per record across all three adapters — not implemented
+this phase; recorded as Technical Debt, below.
 
 ## Acceptance Criteria
 
@@ -883,9 +962,36 @@ original untracked placement lacked, and the reason this correction exists at al
 - Two concurrent sessions in one repo append to one file. Single-line appends under the pipe-buffer
   size are effectively atomic on both target platforms, but this is an assumption, not a guarantee;
   the `session` field is what makes interleaving harmless.
+- **LATENT CORRECTNESS HAZARD (found 2026-09-07, while designing the fix for `_observability_field`'s
+  performance defect in ADR-5's correction, above) — keys are treated as glob patterns, not
+  literals.** In `${payload#*\"$key\":\"}`, `$key`'s expansion is unquoted inside a
+  parameter-expansion PATTERN, so a glob metacharacter in a key name is interpreted as a wildcard
+  rather than matched literally. Measured divergence against a quoted `case` presence check:
+
+  | payload | key | `case` (literal) | prefix-removal (current) |
+  |---|---|---|---|
+  | `{"axb":"1"}` | `a*b` | absent | **present** |
+  | `{"aXb":"1"}` | `a?b` | absent | **present** |
+  | `{"a[b]":"1"}` | `a[b]` | **present** | absent |
+
+  No current caller passes a key containing a glob metacharacter — every field name this design
+  uses is a plain identifier — so nothing is broken today. But this is a latent hazard inside the
+  function this file itself calls "the redaction-critical line of the whole design": a key
+  containing `*` would silently match a NEIGHBOURING field in the payload and return that field's
+  value instead of failing closed. A field name must be matched as a literal, never interpreted as a
+  pattern. The fix quotes the key at both match sites, making extraction literal — a **deliberate
+  semantic tightening**, not a side effect of the performance fix it rides alongside, and it must be
+  tested as a behaviour change in its own right, not folded silently into the performance commit.
 
 ### Technical Debt
 
+- `_observability_write` does not accept a pre-resolved repository-toplevel argument, unlike
+  `_observability_data_dir`, `_observability_repo_field` and `_observability_redact_path`, which all
+  do. Every adapter that redacts a path already resolves the toplevel once for that purpose, then
+  `_observability_write` resolves it again internally — a second, avoidable `git rev-parse` fork on
+  every record, part of the ~13.3 ms end-to-end figure measured in Quality Requirements, above.
+  Giving `_observability_write` the same optional parameter the other three functions already have
+  removes it.
 - Deliberate duplication of the data-directory resolver (ADR-1), repaid if and when this feature
   moves into a plugin.
 - **Resolved 2026-09-06** (was: "the scripts in the hook path are untracked this phase (CON-8), so
