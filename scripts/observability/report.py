@@ -34,10 +34,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, NamedTuple, Sequence
 
 # The five verified `load_reason` values (SDD/Application Data Models).
 # `session_start` and `compact` are the always-loaded layer -- they cost on
@@ -275,7 +276,65 @@ def _walk_nested_claude_md(repo_root: Path) -> set[Path]:
     return found
 
 
-def walk_instruction_inventory(repo_root: Path, home_dir: Path) -> list[str]:
+class InstructionInventory(NamedTuple):
+    """`walk_instruction_inventory`'s result: the redacted paths found, and
+    whether gitignore filtering could actually be applied to the walk
+    (SDD/The two inventories, second amendment, 2026-09-07).
+
+    `git_filtered` is False only when git is unavailable or `repo_root` is
+    not a git repository -- in which case `entries` is the walk unfiltered,
+    never partial (fail open: silently under-reporting the denominator is
+    worse than not filtering at all). `build_load_report` renders this so a
+    reader can tell which mode produced a given count.
+    """
+
+    entries: list[str]
+    git_filtered: bool
+
+
+def _is_inside(path: Path, root_resolved: Path) -> bool:
+    """True if `path` (already resolved) sits inside `root_resolved`.
+
+    A path outside the repo (e.g. a `home_dir` entry) is not "ignored" by
+    git -- it is simply out of `git check-ignore`'s scope, and asking git
+    about it can produce a fatal "outside repository" error rather than a
+    clean answer. Splitting on this BEFORE calling git is what lets that
+    error never occur in the first place, rather than having to parse it.
+    """
+    try:
+        path.relative_to(root_resolved)
+        return True
+    except ValueError:
+        return False
+
+
+def _git_ignored(paths: Sequence[Path], repo_root: Path) -> set[Path] | None:
+    """Which of `paths` (already known to be inside `repo_root`) git ignores.
+
+    One batched `git check-ignore --stdin -z` call rather than one per
+    candidate. Exit codes, per `git-check-ignore(1)`: 0 = at least one path
+    is ignored, 1 = none are -- both are normal, successful answers -- and
+    128 = error (not a repository, or some other failure). Returns `None`
+    for 128, for a missing `git` executable (`FileNotFoundError`), or for
+    any other exec failure (`OSError`): this is the fail-open signal
+    `walk_instruction_inventory` uses to keep every candidate rather than
+    return an empty or partial inventory.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "check-ignore", "--stdin", "-z"],
+            input="\0".join(str(p) for p in paths),
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if result.returncode not in (0, 1):
+        return None
+    return {Path(p) for p in result.stdout.split("\0") if p}
+
+
+def walk_instruction_inventory(repo_root: Path, home_dir: Path) -> InstructionInventory:
     """The instruction inventory: what could load, enumerated by filesystem walk.
 
     SDD/The two inventories -- a filesystem walk at report time, not a
@@ -292,8 +351,18 @@ def walk_instruction_inventory(repo_root: Path, home_dir: Path) -> list[str]:
       - .claude/rules/**/*.md, in the repo and under `home_dir`
       - `home_dir`/.claude/CLAUDE.md
 
-    Pure over the paths handed in: no reliance on a real `$HOME`. A CLI
-    entry point passes `Path.home()`; every test passes an explicit
+    A path git ignores is excluded (second amendment, 2026-09-07): it is not
+    this repo's configuration, and counting it would corrupt the specific
+    answer the report is trying to give -- not merely pad a total -- when,
+    say, a gitignored local mount contains a second copy of a real
+    CLAUDE.md. Determined with `git check-ignore` at walk time, over
+    candidates inside `repo_root` only (see `_is_inside`); when git is
+    absent or `repo_root` is not a repository the walk proceeds unfiltered,
+    and `InstructionInventory.git_filtered` says so.
+
+    Pure over the paths handed in: no reliance on a real `$HOME` or `cwd` --
+    `repo_root` is passed explicitly as git's working directory (`-C`). A
+    CLI entry point passes `Path.home()`; every test passes an explicit
     `tmp_path` fixture instead.
     """
     found: set[Path] = set()
@@ -321,7 +390,23 @@ def walk_instruction_inventory(repo_root: Path, home_dir: Path) -> list[str]:
     if home_claude_md.is_file():
         found.add(home_claude_md)
 
-    return sorted(_redact_path(p, repo_root) for p in found)
+    found = {p.resolve() for p in found}
+    root_resolved = repo_root.resolve()
+    inside_repo = {p for p in found if _is_inside(p, root_resolved)}
+    outside_repo = found - inside_repo
+
+    ignored = _git_ignored(sorted(inside_repo), repo_root)
+    if ignored is None:
+        git_filtered = False
+        kept = found
+    else:
+        git_filtered = True
+        kept = (inside_repo - ignored) | outside_repo
+
+    return InstructionInventory(
+        entries=sorted(_redact_path(p, repo_root) for p in kept),
+        git_filtered=git_filtered,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -333,16 +418,25 @@ def build_load_report(
     stats: dict[str, InstructionFileStats],
     inventory: Sequence[str],
     unparseable: int = 0,
+    git_filtered: bool = True,
 ) -> str:
     """Render the load report: per-file counts and reasons, and what never loaded.
 
-    States which inventory was used and how many entries it found, so a
-    surprising coverage figure can be traced to the denominator rather than
-    assumed to be about usage (SDD/The two inventories, last line).
+    States which inventory was used, how many entries it found, and whether
+    gitignore filtering was applied to the walk, so a surprising coverage
+    figure can be traced to the denominator rather than assumed to be about
+    usage (SDD/The two inventories, last line, and the second amendment,
+    2026-09-07). `git_filtered=False` means the walk is unfiltered because
+    git was unavailable or `repo_root` was not a repository.
     """
     lines: list[str] = []
+    mode = (
+        "gitignore-filtered" if git_filtered
+        else "unfiltered -- git unavailable or repo_root is not a git repository"
+    )
     lines.append(
-        f"Instruction inventory (filesystem walk): {len(inventory)} configured file(s) found."
+        f"Instruction inventory (filesystem walk, {mode}): "
+        f"{len(inventory)} configured file(s) found."
     )
     if unparseable:
         lines.append(f"{unparseable} log line(s) could not be parsed and were skipped.")
@@ -421,7 +515,7 @@ def main(argv: list[str] | None = None) -> int:
     records, unparseable = read_events(events_path)
     stats = instruction_stats(records)
     inventory = walk_instruction_inventory(args.repo_root, args.home)
-    print(build_load_report(stats, inventory, unparseable))
+    print(build_load_report(stats, inventory.entries, unparseable, inventory.git_filtered))
     return 0
 
 

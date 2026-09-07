@@ -19,6 +19,7 @@ real $HOME or a real events.jsonl.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -34,6 +35,33 @@ LOGWRITE_SH = REPO_ROOT / "plugins" / "tcs-helper" / "scripts" / "observability"
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
     path.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+
+
+def _init_git_repo(repo_root: Path) -> None:
+    """A real git repo fixture for `git check-ignore` to run against.
+
+    House rule (docs/ai/memory/active.md): a failed `git init` in a fixture
+    can fall back to the parent `.git/` and leak commits onto this session's
+    own branch. `repo_root` is created first so `git init` has somewhere of
+    its own to put `.git`, `-C` is used instead of `cd`, and both config
+    scopes are pointed at `os.devnull` so no real user/global git config
+    (and no stray identity) leaks into the fixture.
+    """
+    repo_root.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "init", "-q"], env=env, capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def _git_add(repo_root: Path, *relative_paths: str) -> None:
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "add", *relative_paths],
+        env=env, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def _instruction(path: str, reason: str, session: str = "s1") -> dict:
@@ -307,7 +335,7 @@ def test_walk_instruction_inventory_finds_configured_sources(tmp_path):
     (home_dir / ".claude" / "CLAUDE.md").write_text("home claude\n", encoding="utf-8")
     (home_dir / "Kouzou" / "standards" / "general.md").write_text("standards\n", encoding="utf-8")
 
-    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+    inventory = report.walk_instruction_inventory(repo_root, home_dir).entries
 
     assert "CLAUDE.md" in inventory  # the root file itself
     assert "docs/ai/memory/active.md" in inventory  # reached via the @-import
@@ -332,7 +360,7 @@ def test_walk_instruction_inventory_transitive_import_is_reached(tmp_path):
     (repo_root / "docs" / "level1.md").write_text("@level2.md\n", encoding="utf-8")
     (repo_root / "docs" / "level2.md").write_text("leaf\n", encoding="utf-8")
 
-    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+    inventory = report.walk_instruction_inventory(repo_root, home_dir).entries
     assert "docs/level1.md" in inventory
     assert "docs/level2.md" in inventory
 
@@ -343,7 +371,7 @@ def test_walk_instruction_inventory_missing_sources_do_not_crash(tmp_path):
     home_dir = tmp_path / "home"
     repo_root.mkdir()
     home_dir.mkdir()
-    assert report.walk_instruction_inventory(repo_root, home_dir) == []
+    assert report.walk_instruction_inventory(repo_root, home_dir).entries == []
 
 
 # --- nested CLAUDE.md files (SDD amendment, 2026-09-07, T3.1 review) --------
@@ -364,7 +392,7 @@ def test_walk_instruction_inventory_finds_nested_claude_md(tmp_path):
     (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
     (repo_root / "docs" / "CLAUDE.md").write_text("# docs\n", encoding="utf-8")
 
-    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+    inventory = report.walk_instruction_inventory(repo_root, home_dir).entries
 
     assert "docs/CLAUDE.md" in inventory
 
@@ -378,7 +406,7 @@ def test_walk_instruction_inventory_excludes_tests_fixtures_claude_md(tmp_path):
     (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
     (fixtures_dir / "CLAUDE.md").write_text("# fixture\n", encoding="utf-8")
 
-    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+    inventory = report.walk_instruction_inventory(repo_root, home_dir).entries
 
     assert "plugins/example/tests/fixtures/sample-docs/CLAUDE.md" not in inventory
 
@@ -405,7 +433,7 @@ def test_walk_instruction_inventory_similarly_named_dir_is_not_wrongly_excluded(
     two_segments.mkdir(parents=True)
     (two_segments / "CLAUDE.md").write_text("# two-segments\n", encoding="utf-8")
 
-    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+    inventory = report.walk_instruction_inventory(repo_root, home_dir).entries
 
     assert "tests-fixtures/CLAUDE.md" in inventory
     assert "my-tests/fixtures-sample/CLAUDE.md" in inventory
@@ -420,7 +448,7 @@ def test_walk_instruction_inventory_reaches_deeply_nested_claude_md(tmp_path):
     (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
     (deep / "CLAUDE.md").write_text("# deep\n", encoding="utf-8")
 
-    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+    inventory = report.walk_instruction_inventory(repo_root, home_dir).entries
 
     assert "a/b/c/CLAUDE.md" in inventory
 
@@ -432,7 +460,7 @@ def test_walk_instruction_inventory_root_claude_md_not_double_counted(tmp_path):
     home_dir.mkdir()
     (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
 
-    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+    inventory = report.walk_instruction_inventory(repo_root, home_dir).entries
 
     assert inventory.count("CLAUDE.md") == 1
 
@@ -449,10 +477,115 @@ def test_walk_instruction_inventory_nested_entries_are_redacted(tmp_path):
     (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
     nested.write_text("# nested\n", encoding="utf-8")
 
-    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+    inventory = report.walk_instruction_inventory(repo_root, home_dir).entries
 
     assert "docs/ai/CLAUDE.md" in inventory
     assert not any(str(repo_root) in entry for entry in inventory)
+
+
+# --- gitignore-aware filtering (SDD second amendment, 2026-09-07) ----------
+#
+# The walk had no `.gitignore` awareness, and widening it to nested files
+# (above) made that visible: a gitignored local mount inside a real repo
+# root can contain a full second checkout of the same repo, so the walk
+# counted several real CLAUDE.md files a second time each -- duplicates of
+# the very files the report is trying to reason about, corrupting the
+# specific answer rather than merely padding a total. `walk_instruction_
+# inventory` now asks `git check-ignore` at walk time and reports, via
+# `InstructionInventory.git_filtered`, whether it could.
+
+
+def test_walk_instruction_inventory_gitignored_nested_claude_md_is_excluded(tmp_path):
+    repo_root = tmp_path / "repo"
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    _init_git_repo(repo_root)
+    (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
+    mounted = repo_root / "mount" / "docs"
+    mounted.mkdir(parents=True)
+    (mounted / "CLAUDE.md").write_text("# second copy from a local mount\n", encoding="utf-8")
+    (repo_root / ".gitignore").write_text("mount/\n", encoding="utf-8")
+
+    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+
+    assert "mount/docs/CLAUDE.md" not in inventory.entries
+    assert inventory.git_filtered is True
+
+
+def test_walk_instruction_inventory_tracked_nested_claude_md_is_included(tmp_path):
+    repo_root = tmp_path / "repo"
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    _init_git_repo(repo_root)
+    (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
+    (repo_root / "docs").mkdir()
+    (repo_root / "docs" / "CLAUDE.md").write_text("# docs\n", encoding="utf-8")
+    _git_add(repo_root, "CLAUDE.md", "docs/CLAUDE.md")
+
+    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+
+    assert "docs/CLAUDE.md" in inventory.entries
+    assert inventory.git_filtered is True
+
+
+def test_walk_instruction_inventory_outside_repo_path_not_dropped_by_filter(tmp_path):
+    """A `home_dir` entry sits outside the repo's working tree entirely -- it
+    is out of scope for `git check-ignore`, not ignored by it, and asking
+    git about an out-of-repo path can itself return a fatal error rather
+    than a clean answer. The filter must never conflate 'out of scope' with
+    'ignored' (SDD amendment: 'this is the subtlest part')."""
+    repo_root = tmp_path / "repo"
+    home_dir = tmp_path / "home"
+    _init_git_repo(repo_root)
+    (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
+    (home_dir / ".claude").mkdir(parents=True)
+    (home_dir / ".claude" / "CLAUDE.md").write_text("# home\n", encoding="utf-8")
+
+    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+
+    # Both the repo root and the home CLAUDE.md redact to the same basename
+    # (R-3); the point is that filtering did not silently drop either.
+    assert inventory.entries.count("CLAUDE.md") == 2
+    assert inventory.git_filtered is True
+
+
+def test_walk_instruction_inventory_not_a_git_repo_is_unfiltered(tmp_path):
+    repo_root = tmp_path / "repo"
+    home_dir = tmp_path / "home"
+    repo_root.mkdir()
+    home_dir.mkdir()
+    (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
+    # Deliberately no `git init` -- repo_root is a plain directory.
+
+    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+
+    assert "CLAUDE.md" in inventory.entries
+    assert inventory.git_filtered is False
+
+
+def test_walk_instruction_inventory_git_unavailable_fails_open(tmp_path, monkeypatch):
+    repo_root = tmp_path / "repo"
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    _init_git_repo(repo_root)
+    (repo_root / "CLAUDE.md").write_text("# root\n", encoding="utf-8")
+    ignored = repo_root / "mount"
+    ignored.mkdir()
+    (ignored / "CLAUDE.md").write_text("# would be ignored, if git ran\n", encoding="utf-8")
+    (repo_root / ".gitignore").write_text("mount/\n", encoding="utf-8")
+
+    def _raise_missing_git(*args, **kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(report.subprocess, "run", _raise_missing_git)
+
+    inventory = report.walk_instruction_inventory(repo_root, home_dir)
+
+    # Fails open: everything is kept, including what a working filter would
+    # have dropped -- an empty or partial inventory would be worse.
+    assert "CLAUDE.md" in inventory.entries
+    assert "mount/CLAUDE.md" in inventory.entries
+    assert inventory.git_filtered is False
 
 
 # --- the assembled text report ---------------------------------------------
@@ -479,6 +612,22 @@ def test_build_load_report_mentions_counts_reasons_and_never_loaded(tmp_path):
 def test_build_load_report_states_unparseable_count():
     text = report.build_load_report({}, [], unparseable=3)
     assert "3" in text
+
+
+# --- the report states which walk mode produced its denominator ------------
+# (SDD/The two inventories, second amendment, 2026-09-07): a reader must be
+# able to tell whether the count came from a gitignore-filtered walk or an
+# unfiltered fallback, in both directions.
+
+
+def test_build_load_report_states_gitignore_filtered_mode():
+    text = report.build_load_report({}, ["a.md"], git_filtered=True)
+    assert "gitignore" in text.lower()
+
+
+def test_build_load_report_states_unfiltered_mode():
+    text = report.build_load_report({}, ["a.md"], git_filtered=False)
+    assert "unfiltered" in text.lower()
 
 
 # --- CLI wiring (main / _resolve_events_path) -------------------------------
