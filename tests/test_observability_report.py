@@ -69,7 +69,7 @@ def _instruction(
     path: str,
     reason: str,
     session: str = "s1",
-    bytes_value: str | None = None,
+    bytes_value: str | bool | None = None,  # bool case is deliberate corruption for _parse_bytes guard test
     ts: str = "2026-09-06T16:43:28Z",
 ) -> dict:
     record = {
@@ -914,6 +914,24 @@ def test_recording_status_unparseable_ts_is_ignored_not_fatal():
 
     assert status.newest_ts is None
     assert status.stale is False
+
+
+def test_recording_status_fallback_to_last_on_all_unparseable_ts():
+    # The fallback path (when NO state record has a usable ts) should select
+    # the LAST state record encountered, not the first or a fixed one.
+    # With multiple records all bearing unparseable ts, the fallback must
+    # pick the last-listed one to correctly report the newest observable state.
+    records = [
+        _state("0", ts="not-a-date"),  # unparseable, listed first
+        _state("0", ts=""),            # unparseable (empty), listed second
+        _state("1", ts="invalid"),     # unparseable, listed last -- should win
+    ]
+
+    status = report.recording_status(records, _NOW)
+
+    # The result must not crash and must select the last record (enabled="1")
+    assert status.enabled is True
+    assert status.newest_ts is None
 
 
 # --- the report leads with recording state, never with a load figure ------
