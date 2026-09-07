@@ -22,6 +22,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -64,15 +65,49 @@ def _git_add(repo_root: Path, *relative_paths: str) -> None:
     assert result.returncode == 0, result.stderr
 
 
-def _instruction(path: str, reason: str, session: str = "s1") -> dict:
-    return {
-        "ts": "2026-09-06T16:43:28Z",
+def _instruction(
+    path: str,
+    reason: str,
+    session: str = "s1",
+    bytes_value: str | None = None,
+    ts: str = "2026-09-06T16:43:28Z",
+) -> dict:
+    record = {
+        "ts": ts,
         "kind": "instruction",
         "session": session,
         "repo": "the-custom-startup",
         "path": path,
         "scope": "Project",
         "reason": reason,
+    }
+    if bytes_value is not None:
+        record["bytes"] = bytes_value
+    return record
+
+
+def _state(
+    enabled: str,
+    detail: str = "0",
+    note: str = "selfcheck probe x",
+    ts: str = "2026-09-06T16:43:28Z",
+    session: str = "s1",
+) -> dict:
+    """A `kind: state` record, as `selfcheck.sh` writes it (T2.4).
+
+    `enabled` and `detail` are the strings `"1"`/`"0"` -- the same generic
+    quoting `_instruction`'s `bytes_value` goes through, and the truthiness
+    trap this task's tests exist to catch (module docstring point 3 of the
+    T3.2 task text).
+    """
+    return {
+        "ts": ts,
+        "kind": "state",
+        "session": session,
+        "repo": "the-custom-startup",
+        "enabled": enabled,
+        "detail": detail,
+        "note": note,
     }
 
 
@@ -630,6 +665,276 @@ def test_walk_instruction_inventory_git_unavailable_fails_open(tmp_path, monkeyp
     assert "CLAUDE.md" in inventory.entries
     assert "mount/CLAUDE.md" in inventory.entries
     assert inventory.git_filtered is False
+
+
+# --- byte accounting: always-loaded vs conditional, honestly (T3.2) -------
+#
+# SDD-AC-14, and the three typing traps in the T3.2 task text: `bytes` is a
+# quoted string ("2048", never a bare 2048), it is ABSENT (never "0") when
+# `logwrite.sh` could not stat the file, and it must never be silently
+# folded into a total as if it were free.
+
+
+def test_byte_accounting_separates_always_loaded_from_conditional():
+    records = [
+        _instruction("a.md", "session_start", bytes_value="1000"),
+        _instruction("a.md", "compact", bytes_value="500"),
+        _instruction("b.md", "path_glob_match", bytes_value="300"),
+        _instruction("c.md", "include", bytes_value="200"),
+    ]
+
+    totals = report.byte_accounting(records)
+
+    assert totals.always_loaded_bytes == 1500
+    assert totals.conditional_bytes == 500
+    assert totals.unmeasurable_count == 0
+
+
+def test_byte_accounting_casts_quoted_string_bytes_to_int():
+    # A naive `+=` over the raw string would concatenate ("2048" + "2048"),
+    # not add -- this pins the cast, not just the total.
+    records = [
+        _instruction("a.md", "session_start", bytes_value="2048"),
+        _instruction("a.md", "session_start", bytes_value="2048"),
+    ]
+
+    totals = report.byte_accounting(records)
+
+    assert totals.always_loaded_bytes == 4096
+
+
+def test_byte_accounting_excludes_unstatable_file_never_counts_as_zero():
+    records = [
+        _instruction("a.md", "session_start", bytes_value="1000"),
+        _instruction("b.md", "session_start"),  # no `bytes` key: could not be stat'ed
+    ]
+
+    totals = report.byte_accounting(records)
+
+    # b.md contributes nothing -- not a real zero, an absence -- so the
+    # total must equal exactly a.md's measured cost, and the absence must
+    # be surfaced, not dropped.
+    assert totals.always_loaded_bytes == 1000
+    assert totals.unmeasurable_count == 1
+
+
+def test_byte_accounting_non_numeric_bytes_is_unmeasurable_not_zero_not_fatal():
+    records = [_instruction("a.md", "session_start", bytes_value="not-a-number")]
+
+    totals = report.byte_accounting(records)  # must not raise
+
+    assert totals.always_loaded_bytes == 0
+    assert totals.unmeasurable_count == 1
+
+
+def test_byte_accounting_unknown_reason_bytes_not_silently_dropped():
+    records = [_instruction("a.md", "", bytes_value="42")]
+
+    totals = report.byte_accounting(records)
+
+    assert totals.always_loaded_bytes == 0
+    assert totals.conditional_bytes == 0
+    assert totals.unknown_reason_bytes == 42
+
+
+def test_byte_accounting_ignores_non_instruction_kinds():
+    records = [_state("1"), {"kind": "skill", "bytes": "999"}]
+
+    totals = report.byte_accounting(records)
+
+    assert totals.always_loaded_bytes == 0
+    assert totals.conditional_bytes == 0
+    assert totals.unmeasurable_count == 0
+
+
+def test_byte_accounting_file_loaded_both_ways_attributes_each_event_by_its_own_reason():
+    # A file can show up as BOTH always-loaded and conditional (loaded
+    # eagerly, then re-triggered later by a glob match). Attribution is per
+    # LOAD EVENT, not per file: each record's own reason decides its
+    # bucket, so this is never a double-count, and never a dropped read.
+    records = [
+        _instruction("a.md", "session_start", bytes_value="100"),
+        _instruction("a.md", "path_glob_match", bytes_value="100"),
+    ]
+
+    totals = report.byte_accounting(records)
+
+    assert totals.always_loaded_bytes == 100
+    assert totals.conditional_bytes == 100
+
+
+# --- recording state honesty (SDD-AC-15) ------------------------------------
+#
+# `recording_status` takes an injected `now` rather than reading the wall
+# clock, so every case here is deterministic (module docstring / T3.2 task
+# text: "inject the clock").
+
+_NOW = datetime(2026, 9, 7, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def test_recording_status_no_records_at_all_is_unknown_not_off():
+    status = report.recording_status([], _NOW)
+
+    assert status.state_known is False
+    assert status.enabled is None
+    assert status.stale is False
+    assert status.newest_ts is None
+
+
+def test_recording_status_no_state_record_present_is_unknown():
+    records = [_instruction("a.md", "session_start", ts="2026-09-07T11:00:00Z")]
+
+    status = report.recording_status(records, _NOW)
+
+    assert status.state_known is False
+    assert status.enabled is None
+
+
+def test_recording_status_enabled_string_zero_is_not_recording():
+    # The truthiness trap: a Python `if "0":` is True. This must compare
+    # against "1" explicitly, never rely on str truthiness.
+    records = [_state("0", ts="2026-09-07T11:00:00Z")]
+
+    status = report.recording_status(records, _NOW)
+
+    assert status.state_known is True
+    assert status.enabled is False
+
+
+def test_recording_status_enabled_string_one_is_recording():
+    records = [_state("1", ts="2026-09-07T11:00:00Z")]
+
+    status = report.recording_status(records, _NOW)
+
+    assert status.enabled is True
+
+
+def test_recording_status_stale_when_newest_entry_predates_threshold():
+    old_ts = "2026-09-06T00:00:00Z"  # 36h before _NOW
+    records = [_state("1", ts=old_ts)]
+
+    status = report.recording_status(records, _NOW)
+
+    assert status.stale is True
+    assert status.newest_ts == old_ts
+
+
+def test_recording_status_not_stale_when_newest_entry_recent():
+    recent_ts = "2026-09-07T11:55:00Z"  # 5 minutes before _NOW
+    records = [_state("1", ts=recent_ts)]
+
+    status = report.recording_status(records, _NOW)
+
+    assert status.stale is False
+
+
+def test_recording_status_newest_ts_is_max_across_all_records_not_last_in_list():
+    records = [
+        _instruction("a.md", "session_start", ts="2026-09-07T11:59:00Z"),
+        _state("1", ts="2026-09-06T00:00:00Z"),  # written earlier, listed later
+    ]
+
+    status = report.recording_status(records, _NOW)
+
+    assert status.newest_ts == "2026-09-07T11:59:00Z"
+    assert status.stale is False
+
+
+def test_recording_status_unparseable_ts_is_ignored_not_fatal():
+    records = [_state("1", ts="not-a-timestamp")]
+
+    status = report.recording_status(records, _NOW)  # must not raise
+
+    assert status.newest_ts is None
+    assert status.stale is False
+
+
+# --- the report leads with recording state, never with a load figure ------
+# (SDD-AC-15, Quality Requirements' Honesty row): an empty or stale record
+# must report the recording state as the headline, not present emptiness or
+# a stale figure as if it were a finding.
+
+
+def test_build_load_report_states_byte_cost_always_vs_conditional():
+    byte_stats = report.byte_accounting([
+        _instruction("a.md", "session_start", bytes_value="1000"),
+        _instruction("b.md", "path_glob_match", bytes_value="300"),
+    ])
+
+    text = report.build_load_report({}, [], byte_stats=byte_stats)
+
+    assert "1000" in text
+    assert "300" in text
+
+
+def test_build_load_report_states_unmeasurable_count():
+    byte_stats = report.byte_accounting([_instruction("a.md", "session_start")])
+
+    text = report.build_load_report({}, [], byte_stats=byte_stats)
+
+    assert "1" in text
+    assert "unmeasurable" in text.lower()
+
+
+def test_build_load_report_empty_record_leads_with_recording_state_unknown():
+    status = report.recording_status([], _NOW)
+
+    text = report.build_load_report({}, [], recording=status)
+
+    lines = [line for line in text.splitlines() if line.strip()]
+    assert "recording" in lines[0].lower()
+    assert "unknown" in lines[0].lower()
+
+
+def test_build_load_report_states_not_recording_for_enabled_zero():
+    status = report.recording_status([_state("0", ts="2026-09-07T11:00:00Z")], _NOW)
+
+    text = report.build_load_report({}, [], recording=status)
+
+    assert "not recording" in text.lower()
+
+
+def test_build_load_report_states_recording_for_enabled_one():
+    status = report.recording_status([_state("1", ts="2026-09-07T11:55:00Z")], _NOW)
+
+    text = report.build_load_report({}, [], recording=status)
+
+    lines = [line for line in text.splitlines() if line.strip()]
+    assert "recording" in lines[0].lower()
+    assert "not recording" not in lines[0].lower()
+
+
+def test_build_load_report_states_stale():
+    status = report.recording_status([_state("1", ts="2026-09-06T00:00:00Z")], _NOW)
+
+    text = report.build_load_report({}, [], recording=status)
+
+    assert "stale" in text.lower()
+
+
+def test_build_load_report_unknown_state_when_no_state_record_present():
+    records = [_instruction("a.md", "session_start")]
+    status = report.recording_status(records, _NOW)
+
+    text = report.build_load_report(
+        report.instruction_stats(records), ["a.md"], recording=status
+    )
+
+    lines = [line for line in text.splitlines() if line.strip()]
+    assert "unknown" in lines[0].lower()
+
+
+def test_build_load_report_recording_state_line_precedes_loaded_files_line():
+    status = report.recording_status([], _NOW)
+
+    text = report.build_load_report({}, [], recording=status)
+    lines = text.splitlines()
+
+    recording_idx = next(i for i, line in enumerate(lines) if "recording" in line.lower())
+    loaded_idx = next(
+        i for i, line in enumerate(lines) if line.lower().startswith("loaded instruction files")
+    )
+    assert recording_idx < loaded_idx
 
 
 # --- the assembled text report ---------------------------------------------

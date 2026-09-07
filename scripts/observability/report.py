@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """scripts/observability/report.py -- offline analysis over the observability record.
 
-Spec 018 (observability of what loads and fires), phase 3, T3.1: turns the
+Spec 018 (observability of what loads and fires), phase 3. T3.1 turned the
 JSONL record `logwrite.sh` and its adapters write into PRD F4's answers --
 which instruction files loaded, how often, under which reasons, and which
-configured files never did (SDD-AC-13).
+configured files never did (SDD-AC-13). T3.2 adds this file's honesty
+layer: the always-loaded layer's measured byte cost, separate from
+conditional loads (SDD-AC-14), and reporting the recording state itself --
+never a load figure -- when the record is empty, has no `kind: state`
+probe, or is stale (SDD-AC-15).
 
 ADR-6: this file is Python, pytest-covered, and runs offline -- nowhere near
 the hook path, so the sub-millisecond budget (CON-7) does not apply here.
@@ -15,8 +19,9 @@ module is importable and unit-testable without one (tests/test_observability_rep
 Three phase-2 findings this reader must respect (SDD/Application Data Models):
 
   1. `bytes` is written as a quoted string ("2048"), never a bare JSON number
-     -- out of scope for T3.1 (byte accounting is T3.2), but a record
-     carrying it must not be rejected.
+     -- out of scope for T3.1, closed by T3.2's `_parse_bytes`/`byte_accounting`
+     below, which cast on read (the SDD's chosen fix) and treat an absent
+     or non-numeric `bytes` as unmeasurable, never as zero.
   2. `reason` can be an empty string. T2.1 deliberately removed a fabricated
      `session_start` default for a payload missing `load_reason`, because
      defaulting would make a real anomaly permanently indistinguishable from
@@ -37,6 +42,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, NamedTuple, Sequence
 
@@ -162,6 +168,235 @@ def never_loaded(inventory: Iterable[str], stats: dict[str, InstructionFileStats
     denominator this reader is handed, not something it can infer alone.
     """
     return sorted(set(inventory) - set(stats.keys()))
+
+
+# ---------------------------------------------------------------------------
+# Byte accounting: the always-loaded layer's cost, separate from conditional
+# loads (T3.2, SDD-AC-14).
+# ---------------------------------------------------------------------------
+
+
+def _parse_bytes(value: object) -> int | None:
+    """Cast a record's `bytes` field to `int`, or `None` when it cannot be.
+
+    The SDD deliberately left `bytes` a quoted string in the record shape
+    ("(b) `report.py` casts on read -- no change to this shape at all") --
+    so this is the one place that cast happens. `None` covers both typing
+    traps this task exists to catch: the key is ABSENT (T2.1: the file
+    could not be stat'ed) and the key is PRESENT but not a valid integer (a
+    producer bug). Both are "unmeasurable", never a silent zero -- callers
+    must exclude a `None` from any total rather than adding it in.
+    """
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+class ByteAccounting(NamedTuple):
+    """The measured byte cost of the always-loaded layer, separate from
+    conditional loads (SDD-AC-14), plus what could not be measured at all.
+
+    Attribution is per LOAD EVENT (per record), not per file: each `kind:
+    instruction` record's own `bytes` reading is counted toward exactly one
+    of `always_loaded_bytes` / `conditional_bytes` / `unknown_reason_bytes`,
+    chosen by THAT record's own `reason` -- never toward more than one
+    bucket, and never dropped. A file that shows up as both always-loaded
+    and conditional overall (loaded eagerly at session start, and also
+    re-triggered later by a glob match -- `InstructionFileStats.always_loaded`
+    and `.conditionally_loaded` can both be true for one path) is not a
+    double-counting hazard under this rule: the ambiguity lives at the
+    per-file summary level, but each individual load event still carries
+    exactly one reason, so its own bytes land in exactly one bucket.
+
+    `unknown_reason_bytes` exists so a record with an empty/missing/non-string
+    `reason` (T2.1's "unknown" reason, module docstring point 2) still has
+    its measurable bytes accounted for somewhere, rather than silently
+    disappearing because they could not be classified into a layer.
+
+    `unmeasurable_count` is the number of `kind: instruction` records whose
+    `bytes` could not be cast to `int` at all (absent, or present but not
+    numeric) -- see `_parse_bytes`. These contribute to NONE of the byte
+    totals above; counting them as zero would be exactly the dishonesty
+    SDD-AC-14/-15 exist to prevent.
+    """
+
+    always_loaded_bytes: int
+    conditional_bytes: int
+    unknown_reason_bytes: int
+    unmeasurable_count: int
+
+
+def byte_accounting(records: Iterable[dict]) -> ByteAccounting:
+    """Sum `kind: instruction` records' `bytes` into the buckets above.
+
+    Ignores every other `kind`, the same way `instruction_stats` does.
+    """
+    always_loaded_bytes = 0
+    conditional_bytes = 0
+    unknown_reason_bytes = 0
+    unmeasurable_count = 0
+
+    for rec in records:
+        if rec.get("kind") != "instruction":
+            continue
+        size = _parse_bytes(rec.get("bytes"))
+        if size is None:
+            unmeasurable_count += 1
+            continue
+        reason = rec.get("reason")
+        if isinstance(reason, str) and reason in ALWAYS_LOADED_REASONS:
+            always_loaded_bytes += size
+        elif isinstance(reason, str) and reason in CONDITIONAL_REASONS:
+            conditional_bytes += size
+        else:
+            unknown_reason_bytes += size
+
+    return ByteAccounting(
+        always_loaded_bytes=always_loaded_bytes,
+        conditional_bytes=conditional_bytes,
+        unknown_reason_bytes=unknown_reason_bytes,
+        unmeasurable_count=unmeasurable_count,
+    )
+
+
+# ---------------------------------------------------------------------------
+# The honesty rule: report the recording state, not a load figure, when the
+# record is empty or stale (T3.2, SDD-AC-15, Quality Requirements/Honesty).
+# ---------------------------------------------------------------------------
+
+# `ts` is UTC RFC3339 at second precision (e.g. "2026-09-06T16:43:28Z"),
+# per the SDD's Application Data Models. `datetime.fromisoformat` before
+# Python 3.11 rejects the trailing "Z", so this parses explicitly rather
+# than assuming a runtime new enough to accept it.
+_TS_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+# How old the newest record in the whole log may be before this report calls
+# it stale relative to `now` -- SDD-AC-15's "a record whose newest entry is
+# older than the current session." The SDD does not pin a value. Six hours
+# is chosen as a deliberately generous upper bound on a single interactive
+# session's length: long enough that a genuinely active session's own
+# writes will always fall inside it, short enough that a log left over from
+# a previous day is reliably caught. Stated here, and in the report output,
+# rather than left as an unexplained magic number.
+STALE_THRESHOLD_SECONDS = 6 * 60 * 60
+
+
+def _parse_ts(value: object) -> datetime | None:
+    """Parse a record's `ts` field, or `None` if it is missing or malformed.
+
+    Malformed input must never crash the report -- an unparseable `ts` is
+    simply excluded from `newest_ts`'s comparison, the same posture as an
+    unmeasurable `bytes` value above.
+    """
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.strptime(value, _TS_FORMAT).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def newest_ts(records: Iterable[dict]) -> str | None:
+    """The latest `ts` value across ALL records, regardless of `kind`, as
+    the original string (not the parsed `datetime`) -- or `None` if no
+    record carries a parseable one.
+
+    Computed by explicit comparison rather than assumed from read order:
+    `read_events` reads generations oldest-first and appends lines in
+    file order, so records are USUALLY chronological, but "the newest
+    entry" should not silently depend on that ordering holding for every
+    caller of this function.
+    """
+    best: datetime | None = None
+    best_raw: str | None = None
+    for rec in records:
+        parsed = _parse_ts(rec.get("ts"))
+        if parsed is not None and (best is None or parsed > best):
+            best = parsed
+            best_raw = rec.get("ts")
+    return best_raw
+
+
+def latest_state_record(records: Sequence[dict]) -> dict | None:
+    """The most recent `kind: state` record (selfcheck's probe), or `None`
+    if the log carries none at all.
+
+    "Most recent" by position: `read_events` returns records in
+    chronological order (oldest generation first, lines in file order), so
+    the last `kind: state` record encountered is the newest one.
+    """
+    for rec in reversed(records):
+        if rec.get("kind") == "state":
+            return rec
+    return None
+
+
+def _state_enabled(state: dict) -> bool:
+    """Whether a `kind: state` record reports recording as on.
+
+    `enabled` is the string `"1"` or `"0"` (`selfcheck.sh` writes
+    `_enabled=0`/`_enabled=1` through the same generic quoting writer every
+    field goes through) -- NOT a JSON bool despite the SDD's `bool` type
+    annotation for it. A plain Python truthiness check (`if state["enabled"]`)
+    would treat the string `"0"` as truthy and report recording as on when
+    it is actually off -- the exact inversion SDD-AC-15 exists to prevent.
+    Compared against `"1"` explicitly for that reason.
+    """
+    return state.get("enabled") == "1"
+
+
+class RecordingStatus(NamedTuple):
+    """What the report can honestly say about whether recording was on.
+
+    Built by `recording_status`, a pure function of the records and an
+    injected clock -- never wall time, so every case is deterministic and
+    test fixtures never depend on when the test happens to run.
+    """
+
+    # Whether a `kind: state` record (selfcheck's probe) exists anywhere in
+    # the log. False means the recording state is UNKNOWN -- not "off" and
+    # not "on": nothing ever wrote the one record that could answer the
+    # question, per the T3.2 task text ("do not assume it was on, and do
+    # not assume it was off").
+    state_known: bool
+    # `None` when `state_known` is False; otherwise the last known value
+    # from the newest `kind: state` record, decoded with `_state_enabled`.
+    enabled: bool | None
+    # The newest `ts` across every record in the log, regardless of kind,
+    # or `None` if no record carries a parseable one (including an empty
+    # log).
+    newest_ts: str | None
+    # True if `newest_ts` exists and is more than `STALE_THRESHOLD_SECONDS`
+    # older than `now` -- i.e. the log's newest entry predates what this
+    # report considers "the current session."
+    stale: bool
+
+
+def recording_status(records: Sequence[dict], now: datetime) -> RecordingStatus:
+    """Assemble the honesty-rule verdict: is a `kind: state` record present,
+    what did it last say, and is the whole log stale relative to `now`.
+
+    `now` is an explicit parameter, never `datetime.now()` read inside this
+    function -- see the module's purity note and the STALE_THRESHOLD_SECONDS
+    comment above. The CLI entry point (`main`) is the only caller that ever
+    supplies a real wall-clock value.
+    """
+    state = latest_state_record(records)
+    latest = newest_ts(records)
+    stale = False
+    if latest is not None:
+        parsed = _parse_ts(latest)
+        if parsed is not None and (now - parsed).total_seconds() > STALE_THRESHOLD_SECONDS:
+            stale = True
+    return RecordingStatus(
+        state_known=state is not None,
+        enabled=_state_enabled(state) if state is not None else None,
+        newest_ts=latest,
+        stale=stale,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -418,11 +653,70 @@ def walk_instruction_inventory(repo_root: Path, home_dir: Path) -> InstructionIn
 # ---------------------------------------------------------------------------
 
 
+def _render_recording_status(recording: RecordingStatus) -> list[str]:
+    """The honesty-rule headline (SDD-AC-15): leads the report, always.
+
+    Four distinguishable verdicts, per the T3.2 task text -- never
+    collapsed into "0 files loaded" or a bare presence/absence check:
+      - no `kind: state` record at all           -> unknown
+      - a `kind: state` record says `enabled=0`  -> not recording
+      - `enabled=1`, and the log is stale         -> was recording, but stale
+      - `enabled=1`, and the log is current       -> recording
+    """
+    if not recording.state_known:
+        line = (
+            "Recording state: UNKNOWN -- no `kind: state` record (selfcheck's probe) "
+            "was found in this log. This does not mean recording is off; it means "
+            "nothing has confirmed either way. Run selfcheck.sh to check."
+        )
+    elif recording.enabled is False:
+        line = "Recording state: NOT RECORDING (last `kind: state` record reported enabled=0)."
+    elif recording.stale:
+        line = (
+            "Recording state: STALE -- the newest entry in this log "
+            f"({recording.newest_ts}) is older than the "
+            f"{STALE_THRESHOLD_SECONDS // 3600}-hour threshold this report uses for "
+            "\"the current session,\" so the figures below describe a previous "
+            "session, not this one."
+        )
+    else:
+        line = "Recording state: recording (confirmed by the last selfcheck round-trip)."
+        if recording.newest_ts:
+            line += f" Newest entry: {recording.newest_ts}."
+    return [line, ""]
+
+
+def _render_byte_accounting(byte_stats: ByteAccounting) -> list[str]:
+    """The always-loaded layer's measured byte cost, separate from
+    conditional loads (SDD-AC-14), and how many records were unmeasurable.
+    """
+    lines = [
+        "Byte cost -- always-loaded layer: "
+        f"{byte_stats.always_loaded_bytes} byte(s); conditional loads: "
+        f"{byte_stats.conditional_bytes} byte(s).",
+    ]
+    if byte_stats.unknown_reason_bytes:
+        lines.append(
+            f"  {byte_stats.unknown_reason_bytes} byte(s) recorded under an unknown "
+            "load reason, counted separately (not folded into either total above)."
+        )
+    if byte_stats.unmeasurable_count:
+        lines.append(
+            f"  {byte_stats.unmeasurable_count} record(s) were unmeasurable (no usable "
+            "`bytes` -- the file could not be stat'ed, or its size was not a valid "
+            "number) and are excluded from every total above -- never counted as zero."
+        )
+    lines.append("")
+    return lines
+
+
 def build_load_report(
     stats: dict[str, InstructionFileStats],
     inventory: Sequence[str],
     unparseable: int = 0,
     git_filtered: bool = True,
+    byte_stats: ByteAccounting | None = None,
+    recording: RecordingStatus | None = None,
 ) -> str:
     """Render the load report: per-file counts and reasons, and what never loaded.
 
@@ -432,8 +726,20 @@ def build_load_report(
     usage (SDD/The two inventories, last line, and the second amendment,
     2026-09-07). `git_filtered=False` means the walk is unfiltered because
     git was unavailable or `repo_root` was not a repository.
+
+    `byte_stats` and `recording` are optional (T3.2, added after this
+    function's original contract) so every pre-existing caller and test
+    keeps working unchanged when it does not pass them. When `recording` IS
+    given, its verdict is rendered FIRST, ahead of the inventory line and
+    everything else -- the honesty rule (SDD-AC-15) is that an empty or
+    stale record must lead with the recording state, never with a load
+    figure presented as if it were a finding.
     """
     lines: list[str] = []
+
+    if recording is not None:
+        lines.extend(_render_recording_status(recording))
+
     mode = (
         "gitignore-filtered" if git_filtered
         else "unfiltered -- git unavailable or repo_root is not a git repository"
@@ -445,6 +751,9 @@ def build_load_report(
     if unparseable:
         lines.append(f"{unparseable} log line(s) could not be parsed and were skipped.")
     lines.append("")
+
+    if byte_stats is not None:
+        lines.extend(_render_byte_accounting(byte_stats))
 
     lines.append(f"Loaded instruction files ({len(stats)}):")
     for path in sorted(stats):
@@ -519,7 +828,23 @@ def main(argv: list[str] | None = None) -> int:
     records, unparseable = read_events(events_path)
     stats = instruction_stats(records)
     inventory = walk_instruction_inventory(args.repo_root, args.home)
-    print(build_load_report(stats, inventory.entries, unparseable, inventory.git_filtered))
+    byte_stats = byte_accounting(records)
+    # datetime.now() is the one place this module reads the wall clock --
+    # every pure function above takes `now` as an explicit parameter instead
+    # (see RecordingStatus / recording_status), so only this CLI wrapper is
+    # untestable-by-construction, exactly like `Path.cwd()`/`Path.home()`
+    # above.
+    recording = recording_status(records, datetime.now(timezone.utc))
+    print(
+        build_load_report(
+            stats,
+            inventory.entries,
+            unparseable,
+            inventory.git_filtered,
+            byte_stats=byte_stats,
+            recording=recording,
+        )
+    )
     return 0
 
 
