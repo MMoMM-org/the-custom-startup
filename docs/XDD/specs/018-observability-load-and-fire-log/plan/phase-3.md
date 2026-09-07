@@ -144,6 +144,28 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
      groups, this task is replaced by a configuration change and a note in the SDD. Record which
      path was taken.
 
+  > **Done. Wrapper path taken** — T1.4's finding stands, so the skip condition did not apply.
+  > `timed-wrapper.sh` (204 lines) plus 30 bats cases; bats 942 → 972. Three defects were found
+  > after the implementation reported green, none of them by its own tests:
+  >
+  > - **`session` was empty on every record.** The wrapper must never read stdin (a hook's payload
+  >   arrives there), so it cannot extract `session_id` the way the three adapters do — silently
+  >   breaking the cross-kind join that field exists for. Now taken from `$CLAUDE_CODE_SESSION_ID`,
+  >   labelled UNVERIFIED, confirmed at T3.6. Found by running the wrapper and reading its record.
+  > - **The privacy statement overclaimed.** It said the only non-measurement strings were the
+  >   operator-typed ones, omitting `repo` and `session`. A privacy claim that invites verification
+  >   has to survive it. Corrected against a real record.
+  > - **CRITICAL: the argument parser could hang the hook path.** `shift 2` with one argument left
+  >   is a no-op returning non-zero, so `--event` or `--matcher` as the final argument spun the loop
+  >   forever — not fail-open, not fail-closed, but blocking the tool call indefinitely. `${2:-}`
+  >   masked the missing value, so the source read as correct. Found by the code-quality reviewer,
+  >   in a branch none of the original 23 tests touched.
+  >
+  > Overhead measured at ~0.9 ms marginal on Linux/aarch64 against CON-7's 1 ms. The absolute
+  > end-to-end cost (~13 ms) is the pre-existing writer path every adapter already pays, already
+  > recorded in the SDD's Quality Requirements. **The macOS measurement is still outstanding — it
+  > is T3.6's overhead gate.**
+
 - [ ] **T3.6 End-to-end validation and the privacy gate** `[activity: validate]`
 
   1. Run the full suites: `pytest -q` and `bats tests/bats/`, plus the `tcs-git-helpers` bats suite.
