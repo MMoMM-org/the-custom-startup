@@ -92,7 +92,7 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   4. Validate: `pytest -q` green
   5. Success: `[ref: SDD/SDD-AC-18]`; `[ref: PRD/F8]`
 
-- [ ] **T3.4 Wrapper-sourced hook durations in the report** `[activity: backend-api]`
+- [x] **T3.4 Wrapper-sourced hook durations in the report** `[activity: backend-api]`
 
   > **Repurposed 2026-09-07**, maintainer decision (see the Decisions Log). This task previously
   > ingested the harness's own `hook_execution_complete` output. T1.4 found that route needs a
@@ -114,6 +114,17 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   3. Implement: the hook-duration section of `scripts/observability/report.py`
   4. Validate: `pytest -q` green
   5. Success: `[ref: SDD/SDD-AC-17]`; `[ref: PRD/F6]`
+
+  > **Done — and it exposed the phase's most consequential defect, in T3.5's wrapper rather than
+  > here.** `TIMEFORMAT='%3R'` emits SECONDS; the value was written to a field named `ms` and read as
+  > milliseconds by both the report and the README, so every duration was 1000x too small. A hook
+  > 500x over CON-7's 1 ms budget reported as comfortably under it. Fixed in the writer, so the
+  > record itself is honest; the SDD now states the unit instead of leaving it to the field's name.
+  >
+  > Two blind spots made it invisible, both now closed: every test wrapped a trivially fast command,
+  > so nothing asserted a KNOWN duration; and once a known duration was pinned, every test still used
+  > a sub-second one, under which dropping the `* 1000` is indistinguishable from correct arithmetic.
+  > A `sleep 1.3` case now exercises the integer-seconds term, mutation-verified.
 
 - [x] **T3.5 Per-hook attribution — scope decided by T1.4** `[activity: infrastructure]`
 
