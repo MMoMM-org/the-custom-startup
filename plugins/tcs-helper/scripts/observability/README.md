@@ -308,5 +308,21 @@ three adapters above write, and removed the same way (see "How to delete it").
   number as the cost of actually writing a record: using the same shared writer path this wrapper also
   calls, the measured end-to-end cost of writing one record (measured for an instruction-load event,
   in the same research pass) came out close to 13 ms — `solution.md`'s Quality Requirements section
-  has the full breakdown. Both figures are from a Linux container; the macOS figure has not been
-  measured yet, and neither number should be assumed to transfer.
+  has the full breakdown.
+- **On macOS the wrapper costs several times more, and the 1 ms budget is not reachable there at
+  all.** Measured on Darwin arm64 under bash 3.2 (200–300 iterations per configuration): running the
+  hook directly ~1.5 ms, wrapped with recording off ~4.5 ms, wrapped with recording on ~41 ms — so
+  the wrapper adds roughly 3 ms with recording off and roughly 39.5 ms with it on, against Linux's
+  0.24 ms and 12.2 ms.
+
+  This is **not** something a smaller or better-ordered script fixes, and both of those were tested:
+  stripping the file from 15 KB to 2 KB changed nothing, and hoisting the early exit to the second
+  line made it slightly worse. The cost is spawning a shell interpreter at all — a script whose
+  entire body is `exec "$@"` already costs ~4 ms — because macOS runs a code-signature check on every
+  exec and Linux does not.
+
+  What this means in practice: **on macOS, treat a wrapped hook's recorded duration as the hook's own
+  time, not the wrapper's, and do not read small differences between wrapped hooks as meaningful.**
+  The wrapper is still the right tool for finding a hook that takes *hundreds* of milliseconds, which
+  is what it was built for. It is the wrong tool for telling a 2 ms hook from a 5 ms one on this
+  platform.
