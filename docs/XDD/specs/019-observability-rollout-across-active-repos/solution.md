@@ -175,7 +175,10 @@ them somewhere else.
    for editing a user-owned settings file, and its merge semantics are right: read the whole
    document, append only when absent, never touch a foreign entry. Its *write* is not: it truncates
    the real file before rewriting it, so an interruption destroys the user's configuration. Three
-   other writers in this repository use `mktemp` → write → `mv`.
+   other writers here replace atomically instead, by renaming over the target — `install.sh:729-731`
+   and `the-custom-startup-configure-statusline.sh:176-180` via `mktemp`, `install_files.sh:130-132`
+   via a fixed `.tmp` suffix. The rename is the safety property; how the temporary name is chosen is
+   not.
 4. **Split by the record's own `repo` field.** Every record already carries it, frozen and not
    caller-settable, and `report.py` reads it nowhere. It is the dimension the reader is missing, and
    adding it is what makes several records safe to read at once.
@@ -218,7 +221,7 @@ plugins/tcs-helper/
       registration.py              # the settings.local.json merge/unmerge (see ADR-4)
       detect.sh                    # classify a target before writing: clean / ours-current / ours-old / foreign
   templates/observability/
-    tcs-observability-version      # source of truth for the bundle version (spec-012 pattern)
+    tcs-helper-observability-version      # source of truth for the bundle version (spec-012 pattern)
   scripts/observability/           # unchanged: the bundle's source files
 
 scripts/observability/
@@ -374,8 +377,9 @@ second, leaves the first (harmless and shared), and leaves records untouched.
 - **Severity-coded detection (`detect_conflicts.sh`)** — clean / warn / conflict / abort, never a
   boolean.
 - **Foreign content is a stop condition (`with_gha.sh`)** — warn, change nothing, exit 0.
-- **Atomic replace (`install.sh`, `configure-statusline.sh`, `install_files.sh`)** — `mktemp` →
-  write → `mv`.
+- **Atomic replace (`install.sh:729-731`, `the-custom-startup-configure-statusline.sh:176-180`,
+  `install_files.sh:130-132`)** — write elsewhere, then rename over the target. The first two use
+  `mktemp`; the third uses a fixed `.tmp` suffix. The rename is the safety property.
 - **Fail-open recording (spec-018)** — unchanged, and untouched by this spec.
 
 ### New pattern

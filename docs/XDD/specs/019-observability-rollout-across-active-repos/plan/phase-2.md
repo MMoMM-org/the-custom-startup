@@ -130,7 +130,10 @@ anything the maintainer owns.
 
 - [ ] **T2.5 Durability: backup, atomic replace, and the lock** `[activity: backend-api]`
 
-  1. Prime: read `install.sh:744-745` and `scripts/the-custom-startup-configure-statusline.sh:180` for `mktemp` → `mv`;
+  1. Prime: read `install.sh:729-731` — `mktemp`, write, `mv` onto `SETTINGS_FILE`, which is this
+     repository already atomically replacing a settings file and therefore the closest precedent
+     there is — and `scripts/the-custom-startup-configure-statusline.sh:176-180` for the same
+     shape;
      read `plugins/tcs-git-helpers/skills/git-setup/lib/lock.sh:45-76` for a bash 3.2 lock via `set -C`, and
      `:108-118` for why release must accept a dead owner — the skill acquires and releases in
      separate processes, so a `pid == $$` check alone leaks the lock after every run

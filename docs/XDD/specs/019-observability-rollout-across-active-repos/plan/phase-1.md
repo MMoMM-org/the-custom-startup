@@ -48,7 +48,7 @@ an installed copy has fallen behind.
   2. Test: the marker file exists, contains a single semver line and nothing else; a helper reads it
      and returns that version; a malformed or absent marker yields a clear error rather than an
      empty string that later compares equal to everything.
-  3. Implement: `plugins/tcs-helper/templates/observability/tcs-observability-version`, plus the
+  3. Implement: `plugins/tcs-helper/templates/observability/tcs-helper-observability-version`, plus the
      read helper. The bundle's *sources* stay where they are — this task adds the version, not a
      copy of the scripts.
   4. Validate: `bats` green; the marker's format matches the existing git-helpers marker exactly, so
