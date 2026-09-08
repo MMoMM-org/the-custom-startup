@@ -81,7 +81,7 @@ fi
 #   Side effects: none (read-only — never writes, never installs)
 _drift_check_observability_bundle() {
   local expected_version="$1"
-  local marker_path="$2"
+  local marker_path="${2:-}"
 
   if [ -z "$marker_path" ]; then
     marker_path="$(_bundle_install_target_dir)/$_BUNDLE_INSTALL_MARKER_NAME"

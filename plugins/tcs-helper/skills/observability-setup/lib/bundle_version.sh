@@ -37,7 +37,7 @@
 #   caller can tell "nothing installed yet" apart from "something is
 #   broken".
 _read_observability_bundle_version() {
-  local version_file="$1"
+  local version_file="${1:-}"
 
   if [ -z "$version_file" ]; then
     local script_dir
