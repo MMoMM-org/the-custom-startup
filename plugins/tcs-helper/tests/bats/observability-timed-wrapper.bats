@@ -96,6 +96,30 @@ printf 'ERR-B' 1>&2
 exit "${1:-0}"
 EOF
   chmod +x "$FIXTURE_INTERLEAVED"
+
+  # WARM THE FIXTURES -- measured, not assumed (T3.6, 2026-09-08).
+  #
+  # macOS validates a code signature on the FIRST exec of a newly written file
+  # and caches the result. Measured on Darwin arm64 across three fresh files:
+  # exec 1 cost 286, 151 and 154 ms; execs 2-5 of the SAME file cost a flat
+  # 5 ms each. A 30-57x penalty, paid exactly once per file, and absent on
+  # Linux -- the same platform fact the T3.6 overhead gate traced the whole
+  # macOS/Linux gap to (see the README's Decisions Log, 2026-09-07).
+  #
+  # setup() writes these fixtures fresh for EVERY test, so a timing test that
+  # execs one exactly once measures that one-time penalty instead of the
+  # wrapper. That is what made "a near-zero duration records ms as 0" fail
+  # roughly four runs in five on a developer machine while staying green in
+  # CI: `.github/workflows/tests.yml` sets TCS_PERF_SLACK=4, lifting the bound
+  # to 600 ms, so a multiplier meant to absorb CPU contention was also hiding
+  # a deterministic platform constant. Warming here fixes the measurement
+  # rather than widening the bound, so the assertion tests what it claims to
+  # and holds with or without slack.
+  #
+  # stdin MUST come from /dev/null: cat_and_exit.sh reads stdin, and without
+  # this it would block setup() forever rather than fail it.
+  "$FIXTURE_CAT" 0 warm </dev/null >/dev/null 2>&1 || true
+  "$FIXTURE_INTERLEAVED" 0 </dev/null >/dev/null 2>&1 || true
 }
 
 teardown() {

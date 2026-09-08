@@ -420,3 +420,31 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   > a defect in the adapter. Closing it means adding such a rule, reading a matching file in an
   > enabled session, and confirming a record with `reason: path_glob_match` and a populated
   > `trigger` — a configuration change to this repo, so it is a decision rather than a task step.
+
+  > **Step 1, re-run 2026-09-08 — one real defect found in this suite's own timing bound.**
+  > pytest stayed at 675 passed / 1 skipped. The wrapper suite did not: "a near-zero duration
+  > records ms as 0" failed four runs in five on a developer machine, while every other case
+  > passed. The wrapper was not at fault — measured directly, it records a flat 5 ms.
+  >
+  > **The cause is macOS's first-exec cost, measured rather than assumed.** A newly written
+  > executable pays a code-signature validation on its FIRST exec, cached thereafter. Across three
+  > fresh files: exec 1 cost 286, 151 and 154 ms; execs 2 through 5 of the same file cost 5 ms
+  > each. A 30-57x penalty, once per file. `setup()` writes the fixtures fresh for every test, and
+  > this test execs one exactly once — so it measured the penalty, never the wrapper. The 150 ms
+  > bound sits inside that 151-286 ms spread, which is why it failed most runs rather than all.
+  >
+  > **The more useful half of the finding is why CI never saw it.**
+  > `.github/workflows/tests.yml:142` sets `TCS_PERF_SLACK=4`, lifting the bound to 600 ms. The
+  > penalty fits under that comfortably, so the suite is green in CI and red on the maintainer's
+  > machine. A multiplier that exists to absorb CPU contention was also absorbing a deterministic
+  > platform constant — and in doing so, hiding it. This is the second time this one suite's timing
+  > bounds have needed correcting (see the 2026-09-07 block above, where the same suite ignored the
+  > `TCS_PERF_SLACK` convention its three siblings follow); both times the bound was treated as the
+  > thing to adjust. It was not, either time.
+  >
+  > **Fixed by warming the fixtures in `setup()`**, not by widening the bound — a throwaway exec of
+  > each fixture, with stdin from `/dev/null` because `cat_and_exit.sh` reads stdin and would
+  > otherwise block `setup()` rather than fail it. The assertion now measures what it claims and
+  > holds with or without slack. Verified across eight consecutive suite runs: zero failures,
+  > against four-in-five before. One green run would not have been evidence for an intermittent
+  > failure, so it was not accepted as such.
