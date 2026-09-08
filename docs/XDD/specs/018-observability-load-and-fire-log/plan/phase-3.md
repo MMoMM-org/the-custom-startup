@@ -189,3 +189,69 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
      research figures came from a Linux container and were explicitly flagged as non-transferable.
   5. Success: every SDD acceptance criterion has passing evidence, and #147 can be answered from the
      report `[ref: PRD/Success Metrics]`.
+
+  > **In progress — steps 1 and 4 are closed, steps 2, 3 and 5 need a recording session.**
+  > Recording is read from the environment Claude Code launched in, so it cannot be switched on
+  > mid-session; the remaining gates are blocked on a relaunch with `CLAUDE_OBSERVABILITY_ENABLED=1`
+  > and a few turns of ordinary work. Confirmed with Marcus 2026-09-07; the fixture route was
+  > offered and rejected, because step 3 asks for a real record on purpose.
+  >
+  > **Step 1 — full suites: green.** pytest 675 passed / 1 skipped; bats 975/975 across
+  > `plugins/*/tests/bats` (the `tcs-git-helpers` suite included, it is part of that glob).
+  >
+  > Two failures were found first and both were real, in T3.5's own suite, not in the wrapper:
+  >
+  > - **Seven tests never ran on macOS.** They bound a hang guard with `timeout`, which is GNU
+  >   coreutils and ships on neither macOS nor a `macos-latest` runner, so they exited 127 instead of
+  >   exercising the wrapper. The bats CI matrix includes `macos-latest`, so this was red in CI too.
+  >   Replaced with a `_timeout` helper that keeps coreutils' contract and falls back to perl —
+  >   forking rather than exec'ing, since an alarm timer survives exec but its handler does not.
+  > - **The suite ignored this repo's `TCS_PERF_SLACK` convention** that its three sibling
+  >   observability suites all use. Its near-zero bound failed under ordinary CPU contention on a
+  >   developer machine, which is what a shared CI runner is. Upper bounds now scale; the lower
+  >   bounds do not, because those are what catch the 1000x unit regression.
+  >
+  > **Step 4 — overhead gate: the budget does NOT hold, and cannot.** Darwin arm64, bash 3.2.57,
+  > N=200-300 per configuration, two interleaved passes. Hook run directly ~1.5 ms; wrapped with
+  > recording off ~4.5 ms; wrapped with recording on ~41 ms — a marginal ~3.0 ms and ~39.5 ms against
+  > CON-7's 1 ms, where Linux measured 0.24 ms and 12.2 ms.
+  >
+  > Two candidate causes were measured and **refuted**, which is what makes this a platform fact
+  > rather than a defect to fix: script size (15019 bytes stripped to 1965 changed nothing —
+  > 4477 → 4354 us, inside noise) and early-exit position (hoisting the `ENABLED` check to line 2
+  > made it *worse*, 5299 → 6050 us). The cost is spawning a shell interpreter at all: a script whose
+  > entire body is `exec "$@"` costs ~4.0 ms. macOS runs a code-signature check per exec and Linux
+  > does not, which is the whole gap. Full numbers in the README's Decisions Log, 2026-09-07.
+  >
+  > One lever was found and deliberately **not** applied: `#!/usr/bin/env bash` → `#!/bin/bash` saves
+  > ~1.1 ms per invocation by dropping one exec. It trades PATH portability across every script in
+  > the repo, so it wants a decision under the Deviation Protocol, not a quiet edit inside a
+  > validation task.
+  >
+  > **Partial evidence toward the `session` caveat (step 2 closes it).** `CLAUDE_CODE_SESSION_ID` is
+  > present in a harness-spawned subprocess and is a 36-character UUID — the same shape as a hook
+  > payload's `session_id`. That answers neither half of the caveat on its own: whether it reaches a
+  > hook the harness spawns, and whether its value equals the payload's. Both need one wrapped hook
+  > in a live session, read side by side with that session's adapter records.
+  >
+  > **What the next session runs.** Relaunch as `CLAUDE_OBSERVABILITY_ENABLED=1 claude`, confirm with
+  > `plugins/tcs-helper/scripts/observability/selfcheck.sh`, work normally for a few turns (load a
+  > skill, dispatch a subagent, edit a file), then:
+  >
+  > ```bash
+  > REC="$HOME/.claude/plugins/data/observability-the-custom-startup/observability/events.jsonl"
+  >
+  > # Step 2 -- the report against real data, not fixtures.
+  > python3 scripts/observability/report.py
+  >
+  > # Step 3 -- the privacy deny-list. Every one of these must print nothing.
+  > grep -n "$HOME" "$REC"                    # absolute home paths
+  > grep -n 'transcript_path' "$REC"          # transcript path
+  > grep -n '/Users/' "$REC"                  # absolute paths by any other route
+  > jq -r 'select(.kind=="hook") | .matcher' "$REC" | sort -u   # eyeball: no command strings
+  > jq -r 'keys[]' "$REC" | sort -u           # the full field set actually emitted, read once by hand
+  > ```
+  >
+  > The last two are deliberately not `grep`-only: the gate is "no Bash arguments and no hook command
+  > strings", and the way that leaks is a field nobody thought to look at. Read the emitted key set
+  > against the SDD's Privacy row rather than trusting a pattern to catch it.
