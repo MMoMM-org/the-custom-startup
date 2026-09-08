@@ -109,9 +109,9 @@ plugins/tcs-helper/scripts/observability/logwrite.sh              # the writer; 
 plugins/tcs-helper/scripts/observability/log_instructions.sh      # adapter; self-locates via ${BASH_SOURCE[0]} at :38
 modules/satori/scripts/install-hooks.sh                           # the settings-merge precedent, :62-106
 plugins/tcs-git-helpers/skills/git-setup/SKILL.md                 # the install process pattern: lock, detect, confirm, write
-plugins/tcs-git-helpers/scripts/lib/install_files.sh              # copy + substitute + atomic version marker
-plugins/tcs-git-helpers/scripts/lib/detect_conflicts.sh           # severity exit codes; version-marker ownership
-plugins/tcs-git-helpers/scripts/lib/lock.sh                       # bash 3.2 lock via set -C noclobber
+plugins/tcs-git-helpers/skills/git-setup/lib/install_files.sh              # copy + substitute + atomic version marker
+plugins/tcs-git-helpers/skills/git-setup/lib/detect_conflicts.sh           # severity exit codes; version-marker ownership
+plugins/tcs-git-helpers/skills/git-setup/lib/lock.sh                       # bash 3.2 lock via set -C noclobber
 plugins/tcs-git-helpers/scripts/lib/drift_check.sh                # OK / MISSING / DRIFT comparator
 plugins/tcs-git-helpers/tests/bats/install-files.bats             # the canonical target-repo test shape
 plugins/tcs-git-helpers/tests/fixtures/repos/build.sh             # named-scenario fixture builder
@@ -398,10 +398,18 @@ fails a PR that changes the bundle without bumping the marker).
 
 **ADR-4 — Merge like satori; write unlike it.**
 *Choice:* satori's merge semantics — read the whole document, `setdefault` the hooks block, append
-only when absent, never modify a foreign entry — with nine gaps closed: atomic replace via
-`mktemp` → `mv`; a backup before writing; a parse check that refuses rather than tracebacks;
-`ensure_ascii=False` so foreign non-ASCII values are not silently rewritten; a plan-then-confirm
-step; a lock; and an ownership concept (ADR-5).
+only when absent, never modify a foreign entry. An audit of that precedent found **nine** gaps.
+**Seven are closed here**: atomic replace via `mktemp` → `mv`; a backup before writing; a parse
+check that refuses rather than tracebacks; `ensure_ascii=False` so foreign non-ASCII values are not
+silently rewritten; a plan-then-confirm step; a lock; and an ownership concept (ADR-5).
+
+**Two are deliberately not closed, and saying "nine gaps closed" would have been false** — an
+earlier draft of this row did say exactly that, and a consistency audit caught the count against the
+list. (8) *Formatting preservation*: `indent=2` reflows a differently formatted document. Nothing in
+this repository solves it, so it is accepted as a cost below rather than pretended away.
+(9) *Key ordering*: nothing pins it beyond the interpreter's insertion order, which puts appended
+keys last. That is acceptable and is recorded so the next reader does not mistake silence for
+oversight.
 *Rationale:* the merge half is proven in this repository and does exactly what the PRD requires. The
 write half truncates the real file before rewriting it, so an interruption destroys the user's
 configuration outright — the worst failure this command can have, and the one the PRD names first.

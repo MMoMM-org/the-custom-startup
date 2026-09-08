@@ -57,7 +57,7 @@ an installed copy has fallen behind.
 
 - [ ] **T1.2 Bundle installation into `$HOME/.claude/observability/`** `[activity: backend-api]`
 
-  1. Prime: read `plugins/tcs-git-helpers/scripts/lib/install_files.sh:104-141` for the
+  1. Prime: read `plugins/tcs-git-helpers/skills/git-setup/lib/install_files.sh:104-141` for the
      copy-and-substitute pattern and `:130-132` for the atomic marker write `[ref: SDD/ADR-2]`.
   2. Test: installing into an empty home creates the directory, every adapter plus `logwrite.sh`,
      and the version marker; the copied adapters run correctly *from their new location* (this is

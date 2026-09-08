@@ -45,6 +45,21 @@ file is written by both, so the two sides can proceed concurrently.
 Delivers a reader that answers the cross-repository question without pretending four repositories
 are one.
 
+- [ ] **T3.0 Capture the spec-018 output fixture — before anything else** `[activity: test-strategy]`
+
+  **This must happen before T3.1 touches `report.py`.** T3.5 asserts that `--events <path>` behaves
+  exactly as it did in spec-018, "against a recorded fixture of the old output rather than by
+  inspection". By the time T3.5 runs, T3.1, T3.3 and T3.4 have already changed the reader — there is
+  nothing left to record the old behaviour from. A golden fixture captured after the change would
+  only prove the new code agrees with itself.
+
+  1. Prime: read `scripts/observability/report.py`'s current rendering path.
+  2. Test: none yet — this task produces the baseline the later tests compare against.
+  3. Implement: run the current reader over a fixed input and commit its output verbatim as a
+     fixture, with a comment naming the commit it was captured from.
+  4. Validate: the fixture reproduces byte-identically on a second run of the unmodified reader.
+  5. Success: T3.5 has something real to compare against `[ref: SDD/SDD-AC-24]`
+
 - [ ] **T3.1 `repo` as a first-class dimension in the existing analyses** `[activity: backend-api]`
 
   1. Prime: read `scripts/observability/report.py` — `instruction_stats:151`, `_redact_path:453`,

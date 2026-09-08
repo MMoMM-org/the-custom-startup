@@ -39,9 +39,9 @@ version: "1.0"
 | specId | 019-observability-rollout-across-active-repos |
 | title | Observability rollout across active repositories |
 | status | COMPLETE |
-| totalTasks | 18 |
+| totalTasks | 20 |
 | parallelTasks | 2 |
-| specReferences | 73 |
+| specReferences | 75 |
 | clarificationsRemaining | 0 |
 
 ### PhaseStatus
@@ -49,8 +49,8 @@ version: "1.0"
 | Phase | Name | Status | Tasks | File |
 |---|---|---|---|---|
 | 1 | The bundle and its versioning | COMPLETE | 5 | [phase-1.md](phase-1.md) |
-| 2 | The registration editor | COMPLETE | 5 | [phase-2.md](phase-2.md) |
-| 3 | Reading several records | COMPLETE | 5 | [phase-3.md](phase-3.md) |
+| 2 | The registration editor | COMPLETE | 6 | [phase-2.md](phase-2.md) |
+| 3 | Reading several records | COMPLETE | 6 | [phase-3.md](phase-3.md) |
 | 4 | The command, the rollout, and the gates | COMPLETE | 3 | [phase-4.md](phase-4.md) |
 
 `COMPLETE` here means the phase is fully **defined**. Implementation status is the `status:` field in
@@ -113,7 +113,9 @@ mid-flight.
   (`:70-87`), not its write (`:97-99`, truncate-then-rewrite).
 - `plugins/tcs-git-helpers/skills/git-setup/SKILL.md` — the install sequence and why the lock comes
   before detection rather than before writing.
-- `plugins/tcs-git-helpers/scripts/lib/{install_files,detect_conflicts,lock,drift_check}.sh`
+- `plugins/tcs-git-helpers/skills/git-setup/lib/{install_files,detect_conflicts,lock,with_gha}.sh`
+- `plugins/tcs-git-helpers/scripts/lib/drift_check.sh` — note the different parent: this one
+  really is under `scripts/lib/`, the others are not
 - `plugins/tcs-git-helpers/tests/bats/install-files.bats` — the canonical target-repo test shape
 - `plugins/tcs-git-helpers/tests/fixtures/repos/build.sh` — the named-scenario fixture builder
 
@@ -121,7 +123,7 @@ mid-flight.
 
 - **ADR-2**: the bundle lives at `$HOME/.claude/observability/` and is referenced by `$HOME` in the
   command string. Verified 2026-09-08: `$HOME` expands in a hook command, and `$0` resolves fully.
-- **ADR-4**: merge like satori, write unlike it. Nine gaps to close, atomicity first.
+- **ADR-4**: merge like satori, write unlike it. Nine gaps found in that precedent; seven closed here, two named as accepted costs. Atomicity first.
 - **ADR-5**: ownership is the path namespace, because JSON has nowhere to put a version banner.
 - **ADR-7**: split by the record's `repo` field. Only firing coverage is unioned.
 
@@ -194,15 +196,15 @@ are applied here and the reasons kept, rather than the rows quietly rewritten.
 
 | SDD-AC | Task | Note |
 |---|---|---|
-| 1 | T2.1, T4.1 | Was mapped to T2.2, whose tests are all JSON merge behaviour and never mention repository detection |
-| 2, 3, 5 | T2.2 | |
-| 4 | T2.1, T4.1 | Detection classifies; **T4.1 asserts the command's own exit 0**, which is the half nothing tested |
-| 6 | T2.1 | |
-| 7 | T2.3 | Now includes the "already configured" report string, not only the no-op |
-| 8 | T1.2, T2.3 | T2.3 now asserts the update-versus-install wording, not only the mechanics |
-| 9, 11 | T2.4 | |
-| 10 | T2.2 | Was mapped to T2.4, which tests truncation, backup, interruption and the lock — no encoding case |
-| 12, 13, 14 | T2.3 | |
+| 1 | T2.2, T4.1 | Was mapped to T2.3, whose tests are all JSON merge behaviour and never mention repository detection |
+| 2, 3, 5 | T2.3 | |
+| 4 | T2.2, T4.1 | Detection classifies; **T4.1 asserts the command's own exit 0**, which is the half nothing tested |
+| 6 | T2.2 | |
+| 7 | T2.4 | Now includes the "already configured" report string, not only the no-op |
+| 8 | T1.2, T2.4 | T2.4 now asserts the update-versus-install wording, not only the mechanics |
+| 9, 11 | T2.5 | |
+| 10 | T2.3 | Was mapped to T2.5, which tests truncation, backup, interruption and the lock — no encoding case |
+| 12, 13, 14 | T2.4 | |
 | 15 | T1.3, T4.1 | T1.3 tests the comparator; **T4.1 asserts drift actually surfaces through `status`**, which the comparator being correct does not guarantee |
 | 16, 17, 18 | T3.2 | |
 | 19 | T3.1 | Was mapped to T3.3; T3.1 is the task that keys on `(repo, path)` and already cited AC-19 itself |
