@@ -190,6 +190,10 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   5. Success: every SDD acceptance criterion has passing evidence, and #147 can be answered from the
      report `[ref: PRD/Success Metrics]`.
 
+  > **Partly superseded — steps 1 and 4 were closed here; steps 2 and 3 were closed in the
+  > 2026-09-08 block at the end of this task, which is the recording session this paragraph asks
+  > for. Read this block for the overhead and suite evidence, that one for everything after.**
+  >
   > **In progress — steps 1 and 4 are closed, steps 2, 3 and 5 need a recording session.**
   > Recording is read from the environment Claude Code launched in, so it cannot be switched on
   > mid-session; the remaining gates are blocked on a relaunch with `CLAUDE_OBSERVABILITY_ENABLED=1`
@@ -255,3 +259,118 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   > The last two are deliberately not `grep`-only: the gate is "no Bash arguments and no hook command
   > strings", and the way that leaks is a field nobody thought to look at. Read the emitted key set
   > against the SDD's Privacy row rather than trusting a pattern to catch it.
+
+  > **2026-09-08 — the recording session. Steps 2 and 3 closed; step 5 and two criteria remain.**
+  > Run under `CLAUDE_OBSERVABILITY_ENABLED=1`, `DETAIL=0`, in this repo, on branch
+  > `spec/153-observability-log`. Fourteen records across four kinds.
+  >
+  > **Step 2 — the report against real data: passes.** `report.py` exits 0 and answers PRD F4 from
+  > eleven `instruction` records: five files loaded (`CLAUDE.md` four times, `docs/CLAUDE.md` once by
+  > `nested_traversal`, three more by `include`), ten configured files that never loaded, and the
+  > always-loaded layer separated from conditional loads at 7038 vs 16193 bytes.
+  >
+  > Two things the run settled that a fixture could not:
+  >
+  > - **The join's name form is the qualified one.** The report's matching rule accepts a qualified
+  >   *or* a bare name and says so in its own output, "confirmed at T3.6 against a live session".
+  >   Now confirmed: `kind: skill` carried `tcs-workflow:verify`, `kind: agent` carried
+  >   `tcs-workflow:code-quality-reviewer`. Both qualified. The bare-name tolerance is now known to
+  >   be unnecessary rather than merely unproven — tightening it changes report output and the
+  >   pytest cases that assert on it, so it is recorded here as a decision, not applied as a cleanup.
+  > - **An ad-hoc named subagent is reported honestly.** An `Agent` call carrying a caller-supplied
+  >   name recorded `agent_type: ac-evidence-mapper`, matching no shipped inventory entry. The report
+  >   named it under "1 record(s) named a skill/agent not found in this inventory" rather than
+  >   dropping it silently or counting it toward coverage. That branch had never run on real data.
+  >
+  > **Step 3 — the privacy gate: passes, five of five.** All three greps returned nothing: no
+  > `$HOME`, no `transcript_path`, no `/Users/`. The emitted key set, read by hand against
+  > SDD/Quality Requirements/Privacy rather than trusted to a pattern, is exactly: `agent_id`,
+  > `agent_type`, `bytes`, `detail`, `enabled`, `kind`, `note`, `parent`, `path`, `reason`, `repo`,
+  > `scope`, `session`, `skill`, `ts`. Every entry is a name, a reason, a size or a switch position.
+  > Two redactions were confirmed against real input: a User-scope import at
+  > `~/Kouzou/standards/general.md` recorded as the bare `general.md`, and every in-repo path
+  > recorded repo-relative. **Caveat on the gate's own completeness:** the `matcher` scan was
+  > vacuous, because no `kind: hook` record existed yet. It has not really run, and is repeated in
+  > the relaunch commands below.
+  >
+  > **One documentation defect, found and fixed.** The `kind: hook` record carries a nine-field
+  > enumeration in the scripts' README. The four adapter kinds had none — `agent_id`, `agent_type`,
+  > `scope`, `note`, `enabled`, `parent` and `bytes` appeared nowhere in that file, not even as
+  > prose. The prose said what was *kept*, never which fields carry it, so the privacy claim could
+  > not be checked field by field the way the wrapper's can. Same class of defect the T3.5 reviewer
+  > caught in the wrapper's own privacy statement, in the other half of the document. Fixed by
+  > adding a per-kind field table, every entry verified against both the adapter source and a real
+  > record.
+  >
+  > **Step 1 corroborated by an independent review.** `tcs-workflow:code-quality-reviewer` over
+  > `f3e49a0..HEAD`, scoped to the six shell scripts: **PASS**, no critical and no warning findings,
+  > verified by running the code under bash 3.2.57 rather than by reading it. It independently
+  > exercised the rotation chain, the 256-byte multibyte-boundary heal, invalid-UTF-8 rejection, the
+  > unwritable-directory fail-open path, and T3.5's missing-final-flag-value branch. One suggestion,
+  > not a defect: `log_instructions.sh:56` forks `cat` to read stdin where both sibling adapters use
+  > the fork-free `read -r -d ''` form and carry comments justifying it on CON-7 grounds — and this
+  > is the adapter that fires most often. Recorded, not fixed; it is a CON-7 question, not a
+  > correctness one.
+  >
+  > **Step 4 corroborated incidentally.** The wrapped adapter measured 43 ms end-to-end on this
+  > machine against the ~41 ms the 2026-09-07 gate measured. The macOS finding reproduces.
+  >
+  > **`session` caveat — second half confirmed, first half still open.** The caveat asks two things:
+  > whether `CLAUDE_CODE_SESSION_ID` reaches a harness-spawned hook, and whether its value equals
+  > the payload's `session_id`. Running `timed-wrapper.sh` directly in this session wrote
+  > `session: 058f9767-67c9-4619-b718-d6a78cbefc11` — byte-identical to what all three adapters
+  > extracted from their own payloads in the same session. **The values agree.** What that run
+  > cannot show is the first half: it was spawned by the Bash tool, not by the harness as a hook.
+  >
+  > **The wrapper is now wired, and must be unwired again.** `.claude/settings.json` (gitignored,
+  > local only, so this change is invisible to git by design) had its `InstructionsLoaded` command
+  > replaced with:
+  >
+  > ```
+  > "$CLAUDE_PROJECT_DIR/…/timed-wrapper.sh" --event InstructionsLoaded --matcher "" -- "$CLAUDE_PROJECT_DIR/…/log_instructions.sh"
+  > ```
+  >
+  > `InstructionsLoaded` was chosen because it fires once per instruction file at session start, so
+  > the relaunch produces the `kind: hook` records and that same session's payload-sourced
+  > `instruction` records at the same moment — exactly the side-by-side the caveat's first half
+  > needs, with no further action asked of the operator.
+  >
+  > Three things were verified before wiring, so that a relaunch cannot silently lose instruction
+  > records: the empty `--matcher ""` parses as a present-but-empty argument and does not trip
+  > T3.5's missing-final-value branch; stdin passes through untouched (a wrapped `/bin/cat` echoed
+  > its payload byte for byte, which is HAZARD 1 verified live rather than by reading); and the
+  > exact wired command line, run against a realistic payload, wrote **both** records — the
+  > adapter's `instruction` and the wrapper's `hook`.
+  >
+  > **To remove it**, once the gate below is recorded: put the original command back —
+  > `"$CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/log_instructions.sh"`, no flags,
+  > no wrapper. That is the whole procedure.
+  >
+  > **What the next session runs.** Relaunch as `CLAUDE_OBSERVABILITY_ENABLED=1 claude`, then:
+  >
+  > ```bash
+  > REC="$HOME/.claude/plugins/data/observability-the-custom-startup/observability/events.jsonl"
+  >
+  > # SDD-AC-17 -- a hook record from the real harness path, labelled scope_note single.
+  > jq -c 'select(.kind=="hook")' "$REC"
+  > python3 scripts/observability/report.py | grep -A 6 "Hook durations"
+  >
+  > # SDD-AC-5's caveat, first half. These two must print the SAME session id.
+  > jq -r 'select(.kind=="hook")        | .session' "$REC" | sort -u | tail -3
+  > jq -r 'select(.kind=="instruction") | .session' "$REC" | sort -u | tail -3
+  >
+  > # The privacy gate's matcher scan, which was vacuous the first time round.
+  > jq -r 'select(.kind=="hook") | .matcher' "$REC" | sort -u
+  > ```
+  >
+  > An empty `session` on the hook records answers the caveat too, in the other direction: it would
+  > mean the variable does not reach a harness-spawned hook, and that the field's documented
+  > empty-rather-than-guess behaviour is what kept it from joining to the wrong session. Record
+  > whichever way it lands; both are results.
+  >
+  > **Two traps for whoever runs the above.** `report.py` takes the data directory as `--data-dir`,
+  > **not** from `$CLAUDE_OBSERVABILITY_DATA` — ADR-6 keeps it free of environment dependence so it
+  > stays unit-testable, and pointing the env var at it silently reports on the wrong log. And
+  > `selfcheck.sh` reports `cannot record` when run through Claude's Bash tool, because the sandbox
+  > denies writes under `~/.claude/plugins`; the hooks themselves are harness-spawned and unaffected.
+  > Run it with the sandbox disabled before believing it.

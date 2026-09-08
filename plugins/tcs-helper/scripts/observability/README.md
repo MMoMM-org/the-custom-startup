@@ -68,6 +68,22 @@ in), and `repo` (this repo's name, never an absolute path) — plus a handful of
 that `kind`. A line may also carry `"truncated":true` if one of its fields was cut down to the
 256-byte-per-field limit.
 
+### The fields each kind carries
+
+The wrapper's `kind: hook` record is enumerated separately, under "Privacy: what is, and is not, in
+that record". These are the other four. Each was checked against a record this repository actually
+produced, not read off the source:
+
+| `kind` | Fields beyond the four common ones |
+|---|---|
+| `instruction` | `path` (relative to this repo, or a bare filename when the file lives outside it), `scope` (the payload's `memory_type` — `Project` or `User`), `reason` (`session_start`, `include`, `nested_traversal` or `path_glob_match`), and `bytes` (the loaded file's size as a quoted string, absent when it could not be measured). Plus exactly one of `parent` (when `reason` is `include`) or `trigger` (when it is `path_glob_match`) — never both, and neither on any other reason. |
+| `skill` | `skill` — the skill's qualified name, e.g. `tcs-workflow:verify`. |
+| `agent` | `agent_type` (the subagent type, qualified, e.g. `tcs-workflow:code-quality-reviewer`; for a caller-named ad-hoc agent it is that caller-supplied name, which matches no shipped entry on purpose) and `agent_id` (the harness's identifier for that one dispatch). |
+| `state` | `enabled` and `detail` (each switch as it stood at that moment) and `note`, which carries the self-check's probe nonce — that nonce is the whole mechanism by which the check confirms *this* run's write landed rather than some earlier one's. |
+
+Every one of those is a name, a reason, a size or a switch position. None of them is a file's
+contents, a command line, or an absolute path.
+
 ### Is it actually working right now?
 
 Run the self-check script — it answers "is this actually recording?" honestly, including the case
