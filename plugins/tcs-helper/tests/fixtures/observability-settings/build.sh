@@ -111,6 +111,18 @@ _commit_all() {
   git -C "$dir" commit -q -m "$subject"
 }
 
+_init_scenario() {
+  # $1=repo dir  $2=fixture label  $3=gitignore content (default ".claude/")
+  # Common init shape shared by twelve of the thirteen builders below.
+  # ${3:-...} rather than $3: phase 1 shipped two libraries that aborted
+  # under `set -u` on exactly that mistake (docs/ai/memory/active.md).
+  local dir="$1" label="$2" gitignore="${3:-.claude/}"
+  _init_repo "$dir"
+  printf '%s\n' "$gitignore" > "$dir/.gitignore"
+  printf '%s\n' "$label fixture" > "$dir/README.md"
+  _commit_all "$dir" "feat: init"
+}
+
 # The canonical "ours" registration this feature would write (SDD's
 # Runtime View example, byte-for-byte): three hook entries plus the env
 # switch, commands pointing into $HOME/.claude/observability/. This string
@@ -163,20 +175,14 @@ EOF
 # --- Scenario 1: absent -----------------------------------------------------
 build_absent() {
   local repo="$OUT_DIR/absent"
-  _init_repo "$repo"
-  printf '.claude/\n' > "$repo/.gitignore"
-  printf '%s\n' "absent fixture" > "$repo/README.md"
-  _commit_all "$repo" "feat: init"
+  _init_scenario "$repo" "absent"
   # No .claude/ directory at all -- deliberately absent.
 }
 
 # --- Scenario 2: empty-object -----------------------------------------------
 build_empty_object() {
   local repo="$OUT_DIR/empty-object"
-  _init_repo "$repo"
-  printf '.claude/\n' > "$repo/.gitignore"
-  printf '%s\n' "empty-object fixture" > "$repo/README.md"
-  _commit_all "$repo" "feat: init"
+  _init_scenario "$repo" "empty-object"
 
   mkdir -p "$repo/.claude"
   printf '{}\n' > "$repo/.claude/settings.local.json"
@@ -186,10 +192,7 @@ build_empty_object() {
 # --- Scenario 3: foreign-only ------------------------------------------------
 build_foreign_only() {
   local repo="$OUT_DIR/foreign-only"
-  _init_repo "$repo"
-  printf '.claude/\n' > "$repo/.gitignore"
-  printf '%s\n' "foreign-only fixture" > "$repo/README.md"
-  _commit_all "$repo" "feat: init"
+  _init_scenario "$repo" "foreign-only"
 
   mkdir -p "$repo/.claude"
   {
@@ -204,10 +207,7 @@ build_foreign_plus_ours_current() {
   local repo="$OUT_DIR/foreign-plus-ours-current"
   local home="$OUT_DIR/foreign-plus-ours-current.home"
 
-  _init_repo "$repo"
-  printf '.claude/\n' > "$repo/.gitignore"
-  printf '%s\n' "foreign-plus-ours-current fixture" > "$repo/README.md"
-  _commit_all "$repo" "feat: init"
+  _init_scenario "$repo" "foreign-plus-ours-current"
 
   mkdir -p "$repo/.claude"
   {
@@ -230,10 +230,7 @@ build_foreign_plus_ours_older() {
   local repo="$OUT_DIR/foreign-plus-ours-older"
   local home="$OUT_DIR/foreign-plus-ours-older.home"
 
-  _init_repo "$repo"
-  printf '.claude/\n' > "$repo/.gitignore"
-  printf '%s\n' "foreign-plus-ours-older fixture" > "$repo/README.md"
-  _commit_all "$repo" "feat: init"
+  _init_scenario "$repo" "foreign-plus-ours-older"
 
   mkdir -p "$repo/.claude"
   # Byte-identical registration JSON to foreign-plus-ours-current -- ADR-5
@@ -255,10 +252,7 @@ build_foreign_plus_ours_older() {
 # --- Scenario 6: malformed ---------------------------------------------------
 build_malformed() {
   local repo="$OUT_DIR/malformed"
-  _init_repo "$repo"
-  printf '.claude/\n' > "$repo/.gitignore"
-  printf '%s\n' "malformed fixture" > "$repo/README.md"
-  _commit_all "$repo" "feat: init"
+  _init_scenario "$repo" "malformed"
 
   mkdir -p "$repo/.claude"
   # Deliberately unparseable: truncated mid-object, not just "wrong shape".
@@ -268,10 +262,7 @@ build_malformed() {
 # --- Scenario 7: non-ascii ---------------------------------------------------
 build_non_ascii() {
   local repo="$OUT_DIR/non-ascii"
-  _init_repo "$repo"
-  printf '.claude/\n' > "$repo/.gitignore"
-  printf '%s\n' "non-ascii fixture" > "$repo/README.md"
-  _commit_all "$repo" "feat: init"
+  _init_scenario "$repo" "non-ascii"
 
   mkdir -p "$repo/.claude"
   cat > "$repo/.claude/settings.local.json" <<'EOF'
@@ -288,10 +279,7 @@ EOF
 # --- Scenario 8: same-event-names-populated ----------------------------------
 build_same_event_names_populated() {
   local repo="$OUT_DIR/same-event-names-populated"
-  _init_repo "$repo"
-  printf '.claude/\n' > "$repo/.gitignore"
-  printf '%s\n' "same-event-names-populated fixture" > "$repo/README.md"
-  _commit_all "$repo" "feat: init"
+  _init_scenario "$repo" "same-event-names-populated"
 
   mkdir -p "$repo/.claude"
   {
@@ -304,11 +292,8 @@ build_same_event_names_populated() {
 # --- Scenario 9: write-path-not-ignored --------------------------------------
 build_write_path_not_ignored() {
   local repo="$OUT_DIR/write-path-not-ignored"
-  _init_repo "$repo"
   # Ignores something unrelated -- NOT .claude/, NOT settings.local.json.
-  printf 'node_modules/\n' > "$repo/.gitignore"
-  printf '%s\n' "write-path-not-ignored fixture" > "$repo/README.md"
-  _commit_all "$repo" "feat: init"
+  _init_scenario "$repo" "write-path-not-ignored" "node_modules/"
   # .claude/settings.local.json intentionally absent: the hazard this
   # fixture proves is about the WRITE PATH's ignore status, independent of
   # whether a file is there yet.
@@ -324,10 +309,7 @@ build_write_path_not_ignored() {
 # lands, not be deleted.
 build_already_configured_observability() {
   local repo="$OUT_DIR/already-configured-observability"
-  _init_repo "$repo"
-  printf '.claude/\n' > "$repo/.gitignore"
-  printf '%s\n' "already-configured-observability fixture" > "$repo/README.md"
-  _commit_all "$repo" "feat: init"
+  _init_scenario "$repo" "already-configured-observability"
 
   mkdir -p "$repo/.claude"
   cat > "$repo/.claude/settings.json" <<'EOF'
@@ -362,12 +344,9 @@ build_not_a_repository() {
 # --- Scenario 12: ignored-file-but-not-backup --------------------------------
 build_ignored_file_but_not_backup() {
   local repo="$OUT_DIR/ignored-file-but-not-backup"
-  _init_repo "$repo"
   # Names the exact file, NOT the directory -- so the sibling .bak path is
   # not covered by this pattern.
-  printf '.claude/settings.local.json\n' > "$repo/.gitignore"
-  printf '%s\n' "ignored-file-but-not-backup fixture" > "$repo/README.md"
-  _commit_all "$repo" "feat: init"
+  _init_scenario "$repo" "ignored-file-but-not-backup" ".claude/settings.local.json"
 
   mkdir -p "$repo/.claude"
   printf '{}\n' > "$repo/.claude/settings.local.json"
@@ -376,10 +355,7 @@ build_ignored_file_but_not_backup() {
 # --- Scenario 13: valid-json-wrong-shape -------------------------------------
 build_valid_json_wrong_shape() {
   local repo="$OUT_DIR/valid-json-wrong-shape"
-  _init_repo "$repo"
-  printf '.claude/\n' > "$repo/.gitignore"
-  printf '%s\n' "valid-json-wrong-shape fixture" > "$repo/README.md"
-  _commit_all "$repo" "feat: init"
+  _init_scenario "$repo" "valid-json-wrong-shape"
 
   mkdir -p "$repo/.claude"
   # Parses cleanly under json.load -- "hooks" is a string, not an object.

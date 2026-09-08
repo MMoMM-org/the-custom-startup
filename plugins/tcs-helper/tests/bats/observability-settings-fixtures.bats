@@ -216,15 +216,13 @@ _assert_json_invalid() {
   _assert_is_repo "$repo"
   _assert_json_valid "$file"
 
-  run grep -F "InstructionsLoaded" "$file"
+  # Pin each event key to the specific foreign command that sits under it --
+  # a grep for unlinked substrings would still pass if the fixture's
+  # commands were scrambled across event keys, even though that linkage is
+  # the entire point of this fixture (T2.3 must prove a foreign entry under
+  # OUR event name survives a merge).
+  run python3 -c "import json; d = json.load(open(\"$file\")); h = d[\"hooks\"]; ok = (h[\"InstructionsLoaded\"][0][\"hooks\"][0][\"command\"] == \"/opt/foreign-audit/on-load.sh\" and h[\"PreToolUse\"][0][\"hooks\"][0][\"command\"] == \"/opt/foreign-audit/hook.sh\" and h[\"SubagentStart\"][0][\"hooks\"][0][\"command\"] == \"/opt/foreign-audit/on-subagent.sh\" and \"\$HOME/.claude/observability/\" not in json.dumps(h)); raise SystemExit(0 if ok else 1)"
   [ "$status" -eq 0 ]
-  run grep -F "SubagentStart" "$file"
-  [ "$status" -eq 0 ]
-  run grep -F "/opt/foreign-audit/" "$file"
-  [ "$status" -eq 0 ]
-
-  run grep -F '$HOME/.claude/observability/' "$file"
-  [ "$status" -ne 0 ]
 }
 
 # ---------------------------------------------------------------------------
