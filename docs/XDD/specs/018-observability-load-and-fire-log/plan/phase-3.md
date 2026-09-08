@@ -388,8 +388,8 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   > | AC-9 and the privacy gate — never run against a real record | **CLOSED.** Five of five deny-list items clean, and the key set read by hand against the Privacy row, which is what the gate asks for rather than a pattern match. |
   > | AC-5's exception clause — the wrapper tests set `CLAUDE_CODE_SESSION_ID` themselves, so they prove the wrapper *reads* it, never that the harness *supplies* it | **WIRED, pending relaunch.** The value half is already confirmed (see the block above); the reach half needs the wired hook. |
   > | AC-20 — the six-arrangement numbers are recorded, but the reproduction artifacts sat in a scratchpad | **CLOSED as un-reproducible, deliberately.** See below. |
-  > | AC-8 — vacuous in production | **OPEN, needs a decision.** See below. |
-  > | AC-3 — the live half of `path_glob_match` | **OPEN, needs a decision.** See below. |
+  > | AC-8 — vacuous in production | **DECIDED 2026-09-08 (maintainer): scope the criterion to the writer.** Applied in three places, because one was not enough — the SDD's AC-8 row, the PRD's Feature 3 criterion, and a new PRD Won't-Have bullet. See below. |
+  > | AC-3 — the live half of `path_glob_match` | **DECIDED 2026-09-08 (maintainer): accept the fixture evidence.** No glob rule is added to this repo; the adapter path stays proved by I:192 and the live half stays deliberately unobserved. See below. |
   >
   > **AC-20 is closed the only honest way left: the artifacts are gone for good.** README line 141
   > points at `/tmp/claude-1001/…/scratchpad/t14/`. That path does not exist — and neither does

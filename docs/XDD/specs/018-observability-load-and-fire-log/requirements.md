@@ -213,6 +213,12 @@ guessing, which is the failure mode this whole spec exists to eliminate.
         and no record file is created.
   - [ ] Given a user enables recording without opting into detail, When a Bash tool call is
         recorded, Then the invoked program is retained but its arguments are not.
+        **Scoped to the writer (T3.6 decision, 2026-09-08):** this phase ships no Bash adapter, so
+        nothing records Bash calls and the criterion is vacuously satisfied in production. The
+        guarantee itself is implemented and tested in `logwrite.sh`'s reduce helper, so a future
+        Bash adapter inherits argument-stripping on the day it is written rather than having to
+        add it. Stated here because the criterion otherwise reads as a promise that command lines
+        ARE being recorded, with arguments stripped — and nothing records them at all.
   - [ ] Given a user has not opted into detail, When any entry is written, Then it contains no file
         contents, no configured hook command strings, and no prompt or response text.
   - [ ] Given detail mode is enabled, When entries are written, Then the additional fields appear —
@@ -317,6 +323,11 @@ guessing, which is the failure mode this whole spec exists to eliminate.
   registration for the duration of one investigation — never left in place switched off.
 - Restructuring the memory bank. This spec produces the evidence; #147 makes that decision.
 - Recording prompt or response text.
+- Recording Bash tool calls. **Added by the T3.6 decision, 2026-09-08.** Feature 3's second
+  acceptance criterion describes how such a call would be redacted, and the writer implements that
+  redaction, but no adapter records Bash calls and none is registered. This bullet exists because
+  the omission was previously invisible: the criterion was present, the Won't-Have list was silent,
+  and the two together read as a shipped feature. It is not one.
 - Shipping the capability to plugin consumers in this phase. It stays repo-local configuration until
   it has answered a real question here; see Open Questions.
 
