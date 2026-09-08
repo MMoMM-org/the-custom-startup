@@ -37,6 +37,23 @@ phase: 4
 Turns the pieces into something a person invokes, puts it into the target repositories, and proves
 the whole path end to end.
 
+**Migration of THIS repository — added 2026-09-08 by maintainer ruling.** Before the collection
+period starts, this repository's hand-made registration must be migrated to the standard mechanism.
+Its current state, measured rather than assumed:
+
+    file:   .claude/settings.json          (NOT settings.local.json, which holds no hooks here)
+    env:    CLAUDE_OBSERVABILITY_ENABLED=1
+    hooks:  InstructionsLoaded -> $CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/log_instructions.sh
+            PreToolUse         -> $CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/log_skill.sh
+            SubagentStart      -> $CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/log_agent.sh
+
+Neither the file nor the command namespace matches what ADR-1 and ADR-5 expect, so the old entries
+must come out as the new ones go in — otherwise this repository records twice, and it is the one
+repository whose data the collection period depends on. Sequence it so recording is never
+simultaneously double and never silently off: remove the legacy entries and install the standard
+registration in the same operation, then confirm with the `status` verb before trusting the records.
+Phase 2's detection classifies this legacy shape distinctly for exactly this reason.
+
 - [ ] **T4.1 The setup command** `[activity: backend-api]`
 
   **Note added 2026-09-08 while phase 1 shipped, so this is not rediscovered here.** The drift

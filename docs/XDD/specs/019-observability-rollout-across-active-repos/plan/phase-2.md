@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: The registration editor"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 2
 ---
@@ -69,6 +69,52 @@ anything the maintainer owns.
      repository itself**, whose recording was configured by hand before this command existed and
      which must be recognised as already configured rather than duplicated — a PRD edge case that
      had no fixture and no criterion until an audit found it.
+
+     **Pinned 2026-09-08 after a TDD gate blocked this task. Three corrections.**
+
+     - **The shipping-repository fixture must be built from this repository's ACTUAL state, which
+       was measured rather than assumed, and which the design as written does not recognise.**
+       Verified today:
+
+           file:   .claude/settings.json          (NOT settings.local.json; untracked here)
+           env:    CLAUDE_OBSERVABILITY_ENABLED=1
+           hooks:  InstructionsLoaded -> $CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/log_instructions.sh
+                   PreToolUse         -> $CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/log_skill.sh
+                   SubagentStart      -> $CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/log_agent.sh
+
+       This collides with two ADRs at once. ADR-1 has the command write to
+       `settings.local.json`, and this repository's `settings.local.json` holds no hooks at all.
+       ADR-5 proves ownership by the `$HOME/.claude/observability/` path namespace, and these
+       commands point at `$CLAUDE_PROJECT_DIR/plugins/...`. So detection reading only
+       `settings.local.json` calls this repository **clean** and would add a second registration
+       beside a live one — double recording in the very repository the collection period depends
+       on — while detection that reads `settings.json` calls our own entries **foreign**.
+
+     - **Maintainer ruling: this repository migrates to the standard mechanism.** The hand-made
+       entries come out and setup installs the normal registration against the `$HOME` bundle.
+       The migration itself runs in phase 4, since it needs the setup command to exist.
+       **That does not make this fixture optional — it makes it the state the migration passes
+       through.** Setup will meet a repository in the legacy shape, so detection must handle it
+       safely or the migration is exactly where the duplicate gets created.
+
+     - Two fixtures are missing from the list above and must be added:
+       **not-a-repository** (a plain directory with no `.git/` — T2.2's first requirement, and
+       distinct from a repository whose settings file is absent), and **ignored-file-but-not-backup**
+       (a target whose `.gitignore` names `settings.local.json` explicitly rather than ignoring
+       `.claude/` wholesale, so the `.bak` path is NOT ignored). T2.5 names that hazard precisely and
+       the matrix had no fixture in which it can occur, so the assertion it calls for could not have
+       been written.
+
+     - **The sanity-test pass criterion is too loose as referenced.** `skill_git_setup.bats:251-299`
+       passes on directory existence alone, which is exactly the silent weakening this step's own
+       wording warns against. Each sanity test must assert the fixture's *observable characteristic*
+       — e.g. `foreign-only` has at least one foreign entry AND zero entries in our namespace;
+       repository fixtures additionally prove `git -C <repo> log` succeeds, so a `git init` that
+       failed and leaked to the parent is caught here rather than downstream.
+       **The sanity tests must not call T2.2's detection script** to validate a fixture: T2.1 runs
+       first precisely so nothing in it depends on a later task, and reaching for `detect.sh` here
+       would reintroduce the backwards dependency this ordering exists to remove. Assert the file
+       contents directly.
   4. Validate: each fixture builds and its sanity test passes.
   5. Success: every later task in this phase has the target states it needs `[ref: SDD/Quality Requirements]`
 
@@ -84,6 +130,15 @@ anything the maintainer owns.
      version control is `abort`** — this is the check that protects a third party, so it is tested
      first and independently; and detection writes nothing at all, asserted against a
      write-protected target.
+     **Pinned 2026-09-08:** detection must also classify the **legacy in-repository shape** — our
+     scripts registered under `<repo>/plugins/tcs-helper/scripts/observability/` rather than the
+     `$HOME/.claude/observability/` namespace, in `settings.json` rather than `settings.local.json`.
+     That is this repository's real, hand-made state (see T2.1). It must be reported distinctly:
+     **never `clean`**, because that would let setup add a duplicate registration beside a live one,
+     and never a bare `conflict` naming our own scripts as a third party's. This is the state the
+     maintainer-approved migration passes through, so getting it wrong is how the migration creates
+     the double-recording it is meant to avoid.
+
   3. Implement: `plugins/tcs-helper/skills/observability-setup/lib/detect.sh`
   4. Validate: `bats` green over the scenario fixtures from T2.1.
   5. Success: `[ref: SDD/SDD-AC-1, SDD-AC-4, SDD-AC-6]` — AC-1's detection half; its command-level half is asserted in T4.1
