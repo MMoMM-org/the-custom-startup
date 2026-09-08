@@ -51,7 +51,7 @@ spec: 019
 | User Journey Maps | COMPLETE | Four journeys including uninstall and the foreign-entry error path |
 | Feature Requirements | COMPLETE | Four Must, one Should, one Could, five Won't |
 | Detailed Feature Specifications | COMPLETE | Setup and removal, the highest-risk feature |
-| Success Metrics | COMPLETE | Decidability of #147, with a stated collection period |
+| Success Metrics | COMPLETE | Decidability of #153's two questions, with a stated collection period. Corrected 2026-09-08: an earlier version attributed all of this to #147, which asks something narrower |
 | Constraints and Assumptions | COMPLETE | |
 | Risks and Mitigations | COMPLETE | |
 | Open Questions | COMPLETE | Three decided at review, one carried |
@@ -83,7 +83,21 @@ skills in one plugin are structurally unreachable — nested too deep to be disc
 they cannot fire regardless of usage.
 
 Everything else is waiting on data that cannot be gathered from where the recorder currently sits.
-Issue #147 asks which memory files and skills are worth keeping. Today that question is answered by
+**Which issues this actually serves — corrected 2026-09-08 after an alignment audit.** An earlier
+version of this document said "#147 asks which memory files and skills are worth keeping". It does
+not, and the error mattered because the success criterion was built on it.
+
+- **#153** is this work's own issue and owns both halves of the report. It states the dependency
+  precisely: "#147 cannot be decided without a denominator."
+- **#147** audits which user auto-memory entries belong where subagents can see them. Its deciding
+  question is *must this fire for every agent on every run* — not how often something was used. It
+  needs the **instruction-load** half of the report as its denominator, and nothing more.
+- **#155** owns the 15 structurally unreachable skills, which the coverage report names rather
+  than fixes.
+
+So the skill-and-agent firing coverage this spec is largely about serves **#153 and #155**. Only
+the instruction-load half reaches #147, and only as an input to a decision made on other grounds.
+Today the underlying question is answered by
 reasoning about the loader, which spec-018 documented as having been measurably wrong three separate
 times in the session that produced it.
 
@@ -351,7 +365,10 @@ the first day and would leave this feature where spec-018 left it: correct, and 
 - **Continuity:** no target silently stops recording without it being noticed. Target: the liveness
   check identifies any target whose newest record is older than the collection period's start.
 - **Decision quality:** the resulting evidence is sufficient to classify each shipped skill and
-  agent as keep, drop or rework, and #147 can be closed with a decision rather than an estimate.
+  agent as keep, drop or rework — closing **#153**'s coverage question and giving **#155** the
+  usage half of its case. Separately, the instruction-load half supplies the denominator **#147**
+  says it cannot be decided without; #147 itself is then decided on its own criterion, which is
+  whether an entry must reach every agent on every run, not how often it was loaded.
 - **Invisibility:** the Subject reports no perceptible change to ordinary sessions.
 
 ### Tracking Requirements
