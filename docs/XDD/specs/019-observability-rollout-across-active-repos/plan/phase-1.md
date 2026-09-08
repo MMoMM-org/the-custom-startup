@@ -64,8 +64,10 @@ an installed copy has fallen behind.
      the test that actually exercises the `${BASH_SOURCE[0]}` self-location, and it is the one that
      would catch a bundle that copies the adapters but forgets the writer they source); installing
      twice at the same version changes nothing; installing over an older version replaces the
-     scripts and updates the marker; the marker is written atomically, so an interrupted install
-     never leaves a marker claiming a version that is not on disk.
+     scripts and updates the marker; the marker is written atomically — run the installer with the
+     marker write replaced by a failing stub and assert no marker claims a version that is not on
+     disk. Naming the injection point matters: the same property stated abstractly in an earlier
+     draft would have been tested three different ways by three developers.
   3. Implement: `plugins/tcs-helper/skills/observability-setup/lib/bundle_install.sh`
   4. Validate: `bats` green, including a case that executes a copied adapter end-to-end and reads
      back the record it wrote.
@@ -102,6 +104,10 @@ an installed copy has fallen behind.
 - [ ] **T1.5 Phase Validation** `[activity: validate]`
 
   - Run the full suites: `pytest -q` and `bats plugins/*/tests/bats`.
+  - **Run the new bats suite under `/bin/bash` explicitly** — CON-1 requires bash 3.2 and this
+    repository has no `BASH_VERSINFO` guard anywhere; the `macos-latest` CI leg is the only gate,
+    and its two failure modes (`\s`/`\b` in `[[ =~ ]]`, bounded `^.{m,n}$`) match nothing
+    *silently* rather than erroring, so an unchecked CON-1 fails open.
   - Verify a copied adapter, run from `$HOME/.claude/observability/`, writes a record readable by
     `report.py`.
   - Confirm no file in this phase writes to any target repository — phase 1 touches only this

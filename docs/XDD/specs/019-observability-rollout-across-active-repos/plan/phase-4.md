@@ -56,8 +56,10 @@ the whole path end to end.
      - **Drift surfaces through `status`.** T1.3 proves the comparator is correct; it does not
        prove the comparator is wired into the verb a person actually runs. Assert that an installed
        bundle behind the marker shows drift in `status` output.
-     - **A target that is not a repository is refused with the reason named**, which is the
-       command-level half of a criterion whose detection half lives in T2.2.
+     - **A target that is not a repository is refused with the reason named, and exits 0.** The
+       exit status is the sibling of the foreign-entry case above and was missing for the same
+       reason: both are *normal* outcomes that must not read as failures to anything checking
+       status codes. This is the command-level half of a criterion whose detection half is T2.2.
      - **`status` distinguishes three states, not two**: configured and recording, configured but
        silent, and *not configured at all*. The third needs reading the target's settings, which
        no reporting task does — the report sees records, not registrations, so a target where
@@ -76,10 +78,19 @@ the whole path end to end.
   1. Prime: read the locations config format `[ref: SDD/ADR-6]`. **The real repository names and
      paths belong only in that gitignored file — never in a commit message, a test fixture, or any
      document in this spec.**
-  2. Test: this task's verification is observational rather than unit-level. For each target, after
-     setup: the write path is confirmed gitignored; the target's tracked files show no change
-     (`git status` clean); a session in that target produces records; the record's `repo` field
-     matches what the config labels.
+  2. Test: this task's verification is observational rather than unit-level.
+
+     **Before running the command against a target**, confirm `git check-ignore` succeeds for
+     **both** the settings path and the backup path, and skip any target where either fails. The
+     ordering matters and an audit caught it: T2.5 asserts the backup's ignore status against
+     *fixtures*, which are built to spec and always pass, while T4.3 asserts it against *real*
+     targets — but by then this task has already written to them. A target that ignores
+     `settings.local.json` by name rather than `.claude/` wholesale would receive a committable
+     `.bak` and be told about it afterwards.
+
+     After setup, for each target: the target's tracked files show no change (`git status`
+     clean); a session in that target produces records; the record's `repo` field matches what
+     the config labels.
   3. Implement: run the command against each target; add each to the locations config.
   4. Validate: `report.py` with no arguments reads every configured source and reports each
      separately. Before this step, **remove the three test-fixture record directories** identified
@@ -87,7 +98,24 @@ the whole path end to end.
      records under names a pytest fixture produced.
   5. Success: all intended targets recording, verifiable individually `[ref: PRD/Success Metrics]`
 
-- [ ] **T4.3 End-to-end validation and the collection gate** `[activity: validate]`
+- [ ] **T4.3 The documentation the risk register already promised** `[activity: technical-writing]`
+
+  The PRD mitigates the per-event-cost risk with "keep the measured cost visible in the
+  documentation", and no other task in this plan writes or updates any documentation. A
+  mitigation nothing owns is not a mitigation.
+
+  1. Prime: read the scripts README's existing structure and the CON-5 measurement
+     `[ref: SDD/Constraints — CON-5]`.
+  2. Test: a reader who has not seen this spec can answer three questions from the docs alone —
+     what recording costs per event, where the record for their repository lives, and how to turn
+     it off.
+  3. Implement: extend `plugins/tcs-helper/scripts/observability/README.md` with the 3-5 ms
+     figure and its platform caveat, the two record location shapes, the setup and removal verbs,
+     and the locations config's format.
+  4. Validate: the three questions are answerable by reading, not by inference.
+  5. Success: `[ref: PRD/Risks and Mitigations]` — the documentation mitigation has an owner
+
+- [ ] **T4.4 End-to-end validation and the collection gate** `[activity: validate]`
 
   1. Run the full suites: `pytest -q` and `bats plugins/*/tests/bats`.
   2. Verify every SDD acceptance criterion has passing evidence, and that each one's evidence is a

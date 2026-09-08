@@ -90,8 +90,11 @@ are one.
      how a human tells two sources apart; the config is confirmed gitignored by a test, because that
      property is a requirement rather than a convenience.
   3. Implement: `scripts/observability/sources.py`, and the example config documented in the SDD.
-  4. Validate: `pytest -q` green.
-  5. Success: `[ref: SDD/SDD-AC-16, SDD-AC-17, SDD-AC-18, SDD-AC-25]`; `[ref: PRD/F3]`
+  4. Validate: `pytest -q` green; **assert `sources.py` imports nothing outside the standard
+     library** — CON-3 is otherwise honoured by intention only, and a future `import tomli` or
+     `import yaml` would pass every other gate in this plan.
+  5. Success: `[ref: SDD/SDD-AC-16, SDD-AC-17, SDD-AC-18, SDD-AC-25]`; `[ref: PRD/F3]`;
+     `[ref: SDD/Constraints — CON-3]`
 
 - [ ] **T3.3 Per-source rendering, and the honesty rules** `[activity: backend-api]`
 

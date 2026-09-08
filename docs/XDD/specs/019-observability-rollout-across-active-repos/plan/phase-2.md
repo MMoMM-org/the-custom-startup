@@ -65,7 +65,10 @@ anything the maintainer owns.
      broken fixture weakens every test that uses it silently, rather than failing loudly.
   3. Implement: the scenario set the rest of the phase needs — settings file **absent / empty
      object / foreign-only / foreign plus ours-current / foreign plus ours-older / malformed /
-     non-ASCII / same event names already populated / write path not gitignored**.
+     non-ASCII / same event names already populated / write path not gitignored / **the shipping
+     repository itself**, whose recording was configured by hand before this command existed and
+     which must be recognised as already configured rather than duplicated — a PRD edge case that
+     had no fixture and no criterion until an audit found it.
   4. Validate: each fixture builds and its sanity test passes.
   5. Success: every later task in this phase has the target states it needs `[ref: SDD/Quality Requirements]`
 
@@ -125,7 +128,9 @@ anything the maintainer owns.
      outcomes that all leave a correct file behind, so a caller cannot tell them apart otherwise.
   3. Implement: extend `registration.py` with removal and update.
   4. Validate: `pytest -q` green; a round-trip test asserts install → remove leaves the file
-     byte-identical to its pre-install content.
+     byte-identical to its pre-install content **and leaves no backup behind** — the round trip
+     alone would pass with a stray `.bak` sitting beside it, which is the state T2.5's retention
+     rule says must not persist.
   5. Success: `[ref: SDD/SDD-AC-7, SDD-AC-8, SDD-AC-12, SDD-AC-13, SDD-AC-14]`; `[ref: PRD/F2]`
 
 - [ ] **T2.5 Durability: backup, atomic replace, and the lock** `[activity: backend-api]`
@@ -138,18 +143,26 @@ anything the maintainer owns.
      `:108-118` for why release must accept a dead owner — the skill acquires and releases in
      separate processes, so a `pid == $$` check alone leaks the lock after every run
      `[ref: SDD/ADR-4]`.
-  2. Test: **the backup lands at a named path** — `<settings file>.tcs-observability.bak`, beside
+  2. Test — **each of these names its mechanism**, because an audit found the first draft stated
+     properties with no observable way to check them, and three developers would have reached for
+     three different techniques:
+     **the backup lands at a named path** — `<settings file>.tcs-observability.bak`, beside
      the file it backs up — and that path's ignore status is asserted, not assumed. A target that
      ignores `settings.local.json` *by name* rather than ignoring `.claude/` wholesale would leave
      a `.bak` un-ignored, and T4.3 asserts every path this feature writes is ignored. Getting this
      wrong drops a committable file into a repository we do not own, which is the exact harm ADR-1
      exists to prevent. Retention: the backup is overwritten by the next write and removed by
      removal, so at most one exists per target.
-     The real file is never opened for truncation — asserted by checking that the written path
-     differs from the final path until the rename; a backup exists after a write and matches the
-     pre-write content; an interrupted write leaves the original intact; two concurrent runs
-     serialize and neither sees a partial file; a live foreign lock is never force-removed; a stale
-     lock (dead PID, or older than the TTL) is reclaimed.
+     The real file is never opened for truncation — wrap `builtins.open`, assert the final path is
+     never opened in a truncating mode, and assert the final path's `st_ino` changes across the
+     write (a rename replaces the inode; an in-place rewrite does not); a backup exists after a write and matches the
+     pre-write content; an interrupted write leaves the original intact — patch the rename to
+     raise once the temporary file exists, then assert the original's and the backup's bytes;
+     two concurrent runs serialize and neither sees a partial file; **a contended lock behaves as
+     the SDD says** — the second run either waits and then succeeds, or reports and exits, within
+     a bounded time, and the test asserts which of the two it is rather than accepting either;
+     a live foreign lock is never force-removed; a stale lock (dead PID, or older than the TTL)
+     is reclaimed.
   3. Implement: wrap the merge in backup → temp-write → rename, under the lock.
   4. Validate: `pytest -q` and `bats` green.
   5. Success: `[ref: SDD/SDD-AC-9, SDD-AC-11]`; `[ref: SDD/Quality Requirements]`
