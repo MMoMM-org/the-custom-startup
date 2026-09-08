@@ -193,6 +193,14 @@ anything the maintainer owns.
        An abort there would force the migration to be a manual two-step on the one repository most
        needing a clean one.
 
+     - **One labelled line per target, and the write-path check is a GATE that short-circuits.**
+       If the write path is not ignored by version control, emit `ABORT`, exit 2, and stop —
+       **without reading the settings content at all**. Only a target that passes that gate is
+       classified. This is what the plan's "tested first and independently" means operationally, and
+       it removes the ambiguity a multi-line report would create: a target can never come back as
+       both `ABORT` and `OURS-OLD`, so T4.1 never has to decide which of two findings to show a user
+       about a repository they do not own.
+
      - **Every fixture gets a classification, so none is left to an implementer's guess:**
        `absent` and `empty-object` -> CLEAN; `foreign-only` and `same-event-names-populated` ->
        CONFLICT (the latter is foreign content that merely happens to sit under our event names —
