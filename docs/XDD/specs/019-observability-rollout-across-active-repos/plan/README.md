@@ -41,7 +41,7 @@ version: "1.0"
 | status | COMPLETE |
 | totalTasks | 18 |
 | parallelTasks | 2 |
-| specReferences | 71 |
+| specReferences | 73 |
 | clarificationsRemaining | 0 |
 
 ### PhaseStatus
@@ -188,21 +188,27 @@ sides, so the two can run concurrently without a merge conflict or an ordering a
 
 ### Coverage map — SDD acceptance criteria to tasks
 
-| SDD-AC | Task |
-|---|---|
-| 15 | T1.2, T1.3 |
-| 8 | T1.2, T2.3 |
-| 1, 2, 3, 5 | T2.2 |
-| 4 | T2.1 |
-| 6 | T2.1 |
-| 7 | T2.3 |
-| 9, 10, 11 | T2.4 |
-| 12, 13, 14 | T2.3 |
-| 16, 17, 18 | T3.2 |
-| 19, 20 | T3.3 |
-| 21 | T3.4 |
-| 22, 23 | T3.4 |
-| 24 | T3.5 |
+Corrected 2026-09-08 after a completeness audit found five rows naming a task whose body did not
+exercise the criterion. A map is only worth having if its rows are true, so the audit's corrections
+are applied here and the reasons kept, rather than the rows quietly rewritten.
+
+| SDD-AC | Task | Note |
+|---|---|---|
+| 1 | T2.1, T4.1 | Was mapped to T2.2, whose tests are all JSON merge behaviour and never mention repository detection |
+| 2, 3, 5 | T2.2 | |
+| 4 | T2.1, T4.1 | Detection classifies; **T4.1 asserts the command's own exit 0**, which is the half nothing tested |
+| 6 | T2.1 | |
+| 7 | T2.3 | Now includes the "already configured" report string, not only the no-op |
+| 8 | T1.2, T2.3 | T2.3 now asserts the update-versus-install wording, not only the mechanics |
+| 9, 11 | T2.4 | |
+| 10 | T2.2 | Was mapped to T2.4, which tests truncation, backup, interruption and the lock — no encoding case |
+| 12, 13, 14 | T2.3 | |
+| 15 | T1.3, T4.1 | T1.3 tests the comparator; **T4.1 asserts drift actually surfaces through `status`**, which the comparator being correct does not guarantee |
+| 16, 17, 18 | T3.2 | |
+| 19 | T3.1 | Was mapped to T3.3; T3.1 is the task that keys on `(repo, path)` and already cited AC-19 itself |
+| 20 | T3.3 | |
+| 21, 22, 23 | T3.4 | |
+| 24 | T3.5 | |
 
 ### Coverage map — PRD features to phases
 

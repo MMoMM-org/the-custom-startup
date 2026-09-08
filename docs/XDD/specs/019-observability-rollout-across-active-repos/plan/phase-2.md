@@ -65,7 +65,7 @@ anything the maintainer owns.
      write-protected target.
   3. Implement: `plugins/tcs-helper/skills/observability-setup/lib/detect.sh`
   4. Validate: `bats` green over the scenario fixtures from T2.5.
-  5. Success: `[ref: SDD/SDD-AC-4]`; `[ref: SDD/SDD-AC-6]`
+  5. Success: `[ref: SDD/SDD-AC-1, SDD-AC-4, SDD-AC-6]` — AC-1's detection half; its command-level half is asserted in T4.1
 
 - [ ] **T2.2 The merge: add the registration without disturbing anything else**
       `[activity: backend-api]`
@@ -76,7 +76,8 @@ anything the maintainer owns.
   2. Test: unrelated top-level keys survive byte-identically; a foreign hooks block survives,
      including foreign entries under the *same* event name; non-ASCII values in foreign content are
      unchanged (`ensure_ascii=False` — this repository has already been bitten by the default once);
-     an unparseable file causes no write and a diagnosis rather than a traceback; an absent file is
+     an unparseable file causes no write, **exits non-zero**, and produces a diagnosis rather than a
+     traceback — the exit status is asserted, not just the absence of a write; an absent file is
      created containing only our entries; the three hook entries and the `env` switch are all
      present after a successful merge; running twice changes nothing.
   3. Implement: `plugins/tcs-helper/skills/observability-setup/lib/registration.py`, with a
@@ -84,7 +85,7 @@ anything the maintainer owns.
      such an override and nothing tests it; do not repeat that.)*
   4. Validate: `pytest -q` green; every assertion compares the file's full content, not just our
      keys, because the risk being tested is what happens to everything else.
-  5. Success: `[ref: SDD/SDD-AC-1, SDD-AC-2, SDD-AC-3, SDD-AC-5]`; `[ref: PRD/F1]`
+  5. Success: `[ref: SDD/SDD-AC-2, SDD-AC-3, SDD-AC-5, SDD-AC-10]`; `[ref: PRD/F1]`
 
 - [ ] **T2.3 Removal, and the update path ownership makes possible** `[activity: backend-api]`
 
@@ -95,10 +96,15 @@ anything the maintainer owns.
      exits 0; **removal never deletes records** — asserted by counting record files before and
      after; an entry written by an older bundle version is recognised and removed, not orphaned;
      re-running setup after a version change updates in place rather than appending a duplicate.
+     Two **reporting** clauses, which the mechanics alone do not satisfy and which an audit found
+     untested: re-running setup at the *same* version reports "already configured" — the message,
+     not merely the absence of a change; and re-running after a *version change* reports an update
+     rather than an install. Both are the only externally visible difference between three
+     outcomes that all leave a correct file behind, so a caller cannot tell them apart otherwise.
   3. Implement: extend `registration.py` with removal and update.
   4. Validate: `pytest -q` green; a round-trip test asserts install → remove leaves the file
      byte-identical to its pre-install content.
-  5. Success: `[ref: SDD/SDD-AC-7, SDD-AC-12, SDD-AC-13, SDD-AC-14]`; `[ref: PRD/F2]`
+  5. Success: `[ref: SDD/SDD-AC-7, SDD-AC-8, SDD-AC-12, SDD-AC-13, SDD-AC-14]`; `[ref: PRD/F2]`
 
 - [ ] **T2.4 Durability: backup, atomic replace, and the lock** `[activity: backend-api]`
 
@@ -114,7 +120,7 @@ anything the maintainer owns.
      lock (dead PID, or older than the TTL) is reclaimed.
   3. Implement: wrap the merge in backup → temp-write → rename, under the lock.
   4. Validate: `pytest -q` and `bats` green.
-  5. Success: `[ref: SDD/SDD-AC-9, SDD-AC-10, SDD-AC-11]`; `[ref: SDD/Quality Requirements]`
+  5. Success: `[ref: SDD/SDD-AC-9, SDD-AC-11]`; `[ref: SDD/Quality Requirements]`
 
 - [ ] **T2.5 Phase Validation and the fixture matrix** `[activity: validate]`
 

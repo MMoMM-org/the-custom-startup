@@ -83,7 +83,7 @@ an installed copy has fallen behind.
   3. Implement: reuse the existing comparator; add only what is specific to this bundle.
   4. Validate: `bats` green; the check is read-only, asserted by running it against a
      write-protected directory.
-  5. Success: `[ref: SDD/SDD-AC-15]`; `[ref: PRD/F5]`
+  5. Success: `[ref: SDD/SDD-AC-15]` — the comparator half only; that drift reaches the `status` verb is asserted in T4.1; `[ref: PRD/F5]`
 
 - [ ] **T1.4 The CI gate on the maintainer contract** `[activity: devops]` `[parallel: true]`
 

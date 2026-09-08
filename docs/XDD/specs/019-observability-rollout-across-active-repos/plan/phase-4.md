@@ -46,12 +46,26 @@ the whole path end to end.
      confirmation leaves the target untouched; the summary names how to undo what was done; the
      first run against a clean target does **not** report itself as a foreign install; a target that
      is not a repository is refused before anything else runs.
+
+     Three assertions an audit found missing everywhere, each about a *translation* the command
+     performs rather than about a library's behaviour:
+     - **The foreign-entry case exits 0.** Detection returns severity 3 for a conflict, but the
+       command must exit 0 — foreign content is a stop condition, not a failure. Nothing else in
+       the plan asserts that mapping from detect's 3 to the command's 0, and getting it wrong turns
+       a normal outcome into a failed one for anything that checks status codes.
+     - **Drift surfaces through `status`.** T1.3 proves the comparator is correct; it does not
+       prove the comparator is wired into the verb a person actually runs. Assert that an installed
+       bundle behind the marker shows drift in `status` output.
+     - **A target that is not a repository is refused with the reason named**, which is the
+       command-level half of a criterion whose detection half lives in T2.1.
   3. Implement: `plugins/tcs-helper/skills/observability-setup/SKILL.md` plus the wiring of the
      phase-1 and phase-2 libraries. Install, remove and status are one command with three verbs, not
      three commands.
   4. Validate: `bats` green; the command is exercised through its real entry point, not by calling
      its libraries directly.
-  5. Success: `[ref: PRD/F1]`, `[ref: PRD/F2]`, `[ref: PRD/User Journey Maps]`
+  5. Success: `[ref: PRD/F1]`, `[ref: PRD/F2]`, `[ref: PRD/User Journey Maps]`;
+     `[ref: SDD/SDD-AC-1]` (command-level refusal), `[ref: SDD/SDD-AC-4]` (exit 0 on foreign
+     entries), `[ref: SDD/SDD-AC-15]` (drift reaches `status`)
 
 - [ ] **T4.2 Rollout to the target repositories** `[activity: validate]`
 
