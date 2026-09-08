@@ -1160,7 +1160,7 @@ this phase; recorded as Technical Debt, below.
 
 | Term | Definition | Context |
 |---|---|---|
-| `CLAUDE_OBSERVABILITY_ENABLED` | Switch that turns recording on | Unset by default; nothing is written and no directory is created |
+| `CLAUDE_OBSERVABILITY_ENABLED` | Switch that turns recording on | Unset by default; nothing is written and no directory is created. **Set it in a `.claude/settings.json` `env` block, not at launch** — measured 2026-09-08 to reach harness-spawned hooks and to apply without a restart. A launch-time variable is a switch nobody remembers, and the question this feature exists to answer needs weeks of ordinary sessions, not one deliberate one |
 | `CLAUDE_OBSERVABILITY_DETAIL` | Switch that adds sensitive fields | Unset by default; requires the first switch to have any effect |
 | `CLAUDE_OBSERVABILITY_DATA` | Data-directory override | Set by tests to redirect the record; mirrors `CLAUDE_PLUGIN_DATA`'s role |
 | `kind` | Discriminator on every record | `instruction` \| `skill` \| `agent` \| `hook` \| `state` |

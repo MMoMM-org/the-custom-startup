@@ -9,9 +9,37 @@ It writes nothing anywhere unless you turn it on.
 
 ## The two switches
 
-Both are environment variables, both default off, and you set them in the environment the Claude
-Code session (or the hook process) runs in — for example in your shell profile, or wherever you
-already set `CLAUDE_PROJECT_DIR` and similar.
+Both are environment variables and both default off. Where you set them decides whether this
+feature is usable at all, so read the next section before the table.
+
+### Where to put the switch
+
+**Put it in the `env` block of a `.claude/settings.json`.** That file is per repository and
+gitignored, so the choice is yours alone and cannot travel to anyone else:
+
+```json
+{
+  "env": {
+    "CLAUDE_OBSERVABILITY_ENABLED": "1"
+  }
+}
+```
+
+**Verified, not assumed (2026-09-08):** a value set this way does reach a hook the harness spawns —
+checked by pointing `CLAUDE_OBSERVABILITY_DATA` at a scratch directory from `settings.json` alone
+and confirming that the next instruction load wrote its record there instead of the usual path.
+The change was also picked up in the running session, without a restart.
+
+The alternative — exporting it in your shell profile, or typing
+`CLAUDE_OBSERVABILITY_ENABLED=1 claude` at launch — works too, and is the right choice for a single
+deliberate measurement session. It is the wrong choice for the question this feature exists to
+answer. "Which of our instruction files and skills are actually used?" needs weeks of ordinary
+sessions, and a switch you have to remember at every launch is a switch that is off. The
+`settings.json` route is set once and then simply true.
+
+Neither route weakens the safety property. Recording is still off until you take an explicit
+action, and that action is editing your own configuration file — nothing a plugin update can do
+for you.
 
 | Variable | Effect |
 |---|---|
