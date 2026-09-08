@@ -97,10 +97,23 @@ the whole path end to end.
   3. Confirm the safety property directly rather than by inference: in each target, assert that
      `git check-ignore` succeeds for every path this feature wrote, and that `git status` reports
      nothing.
-  4. **Record the collection period's end date in the spec README.** This is the PRD's one carried
+  4. **Check the two constraints nothing else checks.** A self-audit found CON-1 and CON-3 stated in
+     the SDD and enforced by no task — the kind of constraint that is honoured by intention until
+     the day it is not.
+     - **CON-1 (bash 3.2)**: the mechanism is the `macos-latest` leg of the bats matrix in
+       `.github/workflows/tests.yml:82`, since macOS ships bash 3.2 as `/bin/bash`. Confirm the new
+       suite actually runs on that leg — a suite that only runs on the Linux leg is tested under
+       bash 5 and proves nothing about the constraint. There is no dedicated `BASH_VERSINFO` guard
+       anywhere in this repository; the runner *is* the guard, which is worth knowing before relying
+       on it.
+     - **CON-3 (no new runtime dependency)**: assert that `requirements-dev.txt` is unchanged and
+       that the new Python modules import nothing outside the standard library. `tomllib` is stdlib
+       on the local interpreter, which is what makes the config format free — but that is a property
+       of the interpreter version, so assert it rather than assume it.
+  5. **Record the collection period's end date in the spec README.** This is the PRD's one carried
      open question. Without a date, "evaluate later" is the failure mode this spec exists to
      correct, and the mode spec-018 already fell into once.
-  5. Success: every SDD acceptance criterion has passing evidence; the collection period has a start
+  6. Success: every SDD acceptance criterion has passing evidence; the collection period has a start
      and a named end `[ref: PRD/Success Metrics]`
 
 ---

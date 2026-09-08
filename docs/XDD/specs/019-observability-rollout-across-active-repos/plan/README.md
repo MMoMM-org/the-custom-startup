@@ -196,14 +196,14 @@ are applied here and the reasons kept, rather than the rows quietly rewritten.
 
 | SDD-AC | Task | Note |
 |---|---|---|
-| 1 | T2.3, T4.1 | Was mapped to T2.4, whose tests are all JSON merge behaviour and never mention repository detection |
-| 2, 3, 5 | T2.4 | |
-| 4 | T2.3, T4.1 | Detection classifies; **T4.1 asserts the command's own exit 0**, which is the half nothing tested |
-| 6 | T2.3 | |
+| 1 | T2.4, T4.1 | Was mapped to T2.5, whose tests are all JSON merge behaviour and never mention repository detection |
+| 2, 3, 5 | T2.5 | |
+| 4 | T2.4, T4.1 | Detection classifies; **T4.1 asserts the command's own exit 0**, which is the half nothing tested |
+| 6 | T2.4 | |
 | 7 | T2.5 | Now includes the "already configured" report string, not only the no-op |
 | 8 | T1.2, T2.5 | T2.5 now asserts the update-versus-install wording, not only the mechanics |
 | 9, 11 | T2.5 | |
-| 10 | T2.4 | Was mapped to T2.5, which tests truncation, backup, interruption and the lock — no encoding case |
+| 10 | T2.5 | Was mapped to T2.5, which tests truncation, backup, interruption and the lock — no encoding case |
 | 12, 13, 14 | T2.5 | |
 | 15 | T1.3, T4.1 | T1.3 tests the comparator; **T4.1 asserts drift actually surfaces through `status`**, which the comparator being correct does not guarantee |
 | 16, 17, 18 | T3.2 | |
