@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-09-08 |
-| **Current Phase** | PRD |
+| **Current Phase** | SDD |
 | **Decomposition tier** | {{DECOMPOSITION_TIER}} |
 | **Last Updated** | 2026-09-08 |
 
@@ -14,7 +14,7 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | 26 acceptance criteria, 0 clarification markers, 1 open question carried (collection-period end date) |
-| solution.md | pending | |
+| solution.md | completed | 4 components, 8 ADRs all confirmed, 24 acceptance criteria |
 | plan/ | pending | |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
