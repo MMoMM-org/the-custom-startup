@@ -311,13 +311,23 @@ three adapters above write, and removed the same way (see "How to delete it").
 
 ### Caveats, stated plainly
 
-- **`session` is unverified.** The `session` field comes from the `$CLAUDE_CODE_SESSION_ID`
-  environment variable, not from the hook payload — the wrapper never reads the payload at all. Two
-  things about that variable are not yet confirmed: whether it reaches a hook the harness itself
-  spawns, and whether its value actually matches the payload's own `session_id`. Treat `session` on a
-  hook record as unverified until both are checked against a live session. When the variable is
-  absent, the field is left empty rather than filled with a guess, so a hook record may simply fail to
-  join to that session's other records — it does not silently join to the wrong one.
+- **`session` is verified (2026-09-08).** The `session` field comes from the
+  `$CLAUDE_CODE_SESSION_ID` environment variable, not from the hook payload — the wrapper never
+  reads the payload at all. This entry previously warned that two things about that variable were
+  unconfirmed: whether it reaches a hook the harness itself spawns, and whether its value matches
+  the payload's own `session_id`. Both are now confirmed, by one observation rather than by
+  argument. With the wrapper registered on `InstructionsLoaded`, a real hook run produced these two
+  lines at the same timestamp — the wrapped adapter's record, whose session comes from the payload,
+  and the wrapper's own, whose session comes from the variable:
+
+  ```
+  {"ts":"2026-09-08T07:59:22Z","kind":"instruction","session":"058f9767-…","path":"docs/CLAUDE.md",…}
+  {"ts":"2026-09-08T07:59:22Z","kind":"hook","session":"058f9767-…","hook_event":"InstructionsLoaded",…}
+  ```
+
+  One event, two independent sources, the same id. When the variable is absent the field is still
+  left empty rather than filled with a guess, so such a hook record simply fails to join to that
+  session's other records — it never silently joins to the wrong one.
 - **Overhead is two different numbers, and only one of them is specific to this wrapper.** The
   wrapper's own marginal cost — what it adds on top of running the real hook directly — was measured
   at roughly 0.85 ms on Linux (aarch64), against this feature's 1 ms budget. That is not the same

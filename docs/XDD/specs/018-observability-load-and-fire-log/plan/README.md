@@ -150,7 +150,7 @@ context), **Test** (red), **Implement** (green), **Validate** (refactor + verify
 
 - [x] [Phase 1: Writer foundation, and the attribution question](phase-1.md)
 - [x] [Phase 2: Adapters and registration](phase-2.md)
-- [ ] [Phase 3: Report, self-check and end-to-end validation](phase-3.md)
+- [x] [Phase 3: Report, self-check and end-to-end validation](phase-3.md)
 
 **Phase dependencies** — strictly linear at the phase level, with parallelism inside phase 2:
 

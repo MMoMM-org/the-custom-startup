@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Report, self-check and end-to-end validation"
-status: in_progress
+status: complete
 version: "1.0"
 phase: 3
 ---
@@ -177,7 +177,7 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   > recorded in the SDD's Quality Requirements. **The macOS measurement is still outstanding — it
   > is T3.6's overhead gate.**
 
-- [ ] **T3.6 End-to-end validation and the privacy gate** `[activity: validate]`
+- [x] **T3.6 End-to-end validation and the privacy gate** `[activity: validate]`
 
   1. Run the full suites: `pytest -q` and `bats tests/bats/`, plus the `tcs-git-helpers` bats suite.
   2. Work a normal session with recording enabled, then run the report and check that it answers the
@@ -448,3 +448,53 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   > holds with or without slack. Verified across eight consecutive suite runs: zero failures,
   > against four-in-five before. One green run would not have been evidence for an intermittent
   > failure, so it was not accepted as such.
+
+  > **2026-09-08, later the same session — T3.6 CLOSED. Both remaining criteria confirmed from the
+  > real harness path, and the planned relaunch turned out to be unnecessary.**
+  >
+  > **The handoff above was wrong about one thing, and it matters for the next person who wires a
+  > hook:** it assumed a changed hook registration cannot take effect mid-session, and planned a
+  > relaunch around that. Claude Code picked the changed `.claude/settings.json` up live. Three
+  > minutes after the wrapper was wired, an ordinary file read under `docs/` triggered a
+  > `nested_traversal` load of `docs/CLAUDE.md`, the `InstructionsLoaded` hook fired through the
+  > wrapper, and the gate answered itself:
+  >
+  > ```
+  > 07:59:22  kind:instruction  session:058f9767-…  docs/CLAUDE.md nested_traversal   <- from the PAYLOAD
+  > 07:59:22  kind:hook         session:058f9767-…  InstructionsLoaded ms:49 exit:0   <- from the ENV VAR
+  > ```
+  >
+  > **SDD-AC-17: CLOSED.** A `kind: hook` record produced by the real harness hook path rather than
+  > by a Bash-tool invocation — `ms: 49`, `exit: 0`, `scope_note: single` — and rendered by
+  > `report.py` as `InstructionsLoaded / (no matcher) (1 invocation(s)): 49 ms (exit 0)`. One
+  > duration attributed to the one invocation that produced it, which is the whole of what the
+  > criterion asks and the entire point of ADR-7.
+  >
+  > **SDD-AC-5's session caveat: CLOSED, both halves, by a single observation.** The two records
+  > above share a timestamp because they describe one event. The adapter's `session` comes from the
+  > payload; the wrapper's comes from `$CLAUDE_CODE_SESSION_ID`, which it must use because it may
+  > never read stdin. They are byte-identical. So the variable *does* reach a harness-spawned hook,
+  > and its value *does* equal the payload's `session_id`. Both were assumptions carried from T3.5,
+  > and neither was closeable by the wrapper's own tests — those set the variable themselves, which
+  > was the evidence map's first and most consequential finding.
+  >
+  > A second session id in the same log, `fe9bbf92-…` from 07:40:55, predates this session and is
+  > unrelated. It is incidentally a small piece of evidence that the record separates sessions
+  > correctly rather than pooling them.
+  >
+  > **Privacy gate: the matcher scan has now really run.** It was vacuous on the first pass because
+  > no `kind: hook` record existed to scan. With one present, `matcher` carries a single value —
+  > empty, which is correct for `InstructionsLoaded` — and no command string. The three greps stay
+  > at zero. The key set grew by the wrapper's five fields (`exit`, `hook_event`, `matcher`, `ms`,
+  > `scope_note`), each already enumerated in the scripts README's nine-field hook table.
+  >
+  > **The wrapper has been removed** from `.claude/settings.json`, per the PRD Won't-Have rule that
+  > no timing layer stays installed, switched off or not. Verified rather than assumed: no
+  > `timed-wrapper` reference remains anywhere in the file, and all three hooks point at their bare
+  > adapters.
+  >
+  > **The gate is reproducible**, which is the lesson step 5 drew from the T1.4 artifact loss:
+  > `gate-t36.sh`, in this spec directory, runs all of the above and reports which of the caveat's
+  > possible outcomes it observed — including the case where an empty `session` would itself have
+  > been the answer, in the other direction. It reports rather than asserts, because an exit status
+  > would have to misrepresent one of the two valid outcomes as a failure.

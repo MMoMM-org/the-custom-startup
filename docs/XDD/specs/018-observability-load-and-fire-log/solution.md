@@ -498,11 +498,18 @@ ENTITY: Event (NEW)                       # one JSON object per line
                             # wrapper must never read stdin — a hook's payload arrives there, and
                             # consuming it would hand every wrapped hook an empty payload. It is
                             # taken from `$CLAUDE_CODE_SESSION_ID` instead, which costs no fork and
-                            # is absent-safe. **UNVERIFIED**: that this variable reaches a
-                            # harness-spawned hook, and that its value equals the payload's
-                            # `session_id`, are both assumptions — T3.6 confirms them against a
-                            # live session. When the variable is absent the field is empty, and a
-                            # hook record simply does not join across kinds; it is never faked.
+                            # is absent-safe. **VERIFIED (T3.6, 2026-09-08)** — this was carried
+                            # as UNVERIFIED from T3.5 on two counts, and both are now closed by
+                            # one observation. With the wrapper registered on InstructionsLoaded,
+                            # a real harness-spawned hook wrote, at the SAME timestamp as the
+                            # adapter it wrapped:
+                            #   kind:instruction session:058f9767-… (from the PAYLOAD)
+                            #   kind:hook        session:058f9767-… (from the ENV VAR)
+                            # One event, both sources side by side, byte-identical. So the
+                            # variable does reach a harness-spawned hook, and its value does
+                            # equal the payload's `session_id`. When the variable is absent the
+                            # field is still left empty, and such a hook record simply does not
+                            # join across kinds; it is never faked.
     matcher:       string
     ms:            number   # WHOLE milliseconds, as an integer (e.g. "504"). CORRECTION
                             # (2026-09-07, #153): the wrapper originally wrote `time`'s raw
@@ -1023,7 +1030,7 @@ this phase; recorded as Technical Debt, below.
 | SDD-AC-2 | Given the switch is set, when a session starts, then one `kind: instruction` record exists per loaded file, each with `reason: session_start` | PRD F1 |
 | SDD-AC-3 | Given a rule with `globs`, when a matching file is read, then a record with `reason: path_glob_match` and a populated `trigger` exists | PRD F1 |
 | SDD-AC-4 | Given an imported instruction file, when it loads, then the record carries `reason: include` and a populated `parent` | PRD F1 |
-| SDD-AC-5 | Given records of several kinds, when they are read, then each parses as one JSON object and carries `ts`, `kind`, `session`, `repo` — with one stated exception: a `kind = hook` record's `session` is sourced from `$CLAUDE_CODE_SESSION_ID`, not the payload, and is empty when that variable is absent (see the record shape's session caveat; T3.5). **Half confirmed as of T3.6, 2026-09-08** — this row previously read "confirmed at T3.6", which a reader takes as done: it is not. The value half IS confirmed: `$CLAUDE_CODE_SESSION_ID` read in a live session was byte-identical to the `session_id` the three adapters extracted from their own payloads in that same session. The reach half is NOT: that run was spawned by the Bash tool, not by the harness as a hook, so whether the variable reaches a harness-spawned hook is still open, pending the wired-hook gate recorded in `plan/phase-3.md` | PRD F2 |
+| SDD-AC-5 | Given records of several kinds, when they are read, then each parses as one JSON object and carries `ts`, `kind`, `session`, `repo` — with one stated exception: a `kind = hook` record's `session` is sourced from `$CLAUDE_CODE_SESSION_ID`, not the payload, and is empty when that variable is absent (see the record shape's session caveat; T3.5). **CONFIRMED at T3.6, 2026-09-08, both halves.** With `timed-wrapper.sh` registered on `InstructionsLoaded`, one harness-spawned hook produced a `kind: hook` record and the `kind: instruction` record it wrapped at the same timestamp, carrying the same session id from two independent sources — the environment variable and the payload. So the variable reaches a harness-spawned hook, and its value equals the payload's. Reproducible via `gate-t36.sh` in this spec directory | PRD F2 |
 | SDD-AC-6 | Given a field over the length limit, when written, then it is shortened and `truncated: true` is set | PRD F2 |
 | SDD-AC-7 | Given the file exceeds 1024000 bytes, when the next record is written, then the chain rotates and no `.4` exists | PRD F2 |
 | SDD-AC-8 | Given detail mode off, when a Bash tool call is recorded, then the program name is present and no argument is. **Scoped to the writer (T3.6 decision, 2026-09-08).** This is a guarantee held by `logwrite.sh`'s reduce helper, proved at `observability-writer.bats:1271` and `:1291` — not a behaviour any shipped adapter exercises. No `log_bash.sh` exists and no Bash `PreToolUse` registration is made, deliberately (see the PRD's Won't-Have list). The criterion is conditional and so vacuously satisfied in production; it is kept, rather than deleted, because it states the contract any future Bash adapter inherits on the day it is written | PRD F3 |
