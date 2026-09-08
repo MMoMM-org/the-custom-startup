@@ -39,6 +39,21 @@ the whole path end to end.
 
 - [ ] **T4.1 The setup command** `[activity: backend-api]`
 
+  **Note added 2026-09-08 while phase 1 shipped, so this is not rediscovered here.** The drift
+  comparator T1.3 delivered is
+  `_drift_check_observability_bundle <expected_version> [<marker_path>]` — it does NOT fetch the
+  expected version itself. The `status` verb must obtain it first, using the same two-line pattern
+  `bundle_install.sh:167` already uses:
+
+      expected="$(_read_observability_bundle_version 2>/dev/null)" || expected=""
+
+  This follows existing precedent rather than inventing boilerplate. Note also that the comparator
+  drops the mirrored signature's `repo_path` argument (this bundle lives at
+  `$HOME/.claude/observability/`, not at a repo-relative `.githooks/`), so do not expect the
+  argument order of `drift_check_hook_bundle`. It exits 0 in every case and signals via stdout —
+  `OK`, `MISSING`, or `DRIFT:<installed>` — so the `status` verb, not the comparator, decides what
+  each state means to the user.
+
   1. Prime: read `plugins/tcs-git-helpers/skills/git-setup/SKILL.md:86-174` — the whole sequence,
      including why the lock is taken where it is `[ref: SDD/Runtime View — Primary Flow]`.
   2. Test: the four journeys from the PRD end to end — install, status, remove, and the
