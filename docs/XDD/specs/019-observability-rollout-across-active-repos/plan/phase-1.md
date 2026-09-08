@@ -31,7 +31,10 @@ phase: 1
   (`log_instructions.sh:38`). Copying them elsewhere is therefore safe by construction, and this is
   the property the whole bundle approach rests on.
 
-**Dependencies**: none. This phase is the foundation for phase 2 and can start immediately.
+**Dependencies**: none within this spec, but one outside it — **the observability scripts must be
+published in a released `tcs-helper` version before setup can run against a repository other than
+this one.** Until then they exist only in this repository's working tree and there is nothing for
+the installer to copy. Phases 1 to 3 can be built and tested before that; T4.2's rollout cannot.
 
 ---
 
@@ -59,6 +62,9 @@ an installed copy has fallen behind.
 
   1. Prime: read `plugins/tcs-git-helpers/skills/git-setup/lib/install_files.sh:104-141` for the
      copy-and-substitute pattern and `:130-132` for the atomic marker write `[ref: SDD/ADR-2]`.
+     Note the **source**: `../../scripts/observability/` relative to this skill's own base
+     directory, which the harness names on load. Not `$CLAUDE_PLUGIN_ROOT`, which does not reach
+     a Bash-tool subprocess — the mistake spec-018's ADR-1 exists to prevent.
   2. Test: installing into an empty home creates the directory, every adapter plus `logwrite.sh`,
      and the version marker; the copied adapters run correctly *from their new location* (this is
      the test that actually exercises the `${BASH_SOURCE[0]}` self-location, and it is the one that

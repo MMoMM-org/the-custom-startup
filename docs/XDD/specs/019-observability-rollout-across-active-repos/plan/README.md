@@ -198,15 +198,15 @@ worth having if its rows are true, and hand-editing is how they stopped being tr
 
 | SDD-AC | Task(s) claiming it |
 |---|---|
-| 1 | T2.3, T4.1 |
-| 2, 3 | T2.4 |
-| 4 | T2.3, T4.1 |
-| 5 | T2.4 |
-| 6 | T2.3 |
+| 1 | T2.4, T4.1 |
+| 2, 3 | T2.5 |
+| 4 | T2.4, T4.1 |
+| 5 | T2.5 |
+| 6 | T2.4 |
 | 7 | T2.5 |
 | 8 | T1.2, T2.5 |
 | 9 | T2.5 |
-| 10 | T2.4 |
+| 10 | T2.5 |
 | 11 | T2.5 |
 | 12, 13, 14 | T2.5 |
 | 15 | T1.3, T4.1 |

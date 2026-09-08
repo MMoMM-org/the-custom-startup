@@ -420,6 +420,20 @@ a backup file is therefore mandatory rather than optional (ADR-4). Confirmed by 
 
 **ADR-2 — The bundle lives under `$HOME/.claude/observability/` and is referenced by `$HOME`.**
 *Choice:* one versioned copy per environment; the command string is identical in every target.
+
+*Where the copy comes from — added 2026-08 after a gap was noticed:* the source is the setup
+skill's own plugin directory, `../../scripts/observability/` relative to the skill's base
+directory, which the harness names when the skill loads. **Not `$CLAUDE_PLUGIN_ROOT`** — this
+repository has already recorded that the variable does not reach a Bash-tool subprocess, which is
+what a skill's helper scripts run as, and spec-018's ADR-1 exists because of exactly that. The
+relative-to-base-directory form is what `git-setup` already uses for its own `lib/` scripts.
+
+*This makes publishing a prerequisite rather than a side effect.* Until the observability scripts
+ship in a released plugin version they exist only in this repository's working tree, so a setup
+command invoked from a target repository would have nothing to copy. Merging them to `main`
+bumps `tcs-helper` and puts them in the plugin cache, which is where every target's setup run
+reads them from. The scripts travel; **no registration and no switch travels with them**, so a
+consumer who never runs setup carries inert files and pays nothing.
 *Rationale:* `$HOME` is the container's gitignored docker home inside a container and the real home
 on the host, so a single expression covers both shapes — the same mechanism spec-018 found for the
 record locations. No absolute path is baked into any target, so nothing breaks when this repository
