@@ -97,7 +97,14 @@ anything the maintainer owns.
        through.** Setup will meet a repository in the legacy shape, so detection must handle it
        safely or the migration is exactly where the duplicate gets created.
 
-     - Two fixtures are missing from the list above and must be added:
+     - **A third missing fixture: valid JSON of the wrong shape.** The list's `malformed` case means
+       *unparseable* — T2.3 pairs it with "an unparseable file causes no write". A file that parses
+       cleanly and is then the wrong TYPE (`hooks` a string rather than an object, or an event's
+       value a scalar rather than a list) is a different state entirely: it survives
+       `json.load` and breaks the merge, which is where an unhandled `TypeError`/`KeyError` becomes
+       a traceback instead of the diagnosis T2.3 requires. Add `valid-json-wrong-shape`.
+
+     - Two further fixtures are missing from the list above and must be added:
        **not-a-repository** (a plain directory with no `.git/` — T2.2's first requirement, and
        distinct from a repository whose settings file is absent), and **ignored-file-but-not-backup**
        (a target whose `.gitignore` names `settings.local.json` explicitly rather than ignoring
@@ -110,7 +117,9 @@ anything the maintainer owns.
        wording warns against. Each sanity test must assert the fixture's *observable characteristic*
        — e.g. `foreign-only` has at least one foreign entry AND zero entries in our namespace;
        repository fixtures additionally prove `git -C <repo> log` succeeds, so a `git init` that
-       failed and leaked to the parent is caught here rather than downstream.
+       failed and leaked to the parent is caught here rather than downstream. Every fixture holding a settings
+       file additionally asserts `json.load` succeeds on it (or, for the deliberately-unparseable
+       one, that it raises) — a structural check only, never a call into `detect.sh` or the merge.
        **The sanity tests must not call T2.2's detection script** to validate a fixture: T2.1 runs
        first precisely so nothing in it depends on a later task, and reaching for `detect.sh` here
        would reintroduce the backwards dependency this ordering exists to remove. Assert the file
@@ -138,6 +147,25 @@ anything the maintainer owns.
      and never a bare `conflict` naming our own scripts as a third party's. This is the state the
      maintainer-approved migration passes through, so getting it wrong is how the migration creates
      the double-recording it is meant to avoid.
+
+     **Coupling flagged by T2.1 when it built the fixtures — read before designing detect.sh's
+     interface.** `ours-current` versus `ours-old` is **not observable from the settings file at
+     all.** ADR-5 makes the registration command version-opaque on purpose (a namespace prefix
+     survives a version change), so both states carry byte-identical JSON — T2.1's fixtures 4 and 5
+     assert that identity with `diff -q`. The version lives only in the bundle marker at
+     `$HOME/.claude/observability/`. Each of those two fixtures therefore ships a paired
+     `<scenario>.home/` directory standing in for `$HOME`, and `detect.sh` needs a way to be pointed
+     at an overridden home so those two cases are testable at all. Phase 1 already provides the
+     mechanism: `_bundle_install_target_dir()` resolves at CALL time and honours a
+     `_BUNDLE_INSTALL_TARGET_DIR` override, so read the installed marker through it rather than
+     composing `$HOME/.claude/observability` a second time.
+
+     **Also worth knowing when classifying `write-path-not-ignored`:** on this machine the ignore
+     that covers `.claude/settings.local.json` comes from the user's *global* excludes file
+     (`~/.config/git/ignore`), not from any repository's own `.gitignore`. Production detection
+     should keep using real `git check-ignore` semantics, which include global rules — but be aware
+     a target relying on a personal global ignore is more fragile than one carrying its own rule,
+     and say which it found when reporting.
 
   3. Implement: `plugins/tcs-helper/skills/observability-setup/lib/detect.sh`
   4. Validate: `bats` green over the scenario fixtures from T2.1.
