@@ -181,8 +181,6 @@ teardown() {
 # ---------------------------------------------------------------------------
 
 @test "read-only: succeeds against a valid marker inside a write-protected directory, and writes nothing" {
-  [[ $EUID -ne 0 ]] || skip "write-protection test cannot run as root"
-
   mkdir -p "$TARGET_DIR"
   printf 'h1\n' > "$TARGET_DIR/$MARKER_NAME"
 
@@ -190,6 +188,15 @@ teardown() {
   before_listing="$(ls -la "$TARGET_DIR")"
 
   chmod 555 "$TARGET_DIR"
+
+  # Prove the protection is actually in place, rather than assuming it —
+  # this repo lives on a mounted volume (/Volumes/Moon), where chmod
+  # semantics can diverge from expectations even for a non-root user, not
+  # just when running as root.
+  if echo "canary" > "$TARGET_DIR/test-write" 2>/dev/null; then
+    skip "write-protected directory is actually writable (running as root, or a permissive filesystem)"
+  fi
+  rm -f "$TARGET_DIR/test-write"
 
   run bash -c ". '$HELPER' && _drift_check_observability_bundle '$EXPECTED_VERSION'"
 
@@ -204,12 +211,17 @@ teardown() {
 }
 
 @test "read-only: DRIFT case also succeeds against a write-protected directory" {
-  [[ $EUID -ne 0 ]] || skip "write-protection test cannot run as root"
-
   mkdir -p "$TARGET_DIR"
   printf 'h0\n' > "$TARGET_DIR/$MARKER_NAME"
 
   chmod 555 "$TARGET_DIR"
+
+  # See the OK-case test above for why this proves the protection directly
+  # rather than assuming EUID != 0 implies it.
+  if echo "canary" > "$TARGET_DIR/test-write" 2>/dev/null; then
+    skip "write-protected directory is actually writable (running as root, or a permissive filesystem)"
+  fi
+  rm -f "$TARGET_DIR/test-write"
 
   run bash -c ". '$HELPER' && _drift_check_observability_bundle '$EXPECTED_VERSION'"
 
