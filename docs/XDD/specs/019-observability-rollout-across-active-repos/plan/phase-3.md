@@ -82,7 +82,10 @@ are one.
      duplicate `[ref: SDD/ADR-6]` `[ref: PRD/F3]`.
   2. Test: a config with a container source (`homes` given) and a host source (none) resolves both
      record paths correctly; **a single source carrying two homes resolves both its record
-     locations, merges them into one section under one label, and walks its inventory once** —
+     locations, merges them into one section under one label, and takes its instruction inventory
+     as the **union of both homes' trees** — a file present in only one home still appears in the
+     denominator, because a primary-home rule would have dropped it with nothing to show it was
+     gone —
      the case a completeness audit found the PRD promised and the first schema could not express; a source whose record does not exist yet is reported as *not yet
      recording*, distinct from a source whose path is gone entirely, which is reported as *missing*;
      an absent config file is not an error — the report falls back to single-record behaviour; a

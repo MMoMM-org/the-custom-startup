@@ -191,23 +191,30 @@ them somewhere else.
 
 | Component | Responsibility | Owns PRD |
 |---|---|---|
-| **Bundle installer** | Places a versioned copy of the recorder's scripts at `$HOME/.claude/observability/`, and reports drift against the plugin's current version | F1 (partly), F5 (partly) |
-| **Registration editor** | Merges and un-merges the three hook entries and the switch in a target's `.claude/settings.local.json`, without disturbing what it does not own | F1, F2 |
+| **Bundle installer** | Places a versioned copy of the recorder's scripts at `$HOME/.claude/observability/`, and reports drift against the plugin's current version | F1 bundle placement, F5 bundle currency |
+| **Registration editor** | Merges and un-merges the three hook entries and the switch in a target's `.claude/settings.local.json`, without disturbing what it does not own — and reads them back, which is how anything answers whether a target is registered at all | F1, F2, F5 registration presence |
 | **Locations config** | Records which targets exist and where each one's record lives, so the reader needs no arguments | F3 |
-| **Report aggregation** | Reads several records as a set, splits every per-repository analysis by the record's `repo` field, and unions exactly one figure | F4, F5 |
+| **Report aggregation** | Reads several records as a set, splits every per-repository analysis by the record's `repo` field, and unions exactly one figure | F4, F5 record liveness |
 
-Responsibility matrix — every PRD requirement has exactly one owner:
+Responsibility matrix — **every PRD *requirement* has exactly one owner. A *feature* may
+decompose into requirements owned by different components**, which is not overlap and is worth
+stating because an earlier draft of this section conflated the two granularities: F1 was already
+split into requirement rows while F5 was left as a single feature row, so F5 appeared to have two
+owners when it actually had two requirements. The check that matters is the one below it — no
+component reads or writes another's storage — and that holds.
 
 | PRD requirement | Owner |
 |---|---|
-| F1 setup writes registration | Registration editor (calls Bundle installer first) |
+| F1 setup writes registration | Registration editor — it owns the outcome and delegates bundle placement to the Bundle installer. A call edge is not co-ownership; treating one as such would fail MECE for every orchestrated design |
 | F1 nothing foreign is modified | Registration editor |
 | F1 writes only where git ignores | Registration editor |
 | F2 removal | Registration editor |
 | F3 the list of locations | Locations config |
 | F4 per-repository reporting | Report aggregation |
 | F4 union coverage | Report aggregation |
-| F5 liveness per target | Report aggregation (reads), Bundle installer (drift half) |
+| F5 — is the installed bundle current? | Bundle installer (a property of the installed files) |
+| F5 — is this target registered at all? | Registration editor (a property of the target's settings; the report sees records, not registrations, so nothing else can answer it) |
+| F5 — is this source still producing records? | Report aggregation (a property of the record stream) |
 | F6 assisted discovery | Locations config |
 
 ### Directory Map
@@ -274,7 +281,16 @@ ADR-7 exists to prevent. It would also walk the same inventory twice.
 
 A list keeps **one repository = one label = one `repo` value = one section**, whose records are read
 from several files and merged — which is precisely the rotated-chain merge `read_events` already
-performs, applied one level up. The inventory is walked once, from `repo_root`.
+performs, applied one level up.
+
+**Which home feeds the inventory walk (CON-6, decided 2026-09-08).** The walk reads the repository
+*and* `$HOME`, and the `$HOME` half is the user-level instruction files — which genuinely differ
+between a container home and the real one. The denominator is therefore the **union of both
+homes' instruction trees**, walked from the single `repo_root`. That answers the question the
+report actually asks — *across every way I work in this repository, which instruction file never
+loads?* A designated primary home would have been simpler and silently wrong: the other home's
+files would appear neither as loaded nor as never-loaded, vanishing from the analysis with nothing
+to show they were missing.
 
 `repo_root` and each entry in `homes` are exactly the values `report.py` already accepts as
 `--repo-root` and `--home`, and `_resolve_events_path` already derives both location shapes from
@@ -523,7 +539,7 @@ time.
 | SDD-AC-22 | Given a shipped skill that fired in one source and not another, when the report runs, then both facts are visible | PRD F4 |
 | SDD-AC-23 | Given records from several sources, when coverage is computed, then the denominator is the shipping repository's inventory alone | PRD F4, ADR-8 |
 | SDD-AC-24 | Given the existing single-record invocation `--events <path>`, when it is used, then behaviour is unchanged from spec-018 | Backwards compatibility |
-| SDD-AC-25 | Given one source configured with two homes, when the report runs, then its records from both locations are merged into a single section under one label, and the inventory is walked once | PRD F3, ADR-6 |
+| SDD-AC-25 | Given one source configured with two homes, when the report runs, then its records from both locations are merged into a single section under one label, and the instruction inventory is the **union of both homes' trees** walked from the one `repo_root` | PRD F3, ADR-6, CON-6 |
 | SDD-AC-26 | Given a source configured but absent from its target's settings, when the liveness check runs, then it is reported as *not configured*, distinct from *configured but silent* | PRD F5 |
 
 ---
