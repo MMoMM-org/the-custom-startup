@@ -100,10 +100,17 @@ fi
 
 _BUNDLE_INSTALL_MARKER_NAME="tcs-helper-observability-version"
 
-# The install set. Order does not matter (each file is copied
+# Target installation directory (resolved at source time, after HOME is set).
+_BUNDLE_INSTALL_TARGET_DIR="${HOME}/.claude/observability"
+
+# The executable scripts in the bundle (gated by T1.4's CI check; README is
+# installed but not gated, so a prose fix does not force a version bump).
+_BUNDLE_INSTALL_SCRIPTS="logwrite.sh log_agent.sh log_instructions.sh log_skill.sh selfcheck.sh timed-wrapper.sh"
+
+# The complete install set. Order does not matter (each file is copied
 # independently) but logwrite.sh is listed first as documentation of the
 # dependency every other entry has on it.
-_BUNDLE_INSTALL_FILES="logwrite.sh log_agent.sh log_instructions.sh log_skill.sh selfcheck.sh timed-wrapper.sh README.md"
+_BUNDLE_INSTALL_FILES="$_BUNDLE_INSTALL_SCRIPTS README.md"
 
 # _write_bundle_marker <version> <marker_path>
 #
@@ -153,7 +160,7 @@ _install_observability_bundle() {
     return 1
   fi
 
-  local target_dir="${HOME}/.claude/observability"
+  local target_dir="$_BUNDLE_INSTALL_TARGET_DIR"
   local marker_path="$target_dir/$_BUNDLE_INSTALL_MARKER_NAME"
 
   # Read BEFORE any file is touched, so this reflects what was actually
