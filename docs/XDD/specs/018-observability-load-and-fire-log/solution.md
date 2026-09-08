@@ -579,9 +579,16 @@ skill and agent inventory:        # for PRD F8's "exists but never fired"
   matching:    an entry is credited as fired when a record names it by either its bare frontmatter
                name or its qualified `<plugin>:<path>` form; a bare-name match is credited only
                when that bare name is unique across the inventory. Which form a real
-               plugin-dispatched record carries is unmeasured until T3.6 — the join is
-               deliberately tolerant until then, rather than guessing one and reporting the other
-               as never fired
+               plugin-dispatched record carries was unmeasured until T3.6. MEASURED (T3.6,
+               2026-09-08, against a live session's own record): both kinds carry the QUALIFIED
+               form — `kind: skill` recorded `tcs-workflow:verify`, `kind: agent` recorded
+               `tcs-workflow:code-quality-reviewer`. The bare-name tolerance is therefore now
+               known to be unnecessary rather than merely unproven. It is KEPT regardless:
+               removing it changes report output and the pytest cases that assert on it, which is
+               a decision to take deliberately, not a cleanup to fold into a validation task.
+               One further shape the same run exposed: a caller-named ad-hoc subagent records
+               that caller-supplied name (`agent_type: ac-evidence-mapper`), matches no shipped
+               entry, and is reported as unrecognised rather than credited as coverage
 ```
 
 The report states which inventory it used and how many entries it found, so a surprising coverage
@@ -1016,7 +1023,7 @@ this phase; recorded as Technical Debt, below.
 | SDD-AC-2 | Given the switch is set, when a session starts, then one `kind: instruction` record exists per loaded file, each with `reason: session_start` | PRD F1 |
 | SDD-AC-3 | Given a rule with `globs`, when a matching file is read, then a record with `reason: path_glob_match` and a populated `trigger` exists | PRD F1 |
 | SDD-AC-4 | Given an imported instruction file, when it loads, then the record carries `reason: include` and a populated `parent` | PRD F1 |
-| SDD-AC-5 | Given records of several kinds, when they are read, then each parses as one JSON object and carries `ts`, `kind`, `session`, `repo` — with one stated exception: a `kind = hook` record's `session` is sourced from `$CLAUDE_CODE_SESSION_ID`, not the payload, and is empty when that variable is absent (see the record shape's session caveat; T3.5, confirmed at T3.6) | PRD F2 |
+| SDD-AC-5 | Given records of several kinds, when they are read, then each parses as one JSON object and carries `ts`, `kind`, `session`, `repo` — with one stated exception: a `kind = hook` record's `session` is sourced from `$CLAUDE_CODE_SESSION_ID`, not the payload, and is empty when that variable is absent (see the record shape's session caveat; T3.5). **Half confirmed as of T3.6, 2026-09-08** — this row previously read "confirmed at T3.6", which a reader takes as done: it is not. The value half IS confirmed: `$CLAUDE_CODE_SESSION_ID` read in a live session was byte-identical to the `session_id` the three adapters extracted from their own payloads in that same session. The reach half is NOT: that run was spawned by the Bash tool, not by the harness as a hook, so whether the variable reaches a harness-spawned hook is still open, pending the wired-hook gate recorded in `plan/phase-3.md` | PRD F2 |
 | SDD-AC-6 | Given a field over the length limit, when written, then it is shortened and `truncated: true` is set | PRD F2 |
 | SDD-AC-7 | Given the file exceeds 1024000 bytes, when the next record is written, then the chain rotates and no `.4` exists | PRD F2 |
 | SDD-AC-8 | Given detail mode off, when a Bash tool call is recorded, then the program name is present and no argument is | PRD F3 |
