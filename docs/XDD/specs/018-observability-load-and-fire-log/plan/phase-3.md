@@ -374,3 +374,49 @@ Turns the record into the answers #147 needs, and proves the whole path end to e
   > `selfcheck.sh` reports `cannot record` when run through Claude's Bash tool, because the sandbox
   > denies writes under `~/.claude/plugins`; the hooks themselves are harness-spawned and unaffected.
   > Run it with the sandbox disabled before believing it.
+
+  > **Step 5 — the acceptance-criteria evidence map (2026-09-08).** Built by a read-only subagent
+  > across `solution.md`, the three phase files, all six bats suites and the pytest file, then
+  > spot-verified by hand wherever a claim carried a consequence. **All twenty SDD acceptance
+  > criteria carry evidence; none is wholly missing.** Six carried a specific unevidenced or
+  > vacuous clause. Two of those were closed by this same session, one is wired and waiting on a
+  > relaunch, one is now answered as un-closeable and recorded as such, and two are open decisions.
+  >
+  > | Clause | State after this session |
+  > |---|---|
+  > | AC-13, AC-14, AC-15, AC-18 — pytest-over-fixtures only; `report.py` had never run against a real record | **CLOSED.** It has now: exit 0 over fourteen live records from this repo and session. |
+  > | AC-9 and the privacy gate — never run against a real record | **CLOSED.** Five of five deny-list items clean, and the key set read by hand against the Privacy row, which is what the gate asks for rather than a pattern match. |
+  > | AC-5's exception clause — the wrapper tests set `CLAUDE_CODE_SESSION_ID` themselves, so they prove the wrapper *reads* it, never that the harness *supplies* it | **WIRED, pending relaunch.** The value half is already confirmed (see the block above); the reach half needs the wired hook. |
+  > | AC-20 — the six-arrangement numbers are recorded, but the reproduction artifacts sat in a scratchpad | **CLOSED as un-reproducible, deliberately.** See below. |
+  > | AC-8 — vacuous in production | **OPEN, needs a decision.** See below. |
+  > | AC-3 — the live half of `path_glob_match` | **OPEN, needs a decision.** See below. |
+  >
+  > **AC-20 is closed the only honest way left: the artifacts are gone for good.** README line 141
+  > points at `/tmp/claude-1001/…/scratchpad/t14/`. That path does not exist — and neither does
+  > `/tmp/claude-1001`, the entire uid namespace. T1.4 ran inside the Docker container (uid 1001);
+  > this repo's host sessions run under uid 501, so the spike's settings, collector, run script and
+  > raw OTLP capture were never on this filesystem and cannot be recovered by anyone. **The
+  > arrangement table at README:144-152 is therefore not a summary of the evidence — it IS the
+  > evidence, and the only surviving copy.** AC-20 asks that the negative finding be written down
+  > rather than quietly dropped, and it was, so the criterion itself is met. What is not available,
+  > and never will be, is independent reproduction. Recorded here so that a future reader learns
+  > this from the spec rather than by following a dead path.
+  >
+  > **AC-8 is vacuous in production, and the PRD does not admit it.** The writer's reduce helper
+  > keeps a Bash call's program name and drops its arguments — proved at W:1271 and W:1291. But no
+  > shipped adapter records Bash calls at all: there is no `log_bash.sh`, and this repo's hook
+  > registration carries `PreToolUse` under matcher `Skill` only. The criterion is written
+  > conditionally ("*when* a Bash tool call is recorded"), so in production it is vacuously
+  > satisfied. The problem is that PRD Feature 3 carries the same criterion and the Won't-Have list
+  > never mentions Bash recording, so the spec neither ships this nor declares it out of scope. A
+  > reader reasonably concludes their Bash command lines are recorded with arguments stripped.
+  > Nothing records them at all. This wants a decision rather than a fix: scope the criterion to
+  > the writer in both documents, or register a Bash adapter if it was meant literally.
+  >
+  > **AC-3's live half has never been observed.** `reason: path_glob_match` and its `trigger` field
+  > come only from a fixture payload (I:192). The live log's reasons are `include` ×6,
+  > `session_start` ×4 and `nested_traversal` ×1 — no glob match, because this repo has no
+  > `.claude/rules/` entry carrying `globs:` for one to fire from. That is an unexercised path, not
+  > a defect in the adapter. Closing it means adding such a rule, reading a matching file in an
+  > enabled session, and confirming a record with `reason: path_glob_match` and a populated
+  > `trigger` — a configuration change to this repo, so it is a decision rather than a task step.
