@@ -94,13 +94,13 @@ teardown() {
 # ---------------------------------------------------------------------------
 
 @test "helper: reads the marker and returns its version verbatim on stdout, exit 0" {
-  run bash -c ". '$HELPER' && _observability_bundle_version '$MARKER'"
+  run bash -c ". '$HELPER' && _read_observability_bundle_version '$MARKER'"
   [ "$status" -eq 0 ]
   [ "$output" = "h1" ]
 }
 
 @test "helper: with no argument, resolves the bundle's own template marker by default" {
-  run bash -c ". '$HELPER' && _observability_bundle_version"
+  run bash -c ". '$HELPER' && _read_observability_bundle_version"
   [ "$status" -eq 0 ]
   [ "$output" = "h1" ]
 }
@@ -113,7 +113,7 @@ teardown() {
 
 @test "helper: an absent marker file yields a non-empty stderr error, non-zero exit, and empty stdout" {
   local missing="$TEST_DIR/does-not-exist-version"
-  run --separate-stderr bash -c ". '$HELPER' && _observability_bundle_version '$missing'"
+  run --separate-stderr bash -c ". '$HELPER' && _read_observability_bundle_version '$missing'"
   [ "$status" -ne 0 ]
   [ -z "$output" ]
   [ -n "$stderr" ]
@@ -127,7 +127,7 @@ teardown() {
 @test "helper: an empty marker file is malformed, not accepted" {
   local bad="$TEST_DIR/empty-version"
   : > "$bad"
-  run --separate-stderr bash -c ". '$HELPER' && _observability_bundle_version '$bad'"
+  run --separate-stderr bash -c ". '$HELPER' && _read_observability_bundle_version '$bad'"
   [ "$status" -ne 0 ]
   [ -z "$output" ]
   [ -n "$stderr" ]
@@ -136,7 +136,7 @@ teardown() {
 @test "helper: a marker with more than one line is malformed" {
   local bad="$TEST_DIR/multiline-version"
   printf 'h1\nextra\n' > "$bad"
-  run --separate-stderr bash -c ". '$HELPER' && _observability_bundle_version '$bad'"
+  run --separate-stderr bash -c ". '$HELPER' && _read_observability_bundle_version '$bad'"
   [ "$status" -ne 0 ]
   [ -z "$output" ]
   [ -n "$stderr" ]
@@ -145,7 +145,7 @@ teardown() {
 @test "helper: a semver-style marker (not h<N>) is malformed" {
   local bad="$TEST_DIR/semver-version"
   printf '1.2.3\n' > "$bad"
-  run --separate-stderr bash -c ". '$HELPER' && _observability_bundle_version '$bad'"
+  run --separate-stderr bash -c ". '$HELPER' && _read_observability_bundle_version '$bad'"
   [ "$status" -ne 0 ]
   [ -z "$output" ]
   [ -n "$stderr" ]
@@ -154,7 +154,7 @@ teardown() {
 @test "helper: trailing garbage after the digits is malformed" {
   local bad="$TEST_DIR/trailing-version"
   printf 'h1x\n' > "$bad"
-  run --separate-stderr bash -c ". '$HELPER' && _observability_bundle_version '$bad'"
+  run --separate-stderr bash -c ". '$HELPER' && _read_observability_bundle_version '$bad'"
   [ "$status" -ne 0 ]
   [ -z "$output" ]
   [ -n "$stderr" ]
@@ -163,7 +163,7 @@ teardown() {
 @test "helper: 'h' with no digits is malformed" {
   local bad="$TEST_DIR/nodigits-version"
   printf 'h\n' > "$bad"
-  run --separate-stderr bash -c ". '$HELPER' && _observability_bundle_version '$bad'"
+  run --separate-stderr bash -c ". '$HELPER' && _read_observability_bundle_version '$bad'"
   [ "$status" -ne 0 ]
   [ -z "$output" ]
   [ -n "$stderr" ]
@@ -172,7 +172,7 @@ teardown() {
 @test "helper: trailing whitespace after the version is malformed" {
   local bad="$TEST_DIR/trailingws-version"
   printf 'h1 \n' > "$bad"
-  run --separate-stderr bash -c ". '$HELPER' && _observability_bundle_version '$bad'"
+  run --separate-stderr bash -c ". '$HELPER' && _read_observability_bundle_version '$bad'"
   [ "$status" -ne 0 ]
   [ -z "$output" ]
   [ -n "$stderr" ]
@@ -189,11 +189,11 @@ teardown() {
   local bad="$TEST_DIR/still-malformed-version"
   printf 'nope\n' > "$bad"
 
-  run --separate-stderr bash -c ". '$HELPER' && _observability_bundle_version '$missing'"
+  run --separate-stderr bash -c ". '$HELPER' && _read_observability_bundle_version '$missing'"
   [ "$status" -ne 0 ]
   local missing_err="$stderr"
 
-  run --separate-stderr bash -c ". '$HELPER' && _observability_bundle_version '$bad'"
+  run --separate-stderr bash -c ". '$HELPER' && _read_observability_bundle_version '$bad'"
   [ "$status" -ne 0 ]
   local malformed_err="$stderr"
 

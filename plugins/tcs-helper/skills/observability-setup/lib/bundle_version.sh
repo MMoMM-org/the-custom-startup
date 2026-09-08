@@ -12,16 +12,12 @@
 # $HOME/.claude/observability/ at install time; a later drift check compares
 # an installed copy of this same marker against this one (SDD/ADR-3).
 #
-# The bundle's *sources* are unrelated and untouched here — this file only
-# reads the version marker (templates/observability/
-# tcs-helper-observability-version). It does not copy anything.
-#
 # bash 3.2 compatible (CON-1): PCRE \d/\s/\b and bounded quantifiers
 # `^.{m,n}$` silently match nothing inside `[[ =~ ]]` under bash 3.2's regex
 # engine (this machine's /bin/bash is 3.2.57, and CI runs a macos-latest
 # leg). Uses [[:digit:]] instead.
 
-# _observability_bundle_version [<version_file>]
+# _read_observability_bundle_version [<version_file>]
 #
 #   $1 (optional): path to the marker file. Defaults to this bundle's own
 #   template marker, resolved relative to THIS file's own location (not
@@ -40,7 +36,7 @@
 #   distinguishable (one names "not found", the other "malformed"), so a
 #   caller can tell "nothing installed yet" apart from "something is
 #   broken".
-_observability_bundle_version() {
+_read_observability_bundle_version() {
   local version_file="$1"
 
   if [ -z "$version_file" ]; then
