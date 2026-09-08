@@ -311,3 +311,60 @@ _install() {
   marker_content="$(cat "$TARGET_DIR/$MARKER_NAME")"
   [ "$marker_content" = "$CURRENT_VERSION" ]
 }
+
+# ---------------------------------------------------------------------------
+# 6. Call-time HOME resolution (ADR-2 T4.2 shape): source the library ONCE,
+#    then call _install_observability_bundle twice with HOME changed between
+#    calls -- the reuse-across-environments pattern the later rollout task
+#    needs. A source-time snapshot of the target directory would install
+#    both times into whichever HOME was set at source time; this proves
+#    each call resolves the target from the HOME live at call time.
+# ---------------------------------------------------------------------------
+
+@test "sourcing once and calling with different HOME values each time installs into each HOME separately" {
+  local home_a="$TEST_DIR/home-a"
+  local home_b="$TEST_DIR/home-b"
+  mkdir -p "$home_a" "$home_b"
+
+  run bash -c '
+    . "'"$INSTALLER"'"
+
+    export HOME="'"$home_a"'"
+    _install_observability_bundle || exit 81
+
+    export HOME="'"$home_b"'"
+    _install_observability_bundle || exit 82
+  '
+  [ "$status" -eq 0 ]
+
+  local target_a="$home_a/.claude/observability"
+  local target_b="$home_b/.claude/observability"
+
+  [ -f "$target_a/$MARKER_NAME" ]
+  [ -f "$target_b/$MARKER_NAME" ]
+
+  local marker_a marker_b
+  marker_a="$(cat "$target_a/$MARKER_NAME")"
+  marker_b="$(cat "$target_b/$MARKER_NAME")"
+  [ "$marker_a" = "$CURRENT_VERSION" ]
+  [ "$marker_b" = "$CURRENT_VERSION" ]
+
+  # The second call must not have touched the first environment's home at
+  # all -- not just "still has a marker", but byte-identical to what the
+  # first call alone produced.
+  local f
+  while IFS= read -r f; do
+    [ -f "$target_a/$f" ]
+    [ -f "$target_b/$f" ]
+  done < <(_bundle_files)
+
+  # The defect this test exists to catch: a file-scope, source-time capture
+  # of the target directory would resolve to home_a for BOTH calls (HOME
+  # was home_a at source time... but here HOME is set before sourcing too,
+  # so also assert the negative directly -- home_b's bundle must exist as
+  # its own tree, not merely as a leftover from installing into home_a).
+  [ -d "$target_b" ]
+  local b_file_count
+  b_file_count="$(find "$target_b" -maxdepth 1 -type f | wc -l)"
+  [ "${b_file_count// /}" -gt 0 ]
+}

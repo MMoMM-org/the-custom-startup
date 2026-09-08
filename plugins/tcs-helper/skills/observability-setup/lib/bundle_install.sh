@@ -100,8 +100,18 @@ fi
 
 _BUNDLE_INSTALL_MARKER_NAME="tcs-helper-observability-version"
 
-# Target installation directory (resolved at source time, after HOME is set).
-_BUNDLE_INSTALL_TARGET_DIR="${HOME}/.claude/observability"
+# _bundle_install_target_dir
+#
+#   Prints the bundle's install directory. Resolved at CALL time, not at
+#   source time: a caller installing into another environment's home (a
+#   container's gitignored docker home, per ADR-2) may set HOME and call
+#   this, or set _BUNDLE_INSTALL_TARGET_DIR to pin an explicit path.
+#   _BUNDLE_INSTALL_TARGET_DIR is otherwise unset — this file assigns it
+#   nothing at source time — so the default branch below is live for every
+#   caller that does not opt into an override.
+_bundle_install_target_dir() {
+  printf '%s' "${_BUNDLE_INSTALL_TARGET_DIR:-${HOME}/.claude/observability}"
+}
 
 # The executable scripts in the bundle (gated by T1.4's CI check; README is
 # installed but not gated, so a prose fix does not force a version bump).
@@ -160,7 +170,7 @@ _install_observability_bundle() {
     return 1
   fi
 
-  local target_dir="$_BUNDLE_INSTALL_TARGET_DIR"
+  local target_dir; target_dir="$(_bundle_install_target_dir)"
   local marker_path="$target_dir/$_BUNDLE_INSTALL_MARKER_NAME"
 
   # Read BEFORE any file is touched, so this reflects what was actually
