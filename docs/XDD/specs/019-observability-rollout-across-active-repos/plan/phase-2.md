@@ -51,7 +51,7 @@ string pointing into it).
 Delivers the ability to add and remove the registration in a target repository without damaging
 anything the maintainer owns.
 
-- [ ] **T2.1 The fixture matrix** `[activity: test-strategy]`
+- [x] **T2.1 The fixture matrix** `[activity: test-strategy]`
 
   **This comes first because three later tasks validate against it.** In the first draft of this
   plan it was numbered last, which made T2.2, T2.3 and T2.5 depend on a task that had not run — the
@@ -166,6 +166,69 @@ anything the maintainer owns.
      should keep using real `git check-ignore` semantics, which include global rules — but be aware
      a target relying on a personal global ignore is more fragile than one carrying its own rule,
      and say which it found when reporting.
+
+     **Pinned 2026-09-08 after a second TDD gate blocked this task. Five gaps closed.**
+
+     - **State and severity are separate channels, and the mapping is now fixed (maintainer
+       ruling).** Eight states do not fit four exit codes, and they were never meant to: the
+       precedent at `detect_conflicts.sh` emits a labelled line per finding (`_emit "ABORT" "..."`)
+       and keeps only the highest severity as the exit code (`_bump 2`). Do the same — the state
+       name goes to stdout as a labelled line, the exit code carries severity alone. T4.1 reads the
+       label for its message and branches on the code for control flow.
+
+           state                    label          exit
+           --------------------------------------------
+           clean (absent/empty)     CLEAN            0
+           ours-current             OURS-CURRENT     0
+           ours-old                 OURS-OLD         4
+           legacy in-repo           LEGACY           4
+           foreign-only             CONFLICT         3
+           not-a-repository         ABORT            2
+           unparseable              ABORT            2
+           valid-json-wrong-shape   ABORT            2
+           write-path-not-ignored   ABORT            2
+
+       `legacy` and `ours-old` are **warn, not abort**, deliberately: both mean "action available,
+       nothing broken", and the maintainer-approved migration of this repository runs THROUGH setup.
+       An abort there would force the migration to be a manual two-step on the one repository most
+       needing a clean one.
+
+     - **Every fixture gets a classification, so none is left to an implementer's guess:**
+       `absent` and `empty-object` -> CLEAN; `foreign-only` and `same-event-names-populated` ->
+       CONFLICT (the latter is foreign content that merely happens to sit under our event names —
+       whether the merge preserves it is T2.3's problem, not detection's);
+       `foreign-plus-ours-current` -> OURS-CURRENT; `foreign-plus-ours-older` -> OURS-OLD;
+       `malformed` and `valid-json-wrong-shape` -> ABORT; `write-path-not-ignored` -> ABORT;
+       `not-a-repository` -> ABORT; `already-configured-observability` -> LEGACY.
+       `non-ascii` classifies by its hooks content like any other file — it exists to prove T2.3
+       does not mangle foreign non-ASCII values, and detection must simply not corrupt or choke on
+       it. `ignored-file-but-not-backup` is CLEAN to detection; the `.bak` ignore status it exists
+       for is T2.5's assertion.
+
+     - **`valid-json-wrong-shape` is ABORT, not a traceback.** The plan said an *unparseable* file
+       aborts; a file that parses and whose `hooks` is a string is a different state and had no
+       ruling. Detection must recognise it and abort with a diagnosis — an unhandled
+       `TypeError`/`KeyError` reaching the user is the failure mode this closes.
+
+     - **The read-only assertion must exercise the read paths.** Phase 1 shipped exactly this
+       defect: a write-protected assertion covering only the branch that opens no file. Detection
+       reads up to three things — `settings.local.json`, `settings.json` (for the legacy shape), and
+       the bundle marker under the resolved home — so the write-protected case must be a target
+       where all three are present and readable, asserting a real classification comes back. Guard
+       it with a **write canary**, not an `EUID` check: attempt a write, skip if it succeeds. This
+       repository lives on a mounted volume, where `chmod 555` may not bite.
+
+     - **Test isolation for `git check-ignore` needs no production divergence — verified 2026-09-08.**
+       Detection must call plain `git check-ignore`, because global ignores are real for users and
+       suppressing them would make detection lie. Tests neutralise the developer's personal
+       `~/.config/git/ignore` (which on this machine contains `**/.claude/settings.local.json`, and
+       would otherwise make the `write-path-not-ignored` fixture read as ignored) purely from the
+       environment:
+
+           GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.excludesFile GIT_CONFIG_VALUE_0=/dev/null
+
+       Measured: plain `check-ignore` reports the path ignored; with those variables set it reports
+       not-ignored. Production code is untouched.
 
   3. Implement: `plugins/tcs-helper/skills/observability-setup/lib/detect.sh`
   4. Validate: `bats` green over the scenario fixtures from T2.1.
