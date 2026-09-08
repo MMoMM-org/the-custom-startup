@@ -18,16 +18,19 @@ file is written by both, so the two sides can proceed concurrently.
 **GATE**: Read all referenced files before starting this phase.
 
 **Specification References**:
-- `[ref: SDD/ADR-6]` — the locations config: TOML, `repo_root` plus optional `home`
+- `[ref: SDD/ADR-6]` — the locations config: TOML, `repo_root` plus an optional `homes` list
 - `[ref: SDD/ADR-7]` — split by `repo`; union only coverage
 - `[ref: SDD/ADR-8]` — the denominator stays one repository's shipped inventory
 - `[ref: SDD/Runtime View — Complex Logic]` — how the report splits without lying
 - `[ref: PRD/F3]`, `[ref: PRD/F4]`, `[ref: PRD/F5]`
 
 **Key Decisions**:
-- **The config stores `repo_root` and optional `home`, never a derived record path.** Those are
-  exactly the two values `report.py` already accepts, and `_resolve_events_path` already derives
-  both location shapes from them — so the config cannot drift from the resolver that consumes it.
+- **The config stores `repo_root` and an optional `homes` list, never a derived record path.**
+  Those are exactly the values `report.py` already accepts, and `_resolve_events_path` already
+  derives both location shapes from them — so the config cannot drift from the resolver that
+  consumes it. `homes` is a list because one repository worked in both environments has two
+  record locations but **one** identity: the writer freezes `repo` from the repository, so two
+  config entries would collide on it and leave the renderer an undecided two-to-one mapping.
 - **`repo` is the dimension the reader is missing.** Every record carries it, frozen in the writer
   and not caller-settable; `report.py` reads it nowhere today. Adding it is what makes reading
   several records safe rather than merely possible.
@@ -77,8 +80,10 @@ are one.
 
   1. Prime: read ADR-6 and `_resolve_events_path:1561-1573`, which the reader must feed rather than
      duplicate `[ref: SDD/ADR-6]` `[ref: PRD/F3]`.
-  2. Test: a config with a container source (a `home` given) and a host source (none) resolves both
-     record paths correctly; a source whose record does not exist yet is reported as *not yet
+  2. Test: a config with a container source (`homes` given) and a host source (none) resolves both
+     record paths correctly; **a single source carrying two homes resolves both its record
+     locations, merges them into one section under one label, and walks its inventory once** —
+     the case a completeness audit found the PRD promised and the first schema could not express; a source whose record does not exist yet is reported as *not yet
      recording*, distinct from a source whose path is gone entirely, which is reported as *missing*;
      an absent config file is not an error — the report falls back to single-record behaviour; a
      malformed config is an error naming the line; duplicate labels are rejected, since a label is
@@ -86,7 +91,7 @@ are one.
      property is a requirement rather than a convenience.
   3. Implement: `scripts/observability/sources.py`, and the example config documented in the SDD.
   4. Validate: `pytest -q` green.
-  5. Success: `[ref: SDD/SDD-AC-16, SDD-AC-17, SDD-AC-18]`; `[ref: PRD/F3]`
+  5. Success: `[ref: SDD/SDD-AC-16, SDD-AC-17, SDD-AC-18, SDD-AC-25]`; `[ref: PRD/F3]`
 
 - [ ] **T3.3 Per-source rendering, and the honesty rules** `[activity: backend-api]`
 

@@ -39,7 +39,7 @@ spec: 019
 | status | COMPLETE |
 | components | 4 |
 | adrs | 8 |
-| acceptanceCriteria | 24 |
+| acceptanceCriteria | 26 |
 | clarificationsRemaining | 0 |
 
 ### SectionStatus
@@ -246,17 +246,36 @@ has to remember to add an ignore rule.
 [[source]]
 label     = "repo1"                     # what the report prints
 repo_root = "/abs/path/to/repo1"        # also the inventory walk root
-home      = "/abs/path/to/repo1/claude-docker-home"   # optional; omit for a host target
+homes     = ["/abs/path/to/repo1/claude-docker-home"]   # optional; omit for a host-only target
 
 [[source]]
 label     = "repo2"
 repo_root = "/abs/path/to/repo2"
-# no `home` — the real $HOME applies
+# no `homes` — the real $HOME applies
+
+[[source]]
+label     = "repo3"
+repo_root = "/abs/path/to/repo3"
+# worked in BOTH environments: one source, two record locations, one identity
+homes     = ["/abs/path/to/repo3/claude-docker-home", "~"]
 ```
 
-`repo_root` and `home` are exactly the two values `report.py` already accepts as `--repo-root` and
-`--home`, and `_resolve_events_path` already derives both location shapes from them. The config
-therefore stores no derived path and cannot drift from the resolver.
+**`homes` is a list, and that is a deliberate correction (2026-09-08).** It was a single optional
+value until a completeness audit found that PRD F3 promises a repository worked on in *both*
+environments can express both its record locations, and the single value could not. The obvious
+workaround — two `[[source]]` entries sharing a `repo_root` — is worse than it looks: both would
+emit records under the *same* frozen `repo` value while carrying two different labels, leaving the
+renderer an undecided two-to-one mapping. Grouping by `repo` would silently discard a label;
+grouping by `label` would print one repository as two sections, which is the class of dishonesty
+ADR-7 exists to prevent. It would also walk the same inventory twice.
+
+A list keeps **one repository = one label = one `repo` value = one section**, whose records are read
+from several files and merged — which is precisely the rotated-chain merge `read_events` already
+performs, applied one level up. The inventory is walked once, from `repo_root`.
+
+`repo_root` and each entry in `homes` are exactly the values `report.py` already accepts as
+`--repo-root` and `--home`, and `_resolve_events_path` already derives both location shapes from
+them. The config therefore stores no derived path and cannot drift from the resolver.
 
 **The registration written into a target.** Three hook entries and one switch, all inside the
 untracked local settings layer:
@@ -323,7 +342,8 @@ introducing the dimension therefore produces a plausible, wrong number.
 
 - Instruction statistics key on `(repo, path)`, and render grouped by repository.
 - The never-loaded list is a difference per repository — an inventory walked with that repository's
-  own `repo_root` and `home`, minus what loaded there. It is never a difference against a pooled set.
+  own `repo_root` and its `homes`, minus what loaded there. It is never a difference against a
+  pooled set, and a source with several homes is still one inventory walk from one `repo_root`.
 - Recording status is computed per repository and rendered per repository. **It is never merged.**
   Merging takes the newest timestamp across everything, so one live repository would report the
   whole set as fresh and hide a source that stopped months ago — inverting spec-018's SDD-AC-15,
@@ -428,10 +448,10 @@ namespace is specific enough that this is acceptable, and detection reports what
 ours before writing.
 
 **ADR-6 — The locations config is TOML in this repository's `.claude/`.**
-*Choice:* `.claude/observability-sources.toml`, holding `label`, `repo_root` and optional `home`.
+*Choice:* `.claude/observability-sources.toml`, holding `label`, `repo_root` and an optional `homes` list.
 *Rationale:* TOML is this repository's format for its own config, and `tomllib` is stdlib, so CON-3
 holds. `.claude/` ignores any new file by default — verified mechanically — which makes the file
-uncommittable without anyone remembering an ignore rule. Storing `repo_root` and `home` rather than
+uncommittable without anyone remembering an ignore rule. Storing `repo_root` and `homes` rather than
 a derived record path means the config cannot drift from the resolver that consumes it.
 *Trade-offs:* there is no precedent in this repository for a user-maintained local config file; the
 existing local files are harness-owned. This is a new category and is justified rather than
@@ -499,6 +519,8 @@ time.
 | SDD-AC-22 | Given a shipped skill that fired in one source and not another, when the report runs, then both facts are visible | PRD F4 |
 | SDD-AC-23 | Given records from several sources, when coverage is computed, then the denominator is the shipping repository's inventory alone | PRD F4, ADR-8 |
 | SDD-AC-24 | Given the existing single-record invocation `--events <path>`, when it is used, then behaviour is unchanged from spec-018 | Backwards compatibility |
+| SDD-AC-25 | Given one source configured with two homes, when the report runs, then its records from both locations are merged into a single section under one label, and the inventory is walked once | PRD F3, ADR-6 |
+| SDD-AC-26 | Given a source configured but absent from its target's settings, when the liveness check runs, then it is reported as *not configured*, distinct from *configured but silent* | PRD F5 |
 
 ---
 
@@ -542,7 +564,7 @@ time.
 
 | Term | Definition |
 |---|---|
-| **Source** | One configured target in the locations config: a label, a repository root, and optionally a home |
+| **Source** | One configured target in the locations config: a label, a repository root, and optionally a list of homes. One source is always one repository identity, even when its records live in several places |
 | **Bundle** | The copy of the recorder's scripts installed at `$HOME/.claude/observability/`, with its version marker |
 | **Namespace ownership** | Treating an entry as ours because its command points inside our path namespace (ADR-5) |
 | **Union figure** | The one aggregate this design computes across sources: firing coverage |

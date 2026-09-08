@@ -41,7 +41,7 @@ version: "1.0"
 | status | COMPLETE |
 | totalTasks | 20 |
 | parallelTasks | 2 |
-| specReferences | 75 |
+| specReferences | 76 |
 | clarificationsRemaining | 0 |
 
 ### PhaseStatus
@@ -196,21 +196,23 @@ are applied here and the reasons kept, rather than the rows quietly rewritten.
 
 | SDD-AC | Task | Note |
 |---|---|---|
-| 1 | T2.2, T4.1 | Was mapped to T2.3, whose tests are all JSON merge behaviour and never mention repository detection |
-| 2, 3, 5 | T2.3 | |
-| 4 | T2.2, T4.1 | Detection classifies; **T4.1 asserts the command's own exit 0**, which is the half nothing tested |
-| 6 | T2.2 | |
-| 7 | T2.4 | Now includes the "already configured" report string, not only the no-op |
-| 8 | T1.2, T2.4 | T2.4 now asserts the update-versus-install wording, not only the mechanics |
+| 1 | T2.3, T4.1 | Was mapped to T2.4, whose tests are all JSON merge behaviour and never mention repository detection |
+| 2, 3, 5 | T2.4 | |
+| 4 | T2.3, T4.1 | Detection classifies; **T4.1 asserts the command's own exit 0**, which is the half nothing tested |
+| 6 | T2.3 | |
+| 7 | T2.5 | Now includes the "already configured" report string, not only the no-op |
+| 8 | T1.2, T2.5 | T2.5 now asserts the update-versus-install wording, not only the mechanics |
 | 9, 11 | T2.5 | |
-| 10 | T2.3 | Was mapped to T2.5, which tests truncation, backup, interruption and the lock — no encoding case |
-| 12, 13, 14 | T2.4 | |
+| 10 | T2.4 | Was mapped to T2.5, which tests truncation, backup, interruption and the lock — no encoding case |
+| 12, 13, 14 | T2.5 | |
 | 15 | T1.3, T4.1 | T1.3 tests the comparator; **T4.1 asserts drift actually surfaces through `status`**, which the comparator being correct does not guarantee |
 | 16, 17, 18 | T3.2 | |
 | 19 | T3.1 | Was mapped to T3.3; T3.1 is the task that keys on `(repo, path)` and already cited AC-19 itself |
 | 20 | T3.3 | |
 | 21, 22, 23 | T3.4 | |
 | 24 | T3.5 | |
+| 25 | T3.2 | The multi-home case PRD F3 promised and the first schema could not express |
+| 26 | T4.1 | Three-state liveness; needs the target's settings, which no reporting task reads |
 
 ### Coverage map — PRD features to phases
 

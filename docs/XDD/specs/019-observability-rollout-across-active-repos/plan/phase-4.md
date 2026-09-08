@@ -57,7 +57,11 @@ the whole path end to end.
        prove the comparator is wired into the verb a person actually runs. Assert that an installed
        bundle behind the marker shows drift in `status` output.
      - **A target that is not a repository is refused with the reason named**, which is the
-       command-level half of a criterion whose detection half lives in T2.1.
+       command-level half of a criterion whose detection half lives in T2.2.
+     - **`status` distinguishes three states, not two**: configured and recording, configured but
+       silent, and *not configured at all*. The third needs reading the target's settings, which
+       no reporting task does — the report sees records, not registrations, so a target where
+       setup never ran looks identical to one that ran and recorded nothing.
   3. Implement: `plugins/tcs-helper/skills/observability-setup/SKILL.md` plus the wiring of the
      phase-1 and phase-2 libraries. Install, remove and status are one command with three verbs, not
      three commands.
@@ -65,7 +69,7 @@ the whole path end to end.
      its libraries directly.
   5. Success: `[ref: PRD/F1]`, `[ref: PRD/F2]`, `[ref: PRD/User Journey Maps]`;
      `[ref: SDD/SDD-AC-1]` (command-level refusal), `[ref: SDD/SDD-AC-4]` (exit 0 on foreign
-     entries), `[ref: SDD/SDD-AC-15]` (drift reaches `status`)
+     entries), `[ref: SDD/SDD-AC-15]` (drift reaches `status`), `[ref: SDD/SDD-AC-26]` (three-state liveness)
 
 - [ ] **T4.2 Rollout to the target repositories** `[activity: validate]`
 
