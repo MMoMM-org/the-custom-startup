@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — observability
+
+### Added
+
+- **`plugins/tcs-helper/scripts/observability/logwrite.sh` — a shared, fork-free bash
+  library that turns key=value pairs into one durable, redacted JSON line (#153, PR #154,
+  spec 018 phase 1 of 3).** It is **not wired to anything yet** — no hooks call it, and it
+  does not ship until `plugins/tcs-helper/.claude-plugin/plugin.json` is bumped. Phase 2
+  registers the three adapters (instructions, skills, agents); phase 3 adds the report.
+  Landed with a 50-test bats suite, grown from a planned 10 — most of the growth came from
+  mutation testing finding tests that were green and could not fail.
+
+  It was nearly invisible before this PR. The writer was first placed at
+  `.claude/observability/logwrite.sh`, which `.gitignore` ignores wholesale — untracked,
+  with no installer, it existed on exactly one machine. CI could not see it, so all 50
+  tests passed locally and failed on both runners. Moving it into `plugins/tcs-helper/`
+  follows the convention every other tested hook script in this repo already uses.
+
+  It also failed **closed** under `set -e`: the writer aborted its calling script outright
+  whenever `git`, `date`, or the append itself returned non-zero — and this repo's real
+  hooks run under `set -euo pipefail`. An instrument whose entire purpose is transparency
+  would have killed the hooks it was supposed to be measuring, and the suite could not see
+  the defect because its own caller wrapper never set those flags either.
+
+  The specified redaction extractor leaks on an empty key. `"":"value"` is legal JSON, the
+  prefix-removal regex matches it, and the absent-key guard the SDD calls "the
+  redaction-critical line of the whole design" never fires — the value comes back
+  unredacted. The shipped implementation carries a second guard the SDD never specified;
+  without it, the leak stands.
+
+  **CON-7 (≤1 ms per hook invocation) is not met** — measured at roughly 9× the budget,
+  and the dominant cost is command substitution rather than the `jq`/`sed` execs the
+  design was built to avoid. Recorded and deferred to phase 2 by decision, not silently
+  accepted.
+
+---
+
 ## [Unreleased] — memory
 
 ### Added

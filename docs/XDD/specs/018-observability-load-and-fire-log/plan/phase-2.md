@@ -1,0 +1,176 @@
+---
+title: "Phase 2: Adapters and registration"
+status: completed
+version: "1.0"
+phase: 2
+---
+
+# Phase 2: Adapters and registration
+
+## Phase Context
+
+**GATE**: Read all referenced files before starting this phase.
+
+**Specification References**:
+- `[ref: SDD/Interface Specifications — inbound]` — the three payload shapes and their fields
+- `[ref: SDD/Application Data Models]` — which payload field becomes which record field
+- `[ref: SDD/Runtime View — Primary Flow]` — the six-step path from harness to appended line
+- `[ref: SDD/Architecture Decisions — ADR-2, ADR-3]`
+- `docs/XDD/specs/018-observability-load-and-fire-log/README.md` § `InstructionsLoaded` — the five
+  load reasons and both emission sites
+
+**Key Decisions**:
+- Adapters are thin by contract: read stdin once, extract two or three scalars, call the writer.
+  Any logic beyond that belongs in the report, where it costs nothing (SDD/Solution Strategy).
+- The skill adapter reads `tool_input`, which is a nested object. It extracts the one scalar it
+  needs and **must not** be extended to walk that object — the extractor is a string operation, not
+  a parser `[ref: SDD/Known Technical Issues]`.
+- Registering a no-op hook "just in case" is forbidden: `hasInstructionsLoadedHook` is what makes
+  the feature free while off, and a registered hook switches that cost back on
+  `[ref: SDD/Implementation Gotchas]`.
+
+**Dependencies**: Phase 1 (T1.1–T1.3). The adapters call the writer; without it they have nothing to
+call. T1.4 does not block this phase.
+
+**BINDING NOTE, added after phase 1 (T1.3) — the reduction mechanism, not just the keep/drop table**
+`[ref: SDD/Complex Logic — the reduction mechanism]`:
+- Call `_observability_field`, the writer's actual extractor. Do not write a second one, and do not
+  call it `_field` (the name the SDD's Implementation Examples sketches it under) — that name is
+  deliberately avoided in `logwrite.sh` to prevent a silent collision with a sourced adapter.
+- Every field the keep/drop table forbids for a given kind must be passed to the writer with a
+  `detail:` prefix (e.g. `detail:command`). The prefix is the interface; it is what makes a field
+  detail-only.
+- Do **not** rely on the writer's bare-name deny list (`command`, `full_command`, `hook_command`,
+  `content`, `file_content`, `transcript_path`, `cwd`, `prompt`, `prompt_text`, `response`,
+  `response_text`) to keep a sensitive field out of reduced mode. It is a fail-safe for a field an
+  adapter forgot to prefix, not a substitute for prefixing — it is an EXACT match on the bare field
+  name, so a field like `new_string` or a nested-looking name such as `tool_input.command` bypasses
+  it entirely.
+
+---
+
+## Tasks
+
+Delivers the three capture paths and turns the feature on in this repo for the first time.
+
+- [x] **T2.1 Instruction-load adapter** `[activity: backend-api]` `[parallel: true]`
+
+  1. Prime: read the `InstructionsLoaded` payload contract and the five load reasons
+     `[ref: SDD/Interface Specifications]`
+  2. Test: a `session_start` payload yields one record with `reason: session_start`, the file's
+     scope, and a repo-relative path; a payload carrying `globs` yields `reason: path_glob_match`
+     with `trigger` populated; a payload carrying a parent yields `reason: include` with `parent`
+     populated; an absolute path outside the repo is reduced to its basename, never emitted whole;
+     **the record carries `bytes`, the size of the loaded file** — the harness payload does not
+     contain it, so the adapter stats the path itself, and a file that cannot be stat'ed yields a
+     record without the field rather than no record at all
+  3. Implement: `plugins/tcs-helper/scripts/observability/log_instructions.sh` (relocated 2026-09-06
+     from `.claude/observability/` along with `logwrite.sh` — see `solution.md`'s Directory Map and
+     the README's Decisions Log)
+  4. Validate: bats green; the adapter writes nothing to stdout (CON-4)
+  5. Success: `[ref: SDD/SDD-AC-2, SDD-AC-3, SDD-AC-4]`; `[ref: PRD/F1]`; `bytes` is populated,
+     without which PRD F4's byte-cost report has no input `[ref: SDD/SDD-AC-14]`
+
+- [x] **T2.2 Skill adapter** `[activity: backend-api]` `[parallel: true]`
+
+  1. Prime: read the `PreToolUse` payload shape and the nested-`tool_input` caveat
+     `[ref: SDD/Known Technical Issues]`
+  2. Test: a `Skill` tool call yields one `kind: skill` record naming the skill; a payload whose
+     `tool_input` lacks the expected key yields a record with an empty skill and **never** the
+     serialised object; a non-`Skill` tool call yields no record at all
+  3. Implement: `plugins/tcs-helper/scripts/observability/log_skill.sh` (relocated 2026-09-06, see
+     T2.1 above)
+  4. Validate: bats green; nothing on stdout
+  5. Success: `[ref: SDD/SDD-AC-16]`; `[ref: PRD/F5]`
+
+- [x] **T2.3 Agent adapter** `[activity: backend-api]` `[parallel: true]`
+
+  1. Prime: read the `SubagentStart` payload shape `[ref: SDD/Interface Specifications]`
+  2. Test: a dispatch yields one `kind: agent` record with the agent type and id; a nested dispatch
+     records the parent agent; a payload missing `agent_type` still produces a well-formed line
+     — **superseded by measurement (2026-09-07, T2.4):** "a nested dispatch records the parent
+     agent" described a payload shape no harness produces. A real nested dispatch, captured live,
+     carries no parent-identifying field under any name (see README Decisions Log, 2026-09-07, and
+     `solution.md`'s `kind = agent` record note). The test now pins the opposite: a parent-looking
+     payload field must never produce a `parent_agent` record. This line is not rewritten — it
+     records what T2.3 originally set out to test
+  3. Implement: `plugins/tcs-helper/scripts/observability/log_agent.sh` (relocated 2026-09-06, see
+     T2.1 above)
+  4. Validate: bats green; nothing on stdout
+  5. Success: `[ref: SDD/SDD-AC-16]`; `[ref: PRD/F5]`
+
+- [x] **T2.4 Registration and self-check** `[activity: infrastructure]`
+
+  1. Prime: read the hook registration shape in `plugins/tcs-helper/hooks/hooks.json` and the
+     directory map `[ref: SDD/Directory Map]`
+  2. Test: with `CLAUDE_OBSERVABILITY_ENABLED` unset, a session creates no data directory and no file; with it
+     set, a real session start produces at least one instruction record; `selfcheck` reports
+     enabled state, detail state, record path and last-write time, and says "not recording" rather
+     than reporting an empty result as a finding
+  3. Implement: `.claude/settings.json` registration for the three events (unchanged — the SDD's
+     relocation moves the scripts, not this file), `plugins/tcs-helper/scripts/observability/selfcheck.sh`,
+     and `plugins/tcs-helper/scripts/observability/README.md` — the user-facing note the PRD promises
+     three times: the two switch names, where the record lives, how to read it, and how to delete it.
+     The `.claude/settings.json` entries must point at the writer/adapters by an absolute or
+     `$CLAUDE_PROJECT_DIR`-relative path — a repo's own `.claude/settings.json` hook gets no
+     `CLAUDE_PLUGIN_ROOT` at invocation time, unlike a hook a plugin registers via its own
+     `hooks.json` (see `solution.md`'s ADR-1 premise correction)
+  4. Validate: run a real session in this repo and inspect the produced records by hand — the first
+     point at which the design meets the actual harness rather than a fixture
+  5. Success: `[ref: SDD/SDD-AC-1]`; the `kind: state` record exists `[ref: SDD/Application Data Models]`;
+     `[ref: PRD/F3]` (nothing recorded while off); a reader who has never seen this spec can enable,
+     locate and delete the record from the written note alone
+
+  > **Done, with the registration deliberately left to the maintainer.** `selfcheck.sh`, the
+  > user-facing `README.md` and 8 tests landed in `468f340`; the registration snippet is documented
+  > in that README rather than written into `.claude/settings.json`, because registering an
+  > `InstructionsLoaded` hook switches on the harness's eager-load bookkeeping in every session in
+  > this repo, recording on or off. That is the maintainer's call, not an implementation detail.
+  >
+  > **Step 4 ran for real** — a live session in an isolated scratch repo with all three adapters
+  > registered, `CLAUDE_OBSERVABILITY_ENABLED=1`. It settled both UNVERIFIED payload assumptions:
+  >
+  > - **`skill` is the right key** — CONFIRMED. A real `PreToolUse` payload produced
+  >   `{"kind":"skill","skill":"dataviz"}`. Previously only inferred from 358 transcript observations.
+  > - **`parent_agent` does not exist** — DISPROVEN. A genuinely nested dispatch (the session's own
+  >   answer confirms the chain, and the timestamps show the child five seconds after its parent)
+  >   produced a record with no parent field. Removed from the record shape in `5e05b97`, together
+  >   with the binary and live-doc evidence.
+  >
+  > Also confirmed against real payloads: `agent_type`/`agent_id` are correct; `bytes` matched the
+  > fixture file exactly (36 bytes); an outside-the-repo path was reduced to its basename while a
+  > repo-local one stayed repo-relative; `reason: session_start` and `scope: Project`/`User` both
+  > populated correctly.
+
+
+- [x] **T2.5 Phase Validation** `[activity: validate]`
+
+  - Run the full bats and pytest suites. Then verify the thing fixtures cannot: start a real session,
+    confirm records appear for all three kinds, and confirm **no existing hook changed behaviour** —
+    exit statuses, blocking behaviour and stdout of this repo's existing hooks are unchanged
+    `[ref: SDD/Implementation Boundaries — Must Preserve]`.
+
+  > **Result — both suites green, all three record kinds seen live.**
+  > `pytest -q`: 539 passed, 1 skipped. Observability bats: 102/102. The full CI invocation
+  > (`bats --recursive plugins/*/tests/bats`): **942/942** under CI's own `TCS_PERF_SLACK=4`.
+  >
+  > One failure appeared without that slack: `test_perf_cache_hit_under_30ms` in `tcs-git-helpers`.
+  > Investigated rather than dismissed — it passes 3/3 in isolation and is a 30 ms budget reached
+  > while 942 tests and several background agents ran concurrently. Load artefact, not a regression;
+  > this repo's `TCS_PERF_SLACK` convention exists for exactly this and CI sets it.
+  >
+  > **Records confirmed for all three kinds from a live session**, not fixtures: `instruction`
+  > (`CLAUDE.md`, scope `Project`, reason `session_start`, `bytes` 36 matching the file exactly; a
+  > `User`-scope path outside the repo correctly reduced to its basename), `agent` (`Explore`,
+  > `general-purpose`, and a genuinely nested dispatch), and `skill` (`dataviz`, from a real
+  > `PreToolUse` payload).
+  >
+  > **"No existing hook changed behaviour" — stated precisely.** In THIS repo the criterion is
+  > trivially met because the hooks were deliberately not registered: that is an absence of risk,
+  > not evidence. The real evidence comes from the scratch repo, where all three ran registered and
+  > active through several sessions that behaved normally — exit 0, correct answers, subagents
+  > dispatched, nested dispatch working. That demonstrates CON-4/CON-5 hold against the live harness.
+  > **What remains unobserved**: these three adapters running alongside this repo's OWN existing
+  > hooks (`tcs-git-helpers`' guards, `tcs-helper`'s). The harness runs hooks in a group in parallel
+  > (T1.4's finding), and that combination has not been exercised. It becomes testable the moment
+  > the maintainer registers them here.
