@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-09-08 |
-| **Current Phase** | SDD |
-| **Decomposition tier** | {{DECOMPOSITION_TIER}} |
+| **Current Phase** | PLAN |
+| **Decomposition tier** | Incremental |
 | **Last Updated** | 2026-09-08 |
 
 ## Documents
@@ -15,7 +15,7 @@
 |----------|--------|-------|
 | requirements.md | completed | 26 acceptance criteria, 0 clarification markers, 1 open question carried (collection-period end date) |
 | solution.md | completed | 4 components, 8 ADRs all confirmed, 24 acceptance criteria |
-| plan/ | pending | |
+| plan/ | completed | Incremental tier: 4 phases, 18 tasks, 2 parallel, 71 spec references |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -33,6 +33,7 @@
 | 2026-09-08 | **Setup writes into each target's `.claude/settings.local.json`, never `.claude/settings.json`** | Found while checking a residual risk rather than by design intent, and it inverted the obvious choice. In three of the four targets `.claude/settings.json` is **tracked in git**, and all four have remotes. Writing the registration there would put it in the maintainer's diffs, let it be committed by accident, and — once pushed — start recording for anyone who clones the repository and opens a session, with no reason to look for it. That is precisely the breach spec-018's PRD Feature 3 names, arriving one clone away rather than through a plugin update. `settings.local.json` is untracked in all four. It is also proven to carry hooks: one of the four already has a `hooks` block there, which is empirical evidence that the harness honours them at that layer rather than a claim from documentation. The satori precedent supplies the merge mechanism, not the choice of file — that choice is ours, and the evidence settles it |
 | 2026-09-08 | **Success is defined as "#147 becomes decidable", not "records exist"** | Maintainer choice. The criterion is that after a stated collection period the report can say, for every shipped skill and agent, in which target repositories it fired and in which it did not — reliably enough to decide keep, drop or rework. A criterion phrased as "recording works" would be met on day one and would leave the feature in exactly the state spec-018 left it: built, correct, and answering nothing |
 | 2026-09-08 | **The setup command is general and reversible, not a four-repository script** | Maintainer choice. It accepts any target, detects the host or container shape itself, merges without damaging foreign entries, reports honestly when it finds entries it does not own, and can uninstall. The incremental cost over a hard-coded script is small because the merge logic is required either way — and a setup path with no uninstall path is a trap, leaving entries to be pulled out of several files by hand later |
+| 2026-09-08 | **Decomposition tier: Incremental.** Classifier recommended Incremental; maintainer confirmed | Rule 1 fired twice over: `component_count` 3 (bundle installer, registration editor, locations config are new surface; the report aggregation modifies existing code and so does not increment) and `feature_count` 4. `ac_count` 26, `change_type` feature, `parallel_markers` **false** — the two "concurrent" mentions in the SDD are a requirement that concurrent setup runs must serialize, which is a safety property of the lock rather than a parallel work stream, so a naive grep would have set this signal wrongly. Not a borderline case: breadth vetoes Direct regardless of change type, and both breadth signals cleared the threshold independently |
 
 ## Context
 
