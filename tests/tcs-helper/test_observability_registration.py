@@ -1211,3 +1211,106 @@ def test_a_stale_lock_older_than_the_ttl_is_reclaimed_even_with_a_live_owner(tmp
     assert result.returncode == 0, result.stderr
     assert settings.read_text(encoding='utf-8') != original
     assert not os.path.exists(lock), 'the reclaimed lock was not released'
+
+
+def _age_lock(lock, seconds):
+    """Backdate the lock file's mtime -- the observable the grace check reads."""
+    old = time.time() - seconds
+    os.utime(lock, (old, old))
+
+
+def test_a_freshly_created_empty_lock_is_not_reclaimed(tmp_path):
+    """SDD-AC-11's real hazard, and the one an "unreadable means stale" rule
+    walks straight into.
+
+    Creating the lock file IS the acquisition, but the owner's `pid:epoch`
+    line lands on the NEXT statement -- so for a few microseconds a perfectly
+    live lock reads as empty. A contender that calls that stale unlinks the
+    lock out from under its owner, race-creates its own, and both runs edit
+    the same settings file. An empty lock file with a fresh mtime therefore
+    has to be respected, not reclaimed.
+
+    The injected timeout (1s) is deliberately SHORTER than the grace period
+    (2s): the run must give up while the empty lock is still inside its
+    grace window. If either number moves, this pairing has to move with it.
+    """
+    settings = tmp_path / 'settings.local.json'
+    original = write_settings(settings, {'model': 'claude-opus-5'})
+    lock = str(settings) + LOCK_SUFFIX
+    open(lock, 'w', encoding='utf-8').close()   # created, not yet written
+    assert os.path.getsize(lock) == 0
+    assert registration.LOCK_GRACE > 1.0, (
+        'this test needs the grace period to outlast the injected timeout')
+
+    result = subprocess.run(
+        [sys.executable, SCRIPT, '--settings', str(settings)],
+        capture_output=True, text=True, timeout=30,
+        env=dict(os.environ, **{LOCK_TIMEOUT_ENV: '1'}))
+
+    assert result.returncode != 0, (
+        'a half-written lock was treated as abandoned -- two runs can now '
+        'enter the same settings file')
+    assert os.path.exists(lock), 'a live lock was unlinked out from under its owner'
+    assert settings.read_text(encoding='utf-8') == original, 'it wrote anyway'
+
+
+def test_an_empty_lock_older_than_the_grace_period_is_reclaimed(tmp_path):
+    """The other half: a lock left empty by a crash must not wedge setup
+    forever. Once it is older than any create-to-write window could be, it is
+    abandoned and gets reclaimed."""
+    settings = tmp_path / 'settings.local.json'
+    original = write_settings(settings, {'model': 'claude-opus-5'})
+    lock = str(settings) + LOCK_SUFFIX
+    open(lock, 'w', encoding='utf-8').close()
+    _age_lock(lock, registration.LOCK_GRACE + 60)
+
+    result = subprocess.run(
+        [sys.executable, SCRIPT, '--settings', str(settings)],
+        capture_output=True, text=True, timeout=30,
+        env=dict(os.environ, **{LOCK_TIMEOUT_ENV: '2'}))
+
+    assert result.returncode == 0, result.stderr
+    assert settings.read_text(encoding='utf-8') != original
+    assert not os.path.exists(lock), 'the reclaimed lock was not released'
+
+
+def test_a_lock_holding_junk_is_reclaimed_once_it_is_older_than_the_grace_period(tmp_path):
+    """Content that is neither empty nor `pid:epoch` takes the same path as
+    empty content: unusable, but only abandoned once it is old. Until now only
+    a dead PID and an over-TTL timestamp were covered, both of which require a
+    well-formed line to detect."""
+    settings = tmp_path / 'settings.local.json'
+    original = write_settings(settings, {'model': 'claude-opus-5'})
+    lock = str(settings) + LOCK_SUFFIX
+
+    with open(lock, 'w', encoding='utf-8') as handle:
+        handle.write('not-a-pid:not-an-epoch\n')
+    _age_lock(lock, registration.LOCK_GRACE + 60)
+
+    result = subprocess.run(
+        [sys.executable, SCRIPT, '--settings', str(settings)],
+        capture_output=True, text=True, timeout=30,
+        env=dict(os.environ, **{LOCK_TIMEOUT_ENV: '2'}))
+
+    assert result.returncode == 0, result.stderr
+    assert settings.read_text(encoding='utf-8') != original
+    assert not os.path.exists(lock)
+
+
+def test_junk_in_a_fresh_lock_is_respected_like_an_empty_one(tmp_path):
+    """The junk path gets the grace period too -- it is the same branch, and a
+    test that only ever backdates the mtime would not notice if it did not."""
+    settings = tmp_path / 'settings.local.json'
+    original = write_settings(settings, {'model': 'claude-opus-5'})
+    lock = str(settings) + LOCK_SUFFIX
+    with open(lock, 'w', encoding='utf-8') as handle:
+        handle.write('garbage\n')
+
+    result = subprocess.run(
+        [sys.executable, SCRIPT, '--settings', str(settings)],
+        capture_output=True, text=True, timeout=30,
+        env=dict(os.environ, **{LOCK_TIMEOUT_ENV: '1'}))
+
+    assert result.returncode != 0
+    assert os.path.exists(lock)
+    assert settings.read_text(encoding='utf-8') == original

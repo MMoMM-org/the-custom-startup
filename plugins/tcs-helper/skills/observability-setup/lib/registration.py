@@ -89,6 +89,15 @@ DEFAULT_LOCK_TIMEOUT = 10.0   # lock.sh's TCS_LOCK_TIMEOUT default
 DEFAULT_LOCK_TTL = 300        # lock.sh's 5-minute stale reclaim
 LOCK_POLL_INTERVAL = 0.05
 
+# How long an empty or unparseable lock file must sit before it counts as
+# abandoned rather than half-written. Sized between the two things it has to
+# separate: the create-to-write window is microseconds, and the TTL that
+# governs a properly written lock is 300s. Two seconds is six orders of
+# magnitude clear of the first and two orders short of the second, so a lock
+# genuinely left as garbage by a crash still clears well inside the default
+# 10s wait.
+LOCK_GRACE = 2.0
+
 # event -> (matcher, script). PreToolUse is matched to Skill alone; the other
 # two carry no matcher because their events fire once, not per tool.
 REGISTRATION = {
@@ -390,6 +399,18 @@ def _read_lock(path):
         return None
 
 
+def _age(path):
+    """Seconds since the lock file was last written, or 0 if it is gone.
+
+    A vanished lock reads as brand new on purpose: there is nothing left to
+    reclaim, and the next poll will race-create cleanly.
+    """
+    try:
+        return time.time() - os.stat(path).st_mtime
+    except OSError:
+        return 0.0
+
+
 def _try_acquire_once(path, ttl):
     """One attempt. Creating the file IS the acquisition.
 
@@ -412,11 +433,22 @@ def _try_acquire_once(path, ttl):
     if text is None:
         return False
     pid, stamp = _lock_owner(text)
-    stale = (
-        pid is None                                 # unreadable, so unusable
-        or int(time.time()) - stamp > ttl           # older than the TTL
-        or not _pid_is_alive(pid)                   # owner is gone
-    )
+    if pid is None:
+        # Empty or unparseable -- and NOT necessarily abandoned. Creating the
+        # file is the acquisition, but the owner's pid line lands on the very
+        # next statement, so between those two moments a live lock reads as
+        # empty. Declaring that stale unlinks a lock out from under its owner;
+        # the owner then holds a file that no longer exists, this process
+        # race-creates a fresh one, and both runs walk into the same settings
+        # file -- precisely what SDD-AC-11 forbids. So unreadable content is
+        # stale only once the file has sat unwritten for longer than any
+        # create-to-write window could plausibly last.
+        stale = _age(path) > LOCK_GRACE
+    else:
+        stale = (
+            int(time.time()) - stamp > ttl          # older than the TTL
+            or not _pid_is_alive(pid)               # owner is gone
+        )
     if stale:
         # Remove it and let the NEXT iteration race-create cleanly, exactly as
         # lock.sh:70-74 does. Acquiring in place here would let two contenders
