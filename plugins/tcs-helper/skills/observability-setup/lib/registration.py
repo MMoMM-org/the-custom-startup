@@ -21,9 +21,24 @@ That shape is copied here.
         json.dump(data, f, indent=2)        # rewrites second
 
 An interruption between those two lines leaves the maintainer with an empty
-file and no way back. T2.5 replaces the write below with backup ->
-temp-write -> rename under a lock. Until then this module writes only after a
-successful parse, and never truncates a file it has not fully read.
+file and no way back. write_settings() below replaces that with backup ->
+temp-write -> rename, run under a lock held across the whole load-merge-write
+sequence. The real file is only ever opened for reading; the new document
+reaches it through os.replace() alone.
+
+WHY THE TEMP FILE IS NOT IN $TMPDIR, THOUGH BOTH IN-REPO PRECEDENTS PUT IT
+THERE. `install.sh:729-731` and `scripts/the-custom-startup-configure-statusline.sh:176-180`
+both `mktemp` and `mv` onto the settings file. `mktemp` creates in $TMPDIR,
+which on the machine this was written on is a DIFFERENT FILESYSTEM from the
+repositories being configured (st_dev 16777234 vs 16777245). Across a
+filesystem boundary `mv` is copy-then-unlink, not a rename -- and the direct
+Python translation is worse than merely non-atomic: os.rename() raises EXDEV
+and the obvious rescue, shutil.move(), falls back to copying INTO the
+destination, which opens and truncates the real file. That is precisely the
+window this module exists to close, reintroduced while looking like house
+style. So the temp file is created in the TARGET's own directory and replaced
+with os.replace(). Follow the precedent's intent, not its literal shape --
+please do not "fix" this back to mktemp.
 
 TWO DEFAULTS THAT LOOK LIKE STYLE AND ARE NOT.
 
@@ -44,7 +59,10 @@ command changes, with no way left to recognise or remove the old one.
 import argparse
 import json
 import os
+import shutil
+import stat
 import sys
+import time
 
 # The bundle is referenced through $HOME rather than an absolute path (ADR-2):
 # one command string has to work on the host and inside a container, and an
@@ -52,6 +70,24 @@ import sys
 NAMESPACE = '$HOME/.claude/observability/'
 
 ENV_SWITCH = ('CLAUDE_OBSERVABILITY_ENABLED', '1')
+
+# The three sidecar files, all beside the settings file they belong to and all
+# sharing one infix so a single ignore rule covers the set.
+BACKUP_SUFFIX = '.tcs-observability.bak'
+LOCK_SUFFIX = '.tcs-observability.lock'
+TEMP_SUFFIX = '.tcs-observability.tmp'
+
+# Deliberately NOT tempfile.mkstemp: a random name cannot be handed to
+# `git check-ignore` before it exists, and the Safety requirement binds the
+# temp file exactly as it binds the backup. A fixed name is safe because it is
+# only ever created while this process holds the lock.
+
+# Lock knobs, injectable so a test never has to sit through the real wait.
+LOCK_TIMEOUT_ENV = 'TCS_OBSERVABILITY_LOCK_TIMEOUT'
+LOCK_TTL_ENV = 'TCS_OBSERVABILITY_LOCK_TTL'
+DEFAULT_LOCK_TIMEOUT = 10.0   # lock.sh's TCS_LOCK_TIMEOUT default
+DEFAULT_LOCK_TTL = 300        # lock.sh's 5-minute stale reclaim
+LOCK_POLL_INTERVAL = 0.05
 
 # event -> (matcher, script). PreToolUse is matched to Skill alone; the other
 # two carry no matcher because their events fire once, not per tool.
@@ -286,19 +322,223 @@ def remove_registration(data):
     return changed
 
 
-def write_settings(path, data):
-    """Write the document back.
+def backup_path(path):
+    return str(path) + BACKUP_SUFFIX
 
-    Deliberately NOT satori's truncate-then-rewrite. T2.5 wraps this in
-    backup -> temp file -> rename under a lock; the signature is already the
-    one that change needs, so no caller moves when it lands.
+
+def lock_path(path):
+    return str(path) + LOCK_SUFFIX
+
+
+def temp_path(path):
+    return str(path) + TEMP_SUFFIX
+
+
+def written_paths(path):
+    """Every path this module can create in a target, the target included.
+
+    The declaration the "Safety" quality requirement is checked against: no
+    file this feature writes in a target may be reachable by version control.
+    Enforcing that -- refusing a target where any of these is committable --
+    is SDD-AC-6, which belongs to detection and to the command that composes
+    it, not here. This module's obligation is to keep the list honest, so a
+    path added to write_settings without being added here is a bug.
+    """
+    target = os.path.abspath(str(path))
+    return [target, backup_path(target), lock_path(target), temp_path(target)]
+
+
+# ---------------------------------------------------------------------------
+# The lock -- lock.sh:45-118 ported to Python
+# ---------------------------------------------------------------------------
+
+def _env_number(name, default):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _lock_owner(text):
+    """(pid, epoch) from lock.sh's `<pid>:<timestamp>` line, or (None, None)."""
+    pid_text, _, stamp_text = text.strip().partition(':')
+    if not pid_text.isdigit() or not stamp_text.isdigit():
+        return None, None
+    return int(pid_text), int(stamp_text)
+
+
+def _pid_is_alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True   # running, just owned by another user
+    except OSError:
+        return True   # unknown: treat as alive, never force-remove on a guess
+    return True
+
+
+def _read_lock(path):
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            return handle.read()
+    except OSError:
+        return None
+
+
+def _try_acquire_once(path, ttl):
+    """One attempt. Creating the file IS the acquisition.
+
+    O_CREAT|O_EXCL is the only Python equivalent of the precedent's `set -C`:
+    an os.path.exists() test followed by a write is a race, and a race here
+    means two runs editing one settings file at once.
+    """
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        pass
+    except OSError:
+        return False
+    else:
+        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+            handle.write('%d:%d\n' % (os.getpid(), int(time.time())))
+        return True
+
+    text = _read_lock(path)
+    if text is None:
+        return False
+    pid, stamp = _lock_owner(text)
+    stale = (
+        pid is None                                 # unreadable, so unusable
+        or int(time.time()) - stamp > ttl           # older than the TTL
+        or not _pid_is_alive(pid)                   # owner is gone
+    )
+    if stale:
+        # Remove it and let the NEXT iteration race-create cleanly, exactly as
+        # lock.sh:70-74 does. Acquiring in place here would let two contenders
+        # that both saw the same stale lock both succeed.
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    return False
+
+
+def acquire_lock(path, timeout=None, ttl=None):
+    """Poll until the lock is ours or the bounded wait expires.
+
+    The two outcomes a caller can see are the two outcomes of this one loop
+    (lock.sh:78-99), not two designs: a lock released inside the window is
+    followed by a normal successful run, and a lock still held at the deadline
+    makes the caller report the contention and exit.
+    """
+    if timeout is None:
+        timeout = _env_number(LOCK_TIMEOUT_ENV, DEFAULT_LOCK_TIMEOUT)
+    if ttl is None:
+        ttl = _env_number(LOCK_TTL_ENV, DEFAULT_LOCK_TTL)
+    deadline = time.time() + timeout
+    attempts = 0
+    while True:
+        if _try_acquire_once(path, ttl):
+            return True
+        attempts += 1
+        # At least two attempts: reclaiming a stale lock takes one pass to
+        # remove it and one to create it, so a very short timeout must not
+        # turn a reclaimable lock into a spurious contention report.
+        if attempts >= 2 and time.time() >= deadline:
+            return False
+        time.sleep(LOCK_POLL_INTERVAL)
+
+
+def release_lock(path):
+    """Idempotent. Never removes a lock a live foreign process holds.
+
+    The dead-owner branch is lock.sh:108-118, and it is defensive here rather
+    than load-bearing: git-setup acquires and releases in separate Bash calls,
+    so its `pid == $$` check never matches, while this module does both in one
+    process. What the branch still covers is a lock left behind by an earlier
+    run that crashed.
+    """
+    text = _read_lock(path)
+    if text is None:
+        return
+    pid, _stamp = _lock_owner(text)
+    if pid is None or pid == os.getpid() or not _pid_is_alive(pid):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# The write
+# ---------------------------------------------------------------------------
+
+def _fsync_dir(directory):
+    """Best-effort: make the rename itself durable, not just its contents."""
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def discard_backup(path):
+    """Removal takes the backup with it -- at most one exists per target, and
+    none outlives the registration it was taken for."""
+    try:
+        os.unlink(backup_path(path))
+    except OSError:
+        pass
+
+
+def write_settings(path, data):
+    """Replace the document without ever opening the real file for writing.
+
+    backup -> temp-write -> rename (see the module docstring for why the temp
+    file lives in the target's own directory). SDD-AC-9: if anything fails
+    between the backup and the rename, the original is untouched and the
+    backup is the second copy of it.
     """
     parent = os.path.dirname(os.path.abspath(path))
     if parent and not os.path.isdir(parent):
         os.makedirs(parent)
     text = json.dumps(data, indent=2, ensure_ascii=False) + '\n'
-    with open(path, 'w', encoding='utf-8') as handle:
-        handle.write(text)
+
+    mode = 0o600
+    if os.path.isfile(path):
+        mode = stat.S_IMODE(os.stat(path).st_mode)
+        # copy2, not copy: the backup keeps the original's mode and times, so
+        # restoring it by hand restores the file the maintainer had.
+        shutil.copy2(path, backup_path(path))
+
+    temp = temp_path(path)
+    fd = os.open(temp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temp, mode)
+        os.replace(temp, path)
+    except BaseException:
+        # Including KeyboardInterrupt: a Ctrl-C here must not leave a stray
+        # temp file in a repository we do not own.
+        try:
+            os.unlink(temp)
+        except OSError:
+            pass
+        raise
+    _fsync_dir(parent)
 
 
 def main(argv=None):
@@ -314,6 +554,24 @@ def main(argv=None):
         help='remove the observability registration instead of adding it')
     args = parser.parse_args(argv)
 
+    # The lock is acquired before the document is read, not before it is
+    # written, so two concurrent runs serialize across the whole load-merge-
+    # write sequence rather than racing to a merge each computed alone
+    # (SDD/Runtime View step 2).
+    parent = os.path.dirname(os.path.abspath(args.settings))
+    if parent and not os.path.isdir(parent):
+        os.makedirs(parent)
+    lock = lock_path(args.settings)
+    if not acquire_lock(lock):
+        sys.stderr.write('another observability setup run holds %s\n' % lock)
+        return 1
+    try:
+        return _edit_under_lock(args)
+    finally:
+        release_lock(lock)
+
+
+def _edit_under_lock(args):
     data, error = load_settings(args.settings)
     if error:
         sys.stderr.write('%s\n' % error)
@@ -323,8 +581,10 @@ def main(argv=None):
         changed = remove_registration(data)
         if not changed:
             print('nothing to remove: %s' % args.settings)
+            discard_backup(args.settings)
             return 0
         write_settings(args.settings, data)
+        discard_backup(args.settings)
         print('removed observability hooks from %s' % args.settings)
         return 0
 

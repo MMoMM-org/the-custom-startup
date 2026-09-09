@@ -13,8 +13,14 @@ that nothing tests. Both are deliberately covered here.
 """
 import json
 import os
+import pathlib
+import shutil
 import subprocess
 import sys
+import tempfile
+import time
+
+import pytest
 
 SCRIPT = os.path.abspath(
     os.path.join(
@@ -34,6 +40,7 @@ sys.path.insert(0, os.path.join(
     os.path.dirname(__file__),
     '../../plugins/tcs-helper/skills/observability-setup/lib',
 ))
+import registration  # noqa: E402
 from registration import entry_is_ours, command_for  # noqa: E402
 
 OUR_NAMESPACE = '$HOME/.claude/observability/'
@@ -45,12 +52,21 @@ EXPECTED_EVENTS = {
 }
 
 
-def run_registration(settings_path, *extra_args):
-    """Invoke the editor against a settings file, never a real one."""
+def run_registration(settings_path, *extra_args, env_extra=None):
+    """Invoke the editor against a settings file, never a real one.
+
+    `env_extra` exists for the T2.5 tests, which need to neutralise the
+    operator's global git ignore rules inside the child process too -- see
+    GIT_ISOLATION below.
+    """
+    env = dict(os.environ)
+    if env_extra:
+        env.update(env_extra)
     return subprocess.run(
         [sys.executable, SCRIPT, '--settings', str(settings_path), *extra_args],
         capture_output=True,
         text=True,
+        env=env,
     )
 
 
@@ -706,3 +722,492 @@ def test_install_then_remove_round_trips_to_the_original_bytes(tmp_path):
     assert settings.read_text(encoding='utf-8') == original
     siblings = sorted(p.name for p in tmp_path.iterdir())
     assert siblings == [settings.name], 'unexpected sibling files: %r' % siblings
+
+
+# ---------------------------------------------------------------------------
+# T2.5 -- durability: backup, atomic replace, and the lock
+#
+# The three sidecar paths this feature writes all sit beside the settings
+# file and share one infix, so a single ignore rule covers the set:
+#
+#   <settings>.tcs-observability.bak    the pre-write copy   (SDD-AC-9)
+#   <settings>.tcs-observability.lock   the serializing lock (SDD-AC-11)
+#   <settings>.tcs-observability.tmp    the staging file replaced onto target
+#
+# The temp file is deliberately NOT mkstemp-random: a random name cannot be
+# handed to `git check-ignore` before it exists, and the Safety requirement
+# ("no file this feature writes in a target is reachable by version control")
+# binds the temp file exactly as it binds the other two.
+# ---------------------------------------------------------------------------
+
+BACKUP_SUFFIX = '.tcs-observability.bak'
+LOCK_SUFFIX = '.tcs-observability.lock'
+TEMP_SUFFIX = '.tcs-observability.tmp'
+
+LOCK_TIMEOUT_ENV = 'TCS_OBSERVABILITY_LOCK_TIMEOUT'
+LOCK_TTL_ENV = 'TCS_OBSERVABILITY_LOCK_TTL'
+
+# The repository's gitignored scratch directory, on the repository's own
+# volume. One test deliberately needs a target that is NOT under $TMPDIR --
+# see test_the_temp_file_is_created_on_the_same_filesystem_as_the_target.
+REPO_SCRATCH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'tmp'))
+
+# `git check-ignore` reads the operator's global excludes, and
+# GIT_CONFIG_GLOBAL=/dev/null alone is NOT isolation: with core.excludesFile
+# unset git falls back to ~/.config/git/ignore, which on the machine this was
+# written on carries `**/.claude/settings.local.json`. Without neutralising
+# core.excludesFile too, the by-name fixture below would read as ignored and
+# the test would silently assert nothing. Same override the bats suites use
+# (observability-detect.bats), and it lives only here -- registration.py calls
+# plain `git check-ignore`, because a global rule is real for a real user.
+GIT_ISOLATION = {
+    'GIT_CONFIG_GLOBAL': '/dev/null',
+    'GIT_CONFIG_SYSTEM': '/dev/null',
+    'GIT_CONFIG_COUNT': '1',
+    'GIT_CONFIG_KEY_0': 'core.excludesFile',
+    'GIT_CONFIG_VALUE_0': '/dev/null',
+}
+
+
+def _git(*args):
+    env = dict(os.environ)
+    env.update(GIT_ISOLATION)
+    return subprocess.run(['git', *args], capture_output=True, text=True, env=env)
+
+
+def _make_repo(root, ignore_line):
+    """A real repository whose .gitignore carries exactly one rule.
+
+    `git init <dir>` with an explicit directory (never a bare `git init` after
+    a chdir) so a failure cannot fall back to this repository's own .git.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    result = _git('init', '-q', str(root))
+    assert result.returncode == 0, result.stderr
+    (root / '.gitignore').write_text(ignore_line + '\n', encoding='utf-8')
+    return root
+
+
+def _is_ignored(repo, path):
+    return _git('-C', str(repo), 'check-ignore', '-q', '--', str(path)).returncode == 0
+
+
+def _sidecars(settings):
+    return [
+        str(settings) + BACKUP_SUFFIX,
+        str(settings) + LOCK_SUFFIX,
+        str(settings) + TEMP_SUFFIX,
+    ]
+
+
+def _dead_pid():
+    """A PID that is certainly not running: start a process, reap it, reuse it."""
+    proc = subprocess.Popen([sys.executable, '-c', 'pass'])
+    proc.wait()
+    return proc.pid
+
+
+def _hold_lock(settings, pid, age_seconds=0):
+    """Plant a lock file in the precedent's `<pid>:<epoch>` format."""
+    lock = str(settings) + LOCK_SUFFIX
+    with open(lock, 'w', encoding='utf-8') as handle:
+        handle.write('%d:%d\n' % (pid, int(time.time()) - age_seconds))
+    return lock
+
+
+# --- the backup ------------------------------------------------------------
+
+def test_the_backup_lands_beside_the_settings_file_and_holds_the_pre_write_bytes(tmp_path):
+    """SDD-AC-9: a backup exists after a write and matches the pre-write content."""
+    settings = tmp_path / 'settings.local.json'
+    original = write_settings(settings, {'model': 'claude-opus-5'})
+
+    assert run_registration(settings).returncode == 0
+
+    backup = tmp_path / ('settings.local.json' + BACKUP_SUFFIX)
+    assert backup.exists(), 'no backup at the named path %s' % backup
+    assert backup.read_text(encoding='utf-8') == original
+    assert settings.read_text(encoding='utf-8') != original, 'the write did not happen'
+
+
+def test_at_most_one_backup_per_target_overwritten_by_the_next_write(tmp_path):
+    """Retention: the backup is overwritten by the next write, never accumulated."""
+    settings = tmp_path / 'settings.local.json'
+    write_settings(settings, {'model': 'claude-opus-5'})
+
+    assert run_registration(settings).returncode == 0
+    after_first = settings.read_text(encoding='utf-8')
+
+    # make the second run write again (an env-only correction is enough)
+    data = json.loads(after_first)
+    data['env']['CLAUDE_OBSERVABILITY_ENABLED'] = '0'
+    after_first = json.dumps(data, indent=2, ensure_ascii=False) + '\n'
+    settings.write_text(after_first, encoding='utf-8')
+
+    assert run_registration(settings).returncode == 0
+
+    backups = sorted(p.name for p in tmp_path.iterdir() if p.name.endswith(BACKUP_SUFFIX))
+    assert backups == ['settings.local.json' + BACKUP_SUFFIX], (
+        'expected exactly one backup, found %r' % backups)
+    backup = tmp_path / backups[0]
+    assert backup.read_text(encoding='utf-8') == after_first, (
+        'the backup holds the state before the LAST write, not an older one')
+
+
+def test_removal_deletes_the_backup_and_leaves_no_lock_or_temp_file(tmp_path):
+    """Retention: removal takes the backup with it, so at most one exists per
+    target and none outlives the feature."""
+    settings = tmp_path / 'settings.local.json'
+    write_settings(settings, {'model': 'claude-opus-5'})
+    assert run_registration(settings).returncode == 0
+    assert (tmp_path / ('settings.local.json' + BACKUP_SUFFIX)).exists()
+
+    assert run_registration(settings, '--remove').returncode == 0
+
+    siblings = sorted(p.name for p in tmp_path.iterdir())
+    assert siblings == ['settings.local.json'], 'left behind: %r' % siblings
+
+
+# --- every written path is out of version control's reach ------------------
+
+def test_every_path_this_feature_writes_is_ignored_when_the_target_ignores_claude(tmp_path):
+    """Quality Requirement "Safety", the ordinary case: a target that ignores
+    `.claude/` wholesale covers the settings file and all three sidecars.
+
+    Asserted for the settings path, the backup, the lock AND the temp file --
+    each is a real file written into a repository we do not own (ADR-1).
+    """
+    repo = _make_repo(tmp_path / 'target', '.claude/')
+    settings = repo / '.claude' / 'settings.local.json'
+    settings.parent.mkdir(parents=True)
+    write_settings(settings, {'model': 'claude-opus-5'})
+
+    result = run_registration(settings, env_extra=GIT_ISOLATION)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / 'target' / '.claude' / ('settings.local.json' + BACKUP_SUFFIX)).exists(), (
+        'nothing was written, so this asserts nothing')
+
+    # The module's own declared write set, not a list rebuilt here: an
+    # assertion over a locally-rebuilt list would keep passing if production
+    # moved the temp file to $TMPDIR (outside the repository, and therefore
+    # outside `git check-ignore`'s reach entirely).
+    declared = registration.written_paths(settings)
+    assert set(declared) == set([os.path.abspath(str(settings))] + _sidecars(settings)), (
+        'the written-path set drifted from the names this test pins: %r' % declared)
+    for path in declared:
+        assert _is_ignored(repo, path), 'not ignored: %s' % path
+
+
+# --- the replace is a rename, not a rewrite --------------------------------
+
+def test_the_temp_file_is_created_on_the_same_filesystem_as_the_target():
+    """os.replace() is an atomic rename only WITHIN one filesystem, so the temp
+    file has to be created in the target's own directory.
+
+    This has its own test rather than riding on the truncation check below
+    because the mistake it guards is the likely one: both precedents this task
+    was told to imitate (install.sh:729-731,
+    scripts/the-custom-startup-configure-statusline.sh:176-180) `mktemp` into
+    $TMPDIR, which on this machine is a different device from the repositories
+    being configured. The truncation check would catch a shutil.move() fallback
+    too -- its cross-device path opens the destination in write mode -- but it
+    would report "the settings file was truncated" and leave the next reader to
+    work out that the real cause was a temp file on the wrong filesystem.
+
+    Observed, not inferred: the temp file is identified by ROLE -- it is
+    whatever gets renamed onto the target -- and compared by st_dev, never by
+    path string. A string check would pass for the wrong reason if $TMPDIR were
+    ever pointed inside the repository.
+
+    NOT `tmp_path`, and that is the whole point: pytest's tmp_path lives under
+    $TMPDIR, so a temp file mistakenly created by `tempfile.mkstemp()` would
+    land on the SAME device as the target and this assertion would be vacuous
+    -- it would pass while the bug is present. The fixture therefore sits on
+    the repository's own volume, under the gitignored `tmp/` scratch directory,
+    which is a different device here (measured: 16777245 vs 16777234).
+    """
+    os.makedirs(REPO_SCRATCH, exist_ok=True)
+    target_dir = tempfile.mkdtemp(prefix='t25-device-', dir=REPO_SCRATCH)
+    try:
+        _assert_temp_shares_the_targets_filesystem(target_dir)
+    finally:
+        shutil.rmtree(target_dir, ignore_errors=True)
+
+
+def _assert_temp_shares_the_targets_filesystem(target_dir):
+    settings = pathlib.Path(target_dir) / 'settings.local.json'
+    write_settings(settings, {'model': 'claude-opus-5'})
+    target = os.path.abspath(str(settings))
+
+    renamed = {}
+    real_replace = os.replace
+
+    def recording_replace(src, dst, *args, **kwargs):
+        renamed.setdefault('src', os.path.abspath(str(src)))
+        return real_replace(src, dst, *args, **kwargs)
+
+    os.replace = recording_replace
+    try:
+        failure = None
+        try:
+            assert registration.main(['--settings', str(settings)]) == 0
+        except OSError as exc:
+            failure = exc   # e.g. EXDEV -- report the cause below, not this
+    finally:
+        os.replace = real_replace
+
+    assert 'src' in renamed, 'the document never reached the target via os.replace'
+    temp_dir = os.stat(os.path.dirname(renamed['src']))
+    target_dir_stat = os.stat(os.path.dirname(target))
+    assert temp_dir.st_dev == target_dir_stat.st_dev, (
+        'the temp file was created on a different filesystem (st_dev %d) from '
+        'the target (st_dev %d): %s. os.replace() is only an atomic rename '
+        'within one filesystem -- create the temp file in the target'
+        "'s own directory." % (temp_dir.st_dev, target_dir_stat.st_dev, renamed['src']))
+    # Same device is the requirement; same directory is how this module meets
+    # it, and asserting it by inode (not by path string) keeps the test's teeth
+    # on a machine where $TMPDIR happens to share the target's filesystem.
+    assert temp_dir.st_ino == target_dir_stat.st_ino, (
+        'the temp file was created outside the target\'s own directory: %s'
+        % renamed['src'])
+    assert failure is None, failure
+
+def test_the_settings_file_is_never_opened_for_writing(tmp_path):
+    """Quality Requirement "Atomicity", by mechanism: wrap `builtins.open` and
+    `os.open` and assert the final path never appears in a truncating -- in
+    fact never in any writing -- mode. The document reaches the file only
+    through `os.replace`.
+    """
+    import builtins
+
+    settings = tmp_path / 'settings.local.json'
+    write_settings(settings, {'model': 'claude-opus-5'})
+    target = os.path.abspath(str(settings))
+
+    opens = []
+    real_open = builtins.open
+    real_os_open = os.open
+
+    def recording_open(file, mode='r', *args, **kwargs):
+        opens.append((os.path.abspath(str(file)), mode))
+        return real_open(file, mode, *args, **kwargs)
+
+    def recording_os_open(path, flags, *args, **kwargs):
+        opens.append((os.path.abspath(str(path)), flags))
+        return real_os_open(path, flags, *args, **kwargs)
+
+    builtins.open = recording_open
+    os.open = recording_os_open
+    try:
+        assert registration.main(['--settings', str(settings)]) == 0
+    finally:
+        builtins.open = real_open
+        os.open = real_os_open
+
+    for path, mode in opens:
+        if path != target:
+            continue
+        if isinstance(mode, str):
+            assert 'w' not in mode and 'a' not in mode and '+' not in mode, (
+                'the settings file was opened %r -- truncating rewrite' % mode)
+        else:
+            writing = os.O_WRONLY | os.O_RDWR | os.O_TRUNC | os.O_CREAT
+            assert not (mode & writing), (
+                'the settings file was opened with flags %d -- truncating rewrite' % mode)
+
+
+def test_the_settings_files_inode_changes_across_a_write(tmp_path):
+    """A rename replaces the inode; an in-place rewrite does not."""
+    settings = tmp_path / 'settings.local.json'
+    write_settings(settings, {'model': 'claude-opus-5'})
+    before = os.stat(str(settings)).st_ino
+
+    assert run_registration(settings).returncode == 0
+
+    assert os.stat(str(settings)).st_ino != before, (
+        'the inode survived the write -- the file was rewritten in place, '
+        'not replaced by a rename')
+
+
+def test_an_interrupted_write_leaves_the_original_and_the_backup_intact(tmp_path):
+    """SDD-AC-9. The rename is patched to raise once the temp file exists, so
+    the failure lands in the one window this whole task exists to close."""
+    settings = tmp_path / 'settings.local.json'
+    original = write_settings(settings, {'model': 'claude-opus-5'})
+    temp = str(settings) + TEMP_SUFFIX
+
+    seen = {}
+    real_replace = os.replace
+
+    def exploding_replace(src, dst, *args, **kwargs):
+        seen['temp_existed'] = os.path.exists(temp)
+        seen['temp_content'] = (
+            open(temp, encoding='utf-8').read() if seen['temp_existed'] else None)
+        raise OSError(5, 'simulated interruption')
+
+    os.replace = exploding_replace
+    try:
+        with pytest.raises(OSError):
+            registration.main(['--settings', str(settings)])
+    finally:
+        os.replace = real_replace
+
+    assert seen.get('temp_existed'), 'the rename fired before the temp file was written'
+    assert seen['temp_content'], 'the temp file was empty at rename time'
+    assert settings.read_text(encoding='utf-8') == original, 'the original was damaged'
+    backup = tmp_path / ('settings.local.json' + BACKUP_SUFFIX)
+    assert backup.exists(), 'no backup survived the interruption'
+    assert backup.read_text(encoding='utf-8') == original
+    assert not os.path.exists(temp), 'the temp file was left behind'
+
+
+# --- the lock --------------------------------------------------------------
+
+def test_two_concurrent_runs_serialize_and_neither_observes_a_partial_file(tmp_path):
+    """SDD-AC-11. Both runs are started at once against one target; while they
+    run the test polls the file and asserts every state it can observe is a
+    complete, parseable document."""
+    settings = tmp_path / 'settings.local.json'
+    write_settings(settings, {'model': 'claude-opus-5'})
+
+    env = dict(os.environ)
+    env[LOCK_TIMEOUT_ENV] = '20'
+    procs = [
+        subprocess.Popen(
+            [sys.executable, SCRIPT, '--settings', str(settings)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        for _ in range(2)
+    ]
+    observations = 0
+    while any(proc.poll() is None for proc in procs):
+        try:
+            text = settings.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError) as exc:
+            raise AssertionError('unreadable mid-run: %s' % exc)
+        json.loads(text)  # raises if a partial document was ever observable
+        observations += 1
+    for proc in procs:
+        proc.wait()
+
+    assert observations > 0, 'the runs finished before anything could be observed'
+    for proc in procs:
+        assert proc.returncode == 0, proc.stderr.read()
+
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    assert data['model'] == 'claude-opus-5'
+    assert len(our_commands(settings.read_text(encoding='utf-8'))) == 3, (
+        'the two runs did not serialize -- entries were doubled')
+
+
+def test_a_lock_released_inside_the_wait_window_lets_the_second_run_wait_then_succeed(tmp_path):
+    """The first of the two outcomes the precedent's poll loop produces
+    (lock.sh:78-99): the wait is bounded, and a lock that goes away inside the
+    window is followed by a normal, successful run."""
+    settings = tmp_path / 'settings.local.json'
+    original = write_settings(settings, {'model': 'claude-opus-5'})
+    holder = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+    lock = _hold_lock(settings, holder.pid)
+
+    started = time.time()
+    proc = subprocess.Popen(
+        [sys.executable, SCRIPT, '--settings', str(settings)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        env=dict(os.environ, **{LOCK_TIMEOUT_ENV: '10'}))
+    try:
+        time.sleep(0.6)
+        assert proc.poll() is None, 'the run did not wait for the lock at all'
+        os.unlink(lock)
+        stdout, stderr = proc.communicate(timeout=30)
+    finally:
+        holder.kill()
+        holder.wait()
+
+    elapsed = time.time() - started
+    assert proc.returncode == 0, stderr
+    assert elapsed >= 0.6, 'the run cannot have waited: %.2fs' % elapsed
+    assert settings.read_text(encoding='utf-8') != original, 'the run never wrote'
+
+
+def test_a_lock_held_past_the_timeout_makes_the_second_run_report_and_exit(tmp_path):
+    """The other outcome of the same mechanism: on expiry the run reports the
+    contention on stderr and exits non-zero, within the bounded time -- it does
+    not wait forever and does not write."""
+    settings = tmp_path / 'settings.local.json'
+    original = write_settings(settings, {'model': 'claude-opus-5'})
+    holder = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+    _hold_lock(settings, holder.pid)
+
+    started = time.time()
+    try:
+        result = subprocess.run(
+            [sys.executable, SCRIPT, '--settings', str(settings)],
+            capture_output=True, text=True, timeout=30,
+            env=dict(os.environ, **{LOCK_TIMEOUT_ENV: '1'}))
+    finally:
+        holder.kill()
+        holder.wait()
+    elapsed = time.time() - started
+
+    assert result.returncode != 0
+    assert 'holds' in result.stderr, result.stderr
+    assert 'Traceback' not in result.stderr
+    assert elapsed >= 1.0, 'it gave up before the timeout: %.2fs' % elapsed
+    assert elapsed < 15.0, 'the wait was not bounded by the timeout: %.2fs' % elapsed
+    assert settings.read_text(encoding='utf-8') == original, 'it wrote despite the lock'
+
+
+def test_a_live_foreign_lock_is_never_force_removed(tmp_path):
+    """Reclaiming a lock whose owner is still alive is how two runs both
+    proceed. The contended run leaves the lock exactly as it found it."""
+    settings = tmp_path / 'settings.local.json'
+    write_settings(settings, {'model': 'claude-opus-5'})
+    holder = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+    lock = _hold_lock(settings, holder.pid)
+    before = open(lock, encoding='utf-8').read()
+
+    try:
+        result = subprocess.run(
+            [sys.executable, SCRIPT, '--settings', str(settings)],
+            capture_output=True, text=True, timeout=30,
+            env=dict(os.environ, **{LOCK_TIMEOUT_ENV: '1'}))
+    finally:
+        holder.kill()
+        holder.wait()
+
+    assert result.returncode != 0
+    assert os.path.exists(lock), 'a live foreign lock was force-removed'
+    assert open(lock, encoding='utf-8').read() == before, 'a live foreign lock was overwritten'
+
+
+def test_a_stale_lock_left_by_a_dead_owner_is_reclaimed(tmp_path):
+    """ADR-4 / lock.sh:72 -- stale by liveness."""
+    settings = tmp_path / 'settings.local.json'
+    original = write_settings(settings, {'model': 'claude-opus-5'})
+    lock = _hold_lock(settings, _dead_pid())
+
+    result = subprocess.run(
+        [sys.executable, SCRIPT, '--settings', str(settings)],
+        capture_output=True, text=True, timeout=30,
+        env=dict(os.environ, **{LOCK_TIMEOUT_ENV: '2'}))
+
+    assert result.returncode == 0, result.stderr
+    assert settings.read_text(encoding='utf-8') != original
+    assert not os.path.exists(lock), 'the reclaimed lock was not released'
+
+
+def test_a_stale_lock_older_than_the_ttl_is_reclaimed_even_with_a_live_owner(tmp_path):
+    """The other half of the same rule: stale by TTL. The recorded owner here
+    is very much alive -- it is this test -- so only the age can reclaim it."""
+    settings = tmp_path / 'settings.local.json'
+    original = write_settings(settings, {'model': 'claude-opus-5'})
+    lock = _hold_lock(settings, os.getpid(), age_seconds=400)
+
+    result = subprocess.run(
+        [sys.executable, SCRIPT, '--settings', str(settings)],
+        capture_output=True, text=True, timeout=30,
+        env=dict(os.environ, **{LOCK_TIMEOUT_ENV: '2', LOCK_TTL_ENV: '300'}))
+
+    assert result.returncode == 0, result.stderr
+    assert settings.read_text(encoding='utf-8') != original
+    assert not os.path.exists(lock), 'the reclaimed lock was not released'
