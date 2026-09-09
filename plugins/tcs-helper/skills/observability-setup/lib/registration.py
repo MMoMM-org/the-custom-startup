@@ -121,20 +121,50 @@ def load_settings(path):
     return data, None
 
 
-def add_registration(data):
-    """Merge our entries into a settings document. Returns True if it changed.
+def _expected_entry(matcher, script):
+    return {
+        'matcher': matcher,
+        'hooks': [{'type': 'command', 'command': command_for(script)}],
+    }
 
-    Follows satori's add_hook_if_absent shape: append only when absent, leave
-    every existing entry -- including foreign entries under our own event
-    names -- exactly where it is.
+
+def add_registration(data):
+    """Merge our entries into a settings document.
+
+    Returns (changed, status). status is one of:
+
+      'none'    -- the env switch and every expected entry were already
+                   present and identical to what command_for() produces
+                   today; nothing was touched. Reported as "already
+                   configured" -- SDD-AC-7.
+      'install' -- at least one expected entry was missing outright and got
+                   appended; nothing of ours was replaced.
+      'update'  -- at least one entry of ours (namespace membership per
+                   ADR-5, not exact-string identity) was present but did not
+                   match what command_for() produces today -- an older
+                   bundle version's command, most likely -- and was replaced
+                   in place rather than appended beside it. SDD-AC-8: the
+                   caller needs to know an old entry was replaced, which
+                   "install" would hide, so 'update' wins when a single run
+                   produces both.
+
+    Follows satori's add_hook_if_absent shape for what is left alone: every
+    existing entry that is not ours -- including a foreign entry under our
+    own event name -- stays exactly where it is.
     """
     changed = False
+    replaced = False
 
     env = data.setdefault('env', {})
     if not isinstance(env, dict):
         raise ValueError('"env" is not an object (found %s)' % type(env).__name__)
     key, value = ENV_SWITCH
-    if env.get(key) != value:
+    if key in env:
+        if env[key] != value:
+            env[key] = value
+            changed = True
+            replaced = True
+    else:
         env[key] = value
         changed = True
 
@@ -163,13 +193,82 @@ def add_registration(data):
                         raise ValueError(
                             '"hooks.%s" contains an entry with non-object hook in "hooks" list' % event)
 
-        if any(entry_is_ours(entry) for entry in entries if isinstance(entry, dict)):
+        expected = _expected_entry(matcher, script)
+        ours_indices = [
+            i for i, entry in enumerate(entries)
+            if isinstance(entry, dict) and entry_is_ours(entry)
+        ]
+
+        if not ours_indices:
+            entries.append(expected)
+            changed = True
             continue
-        entries.append({
-            'matcher': matcher,
-            'hooks': [{'type': 'command', 'command': command_for(script)}],
-        })
+
+        ours_entries = [entries[i] for i in ours_indices]
+        if len(ours_entries) == 1 and ours_entries[0] == expected:
+            continue
+
+        # ADR-5: whatever is here under our namespace is ours to replace --
+        # a stale command from an older bundle version, or (defensively) a
+        # duplicate. Replace at the first occurrence's position instead of
+        # appending, so re-running setup never grows the list.
+        insert_at = ours_indices[0]
+        entries[:] = [entry for i, entry in enumerate(entries) if i not in ours_indices]
+        entries.insert(insert_at, expected)
         changed = True
+        replaced = True
+
+    if not changed:
+        return False, 'none'
+    return True, ('update' if replaced else 'install')
+
+
+def remove_registration(data):
+    """Undo add_registration: prune only what's ours (ADR-5 namespace
+    membership), and prune the containers add_registration created down to
+    nothing once they hold nothing of ours -- SDD-AC-12, SDD-AC-13,
+    SDD-AC-14.
+
+    A container is deleted only when THIS call emptied it. A pre-existing
+    foreign 'env' or 'hooks.<event>' that happened to already be empty is
+    left alone rather than swept up as if we owned it.
+
+    This function's only effect is on `data` in memory -- it has no path to
+    anything else on disk, which is what SDD-AC-14 (existing records
+    survive) rests on.
+    """
+    changed = False
+
+    env = data.get('env')
+    if isinstance(env, dict):
+        key, _value = ENV_SWITCH
+        if key in env:
+            del env[key]
+            changed = True
+            if not env:
+                del data['env']
+
+    hooks = data.get('hooks')
+    if isinstance(hooks, dict):
+        hooks_changed = False
+        for event in list(hooks.keys()):
+            entries = hooks[event]
+            if not isinstance(entries, list):
+                continue
+            kept = [
+                entry for entry in entries
+                if not (isinstance(entry, dict) and entry_is_ours(entry))
+            ]
+            if len(kept) == len(entries):
+                continue
+            hooks_changed = True
+            changed = True
+            if kept:
+                hooks[event] = kept
+            else:
+                del hooks[event]
+        if hooks_changed and not hooks:
+            del data['hooks']
 
     return changed
 
@@ -191,11 +290,15 @@ def write_settings(path, data):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description='Add the observability registration to a settings file.')
+        description='Add or remove the observability registration in a settings file.')
     parser.add_argument(
         '--settings',
         required=True,
         help='path to the settings file to edit (never defaults to a real one)')
+    parser.add_argument(
+        '--remove',
+        action='store_true',
+        help='remove the observability registration instead of adding it')
     args = parser.parse_args(argv)
 
     data, error = load_settings(args.settings)
@@ -203,8 +306,17 @@ def main(argv=None):
         sys.stderr.write('%s\n' % error)
         return 1
 
+    if args.remove:
+        changed = remove_registration(data)
+        if not changed:
+            print('nothing to remove: %s' % args.settings)
+            return 0
+        write_settings(args.settings, data)
+        print('removed observability hooks from %s' % args.settings)
+        return 0
+
     try:
-        changed = add_registration(data)
+        changed, status = add_registration(data)
     except ValueError as exc:
         sys.stderr.write('%s: %s\n' % (args.settings, exc))
         return 1
@@ -214,7 +326,10 @@ def main(argv=None):
         return 0
 
     write_settings(args.settings, data)
-    print('registered observability hooks in %s' % args.settings)
+    if status == 'update':
+        print('updated observability hooks in %s' % args.settings)
+    else:
+        print('registered observability hooks in %s' % args.settings)
     return 0
 
 

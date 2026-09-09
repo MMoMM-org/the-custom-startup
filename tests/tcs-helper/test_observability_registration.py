@@ -383,3 +383,201 @@ def test_entry_is_ours_false_for_well_formed_foreign_entry():
         'hooks': [{'type': 'command', 'command': '.claude/hooks/on-stop.sh'}],
     }
     assert entry_is_ours(entry) is False
+
+
+# ---------------------------------------------------------------------------
+# Removal (T2.4)
+#
+# ADR-5 is why removal cannot be exact-string matching: an entry written by
+# an older bundle version has a command that still points inside our
+# namespace but is not byte-identical to what command_for() produces today.
+# Exact-string equality would orphan it forever -- namespace membership is
+# the only test that survives a version change.
+# ---------------------------------------------------------------------------
+
+def _snapshot(dir_path, exclude):
+    """Path -> (size, mtime_ns) for everything under dir_path except exclude.
+
+    Used to prove removal's blast radius is the --settings file alone --
+    SDD-AC-14 says existing records must survive, and the only way to trust
+    that is to show nothing else on disk moved.
+    """
+    exclude = os.path.abspath(str(exclude))
+    snap = {}
+    for root, _dirs, files in os.walk(str(dir_path)):
+        for name in files:
+            path = os.path.join(root, name)
+            if os.path.abspath(path) == exclude:
+                continue
+            st = os.stat(path)
+            snap[path] = (st.st_size, st.st_mtime_ns)
+    return snap
+
+
+def test_removal_deletes_only_our_entries_foreign_entry_survives(tmp_path):
+    """SDD-AC-12: only namespace-owned entries go; a foreign entry under the
+    same event name is untouched, and the env switch we own is removed
+    without disturbing a foreign env key beside it."""
+    settings = tmp_path / 'settings.local.json'
+    foreign = {
+        'matcher': 'Bash',
+        'hooks': [{'type': 'command', 'command': '.claude/hooks/block-bad-git-ops.sh'}],
+    }
+    write_settings(settings, {
+        'env': {'CLAUDE_OBSERVABILITY_ENABLED': '1', 'SOMETHING_ELSE': 'keep me'},
+        'hooks': {
+            'PreToolUse': [
+                foreign,
+                {'matcher': 'Skill', 'hooks': [{'type': 'command', 'command': command_for('log_skill.sh')}]},
+            ],
+        },
+    })
+
+    result = run_registration(settings, '--remove')
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    assert data['hooks']['PreToolUse'] == [foreign]
+    assert data['env'] == {'SOMETHING_ELSE': 'keep me'}
+
+
+def test_removal_on_never_configured_target_changes_nothing(tmp_path):
+    """SDD-AC-13: nothing to remove leaves the file byte-identical, exit 0."""
+    settings = tmp_path / 'settings.local.json'
+    original = write_settings(settings, {'model': 'claude-opus-5'})
+
+    result = run_registration(settings, '--remove')
+
+    assert result.returncode == 0, result.stderr
+    assert settings.read_text(encoding='utf-8') == original
+
+
+def test_removal_never_deletes_records_or_touches_other_files(tmp_path):
+    """SDD-AC-14: removal's blast radius is the settings file, nothing else --
+    asserted by counting record files before and after, not just by reading
+    the settings diff."""
+    settings = tmp_path / 'settings.local.json'
+    assert run_registration(settings).returncode == 0
+
+    records_dir = tmp_path / 'records'
+    records_dir.mkdir()
+    for i in range(3):
+        (records_dir / ('events-%d.jsonl' % i)).write_text('{"event": "x"}\n', encoding='utf-8')
+    record_files_before = sorted(p.name for p in records_dir.iterdir())
+    snapshot_before = _snapshot(tmp_path, exclude=settings)
+
+    result = run_registration(settings, '--remove')
+
+    assert result.returncode == 0, result.stderr
+    record_files_after = sorted(p.name for p in records_dir.iterdir())
+    assert record_files_after == record_files_before
+    snapshot_after = _snapshot(tmp_path, exclude=settings)
+    assert snapshot_after == snapshot_before, 'a path outside --settings was written'
+
+
+def test_removal_recognises_an_older_bundle_versions_command_as_ours(tmp_path):
+    """ADR-5: ownership is the namespace, not the exact command string -- an
+    entry from an older bundle version must be removed, not orphaned."""
+    settings = tmp_path / 'settings.local.json'
+    old_command = command_for('log_instructions_v1.sh')
+    assert old_command != command_for('log_instructions.sh')
+    write_settings(settings, {
+        'hooks': {
+            'InstructionsLoaded': [
+                {'matcher': '', 'hooks': [{'type': 'command', 'command': old_command}]},
+            ],
+        },
+    })
+
+    result = run_registration(settings, '--remove')
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    assert 'InstructionsLoaded' not in data.get('hooks', {})
+
+
+def test_rerunning_setup_after_a_version_change_replaces_in_place(tmp_path):
+    """SDD-AC-8: the old entry is replaced, never duplicated."""
+    settings = tmp_path / 'settings.local.json'
+    old_command = command_for('log_instructions_v1.sh')
+    foreign = {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': 'foreign.sh'}]}
+    write_settings(settings, {
+        'hooks': {
+            'InstructionsLoaded': [
+                {'matcher': '', 'hooks': [{'type': 'command', 'command': old_command}]},
+            ],
+            'PreToolUse': [foreign],
+        },
+    })
+
+    result = run_registration(settings)
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    instructions_entries = data['hooks']['InstructionsLoaded']
+    ours = [
+        e for e in instructions_entries
+        if command_for('log_instructions.sh') in e['hooks'][0]['command']
+    ]
+    assert len(ours) == 1
+    assert len(instructions_entries) == 1, 'the old entry must be replaced, not left beside the new one'
+    assert old_command not in json.dumps(instructions_entries)
+    # PreToolUse had no entry of ours yet: the foreign entry is left alone
+    # and ours is appended beside it, same as any other first install.
+    assert foreign in data['hooks']['PreToolUse']
+    assert len(data['hooks']['PreToolUse']) == 2
+
+
+# ---------------------------------------------------------------------------
+# Reporting: the only externally visible difference between three outcomes
+# that all leave a correct file behind (T2.4)
+# ---------------------------------------------------------------------------
+
+def test_reporting_distinguishes_install_already_configured_and_update(tmp_path):
+    settings = tmp_path / 'settings.local.json'
+
+    first = run_registration(settings)
+    assert first.returncode == 0, first.stderr
+    assert 'registered observability hooks in' in first.stdout
+    assert 'already configured' not in first.stdout
+    assert 'updated observability hooks in' not in first.stdout
+
+    second = run_registration(settings)
+    assert second.returncode == 0, second.stderr
+    assert 'already configured' in second.stdout
+    assert 'registered observability hooks in' not in second.stdout
+    assert 'updated observability hooks in' not in second.stdout
+
+    # simulate a version change: an older command lands under our namespace
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    data['hooks']['InstructionsLoaded'][0]['hooks'][0]['command'] = command_for('log_instructions_v1.sh')
+    settings.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+
+    third = run_registration(settings)
+    assert third.returncode == 0, third.stderr
+    assert 'updated observability hooks in' in third.stdout
+    assert 'already configured' not in third.stdout
+    assert 'registered observability hooks in' not in third.stdout
+
+
+# ---------------------------------------------------------------------------
+# Round trip: install -> remove must restore the original bytes, with no
+# backup or other sibling file left behind (T2.4; T2.5 owns the actual
+# backup mechanism -- this only guards today's no-backup behaviour so a
+# regression there is caught before T2.5 has to reason about it)
+# ---------------------------------------------------------------------------
+
+def test_install_then_remove_round_trips_to_the_original_bytes(tmp_path):
+    settings = tmp_path / 'settings.local.json'
+    original = write_settings(settings, {'model': 'claude-opus-5', 'permissions': {'allow': []}})
+
+    assert run_registration(settings).returncode == 0
+    installed = settings.read_text(encoding='utf-8')
+    assert installed != original, 'install should have changed the file'
+
+    result = run_registration(settings, '--remove')
+
+    assert result.returncode == 0, result.stderr
+    assert settings.read_text(encoding='utf-8') == original
+    siblings = sorted(p.name for p in tmp_path.iterdir())
+    assert siblings == [settings.name], 'unexpected sibling files: %r' % siblings
