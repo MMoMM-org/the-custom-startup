@@ -596,6 +596,35 @@ def test_rerunning_setup_after_a_version_change_replaces_in_place(tmp_path):
     assert len(data['hooks']['PreToolUse']) == 2
 
 
+def test_replace_in_place_preserves_position_among_foreign_entries(tmp_path):
+    """The comment above the replace step in add_registration promises the
+    refreshed entry lands at the first occurrence's position, not appended
+    at the end. A single-entry list can't tell "replaced in place" apart
+    from "removed then appended" -- both produce a 1-item list -- so this
+    uses a 3-entry list where only "in place" keeps the stale entry's slot.
+    """
+    settings = tmp_path / 'settings.local.json'
+    old_command = command_for('log_instructions_v1.sh')
+    foreign_a = {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': 'foreign-a.sh'}]}
+    foreign_b = {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': 'foreign-b.sh'}]}
+    stale_ours = {'matcher': '', 'hooks': [{'type': 'command', 'command': old_command}]}
+    write_settings(settings, {
+        'hooks': {'InstructionsLoaded': [foreign_a, stale_ours, foreign_b]},
+    })
+
+    result = run_registration(settings)
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    entries = data['hooks']['InstructionsLoaded']
+    assert len(entries) == 3, 'replacing must not change the list length'
+    assert entries[0] == foreign_a
+    assert entries[2] == foreign_b
+    refreshed = entries[1]
+    assert command_for('log_instructions.sh') in refreshed['hooks'][0]['command'], (
+        'the refreshed entry must sit at the stale entry\'s original index, between the two foreign entries')
+
+
 # ---------------------------------------------------------------------------
 # Reporting: the only externally visible difference between three outcomes
 # that all leave a correct file behind (T2.4)
@@ -608,13 +637,13 @@ def test_reporting_distinguishes_install_already_configured_and_update(tmp_path)
     assert first.returncode == 0, first.stderr
     assert 'registered observability hooks in' in first.stdout
     assert 'already configured' not in first.stdout
-    assert 'updated observability hooks in' not in first.stdout
+    assert 'updated observability registration in' not in first.stdout
 
     second = run_registration(settings)
     assert second.returncode == 0, second.stderr
     assert 'already configured' in second.stdout
     assert 'registered observability hooks in' not in second.stdout
-    assert 'updated observability hooks in' not in second.stdout
+    assert 'updated observability registration in' not in second.stdout
 
     # simulate a version change: an older command lands under our namespace
     data = json.loads(settings.read_text(encoding='utf-8'))
@@ -623,9 +652,37 @@ def test_reporting_distinguishes_install_already_configured_and_update(tmp_path)
 
     third = run_registration(settings)
     assert third.returncode == 0, third.stderr
-    assert 'updated observability hooks in' in third.stdout
+    assert 'updated observability registration in' in third.stdout
     assert 'already configured' not in third.stdout
     assert 'registered observability hooks in' not in third.stdout
+
+
+def test_reporting_an_env_only_correction_still_reports_update(tmp_path):
+    """The status stays 'update' when only the env switch was stale --
+    something of ours was wrong and got corrected -- but the message must
+    not claim a hook was touched when none was.
+
+    (Reviewer ruling: the STATUS is right to stay 'update' here; what was
+    wrong was the word "hooks" in a message that fires when no hook entry
+    changed.)
+    """
+    settings = tmp_path / 'settings.local.json'
+    assert run_registration(settings).returncode == 0
+
+    # hand-edit only the env switch's value; every hook entry stays current
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    data['env']['CLAUDE_OBSERVABILITY_ENABLED'] = '0'
+    settings.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+
+    result = run_registration(settings)
+
+    assert result.returncode == 0, result.stderr
+    assert 'updated observability registration in' in result.stdout, (
+        'an env-only correction must still report as an update, not an install')
+    assert 'already configured' not in result.stdout
+    assert 'registered observability hooks in' not in result.stdout
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    assert data['env']['CLAUDE_OBSERVABILITY_ENABLED'] == '1'
 
 
 # ---------------------------------------------------------------------------

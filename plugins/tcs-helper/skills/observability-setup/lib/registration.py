@@ -92,6 +92,18 @@ def entry_is_ours(entry):
     )
 
 
+def _entry_is_owned(entry):
+    """Whether an entry sitting inside a hooks[event] list is ours.
+
+    entry_is_ours() assumes its argument is already a dict -- it calls
+    entry.get() unconditionally -- but an entries list can itself contain a
+    malformed, non-dict element (a settings file we do not own is free to
+    be anything). Every caller that walks such a list needs both checks
+    together; this is that pairing, written once rather than three times.
+    """
+    return isinstance(entry, dict) and entry_is_ours(entry)
+
+
 def load_settings(path):
     """Returns (data, error). An absent file is an empty document, not an error.
 
@@ -139,14 +151,16 @@ def add_registration(data):
                    configured" -- SDD-AC-7.
       'install' -- at least one expected entry was missing outright and got
                    appended; nothing of ours was replaced.
-      'update'  -- at least one entry of ours (namespace membership per
-                   ADR-5, not exact-string identity) was present but did not
-                   match what command_for() produces today -- an older
-                   bundle version's command, most likely -- and was replaced
-                   in place rather than appended beside it. SDD-AC-8: the
-                   caller needs to know an old entry was replaced, which
-                   "install" would hide, so 'update' wins when a single run
-                   produces both.
+      'update'  -- something of ours was stale and got corrected: either an
+                   entry of ours (namespace membership per ADR-5, not
+                   exact-string identity) whose command did not match what
+                   command_for() produces today -- an older bundle
+                   version's command, most likely -- and was replaced in
+                   place rather than appended beside it; or the env
+                   switch's value was wrong and got corrected. SDD-AC-8:
+                   the caller needs to know something stale was fixed,
+                   which "install" would hide, so 'update' wins whenever a
+                   single run produces both an install and a correction.
 
     Follows satori's add_hook_if_absent shape for what is left alone: every
     existing entry that is not ours -- including a foreign entry under our
@@ -195,8 +209,7 @@ def add_registration(data):
 
         expected = _expected_entry(matcher, script)
         ours_indices = [
-            i for i, entry in enumerate(entries)
-            if isinstance(entry, dict) and entry_is_ours(entry)
+            i for i, entry in enumerate(entries) if _entry_is_owned(entry)
         ]
 
         if not ours_indices:
@@ -213,7 +226,7 @@ def add_registration(data):
         # duplicate. Replace at the first occurrence's position instead of
         # appending, so re-running setup never grows the list.
         insert_at = ours_indices[0]
-        entries[:] = [entry for i, entry in enumerate(entries) if i not in ours_indices]
+        entries[:] = [entry for entry in entries if not _entry_is_owned(entry)]
         entries.insert(insert_at, expected)
         changed = True
         replaced = True
@@ -225,13 +238,16 @@ def add_registration(data):
 
 def remove_registration(data):
     """Undo add_registration: prune only what's ours (ADR-5 namespace
-    membership), and prune the containers add_registration created down to
-    nothing once they hold nothing of ours -- SDD-AC-12, SDD-AC-13,
-    SDD-AC-14.
+    membership), and delete a container add_registration created only once
+    removing our content leaves it completely empty -- SDD-AC-12,
+    SDD-AC-13, SDD-AC-14.
 
-    A container is deleted only when THIS call emptied it. A pre-existing
-    foreign 'env' or 'hooks.<event>' that happened to already be empty is
-    left alone rather than swept up as if we owned it.
+    A container is deleted only when THIS call emptied it -- not merely
+    once it "holds nothing of ours": a container that still holds foreign
+    content (a foreign 'env' key beside our switch, a foreign entry beside
+    ours) is left in place with that foreign content, same as one that was
+    already completely empty before this call ran. Neither is ours to
+    delete.
 
     This function's only effect is on `data` in memory -- it has no path to
     anything else on disk, which is what SDD-AC-14 (existing records
@@ -255,10 +271,7 @@ def remove_registration(data):
             entries = hooks[event]
             if not isinstance(entries, list):
                 continue
-            kept = [
-                entry for entry in entries
-                if not (isinstance(entry, dict) and entry_is_ours(entry))
-            ]
+            kept = [entry for entry in entries if not _entry_is_owned(entry)]
             if len(kept) == len(entries):
                 continue
             hooks_changed = True
@@ -327,7 +340,9 @@ def main(argv=None):
 
     write_settings(args.settings, data)
     if status == 'update':
-        print('updated observability hooks in %s' % args.settings)
+        # 'update' also fires for an env-only correction (no hook entry
+        # touched), so the message names the registration, not "hooks".
+        print('updated observability registration in %s' % args.settings)
     else:
         print('registered observability hooks in %s' % args.settings)
     return 0
