@@ -303,7 +303,7 @@ anything the maintainer owns.
      **the backup lands at a named path** — `<settings file>.tcs-observability.bak`, beside
      the file it backs up — and that path's ignore status is asserted, not assumed. A target that
      ignores `settings.local.json` *by name* rather than ignoring `.claude/` wholesale would leave
-     a `.bak` un-ignored, and T4.3 asserts every path this feature writes is ignored. Getting this
+     a `.bak` un-ignored, and T4.4 asserts every path this feature writes is ignored. Getting this
      wrong drops a committable file into a repository we do not own, which is the exact harm ADR-1
      exists to prevent. Retention: the backup is overwritten by the next write and removed by
      removal, so at most one exists per target.

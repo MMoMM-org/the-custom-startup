@@ -115,7 +115,7 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
      **Before running the command against a target**, confirm `git check-ignore` succeeds for
      **both** the settings path and the backup path, and skip any target where either fails. The
      ordering matters and an audit caught it: T2.5 asserts the backup's ignore status against
-     *fixtures*, which are built to spec and always pass, while T4.3 asserts it against *real*
+     *fixtures*, which are built to spec and always pass, while T4.4 asserts it against *real*
      targets — but by then this task has already written to them. A target that ignores
      `settings.local.json` by name rather than `.claude/` wholesale would receive a committable
      `.bak` and be told about it afterwards.
