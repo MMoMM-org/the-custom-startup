@@ -127,7 +127,7 @@ anything the maintainer owns.
   4. Validate: each fixture builds and its sanity test passes.
   5. Success: every later task in this phase has the target states it needs `[ref: SDD/Quality Requirements]`
 
-- [ ] **T2.2 Detection: classify a target before touching it** `[activity: backend-api]`
+- [x] **T2.2 Detection: classify a target before touching it** `[activity: backend-api]`
 
   1. Prime: read `plugins/tcs-git-helpers/skills/git-setup/lib/detect_conflicts.sh:60-67` for the severity
      exit-code convention — 0 clean / 2 abort / 3 conflict / 4 warn, never a boolean
