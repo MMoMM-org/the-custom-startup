@@ -293,12 +293,46 @@ _count_state_lines() {
 
   # Snapshot mtimes of every file detect.sh might touch, before locking down
   # write access.
+  # The fixture ships settings.local.json and the marker, but NO
+  # settings.json -- so load(shared_path) used to return at os.path.isfile()
+  # without ever opening a file, leaving the shared read path unexercised.
+  # That is the phase-1 defect the pin names, so the file is added here.
+  # It is added in the test rather than in build.sh on purpose: T2.1 asserts
+  # fixtures 4 and 5 are byte-identical, and giving one of them an extra file
+  # would break that identity.
+  # Its content is foreign and deliberately NOT the legacy shape, so the
+  # classification stays OURS-CURRENT -- which also means the marker under
+  # the overridden home must still be read to tell CURRENT from OLD.
+  local shared_settings="$protected/.claude/settings.json"
+  cat > "$shared_settings" <<'SHAREDJSON'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/unrelated-third-party.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+SHAREDJSON
+  # Keep it no newer than the fixture tree, or the structural "nothing was
+  # created" find below would report this very file.
+  touch -r "$FIXTURES_DIR" "$shared_settings"
+
   local local_settings="$protected/.claude/settings.local.json"
   local marker="$protected_home/.claude/observability/tcs-helper-observability-version"
   [ -f "$local_settings" ]
+  [ -f "$shared_settings" ]
   [ -f "$marker" ]
-  local before_local before_marker
+  local before_local before_shared before_marker
   before_local="$(stat -f %m "$local_settings" 2>/dev/null || stat -c %Y "$local_settings")"
+  before_shared="$(stat -f %m "$shared_settings" 2>/dev/null || stat -c %Y "$shared_settings")"
   before_marker="$(stat -f %m "$marker" 2>/dev/null || stat -c %Y "$marker")"
 
   chmod -R a-w "$protected" "$protected_home"
@@ -319,10 +353,12 @@ _count_state_lines() {
   [ "$detect_status" -eq 0 ]
   _assert_contains "$detect_output" "OURS-CURRENT"
 
-  local after_local after_marker
+  local after_local after_shared after_marker
   after_local="$(stat -f %m "$local_settings" 2>/dev/null || stat -c %Y "$local_settings")"
+  after_shared="$(stat -f %m "$shared_settings" 2>/dev/null || stat -c %Y "$shared_settings")"
   after_marker="$(stat -f %m "$marker" 2>/dev/null || stat -c %Y "$marker")"
   [ "$before_local" = "$after_local" ]
+  [ "$before_shared" = "$after_shared" ]
   [ "$before_marker" = "$after_marker" ]
 
   # No file was created inside the target either (backup, temp, canary, or
@@ -339,6 +375,46 @@ _count_state_lines() {
 # set -u safety: the documented default form (no argument) must not abort
 # under set -u.
 # ---------------------------------------------------------------------------
+
+@test "under write protection the shared settings.json is genuinely read, not silently skipped" {
+  # The test above proves all three paths are present and readable. It cannot
+  # prove the shared one was actually opened: if open() failed on it, load()
+  # returns (None, err), is_legacy(None) is False, and the classification
+  # falls through to OURS-CURRENT -- the same answer as a successful read.
+  #
+  # This target's settings.json carries the legacy shape, which only changes
+  # the answer if the file is opened AND parsed. A skipped or failed read
+  # reports something other than LEGACY, so the assertion below has teeth.
+  local protected="$FIXTURES_PARENT/write-protected-legacy"
+  rm -rf "$protected"
+  cp -pR "$FIXTURES_DIR/already-configured-observability" "$protected"
+
+  [ -f "$protected/.claude/settings.json" ]
+
+  chmod -R a-w "$protected"
+
+  if echo "canary" > "$protected/.claude/test-write" 2>/dev/null; then
+    chmod -R u+w "$protected"
+    rm -rf "$protected"
+    skip "write-protected directory is actually writable (running as root, or chmod does not bite on this volume?)"
+  fi
+
+  _run_detect "$protected"
+  local detect_status="$status" detect_output="$output"
+
+  chmod -R u+w "$protected"
+
+  [ "$detect_status" -eq 4 ]
+  _assert_contains "$detect_output" "LEGACY"
+  _assert_not_contains "$detect_output" "OURS-CURRENT"
+  _assert_not_contains "$detect_output" "cannot read"
+
+  run find "$protected" -newer "$FIXTURES_DIR" -type f
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+
+  rm -rf "$protected"
+}
 
 @test "detect.sh with no argument (documented default = cwd) runs cleanly under set -u" {
   run env \
