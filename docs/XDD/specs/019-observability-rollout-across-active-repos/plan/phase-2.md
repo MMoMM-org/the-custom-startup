@@ -287,7 +287,7 @@ anything the maintainer owns.
      rule says must not persist.
   5. Success: `[ref: SDD/SDD-AC-7, SDD-AC-8, SDD-AC-12, SDD-AC-13, SDD-AC-14]`; `[ref: PRD/F2]`
 
-- [ ] **T2.5 Durability: backup, atomic replace, and the lock** `[activity: backend-api]`
+- [x] **T2.5 Durability: backup, atomic replace, and the lock** `[activity: backend-api]`
 
   1. Prime: read `install.sh:729-731` — `mktemp`, write, `mv` onto `SETTINGS_FILE`, which is this
      repository already atomically replacing a settings file and therefore the closest precedent
