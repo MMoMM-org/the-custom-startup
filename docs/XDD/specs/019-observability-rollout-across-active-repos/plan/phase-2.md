@@ -242,7 +242,7 @@ anything the maintainer owns.
   4. Validate: `bats` green over the scenario fixtures from T2.1.
   5. Success: `[ref: SDD/SDD-AC-1, SDD-AC-4, SDD-AC-6]` — AC-1's detection half; its command-level half is asserted in T4.1
 
-- [ ] **T2.3 The merge: add the registration without disturbing anything else**
+- [x] **T2.3 The merge: add the registration without disturbing anything else**
       `[activity: backend-api]`
 
   1. Prime: read `modules/satori/scripts/install-hooks.sh:70-99` in full. Take `:70-87` — read the
