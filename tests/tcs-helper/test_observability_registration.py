@@ -441,6 +441,74 @@ def test_removal_deletes_only_our_entries_foreign_entry_survives(tmp_path):
     assert data['env'] == {'SOMETHING_ELSE': 'keep me'}
 
 
+def test_removal_leaves_a_preexisting_empty_env_untouched(tmp_path):
+    """SDD-AC-12: a foreign 'env' that already had nothing in it -- no key
+    of ours, ever -- is not ours to delete. An empty dict a foreign owner
+    left behind is still a foreign entry, and it must remain, same as any
+    other foreign entry.
+
+    This distinguishes "we emptied it" (ours to prune) from "it was already
+    empty" (never ours, must survive) -- the exact case `remove_registration`
+    document but that no test held before this one.
+    """
+    settings = tmp_path / 'settings.local.json'
+    write_settings(settings, {
+        'env': {},
+        'hooks': {
+            'InstructionsLoaded': [
+                {'matcher': '', 'hooks': [{'type': 'command', 'command': command_for('log_instructions.sh')}]},
+            ],
+        },
+    })
+
+    result = run_registration(settings, '--remove')
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    assert data == {'env': {}}, 'a pre-existing empty foreign env must survive removal'
+
+
+def test_removal_leaves_a_preexisting_empty_hooks_object_untouched(tmp_path):
+    """Same distinction as the empty-env case, for 'hooks': a top-level
+    'hooks': {} that held none of our events to begin with is foreign and
+    already empty -- removal did not empty it, so removal must not delete
+    it either."""
+    settings = tmp_path / 'settings.local.json'
+    write_settings(settings, {
+        'env': {'CLAUDE_OBSERVABILITY_ENABLED': '1'},
+        'hooks': {},
+    })
+
+    result = run_registration(settings, '--remove')
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    assert data == {'hooks': {}}, 'a pre-existing empty foreign hooks object must survive removal'
+
+
+def test_removal_leaves_a_preexisting_empty_foreign_hook_bucket_untouched(tmp_path):
+    """SDD-AC-12: a foreign event bucket that was already an empty list
+    survives removal even while our own event bucket, sitting beside it in
+    the same 'hooks' object, gets emptied and dropped."""
+    settings = tmp_path / 'settings.local.json'
+    write_settings(settings, {
+        'hooks': {
+            'SomeForeignEvent': [],
+            'InstructionsLoaded': [
+                {'matcher': '', 'hooks': [{'type': 'command', 'command': command_for('log_instructions.sh')}]},
+            ],
+        },
+    })
+
+    result = run_registration(settings, '--remove')
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    assert data == {'hooks': {'SomeForeignEvent': []}}, (
+        'a pre-existing empty foreign hook bucket must survive removal '
+        'while our own emptied bucket is dropped')
+
+
 def test_removal_on_never_configured_target_changes_nothing(tmp_path):
     """SDD-AC-13: nothing to remove leaves the file byte-identical, exit 0."""
     settings = tmp_path / 'settings.local.json'
