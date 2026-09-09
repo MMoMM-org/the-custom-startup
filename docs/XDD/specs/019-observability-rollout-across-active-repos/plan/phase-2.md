@@ -266,7 +266,7 @@ anything the maintainer owns.
      keys, because the risk being tested is what happens to everything else.
   5. Success: `[ref: SDD/SDD-AC-2, SDD-AC-3, SDD-AC-5, SDD-AC-10]`; `[ref: PRD/F1]`
 
-- [ ] **T2.4 Removal, and the update path ownership makes possible** `[activity: backend-api]`
+- [x] **T2.4 Removal, and the update path ownership makes possible** `[activity: backend-api]`
 
   1. Prime: read ADR-5 and be clear why exact-string matching cannot support removal after a version
      change `[ref: SDD/ADR-5]`.
