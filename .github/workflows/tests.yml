@@ -75,12 +75,14 @@ jobs:
       # addopts) because subprocess-exec latency swings past any fixed
       # budget on a load-variable shared runner — measured p95 124.8-156.4ms
       # against a 100ms hard limit under contention, see docs/ai/memory/active.md.
-      # `|| true` keeps this step from failing the job: it exists so the
-      # measurement stays visible in the log, not to gate the merge. A
-      # blocking perf gate here would only move the flake from a developer's
-      # machine into CI, not remove it.
+      # continue-on-error (not `|| true`) keeps the job green while still
+      # marking this step failed in the UI, so a bad measurement stays
+      # visible at a glance instead of being swallowed by an always-0 exit.
+      # A blocking perf gate here would only move the flake from a
+      # developer's machine into CI, not remove it.
       - name: Run perf tests (non-blocking)
-        run: pytest -m perf -q || true
+        continue-on-error: true
+        run: pytest -m perf -q
 
   bats:
     name: bats (${{ matrix.os }})
