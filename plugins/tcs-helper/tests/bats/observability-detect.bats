@@ -31,8 +31,7 @@ setup_file() {
   REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../../../.." && pwd)"
   BUILD_SH="$REPO_ROOT/plugins/tcs-helper/tests/fixtures/observability-settings/build.sh"
   DETECT_SH="$REPO_ROOT/plugins/tcs-helper/skills/observability-setup/lib/detect.sh"
-  MARKER_FILE="$REPO_ROOT/plugins/tcs-helper/templates/observability/tcs-helper-observability-version"
-  export REPO_ROOT BUILD_SH DETECT_SH MARKER_FILE
+  export REPO_ROOT BUILD_SH DETECT_SH
 
   # Isolate every git invocation this file makes (fixture build AND
   # detect.sh's own check-ignore calls) from the operator's real
@@ -97,6 +96,13 @@ _assert_contains() {
 # in docs/ai/memory/active.md.
 _assert_not_contains() {
   ! printf '%s' "$1" | grep -qF "$2"
+}
+
+# _mtime <path> -- portable mtime (BSD stat on macOS, GNU stat elsewhere).
+# A helper rather than the shim inline: it appeared six times in one test,
+# which is six chances for the copies to drift apart on a later edit.
+_mtime() {
+  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"
 }
 
 # _count_state_lines <text> -- number of lines matching one of the six
@@ -331,9 +337,9 @@ SHAREDJSON
   [ -f "$shared_settings" ]
   [ -f "$marker" ]
   local before_local before_shared before_marker
-  before_local="$(stat -f %m "$local_settings" 2>/dev/null || stat -c %Y "$local_settings")"
-  before_shared="$(stat -f %m "$shared_settings" 2>/dev/null || stat -c %Y "$shared_settings")"
-  before_marker="$(stat -f %m "$marker" 2>/dev/null || stat -c %Y "$marker")"
+  before_local="$(_mtime "$local_settings")"
+  before_shared="$(_mtime "$shared_settings")"
+  before_marker="$(_mtime "$marker")"
 
   chmod -R a-w "$protected" "$protected_home"
 
@@ -354,9 +360,9 @@ SHAREDJSON
   _assert_contains "$detect_output" "OURS-CURRENT"
 
   local after_local after_shared after_marker
-  after_local="$(stat -f %m "$local_settings" 2>/dev/null || stat -c %Y "$local_settings")"
-  after_shared="$(stat -f %m "$shared_settings" 2>/dev/null || stat -c %Y "$shared_settings")"
-  after_marker="$(stat -f %m "$marker" 2>/dev/null || stat -c %Y "$marker")"
+  after_local="$(_mtime "$local_settings")"
+  after_shared="$(_mtime "$shared_settings")"
+  after_marker="$(_mtime "$marker")"
   [ "$before_local" = "$after_local" ]
   [ "$before_shared" = "$after_shared" ]
   [ "$before_marker" = "$after_marker" ]
@@ -414,6 +420,62 @@ SHAREDJSON
   [ -z "$output" ]
 
   rm -rf "$protected"
+}
+
+@test "a missing sibling library aborts with a state line, not a silent exit 1" {
+  # Unguarded under `set -e`, sourcing drift_check.sh killed the script with
+  # exit 1 and no output whatsoever -- violating both "exactly one state line
+  # per run" and the documented 0/2/3/4 exit range, leaving T4.1's caller with
+  # nothing to branch on. Reachable in practice: this repo's own documented
+  # workflow hand-copies skill directories between two locations.
+  local orphan="$FIXTURES_PARENT/orphan-lib"
+  rm -rf "$orphan"
+  mkdir -p "$orphan"
+  cp "$DETECT_SH" "$orphan/detect.sh"
+
+  run env \
+    GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=core.excludesFile \
+    GIT_CONFIG_VALUE_0=/dev/null \
+    bash "$orphan/detect.sh" "$FIXTURES_DIR/absent"
+
+  [ "$status" -eq 2 ]
+  _assert_contains "$output" "ABORT"
+  _assert_contains "$output" "drift_check.sh"
+  [ "$(_count_state_lines "$output")" -eq 1 ]
+
+  rm -rf "$orphan"
+}
+
+@test "an unreadable settings file reports that it cannot be read, not that it is invalid JSON" {
+  # load() distinguished OSError from JSONDecodeError internally, but both
+  # arrived on the bash side as ABORT_MALFORMED and were reported as "is not
+  # valid JSON" -- sending whoever debugs it looking for a syntax error in a
+  # file they cannot open.
+  local target="$FIXTURES_PARENT/unreadable-settings"
+  rm -rf "$target"
+  cp -pR "$FIXTURES_DIR/foreign-only" "$target"
+  local settings="$target/.claude/settings.local.json"
+  [ -f "$settings" ]
+
+  chmod 000 "$settings"
+  if cat "$settings" >/dev/null 2>&1; then
+    chmod u+rw "$settings"
+    rm -rf "$target"
+    skip "unreadable file is still readable (running as root, or chmod does not bite on this volume?)"
+  fi
+
+  _run_detect "$target"
+  local detect_status="$status" detect_output="$output"
+
+  chmod u+rw "$settings"
+  rm -rf "$target"
+
+  [ "$detect_status" -eq 2 ]
+  _assert_contains "$detect_output" "ABORT"
+  _assert_contains "$detect_output" "cannot be read"
+  _assert_not_contains "$detect_output" "is not valid JSON"
+  [ "$(_count_state_lines "$detect_output")" -eq 1 ]
 }
 
 @test "detect.sh with no argument (documented default = cwd) runs cleanly under set -u" {

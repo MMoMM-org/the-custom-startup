@@ -94,6 +94,11 @@
 
 set -euo pipefail
 
+_emit() {
+  # $1 = label, $2 = message
+  printf '[tcs-helper:observability-setup] %s: %s\n' "$1" "$2"
+}
+
 _DETECT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)" || _DETECT_LIB_DIR=""
 
 # Pulls in _bundle_install_target_dir(), _BUNDLE_INSTALL_MARKER_NAME,
@@ -103,16 +108,27 @@ _DETECT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)" 
 # itself, so sourcing both here would just re-run the same resolution twice.
 # shellcheck source=./drift_check.sh
 # shellcheck disable=SC1091
-if [ -n "$_DETECT_LIB_DIR" ]; then
-  . "$_DETECT_LIB_DIR/drift_check.sh" 2>/dev/null
+#
+# Guarded, and its stderr NOT suppressed. Unguarded under `set -e` this line
+# killed the script with exit 1 and no output at all -- no state line, and an
+# exit code outside the documented 0/2/3/4 range, so T4.1's caller would have
+# had nothing to branch on and nothing to show. Not hypothetical: this repo's
+# own documented workflow hand-copies skill directories between the plugin
+# cache and the marketplace source, and a partial copy produces exactly this.
+if [ -z "$_DETECT_LIB_DIR" ]; then
+  _emit "ABORT" "cannot resolve this script's own directory, so its sibling libraries cannot be loaded."
+  exit 2
+fi
+if [ ! -r "$_DETECT_LIB_DIR/drift_check.sh" ]; then
+  _emit "ABORT" "cannot read $_DETECT_LIB_DIR/drift_check.sh -- this skill's lib/ directory is incomplete."
+  exit 2
+fi
+if ! . "$_DETECT_LIB_DIR/drift_check.sh"; then
+  _emit "ABORT" "failed to load $_DETECT_LIB_DIR/drift_check.sh -- this skill's lib/ directory looks damaged."
+  exit 2
 fi
 
 TARGET_DIR="${1:-.}"
-
-_emit() {
-  # $1 = label, $2 = message
-  printf '[tcs-helper:observability-setup] %s: %s\n' "$1" "$2"
-}
 
 # --- 1. Not a repository -----------------------------------------------
 REPO_ROOT="$(git -C "$TARGET_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
@@ -198,18 +214,21 @@ class WrongShape(Exception):
 
 def load(path):
     """Returns (data, error). data is None if the file is absent, unreadable,
-    or fails to parse; error is a short diagnosis string in that case."""
+    or fails to parse. error is None, or a (kind, message) pair where kind is
+    "unreadable" or "malformed" -- kept apart because "not valid JSON" is a
+    wrong diagnosis for a permission error, and sends whoever is debugging it
+    looking for a syntax problem in a file they cannot even open."""
     if not path or not os.path.isfile(path):
         return None, None
     try:
         with open(path, "r", encoding="utf-8") as fh:
             text = fh.read()
     except OSError as exc:
-        return None, "cannot read %s: %s" % (path, exc)
+        return None, ("unreadable", "cannot read %s: %s" % (path, exc))
     try:
         return json.loads(text), None
     except json.JSONDecodeError as exc:
-        return None, "not valid JSON: %s" % exc
+        return None, ("malformed", "not valid JSON: %s" % exc)
 
 
 def hook_commands(hooks):
@@ -271,7 +290,9 @@ def main():
 
     local_data, local_err = load(local_path)
     if local_err:
-        print("ABORT_MALFORMED|" + local_err)
+        kind, message = local_err
+        token = "ABORT_UNREADABLE" if kind == "unreadable" else "ABORT_MALFORMED"
+        print(token + "|" + message)
         return
 
     if local_data is None:
@@ -328,6 +349,10 @@ PY
 )
 
 case "$CLASSIFY_OUTPUT" in
+  ABORT_UNREADABLE\|*)
+    _emit "ABORT" "$WRITE_PATH_REL cannot be read (${CLASSIFY_OUTPUT#ABORT_UNREADABLE|})"
+    exit 2
+    ;;
   ABORT_MALFORMED\|*)
     _emit "ABORT" "$WRITE_PATH_REL is not valid JSON (${CLASSIFY_OUTPUT#ABORT_MALFORMED|})"
     exit 2
