@@ -1312,12 +1312,21 @@ def test_a_lock_holding_junk_is_reclaimed_once_it_is_older_than_the_grace_period
 
 def test_junk_in_a_fresh_lock_is_respected_like_an_empty_one(tmp_path):
     """The junk path gets the grace period too -- it is the same branch, and a
-    test that only ever backdates the mtime would not notice if it did not."""
+    test that only ever backdates the mtime would not notice if it did not.
+
+    Same coupling as test_a_freshly_created_empty_lock_is_not_reclaimed: the
+    injected timeout (1s) has to stay SHORTER than the grace period (2s), or
+    the run outlasts the window and acquires. Guarded below rather than only
+    noted, because the two tests that share this coupling will not be edited
+    together.
+    """
     settings = tmp_path / 'settings.local.json'
     original = write_settings(settings, {'model': 'claude-opus-5'})
     lock = str(settings) + LOCK_SUFFIX
     with open(lock, 'w', encoding='utf-8') as handle:
         handle.write('garbage\n')
+    assert LOCK_GRACE > 1.0, (
+        'this test needs the grace period to outlast the injected timeout')
 
     result = subprocess.run(
         [sys.executable, SCRIPT, '--settings', str(settings)],

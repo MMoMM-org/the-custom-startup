@@ -43,6 +43,22 @@ LOCK_POLL_INTERVAL = 0.05
 # magnitude clear of the first and two orders short of the second, so a lock
 # genuinely left as garbage by a crash still clears well inside the default
 # 10s wait.
+#
+# WHAT THIS DOES NOT COVER, and the road not taken. The grace period narrows
+# the create-to-write window; it does not close it. An owner whose process
+# stalled for longer than LOCK_GRACE between os.open() and the write below
+# would still have its lock reclaimed. The airtight version is the technique
+# registration.py already uses for the settings file: write `pid:epoch` to a
+# temp name and rename it into place, so the lock is never observable empty
+# and no grace period is needed at all.
+#
+# That was considered and not built, deliberately. Reaching the residual
+# window needs a multi-second I/O stall between two adjacent statements
+# writing about twenty bytes -- which is the same risk shape the 300s TTL
+# above already accepts when it reclaims from an owner that is alive but
+# frozen. Closing one and not the other buys nothing. If this file ever grows
+# a reason to be airtight, the rename is the change to make, and LOCK_GRACE
+# and its two fresh-lock tests come out with it.
 LOCK_GRACE = 2.0
 
 
