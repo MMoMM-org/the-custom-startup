@@ -740,12 +740,16 @@ def test_install_then_remove_round_trips_to_the_original_bytes(tmp_path):
 # binds the temp file exactly as it binds the other two.
 # ---------------------------------------------------------------------------
 
-BACKUP_SUFFIX = '.tcs-observability.bak'
-LOCK_SUFFIX = '.tcs-observability.lock'
-TEMP_SUFFIX = '.tcs-observability.tmp'
+# Taken from the module rather than retyped: a suffix that drifts in
+# production has to break these tests, not slip past them. The same reasoning
+# is why the Safety test below asserts against registration.written_paths()
+# instead of rebuilding the list locally.
+BACKUP_SUFFIX = registration.BACKUP_SUFFIX
+LOCK_SUFFIX = registration.LOCK_SUFFIX
+TEMP_SUFFIX = registration.TEMP_SUFFIX
 
-LOCK_TIMEOUT_ENV = 'TCS_OBSERVABILITY_LOCK_TIMEOUT'
-LOCK_TTL_ENV = 'TCS_OBSERVABILITY_LOCK_TTL'
+LOCK_TIMEOUT_ENV = registration.LOCK_TIMEOUT_ENV
+LOCK_TTL_ENV = registration.LOCK_TTL_ENV
 
 # The repository's gitignored scratch directory, on the repository's own
 # volume. One test deliberately needs a target that is NOT under $TMPDIR --
@@ -1152,14 +1156,21 @@ def test_a_lock_held_past_the_timeout_makes_the_second_run_report_and_exit(tmp_p
     assert result.returncode != 0
     assert 'holds' in result.stderr, result.stderr
     assert 'Traceback' not in result.stderr
+    # Both bounds are tied to the 1s injected above: the run must not give up
+    # early, and must not wait an order of magnitude past its own timeout. The
+    # upper bound is not redundant with communicate()'s 30s guard -- a
+    # regression stretching the effective wait from 1s to 20s would clear that
+    # guard silently, and this is what catches it. Change the injected timeout
+    # and both numbers move with it.
     assert elapsed >= 1.0, 'it gave up before the timeout: %.2fs' % elapsed
-    assert elapsed < 15.0, 'the wait was not bounded by the timeout: %.2fs' % elapsed
+    assert elapsed < 15.0, 'the wait ran well past its 1s timeout: %.2fs' % elapsed
     assert settings.read_text(encoding='utf-8') == original, 'it wrote despite the lock'
 
 
 def test_a_live_foreign_lock_is_never_force_removed(tmp_path):
-    """Reclaiming a lock whose owner is still alive is how two runs both
-    proceed. The contended run leaves the lock exactly as it found it."""
+    """The hazard: force-removing a lock whose owner is still running is how
+    two runs end up in the same settings file. A contended run therefore
+    leaves the lock exactly as it found it -- same file, same bytes."""
     settings = tmp_path / 'settings.local.json'
     write_settings(settings, {'model': 'claude-opus-5'})
     holder = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
