@@ -264,16 +264,22 @@ def test_zero_byte_settings_file_is_treated_as_empty_document(tmp_path):
 import pytest
 
 
-@pytest.mark.parametrize('bad_env,bad_hooks,bad_event_value', [
+@pytest.mark.parametrize('bad_env,bad_hooks,bad_event_value,expected_marker', [
     # Item 1a: env is not a dict
-    ('string_env', None, None),
+    ('string_env', None, None, '"env"'),
     # Item 1b: hooks is not a dict
-    (None, 'string_hooks', None),
+    (None, 'string_hooks', None, '"hooks"'),
     # Item 1c: hooks[event] is not a list
-    (None, None, 'string_event_value'),
+    (None, None, 'string_event_value', '"hooks.PreToolUse"'),
 ])
-def test_malformed_shapes_exit_with_diagnosis(tmp_path, bad_env, bad_hooks, bad_event_value):
-    """SDD-AC-5: malformed documents exit 1 with diagnosis, no Traceback, file untouched."""
+def test_malformed_shapes_exit_with_diagnosis(
+        tmp_path, bad_env, bad_hooks, bad_event_value, expected_marker):
+    """SDD-AC-5: malformed documents exit 1 with diagnosis naming the bad key, no Traceback.
+
+    A diagnostic that merely exists is not enough -- it must name the key that
+    is actually malformed, or a wrong-key diagnosis (or a generic "bad
+    settings" message) would pass unnoticed.
+    """
     settings = tmp_path / 'settings.local.json'
     data = {}
 
@@ -291,9 +297,9 @@ def test_malformed_shapes_exit_with_diagnosis(tmp_path, bad_env, bad_hooks, bad_
     assert result.returncode != 0, 'should exit non-zero on bad shape'
     assert settings.read_text(encoding='utf-8') == original_text, 'file was modified'
     assert 'Traceback' not in result.stderr, 'stderr should contain diagnosis, not traceback'
-    # Check that some diagnostic is present
     combined = result.stdout + result.stderr
-    assert combined, 'should output a diagnostic message'
+    assert expected_marker in combined, (
+        f'diagnostic should name the malformed key {expected_marker!r}; got: {combined!r}')
 
 
 # ---------------------------------------------------------------------------

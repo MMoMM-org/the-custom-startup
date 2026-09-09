@@ -12,8 +12,8 @@ at that single fact.
 THE PRECEDENT, AND WHERE IT STOPS BEING ONE.
 
 `modules/satori/scripts/install-hooks.sh:70-87` is the model for the MERGE:
-read the whole document, `setdefault` the block, append only when absent,
-reassign. That shape is copied here.
+read the whole document, `setdefault` the block, append only when absent.
+That shape is copied here.
 
 `:97-99` is the ANTI-model for the WRITE:
 
