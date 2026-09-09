@@ -77,7 +77,19 @@ def is_ours(command):
 
 
 def entry_is_ours(entry):
-    return any(is_ours(hook.get('command', '')) for hook in entry.get('hooks', []))
+    """Check if any hook in an entry is ours. Validates hook structure.
+
+    A malformed entry (hooks not a list, or list containing non-dicts) is
+    treated as not ours, not as an error. The caller will validate structure.
+    """
+    hooks = entry.get('hooks', [])
+    if not isinstance(hooks, list):
+        return False
+    return any(
+        is_ours(hook.get('command', ''))
+        for hook in hooks
+        if isinstance(hook, dict)
+    )
 
 
 def load_settings(path):
@@ -131,17 +143,32 @@ def add_registration(data):
         raise ValueError('"hooks" is not an object (found %s)' % type(hooks).__name__)
 
     for event, (matcher, script) in REGISTRATION.items():
-        entries = hooks.get(event, [])
+        entries = hooks.setdefault(event, [])
         if not isinstance(entries, list):
             raise ValueError(
                 '"hooks.%s" is not a list (found %s)' % (event, type(entries).__name__))
+
+        # Validate that existing entries have proper structure before examining them
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            hooks_field = entry.get('hooks')
+            if hooks_field is not None and not isinstance(hooks_field, list):
+                raise ValueError(
+                    '"hooks.%s" contains an entry with malformed "hooks" field (found %s)' % (
+                        event, type(hooks_field).__name__))
+            if isinstance(hooks_field, list):
+                for hook in hooks_field:
+                    if not isinstance(hook, dict):
+                        raise ValueError(
+                            '"hooks.%s" contains an entry with non-object hook in "hooks" list' % event)
+
         if any(entry_is_ours(entry) for entry in entries if isinstance(entry, dict)):
             continue
         entries.append({
             'matcher': matcher,
             'hooks': [{'type': 'command', 'command': command_for(script)}],
         })
-        hooks[event] = entries
         changed = True
 
     return changed

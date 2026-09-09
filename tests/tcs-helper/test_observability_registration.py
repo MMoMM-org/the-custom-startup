@@ -224,3 +224,90 @@ def test_settings_override_is_the_only_file_touched(tmp_path):
     assert settings.exists(), '--settings path was not written'
     assert len(our_commands(settings.read_text(encoding='utf-8'))) == 3
     assert decoy.read_text(encoding='utf-8') == '{}\n', 'a file outside --settings was touched'
+
+
+# ---------------------------------------------------------------------------
+# Zero-byte file handling (SDD-AC-2)
+# ---------------------------------------------------------------------------
+
+def test_zero_byte_settings_file_is_treated_as_empty_document(tmp_path):
+    """SDD-AC-2: a zero-byte file should be treated like an absent file."""
+    settings = tmp_path / 'settings.local.json'
+    settings.write_text('', encoding='utf-8')
+
+    result = run_registration(settings)
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    assert set(data) == {'env', 'hooks'}
+    assert set(data['hooks']) == set(EXPECTED_EVENTS)
+    assert len(our_commands(settings.read_text(encoding='utf-8'))) == 3
+
+
+# ---------------------------------------------------------------------------
+# Malformed shapes: env and hooks guards (SDD-AC-5)
+# ---------------------------------------------------------------------------
+
+import pytest
+
+
+@pytest.mark.parametrize('bad_env,bad_hooks,bad_event_value', [
+    # Item 1a: env is not a dict
+    ('string_env', None, None),
+    # Item 1b: hooks is not a dict
+    (None, 'string_hooks', None),
+    # Item 1c: hooks[event] is not a list
+    (None, None, 'string_event_value'),
+])
+def test_malformed_shapes_exit_with_diagnosis(tmp_path, bad_env, bad_hooks, bad_event_value):
+    """SDD-AC-5: malformed documents exit 1 with diagnosis, no Traceback, file untouched."""
+    settings = tmp_path / 'settings.local.json'
+    data = {}
+
+    if bad_env is not None:
+        data['env'] = bad_env
+    if bad_hooks is not None:
+        data['hooks'] = bad_hooks
+    if bad_event_value is not None:
+        data['hooks'] = {'PreToolUse': bad_event_value}
+
+    original_text = write_settings(settings, data)
+
+    result = run_registration(settings)
+
+    assert result.returncode != 0, 'should exit non-zero on bad shape'
+    assert settings.read_text(encoding='utf-8') == original_text, 'file was modified'
+    assert 'Traceback' not in result.stderr, 'stderr should contain diagnosis, not traceback'
+    # Check that some diagnostic is present
+    combined = result.stdout + result.stderr
+    assert combined, 'should output a diagnostic message'
+
+
+# ---------------------------------------------------------------------------
+# Foreign entries with malformed hooks field (SDD-AC-5, item 3)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize('bad_hooks_value', [
+    'string_instead_of_list',
+    [{'type': 'command', 'command': 'ok'}, 'not_an_object'],
+    {'type': 'command', 'command': 'dict_not_list'},
+])
+def test_foreign_entry_with_malformed_hooks_exits_with_diagnosis(tmp_path, bad_hooks_value):
+    """SDD-AC-5: foreign entry with non-list hooks field should be diagnosed, not crash.
+
+    entry_is_ours should not raise AttributeError when examining a malformed entry.
+    """
+    settings = tmp_path / 'settings.local.json'
+    foreign_entry = {
+        'matcher': 'SomeOtherTool',
+        'hooks': bad_hooks_value,
+    }
+    write_settings(settings, {'hooks': {'PreToolUse': [foreign_entry]}})
+
+    result = run_registration(settings)
+
+    # Should exit non-zero and leave file untouched
+    assert result.returncode != 0, f'should exit non-zero; stderr: {result.stderr}'
+    assert 'Traceback' not in result.stderr, 'should have diagnosis, not traceback'
+    assert 'PreToolUse' in result.stderr or 'hooks' in result.stderr, \
+        'stderr should name the problematic key'
