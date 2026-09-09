@@ -42,6 +42,10 @@ sys.path.insert(0, os.path.join(
 ))
 import registration  # noqa: E402
 from registration import entry_is_ours, command_for  # noqa: E402
+# The lock knobs live in the lock module now. Imported by NAME rather than
+# as `import lock`, because several tests below bind a local `lock` to a
+# lock-file path and a module binding of the same name would be shadowed.
+from lock import LOCK_GRACE, LOCK_TIMEOUT_ENV, LOCK_TTL_ENV  # noqa: E402
 
 OUR_NAMESPACE = '$HOME/.claude/observability/'
 
@@ -748,8 +752,6 @@ BACKUP_SUFFIX = registration.BACKUP_SUFFIX
 LOCK_SUFFIX = registration.LOCK_SUFFIX
 TEMP_SUFFIX = registration.TEMP_SUFFIX
 
-LOCK_TIMEOUT_ENV = registration.LOCK_TIMEOUT_ENV
-LOCK_TTL_ENV = registration.LOCK_TTL_ENV
 
 # The repository's gitignored scratch directory, on the repository's own
 # volume. One test deliberately needs a target that is NOT under $TMPDIR --
@@ -1250,7 +1252,7 @@ def test_a_freshly_created_empty_lock_is_not_reclaimed(tmp_path):
     lock = str(settings) + LOCK_SUFFIX
     open(lock, 'w', encoding='utf-8').close()   # created, not yet written
     assert os.path.getsize(lock) == 0
-    assert registration.LOCK_GRACE > 1.0, (
+    assert LOCK_GRACE > 1.0, (
         'this test needs the grace period to outlast the injected timeout')
 
     result = subprocess.run(
@@ -1273,7 +1275,7 @@ def test_an_empty_lock_older_than_the_grace_period_is_reclaimed(tmp_path):
     original = write_settings(settings, {'model': 'claude-opus-5'})
     lock = str(settings) + LOCK_SUFFIX
     open(lock, 'w', encoding='utf-8').close()
-    _age_lock(lock, registration.LOCK_GRACE + 60)
+    _age_lock(lock, LOCK_GRACE + 60)
 
     result = subprocess.run(
         [sys.executable, SCRIPT, '--settings', str(settings)],
@@ -1296,7 +1298,7 @@ def test_a_lock_holding_junk_is_reclaimed_once_it_is_older_than_the_grace_period
 
     with open(lock, 'w', encoding='utf-8') as handle:
         handle.write('not-a-pid:not-an-epoch\n')
-    _age_lock(lock, registration.LOCK_GRACE + 60)
+    _age_lock(lock, LOCK_GRACE + 60)
 
     result = subprocess.run(
         [sys.executable, SCRIPT, '--settings', str(settings)],
