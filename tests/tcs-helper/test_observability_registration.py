@@ -23,6 +23,19 @@ SCRIPT = os.path.abspath(
     )
 )
 
+# entry_is_ours's tolerant branches (malformed `hooks` shapes) are unreachable
+# through the CLI: add_registration validates and raises ValueError on those
+# same shapes before entry_is_ours is ever consulted. They are still real
+# code paths -- T2.4 (removal) will call entry_is_ours on paths that skip that
+# validation loop -- so they are exercised here as a direct unit import,
+# following the `lib.<module>` idiom used elsewhere in this suite (see
+# test_reflect_utils.py).
+sys.path.insert(0, os.path.join(
+    os.path.dirname(__file__),
+    '../../plugins/tcs-helper/skills/observability-setup/lib',
+))
+from registration import entry_is_ours, command_for  # noqa: E402
+
 OUR_NAMESPACE = '$HOME/.claude/observability/'
 
 EXPECTED_EVENTS = {
@@ -311,3 +324,56 @@ def test_foreign_entry_with_malformed_hooks_exits_with_diagnosis(tmp_path, bad_h
     assert 'Traceback' not in result.stderr, 'should have diagnosis, not traceback'
     assert 'PreToolUse' in result.stderr or 'hooks' in result.stderr, \
         'stderr should name the problematic key'
+
+
+# ---------------------------------------------------------------------------
+# entry_is_ours: direct unit coverage of the tolerant branches
+#
+# These shapes cannot be reached through the CLI -- add_registration raises
+# ValueError on a non-list `hooks` field or a non-dict hook before
+# entry_is_ours is ever called on the entry. The tolerance is still real
+# defence-in-depth (T2.4 will call entry_is_ours on paths that skip that
+# validation loop), so it is covered directly here rather than through
+# run_registration.
+# ---------------------------------------------------------------------------
+
+def test_entry_is_ours_false_when_hooks_field_is_a_string():
+    entry = {'matcher': '', 'hooks': 'not_a_list'}
+    assert entry_is_ours(entry) is False
+
+
+def test_entry_is_ours_false_when_hooks_field_is_a_dict():
+    entry = {'matcher': '', 'hooks': {'type': 'command', 'command': 'ok'}}
+    assert entry_is_ours(entry) is False
+
+
+def test_entry_is_ours_skips_non_dict_elements_and_still_finds_ours():
+    entry = {
+        'matcher': '',
+        'hooks': ['not_a_dict', {'type': 'command', 'command': command_for('log_agent.sh')}],
+    }
+    assert entry_is_ours(entry) is True
+
+
+def test_entry_is_ours_skips_non_dict_elements_with_no_match():
+    entry = {
+        'matcher': '',
+        'hooks': ['not_a_dict', {'type': 'command', 'command': 'some/foreign/script.sh'}],
+    }
+    assert entry_is_ours(entry) is False
+
+
+def test_entry_is_ours_true_for_well_formed_entry_of_ours():
+    entry = {
+        'matcher': '',
+        'hooks': [{'type': 'command', 'command': command_for('log_instructions.sh')}],
+    }
+    assert entry_is_ours(entry) is True
+
+
+def test_entry_is_ours_false_for_well_formed_foreign_entry():
+    entry = {
+        'matcher': '',
+        'hooks': [{'type': 'command', 'command': '.claude/hooks/on-stop.sh'}],
+    }
+    assert entry_is_ours(entry) is False
