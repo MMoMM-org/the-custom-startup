@@ -49,6 +49,24 @@ teardown() {
 # 1. The marker file itself: exists, single `h<N>` line, nothing else.
 # ---------------------------------------------------------------------------
 
+# Every byte of "$1" is an ASCII digit (0x30-0x39), as a hex byte string.
+# A guard rather than a bare [[ ]]: a non-final bare [[ ]] in a bats body
+# does not trip set -e, so the assertion would silently never fail.
+_assert_ascii_digit_bytes() {
+  local bytes="$1" label="$2"
+  case "$bytes" in
+    "") echo "$label has no version digits between the h and the newline" >&2; return 1 ;;
+  esac
+  local rest="$bytes"
+  while [ -n "$rest" ]; do
+    case "$rest" in
+      3[0-9]*) rest="${rest#??}" ;;
+      *) echo "$label contains a non-digit byte: $bytes" >&2; return 1 ;;
+    esac
+  done
+  return 0
+}
+
 @test "marker: the template version file exists and contains a single h<N> line, starting at h1" {
   [ -f "$MARKER" ]
 
@@ -57,7 +75,10 @@ teardown() {
 
   local content
   content="$(cat "$MARKER")"
-  [[ "$content" =~ ^h[[:digit:]]+$ ]]
+  case "$content" in
+    h[[:digit:]]*) : ;;
+    *) echo "marker is not of the form h<N>: $content" >&2; return 1 ;;
+  esac
   [ "$content" = "h1" ]
 }
 
@@ -83,10 +104,10 @@ teardown() {
   # digit (0x30-0x39) in both files.
   local mid="${ours#68}"
   mid="${mid%0a}"
-  [[ "$mid" =~ ^(3[0-9])+$ ]]
+  _assert_ascii_digit_bytes "$mid" "marker" || return 1
   mid="${theirs#68}"
   mid="${mid%0a}"
-  [[ "$mid" =~ ^(3[0-9])+$ ]]
+  _assert_ascii_digit_bytes "$mid" "git-helpers marker" || return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -204,8 +225,18 @@ teardown() {
   # Not just "different strings" — anchored to the qualitatively distinct
   # words a human (or a drift-check caller deciding "install" vs "repair")
   # would grep for.
-  [[ "$missing_err" == *"not found"* ]]
-  [[ "$malformed_err" == *"malformed"* ]]
-  [[ "$missing_err" != *"malformed"* ]]
-  [[ "$malformed_err" != *"not found"* ]]
+  case "$missing_err" in
+    *"not found"*) : ;;
+    *) echo "absent-marker error does not say 'not found': $missing_err" >&2; return 1 ;;
+  esac
+  case "$malformed_err" in
+    *malformed*) : ;;
+    *) echo "malformed-marker error does not say 'malformed': $malformed_err" >&2; return 1 ;;
+  esac
+  case "$missing_err" in
+    *malformed*) echo "absent-marker error wrongly says 'malformed': $missing_err" >&2; return 1 ;;
+  esac
+  case "$malformed_err" in
+    *"not found"*) echo "malformed-marker error wrongly says 'not found': $malformed_err" >&2; return 1 ;;
+  esac
 }

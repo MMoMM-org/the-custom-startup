@@ -243,7 +243,10 @@ _install() {
   _install
   [ "$status" -eq 0 ]
 
-  [[ "$output" == *"Updated"* ]] || [[ "$output" == *"updat"* ]]
+  case "$output" in
+    *Updated*|*updat*) : ;;
+    *) echo "install did not report an update (SDD-AC-8): $output" >&2; return 1 ;;
+  esac
 
   local marker_content
   marker_content="$(cat "$TARGET_DIR/$MARKER_NAME")"
