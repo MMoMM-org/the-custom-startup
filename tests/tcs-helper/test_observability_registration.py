@@ -259,6 +259,37 @@ def test_settings_override_is_the_only_file_touched(tmp_path):
     assert decoy.read_text(encoding='utf-8') == '{}\n', 'a file outside --settings was touched'
 
 
+def test_missing_settings_argument_refuses_before_writing_anything(tmp_path):
+    """Pins the promise `--settings` makes for itself: 'never defaults to a
+    real one'. Nothing held that promise -- give it a default and drop
+    `required=True` and every other test in this file still passes, because
+    every one of them passes --settings explicitly. This is the one
+    invocation that would catch it.
+
+    HOME is pointed at an empty directory so there is a real, observable
+    place a future default could write into. Asserting the exit code alone
+    would not catch a default that exits 0 and quietly edits the operator's
+    settings file -- walking HOME afterwards would.
+    """
+    fake_home = tmp_path / 'home'
+    fake_home.mkdir()
+    env = dict(os.environ)
+    env['HOME'] = str(fake_home)
+
+    result = subprocess.run(
+        [sys.executable, SCRIPT],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode != 0
+    assert 'Traceback' not in result.stderr
+    assert '--settings' in result.stderr, 'error should name the missing option'
+    written = [str(p) for p in fake_home.rglob('*') if p.is_file()]
+    assert written == [], 'a run with no --settings wrote into HOME: %r' % written
+
+
 # ---------------------------------------------------------------------------
 # Zero-byte file handling (SDD-AC-2)
 # ---------------------------------------------------------------------------
