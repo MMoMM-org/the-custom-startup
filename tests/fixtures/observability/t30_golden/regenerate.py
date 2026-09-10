@@ -62,14 +62,24 @@ Usage:
                                       (exit 1 on any mismatch). This is what
                                       spec-019 T3.5 -- and this fixture's own
                                       pytest test -- runs.
-    python3 regenerate.py --write    Same, but OVERWRITE golden_report.txt
-                                      with the freshly captured output. Only
-                                      ever used once, at initial capture.
-                                      Never run this to "fix" a mismatch --
-                                      a mismatch after spec-019 T3.1/T3.3/T3.4
+    python3 regenerate.py --write    Write golden_report.txt with the freshly
+                                      captured output. Only works when the
+                                      file does not exist yet (the one-time
+                                      initial capture) -- refuses otherwise,
+                                      structurally, not just by convention:
+                                      see --force below.
+    python3 regenerate.py --write --force
+                                      OVERWRITE an existing golden_report.txt.
+                                      Never run this to "fix" a mismatch -- a
+                                      mismatch after spec-019 T3.1/T3.3/T3.4
                                       land means the reader's `--events`
                                       behaviour changed, which is exactly what
-                                      SDD-AC-24 forbids.
+                                      SDD-AC-24 forbids. `--write` alone
+                                      refusing when the file already exists is
+                                      the structural guard against exactly
+                                      that: the first task to hit a red test
+                                      here and reach for `--write` gets
+                                      stopped, in code, not just by a comment.
 """
 
 from __future__ import annotations
@@ -227,7 +237,7 @@ def capture(base: Path) -> str:
             "--repo-root", str(base / "repo"),
             "--home", str(base / "home"),
         ],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8",
     )
     assert result.returncode == 0, f"report.py exited {result.returncode}: {result.stderr}"
     return result.stdout
@@ -247,12 +257,30 @@ def build_and_capture() -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--write", action="store_true", help="overwrite golden_report.txt")
+    parser.add_argument("--write", action="store_true", help="write golden_report.txt")
+    parser.add_argument(
+        "--force", action="store_true",
+        help="required alongside --write when golden_report.txt already exists",
+    )
     args = parser.parse_args()
 
     captured = build_and_capture()
 
     if args.write:
+        if GOLDEN_PATH.is_file() and not args.force:
+            print(
+                f"REFUSING to overwrite {GOLDEN_PATH}: it already exists.\n"
+                "This golden fixture is frozen against commit eb9b529 to prove SDD-AC-24 -- "
+                "that report.py's --events output has not changed since spec-018. A mismatch "
+                "here means report.py's --events output DID change; regenerating the golden to "
+                "make a red test pass destroys the only evidence of that change.\n"
+                "Run with no flags first to see the diff. If the change is genuinely intentional "
+                "and reviewed, re-run with --write --force.",
+                file=sys.stderr,
+            )
+            return 1
+        if GOLDEN_PATH.is_file():
+            print(f"WARNING: --force given -- overwriting existing {GOLDEN_PATH}", file=sys.stderr)
         _write(GOLDEN_PATH, captured)
         print(f"wrote {GOLDEN_PATH} ({len(captured)} bytes)")
         return 0
