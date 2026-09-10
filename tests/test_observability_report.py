@@ -1963,7 +1963,7 @@ def test_build_load_report_fired_skill_not_listed_as_unused():
 def test_build_load_report_without_skill_agent_inventory_omits_section():
     """Pre-existing callers/tests that never pass skill_agent_inventory=/
     firing= must keep working unchanged -- same posture as byte_stats=/
-    recording= in T3.2."""
+    recording= in spec-019 T3.2."""
     text = report.build_load_report({}, [])
     assert "never fired" not in text.lower()
 
@@ -2594,6 +2594,183 @@ def test_build_multi_source_report_leaves_skill_agent_and_hook_sections_out(tmp_
     assert "hook timing" not in text.lower()
 
 
+# ---------------------------------------------------------------------------
+# Per-home sub-lines within one source's section (spec-019 T3.2 ruling (a),
+# implemented here in T3.3 since T3.2 could only deliver the per-home DATA --
+# see ruling (a)'s own text: "the two streams merge exactly as `read_events`
+# already merges a rotation chain, one level up -- and each home's own state
+# is listed beneath it"). `HomeStatus.state` and `Source.verdict` were
+# computed and tested in `test_observability_sources.py` since T3.2 but never
+# read by `report.py` until now -- these tests pin that they are read.
+# ---------------------------------------------------------------------------
+
+
+def test_build_multi_source_report_renders_per_home_sublines_for_two_homes(tmp_path):
+    """spec-019 T3.3 ruling (a): a two-home source renders one headline
+    verdict -- "recording if ANY home is" (`sources.Source.verdict`) -- plus
+    a sub-line PER home beneath it. The missing home's identifying text is
+    the assertion that matters: the whole point of the ruling is that a
+    second home that died cannot hide behind a healthy headline."""
+    root = tmp_path / "repo-two-homes"
+    root.mkdir()
+    home_recording = tmp_path / "home-recording"
+    home_recording.mkdir()
+    _write_source_events(root, home_recording, [_state(enabled="1", ts="2026-09-10T08:12:00Z")])
+
+    home_missing = tmp_path / "home-missing-does-not-exist"  # deliberately never created
+
+    source = sources.Source(
+        label="repo-two-homes",
+        repo_root=root,
+        homes=[
+            sources.HomeStatus(home=home_recording, state=sources.RECORDING),
+            sources.HomeStatus(home=home_missing, state=sources.MISSING),
+        ],
+    )
+
+    text = report.build_multi_source_report([source], datetime(2026, 9, 10, 8, 30, tzinfo=timezone.utc))
+
+    assert "Recording state: recording" in text  # any home recording wins the headline
+    assert str(home_recording) in text  # the healthy home is named
+    assert str(home_missing) in text  # the dead home is named -- it cannot hide
+    assert "missing" in text.lower()
+
+
+def test_build_multi_source_report_dead_second_home_not_identical_to_healthy_single_home(tmp_path):
+    """spec-019 T3.3 ruling (a): the ruling's own rejection criterion, made a
+    direct comparison rather than two separate substring checks -- "a source
+    whose second home died months ago would look identical to a healthy one"
+    is exactly the collapse this must NOT reproduce. Same `repo_root`, same
+    recording home, same records; the only difference between the two
+    fixtures is whether a second, dead home is also configured."""
+    now = datetime(2026, 9, 10, 8, 30, tzinfo=timezone.utc)
+    root = tmp_path / "repo"
+    root.mkdir()
+    home_recording = tmp_path / "home-recording"
+    home_recording.mkdir()
+    _write_source_events(root, home_recording, [_state(enabled="1", ts="2026-09-10T08:12:00Z")])
+    home_missing = tmp_path / "home-missing-does-not-exist"
+
+    source_healthy = sources.Source(
+        label="repo", repo_root=root, homes=[sources.HomeStatus(home=home_recording, state=sources.RECORDING)]
+    )
+    source_dying = sources.Source(
+        label="repo",
+        repo_root=root,
+        homes=[
+            sources.HomeStatus(home=home_recording, state=sources.RECORDING),
+            sources.HomeStatus(home=home_missing, state=sources.MISSING),
+        ],
+    )
+
+    text_healthy = report.build_multi_source_report([source_healthy], now)
+    text_dying = report.build_multi_source_report([source_dying], now)
+
+    assert text_healthy != text_dying
+
+
+def test_build_multi_source_report_reads_home_status_state_not_just_records(tmp_path):
+    """Guard against `HomeStatus.state` going write-only again (the defect
+    this whole ruling responds to: computed and tested since T3.2, read by
+    `report.py` nowhere until this task). Two sources are identical in every
+    way -- same `repo_root`, same two homes, same on-disk records (home_b's
+    stream is empty in both) -- and differ ONLY in `home_b`'s `HomeStatus.state`.
+    If `_build_source_report` ever stops reading that field, nothing else
+    in these fixtures differs and this test goes red."""
+    now = datetime(2026, 9, 10, 8, 30, tzinfo=timezone.utc)
+    root = tmp_path / "repo"
+    root.mkdir()
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    _write_source_events(root, home_a, [_state(enabled="1", ts="2026-09-10T08:00:00Z")])
+    # home_b's own record stream is never written in either variant below --
+    # both fixtures see it as empty; only its HomeStatus.state differs.
+
+    source_state_missing = sources.Source(
+        label="repo",
+        repo_root=root,
+        homes=[
+            sources.HomeStatus(home=home_a, state=sources.RECORDING),
+            sources.HomeStatus(home=home_b, state=sources.MISSING),
+        ],
+    )
+    source_state_not_yet = sources.Source(
+        label="repo",
+        repo_root=root,
+        homes=[
+            sources.HomeStatus(home=home_a, state=sources.RECORDING),
+            sources.HomeStatus(home=home_b, state=sources.NOT_YET_RECORDING),
+        ],
+    )
+
+    text_missing = report.build_multi_source_report([source_state_missing], now)
+    text_not_yet = report.build_multi_source_report([source_state_not_yet], now)
+
+    assert text_missing != text_not_yet
+
+
+def test_build_multi_source_report_per_home_timestamp_is_that_homes_own_not_the_merged_one(tmp_path):
+    """spec-019 T3.3 ruling (a): each RECORDING home's sub-line must show
+    THAT home's own newest `ts`, computed from that home's own stream before
+    the homes concatenate -- never the source's merged `newest_ts` borrowed
+    from a fresher sibling. Two homes, both `recording`, at different
+    timestamps: the older home's line must carry its own (older) timestamp
+    and must NOT carry the fresher home's timestamp. `newest_ts(home_records)`
+    changed to `newest_ts(records)` (the merged stream) makes this fail while
+    leaving every other assertion in this file green -- the older home would
+    silently advertise its sibling's fresher timestamp, exactly the
+    dishonesty the sub-lines exist to prevent."""
+    now = datetime(2026, 9, 10, 8, 30, tzinfo=timezone.utc)
+    root = tmp_path / "repo"
+    root.mkdir()
+    home_fresh = tmp_path / "home-fresh"
+    home_fresh.mkdir()
+    home_older = tmp_path / "home-older"
+    home_older.mkdir()
+    _write_source_events(root, home_fresh, [_state(enabled="1", ts="2026-09-10T08:12:00Z")])
+    _write_source_events(root, home_older, [_state(enabled="1", ts="2026-09-09T09:00:00Z")])
+
+    source = sources.Source(
+        label="repo",
+        repo_root=root,
+        homes=[
+            sources.HomeStatus(home=home_fresh, state=sources.RECORDING),
+            sources.HomeStatus(home=home_older, state=sources.RECORDING),
+        ],
+    )
+
+    text = report.build_multi_source_report([source], now)
+
+    fresh_line = next(line for line in text.splitlines() if str(home_fresh) in line)
+    older_line = next(line for line in text.splitlines() if str(home_older) in line)
+    assert "2026-09-10T08:12:00Z" in fresh_line
+    assert "2026-09-09T09:00:00Z" in older_line
+    assert "2026-09-10T08:12:00Z" not in older_line  # never borrows the fresher sibling's ts
+
+
+def test_build_multi_source_report_single_home_source_has_no_sublines(tmp_path):
+    """spec-019 T3.3 ruling (a), scope decision: a source with exactly one
+    home renders NO per-home sub-line. The headline already reports that
+    one home's own state exactly -- no collapse has happened yet to hide
+    anything -- so a sub-line would only restate the headline. Pins the
+    choice against the pre-existing T3.3 tests, all of which use single-home
+    sources and must keep rendering unchanged."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    _write_source_events(root, home, [_state(enabled="1", ts="2026-09-10T08:12:00Z")])
+    source = sources.Source(
+        label="repo", repo_root=root, homes=[sources.HomeStatus(home=home, state=sources.RECORDING)]
+    )
+
+    text = report.build_multi_source_report([source], datetime(2026, 9, 10, 8, 30, tzinfo=timezone.utc))
+
+    assert str(home) not in text
+
+
 def test_cli_absent_config_and_empty_config_both_fall_back_to_single_record(tmp_path):
     """spec-019 T3.3 ruling (h): an absent config file and a config with
     zero `[[source]]` entries both fall back to the single-record path
@@ -2631,7 +2808,7 @@ def test_cli_multi_source_config_renders_a_section_per_source(tmp_path):
     through the real CLI (not `build_multi_source_report` called directly)
     -- proves `main()` actually loads the config file and wires it through,
     the same wiring posture `test_cli_end_to_end_prints_report_for_fixture_events`
-    already holds T3.1/T3.2/T3.4 to."""
+    already holds spec-019 T3.1/T3.2/T3.4 to."""
     repo_root = tmp_path / "repo"
     claude_dir = repo_root / ".claude"
     claude_dir.mkdir(parents=True)

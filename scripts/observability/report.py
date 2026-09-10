@@ -1359,6 +1359,43 @@ def _render_recording_status(recording: RecordingStatus) -> list[str]:
     return [line, ""]
 
 
+def _render_home_statuses(home_statuses: Sequence[tuple["sources.HomeStatus", str | None]]) -> list[str]:
+    """Per-home sub-lines beneath the recording-state headline (spec-019 T3.3
+    ruling (a), completing the data T3.2's `HomeStatus`/`Source.verdict`
+    already computed but nothing rendered).
+
+    Only called for a source with more than one home (`_build_source_report`
+    decides that, never this function) -- a lone home's state already IS the
+    headline verbatim, so a sub-line would only restate it. With two or more
+    homes the headline collapses to "recording if ANY home is"
+    (`sources.Source.verdict`), and this is what renders around that collapse:
+    a home whose own state disagrees with the headline must stay visible,
+    never absorbed into it -- the exact case ruling (a) rejected a bare
+    verdict over ("a source whose second home died months ago would look
+    identical to a healthy one").
+
+    Each home is identified by its own path: `HomeStatus.home` carries no
+    other label, and the ruling's illustrative "container home"/"host home"
+    wording is not data the config expresses -- inventing a category the
+    config never chose would be less honest than the path itself. The
+    timestamp shown for a `recording` home is THAT home's own newest record
+    (passed in by the caller, computed from that home's own stream before the
+    homes concatenate) -- never the source's merged `newest_ts`, so a stale or
+    absent second home can never borrow a healthy sibling's timestamp.
+    """
+    lines = []
+    for home_status, home_newest_ts in home_statuses:
+        if home_status.state == sources.RECORDING:
+            detail = f"recording (newest {home_newest_ts})" if home_newest_ts else "recording"
+        elif home_status.state == sources.NOT_YET_RECORDING:
+            detail = "not yet recording (no record file found yet)"
+        else:
+            detail = "missing (path no longer exists)"
+        lines.append(f"  {home_status.home}: {detail}")
+    lines.append("")
+    return lines
+
+
 def _render_byte_accounting(byte_stats: ByteAccounting) -> list[str]:
     """The always-loaded layer's measured byte cost, separate from
     conditional loads (SDD-AC-14), and how many records were unmeasurable.
@@ -1534,6 +1571,12 @@ def build_load_report(
     # is what pins that it stays wired.
     byte_stats: ByteAccounting | None = None,
     recording: RecordingStatus | None = None,
+    # spec-019 T3.3 ruling (a): same optional-parameter posture again -- `None`
+    # by default so every pre-existing caller/test keeps working unchanged.
+    # Per-home sub-lines beneath the recording-state headline; see
+    # `_render_home_statuses` for why the caller (`_build_source_report`)
+    # decides whether to pass anything at all.
+    home_statuses: Sequence[tuple["sources.HomeStatus", str | None]] | None = None,
     # T3.3: same optional-pair posture as byte_stats/recording above -- both
     # `None` by default so every pre-existing caller/test keeps working
     # unchanged, both required together to render the section at all.
@@ -1567,6 +1610,13 @@ def build_load_report(
     stale record must lead with the recording state, never with a load
     figure presented as if it were a finding.
 
+    `home_statuses` is optional (spec-019 T3.3 ruling (a), same posture):
+    when given, one sub-line per `(HomeStatus, newest_ts)` pair renders
+    directly beneath the recording-state headline, naming that home's own
+    state -- see `_render_home_statuses`. `_build_source_report` passes this
+    only for a source with more than one home; a single-home source's
+    headline already IS that home's state, so no sub-line would add anything.
+
     `skill_agent_inventory` and `firing` are optional (T3.3, same posture):
     when both are given, a final section states the skill/agent inventory
     size, coverage as a fraction, and every entry that never fired --
@@ -1599,6 +1649,9 @@ def build_load_report(
 
     if recording is not None:
         lines.extend(_render_recording_status(recording))
+
+    if home_statuses is not None:
+        lines.extend(_render_home_statuses(home_statuses))
 
     mode = (
         "gitignore-filtered" if git_filtered
@@ -1652,7 +1705,8 @@ def build_load_report(
 # ---------------------------------------------------------------------------
 # Per-source rendering (spec-019 T3.3, ADR-7): several sources read without
 # ever pretending they are one repository -- see the module docstring above
-# and phase-3.md's rulings (f)-(k).
+# and phase-3.md's T3.3 rulings (f)-(k), plus T3.2's ruling (a) (the per-home
+# sub-lines), which T3.2 could only deliver the data for.
 # ---------------------------------------------------------------------------
 
 
@@ -1682,12 +1736,24 @@ def _build_source_report(source: sources.Source, now: datetime) -> str:
 
     Ruling (k): `skill_agent_inventory`, `firing` and `hooks` are always
     `None` here -- the firing-coverage union (ADR-8) and the per-source
-    hook-timing split are T3.4's, appended after `build_multi_source_report`'s
-    loop, never inside it.
+    hook-timing split are spec-019 T3.4's, appended after
+    `build_multi_source_report`'s loop, never inside it.
+
+    Ruling (a) (spec-019 T3.2, completed here): `source.homes` carries each
+    home's classified `state`, computed and tested since T3.2 but never
+    rendered until now. With more than one home, `home_statuses` is passed
+    through to `build_load_report` so `_render_home_statuses` can list every
+    home beneath the headline; a single-home source passes `None` -- that one
+    home's state already IS the headline, verbatim.
     """
     records: list[dict] = []
     unparseable_total = 0
     home_inventories: list[InstructionInventory] = []
+    # Ruling (a): each home's OWN newest_ts, from that home's own stream
+    # before the homes concatenate below -- never the source's merged value,
+    # so a stale or missing second home can never borrow a healthy sibling's
+    # timestamp in the sub-line `_render_home_statuses` renders for it.
+    home_statuses: list[tuple[sources.HomeStatus, str | None]] = []
 
     for home_status in source.homes:
         events_path = _resolve_events_path(None, source.repo_root, home_status.home)
@@ -1695,6 +1761,7 @@ def _build_source_report(source: sources.Source, now: datetime) -> str:
         records.extend(home_records)
         unparseable_total += home_unparseable
         home_inventories.append(walk_instruction_inventory(source.repo_root, home_status.home))
+        home_statuses.append((home_status, newest_ts(home_records)))
 
     inventory = _combine_inventories(home_inventories)
     stats = instruction_stats_by_repo(records).get(source.repo_root.name, {})
@@ -1708,6 +1775,10 @@ def _build_source_report(source: sources.Source, now: datetime) -> str:
         inventory.git_filtered,
         byte_stats=byte_stats,
         recording=recording,
+        # Ruling (a): a lone home's state already IS the headline verbatim --
+        # a sub-line would only restate it, so only a multi-home source gets
+        # one.
+        home_statuses=home_statuses if len(home_statuses) > 1 else None,
         skill_agent_inventory=None,
         firing=None,
         hooks=None,
