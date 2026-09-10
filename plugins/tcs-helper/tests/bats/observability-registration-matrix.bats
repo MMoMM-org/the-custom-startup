@@ -29,21 +29,34 @@
 #      three should. This is the editor's contract (ADR-1 scope), not a
 #      defect -- see that test below.
 #
-#   2. foreign-plus-ours-current / foreign-plus-ours-older: build.sh
-#      concatenates a `"hooks": {...}` block from _foreign_hooks_json with a
-#      SECOND `"hooks": {...}` block from _ours_hooks_json at the same
-#      object nesting level, joined by a literal comma. The raw fixture
-#      TEXT contains two top-level "hooks" keys. json.loads (used by both
-#      registration.py and Python's own json module generally) resolves
-#      duplicate object keys last-wins, so the parsed document only ever
-#      has the "ours" hooks -- the foreign PreToolUse/Bash entry is
-#      structurally invisible to any JSON-based consumer, including
-#      registration.py. observability-settings-fixtures.bats' fixture-6/7
-#      tests do not catch this because they assert via grep -F over the raw
-#      text (finds the substring) and _assert_json_valid (parses without
-#      raising), never round-tripping through json.load and re-checking
-#      which keys survived. See the two tests below for what this means in
-#      practice for setup and removal.
+#   2. foreign-plus-ours-current / foreign-plus-ours-older -- FIXED at the
+#      root by 64c0db3, after this file's first version caught it (build.sh
+#      used to concatenate a `"hooks": {...}` block from _foreign_hooks_json
+#      with a SECOND `"hooks": {...}` block from _ours_hooks_json at the
+#      same object nesting level, joined by a literal comma; json.loads
+#      resolves duplicate object keys last-wins, so the parsed document
+#      only ever had the "ours" hooks and the foreign PreToolUse/Bash entry
+#      these two fixtures exist to model was structurally invisible to any
+#      JSON-based consumer, including registration.py, even though grep -F
+#      over the raw text still found it). 64c0db3 replaced both builders
+#      with a single _foreign_plus_ours_hooks_json() that puts the foreign
+#      and ours PreToolUse entries in ONE "hooks" object, so the foreign
+#      entry now survives a parse. The two tests below pin what setup and
+#      removal do against the CORRECTED fixture: setup is still a no-op
+#      ("already configured", byte-identical -- unaffected by the fix,
+#      since add_registration only ever looked at whether ITS OWN entries
+#      already matched); removal now leaves the foreign entry standing
+#      instead of leaving "{}" -- and that is the fix working as intended,
+#      not a behaviour change in remove_registration, which has never
+#      touched a foreign entry (see
+#      test_removal_deletes_only_our_entries_foreign_entry_survives in
+#      tests/tcs-helper/test_observability_registration.py:468, covering
+#      the identical case against a hand-built document since T2.4, green
+#      throughout). The old "{}" result was correct for the input it was
+#      given -- a fixture whose foreign entry had already been discarded
+#      by ITS OWN duplicate-key defect before registration.py ever read
+#      it. What changed between this file's two versions is the fixture,
+#      not the editor.
 #
 # bash 3.2 compatible (CON-1): no `[[ =~ ]]` with PCRE classes or bounded
 # quantifiers. Every substring assertion goes through _assert_contains /
@@ -258,45 +271,65 @@ sys.exit(0 if a == b else 1)
 # ---------------------------------------------------------------------------
 # 4 & 5. foreign-plus-ours-current / foreign-plus-ours-older
 #
-# See the file header's finding #2: both fixtures' raw JSON text has a
-# duplicate top-level "hooks" key (one from _foreign_hooks_json, one from
-# _ours_hooks_json). json.loads resolves that last-wins, so the DOCUMENT
-# registration.py actually reads only ever contains the "ours" hooks -- the
-# foreign PreToolUse/Bash entry is invisible once parsed, even though it is
-# still present as raw text (which is why grep -F over the file still finds
-# it, and why observability-settings-fixtures.bats' fixture tests, which
-# never round-trip through json.load, don't catch this).
+# See the file header's finding #2: build.sh used to give both fixtures a
+# duplicate top-level "hooks" key, which shadowed the foreign PreToolUse/
+# Bash entry out of existence for any JSON parser -- fixed at the root by
+# 64c0db3 (_foreign_plus_ours_hooks_json merges foreign and ours into ONE
+# "hooks" object). What follows pins the CORRECTED fixture. Setup's half is
+# unchanged from this file's first version, because add_registration was
+# never looking at the foreign entry either way. Removal's half is not --
+# it now has a real foreign entry to leave standing, and it does, exactly
+# as test_removal_deletes_only_our_entries_foreign_entry_survives
+# (tests/tcs-helper/test_observability_registration.py:468) has pinned
+# against a hand-built document since T2.4. remove_registration's own
+# behaviour never changed; only the fixture did.
+#
+# Both assertions below go through a JSON parse (_assert_json_equal against
+# a literal expected document), not a raw-text grep -- a raw-text check is
+# exactly what let the old duplicate-key defect hide from
+# observability-settings-fixtures.bats for as long as it did.
 # ---------------------------------------------------------------------------
 
-@test "foreign-plus-ours-current: setup is a no-op ('already configured'); the file is byte-identical to before" {
-  local dir target original
+@test "foreign-plus-ours-current: setup is a no-op ('already configured'); removal leaves the foreign entry standing and prunes only ours" {
+  local dir target original expected
   dir="$(_copy_fixture foreign-plus-ours-current foreign-plus-ours-current)"
   target="$dir/.claude/settings.local.json"
   original="$WORK_PARENT/foreign-plus-ours-current.orig"
   cp -p "$target" "$original"
 
-  # add_registration sees data['hooks'] already equal to what command_for()
-  # produces today -- because the duplicate key means that IS the whole of
-  # "hooks" as parsed -- so status is 'none': nothing written.
+  # add_registration sees data['hooks'] already carrying all three expected
+  # ours-entries (now correctly alongside the foreign one, post-64c0db3) --
+  # so status is 'none': nothing written.
   _run_setup "$target"
   [ "$status" -eq 0 ]
   _assert_contains "$output" "already configured:"
   _assert_bytes_equal "$original" "$target"
 
-  # Removal prunes everything in the parsed document: 'env' held only our
-  # switch, and 'hooks' (the shadowed, ours-only version) held only our
-  # three entries -- so both containers empty out and get deleted, leaving
-  # "{}". This is NOT a loss of the foreign entry by removal: that entry
-  # was already unreachable through any JSON parse before removal ever ran.
+  # remove_registration prunes only what ADR-5 namespace membership marks
+  # as ours: 'env' held only our switch (deleted entirely), and 'hooks.
+  # PreToolUse' held both entries -- ours is stripped out, the foreign one
+  # is kept, same as any other fixture with a real foreign neighbour
+  # (foreign-only, same-event-names-populated above).
   _run_remove "$target"
   [ "$status" -eq 0 ]
   _assert_contains "$output" "removed observability hooks from"
-  run cat "$target"
-  [ "$output" = "{}" ]
+
+  expected="$WORK_PARENT/foreign-plus-ours-current.expected"
+  cat > "$expected" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [
+        { "type": "command", "command": "/opt/foreign-audit/hook.sh" }]}
+    ]
+  }
+}
+EOF
+  _assert_json_equal "$expected" "$target"
 }
 
 @test "foreign-plus-ours-older: byte-identical to foreign-plus-ours-current (ADR-5: the command string is opaque to bundle version), same no-op/removal behaviour" {
-  local dir target original current_target
+  local dir target original current_target expected
   dir="$(_copy_fixture foreign-plus-ours-older foreign-plus-ours-older)"
   target="$dir/.claude/settings.local.json"
   original="$WORK_PARENT/foreign-plus-ours-older.orig"
@@ -312,8 +345,19 @@ sys.exit(0 if a == b else 1)
   _run_remove "$target"
   [ "$status" -eq 0 ]
   _assert_contains "$output" "removed observability hooks from"
-  run cat "$target"
-  [ "$output" = "{}" ]
+
+  expected="$WORK_PARENT/foreign-plus-ours-older.expected"
+  cat > "$expected" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [
+        { "type": "command", "command": "/opt/foreign-audit/hook.sh" }]}
+    ]
+  }
+}
+EOF
+  _assert_json_equal "$expected" "$target"
 }
 
 # ---------------------------------------------------------------------------
