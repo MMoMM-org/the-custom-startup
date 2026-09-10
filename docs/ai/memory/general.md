@@ -17,3 +17,7 @@
 <!-- 2026-09-04 -->
 - **A skill's examples silently language-lock its grep step** — `testing`'s smell patterns were Jest-shaped, so a pytest suite grepped clean and read as passing. → Have the step name the framework first, then list the equivalents.
 - **`tr` maps byte to byte** — `tr ' ' '█'` writes only the first byte of a multibyte replacement, so a rendered bar is invalid UTF-8 shown as replacement glyphs. → Append whole characters in a loop.
+
+<!-- 2026-09-10 -->
+- **Golden-output fixtures live in `tests/fixtures/<area>/<task>_golden/`** — a committed `regenerate.py` builds the input and diffs (`--write` captures once), the `.txt` holds the frozen output, and a sibling test wires the diff into `pytest`. First instance: `observability/t30_golden`. → Never `--write` to silence a mismatch.
+- **Build a fixture tree that must NOT be a git repo under `tempfile.TemporaryDirectory()`** — inside the worktree, `check-ignore` answers with *this* repo's `.gitignore` instead of failing, so the "not a repository" branch never runs and nothing errors. → Materialise outside the worktree at run time.

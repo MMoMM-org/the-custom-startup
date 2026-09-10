@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Reading several records"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 3
 ---
@@ -48,7 +48,7 @@ file is written by both, so the two sides can proceed concurrently.
 Delivers a reader that answers the cross-repository question without pretending four repositories
 are one.
 
-- [ ] **T3.0 Capture the spec-018 output fixture — before anything else** `[activity: test-strategy]`
+- [x] **T3.0 Capture the spec-018 output fixture — before anything else** `[activity: test-strategy]`
 
   **This must happen before T3.1 touches `report.py`.** T3.5 asserts that `--events <path>` behaves
   exactly as it did in spec-018, "against a recorded fixture of the old output rather than by
@@ -62,6 +62,17 @@ are one.
      fixture, with a comment naming the commit it was captured from.
   4. Validate: the fixture reproduces byte-identically on a second run of the unmodified reader.
   5. Success: T3.5 has something real to compare against `[ref: SDD/SDD-AC-24]`
+
+  **Deviation, approved by the maintainer 2026-09-10.** Step 2 said "Test: none yet", and the
+  byte-diff assertion belonged to T3.5 step 1. It landed here instead, as
+  `tests/test_observability_report_t30_golden.py`. Rationale: T3.0 exists to protect T3.1, T3.3
+  and T3.4 from silently breaking `--events`, and an assertion that only lands at T3.5 lands
+  *after* all three have changed the reader — its implementer would meet accumulated drift across
+  three commits with no signal about which change caused what. Wired in now, whoever breaks
+  SDD-AC-24 gets a red test at the commit that breaks it. Proven to have teeth before acceptance:
+  three mutations of `report.py`'s rendered output (a section label, `never_loaded`'s sort order,
+  an off-by-one in the unreachable count) each failed the test. Spec compliance had ruled this
+  scope creep and was correct to; the ruling is the maintainer's, not the implementer's.
 
 - [ ] **T3.1 `repo` as a first-class dimension in the existing analyses** `[activity: backend-api]`
 
@@ -131,8 +142,11 @@ are one.
 - [ ] **T3.5 Backwards compatibility and phase validation** `[activity: validate]`
 
   1. Test: `--events <path>` behaves exactly as it did in spec-018 — same output for the same input,
-     asserted against a recorded fixture of the old output rather than by inspection; no argument
-     reads the config; `--data-dir` still means what it meant.
+     asserted against a recorded fixture of the old output rather than by inspection **(already
+     delivered by T3.0 as `tests/test_observability_report_t30_golden.py`, by approved deviation —
+     verify it is still green and still frozen against commit `eb9b529`; do NOT regenerate the
+     golden to make it pass)**; no argument reads the config; `--data-dir` still means what it
+     meant. The last two assertions remain T3.5's to write.
   2. Validate: run `pytest -q` in full. Every spec-018 report test must still pass unmodified; if one
      needs changing, that is a deviation and is recorded rather than absorbed.
   3. **Optional scope, PRD F6 (Could-have)**: assisted discovery. If implemented, a discovered
