@@ -172,6 +172,35 @@ _foreign_hooks_same_events_json() {
 EOF
 }
 
+# _foreign_hooks_json and _ours_hooks_json each open their own top-level
+# "hooks" object; concatenating them verbatim into one JSON document would
+# produce two "hooks" keys in the same object, which every JSON parser
+# resolves last-wins -- silently dropping the foreign entry these fixtures
+# exist to model. This helper merges the two into ONE "hooks" object, same
+# shape as _foreign_hooks_same_events_json: the foreign entry sits in
+# PreToolUse alongside ours (Bash matcher next to Skill), following how
+# same-event-names-populated already models two entries under one event
+# name. Used by foreign-plus-ours-current/-older, which ship this exact
+# same JSON (ADR-5 keeps the command opaque to bundle version) and differ
+# only in the paired $HOME fixture.
+_foreign_plus_ours_hooks_json() {
+  cat <<'EOF'
+  "env": { "CLAUDE_OBSERVABILITY_ENABLED": "1" },
+  "hooks": {
+    "InstructionsLoaded": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_instructions.sh\"" }]}],
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [
+        { "type": "command", "command": "/opt/foreign-audit/hook.sh" }]},
+      { "matcher": "Skill", "hooks": [
+        { "type": "command", "command": "\"$HOME/.claude/observability/log_skill.sh\"" }]}
+    ],
+    "SubagentStart": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_agent.sh\"" }]}]
+  }
+EOF
+}
+
 # --- Scenario 1: absent -----------------------------------------------------
 build_absent() {
   local repo="$OUT_DIR/absent"
@@ -212,9 +241,7 @@ build_foreign_plus_ours_current() {
   mkdir -p "$repo/.claude"
   {
     echo "{"
-    _foreign_hooks_json
-    echo "  ,"
-    _ours_hooks_json
+    _foreign_plus_ours_hooks_json
     echo "}"
   } > "$repo/.claude/settings.local.json"
 
@@ -238,9 +265,7 @@ build_foreign_plus_ours_older() {
   # that distinguishes "current" from "older" is the paired $HOME below.
   {
     echo "{"
-    _foreign_hooks_json
-    echo "  ,"
-    _ours_hooks_json
+    _foreign_plus_ours_hooks_json
     echo "}"
   } > "$repo/.claude/settings.local.json"
 
