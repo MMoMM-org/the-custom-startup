@@ -2376,7 +2376,7 @@ def test_build_multi_source_report_splits_recording_status_per_source_and_names_
         label="source-b", repo_root=root_b, homes=[sources.HomeStatus(home=home_b, state=sources.RECORDING)]
     )
 
-    text = report.build_multi_source_report([source_a, source_b], now)
+    text, _ = report.build_multi_source_report([source_a, source_b], now)
 
     assert "=== source-a ===" in text
     assert "=== source-b ===" in text
@@ -2431,7 +2431,7 @@ def test_build_multi_source_report_inventory_union_includes_file_present_in_only
         ],
     )
 
-    text = report.build_multi_source_report([source], datetime(2026, 9, 10, tzinfo=timezone.utc))
+    text, _ = report.build_multi_source_report([source], datetime(2026, 9, 10, tzinfo=timezone.utc))
 
     assert "2 configured file(s) found" in text
     assert "only-in-repo.md" in text
@@ -2461,7 +2461,7 @@ def test_build_multi_source_report_never_loaded_is_per_source_not_pooled(tmp_pat
         label="b", repo_root=root_b, homes=[sources.HomeStatus(home=home_b, state=sources.NOT_YET_RECORDING)]
     )
 
-    text = report.build_multi_source_report([source_a, source_b], datetime(2026, 9, 10, tzinfo=timezone.utc))
+    text, _ = report.build_multi_source_report([source_a, source_b], datetime(2026, 9, 10, tzinfo=timezone.utc))
 
     section_a, section_b = text.split("=== b ===")
     assert "unused-in-a.md" in section_a
@@ -2501,7 +2501,7 @@ def test_build_multi_source_report_concatenates_homes_within_one_source_never_ac
         label="b", repo_root=root_b, homes=[sources.HomeStatus(home=home_b, state=sources.RECORDING)]
     )
 
-    text = report.build_multi_source_report([source_a, source_b], datetime(2026, 9, 10, tzinfo=timezone.utc))
+    text, _ = report.build_multi_source_report([source_a, source_b], datetime(2026, 9, 10, tzinfo=timezone.utc))
 
     section_a, section_b = text.split("=== b ===")
     assert "only-in-a1.md" in section_a
@@ -2539,7 +2539,7 @@ def test_build_multi_source_report_byte_accounting_is_per_source(tmp_path):
         label="b", repo_root=root_b, homes=[sources.HomeStatus(home=home_b, state=sources.RECORDING)]
     )
 
-    text = report.build_multi_source_report([source_a, source_b], datetime(2026, 9, 10, tzinfo=timezone.utc))
+    text, _ = report.build_multi_source_report([source_a, source_b], datetime(2026, 9, 10, tzinfo=timezone.utc))
 
     section_a, section_b = text.split("=== b ===")
     assert "Byte cost -- always-loaded layer: 100 byte(s)" in section_a
@@ -2567,17 +2567,27 @@ def test_build_multi_source_report_looks_up_by_repo_root_basename_headed_by_labe
         label="Human Label", repo_root=repo_root, homes=[sources.HomeStatus(home=home, state=sources.RECORDING)]
     )
 
-    text = report.build_multi_source_report([source], datetime(2026, 9, 10, tzinfo=timezone.utc))
+    text, _ = report.build_multi_source_report([source], datetime(2026, 9, 10, tzinfo=timezone.utc))
 
     assert "=== Human Label ===" in text
     assert "a.md: 1 load(s)" in text
 
 
-def test_build_multi_source_report_leaves_skill_agent_and_hook_sections_out(tmp_path):
-    """spec-019 T3.3 ruling (k): every per-source `build_load_report` call
-    passes `skill_agent_inventory=None`, `firing=None`, `hooks=None` -- T3.4's
-    firing-coverage union and per-source hook-timing split are not this
-    task's to build, and must not appear."""
+def test_build_multi_source_report_wires_hook_timing_in_but_leaves_firing_coverage_out(tmp_path):
+    """spec-019 T3.4 ruling (q): retires
+    `test_build_multi_source_report_leaves_skill_agent_and_hook_sections_out`
+    (T3.3 ruling (k)) ON PURPOSE -- captured RED verbatim before this rewrite,
+    in this task's report, per the T3.4 gate. Ruling (k) fixed `hooks=None`
+    at `_build_source_report`'s call site as T3.3's clean insertion point for
+    T3.4; ruling (q) is what completes that stub -- hook timing is per
+    repository (ADR-7: only firing coverage unions), so it is wired into
+    `_build_source_report` itself, the exact function this test inspects.
+    Its firing-coverage half stays VALID but is now MISLEADING as a
+    same-function assertion: the union renders in `main()` (ruling (n)),
+    which `build_multi_source_report` never calls, so "absent from this
+    function's output" proves nothing about whether the union exists --
+    see `test_cli_multi_source_config_denominator_walked_from_shipping_repo_only`
+    and the other T3.4 tests below for the union's own coverage."""
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
     home = tmp_path / "home"
@@ -2587,11 +2597,10 @@ def test_build_multi_source_report_leaves_skill_agent_and_hook_sections_out(tmp_
         label="repo", repo_root=repo_root, homes=[sources.HomeStatus(home=home, state=sources.RECORDING)]
     )
 
-    text = report.build_multi_source_report([source], datetime(2026, 9, 10, tzinfo=timezone.utc))
+    text, _ = report.build_multi_source_report([source], datetime(2026, 9, 10, tzinfo=timezone.utc))
 
-    assert "skill and agent inventory" not in text.lower()
-    assert "hook duration" not in text.lower()
-    assert "hook timing" not in text.lower()
+    assert "hook timing" in text.lower()  # T3.4 ruling (q): now wired in, per source
+    assert "skill and agent inventory" not in text.lower()  # still true -- rendered only in main()
 
 
 # ---------------------------------------------------------------------------
@@ -2628,7 +2637,7 @@ def test_build_multi_source_report_renders_per_home_sublines_for_two_homes(tmp_p
         ],
     )
 
-    text = report.build_multi_source_report([source], datetime(2026, 9, 10, 8, 30, tzinfo=timezone.utc))
+    text, _ = report.build_multi_source_report([source], datetime(2026, 9, 10, 8, 30, tzinfo=timezone.utc))
 
     assert "Recording state: recording" in text  # any home recording wins the headline
     assert str(home_recording) in text  # the healthy home is named
@@ -2663,8 +2672,8 @@ def test_build_multi_source_report_dead_second_home_not_identical_to_healthy_sin
         ],
     )
 
-    text_healthy = report.build_multi_source_report([source_healthy], now)
-    text_dying = report.build_multi_source_report([source_dying], now)
+    text_healthy, _ = report.build_multi_source_report([source_healthy], now)
+    text_dying, _ = report.build_multi_source_report([source_dying], now)
 
     assert text_healthy != text_dying
 
@@ -2705,8 +2714,8 @@ def test_build_multi_source_report_reads_home_status_state_not_just_records(tmp_
         ],
     )
 
-    text_missing = report.build_multi_source_report([source_state_missing], now)
-    text_not_yet = report.build_multi_source_report([source_state_not_yet], now)
+    text_missing, _ = report.build_multi_source_report([source_state_missing], now)
+    text_not_yet, _ = report.build_multi_source_report([source_state_not_yet], now)
 
     assert text_missing != text_not_yet
 
@@ -2741,7 +2750,7 @@ def test_build_multi_source_report_per_home_timestamp_is_that_homes_own_not_the_
         ],
     )
 
-    text = report.build_multi_source_report([source], now)
+    text, _ = report.build_multi_source_report([source], now)
 
     fresh_line = next(line for line in text.splitlines() if str(home_fresh) in line)
     older_line = next(line for line in text.splitlines() if str(home_older) in line)
@@ -2766,7 +2775,7 @@ def test_build_multi_source_report_single_home_source_has_no_sublines(tmp_path):
         label="repo", repo_root=root, homes=[sources.HomeStatus(home=home, state=sources.RECORDING)]
     )
 
-    text = report.build_multi_source_report([source], datetime(2026, 9, 10, 8, 30, tzinfo=timezone.utc))
+    text, _ = report.build_multi_source_report([source], datetime(2026, 9, 10, 8, 30, tzinfo=timezone.utc))
 
     assert str(home) not in text
 
@@ -2842,3 +2851,230 @@ def test_cli_multi_source_config_renders_a_section_per_source(tmp_path):
     assert "=== Source B ===" in result.stdout
     assert "a.md: 1 load(s)" in result.stdout
     assert "b.md: 1 load(s)" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# T3.4: the one union -- firing coverage across sources (ADR-8, rulings (l)-(q)).
+# ---------------------------------------------------------------------------
+
+
+def test_build_multi_source_report_union_and_per_source_firing_coverage(tmp_path):
+    """spec-019 T3.4's own required test (rulings (m)/(p), ADR-8). Skill X
+    fires only in source A, skill Y only in source B, skill Z in BOTH, skill
+    W in neither -- deliberately NOT a fixture where both sources fire
+    identical sets, which "cannot tell a union from an intersection, and
+    cannot tell whether the second source was silently dropped" (T3.4 gate).
+
+    The denominator (`inventory`) is walked from a THIRD root standing in for
+    the shipping repository -- never from either source's own `repo_root` --
+    matching how `main()` actually calls `walk_skill_agent_inventory` (ruling
+    (l)). `union_fired_names`/`firing_coverage` are the same pure functions
+    `main()` composes; this test exercises that composition directly rather
+    than through the CLI, since the union renders in `main()` and
+    `build_multi_source_report` never calls it (ruling (n))."""
+    shipping_root = tmp_path / "shipping-repo"
+    _make_skill(shipping_root, "plugin", "skill-x")
+    _make_skill(shipping_root, "plugin", "skill-y")
+    _make_skill(shipping_root, "plugin", "skill-z")
+    _make_skill(shipping_root, "plugin", "skill-w")
+    inventory = report.walk_skill_agent_inventory(shipping_root)
+
+    root_a = tmp_path / "repo-a"
+    root_a.mkdir()
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+    _write_source_events(
+        root_a, home_a, [_skill_record("plugin:skill-x"), _skill_record("plugin:skill-z")]
+    )
+
+    root_b = tmp_path / "repo-b"
+    root_b.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    _write_source_events(
+        root_b, home_b, [_skill_record("plugin:skill-y"), _skill_record("plugin:skill-z")]
+    )
+
+    source_a = sources.Source(
+        label="source-a", repo_root=root_a, homes=[sources.HomeStatus(home=home_a, state=sources.RECORDING)]
+    )
+    source_b = sources.Source(
+        label="source-b", repo_root=root_b, homes=[sources.HomeStatus(home=home_b, state=sources.RECORDING)]
+    )
+
+    _, source_records = report.build_multi_source_report(
+        [source_a, source_b], datetime(2026, 9, 10, tzinfo=timezone.utc)
+    )
+    fired_by_source = [(source.label, report.fired_names(records)) for source, records in source_records]
+
+    union_fired = report.union_fired_names(fired for _, fired in fired_by_source)
+    union_coverage = report.firing_coverage(inventory.entries, union_fired)
+    union_qualified = {e.qualified for e in union_coverage.fired}
+
+    # The union counts X, Y and Z as fired -- never W, which fired nowhere.
+    assert union_qualified == {"plugin:skill-x", "plugin:skill-y", "plugin:skill-z"}
+
+    # Source A's OWN credited-as-fired-here set is X and Z -- never Y, which
+    # fired only in B. Source B's own set is Y and Z -- never X.
+    fired_a = report.firing_coverage(inventory.entries, fired_by_source[0][1]).fired
+    fired_b = report.firing_coverage(inventory.entries, fired_by_source[1][1]).fired
+    assert {e.qualified for e in fired_a} == {"plugin:skill-x", "plugin:skill-z"}
+    assert {e.qualified for e in fired_b} == {"plugin:skill-y", "plugin:skill-z"}
+
+    # Ruling (p): the per-source DETAIL still names the divergence -- Y fired
+    # in B but not A is exactly the gap the PRD's "fired in both places it
+    # should" question exists to surface, so it appears in A's own detail
+    # (never in A's credited-as-fired-here set, asserted above) and
+    # symmetrically for X in B's.
+    detail_text = "\n".join(report._render_per_source_firing_detail(inventory, fired_by_source))
+    section_a, section_b = detail_text.split("  source-b:")
+    assert "plugin:skill-y [skill]" in section_a
+    assert "plugin:skill-x [skill]" not in section_a
+    assert "plugin:skill-x [skill]" in section_b
+    assert "plugin:skill-y [skill]" not in section_b
+
+
+def test_build_multi_source_report_union_reports_unrecognised_name_not_dropped(tmp_path):
+    """spec-019 T3.4 task text: "a record naming something outside the
+    inventory is reported as unrecognised rather than dropped" -- exercised
+    at the union, which is where unmatched/ambiguous names render (ruling
+    (p): pooled on the union figure only, never attributed per source)."""
+    shipping_root = tmp_path / "shipping-repo"
+    _make_skill(shipping_root, "plugin", "skill-x")
+    inventory = report.walk_skill_agent_inventory(shipping_root)
+
+    root_a = tmp_path / "repo-a"
+    root_a.mkdir()
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+    _write_source_events(root_a, home_a, [_agent_record("Explore")])
+
+    source_a = sources.Source(
+        label="source-a", repo_root=root_a, homes=[sources.HomeStatus(home=home_a, state=sources.RECORDING)]
+    )
+
+    _, source_records = report.build_multi_source_report(
+        [source_a], datetime(2026, 9, 10, tzinfo=timezone.utc)
+    )
+    fired_by_source = [(source.label, report.fired_names(records)) for source, records in source_records]
+    union_fired = report.union_fired_names(fired for _, fired in fired_by_source)
+    union_coverage = report.firing_coverage(inventory.entries, union_fired)
+
+    assert union_coverage.unmatched_record_names == ["Explore [agent]"]
+
+
+def test_build_multi_source_report_hook_timing_installed_only_where_wrapper_was(tmp_path):
+    """spec-019 T3.4 task text: hook timing's `installed` is per source, so a
+    wrapper installed in one source does not present timing as available for
+    the others (ruling (q): hook timing is wired into `_build_source_report`
+    itself, never unioned -- ADR-7)."""
+    root_a = tmp_path / "repo-a"
+    root_a.mkdir()
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+    _write_source_events(root_a, home_a, [_hook()])
+
+    root_b = tmp_path / "repo-b"
+    root_b.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    _write_source_events(root_b, home_b, [_instruction("b.md", "session_start", repo="repo-b")])
+
+    source_a = sources.Source(
+        label="a", repo_root=root_a, homes=[sources.HomeStatus(home=home_a, state=sources.RECORDING)]
+    )
+    source_b = sources.Source(
+        label="b", repo_root=root_b, homes=[sources.HomeStatus(home=home_b, state=sources.RECORDING)]
+    )
+
+    text, _ = report.build_multi_source_report(
+        [source_a, source_b], datetime(2026, 9, 10, tzinfo=timezone.utc)
+    )
+
+    section_a, section_b = text.split("=== b ===")
+    assert "Hook durations" in section_a  # wrapper installed here: real durations render
+    assert "NOT INSTALLED" in section_b  # no wrapper here: never borrows A's installed state
+
+
+def test_cli_multi_source_config_denominator_walked_from_shipping_repo_only(tmp_path):
+    """spec-019 T3.4 ruling (l): the denominator is walked ONCE, from
+    `args.repo_root` -- the shipping repository -- never from any
+    `Source.repo_root`, which are targets. A target's own `.claude/agents/`
+    entry must therefore never enter the denominator. THIS repository has
+    zero repo-local agents today (measured), so a real-repo fixture would
+    prove nothing here -- ruling (l) requires a synthetic source root
+    carrying one, exercised end-to-end through the real CLI so `main()`'s
+    own wiring (not just the pure functions) is what is pinned."""
+    shipping_root = tmp_path / "shipping"
+    _make_skill(shipping_root, "plugin", "skill-x")
+    claude_dir = shipping_root / ".claude"
+    claude_dir.mkdir(parents=True)
+
+    target_root = tmp_path / "target-with-local-agent"
+    (target_root / ".claude" / "agents").mkdir(parents=True)
+    (target_root / ".claude" / "agents" / "local-only.md").write_text(
+        "---\nname: local-only\n---\nbody\n", encoding="utf-8"
+    )
+    target_home = tmp_path / "target-home"
+    target_home.mkdir()
+
+    (claude_dir / "observability-sources.toml").write_text(
+        f'[[source]]\nlabel = "target"\nrepo_root = "{target_root}"\nhomes = ["{target_home}"]\n',
+        encoding="utf-8",
+    )
+
+    result = _run_report_cli(["--repo-root", str(shipping_root), "--home", str(tmp_path / "unused-home")])
+
+    assert result.returncode == 0, result.stderr
+    assert "local-only" not in result.stdout
+    assert "1 entries found (1 skill(s), 0 agent(s))" in result.stdout
+
+
+def test_cli_multi_source_union_names_a_skill_that_fired_only_in_the_second_source(tmp_path):
+    """spec-019 T3.4: `main()`'s union CALL SITE itself, exercised through
+    the real CLI -- not `union_fired_names`/`firing_coverage` called
+    directly, the way `test_build_multi_source_report_union_and_per_source_firing_coverage`
+    does. That test proves the pure functions are correct; it does not prove
+    `main()` actually feeds every source's records into them (verified by
+    review: `main()`'s union line is uncovered by any test that inspects
+    real CLI stdout). Same discipline as
+    `test_cli_end_to_end_prints_report_for_fixture_events`, which exists for
+    exactly this hazard on `build_load_report`'s own wiring.
+
+    The shipping inventory holds exactly ONE skill, which fires only in the
+    SECOND configured source -- so the union's own rendered "Coverage: X/Y
+    fired." line is unambiguous evidence main() read past the first source,
+    not just that a header string is present (a header-only assertion would
+    survive a mutation that unions only `fired_by_source[:1]`)."""
+    shipping_root = tmp_path / "shipping"
+    _make_skill(shipping_root, "plugin", "skill-only-in-second")
+    claude_dir = shipping_root / ".claude"
+    claude_dir.mkdir(parents=True)
+
+    source_a_repo = tmp_path / "source-a-repo"
+    source_a_repo.mkdir()
+    source_a_home = tmp_path / "source-a-home"
+    source_a_home.mkdir()
+    _write_source_events(
+        source_a_repo, source_a_home, [_instruction("a.md", "session_start", repo="source-a-repo")]
+    )
+
+    source_b_repo = tmp_path / "source-b-repo"
+    source_b_repo.mkdir()
+    source_b_home = tmp_path / "source-b-home"
+    source_b_home.mkdir()
+    _write_source_events(source_b_repo, source_b_home, [_skill_record("plugin:skill-only-in-second")])
+
+    (claude_dir / "observability-sources.toml").write_text(
+        f'[[source]]\nlabel = "Source A"\nrepo_root = "{source_a_repo}"\nhomes = ["{source_a_home}"]\n\n'
+        f'[[source]]\nlabel = "Source B"\nrepo_root = "{source_b_repo}"\nhomes = ["{source_b_home}"]\n',
+        encoding="utf-8",
+    )
+
+    result = _run_report_cli(["--repo-root", str(shipping_root), "--home", str(tmp_path / "unused-home")])
+
+    assert result.returncode == 0, result.stderr
+    union_start = result.stdout.index("=== Firing coverage: union across all sources")
+    union_text = result.stdout[union_start:]
+    assert "Coverage: 1/1 fired." in union_text
+    assert "Never fired -- unused, not missing (0):" in union_text

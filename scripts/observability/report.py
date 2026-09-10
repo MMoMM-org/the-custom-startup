@@ -1710,9 +1710,16 @@ def build_load_report(
 # ---------------------------------------------------------------------------
 
 
-def _build_source_report(source: sources.Source, now: datetime) -> str:
+def _build_source_report(source: sources.Source, now: datetime) -> tuple[str, list[dict]]:
     """One source's section: its own records, own inventory, own honesty
     verdicts -- never pooled with any other source's.
+
+    Returns `(text, records)` (spec-019 T3.4 ruling (o)): this is the only
+    place a source's homes are ever read, so the firing-coverage union
+    (ADR-8), built in `main()` after `build_multi_source_report`'s loop, must
+    thread these records back rather than re-reading every source's homes a
+    second time -- which would duplicate I/O and invite the two paths to
+    drift.
 
     Ruling (j): each home's stream is read with `read_events`, which is safe
     on a path that does not exist yet (`rotation_chain` returns `[]`), so a
@@ -1734,10 +1741,14 @@ def _build_source_report(source: sources.Source, now: datetime) -> str:
     not `source.label`, which is free text a human chose. Looked up by
     `source.repo_root.name`, rendered under `source.label`.
 
-    Ruling (k): `skill_agent_inventory`, `firing` and `hooks` are always
-    `None` here -- the firing-coverage union (ADR-8) and the per-source
-    hook-timing split are spec-019 T3.4's, appended after
-    `build_multi_source_report`'s loop, never inside it.
+    Ruling (k) (T3.3) fixed `skill_agent_inventory`, `firing` and `hooks` all
+    to `None` here, as T3.3's clean insertion point for T3.4. Ruling (q)
+    (T3.4) completes the `hooks` stub: hook timing is NOT a union -- ADR-7
+    says per repository, same as recording status and byte accounting -- so
+    it is computed here, from this one source's own concatenated stream, and
+    `skill_agent_inventory`/`firing` stay `None`: the firing-coverage union
+    (ADR-8) is the one figure that DOES union, and it is built in `main()`
+    after `build_multi_source_report`'s loop, never inside it (ruling (n)).
 
     Ruling (a) (spec-019 T3.2, completed here): `source.homes` carries each
     home's classified `state`, computed and tested since T3.2 but never
@@ -1767,8 +1778,11 @@ def _build_source_report(source: sources.Source, now: datetime) -> str:
     stats = instruction_stats_by_repo(records).get(source.repo_root.name, {})
     byte_stats = byte_accounting(records)
     recording = recording_status(records, now)
+    # Ruling (q): hook timing is per source, never unioned -- ADR-7 -- so
+    # it is computed here, over this one source's own concatenated stream.
+    hooks = hook_duration_stats(records)
 
-    return build_load_report(
+    text = build_load_report(
         stats,
         inventory.entries,
         unparseable_total,
@@ -1781,12 +1795,15 @@ def _build_source_report(source: sources.Source, now: datetime) -> str:
         home_statuses=home_statuses if len(home_statuses) > 1 else None,
         skill_agent_inventory=None,
         firing=None,
-        hooks=None,
+        hooks=hooks,
         section_title=source.label,
     )
+    return text, records
 
 
-def build_multi_source_report(config_sources: Sequence[sources.Source], now: datetime) -> str:
+def build_multi_source_report(
+    config_sources: Sequence[sources.Source], now: datetime
+) -> tuple[str, list[tuple[sources.Source, list[dict]]]]:
     """The config-driven report: one section per configured source, joined.
 
     `now` is an explicit parameter -- never `datetime.now()` read inside
@@ -1800,9 +1817,106 @@ def build_multi_source_report(config_sources: Sequence[sources.Source], now: dat
     would otherwise report the whole set as fresh, hiding a source that
     stopped recording months ago (the exact inversion of SDD-AC-15, one
     level up).
+
+    Returns `(text, source_records)` (spec-019 T3.4 ruling (o)):
+    `source_records` pairs each source with the records `_build_source_report`
+    already read for it, so `main()` can build the firing-coverage union
+    (ADR-8) without re-reading every source's homes a second time.
     """
-    sections = [_build_source_report(source, now) for source in config_sources]
-    return "\n\n".join(sections)
+    built = [_build_source_report(source, now) for source in config_sources]
+    sections = [text for text, _ in built]
+    source_records = [(source, records) for source, (_, records) in zip(config_sources, built)]
+    return "\n\n".join(sections), source_records
+
+
+# ---------------------------------------------------------------------------
+# The one union: firing coverage across sources (spec-019 T3.4, ADR-8).
+#
+# ADR-7 says every OTHER per-source analysis above must stay split, never
+# merged -- but firing coverage is the one figure ADR-8 says gains from
+# merging, because it needs no repository identity: a skill either shipped
+# in the inventory or it did not, and whether it fired in one source or
+# several is exactly the question this union answers. The denominator is
+# NEVER globbed across sources (ADR-8's whole point): it is walked once, from
+# the shipping repository (`args.repo_root` in `main()`), never from any
+# `Source.repo_root`, which are targets -- ruling (l). Both the union figure
+# and the per-source detail beside it render in `main()`, after the joined
+# per-source sections, never inside `_build_source_report` (ruling (n)).
+# ---------------------------------------------------------------------------
+
+
+def union_fired_names(fired_by_source: Iterable[set[tuple[str, str]]]) -> set[tuple[str, str]]:
+    """The union numerator across every source (ADR-8, ruling (m)).
+
+    Safe to build from already-pooled `fired_names` or from a plain union of
+    per-source sets -- measured identical, because `fired_names` carries no
+    cross-record state -- but every caller in this module supplies one set
+    per source, so the union is built here rather than by pooling records
+    first, keeping this function's contract explicit rather than relying on
+    that equivalence silently.
+    """
+    union: set[tuple[str, str]] = set()
+    for fired in fired_by_source:
+        union |= fired
+    return union
+
+
+def _firing_divergence(
+    fired_entries_by_label: dict[str, list[InventoryEntry]], label: str
+) -> list[InventoryEntry]:
+    """Entries that fired in at least one OTHER source but not in `label`'s
+    own (ruling (p)) -- the PRD's actual question, "fired in both places it
+    should", not merely "fired somewhere". Sorted by `qualified` for stable
+    rendering, the same convention `firing_coverage` uses for `fired`/`unused`.
+    """
+    this_source = set(fired_entries_by_label[label])
+    other_sources: set[InventoryEntry] = set()
+    for other_label, entries in fired_entries_by_label.items():
+        if other_label != label:
+            other_sources.update(entries)
+    return sorted(other_sources - this_source, key=lambda e: e.qualified)
+
+
+def _render_firing_coverage_union(
+    inventory: SkillAgentInventory, union_coverage: FiringCoverage
+) -> list[str]:
+    """The union figure (ruling (n)): reuses `_render_firing_coverage` --
+    same rendering `_print_single_record_report` already uses for a single
+    source -- under a header that says plainly this is a union, not any one
+    source's own count.
+    """
+    lines = ["=== Firing coverage: union across all sources (ADR-8) ===", ""]
+    lines.extend(_render_firing_coverage(inventory, union_coverage))
+    return lines
+
+
+def _render_per_source_firing_detail(
+    inventory: SkillAgentInventory,
+    fired_by_source: Sequence[tuple[str, set[tuple[str, str]]]],
+) -> list[str]:
+    """Per-source coverage detail beside the union figure (ruling (p)): for
+    each source, how many of the shipped inventory fired there, and which
+    entries fired in another source but not this one -- the divergence the
+    union figure alone cannot show. Unmatched/ambiguous record names are
+    deliberately NOT repeated here: ruling (p) pools those on the union
+    figure only, since no acceptance criterion asks for per-source
+    attribution of a name that matched no entry at all.
+    """
+    denominator = len(inventory.entries)
+    fired_entries_by_label = {
+        label: firing_coverage(inventory.entries, fired).fired for label, fired in fired_by_source
+    }
+    lines = ["Per-source firing detail:"]
+    for label, _ in fired_by_source:
+        fired_here = fired_entries_by_label[label]
+        lines.append(f"  {label}: {len(fired_here)}/{denominator} of the shipped inventory fired here.")
+        gap = _firing_divergence(fired_entries_by_label, label)
+        if gap:
+            lines.append(f"    fired in another source but not here ({len(gap)}):")
+            for entry in gap:
+                lines.append(f"      {entry.qualified} [{entry.kind}]")
+    lines.append("")
+    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -1870,10 +1984,23 @@ def main(argv: list[str] | None = None) -> int:
     # (see RecordingStatus / recording_status, and build_multi_source_report
     # above), so only this CLI wrapper is untestable-by-construction, exactly
     # like `Path.cwd()`/`Path.home()` elsewhere in this function.
-    print(build_multi_source_report(config_sources, datetime.now(timezone.utc)))
-    # spec-019 T3.4's clean insertion point: the firing-coverage union
-    # (ADR-8) appends HERE, after the per-source loop above -- never inside
-    # `_build_source_report` (ruling (k)).
+    joined_text, source_records = build_multi_source_report(config_sources, datetime.now(timezone.utc))
+    print(joined_text)
+
+    # spec-019 T3.4 (ruling (n)): the firing-coverage union (ADR-8) and the
+    # per-source detail beside it render HERE, after the per-source loop
+    # above -- never inside `_build_source_report` (ruling (k)). The
+    # denominator is walked ONCE, from `args.repo_root` -- the shipping
+    # repository -- never from any `Source.repo_root`, which are targets
+    # (ruling (l)): a target's own local agents must never enter it.
+    inventory = walk_skill_agent_inventory(args.repo_root)
+    fired_by_source = [(source.label, fired_names(records)) for source, records in source_records]
+    union_coverage = firing_coverage(
+        inventory.entries, union_fired_names(fired for _, fired in fired_by_source)
+    )
+    print()
+    print("\n".join(_render_firing_coverage_union(inventory, union_coverage)))
+    print("\n".join(_render_per_source_firing_detail(inventory, fired_by_source)))
     return 0
 
 
