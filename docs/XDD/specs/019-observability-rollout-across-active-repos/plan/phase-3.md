@@ -208,6 +208,60 @@ are one.
   4. Validate: `pytest -q` green.
   5. Success: `[ref: SDD/SDD-AC-20]`; `[ref: SDD/SDD-AC-25]` (the inventory-union half — T3.2 delivers the per-home data, this task performs the walk); `[ref: SDD/ADR-7]`
 
+  **Rulings, 2026-09-10, after the TDD gate blocked.**
+
+  **(f) A section is looked up by `repo_root.name` and headed by `label`.** Nothing said how a
+  per-source section finds its own entry in `instruction_stats_by_repo`, and the two candidates are
+  not interchangeable: the outer key is the record's own `repo` field, which `logwrite.sh` freezes
+  as the git toplevel's **basename** (`:328-329,339-347`), while `Source.label` is free text a human
+  chose. The SDD's own example config uses `label = "repo3"` for a `repo_root` whose basename could
+  be anything. So: look up `stats_by_repo.get(source.repo_root.name, {})`, render under
+  `source.label`. Not a design choice — the label is display-only and the basename is the only key
+  the data actually carries. **The plan lacked the test that would catch getting this wrong**: a
+  source whose `label` differs from its `repo_root.name`, asserting the section is headed by the
+  label and populated from the basename key. Without it every specified test passes either way.
+
+  **(g) Two sources whose `repo_root` basenames collide are rejected at config load** *(maintainer
+  ruling; reopens T3.2 for a follow-up).* `_record_base_path` derives the data directory from
+  `repo_root.name` alone, and `logwrite.sh` freezes `repo` to the same basename — so `~/work/tcs`
+  and `~/archive/tcs` resolve to the **same record file**, carry the **identical `repo` value**, and
+  cannot be told apart even in principle. They would render as two sections with identical content
+  under different labels: two plausible, wrong repositories, which is the dishonesty ADR-7 exists to
+  prevent. `sources.py` already rejects duplicate labels; it now rejects duplicate basenames the
+  same way, naming both offending sources. Failing loudly at load beats a silent duplicate in the
+  report.
+
+  **(h) `--events` keeps the golden green because the mode branch lives in `main()`.** The SDD is
+  explicit that "`--events` continues to mean 'this one record', so every existing invocation keeps
+  working" (`solution.md:333-334`) — it is a mode selector, and when given, the config is never
+  consulted. So `main()` branches: `--events` takes today's block unchanged; otherwise load
+  `args.repo_root/.claude/observability-sources.toml` and loop. `build_load_report` gains one more
+  optional `None`-default keyword (a section title), exactly the precedent every prior extension
+  used, and never branches on how many sources exist. The golden test never executes the new branch,
+  so it stays green trivially. **No deviation, and no reason to regenerate the golden — if it goes
+  red, something is wrong with the change, not with the fixture.** An absent config and a config
+  with zero sources both fall back to the single-record path identically; there is no third case.
+
+  **(i) The inventory union: `entries` unions, `git_filtered` ANDs.** `InstructionInventory` has
+  exactly two fields. `entries` is a plain set union — safe by construction, because
+  `walk_instruction_inventory` already redacts to strings and is documented to over-list rather than
+  under-list, so unioning is the same collapse it already performs internally, one level up.
+  `git_filtered` combines with **AND**: both walks share a `repo_root` so they should always agree,
+  but if they ever disagree, reporting the *less* confident state is honest and `or` would overclaim
+  filtering the other home never achieved.
+
+  **(j) Within a source, concatenate; across sources, never.** Each home's stream is read with
+  `read_events`, which is safe on a path that does not exist (`rotation_chain` returns `[]`), so a
+  *missing* or *not yet recording* home needs no special case. The homes' streams concatenate for
+  that one source — it is one repository, and `newest_ts` taking a max is exactly why that is
+  honest, the rotated-chain merge one level up. Concatenating two different sources is the ADR-7
+  collapse and is forbidden.
+
+  **(k) Scope: leave T3.4 its work.** Every per-source `build_load_report` call this task writes
+  passes `skill_agent_inventory=None`, `firing=None`, `hooks=None`. The firing-coverage union
+  (ADR-8) and the per-source hook-timing split are T3.4's, and this leaves them clean insertion
+  points — the union appended after the per-source loop, not inside it.
+
 - [ ] **T3.4 The one union: firing coverage across sources** `[activity: backend-api]`
 
   1. Prime: read `walk_skill_agent_inventory:857-922` and `fired_names:927`, and ADR-8 on why the
