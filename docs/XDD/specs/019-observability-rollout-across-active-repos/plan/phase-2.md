@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: The registration editor"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -321,7 +321,7 @@ anything the maintainer owns.
   4. Validate: `pytest -q` and `bats` green.
   5. Success: `[ref: SDD/SDD-AC-9, SDD-AC-11]`; `[ref: SDD/Quality Requirements]`
 
-- [ ] **T2.6 Phase Validation** `[activity: validate]`
+- [x] **T2.6 Phase Validation** `[activity: validate]`
 
   - Run `pytest -q` and `bats plugins/*/tests/bats`.
   - Confirm the suite never writes outside its temp directories: run it with the real home
