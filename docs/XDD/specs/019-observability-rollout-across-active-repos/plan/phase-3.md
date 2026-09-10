@@ -74,7 +74,7 @@ are one.
   an off-by-one in the unreachable count) each failed the test. Spec compliance had ruled this
   scope creep and was correct to; the ruling is the maintainer's, not the implementer's.
 
-- [ ] **T3.1 `repo` as a first-class dimension in the existing analyses** `[activity: backend-api]`
+- [x] **T3.1 `repo` as a first-class dimension in the existing analyses** `[activity: backend-api]`
 
   1. Prime: read `scripts/observability/report.py` — `instruction_stats:151`, `_redact_path:453`,
      `recording_status:412`, `hook_duration_stats:1183` `[ref: SDD/Runtime View — Complex Logic]`.
