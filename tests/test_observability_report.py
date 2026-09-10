@@ -71,16 +71,19 @@ def _instruction(
     session: str = "s1",
     bytes_value: str | bool | None = None,  # bool case is deliberate corruption for _parse_bytes guard test
     ts: str = "2026-09-06T16:43:28Z",
+    repo: str | None = "the-custom-startup",  # spec-019 T3.1: pass "" or None to exercise the unknown bucket
 ) -> dict:
     record = {
         "ts": ts,
         "kind": "instruction",
         "session": session,
-        "repo": "the-custom-startup",
+        "repo": repo,
         "path": path,
         "scope": "Project",
         "reason": reason,
     }
+    if repo is None:
+        del record["repo"]  # spec-019 T3.1: a truncated/hand-built record can lack the key entirely
     if bytes_value is not None:
         record["bytes"] = bytes_value
     return record
@@ -278,6 +281,134 @@ def test_non_string_reason_is_counted_as_unknown_not_folded(tmp_path):
     assert entry.load_count == 1
     assert entry.unknown_count == 1
     assert entry.reason_counts == {}
+
+
+# --- repo as a first-class dimension (spec-019 T3.1) ------------------------
+#
+# `instruction_stats` itself is NOT changed (see report.py's docstring on
+# `instruction_stats_by_repo` for why: ~20 pre-existing tests above index its
+# result by bare path string, and both `never_loaded()` and
+# `build_load_report()` consume that exact shape). This baseline test pins
+# down -- and documents -- the merge defect `instruction_stats` still has by
+# design: a file of the same name in two repositories collapses into one
+# entry. `instruction_stats_by_repo` below is the parallel function that
+# fixes this without disturbing `instruction_stats`.
+
+
+def test_instruction_stats_still_collapses_same_filename_across_repos(tmp_path):
+    """Baseline/regression pin, not a bug to fix here: `instruction_stats`
+    keys on bare path only, so two repos' records for the same filename
+    still merge into one entry (SDD-AC-19's defect). `instruction_stats_by_repo`
+    is the fix; this function is deliberately left alone (spec-019 T3.1 R1)."""
+    events = tmp_path / "events.jsonl"
+    _write_jsonl(
+        events,
+        [
+            _instruction("CLAUDE.md", "session_start", repo="repo-alpha"),
+            _instruction("CLAUDE.md", "session_start", repo="repo-beta"),
+        ],
+    )
+    records, _ = report.read_events(events)
+    assert {r["repo"] for r in records} == {"repo-alpha", "repo-beta"}  # guard: fixture repos differ
+
+    stats = report.instruction_stats(records)
+    assert set(stats.keys()) == {"CLAUDE.md"}  # the two repos' records collapsed into one entry
+    assert stats["CLAUDE.md"].load_count == 2  # ...and their loads were merged, not kept separate
+
+
+def test_instruction_stats_by_repo_counts_same_filename_separately_per_repo(tmp_path):
+    events = tmp_path / "events.jsonl"
+    _write_jsonl(
+        events,
+        [
+            _instruction("CLAUDE.md", "session_start", repo="repo-alpha"),
+            _instruction("CLAUDE.md", "session_start", repo="repo-beta"),
+            _instruction("CLAUDE.md", "session_start", repo="repo-beta"),
+        ],
+    )
+    records, _ = report.read_events(events)
+    assert {r["repo"] for r in records} == {"repo-alpha", "repo-beta"}  # guard: fixture repos differ
+
+    by_repo = report.instruction_stats_by_repo(records)
+
+    assert set(by_repo.keys()) == {"repo-alpha", "repo-beta"}
+    assert by_repo["repo-alpha"]["CLAUDE.md"].load_count == 1
+    assert by_repo["repo-beta"]["CLAUDE.md"].load_count == 2
+    # each inner dict is exactly instruction_stats's own per-file shape
+    assert isinstance(by_repo["repo-alpha"]["CLAUDE.md"], report.InstructionFileStats)
+
+
+def test_instruction_stats_by_repo_per_repo_counts_sum_to_per_file_totals(tmp_path):
+    events = tmp_path / "events.jsonl"
+    _write_jsonl(
+        events,
+        [
+            _instruction("CLAUDE.md", "session_start", repo="repo-alpha"),
+            _instruction("CLAUDE.md", "session_start", repo="repo-alpha"),
+            _instruction("CLAUDE.md", "path_glob_match", repo="repo-beta"),
+            _instruction("other.md", "session_start", repo="repo-beta"),
+        ],
+    )
+    records, _ = report.read_events(events)
+
+    by_repo = report.instruction_stats_by_repo(records)
+    merged = report.instruction_stats(records)  # the pre-existing, repo-blind totals
+
+    for path, file_stats in merged.items():
+        summed = sum(
+            per_repo[path].load_count for per_repo in by_repo.values() if path in per_repo
+        )
+        assert summed == file_stats.load_count
+
+
+def test_instruction_stats_by_repo_empty_repo_lands_in_unknown_bucket(tmp_path):
+    events = tmp_path / "events.jsonl"
+    _write_jsonl(
+        events,
+        [
+            _instruction("CLAUDE.md", "session_start", repo=""),
+            _instruction("CLAUDE.md", "session_start", repo="repo-alpha"),
+        ],
+    )
+    records, _ = report.read_events(events)
+
+    by_repo = report.instruction_stats_by_repo(records)
+
+    assert None in by_repo  # keyed on Python None, never the string "unknown" (spec-019 T3.1 R2)
+    assert by_repo[None]["CLAUDE.md"].load_count == 1
+    assert by_repo["repo-alpha"]["CLAUDE.md"].load_count == 1  # did not join the empty-repo bucket
+
+
+def test_instruction_stats_by_repo_missing_repo_key_also_lands_in_unknown_bucket(tmp_path):
+    events = tmp_path / "events.jsonl"
+    rec = _instruction("CLAUDE.md", "session_start", repo=None)
+    assert "repo" not in rec  # guard: the key is genuinely absent, not merely falsy
+    other = _instruction("CLAUDE.md", "session_start", repo="repo-alpha")
+    _write_jsonl(events, [rec, other])
+    records, _ = report.read_events(events)
+
+    by_repo = report.instruction_stats_by_repo(records)
+
+    assert None in by_repo
+    assert by_repo[None]["CLAUDE.md"].load_count == 1
+    assert by_repo["repo-alpha"]["CLAUDE.md"].load_count == 1  # did not join the absent-key bucket
+    assert "unknown" not in by_repo  # never a string key (spec-019 T3.1 R2)
+
+
+def test_instruction_stats_by_repo_missing_and_empty_repo_share_one_unknown_bucket(tmp_path):
+    """A missing `repo` key and an empty-string `repo` are the same unification
+    `InstructionFileStats.record()` already applies to `reason` (report.py:79-84)
+    -- both land in the SAME unknown bucket, not two separate ones."""
+    events = tmp_path / "events.jsonl"
+    missing = _instruction("a.md", "session_start", repo=None)
+    empty = _instruction("a.md", "session_start", repo="")
+    _write_jsonl(events, [missing, empty])
+    records, _ = report.read_events(events)
+
+    by_repo = report.instruction_stats_by_repo(records)
+
+    assert set(by_repo.keys()) == {None}
+    assert by_repo[None]["a.md"].load_count == 2
 
 
 # --- the rotated chain is one logical record, read once --------------------

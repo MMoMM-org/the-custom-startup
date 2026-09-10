@@ -167,6 +167,48 @@ def instruction_stats(records: Iterable[dict]) -> dict[str, InstructionFileStats
     return stats
 
 
+def instruction_stats_by_repo(records: Iterable[dict]) -> dict[str | None, dict[str, InstructionFileStats]]:
+    """Group `kind: instruction` records by `(repo, path)`, per repository.
+
+    spec-019 T3.1 (SDD-AC-19, ADR-7): `instruction_stats` above keys on bare
+    path alone, so a file of the same name in two repositories silently
+    merges into one entry -- the naive-merge defect ADR-7 calls out.
+    Rather than change `instruction_stats` (~20 pre-existing tests index its
+    result by bare path string, and `never_loaded()`/`build_load_report()`
+    both consume that exact `dict[str, InstructionFileStats]` shape), this
+    is a parallel function: outer key is the repo, inner dict is EXACTLY
+    `instruction_stats`'s own shape, grouped internally on `(repo, path)` so
+    the two repos' records never collide. Because each inner dict already
+    matches what `never_loaded()`/`build_load_report()` expect, a later task
+    can hand one straight through with no adaptation.
+
+    The unknown bucket is keyed on Python `None`, never a string like
+    `"unknown"` -- `repo` is an environment-controlled, unconstrained
+    directory basename (a clone genuinely named "unknown" is not far-
+    fetched), and a JSON-decoded string can never equal `None`, so `None` is
+    the only key that cannot collide with a real repo name. A record with an
+    empty `repo`, one with the `repo` key entirely absent, and one with a
+    non-string `repo` (a corrupted record) all land in this same bucket --
+    the same unification `InstructionFileStats.record()` already applies to
+    `reason` via the identical `isinstance` guard (report.py:79-84),
+    applied here to `repo` instead. Rendering `None` as a human label is a
+    later task's job, not this function's.
+    """
+    by_repo: dict[str | None, dict[str, InstructionFileStats]] = {}
+    for rec in records:
+        if rec.get("kind") != "instruction":
+            continue
+        path = rec.get("path")
+        if not path:
+            continue
+        repo = rec.get("repo")
+        repo_key = repo if isinstance(repo, str) and repo else None
+        stats = by_repo.setdefault(repo_key, {})
+        entry = stats.setdefault(path, InstructionFileStats(path=path))
+        entry.record(rec.get("reason"))
+    return by_repo
+
+
 def never_loaded(inventory: Iterable[str], stats: dict[str, InstructionFileStats]) -> list[str]:
     """Configured instruction files with no load record at all, sorted.
 
