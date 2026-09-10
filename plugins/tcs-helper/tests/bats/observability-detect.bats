@@ -98,11 +98,27 @@ _assert_not_contains() {
   ! printf '%s' "$1" | grep -qF "$2"
 }
 
-# _mtime <path> -- portable mtime (BSD stat on macOS, GNU stat elsewhere).
+# _mtime <path> -- portable mtime (GNU stat first, BSD stat as the fallback).
 # A helper rather than the shim inline: it appeared six times in one test,
 # which is six chances for the copies to drift apart on a later edit.
+#
+# GNU-first, and the value is captured before the fallback is considered --
+# both deliberate, because the obvious BSD-first one-liner
+# (`stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"`) is broken on Linux in a
+# way that passes locally and fails only under load. GNU `stat -f` does not
+# mean "format", it means FILESYSTEM: `stat -f %m file` prints a whole
+# filesystem report to STDOUT and then exits non-zero, so the `||` fires and
+# the real mtime is appended to that report rather than replacing it. The
+# compared value then contains the filesystem's free-block counts, which
+# change between two calls on a busy machine -- so a test asserting "this
+# file was not touched" fails because the disk filled slightly, and the
+# failure is invisible on macOS and on an idle Linux box.
+# Recorded trap, docs/ai/memory/active.md: "a `|| fallback` inside `$( )`
+# appends to partial output, not replaces it -- assign whole values".
 _mtime() {
-  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"
+  local m
+  m="$(stat -c %Y "$1" 2>/dev/null)" || m="$(stat -f %m "$1")"
+  printf '%s' "$m"
 }
 
 # _count_state_lines <text> -- number of lines matching one of the six
