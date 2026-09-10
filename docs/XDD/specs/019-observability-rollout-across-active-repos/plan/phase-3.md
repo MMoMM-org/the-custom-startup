@@ -189,7 +189,7 @@ are one.
   silent home is more informative than a dead one. Reasonable, and previously written down
   nowhere; recorded here so it is a decision rather than an accident.
 
-- [ ] **T3.3 Per-source rendering, and the honesty rules** `[activity: backend-api]`
+- [x] **T3.3 Per-source rendering, and the honesty rules** `[activity: backend-api]`
 
   1. Prime: re-read why merging is misleading for two specific analyses `[ref: SDD/ADR-7]`
      `[ref: SDD/Runtime View — Complex Logic]`.
