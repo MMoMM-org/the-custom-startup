@@ -29,6 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "observability"))
 
 import report  # noqa: E402  (sys.path must be extended first)
+import sources  # noqa: E402  (spec-019 T3.3: Source/HomeStatus fixtures for the per-source tests below)
 
 REPORT_PY = REPO_ROOT / "scripts" / "observability" / "report.py"
 LOGWRITE_SH = REPO_ROOT / "plugins" / "tcs-helper" / "scripts" / "observability" / "logwrite.sh"
@@ -36,6 +37,16 @@ LOGWRITE_SH = REPO_ROOT / "plugins" / "tcs-helper" / "scripts" / "observability"
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
     path.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+
+
+def _write_source_events(repo_root: Path, home: Path, records: list[dict]) -> None:
+    """spec-019 T3.3: place a fixture events file at the exact path
+    `report._resolve_events_path` resolves for `(repo_root, home)` -- the
+    same real resolution `_build_source_report` uses per home, not a
+    hand-picked location a test happens to read from."""
+    path = report._resolve_events_path(None, repo_root, home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_jsonl(path, records)
 
 
 def _init_git_repo(repo_root: Path) -> None:
@@ -2296,3 +2307,361 @@ def test_build_load_report_hook_section_appears_after_no_hooks_call_too():
     hooks_none = report.hook_duration_stats([])
     text = report.build_load_report({}, [], hooks=hooks_none)
     assert "not installed" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# Per-source rendering, and the honesty rules (spec-019 T3.3, ADR-7).
+#
+# ADR-7: merging several sources' records without introducing the `repo`
+# dimension produces a plausible, wrong number -- recording status and byte
+# accounting both collapse to a single winner across a merged stream, so one
+# live source would report the whole set as fresh and hide a source that
+# stopped recording months ago. `build_multi_source_report` (report.py) is
+# what this section tests: one section per configured `sources.Source`,
+# never pooled.
+# ---------------------------------------------------------------------------
+
+
+def test_recording_status_merged_across_sources_reports_only_the_freshest():
+    """spec-019 T3.3 ruling (a): pins the COLLAPSE the per-source split
+    exists to fix, against TODAY'S unmodified `recording_status` -- kept
+    permanently, right beside the split test below, so the contrast between
+    "merged" and "split" stays legible in the test suite itself.
+
+    Source A's newest `kind: state` record is 5 minutes old (fresh); source
+    B's is ~101 days old (stale). Concatenated into one flat list and run
+    through `recording_status` exactly as a naive merge would, the result
+    reports `stale=False` and `newest_ts` equal to A's -- the whole set
+    reads as fresh, and B's staleness is invisible. This PASSES today, and
+    that is the point: it demonstrates the defect, not a fix for it.
+    """
+    now = datetime(2026, 9, 10, 8, 5, tzinfo=timezone.utc)
+    source_a_state = _state(enabled="1", ts="2026-09-10T08:00:00Z")
+    source_b_state = _state(enabled="1", ts="2026-06-01T08:00:00Z")
+    merged = [source_a_state, source_b_state]
+
+    status = report.recording_status(merged, now)
+
+    assert status.stale is False
+    assert status.newest_ts == "2026-09-10T08:00:00Z"
+
+
+def test_build_multi_source_report_splits_recording_status_per_source_and_names_the_stale_one(tmp_path):
+    """spec-019 T3.3 ruling (a)/(b): the SPLIT half of the test above -- same
+    fixture (source A fresh, source B ~101 days stale), through the new
+    per-source path. Each source must report its OWN recording state: A
+    fresh, B stale, and B's label present in the rendered output so a reader
+    can tell which source went stale. Before the split is implemented this
+    must fail on VALUES (the rendered text does not distinguish the two
+    sources), never on a missing symbol.
+    """
+    now = datetime(2026, 9, 10, 8, 5, tzinfo=timezone.utc)
+
+    root_a = tmp_path / "repo-a"
+    root_a.mkdir()
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+    _write_source_events(root_a, home_a, [_state(enabled="1", ts="2026-09-10T08:00:00Z")])
+
+    root_b = tmp_path / "repo-b"
+    root_b.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    _write_source_events(root_b, home_b, [_state(enabled="1", ts="2026-06-01T08:00:00Z")])
+
+    source_a = sources.Source(
+        label="source-a", repo_root=root_a, homes=[sources.HomeStatus(home=home_a, state=sources.RECORDING)]
+    )
+    source_b = sources.Source(
+        label="source-b", repo_root=root_b, homes=[sources.HomeStatus(home=home_b, state=sources.RECORDING)]
+    )
+
+    text = report.build_multi_source_report([source_a, source_b], now)
+
+    assert "=== source-a ===" in text
+    assert "=== source-b ===" in text
+    section_a, section_b = text.split("=== source-b ===")
+    assert "Recording state: recording" in section_a
+    assert "Recording state: STALE" in section_b
+    assert "source-b" in text  # the stale source is named, not merely a status flag
+
+
+def test_combine_inventories_unions_entries_and_ands_git_filtered():
+    """spec-019 T3.3 ruling (i): `entries` unions (safe -- the walk already
+    over-lists by design); `git_filtered` combines with AND, not OR --
+    reporting the LESS confident state when two homes' walks disagree, since
+    `or` would overclaim filtering the other home never achieved. Tested
+    directly against hand-built `InstructionInventory` values rather than
+    real `git check-ignore` runs, because the two homes of one source always
+    share a `repo_root` and so agree in practice -- this is the one place
+    the disagreement branch can be exercised deterministically.
+    """
+    a = report.InstructionInventory(entries=["a.md", "shared.md"], git_filtered=True)
+    b = report.InstructionInventory(entries=["b.md", "shared.md"], git_filtered=False)
+
+    combined = report._combine_inventories([a, b])
+
+    assert combined.entries == ["a.md", "b.md", "shared.md"]
+    assert combined.git_filtered is False
+
+
+def test_build_multi_source_report_inventory_union_includes_file_present_in_only_one_home(tmp_path):
+    """spec-019 T3.3 ruling (i)/SDD-AC-25: `walk_instruction_inventory` is
+    called once per entry in `source.homes` and the results combined -- a
+    file present in only ONE home must still appear in the denominator, or
+    it shows up as neither loaded nor never-loaded and vanishes with nothing
+    to say it was gone (the primary-home-rule failure the SDD warns about).
+    """
+    repo_root = tmp_path / "twohome-repo"
+    (repo_root / "docs" / "ai" / "memory").mkdir(parents=True)
+    (repo_root / "docs" / "ai" / "memory" / "only-in-repo.md").write_text("x", encoding="utf-8")
+
+    home_container = tmp_path / "home-container"
+    home_container.mkdir()
+    home_host = tmp_path / "home-host"
+    (home_host / ".claude" / "rules").mkdir(parents=True)
+    (home_host / ".claude" / "rules" / "only-in-host-home.md").write_text("x", encoding="utf-8")
+
+    source = sources.Source(
+        label="twohome",
+        repo_root=repo_root,
+        homes=[
+            sources.HomeStatus(home=home_container, state=sources.NOT_YET_RECORDING),
+            sources.HomeStatus(home=home_host, state=sources.NOT_YET_RECORDING),
+        ],
+    )
+
+    text = report.build_multi_source_report([source], datetime(2026, 9, 10, tzinfo=timezone.utc))
+
+    assert "2 configured file(s) found" in text
+    assert "only-in-repo.md" in text
+    assert "only-in-host-home.md" in text
+
+
+def test_build_multi_source_report_never_loaded_is_per_source_not_pooled(tmp_path):
+    """spec-019 T3.3, 'Also test': the never-loaded list is a per-source
+    difference against that source's own inventory walk, never a pooled
+    set. Source A has a configured-but-unloaded file; it must appear ONLY in
+    A's section, never leaking into B's."""
+    root_a = tmp_path / "repo-a"
+    (root_a / "docs" / "ai" / "memory").mkdir(parents=True)
+    (root_a / "docs" / "ai" / "memory" / "unused-in-a.md").write_text("x", encoding="utf-8")
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+
+    root_b = tmp_path / "repo-b"
+    root_b.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+
+    source_a = sources.Source(
+        label="a", repo_root=root_a, homes=[sources.HomeStatus(home=home_a, state=sources.NOT_YET_RECORDING)]
+    )
+    source_b = sources.Source(
+        label="b", repo_root=root_b, homes=[sources.HomeStatus(home=home_b, state=sources.NOT_YET_RECORDING)]
+    )
+
+    text = report.build_multi_source_report([source_a, source_b], datetime(2026, 9, 10, tzinfo=timezone.utc))
+
+    section_a, section_b = text.split("=== b ===")
+    assert "unused-in-a.md" in section_a
+    assert "unused-in-a.md" not in section_b
+
+
+def test_build_multi_source_report_concatenates_homes_within_one_source_never_across_sources(tmp_path):
+    """spec-019 T3.3 ruling (j): within a source, homes' streams
+    CONCATENATE -- both of source A's homes' loads must appear in A's own
+    section. Across sources, records never touch: a load recorded only in
+    source A's home must never appear in source B's section, and vice
+    versa."""
+    root_a = tmp_path / "repo-a"
+    root_a.mkdir()
+    home_a1 = tmp_path / "home-a1"
+    home_a1.mkdir()
+    home_a2 = tmp_path / "home-a2"
+    home_a2.mkdir()
+    _write_source_events(root_a, home_a1, [_instruction("only-in-a1.md", "session_start", repo="repo-a")])
+    _write_source_events(root_a, home_a2, [_instruction("only-in-a2.md", "compact", repo="repo-a")])
+
+    root_b = tmp_path / "repo-b"
+    root_b.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    _write_source_events(root_b, home_b, [_instruction("only-in-b.md", "session_start", repo="repo-b")])
+
+    source_a = sources.Source(
+        label="a",
+        repo_root=root_a,
+        homes=[
+            sources.HomeStatus(home=home_a1, state=sources.RECORDING),
+            sources.HomeStatus(home=home_a2, state=sources.RECORDING),
+        ],
+    )
+    source_b = sources.Source(
+        label="b", repo_root=root_b, homes=[sources.HomeStatus(home=home_b, state=sources.RECORDING)]
+    )
+
+    text = report.build_multi_source_report([source_a, source_b], datetime(2026, 9, 10, tzinfo=timezone.utc))
+
+    section_a, section_b = text.split("=== b ===")
+    assert "only-in-a1.md" in section_a
+    assert "only-in-a2.md" in section_a
+    assert "only-in-b.md" not in section_a
+    assert "only-in-b.md" in section_b
+    assert "only-in-a1.md" not in section_b
+    assert "only-in-a2.md" not in section_b
+
+
+def test_build_multi_source_report_byte_accounting_is_per_source(tmp_path):
+    """spec-019 T3.3, 'Also test': byte accounting is reported per source --
+    source A's 100 bytes must not bleed into B's total (50), and vice
+    versa."""
+    root_a = tmp_path / "repo-a"
+    root_a.mkdir()
+    home_a = tmp_path / "home-a"
+    home_a.mkdir()
+    _write_source_events(
+        root_a, home_a, [_instruction("a.md", "session_start", bytes_value="100", repo="repo-a")]
+    )
+
+    root_b = tmp_path / "repo-b"
+    root_b.mkdir()
+    home_b = tmp_path / "home-b"
+    home_b.mkdir()
+    _write_source_events(
+        root_b, home_b, [_instruction("b.md", "session_start", bytes_value="50", repo="repo-b")]
+    )
+
+    source_a = sources.Source(
+        label="a", repo_root=root_a, homes=[sources.HomeStatus(home=home_a, state=sources.RECORDING)]
+    )
+    source_b = sources.Source(
+        label="b", repo_root=root_b, homes=[sources.HomeStatus(home=home_b, state=sources.RECORDING)]
+    )
+
+    text = report.build_multi_source_report([source_a, source_b], datetime(2026, 9, 10, tzinfo=timezone.utc))
+
+    section_a, section_b = text.split("=== b ===")
+    assert "Byte cost -- always-loaded layer: 100 byte(s)" in section_a
+    assert "Byte cost -- always-loaded layer: 50 byte(s)" in section_b
+
+
+def test_build_multi_source_report_looks_up_by_repo_root_basename_headed_by_label(tmp_path):
+    """spec-019 T3.3 ruling (f): `instruction_stats_by_repo`'s outer key is
+    the record's own `repo` field (frozen by `logwrite.sh` to `repo_root`'s
+    basename), while `Source.label` is free text a human chose -- the two
+    are not interchangeable. Without this test (which the plan lacked),
+    looking a section up by label instead of basename -- or heading it with
+    the basename instead of the label -- would both pass every other test in
+    this file, since every other fixture happens to use the same string for
+    both."""
+    repo_root = tmp_path / "actual-basename"
+    repo_root.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    _write_source_events(
+        repo_root, home, [_instruction("a.md", "session_start", repo="actual-basename")]
+    )
+
+    source = sources.Source(
+        label="Human Label", repo_root=repo_root, homes=[sources.HomeStatus(home=home, state=sources.RECORDING)]
+    )
+
+    text = report.build_multi_source_report([source], datetime(2026, 9, 10, tzinfo=timezone.utc))
+
+    assert "=== Human Label ===" in text
+    assert "a.md: 1 load(s)" in text
+
+
+def test_build_multi_source_report_leaves_skill_agent_and_hook_sections_out(tmp_path):
+    """spec-019 T3.3 ruling (k): every per-source `build_load_report` call
+    passes `skill_agent_inventory=None`, `firing=None`, `hooks=None` -- T3.4's
+    firing-coverage union and per-source hook-timing split are not this
+    task's to build, and must not appear."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    _write_source_events(repo_root, home, [_instruction("a.md", "session_start", repo="repo")])
+    source = sources.Source(
+        label="repo", repo_root=repo_root, homes=[sources.HomeStatus(home=home, state=sources.RECORDING)]
+    )
+
+    text = report.build_multi_source_report([source], datetime(2026, 9, 10, tzinfo=timezone.utc))
+
+    assert "skill and agent inventory" not in text.lower()
+    assert "hook duration" not in text.lower()
+    assert "hook timing" not in text.lower()
+
+
+def test_cli_absent_config_and_empty_config_both_fall_back_to_single_record(tmp_path):
+    """spec-019 T3.3 ruling (h): an absent config file and a config with
+    zero `[[source]]` entries both fall back to the single-record path
+    identically -- there is no third case. Same fixture placed at the
+    default resolved events path in both trees; stdout must match exactly,
+    and neither carries a `=== ... ===` per-source section header."""
+
+    def _fixture(root: Path) -> tuple[Path, Path]:
+        repo_root = root / "repo"
+        repo_root.mkdir(parents=True)
+        home_dir = root / "home"
+        home_dir.mkdir()
+        _write_source_events(repo_root, home_dir, [_instruction("a.md", "session_start", repo=repo_root.name)])
+        return repo_root, home_dir
+
+    no_config_root, no_config_home = _fixture(tmp_path / "no-config")
+    result_no_config = _run_report_cli(["--repo-root", str(no_config_root), "--home", str(no_config_home)])
+
+    empty_config_root, empty_config_home = _fixture(tmp_path / "empty-config")
+    (empty_config_root / ".claude").mkdir(parents=True, exist_ok=True)
+    (empty_config_root / ".claude" / "observability-sources.toml").write_text("", encoding="utf-8")
+    result_empty_config = _run_report_cli(
+        ["--repo-root", str(empty_config_root), "--home", str(empty_config_home)]
+    )
+
+    assert result_no_config.returncode == 0, result_no_config.stderr
+    assert result_empty_config.returncode == 0, result_empty_config.stderr
+    assert result_no_config.stdout == result_empty_config.stdout
+    assert "a.md: 1 load(s)" in result_no_config.stdout
+    assert "===" not in result_no_config.stdout
+
+
+def test_cli_multi_source_config_renders_a_section_per_source(tmp_path):
+    """spec-019 T3.3: main()'s config-driven branch, exercised end-to-end
+    through the real CLI (not `build_multi_source_report` called directly)
+    -- proves `main()` actually loads the config file and wires it through,
+    the same wiring posture `test_cli_end_to_end_prints_report_for_fixture_events`
+    already holds T3.1/T3.2/T3.4 to."""
+    repo_root = tmp_path / "repo"
+    claude_dir = repo_root / ".claude"
+    claude_dir.mkdir(parents=True)
+
+    source_a_repo = tmp_path / "source-a-repo"
+    source_a_repo.mkdir()
+    source_a_home = tmp_path / "source-a-home"
+    source_a_home.mkdir()
+    _write_source_events(
+        source_a_repo, source_a_home, [_instruction("a.md", "session_start", repo="source-a-repo")]
+    )
+
+    source_b_repo = tmp_path / "source-b-repo"
+    source_b_repo.mkdir()
+    source_b_home = tmp_path / "source-b-home"
+    source_b_home.mkdir()
+    _write_source_events(
+        source_b_repo, source_b_home, [_instruction("b.md", "session_start", repo="source-b-repo")]
+    )
+
+    (claude_dir / "observability-sources.toml").write_text(
+        f'[[source]]\nlabel = "Source A"\nrepo_root = "{source_a_repo}"\nhomes = ["{source_a_home}"]\n\n'
+        f'[[source]]\nlabel = "Source B"\nrepo_root = "{source_b_repo}"\nhomes = ["{source_b_home}"]\n',
+        encoding="utf-8",
+    )
+
+    result = _run_report_cli(["--repo-root", str(repo_root), "--home", str(tmp_path / "unused-home")])
+
+    assert result.returncode == 0, result.stderr
+    assert "=== Source A ===" in result.stdout
+    assert "=== Source B ===" in result.stdout
+    assert "a.md: 1 load(s)" in result.stdout
+    assert "b.md: 1 load(s)" in result.stdout

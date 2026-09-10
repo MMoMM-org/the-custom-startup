@@ -18,6 +18,15 @@ but never rendered as if it were one hook's own duration (ADR-7), and no
 `kind: hook` record at all reports hook timing as not installed, never as
 zero hooks.
 
+spec-019 T3.3 adds a second, independent dimension on top of all of the
+above: several SOURCES (repositories, each possibly recorded from more than
+one `home`), read via `sources.py`'s locations config, rendered as one
+section per source rather than merged into one pooled analysis -- ADR-7,
+because recording status and byte accounting both collapse to a single
+misleading winner across a merged stream (see `build_multi_source_report`
+below). `--events <path>` keeps meaning exactly what it always has: this one
+record, config never consulted (SDD/Interface Specifications).
+
 ADR-6: this file is Python, pytest-covered, and runs offline -- nowhere near
 the hook path, so the sub-millisecond budget (CON-7) does not apply here.
 Every function below is pure over the paths and records it is handed: no
@@ -53,6 +62,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, NamedTuple, Sequence
+
+import sources  # spec-019 T3.3: one-way import only -- sources.py's own module docstring explains why it can never import this module back (a real circular import, not style debt).
 
 # The five verified `load_reason` values (SDD/Application Data Models).
 # `session_start` and `compact` are the always-loaded layer -- they cost on
@@ -722,6 +733,32 @@ def walk_instruction_inventory(repo_root: Path, home_dir: Path) -> InstructionIn
         entries=sorted({_redact_path(p, repo_root) for p in kept}),
         git_filtered=git_filtered,
     )
+
+
+def _combine_inventories(inventories: Sequence[InstructionInventory]) -> InstructionInventory:
+    """spec-019 T3.3 ruling (i), SDD-AC-25: union a source's several homes'
+    inventories into one, for `walk_instruction_inventory(repo_root, home)`
+    called once per `source.homes` entry.
+
+    `entries` is a plain set union -- safe by construction, because
+    `walk_instruction_inventory` already redacts to strings and is
+    documented to over-list rather than under-list, so unioning is the same
+    collapse it already performs internally, one level up. A file present in
+    only ONE home must still appear here, or it shows up as neither loaded
+    nor never-loaded and vanishes with nothing to say it was gone -- exactly
+    the failure the SDD says a primary-home rule causes.
+
+    `git_filtered` combines with AND, never OR: both walks share a
+    `repo_root` so they should always agree, but if they ever disagree,
+    reporting the LESS confident state is honest -- `or` would overclaim
+    filtering the other home never actually achieved.
+    """
+    entries: set[str] = set()
+    git_filtered = True
+    for inventory in inventories:
+        entries |= set(inventory.entries)
+        git_filtered = git_filtered and inventory.git_filtered
+    return InstructionInventory(entries=sorted(entries), git_filtered=git_filtered)
 
 
 # ---------------------------------------------------------------------------
@@ -1507,6 +1544,11 @@ def build_load_report(
     # caller/test keeps working unchanged; `main()` is the only real caller,
     # pinned by the CLI end-to-end test asserting on actual stdout.
     hooks: HookDurationReport | None = None,
+    # spec-019 T3.3 ruling (h): same optional-parameter posture again -- one
+    # more `None`-default keyword, never a branch on how many sources exist.
+    # This function still renders exactly ONE source's content; the loop
+    # over several sources lives in `build_multi_source_report`, not here.
+    section_title: str | None = None,
 ) -> str:
     """Render the load report: per-file counts and reasons, and what never loaded.
 
@@ -1540,8 +1582,20 @@ def build_load_report(
     `kind: hook` record at all -- that hook timing is not installed, never
     "0 hooks". A `scope_note: batch` or unscoped record is counted but never
     shown as a single hook's own duration (ADR-7).
+
+    `section_title` is optional (spec-019 T3.3, same posture): when given,
+    a header line leads the whole report, ahead of even the recording-state
+    line. Set by `_build_source_report` to a source's own `label`
+    (never its `repo_root.name` -- ruling (f): the label is what a human
+    chose to tell sources apart, the basename is only how the data itself is
+    keyed). This function still renders exactly one source's content and
+    never branches on how many sources exist -- looping is the caller's job.
     """
     lines: list[str] = []
+
+    if section_title is not None:
+        lines.append(f"=== {section_title} ===")
+        lines.append("")
 
     if recording is not None:
         lines.extend(_render_recording_status(recording))
@@ -1596,6 +1650,91 @@ def build_load_report(
 
 
 # ---------------------------------------------------------------------------
+# Per-source rendering (spec-019 T3.3, ADR-7): several sources read without
+# ever pretending they are one repository -- see the module docstring above
+# and phase-3.md's rulings (f)-(k).
+# ---------------------------------------------------------------------------
+
+
+def _build_source_report(source: sources.Source, now: datetime) -> str:
+    """One source's section: its own records, own inventory, own honesty
+    verdicts -- never pooled with any other source's.
+
+    Ruling (j): each home's stream is read with `read_events`, which is safe
+    on a path that does not exist yet (`rotation_chain` returns `[]`), so a
+    *missing* or *not yet recording* home needs no special case here. The
+    homes' streams CONCATENATE for this one source -- it is one repository,
+    and `newest_ts`/`recording_status` taking the max across the
+    concatenation is exactly why that is honest (the same rotated-chain
+    merge `read_events` already performs one level up). Concatenating two
+    DIFFERENT sources' streams is the ADR-7 collapse and never happens here
+    -- each call to this function sees exactly one source.
+
+    Ruling (i): each home's own `walk_instruction_inventory(repo_root, home)`
+    is combined via `_combine_inventories` (union `entries`, AND
+    `git_filtered`), walked from the one shared `repo_root` (SDD-AC-25,
+    CON-6) -- never one home's walk standing in for the whole source.
+
+    Ruling (f): `instruction_stats_by_repo`'s outer key is the record's own
+    `repo` field, which `logwrite.sh` freezes to `repo_root`'s basename --
+    not `source.label`, which is free text a human chose. Looked up by
+    `source.repo_root.name`, rendered under `source.label`.
+
+    Ruling (k): `skill_agent_inventory`, `firing` and `hooks` are always
+    `None` here -- the firing-coverage union (ADR-8) and the per-source
+    hook-timing split are T3.4's, appended after `build_multi_source_report`'s
+    loop, never inside it.
+    """
+    records: list[dict] = []
+    unparseable_total = 0
+    home_inventories: list[InstructionInventory] = []
+
+    for home_status in source.homes:
+        events_path = _resolve_events_path(None, source.repo_root, home_status.home)
+        home_records, home_unparseable = read_events(events_path)
+        records.extend(home_records)
+        unparseable_total += home_unparseable
+        home_inventories.append(walk_instruction_inventory(source.repo_root, home_status.home))
+
+    inventory = _combine_inventories(home_inventories)
+    stats = instruction_stats_by_repo(records).get(source.repo_root.name, {})
+    byte_stats = byte_accounting(records)
+    recording = recording_status(records, now)
+
+    return build_load_report(
+        stats,
+        inventory.entries,
+        unparseable_total,
+        inventory.git_filtered,
+        byte_stats=byte_stats,
+        recording=recording,
+        skill_agent_inventory=None,
+        firing=None,
+        hooks=None,
+        section_title=source.label,
+    )
+
+
+def build_multi_source_report(config_sources: Sequence[sources.Source], now: datetime) -> str:
+    """The config-driven report: one section per configured source, joined.
+
+    `now` is an explicit parameter -- never `datetime.now()` read inside
+    this function -- matching `recording_status`'s own purity contract
+    above; `main()` is the only caller that ever supplies a real wall-clock
+    value.
+
+    Every honesty verdict (recording status, byte accounting, never-loaded)
+    is computed and rendered per source by `_build_source_report`, never
+    pooled -- ADR-7: merging is not uniformly safe, and one live source
+    would otherwise report the whole set as fresh, hiding a source that
+    stopped recording months ago (the exact inversion of SDD-AC-15, one
+    level up).
+    """
+    sections = [_build_source_report(source, now) for source in config_sources]
+    return "\n\n".join(sections)
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point.
 # ---------------------------------------------------------------------------
 
@@ -1603,9 +1742,13 @@ def build_load_report(
 def _resolve_events_path(data_dir_override: str | None, repo_root: Path, home_dir: Path) -> Path:
     """Mirror `_observability_data_dir` (logwrite.sh, ADR-1) for the CLI only.
 
-    Not used by any test above -- those construct an events path directly,
-    which is the point: the pure functions never need this resolution, only
-    the CLI convenience wrapper does.
+    Not used by any of the pure per-file/per-repo analysis functions above
+    -- those take records directly, which is the point: they never need this
+    resolution. `main()`'s single-record path uses it with `data_dir_override`
+    honoured; `_build_source_report` (spec-019 T3.3) also calls it, once per
+    home, but always with `data_dir_override=None` -- `--data-dir` is a
+    single-record CLI convenience with no meaning once several sources are in
+    play (ruling (h): "no argument reads the config").
     """
     if data_dir_override:
         data_dir = Path(data_dir_override)
@@ -1634,7 +1777,43 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    events_path = args.events or _resolve_events_path(args.data_dir, args.repo_root, args.home)
+    # spec-019 T3.3 ruling (h): `--events` continues to mean "this one
+    # record" -- when given, the config is never consulted at all, and this
+    # is today's rendering path, completely unchanged (SDD-AC-24's golden
+    # fixture pins this branch byte-for-byte).
+    if args.events is not None:
+        return _print_single_record_report(args.events, args)
+
+    # No `--events`: load the locations config and loop. An absent config
+    # file and a config with zero `[[source]]` entries both come back as an
+    # empty list from `sources.load_sources` and fall back to the single-
+    # record path identically -- there is no third case (ruling (h)).
+    config_path = args.repo_root / ".claude" / sources.CONFIG_FILENAME
+    config_sources = sources.load_sources(config_path, default_home=args.home)
+    if not config_sources:
+        events_path = _resolve_events_path(args.data_dir, args.repo_root, args.home)
+        return _print_single_record_report(events_path, args)
+
+    # datetime.now() is the one place this module reads the wall clock --
+    # every pure function above takes `now` as an explicit parameter instead
+    # (see RecordingStatus / recording_status, and build_multi_source_report
+    # above), so only this CLI wrapper is untestable-by-construction, exactly
+    # like `Path.cwd()`/`Path.home()` elsewhere in this function.
+    print(build_multi_source_report(config_sources, datetime.now(timezone.utc)))
+    # spec-019 T3.4's clean insertion point: the firing-coverage union
+    # (ADR-8) appends HERE, after the per-source loop above -- never inside
+    # `_build_source_report` (ruling (k)).
+    return 0
+
+
+def _print_single_record_report(events_path: Path, args: argparse.Namespace) -> int:
+    """Today's `--events` rendering path (pre-spec-019-T3.3), extracted from
+    `main()` unchanged so both the `--events` branch and the config-absent/
+    empty fallback (ruling (h)) render identically without duplicating the
+    body. `main()`'s `--events` branch is the ONLY caller SDD-AC-24's golden
+    fixture exercises; the fallback branch reaches this same code by
+    resolving `events_path` itself first.
+    """
     if not rotation_chain(events_path):
         print(f"No record found at {events_path} (or any of its rotated generations).")
         return 0
@@ -1643,11 +1822,6 @@ def main(argv: list[str] | None = None) -> int:
     stats = instruction_stats(records)
     inventory = walk_instruction_inventory(args.repo_root, args.home)
     byte_stats = byte_accounting(records)
-    # datetime.now() is the one place this module reads the wall clock --
-    # every pure function above takes `now` as an explicit parameter instead
-    # (see RecordingStatus / recording_status), so only this CLI wrapper is
-    # untestable-by-construction, exactly like `Path.cwd()`/`Path.home()`
-    # above.
     recording = recording_status(records, datetime.now(timezone.utc))
     skill_agent_inventory = walk_skill_agent_inventory(args.repo_root)
     firing = firing_coverage(skill_agent_inventory.entries, fired_names(records))
