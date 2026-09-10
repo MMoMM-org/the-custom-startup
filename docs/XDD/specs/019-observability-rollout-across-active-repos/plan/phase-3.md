@@ -262,7 +262,7 @@ are one.
   (ADR-8) and the per-source hook-timing split are T3.4's, and this leaves them clean insertion
   points — the union appended after the per-source loop, not inside it.
 
-- [ ] **T3.4 The one union: firing coverage across sources** `[activity: backend-api]`
+- [x] **T3.4 The one union: firing coverage across sources** `[activity: backend-api]`
 
   1. Prime: read `walk_skill_agent_inventory:857-922` and `fired_names:927`, and ADR-8 on why the
      denominator must not be globbed across sources `[ref: SDD/ADR-8]` `[ref: PRD/F4]`.
@@ -276,6 +276,61 @@ are one.
   3. Implement: the union figure and the per-source coverage detail beside it.
   4. Validate: `pytest -q` green.
   5. Success: `[ref: SDD/SDD-AC-21, SDD-AC-22, SDD-AC-23]`; `[ref: PRD/F4]`
+
+  **Rulings, 2026-09-10, from T3.4's gate.** The plan's cited line numbers were stale again —
+  `walk_skill_agent_inventory` is at `:936` not `:857`, `fired_names` at `:1006` not `:927`.
+
+  **(l) The denominator is walked once, from `args.repo_root`.** That is the shipping repository —
+  never any `Source.repo_root`, which are targets. Other sources' local agents are then excluded by
+  construction, which is exactly ADR-8's stated purpose. The shipping repo's OWN `.claude/agents/`
+  does enter, via `_local_agent_entry:925`, and that is correct rather than a defect: ADR-8's harm
+  names "a **target's** own local agents", contrasted with "the shipping repository" in the same
+  ADR. It is also not new — `_print_single_record_report` already walks it. Moot in practice today:
+  measured, this repo's `.claude/agents/` holds no `.md` files, so the denominator is 83 entries
+  (64 skills, 19 agents) with zero repo-local agents. **A test asserting "a target's local agents do
+  not enter" must therefore build a synthetic source root carrying one** — using the real repo
+  proves nothing, because there are none to exclude.
+
+  **(m) The union may pool, the per-source detail must not.** Measured: `fired_names` over pooled
+  records is identical to unioning per-source sets, because it has no cross-record state — so the
+  union figure can be built either way. The per-source detail cannot: pooling first destroys the
+  "which source" information it exists to show, so `firing_coverage` is called once per source
+  against that source's own records and the **same shared `entries`**. The ambiguous-bare-name rule
+  is unaffected either way, because `bare_counts` is computed from `entries` alone — verified by
+  running it: a bare-name record matching two same-kind entries credits neither and is reported as
+  ambiguous, pooled or not.
+
+  **(n) Both the union figure and the per-source detail render in `main()`, after the joined
+  sections.** Not inside each source's `=== label ===` section: ruling (k) fixed those calls at
+  `firing=None`, the SDD says the per-repository detail is reported *alongside* the union, and the
+  task's own title says **one** union. The insertion point T3.3 left is where both go.
+
+  **(o) `_build_source_report` returns its records; the union does not re-read them.** The union
+  needs every source's records and `_build_source_report`'s `read_events` calls are the only place
+  they are read — it currently discards them. It returns `(text, records)` and
+  `build_multi_source_report` threads them back. The alternative, re-reading each source's homes a
+  second time outside the loop, is safe but duplicates I/O and invites the two paths to drift.
+
+  **(p) Per-source detail shape.** No acceptance criterion pins the text, so: for each source, state
+  how many of the shipped inventory fired there, and **name the entries that fired in at least one
+  OTHER source but not in this one**. That divergence is the PRD's actual question — "fired
+  somewhere" and "fired in both places it should" are different, and it asks the second. Unmatched
+  and ambiguous names are reported **pooled** on the union figure only, not attributed per source:
+  no AC asks for attribution, and this is recorded as a deliberate assumption rather than an
+  accident.
+
+  **(q) Hook timing goes inside `_build_source_report`, and one existing test must be retired on
+  purpose.** Hook timing is not a union — ADR-7 says per repository — so `hooks=None` at that call
+  site becomes `hook_duration_stats(records)` over the source's own concatenated stream.
+  `installed` is False only with zero `kind: hook` records, so per-source concatenation is the right
+  granularity. Completing this stub is **not** reopening T3.3: ruling (k) assigned it to T3.4
+  explicitly. Consequence to handle deliberately:
+  `test_build_multi_source_report_leaves_skill_agent_and_hook_sections_out` asserts hook sections
+  are ABSENT from `build_multi_source_report`'s output, and inspects exactly the function hooks are
+  being wired into — **it must go red, and must be rewritten as a named step rather than discovered
+  as a surprise.** Its firing-coverage half stays valid and would pass by construction anyway, since
+  the union renders in `main()` and that test never calls it — so the test is misleading on that
+  half and should say so.
 
 - [ ] **T3.5 Backwards compatibility and phase validation** `[activity: validate]`
 
