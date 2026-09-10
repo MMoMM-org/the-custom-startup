@@ -215,7 +215,7 @@ worth having if its rows are true, and hand-editing is how they stopped being tr
 | 20 | T3.3 |
 | 21, 22, 23 | T3.4 |
 | 24 | T3.0, T3.5 |
-| 25 | T3.2 |
+| 25 | T3.2 (per-home data), T3.3 (the merge and the union walk) |
 | 26 | T4.1 |
 
 ### Coverage map — PRD features to phases
