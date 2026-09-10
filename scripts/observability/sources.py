@@ -244,11 +244,39 @@ def _parse_document(doc: dict) -> list[tuple[str, Path, list[Path]]]:
 
     parsed: list[tuple[str, Path, list[Path]]] = []
     seen_labels: dict[str, int] = {}
+    seen_basenames: dict[str, tuple[int, str]] = {}
     for i, table in enumerate(raw_sources, start=1):
         label, repo_root, homes = _parse_source_table(i, table)
         if label in seen_labels:
             raise _schema_error(i, label, f"duplicate label (also used by source #{seen_labels[label]})")
         seen_labels[label] = i
+
+        # spec-019 T3.2: repo_root basenames must also be unique, checked
+        # after (not instead of) the duplicate-label check above. logwrite.sh
+        # freezes BOTH the record file's directory name and the recorded
+        # `repo` field to `repo_root.name` alone (logwrite.sh:328-347, "the
+        # git toplevel basename, never the absolute path") -- two sources
+        # with different repo_root paths but the same basename would
+        # silently share one record file (read twice) and be
+        # indistinguishable in the report by `repo` value, even though they
+        # are different repositories. That is two plausible, wrong
+        # repositories presented as fact, which this whole spec exists to
+        # prevent -- so it fails loudly at config load instead.
+        basename = repo_root.name
+        if basename in seen_basenames:
+            other_index, other_label = seen_basenames[basename]
+            raise _schema_error(
+                i,
+                label,
+                f"repo_root basename {basename!r} is also used by source #{other_index} "
+                f"(label={other_label!r}) -- both would write to the same records file "
+                f"(observability-{basename}/observability/events.jsonl under each home) "
+                f"and be reported under the same repo name, because the record location "
+                f"and the recorded repo name are derived from repo_root's basename alone, "
+                f"never its full path",
+            )
+        seen_basenames[basename] = (i, label)
+
         parsed.append((label, repo_root, homes))
     return parsed
 

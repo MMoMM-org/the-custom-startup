@@ -345,6 +345,67 @@ def test_duplicate_labels_rejected(tmp_path):
         sources.load_sources(config, default_home=tmp_path)
 
 
+def test_duplicate_repo_root_basenames_rejected(tmp_path):
+    """Two different repo_root paths that share a basename collide on disk.
+
+    `_record_base_path` derives the data directory from `repo_root.name`
+    alone (sources.py:157-168), and logwrite.sh freezes the `repo` field the
+    same way -- so `/work/tcs` and `/archive/tcs` would resolve to the same
+    record file and be indistinguishable by `repo` in the report, even
+    though the config author gave them distinct labels.
+    """
+    repo_work = _mkdir(tmp_path / "work" / "tcs")
+    repo_archive = _mkdir(tmp_path / "archive" / "tcs")
+    config = _write_config(
+        tmp_path,
+        _source_entry("work-copy", repo_work),
+        _source_entry("archive-copy", repo_archive),
+    )
+
+    with pytest.raises(sources.ConfigSchemaError) as exc_info:
+        sources.load_sources(config, default_home=tmp_path)
+
+    message = str(exc_info.value)
+    assert "work-copy" in message, f"the earlier source's label must be named: {message!r}"
+    assert "archive-copy" in message, f"the offending source's own label must be named: {message!r}"
+    assert "'tcs'" in message, f"the colliding basename must be named: {message!r}"
+
+
+def test_different_repo_root_basenames_still_accepted(tmp_path):
+    """Distinct basenames must not trip the new guard -- the common case."""
+    repo_a = _mkdir(tmp_path / "repo-a")
+    repo_b = _mkdir(tmp_path / "repo-b")
+    config = _write_config(
+        tmp_path,
+        _source_entry("a", repo_a),
+        _source_entry("b", repo_b),
+    )
+
+    result = sources.load_sources(config, default_home=tmp_path)
+
+    assert {s.label for s in result} == {"a", "b"}
+
+
+def test_duplicate_label_fires_before_basename_collision(tmp_path):
+    """When a config violates both checks at once, the label check wins.
+
+    Deliberate ordering (see `_parse_document`): the duplicate-label check
+    runs first in the per-entry loop, so a source that repeats an earlier
+    label is rejected for that reason even if its repo_root basename also
+    collides.
+    """
+    repo_a = _mkdir(tmp_path / "work" / "tcs")
+    repo_b = _mkdir(tmp_path / "archive" / "tcs")
+    config = _write_config(
+        tmp_path,
+        _source_entry("dup", repo_a),
+        _source_entry("dup", repo_b),
+    )
+
+    with pytest.raises(sources.ConfigSchemaError, match=r"duplicate label"):
+        sources.load_sources(config, default_home=tmp_path)
+
+
 # ---------------------------------------------------------------------------
 # CON-4/ADR-6: the config path is gitignored -- a requirement, not a
 # convenience, so it is a test rather than a comment (R9).
