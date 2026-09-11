@@ -175,6 +175,39 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
   deliberate under ADR-1. What was stale was its forward-reference to T4.1, now removed, with new
   cases added alongside pinning the migration boundary.
 
+  **Rulings, 2026-09-11, from T4.1's review gates.**
+
+  **(x) A partial legacy shape classifies LEGACY, not CLEAN.** `is_legacy` required all three
+  events to match (`detect.sh:313`, `matched_events == set(LEGACY_SCRIPTS.keys())`), so a target
+  with two of three read as CLEAN -- and `install` then added a full registration beside the
+  still-live legacy hooks, recording twice, while `remove` reported success as they kept firing.
+  That is the exact outcome the migration exists to prevent, and it fails in the dangerous
+  direction. One or more matching entries is now enough; `_strip_legacy` removes what it actually
+  finds, so a half-migrated target converges to fully-migrated. `ABORT_WRONGSHAPE` was considered
+  and rejected: phase 2 made LEGACY a WARN deliberately, on the grounds that it means "action
+  available, nothing broken", and forcing a manual two-step is what that ruling was written to
+  avoid. The severity stays exit 4; only the matching rule changed. Measured before ruling: four
+  distinct shapes reached the same double registration -- a non-string command replacing one of the
+  trio, one event simply absent, only one entry present, and the env flag removed by hand. Zero
+  matching entries still classifies CLEAN, which is correct: a target the PARTIAL MIGRATION path
+  has stripped has nothing left to migrate, and `install` on it takes the plain path.
+
+  **(y) Legacy ownership is proven by the namespace, and the env flag is corroboration rather than
+  a gate.** Found by the sweep ruling (x) asked for, and the more serious of the two by a distance.
+  Matching was `command.endswith(<script name>)`, which **any** third party's script of that name
+  satisfied. Reproduced on the branch as it then stood: a shared file holding two genuine legacy
+  entries plus an unrelated `/opt/other-tool/log_skill.sh` classified `LEGACY`, and the migration
+  would have **deleted a hook this project does not own**. At the old all-three threshold that
+  needed a coincidence; at ruling (x)'s threshold of one it becomes a licence, so the tightening is
+  not scope creep but the precondition that makes (x) safe to ship. Matching now requires the
+  legacy namespace `plugins/tcs-helper/scripts/observability/` in both `detect.sh` and
+  `registration.py` -- ADR-5's rule ("ownership is the path namespace") applied to the legacy shape,
+  which it had never been. The env flag was a required gate and is now corroboration: with
+  ownership proven by namespace it added nothing except a fourth way for a live legacy registration
+  to read as CLEAN. The LEGACY line also now names the events it actually found, so a partial shape
+  no longer reports as a full one.
+
+
 
 
 - [ ] **T4.2 Rollout to the target repositories** `[activity: validate]`
