@@ -402,7 +402,7 @@ SHAREDJSON
 @test "under write protection the shared settings.json is genuinely read, not silently skipped" {
   # The test above proves all three paths are present and readable. It cannot
   # prove the shared one was actually opened: if open() failed on it, load()
-  # returns (None, err), is_legacy(None) is False, and the classification
+  # returns (None, err), legacy_events(None) is empty, and the classification
   # falls through to OURS-CURRENT -- the same answer as a successful read.
   #
   # This target's settings.json carries the legacy shape, which only changes

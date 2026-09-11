@@ -258,7 +258,7 @@ def hook_commands(hooks, strict=False):
     a "command" that is present but not a string. Skipping them here while
     the editor raises on them is the asymmetry that let a target pass the
     gate and then fail mid-write. strict is used for the LOCAL settings file
-    only -- is_legacy below calls this on the SHARED file to recognise a
+    only -- legacy_events below calls this on the SHARED file to recognise a
     shape, and raising there would turn an unrelated malformation elsewhere
     in that file into "not legacy", which is a classification change rather
     than a gate."""

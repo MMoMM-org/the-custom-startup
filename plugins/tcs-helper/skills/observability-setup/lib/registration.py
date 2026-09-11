@@ -403,7 +403,7 @@ LEGACY_SCRIPTS = {
 # satisfied it, and a migration removed the entry. Ownership is the namespace
 # here exactly as it is for NAMESPACE above (ADR-5). detect.sh carries the
 # same constant and the two must change together.
-LEGACY_NAMESPACE = 'plugins/tcs-helper/scripts/observability/' 
+LEGACY_NAMESPACE = 'plugins/tcs-helper/scripts/observability/'
 
 
 def hook_is_legacy(event, command):
