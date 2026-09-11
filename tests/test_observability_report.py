@@ -3078,3 +3078,104 @@ def test_cli_multi_source_union_names_a_skill_that_fired_only_in_the_second_sour
     union_text = result.stdout[union_start:]
     assert "Coverage: 1/1 fired." in union_text
     assert "Never fired -- unused, not missing (0):" in union_text
+
+
+# ---------------------------------------------------------------------------
+# T3.5: backwards compatibility and phase validation (SDD-AC-24).
+#
+# Step 1 names three assertions. Two are already delivered elsewhere and are
+# not repeated here: "--events <path> behaves exactly as it did in
+# spec-018" is the T3.0 golden fixture (test_observability_report_t30_golden.py,
+# frozen against commit eb9b529 -- approved deviation, see phase-3.md); "no
+# argument reads the config" is exercised by
+# test_cli_multi_source_config_renders_a_section_per_source above, which runs
+# the CLI with no --events and a real config on disk. The two tests below are
+# what step 1 leaves for T3.5 itself: the negative half of ruling (h)
+# (--events makes the config irrelevant) and --data-dir's silent no-op once a
+# config is in play.
+# ---------------------------------------------------------------------------
+
+
+def test_cli_events_flag_ignores_config_even_when_config_is_unparseable(tmp_path):
+    """Ruling (h): "--events given -> single-record mode unconditionally,
+    config never consulted."
+
+    A well-formed config at `<repo-root>/.claude/observability-sources.toml`
+    would not kill a mutant that reads the config and then discards the
+    result -- the rendered report would come out identical either way, since
+    the --events path never uses what the config says. A config that
+    `sources.load_sources` would raise `ConfigSyntaxError` on IF it were ever
+    parsed (confirmed by test_malformed_toml_names_the_line in
+    test_observability_sources.py) makes non-consultation provable rather
+    than merely plausible: if main() ever loads this file on the --events
+    path, the process crashes non-zero instead of quietly printing the right
+    report.
+    """
+    repo_root = tmp_path / "repo"
+    claude_dir = repo_root / ".claude"
+    claude_dir.mkdir(parents=True)
+    # Syntactically broken TOML (unterminated key assignment) -- a syntax
+    # error, not a schema error, so sources.load_sources raises
+    # ConfigSyntaxError while parsing rather than after.
+    (claude_dir / "observability-sources.toml").write_text(
+        '[[source]]\nlabel = "x"\nrepo_root = \n', encoding="utf-8"
+    )
+
+    events = tmp_path / "events.jsonl"
+    _write_jsonl(events, [_instruction("a.md", "session_start")])
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+
+    result = _run_report_cli(
+        ["--events", str(events), "--repo-root", str(repo_root), "--home", str(home_dir)]
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "a.md: 1 load(s)" in result.stdout
+
+
+def test_cli_data_dir_has_no_effect_once_a_config_is_in_play(tmp_path):
+    """--data-dir meant, in spec-018: override the derived data directory
+    when --events is not given. `_build_source_report` always calls
+    `_resolve_events_path(None, ...)` per home, regardless of what the CLI
+    was given (documented in a comment there, asserted nowhere before this).
+
+    A source's real events (a.md) live at the path the config drives the
+    reader to; a DIFFERENT record (decoy.md) lives at the path --data-dir
+    points to. If --data-dir were honoured in multi-source mode, every
+    home's resolution would collapse onto that one decoy path and a.md
+    would vanish from the report in favour of decoy.md.
+    """
+    repo_root = tmp_path / "repo"
+    claude_dir = repo_root / ".claude"
+    claude_dir.mkdir(parents=True)
+
+    source_repo = tmp_path / "source-repo"
+    source_repo.mkdir()
+    source_home = tmp_path / "source-home"
+    source_home.mkdir()
+    _write_source_events(
+        source_repo, source_home, [_instruction("a.md", "session_start", repo="source-repo")]
+    )
+
+    (claude_dir / "observability-sources.toml").write_text(
+        f'[[source]]\nlabel = "Source A"\nrepo_root = "{source_repo}"\nhomes = ["{source_home}"]\n',
+        encoding="utf-8",
+    )
+
+    data_dir = tmp_path / "decoy-data"
+    (data_dir / "observability").mkdir(parents=True)
+    _write_jsonl(data_dir / "observability" / "events.jsonl", [_instruction("decoy.md", "session_start")])
+
+    result = _run_report_cli(
+        [
+            "--repo-root", str(repo_root),
+            "--home", str(tmp_path / "unused-home"),
+            "--data-dir", str(data_dir),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "=== Source A ===" in result.stdout
+    assert "a.md: 1 load(s)" in result.stdout
+    assert "decoy.md" not in result.stdout

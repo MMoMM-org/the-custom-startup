@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Reading several records"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -332,20 +332,29 @@ are one.
   the union renders in `main()` and that test never calls it — so the test is misleading on that
   half and should say so.
 
-- [ ] **T3.5 Backwards compatibility and phase validation** `[activity: validate]`
+- [x] **T3.5 Backwards compatibility and phase validation** `[activity: validate]`
 
   1. Test: `--events <path>` behaves exactly as it did in spec-018 — same output for the same input,
      asserted against a recorded fixture of the old output rather than by inspection **(already
      delivered by T3.0 as `tests/test_observability_report_t30_golden.py`, by approved deviation —
      verify it is still green and still frozen against commit `eb9b529`; do NOT regenerate the
-     golden to make it pass)**; no argument reads the config; `--data-dir` still means what it
-     meant. The last two assertions remain T3.5's to write.
+     golden to make it pass)**; no argument reads the config **(already delivered by T3.3's
+     `test_cli_multi_source_config_renders_a_section_per_source`, which runs the CLI with no
+     `--events` and a real config on disk)**; `--data-dir` still means what it meant. The last
+     assertion is T3.5's own to write, alongside ruling (h)'s negative half (`--events` makes the
+     config irrelevant, proven with a poison config) — both landed as
+     `test_cli_events_flag_ignores_config_even_when_config_is_unparseable` and
+     `test_cli_data_dir_has_no_effect_once_a_config_is_in_play` in `tests/test_observability_report.py`.
   2. Validate: run `pytest -q` in full. Every spec-018 report test must still pass unmodified; if one
-     needs changing, that is a deviation and is recorded rather than absorbed.
-  3. **Optional scope, PRD F6 (Could-have)**: assisted discovery. If implemented, a discovered
-     location is *proposed* and never added silently. The three test-fixture record directories on
-     this machine are the standing argument for that rule — a discovery pass would have offered them
-     as repositories, and they look entirely plausible.
+     needs changing, that is a deviation and is recorded rather than absorbed. Confirmed: no existing
+     test was modified by this task (`git diff --stat` against `scripts/` is empty; only tests and
+     this plan changed).
+  3. **Optional scope, PRD F6 (Could-have): deferred.** *Deliberately not implemented — ruled out of
+     scope by the maintainer, 2026-09-11.* Assisted discovery would scan for plausible repository
+     locations and propose them (never add silently). The condition that reopens it: the config
+     becomes a hand-maintenance burden across more than the current four repositories, or a target's
+     record location stops being mechanically derivable from `repo_root` + `homes` (ADR-6) — either
+     of which would make manual authorship the actual bottleneck rather than a one-time cost.
   4. Success: `[ref: SDD/SDD-AC-24]`
 
 ---
