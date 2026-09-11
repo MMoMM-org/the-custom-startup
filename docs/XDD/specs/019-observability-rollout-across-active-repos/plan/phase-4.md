@@ -136,6 +136,46 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
   registration deliberately: when T4.1 lands, that test is meant to change, and a green run there is
   the defect rather than the proof.
 
+  **Rulings, 2026-09-11, from T4.1's implementation review.** The implementer raised five
+  decisions rather than taking them silently; four are recorded here, the fifth (the
+  `${CLAUDE_PLUGIN_ROOT}` interpolation in another plugin's `git-setup/SKILL.md`) went to issue
+  #163 as out of this spec's scope.
+
+  **(t) The write-path ignore check belongs in `setup.sh`, and before the lock.** SDD-AC-6 was
+  enforced by nothing at command level: `detect.sh` gates only the settings path, while
+  `registration.written_paths()` declares four, and T4.2 assigned the backup path to an operator's
+  memory with T4.4 checking it after the fact. `setup.sh` now refuses a target where any declared
+  path is committable. It is hoisted **above** the lock because the lock file is itself one of those
+  paths, so the check cannot follow the thing it guards. This is more than T4.1 literally asked for
+  and is kept deliberately: the SDD calls this the one refusal that protects a third party, and a
+  target that ignores `settings.local.json` by name rather than `.claude/` wholesale would otherwise
+  receive a committable `.bak` and be told about it afterwards.
+
+  **(u) `remove` takes legacy entries out too, extending (s) to the symmetric case.** Ruling (s)
+  gave the migration to `install` alone. Measured consequence: `remove` against an un-migrated
+  LEGACY target reported success while all three legacy hooks kept firing from the shared file --
+  "off" to whoever asked, on in fact. That is the silent-failure shape this whole spec exists to
+  catch, and PRD F2's premise is that removal makes turning recording on a reversible decision
+  rather than a permanent one. `--remove-legacy` closes it.
+
+  **(v) PRD F1's "foreign entries are still present and unmodified afterwards" is satisfied
+  vacuously at command level, and T4.4 must say so rather than count it.** `detect.sh:336` collects
+  every hook command outside our namespace, not only those under our three event names, so CONFLICT
+  is broader than the SDD's and PRD's "under the same event" wording. Install therefore never runs
+  against a target holding foreign content at all, and the merge never gets the opportunity to step
+  around it. The preservation property is real at the library layer, where T2.x pins it; at the
+  command layer nothing exercises it. T4.4's evidence map records this as prose-only coverage --
+  spec-018's map found four criteria in that state and naming them proved more useful than quietly
+  counting them.
+
+  **(w) The registration-matrix suite gains cases beside its flagless assertion; it does not lose
+  it.** Ruling (s) said a green run there is the defect rather than the proof, which can be read as
+  expecting the old assertion to disappear when T4.1 lands. It does not: that assertion pins
+  `registration.py` editing only the one `--settings` path it is handed, which stays correct and
+  deliberate under ADR-1. What was stale was its forward-reference to T4.1, now removed, with new
+  cases added alongside pinning the migration boundary.
+
+
 
 - [ ] **T4.2 Rollout to the target repositories** `[activity: validate]`
 
