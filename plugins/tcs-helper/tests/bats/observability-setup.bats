@@ -191,6 +191,17 @@ _assert_git_clean() {
   [ -z "$output" ]
 }
 
+# _assert_no_lock <repo> -- no run may leave the per-target lock behind, on
+# ANY exit path. `trap _on_exit EXIT` is what guarantees it, and it fires the
+# same on an abort, a refusal and a plan run as on a success. Until this
+# helper only the two success-path cases touched the lock at all, so a trap
+# that stopped firing would have left every failure path holding one and
+# nothing would have gone red -- the same shape as every other defect this
+# spec has turned up.
+_assert_no_lock() {
+  [ ! -e "$1/.claude/settings.local.json.tcs-observability.lock" ]
+}
+
 # _write_local <repo> <json> -- put a hand-built document in the target's
 # local settings file, creating .claude/ if the fixture has none.
 _write_local() {
@@ -328,6 +339,7 @@ _make_record() {
   # Nothing anywhere: not the settings file, not the bundle.
   [ ! -e "$target" ]
   [ ! -e "$home/.claude/observability" ]
+  _assert_no_lock "$dir"
 }
 
 @test "install --plan reports the plan and writes nothing even when --yes is given" {
@@ -341,6 +353,7 @@ _make_record() {
   _assert_contains "$output" "PLAN"
   [ ! -e "$target" ]
   [ ! -e "$home/.claude/observability" ]
+  _assert_no_lock "$dir"
 }
 
 @test "the plan names the settings file it would change and the bundle directory it would install" {
@@ -369,6 +382,7 @@ _make_record() {
   [ "$status" -eq 0 ]
   _assert_contains "$output" "PLAN"
   _assert_bytes_equal "$after_install" "$target"
+  _assert_no_lock "$dir"
 }
 
 # ---------------------------------------------------------------------------
@@ -389,6 +403,7 @@ _make_record() {
   [ "$status" -eq 0 ]
   _assert_bytes_equal "$original" "$target"
   [ ! -e "$home/.claude/observability" ]
+  _assert_no_lock "$dir"
 }
 
 @test "the foreign-entry stop reports precisely what it found and where" {
@@ -400,6 +415,7 @@ _make_record() {
   [ "$status" -eq 0 ]
   _assert_contains "$output" "/opt/foreign-audit/hook.sh"
   _assert_contains "$output" ".claude/settings.local.json"
+  _assert_no_lock "$dir"
 }
 
 # ---------------------------------------------------------------------------
@@ -420,6 +436,7 @@ _make_record() {
   _assert_contains "$output" "repository"
   [ ! -e "$dir/.claude" ]
   [ ! -e "$home/.claude/observability" ]
+  _assert_no_lock "$dir"
 }
 
 @test "an unparseable settings file is reported as unreadable, writes nothing, and exits NON-ZERO" {
@@ -438,6 +455,7 @@ _make_record() {
   _assert_contains "$output" "not valid JSON"
   _assert_bytes_equal "$original" "$target"
   [ ! -e "$home/.claude/observability" ]
+  _assert_no_lock "$dir"
 }
 
 @test "a valid-JSON-wrong-shape settings file is refused with a non-zero status and nothing written" {
@@ -453,6 +471,7 @@ _make_record() {
   _assert_contains "$output" "ABORT"
   _assert_contains "$output" "unexpected shape"
   _assert_bytes_equal "$original" "$target"
+  _assert_no_lock "$dir"
 }
 
 @test "a write path version control does not ignore is refused with a non-zero status" {
@@ -465,6 +484,7 @@ _make_record() {
   _assert_contains "$output" "ignored"
   [ ! -e "$dir/.claude/settings.local.json" ]
   [ ! -e "$home/.claude/observability" ]
+  _assert_no_lock "$dir"
 }
 
 @test "a target that ignores the settings file but not its backup is refused, naming the backup path" {
@@ -482,6 +502,7 @@ _make_record() {
   [ "$status" -ne 0 ]
   _assert_contains "$output" ".tcs-observability.bak"
   _assert_bytes_equal "$original" "$target"
+  _assert_no_lock "$dir"
 }
 
 # ---------------------------------------------------------------------------
@@ -617,6 +638,7 @@ PY
   [ "$status" -eq 0 ]
   _assert_contains "$output" "repository"
   [ ! -e "$dir/.claude" ]
+  _assert_no_lock "$dir"
 }
 
 # ---------------------------------------------------------------------------
@@ -786,6 +808,7 @@ PY
   _assert_bytes_equal "$original" "$target"
   run _count_our_hooks "$target"
   [ "$output" -eq 0 ]
+  _assert_no_lock "$dir"
 }
 
 @test "install preserves non-ASCII bytes in content it did not author" {
@@ -969,6 +992,7 @@ PY
   [ "$status" -ne 0 ]
   _assert_contains "$output" "ignored"
   _assert_bytes_equal "$original" "$legacy"
+  _assert_no_lock "$dir"
 }
 
 # ---------------------------------------------------------------------------
@@ -996,17 +1020,25 @@ PY
   original="$WORK_PARENT/badenv-legacy.shared.orig"
   cp -p "$legacy" "$original"
   _write_local "$dir" '{ "env": "not-an-object" }'
+  local local_original="$WORK_PARENT/badenv-legacy.local.orig"
+  cp -p "$dir/.claude/settings.local.json" "$local_original"
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -ne 0 ]
 
   # THE assertion: the shared file is untouched, byte for byte. Before the
-  # fix it was "{}" here, with its real content only in the .bak.
+  # reorder it was "{}" here, with its real content only in the .bak.
   _assert_bytes_equal "$original" "$legacy"
+  # No backup, because nothing was written to make one for.
   [ ! -e "$legacy.tcs-observability.bak" ]
+  # The local file is untouched too -- this run refuses, it does not repair.
+  _assert_bytes_equal "$local_original" "$dir/.claude/settings.local.json"
 
-  # ...and the report does not claim an intactness it could not know.
+  # The claim is now the true one, stated positively rather than only as the
+  # absence of the false one.
+  _assert_contains "$output" "nothing was written"
   _assert_not_contains "$output" "The original files are intact"
+  _assert_no_lock "$dir"
 }
 
 @test "a local settings file whose env is a non-object is refused with nothing written" {
@@ -1023,6 +1055,7 @@ PY
   _assert_contains "$output" "unexpected shape"
   _assert_bytes_equal "$original" "$dir/.claude/settings.local.json"
   [ ! -e "$home/.claude/observability" ]
+  _assert_no_lock "$dir"
 }
 
 @test "a local settings file holding a non-object hook is refused with nothing written" {
@@ -1037,6 +1070,7 @@ PY
   [ "$status" -ne 0 ]
   _assert_contains "$output" "unexpected shape"
   _assert_bytes_equal "$original" "$dir/.claude/settings.local.json"
+  _assert_no_lock "$dir"
 }
 
 @test "a local settings file whose hook command is not a string is refused with a diagnosis, never a traceback" {
@@ -1055,6 +1089,7 @@ PY
   # TypeError that nothing caught.
   _assert_not_contains "$output" "Traceback"
   _assert_bytes_equal "$original" "$dir/.claude/settings.local.json"
+  _assert_no_lock "$dir"
 }
 
 # ---------------------------------------------------------------------------
@@ -1140,4 +1175,5 @@ PY
   _assert_contains "$output" "This target is NOT recording"
   _assert_contains "$output" "$legacy.tcs-observability.bak"
   _assert_bytes_equal "$original" "$legacy.tcs-observability.bak"
+  _assert_no_lock "$dir"
 }
