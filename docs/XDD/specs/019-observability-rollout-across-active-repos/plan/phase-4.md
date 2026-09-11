@@ -54,7 +54,7 @@ simultaneously double and never silently off: remove the legacy entries and inst
 registration in the same operation, then confirm with the `status` verb before trusting the records.
 Phase 2's detection classifies this legacy shape distinctly for exactly this reason.
 
-- [ ] **T4.1 The setup command** `[activity: backend-api]`
+- [x] **T4.1 The setup command** `[activity: backend-api]`
 
   **Note added 2026-09-08 while phase 1 shipped, so this is not rediscovered here.** The drift
   comparator T1.3 delivered is
