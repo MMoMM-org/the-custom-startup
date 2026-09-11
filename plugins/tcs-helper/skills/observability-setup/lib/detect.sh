@@ -201,6 +201,13 @@ OUR_NAMESPACE = "$HOME/.claude/observability/"
 # rather than $HOME/.claude/observability) — never to decide "ours" in
 # settings.local.json, where ownership is proven by path namespace alone
 # (ADR-5).
+#
+# DEFINED TWICE, AND THE TWO MUST CHANGE TOGETHER: registration.py carries
+# the same mapping under the same name, because it is what performs the
+# migration this classification exists to trigger, and this copy lives
+# inside a heredoc a shell script wraps — there is no module here to import
+# from. See registration.py's LEGACY_SCRIPTS for the full reasoning; the
+# same treatment CON-6 gets between report.py and sources.py.
 LEGACY_SCRIPTS = {
     "InstructionsLoaded": "log_instructions.sh",
     "PreToolUse": "log_skill.sh",

@@ -254,6 +254,7 @@ if [ -z "$REPO_ROOT" ]; then
 fi
 
 LOCAL_SETTINGS="$REPO_ROOT/.claude/settings.local.json"
+SHARED_SETTINGS="$REPO_ROOT/.claude/settings.json"
 LOCK_FILE="$LOCAL_SETTINGS.tcs-observability.lock"
 BUNDLE_DIR="$(_bundle_install_target_dir)"
 
@@ -565,6 +566,20 @@ if [ "$DETECT_LABEL" = "CONFLICT" ]; then
   exit 0
 fi
 
+IS_LEGACY=0
+if [ "$DETECT_LABEL" = "LEGACY" ]; then
+  IS_LEGACY=1
+fi
+
+# A legacy migration rewrites the SHARED settings file too, so that file's
+# written-paths set has to clear the same version-control bar as the local
+# one -- and before anything is planned against it, not after.
+if [ "$IS_LEGACY" -eq 1 ]; then
+  if ! _verify_paths_ignored "$SHARED_SETTINGS" "shared"; then
+    exit 1
+  fi
+fi
+
 _REGISTERED_EVENTS="InstructionsLoaded, PreToolUse, SubagentStart"
 _ENV_SWITCH="CLAUDE_OBSERVABILITY_ENABLED"
 _UNDO_HINT="bash $_SETUP_LIB_DIR/setup.sh remove --target $REPO_ROOT --yes"
@@ -576,12 +591,18 @@ _UNDO_HINT="bash $_SETUP_LIB_DIR/setup.sh remove --target $REPO_ROOT --yes"
 
 if [ "$VERB" = "install" ]; then
   _emit "PLAN" "would install the observability bundle into $BUNDLE_DIR"
-  if [ "$DETECT_LABEL" = "OURS-CURRENT" ]; then
+  if [ "$IS_LEGACY" -eq 1 ]; then
+    _emit "PLAN" "would remove the legacy in-repo registration from $SHARED_SETTINGS"
+    _emit "PLAN" "would add hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH to $LOCAL_SETTINGS"
+  elif [ "$DETECT_LABEL" = "OURS-CURRENT" ]; then
     _emit "PLAN" "would leave $LOCAL_SETTINGS unchanged -- its registration is already current"
   else
     _emit "PLAN" "would add hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH to $LOCAL_SETTINGS"
   fi
 else
+  if [ "$IS_LEGACY" -eq 1 ]; then
+    _emit "PLAN" "would remove the legacy in-repo registration from $SHARED_SETTINGS"
+  fi
   _emit "PLAN" "would remove hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH from $LOCAL_SETTINGS"
 fi
 
@@ -608,6 +629,27 @@ if [ "$VERB" = "install" ]; then
   if ! _install_observability_bundle; then
     _emit "ABORT" "the bundle install failed, so the registration was not touched."
     exit 1
+  fi
+
+  if [ "$IS_LEGACY" -eq 1 ]; then
+    # Ruling (s): ONE operation, so recording is never simultaneously double
+    # and never silently off. registration.py performs both halves inside a
+    # single invocation, under the lock this process already holds -- the
+    # removal from the shared file first, the standard registration second.
+    # The order is deliberate and documented at the site that implements it:
+    # the intermediate state is "not registered", which `status` reports
+    # honestly; the reverse order's intermediate state records everything
+    # twice while looking healthy.
+    if ! REG_OUTPUT="$(_run_registration --settings "$LOCAL_SETTINGS" --migrate-legacy "$SHARED_SETTINGS" 2>&1)"; then
+      printf '%s\n' "$REG_OUTPUT"
+      _emit "ABORT" "the legacy migration failed. The original files are intact and a backup sits beside each one."
+      exit 1
+    fi
+    printf '%s\n' "$REG_OUTPUT"
+    _emit "MIGRATED" "removed the legacy in-repo registration from $SHARED_SETTINGS"
+    _emit "ADDED" "hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH in $LOCAL_SETTINGS"
+    _emit "UNDO" "$_UNDO_HINT"
+    exit 0
   fi
 
   if ! REG_OUTPUT="$(_run_registration --settings "$LOCAL_SETTINGS" 2>&1)"; then
@@ -638,12 +680,27 @@ fi
 # anything but the settings document it is given (PRD F2 -- stopping
 # recording never deletes what was recorded).
 
-if ! REG_OUTPUT="$(_run_registration --settings "$LOCAL_SETTINGS" --remove 2>&1)"; then
+if [ "$IS_LEGACY" -eq 1 ]; then
+  # An un-migrated legacy target has its three LIVE hooks in the shared file.
+  # Removing only the local registration would report success while all three
+  # kept firing -- "off" to whoever asked, and on in fact. That is the same
+  # silent-failure shape this whole spec exists to catch, so removal takes the
+  # legacy entries too.
+  if ! REG_OUTPUT="$(_run_registration --settings "$LOCAL_SETTINGS" --remove --remove-legacy "$SHARED_SETTINGS" 2>&1)"; then
+    printf '%s\n' "$REG_OUTPUT"
+    _emit "ABORT" "the removal failed. The original files are intact and a backup sits beside each one."
+    exit 1
+  fi
   printf '%s\n' "$REG_OUTPUT"
-  _emit "ABORT" "the removal failed, so $LOCAL_SETTINGS was left as it was."
-  exit 1
+  _emit "REMOVED" "the legacy in-repo registration from $SHARED_SETTINGS"
+else
+  if ! REG_OUTPUT="$(_run_registration --settings "$LOCAL_SETTINGS" --remove 2>&1)"; then
+    printf '%s\n' "$REG_OUTPUT"
+    _emit "ABORT" "the removal failed, so $LOCAL_SETTINGS was left as it was."
+    exit 1
+  fi
+  printf '%s\n' "$REG_OUTPUT"
 fi
-printf '%s\n' "$REG_OUTPUT"
 
 case "$REG_OUTPUT" in
   *"nothing to remove"*)

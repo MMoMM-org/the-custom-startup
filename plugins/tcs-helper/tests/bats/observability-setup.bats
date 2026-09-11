@@ -792,3 +792,163 @@ PY
   # operator bytes had changed (SDD-AC-10).
   _assert_contains "$(cat "$target")" "Équipe-Café-日本語"
 }
+
+# ---------------------------------------------------------------------------
+# The legacy migration -- ruling (s). install on a LEGACY classification
+# removes the in-repo registration from .claude/settings.json and adds the
+# standard one to .claude/settings.local.json as ONE operation, so recording
+# is never simultaneously double and never silently off.
+# ---------------------------------------------------------------------------
+
+@test "install on a legacy target migrates it: three hooks fire afterwards, not six" {
+  local home dir legacy target total
+  home="$(_new_home legacy-migrate)"
+  dir="$(_copy_fixture already-configured-observability legacy-migrate)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+
+  # Before: three legacy hooks in settings.json, none of ours anywhere.
+  run grep -c -F '"type": "command"' "$legacy"
+  [ "$output" -eq 3 ]
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  # After: exactly three command hooks across BOTH files, all of them ours.
+  total="$(cat "$legacy" "$target" | grep -c -F '"type": "command"' || true)"
+  [ "$total" -eq 3 ]
+  run _count_our_hooks "$target"
+  [ "$output" -eq 3 ]
+  run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
+  [ "$status" -ne 0 ]
+}
+
+@test "the legacy migration reports both halves and does not present itself as a plain install" {
+  local home dir
+  home="$(_new_home legacy-report)"
+  dir="$(_copy_fixture already-configured-observability legacy-report)"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  # Not detect.sh own LEGACY line, which says only that a migration WILL
+  # happen -- the command own report that both halves DID happen.
+  _assert_contains "$output" "MIGRATED"
+  _assert_contains "$output" "removed the legacy in-repo registration from"
+  _assert_contains "$output" ".claude/settings.json"
+  _assert_contains "$output" "ADDED"
+  _assert_contains "$output" ".claude/settings.local.json"
+  _assert_contains "$output" "UNDO"
+}
+
+@test "the legacy migration leaves foreign content in the shared settings file untouched" {
+  local home dir legacy target
+  home="$(_new_home legacy-foreign)"
+  dir="$(_copy_fixture already-configured-observability legacy-foreign)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+
+  # A foreign entry under one of our own event names, in the shared file --
+  # the migration must step around it exactly as removal does locally.
+  python3 - "$legacy" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    data = json.load(handle)
+data["hooks"]["PreToolUse"].append(
+    {"matcher": "Bash", "hooks": [{"type": "command", "command": "/opt/foreign-audit/hook.sh"}]}
+)
+data["permissions"] = {"allow": ["Bash(git:*)"]}
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+PY
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_contains "$(cat "$legacy")" "/opt/foreign-audit/hook.sh"
+  _assert_contains "$(cat "$legacy")" "Bash(git:*)"
+  run _count_our_hooks "$target"
+  [ "$output" -eq 3 ]
+  # The foreign entry is the ONLY command hook left in the shared file: the
+  # three legacy ones are gone. Without this, "the foreign entry survives"
+  # would also be true of a run that did nothing at all.
+  run grep -c -F '"type": "command"' "$legacy"
+  [ "$output" -eq 1 ]
+}
+
+@test "install --plan on a legacy target changes neither settings file" {
+  local home dir legacy target orig_legacy orig_target
+  home="$(_new_home legacy-plan)"
+  dir="$(_copy_fixture already-configured-observability legacy-plan)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+  orig_legacy="$WORK_PARENT/legacy-plan.shared.orig"
+  orig_target="$WORK_PARENT/legacy-plan.local.orig"
+  cp -p "$legacy" "$orig_legacy"
+  cp -p "$target" "$orig_target"
+
+  _run_setup "$home" install "$dir" --plan
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "PLAN: would remove the legacy in-repo registration from"
+  _assert_not_contains "$output" "MIGRATED"
+  _assert_bytes_equal "$orig_legacy" "$legacy"
+  _assert_bytes_equal "$orig_target" "$target"
+}
+
+@test "removal on an un-migrated legacy target takes the legacy entries out too" {
+  local home dir legacy
+  home="$(_new_home legacy-remove)"
+  dir="$(_copy_fixture already-configured-observability legacy-remove)"
+  legacy="$dir/.claude/settings.json"
+
+  _run_setup "$home" remove "$dir" --yes
+  [ "$status" -eq 0 ]
+  run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
+  [ "$status" -ne 0 ]
+  # The unrelated content of the shared file survives.
+  _assert_contains "$(cat "$dir/.claude/settings.local.json")" "Bash(git:*)"
+}
+
+@test "status after the legacy migration reports the target as configured, not legacy" {
+  local home dir data
+  home="$(_new_home legacy-status)"
+  dir="$(_copy_fixture already-configured-observability legacy-status)"
+  data="$WORK_PARENT/legacy-status.data"
+  mkdir -p "$data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "configured but silent"
+  # The detect.sh state LABEL, not the word anywhere in the output: the work
+  # directory this fixture is copied into has "legacy" in its own name, and
+  # the TARGET line prints that path.
+  _assert_not_contains "$output" "] LEGACY:"
+  _assert_contains "$output" "] OURS-CURRENT:"
+}
+
+@test "a legacy target whose shared settings file is not ignored by version control is refused" {
+  local home dir legacy original
+  home="$(_new_home legacy-not-ignored)"
+  dir="$(_copy_fixture already-configured-observability legacy-not-ignored)"
+  legacy="$dir/.claude/settings.json"
+  original="$WORK_PARENT/legacy-not-ignored.orig"
+  cp -p "$legacy" "$original"
+
+  # Narrow the ignore rule so the LOCAL file and its sidecars stay covered
+  # and only the shared file the migration would rewrite is committable --
+  # otherwise the refusal could come from the backup-path check instead and
+  # this test would pass without exercising the shared file at all.
+  printf '%s\n' '.claude/settings.local.json*' > "$dir/.gitignore"
+  git -C "$dir" add .gitignore
+  git -C "$dir" -c user.name=fixture -c user.email=fixture@tcs.invalid commit -q -m "chore: narrow ignore"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "ignored"
+  _assert_bytes_equal "$original" "$legacy"
+}

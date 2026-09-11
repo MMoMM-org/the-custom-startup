@@ -317,6 +317,134 @@ def remove_registration(data):
     return changed
 
 
+# ---------------------------------------------------------------------------
+# The legacy in-repo registration (spec 019 phase 4, maintainer ruling (s))
+# ---------------------------------------------------------------------------
+#
+# WHAT IT IS. Before this feature existed, this repository registered the
+# three observability hooks by hand in `.claude/settings.json` -- the SHARED
+# settings layer, not the local one -- with commands pointing at
+# `$CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/<script>.sh`
+# rather than at the $HOME bundle. detect.sh classifies that shape LEGACY and
+# tells the user "setup will migrate this". Until now nothing performed it:
+# NAMESPACE above is the $HOME bundle path and entry_is_ours() gates on it, so
+# --remove steps straight over entries that never mention it.
+#
+# THE SHAPE IS DEFINED IN TWO PLACES AND THE TWO MUST CHANGE TOGETHER.
+# detect.sh:204 carries the same event -> script mapping under the same name,
+# inside a python heredoc that a shell script wraps -- there is no module
+# there to import, and inlining a python import into that heredoc would make
+# detect.sh depend on this file's import path at classification time, which is
+# exactly the coupling ADR-5 keeps out of detection. So the mapping is
+# restated, with a pointer at both sites, the way CON-6 is handled between
+# report.py and sources.py elsewhere in this spec.
+#
+# LEGACY REMOVAL IS NARROWER THAN remove_registration(). Ownership in
+# settings.local.json is proven by the $HOME namespace alone (ADR-5) because
+# this feature is the only thing that writes there. The shared settings file
+# is not ours in that sense -- it is a file the repository's own maintainer
+# edits -- so an entry qualifies as legacy only when it matches BOTH the event
+# name we register AND the adapter script name we ship, and does NOT already
+# point at the $HOME bundle. Anything else in that file, including a foreign
+# entry under one of our event names, is left exactly where it is.
+LEGACY_SCRIPTS = {
+    'InstructionsLoaded': 'log_instructions.sh',
+    'PreToolUse': 'log_skill.sh',
+    'SubagentStart': 'log_agent.sh',
+}
+
+
+def hook_is_legacy(event, command):
+    """One hook command, judged against the legacy shape for its event."""
+    if not isinstance(command, str) or NAMESPACE in command:
+        # Already pointing at the bundle: that is "ours", never "legacy".
+        return False
+    script = LEGACY_SCRIPTS.get(event)
+    if not script:
+        return False
+    # The command string is shell-quoted (wrapped in literal double quotes so
+    # the path survives a space), so it ends with `.sh"`, not `.sh` -- strip a
+    # single trailing quote before comparing. Same treatment as detect.sh:283.
+    return command.rstrip('"').endswith(script)
+
+
+def _entry_is_legacy(event, entry):
+    """Whether an entry sitting in hooks[event] is a legacy registration.
+
+    Pairs the non-dict guard with the content check, for the same reason
+    _entry_is_owned does: a settings file we do not own is free to hold a
+    malformed, non-dict element in that list.
+    """
+    if not isinstance(entry, dict):
+        return False
+    hooks = entry.get('hooks', [])
+    if not isinstance(hooks, list):
+        return False
+    return any(
+        hook_is_legacy(event, hook.get('command', ''))
+        for hook in hooks
+        if isinstance(hook, dict)
+    )
+
+
+def remove_legacy_registration(data):
+    """Prune the legacy in-repo registration from a shared settings document.
+
+    Returns (changed, events) -- `events` is the sorted list of event names an
+    entry was actually removed from, so the caller can report which rather
+    than assert all three.
+
+    Container deletion follows remove_registration() exactly: a container is
+    deleted only when THIS call emptied it, never merely because it holds
+    nothing of ours.
+
+    The env switch is removed only when at least one legacy hook entry was
+    found. remove_registration() deletes it unconditionally because
+    settings.local.json is a layer this feature owns outright; the shared file
+    is not, so a CLAUDE_OBSERVABILITY_ENABLED sitting there beside no legacy
+    hooks belongs to whoever put it there.
+
+    Like remove_registration(), this function's only effect is on `data` in
+    memory -- it has no path to anything else on disk, which is what "removal
+    never deletes existing records" rests on.
+    """
+    changed = False
+    events = []
+
+    hooks = data.get('hooks')
+    if isinstance(hooks, dict):
+        hooks_changed = False
+        for event in list(hooks.keys()):
+            if event not in LEGACY_SCRIPTS:
+                continue
+            entries = hooks[event]
+            if not isinstance(entries, list):
+                continue
+            kept = [e for e in entries if not _entry_is_legacy(event, e)]
+            if len(kept) == len(entries):
+                continue
+            hooks_changed = True
+            changed = True
+            events.append(event)
+            if kept:
+                hooks[event] = kept
+            else:
+                del hooks[event]
+        if hooks_changed and not hooks:
+            del data['hooks']
+
+    if changed:
+        env = data.get('env')
+        if isinstance(env, dict):
+            key, _value = ENV_SWITCH
+            if key in env:
+                del env[key]
+                if not env:
+                    del data['env']
+
+    return changed, sorted(events)
+
+
 def backup_path(path):
     return str(path) + BACKUP_SUFFIX
 
@@ -422,6 +550,19 @@ def main(argv=None):
         action='store_true',
         help='remove the observability registration instead of adding it')
     parser.add_argument(
+        '--migrate-legacy',
+        metavar='SHARED_SETTINGS',
+        help=(
+            'path to the target shared settings file (.claude/settings.json) '
+            'holding a legacy in-repo registration. Removes it and installs '
+            'the standard registration into --settings as ONE operation'))
+    parser.add_argument(
+        '--remove-legacy',
+        metavar='SHARED_SETTINGS',
+        help=(
+            'with --remove: also take the legacy in-repo registration out of '
+            'this shared settings file'))
+    parser.add_argument(
         '--lock-held-by-caller',
         action='store_true',
         help=(
@@ -457,13 +598,62 @@ def main(argv=None):
         lock.release_lock(lock_file)
 
 
+def _strip_legacy(shared_path):
+    """Take the legacy registration out of a shared settings file.
+
+    Returns (status, events): status is 'removed', 'none' (no legacy shape
+    there) or 'error' (already reported on stderr). The backup this write
+    leaves behind is NOT discarded here -- the caller discards it only once
+    the whole operation has succeeded, so a failure between the two halves of
+    a migration still has a second copy of the file it changed first.
+    """
+    data, error = load_settings(shared_path)
+    if error:
+        sys.stderr.write('%s\n' % error)
+        return 'error', []
+    changed, events = remove_legacy_registration(data)
+    if not changed:
+        print('no legacy registration found in %s' % shared_path)
+        return 'none', []
+    write_settings(shared_path, data)
+    print('removed legacy observability hooks (%s) from %s'
+          % (', '.join(events), shared_path))
+    return 'removed', events
+
+
 def _edit_under_lock(args):
+    # The migration is cross-file: the legacy registration lives in the
+    # target's SHARED settings, the standard one in its LOCAL settings, and
+    # this CLI takes a single --settings. Rather than make the caller run two
+    # invocations -- which is precisely the two-step the maintainer ruling
+    # forbids, because the gap between them is a window where a target either
+    # records twice or not at all -- the second path arrives as a flag and
+    # both halves happen inside one run of this function, under one lock.
+    #
+    # ORDER: remove from the shared file FIRST, then add to the local one.
+    # The intermediate state is "not registered", which `status` reports
+    # honestly and which records nothing. The reverse order's intermediate
+    # state is "registered twice", which records everything twice and looks
+    # exactly like a healthy target while doing it. A failure in the first
+    # half leaves the target entirely untouched.
+    if args.migrate_legacy:
+        status, _events = _strip_legacy(args.migrate_legacy)
+        if status == 'error':
+            return 1
+
     data, error = load_settings(args.settings)
     if error:
         sys.stderr.write('%s\n' % error)
         return 1
 
     if args.remove:
+        if args.remove_legacy:
+            # The shared file first here too, and for the same reason: those
+            # are the entries that are actually firing on an un-migrated
+            # target, so they are the ones whose removal has to land.
+            if _strip_legacy(args.remove_legacy)[0] == 'error':
+                return 1
+            discard_backup(args.remove_legacy)
         changed = remove_registration(data)
         if not changed:
             print('nothing to remove: %s' % args.settings)
@@ -481,10 +671,20 @@ def _edit_under_lock(args):
         return 1
 
     if not changed:
+        # A target can be BOTH legacy and already locally registered -- that
+        # is the double-recording state this migration exists to end, and
+        # detect.sh classifies it LEGACY because it checks the shared file
+        # first. The local half is then a no-op, and the migration still
+        # succeeded: the shared backup goes with it.
         print('already configured: %s' % args.settings)
+        if args.migrate_legacy:
+            discard_backup(args.migrate_legacy)
         return 0
 
     write_settings(args.settings, data)
+    if args.migrate_legacy:
+        # Both halves landed. Only now is the shared file's backup redundant.
+        discard_backup(args.migrate_legacy)
     if status == 'update':
         # 'update' also fires for an env-only correction (no hook entry
         # touched), so the message names the registration, not "hooks".

@@ -23,11 +23,21 @@
 # their own commentary rather than "fixed" here (out of scope for this task
 # -- see CONSTRAINTS in the task this file was written under):
 #
-#   1. already-configured-observability: setup alone does NOT migrate the
-#      legacy settings.json registration; it adds a SECOND, independent
-#      registration to settings.local.json, leaving six hooks firing where
-#      three should. This is the editor's contract (ADR-1 scope), not a
-#      defect -- see that test below.
+#   1. already-configured-observability: a FLAGLESS setup invocation does
+#      NOT migrate the legacy settings.json registration; it adds a SECOND,
+#      independent registration to settings.local.json, leaving six hooks
+#      firing where three should. When this file was written that was the
+#      whole story and the test below pinned it as a gap awaiting T4.1.
+#      T4.1 has since landed (spec 019 phase 4, maintainer ruling (s)) and
+#      the story now has two halves, both pinned below: the flagless
+#      invocation still layers -- ADR-1 keeps this editor to the one
+#      --settings path it is given, and that is deliberate, not a defect --
+#      while `--migrate-legacy <shared>` performs the cross-file migration
+#      as one operation. lib/setup.sh passes that flag on a LEGACY
+#      classification, and its own suite
+#      (plugins/tcs-helper/tests/bats/observability-setup.bats) asserts the
+#      command-level outcome; what this file pins is the editor's own
+#      boundary between the two.
 #
 #   2. foreign-plus-ours-current / foreign-plus-ours-older -- FIXED at the
 #      root by 64c0db3, after this file's first version caught it (build.sh
@@ -476,18 +486,22 @@ EOF
 #
 # WHOSE JOB THE MIGRATION IS: detect.sh classifies this target LEGACY and
 # (per T2.2) prints "setup will migrate this to $HOME/.claude/observability/"
-# -- a promise made on setup's behalf. registration.py never reads
-# settings.json at all (ADR-1: it edits settings.local.json only, proving
-# ownership by the $HOME/.claude/observability/ namespace per ADR-5, which
-# settings.json's in-repo command path can never satisfy). So running setup
-# alone cannot keep that promise -- only T4.1, which will compose detection
-# with the editor, can. This test pins that gap as today's real contract:
-# when T4.1 lands and teaches setup to migrate the legacy registration
-# instead of layering a second one beside it, THIS test is the one that
-# has to change.
+# -- a promise made on setup's behalf. A FLAGLESS invocation of this editor
+# cannot keep it: ADR-1 scopes the editor to the single --settings path it is
+# given, and ownership in that file is proven by the
+# $HOME/.claude/observability/ namespace (ADR-5), which settings.json's
+# in-repo command path can never satisfy.
+#
+# T4.1 kept the promise by giving the editor a second path explicitly rather
+# than by widening what "ours" means: `--migrate-legacy <shared>` removes the
+# legacy entries from the shared file and adds the standard registration to
+# --settings inside ONE run, under one lock (ruling (s): recording must never
+# be simultaneously double and never silently off). The two tests below pin
+# both sides of that boundary -- what the editor does when told nothing, and
+# what it does when told where the legacy file is.
 # ---------------------------------------------------------------------------
 
-@test "already-configured-observability: setup adds a SECOND registration beside the untouched legacy one -- six hooks fire, not three (T4.1's migration, not this editor's)" {
+@test "already-configured-observability: a flagless setup adds a SECOND registration beside the untouched legacy one -- six hooks fire, not three" {
   local dir legacy target original_target original_legacy
   dir="$(_copy_fixture already-configured-observability already-configured-observability)"
   legacy="$dir/.claude/settings.json"
@@ -539,6 +553,134 @@ EOF
   # foreign-only above.
   _assert_json_equal "$original_target" "$target"
   _assert_bytes_differ "$original_target" "$target"
+}
+
+@test "already-configured-observability: --migrate-legacy takes the legacy entries out as the standard ones go in -- three hooks fire, not six" {
+  local dir legacy target total
+  dir="$(_copy_fixture already-configured-observability already-configured-migrate)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+
+  run grep -c -F '"type": "command"' "$legacy"
+  [ "$output" -eq 3 ]
+
+  run python3 "$REGISTRATION_PY" --settings "$target" --migrate-legacy "$legacy"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "removed legacy observability hooks"
+  _assert_contains "$output" "InstructionsLoaded"
+  _assert_contains "$output" "PreToolUse"
+  _assert_contains "$output" "SubagentStart"
+  _assert_contains "$output" "registered observability hooks in"
+
+  # THE number: three, where the flagless invocation above leaves six.
+  total="$(cat "$legacy" "$target" | grep -c -F '"type": "command"' || true)"
+  [ "$total" -eq 3 ]
+  run grep -c -F '$HOME/.claude/observability/' "$target"
+  [ "$output" -eq 3 ]
+  run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
+  [ "$status" -ne 0 ]
+
+  # Nothing of ours is left in the shared file: not the env switch, and not
+  # an emptied "hooks" container either. This fixture's shared file held only
+  # the legacy registration, so a complete removal leaves the empty document.
+  run cat "$legacy"
+  [ "$output" = "{}" ]
+
+  # Content of the shared file this editor never authored is still there.
+  _assert_contains "$(cat "$target")" "Bash(git:*)"
+
+  # No backup outlives a completed migration, on either file.
+  [ ! -e "$legacy.tcs-observability.bak" ]
+}
+
+@test "already-configured-observability: --migrate-legacy leaves a foreign entry in the shared file standing" {
+  local dir legacy target
+  dir="$(_copy_fixture already-configured-observability already-configured-migrate-foreign)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+
+  python3 - "$legacy" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    data = json.load(handle)
+data["hooks"]["PreToolUse"].append(
+    {"matcher": "Bash", "hooks": [{"type": "command", "command": "/opt/foreign-audit/hook.sh"}]}
+)
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+PY
+
+  run python3 "$REGISTRATION_PY" --settings "$target" --migrate-legacy "$legacy"
+  [ "$status" -eq 0 ]
+
+  # The legacy trio is gone; the foreign entry sharing one of their event
+  # names is not. Ownership in the SHARED file is the event name AND the
+  # adapter script name together -- never the event name alone, which would
+  # take a third party's hook out with ours.
+  _assert_contains "$(cat "$legacy")" "/opt/foreign-audit/hook.sh"
+  run grep -c -F '"type": "command"' "$legacy"
+  [ "$output" -eq 1 ]
+}
+
+@test "already-configured-observability: --migrate-legacy leaves a shared entry that already points at the bundle alone" {
+  local dir legacy target
+  dir="$(_copy_fixture already-configured-observability already-configured-migrate-ns)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+
+  # One of the three shared entries already points at $HOME/.claude/
+  # observability/ -- a hand-migration someone did halfway. That entry is
+  # OURS, not LEGACY, and the legacy sweep must not take it: ownership in the
+  # shared file is the event name AND the in-repo script path together, and
+  # dropping the namespace half of that test would make an already-migrated
+  # entry look like one still to migrate.
+  python3 - "$legacy" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    data = json.load(handle)
+data["hooks"]["PreToolUse"] = [
+    {"matcher": "Skill", "hooks": [
+        {"type": "command", "command": '"$HOME/.claude/observability/log_skill.sh"'}]}
+]
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+PY
+
+  run python3 "$REGISTRATION_PY" --settings "$target" --migrate-legacy "$legacy"
+  [ "$status" -eq 0 ]
+
+  # The two genuinely legacy entries are gone; the bundle-pointing one stays.
+  run grep -c -F '"type": "command"' "$legacy"
+  [ "$output" -eq 1 ]
+  _assert_contains "$(cat "$legacy")" '$HOME/.claude/observability/log_skill.sh'
+  _assert_not_contains "$(cat "$legacy")" "plugins/tcs-helper/scripts/observability"
+}
+
+@test "already-configured-observability: --remove --remove-legacy takes out both registrations" {
+  local dir legacy target
+  dir="$(_copy_fixture already-configured-observability already-configured-remove-legacy)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+
+  run python3 "$REGISTRATION_PY" --settings "$target" --migrate-legacy "$legacy"
+  [ "$status" -eq 0 ]
+
+  run python3 "$REGISTRATION_PY" --settings "$target" --remove --remove-legacy "$legacy"
+  [ "$status" -eq 0 ]
+
+  run grep -c -F '"type": "command"' "$legacy"
+  [ "$status" -ne 0 ]
+  run grep -c -F '$HOME/.claude/observability/' "$target"
+  [ "$status" -ne 0 ]
+  _assert_contains "$(cat "$target")" "Bash(git:*)"
 }
 
 # ---------------------------------------------------------------------------
