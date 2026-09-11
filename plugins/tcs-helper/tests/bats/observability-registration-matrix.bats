@@ -126,11 +126,12 @@ teardown_file() {
 # command, so it trips `set -e` correctly at any position in a test body --
 # see the header note; a bare `[[ ]]` does not).
 _assert_contains() {
-  printf '%s' "$1" | grep -qF "$2"
+  # `--` so a needle that starts with a dash is a pattern, not an option.
+  printf '%s' "$1" | grep -qF -- "$2"
 }
 
 _assert_not_contains() {
-  ! printf '%s' "$1" | grep -qF "$2"
+  ! printf '%s' "$1" | grep -qF -- "$2"
 }
 
 # _copy_fixture <fixture-name> <work-name> -- fresh, independent copy of a
@@ -869,4 +870,40 @@ PY
   _assert_not_contains "$output" "Traceback"
   # The foreign entry is untouched -- a non-string command is not ours.
   _assert_contains "$(cat "$target")" '"command": 123'
+}
+
+# ---------------------------------------------------------------------------
+# The flag surface. --migrate-legacy is read only on the add path and
+# --remove-legacy only on the remove path, so each combined with the wrong
+# verb used to be accepted and silently ignored. lib/setup.sh is the only
+# caller today and never does either; a future one deserves an error rather
+# than silence.
+# ---------------------------------------------------------------------------
+
+@test "--migrate-legacy with --remove is refused rather than silently ignored" {
+  local dir legacy target original
+  dir="$(_copy_fixture already-configured-observability flags-migrate-remove)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/flags-migrate-remove.orig"
+  cp -p "$legacy" "$original"
+
+  run python3 "$REGISTRATION_PY" --settings "$target" --remove --migrate-legacy "$legacy"
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "--migrate-legacy"
+  _assert_bytes_equal "$original" "$legacy"
+}
+
+@test "--remove-legacy without --remove is refused rather than silently ignored" {
+  local dir legacy target original
+  dir="$(_copy_fixture already-configured-observability flags-removelegacy-add)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/flags-removelegacy-add.orig"
+  cp -p "$legacy" "$original"
+
+  run python3 "$REGISTRATION_PY" --settings "$target" --remove-legacy "$legacy"
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "--remove-legacy"
+  _assert_bytes_equal "$original" "$legacy"
 }

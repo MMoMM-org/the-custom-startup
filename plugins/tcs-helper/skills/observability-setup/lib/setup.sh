@@ -300,7 +300,11 @@ _verify_paths_ignored() {
   fi
   while IFS= read -r path; do
     [ -n "$path" ] || continue
-    rel="${path#$REPO_ROOT/}"
+    # Quoted on purpose: the # operator takes a PATTERN, not a literal, so
+    # an unquoted $REPO_ROOT containing [ ? or * fails to match and `rel`
+    # stays absolute -- which then lands verbatim in the refusal message the
+    # operator reads. shellcheck SC2295.
+    rel="${path#"$REPO_ROOT"/}"
     # Plain check-ignore, deliberately — the same posture detect.sh
     # documents: a personal global ignore rule is real for users, and
     # suppressing it here would make this check lie about whether a file is
@@ -607,13 +611,66 @@ else
 fi
 
 if [ "$APPLY" -eq 0 ]; then
-  _emit "PLAN" "no file was written and no bundle installed. Re-run with --yes to apply."
+  # Name the flag that is actually in the way. Telling someone who passed
+  # --yes --plan to "re-run with --yes" asks them to do what they already did.
+  if [ "$PLAN_ONLY" -eq 1 ]; then
+    _emit "PLAN" "no file was written and no bundle installed. Drop --plan to apply."
+  else
+    _emit "PLAN" "no file was written and no bundle installed. Re-run with --yes to apply."
+  fi
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
 # Runtime View steps 6 and 7 — install the bundle, then merge the settings.
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# REPORTING WHAT HAPPENED, NOT WHAT THE BRANCH ASSUMED WOULD HAPPEN.
+#
+# Every line below that names an entry is branched on what registration.py
+# actually said it did. The legacy install branch used to announce ADDED
+# unconditionally, and a target that is BOTH legacy and already locally
+# registered -- detect.sh returns LEGACY before it ever reaches the OURS
+# check, so the compound state is real -- made that a false claim: the local
+# half is a genuine no-op there and the settings file comes back
+# byte-identical. Same defect class as this task's central one, so it gets
+# the same treatment everywhere rather than a patch at the one site.
+# ---------------------------------------------------------------------------
+
+# _report_local_add <registration output> -- name the three entries only when
+# the local half actually changed something.
+_report_local_add() {
+  case "$1" in
+    *"already configured"*)
+      _emit "INFO" "already configured -- nothing was changed in $LOCAL_SETTINGS."
+      ;;
+    *)
+      _emit "ADDED" "hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH in $LOCAL_SETTINGS"
+      ;;
+  esac
+}
+
+# _report_shared_strip <registration output> <label> <message> -- claim the
+# shared half only when registration.py reported removing something.
+#
+# Unreachable today through this dispatcher: setup.sh passes a legacy flag
+# only on a LEGACY classification, and detect.sh and registration.py agree on
+# what that shape is. It is here because they are PAIRED DEFINITIONS kept in
+# step by hand (LEGACY_SCRIPTS and LEGACY_NAMESPACE live in both), and the
+# first thing a drift between them would produce is exactly this: a confident
+# report of a removal that did not happen. No test constructs it, because
+# constructing it means forcing the drift this guard exists to survive.
+_report_shared_strip() {
+  case "$1" in
+    *"no legacy registration found"*)
+      _emit "INFO" "no legacy registration was present in $SHARED_SETTINGS after all -- nothing was removed from it."
+      ;;
+    *)
+      _emit "$2" "$3"
+      ;;
+  esac
+}
 
 _run_registration() {
   # registration.py holds its own lock by default; this process already owns
@@ -646,8 +703,8 @@ if [ "$VERB" = "install" ]; then
       exit 1
     fi
     printf '%s\n' "$REG_OUTPUT"
-    _emit "MIGRATED" "removed the legacy in-repo registration from $SHARED_SETTINGS"
-    _emit "ADDED" "hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH in $LOCAL_SETTINGS"
+    _report_shared_strip "$REG_OUTPUT" "MIGRATED" "removed the legacy in-repo registration from $SHARED_SETTINGS"
+    _report_local_add "$REG_OUTPUT"
     _emit "UNDO" "$_UNDO_HINT"
     exit 0
   fi
@@ -659,17 +716,7 @@ if [ "$VERB" = "install" ]; then
   fi
   printf '%s\n' "$REG_OUTPUT"
 
-  # registration.py's three documented statuses. The entry names are named
-  # only when something was actually added or corrected -- claiming them on
-  # a no-op run would be the report lying about what changed.
-  case "$REG_OUTPUT" in
-    *"already configured"*)
-      _emit "INFO" "already configured -- nothing was changed in $LOCAL_SETTINGS."
-      ;;
-    *)
-      _emit "ADDED" "hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH in $LOCAL_SETTINGS"
-      ;;
-  esac
+  _report_local_add "$REG_OUTPUT"
   _emit "UNDO" "$_UNDO_HINT"
   exit 0
 fi
@@ -692,7 +739,7 @@ if [ "$IS_LEGACY" -eq 1 ]; then
     exit 1
   fi
   printf '%s\n' "$REG_OUTPUT"
-  _emit "REMOVED" "the legacy in-repo registration from $SHARED_SETTINGS"
+  _report_shared_strip "$REG_OUTPUT" "REMOVED" "the legacy in-repo registration from $SHARED_SETTINGS"
 else
   if ! REG_OUTPUT="$(_run_registration --settings "$LOCAL_SETTINGS" --remove 2>&1)"; then
     printf '%s\n' "$REG_OUTPUT"

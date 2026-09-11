@@ -1385,3 +1385,100 @@ PY
   [ "$output" = "{}" ]
   _assert_no_lock "$dir"
 }
+
+# ---------------------------------------------------------------------------
+# A target that is BOTH legacy and already locally registered.
+#
+# detect.sh checks the shared file first and returns LEGACY before the OURS
+# branch runs, so this compound state classifies LEGACY. The local half of
+# the migration is then a genuine no-op -- registration.py says "already
+# configured" -- and the legacy branch used to announce ADDED regardless.
+# A status line asserting something that did not happen is this task's
+# central defect class, and nothing in the suite built this fixture.
+# ---------------------------------------------------------------------------
+
+@test "install on a target that is legacy AND already registered does not claim it added anything" {
+  local home dir legacy target original report
+  home="$(_new_home compound-legacy)"
+  dir="$(_copy_fixture already-configured-observability compound-legacy)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+
+  # The local half is built through registration.py's own helpers, so it is
+  # byte-for-byte what command_for() produces today rather than a hand copy
+  # that drifts the first time the command string changes.
+  python3 - "$target" "$REPO_ROOT/plugins/tcs-helper/skills/observability-setup/lib" <<'PY'
+import json
+import sys
+
+sys.path.insert(0, sys.argv[2])
+import registration
+
+document = {"permissions": {"allow": ["Bash(git:*)"]}}
+registration.add_registration(document)
+with open(sys.argv[1], "w", encoding="utf-8") as handle:
+    json.dump(document, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+PY
+
+  original="$WORK_PARENT/compound-legacy.local.orig"
+  cp -p "$target" "$original"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  report="$output"
+
+  # The shared half genuinely happened, so MIGRATED is true...
+  _assert_contains "$report" "MIGRATED"
+  run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
+  [ "$status" -ne 0 ]
+
+  # ...and the local half did not, so ADDED must not be claimed.
+  _assert_not_contains "$report" "ADDED"
+  _assert_contains "$report" "already configured"
+  _assert_bytes_equal "$original" "$target"
+  _assert_no_lock "$dir"
+}
+
+@test "install --plan with --yes does not tell the user to re-run with a flag they already passed" {
+  local home dir
+  home="$(_new_home plan-wording)"
+  dir="$(_copy_fixture absent plan-wording)"
+
+  _run_setup "$home" install "$dir" --yes --plan
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "no file was written and no bundle installed"
+  _assert_not_contains "$output" "Re-run with --yes"
+  _assert_contains "$output" "Drop --plan"
+}
+
+@test "install without --yes still tells the user to re-run with --yes" {
+  local home dir
+  home="$(_new_home plan-wording-noyes)"
+  dir="$(_copy_fixture absent plan-wording-noyes)"
+
+  _run_setup "$home" install "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "Re-run with --yes"
+  _assert_not_contains "$output" "Drop --plan"
+}
+
+@test "a refusal names the repo-relative path even when the repository path holds a glob metacharacter" {
+  local home globdir dir
+  home="$(_new_home globpath)"
+  # A bracket in the repository path. `${path#$REPO_ROOT/}` is a pattern
+  # match, not a literal strip, so an unquoted REPO_ROOT containing [ ? or *
+  # fails to match and `rel` stays absolute -- which lands verbatim in the
+  # refusal message the operator reads.
+  globdir="$WORK_PARENT/glob[1]"
+  rm -rf "$globdir"
+  mkdir -p "$globdir"
+  cp -pR "$FIXTURES_DIR/ignored-file-but-not-backup" "$globdir/repo"
+  dir="$globdir/repo"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "does not ignore .claude/settings.local.json.tcs-observability.bak"
+  _assert_not_contains "$output" "does not ignore /"
+  _assert_no_lock "$dir"
+}

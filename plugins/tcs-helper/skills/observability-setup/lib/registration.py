@@ -628,6 +628,18 @@ def main(argv=None):
             'for a longer sequence. Only lib/setup.sh passes this'))
     args = parser.parse_args(argv)
 
+    # Each legacy flag is read on exactly one path -- --migrate-legacy on the
+    # add path, --remove-legacy on the remove path -- so the wrong pairing
+    # used to be accepted and then silently ignored, which is the quietest
+    # possible way to not do what you were asked. lib/setup.sh is the only
+    # caller today and never does either; a future one gets an error.
+    if args.migrate_legacy and args.remove:
+        parser.error(
+            '--migrate-legacy is an install-path flag and is ignored by --remove; '
+            'use --remove-legacy to take the legacy entries out')
+    if args.remove_legacy and not args.remove:
+        parser.error('--remove-legacy has no effect without --remove')
+
     # The lock is acquired before the document is read, not before it is
     # written, so two concurrent runs serialize across the whole load-merge-
     # write sequence rather than racing to a merge each computed alone

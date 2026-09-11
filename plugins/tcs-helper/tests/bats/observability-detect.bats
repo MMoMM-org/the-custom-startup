@@ -86,7 +86,8 @@ _run_detect() {
 # plain command, so it trips `set -e` correctly at any position -- see the
 # header note; a bare `[[ ]]` does not).
 _assert_contains() {
-  printf '%s' "$1" | grep -qF "$2"
+  # `--` so a needle that starts with a dash is a pattern, not an option.
+  printf '%s' "$1" | grep -qF -- "$2"
 }
 
 # _assert_not_contains <haystack> <needle> -- the `!` lives INSIDE this
@@ -95,7 +96,7 @@ _assert_contains() {
 # `set -e` correctly, unlike `! cmd` typed directly in the test body noted
 # in docs/ai/memory/active.md.
 _assert_not_contains() {
-  ! printf '%s' "$1" | grep -qF "$2"
+  ! printf '%s' "$1" | grep -qF -- "$2"
 }
 
 # _mtime <path> -- portable mtime (GNU stat first, BSD stat as the fallback).
