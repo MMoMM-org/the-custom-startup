@@ -1177,3 +1177,88 @@ PY
   _assert_bytes_equal "$original" "$legacy.tcs-observability.bak"
   _assert_no_lock "$dir"
 }
+
+# ---------------------------------------------------------------------------
+# strict=True covers the LOCAL document only, so a malformed hook in the
+# SHARED file reaches remove_legacy_registration unscreened. That is
+# deliberate -- raising there would turn an unrelated malformation elsewhere
+# in settings.json into "not legacy", a classification change rather than a
+# gate -- and it puts the weight on the type guards in hook_is_legacy and
+# is_ours instead. This is the test that holds them to it.
+# ---------------------------------------------------------------------------
+
+@test "removal on a legacy target steps over a non-string command in the shared file and still takes the legacy entries out" {
+  local home dir legacy target
+  home="$(_new_home legacy-shared-nonstring)"
+  dir="$(_copy_fixture already-configured-observability legacy-shared-nonstring)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+
+  # A hook whose "command" is an int, sitting beside the legacy trio under an
+  # event we do register. Nothing screens it before the removal walk reaches
+  # it, and `NAMESPACE in 123` raises TypeError without the guard.
+  python3 - "$legacy" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    data = json.load(handle)
+data["hooks"]["PreToolUse"].append(
+    {"matcher": "", "hooks": [{"type": "command", "command": 123}]}
+)
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+PY
+
+  _run_setup "$home" remove "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_not_contains "$output" "Traceback"
+
+  # Every legacy entry is gone -- no under-removal reported as success, which
+  # is the shape ruling (u) exists to close.
+  run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
+  [ "$status" -ne 0 ]
+
+  # ...and the malformed entry is untouched. A non-string command is not ours.
+  _assert_contains "$(cat "$legacy")" '"command": 123'
+  run _count_our_hooks "$target"
+  [ "$output" -eq 0 ]
+  _assert_no_lock "$dir"
+}
+
+@test "install on a legacy target steps over a non-string command in the shared file and still migrates" {
+  local home dir legacy target total
+  home="$(_new_home legacy-shared-nonstring-install)"
+  dir="$(_copy_fixture already-configured-observability legacy-shared-nonstring-install)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+
+  python3 - "$legacy" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    data = json.load(handle)
+data["hooks"]["Notification"] = [
+    {"matcher": "", "hooks": [{"type": "command", "command": 123}]}
+]
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+PY
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_not_contains "$output" "Traceback"
+  _assert_contains "$output" "MIGRATED"
+
+  run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
+  [ "$status" -ne 0 ]
+  _assert_contains "$(cat "$legacy")" '"command": 123'
+  run _count_our_hooks "$target"
+  [ "$output" -eq 3 ]
+  _assert_no_lock "$dir"
+}
