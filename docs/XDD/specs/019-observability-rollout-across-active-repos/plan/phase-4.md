@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: The command, the rollout, and the gates"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 4
 ---
@@ -104,6 +104,38 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
   5. Success: `[ref: PRD/F1]`, `[ref: PRD/F2]`, `[ref: PRD/User Journey Maps]`;
      `[ref: SDD/SDD-AC-1]` (command-level refusal), `[ref: SDD/SDD-AC-4]` (exit 0 on foreign
      entries), `[ref: SDD/SDD-AC-15]` (drift reaches `status`), `[ref: SDD/SDD-AC-26]` (three-state liveness)
+
+  **Rulings, 2026-09-11, before T4.1's gate.** Two spec-internal contradictions, resolved by the
+  maintainer rather than left to an implementer's guess.
+
+  **(r) The command ships a verb dispatcher at `lib/setup.sh`; `SKILL.md` is a thin wrapper.** The
+  SDD's Directory Map (`solution.md:222-227`) lists only `SKILL.md` and `lib/`, following
+  `git-setup`, where markdown orchestrates the libraries in prose. Step 4 of this task requires the
+  command be "exercised through its real entry point, not by calling its libraries directly", and
+  bats cannot exercise a Markdown file. Both statements hold only if a dispatcher exists, so one is
+  added: `lib/setup.sh install|remove|status`, taking a target path and a non-interactive `--yes`.
+  `SKILL.md` keeps what a script cannot own -- the confirmation at Runtime View step 5 and the
+  summary at step 8 -- and calls the dispatcher for everything mechanical. This extends the
+  Directory Map rather than contradicting it, and makes "one command with three verbs, not three
+  commands" literally true rather than an arrangement of prose. `git-setup` is not a
+  counter-precedent: it has no test asserting its own entry point either, which is the gap this
+  ruling closes rather than copies.
+
+  **(s) T4.1 implements the legacy migration; T4.2 runs it against this repository.**
+  `detect.sh:365` tells the user "setup will migrate this to $HOME/.claude/observability/". Nothing
+  performs it. Measured: `registration.py:71` sets `NAMESPACE` to the `$HOME` bundle path and
+  `entry_is_ours()` gates removal on it, so `--remove` steps over the legacy entries, whose commands
+  point at `$CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/`. The migration is also
+  cross-file -- legacy lives in `.claude/settings.json`, the standard registration in
+  `settings.local.json` -- while `registration.py main()` accepts a single `--settings`. So
+  `install`, on a `LEGACY` classification, must remove the legacy entries from the shared file and
+  add the standard registration to the local one as one operation, covered by bats against fixtures
+  and never against a real repository. Running it against this repository belongs to T4.2, under the
+  per-target confirmation this phase adopted. Until then
+  `plugins/tcs-helper/tests/bats/observability-registration-matrix.bats` keeps pinning the double
+  registration deliberately: when T4.1 lands, that test is meant to change, and a green run there is
+  the defect rather than the proof.
+
 
 - [ ] **T4.2 Rollout to the target repositories** `[activity: validate]`
 
