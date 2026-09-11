@@ -1,0 +1,794 @@
+#!/usr/bin/env bats
+#
+# tests/bats/observability-setup.bats
+#
+# spec 019 (observability rollout across active repos), Phase 4, T4.1 --
+# the verb dispatcher `lib/setup.sh`, which is the command a person invokes.
+#
+# EVERY assertion in this file goes through setup.sh. detect.sh and
+# registration.py are never called directly from here, deliberately: T4.1
+# step 4 requires the command be "exercised through its real entry point,
+# not by calling its libraries directly", and the defect class this file
+# exists to catch lives in the TRANSLATION setup.sh performs -- detect.sh's
+# severity channel into a command-level exit status -- not in either
+# library's own behaviour. Their own suites (observability-detect.bats,
+# observability-registration-matrix.bats, tests/tcs-helper/
+# test_observability_registration.py) cover them directly and stay the place
+# to assert library behaviour.
+#
+# THE MAPPING THIS FILE PINS ROW BY ROW. detect.sh's header states that "the
+# exit code carries SEVERITY ONLY -- state and severity are two separate
+# channels", and it exits 2 for FOUR semantically different ABORT states:
+# not-a-repository, unparseable, valid-json-wrong-shape and
+# write-path-not-ignored. The SDD assigns those different command-level
+# outcomes (non-repo -> exit 0; unparseable -> exit non-zero), so the
+# dispatcher cannot map severity alone. It resolves this by ORDERING, not by
+# reading ABORT prose: setup.sh resolves the toplevel itself, before the lock
+# and before detect.sh, so a non-repository never reaches detection and every
+# remaining exit 2 is a genuine refusal.
+#
+#   setup.sh's own toplevel resolution fails  -> STOP,   exit 0
+#   detect exit 0, CLEAN / OURS-CURRENT       -> proceed, exit 0
+#   detect exit 4, OURS-OLD / LEGACY          -> proceed, exit 0
+#   detect exit 3, CONFLICT                   -> STOP,   exit 0
+#   detect exit 2, any ABORT                  -> ABORT,  exit non-zero
+#
+# The unparseable-vs-non-repository pair below is the assertion that catches
+# a dispatcher mapping "any ABORT -> 0": such a dispatcher passes every other
+# test in this file.
+#
+# bash 3.2 compatible (CON-1): no `[[ =~ ]]` with PCRE classes or bounded
+# quantifiers. Every substring assertion goes through _assert_contains /
+# _assert_not_contains (grep -F, a plain command -- trips `set -e` correctly
+# at any position in a test body, unlike a bare `[[ ]]` used as a non-final
+# statement; see docs/ai/memory/active.md). `timeout` is never used (absent
+# on macOS).
+#
+# NEVER AGAINST A REAL REPOSITORY, AND NEVER AGAINST A REAL $HOME: every
+# target is a throwaway copy of a build.sh fixture under $TMPDIR, and every
+# invocation runs with HOME pointed at a per-test temporary directory, so
+# the bundle install (Runtime View step 6) can never touch the operator's
+# own ~/.claude/.
+
+bats_require_minimum_version 1.5.0
+
+setup_file() {
+  REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../../../.." && pwd)"
+  BUILD_SH="$REPO_ROOT/plugins/tcs-helper/tests/fixtures/observability-settings/build.sh"
+  SETUP_SH="$REPO_ROOT/plugins/tcs-helper/skills/observability-setup/lib/setup.sh"
+  MARKER_FILE="$REPO_ROOT/plugins/tcs-helper/templates/observability/tcs-helper-observability-version"
+  export REPO_ROOT BUILD_SH SETUP_SH MARKER_FILE
+
+  # The plugin's own current bundle version -- read, never hardcoded, so a
+  # marker bump does not silently turn the drift assertions green.
+  CURRENT_BUNDLE_VERSION="$(cat "$MARKER_FILE")"
+  export CURRENT_BUNDLE_VERSION
+
+  # Isolate every git invocation (fixture build AND setup.sh's own
+  # rev-parse/check-ignore) from the operator's real global/system config.
+  export GIT_CONFIG_GLOBAL=/dev/null
+  export GIT_CONFIG_SYSTEM=/dev/null
+
+  # macOS exports TMPDIR with a trailing slash; strip it so no fixture path
+  # carries a "//" (same normalization as the sibling fixture consumers).
+  local tmpbase="${TMPDIR:-/tmp}"
+  while [ "$tmpbase" != "/" ] && [ "${tmpbase%/}" != "$tmpbase" ]; do
+    tmpbase="${tmpbase%/}"
+  done
+
+  FIXTURES_PARENT="$(mktemp -d "$tmpbase/tcs-obs-setup-fixtures.XXXXXX")"
+  FIXTURES_DIR="$("$BUILD_SH" "$FIXTURES_PARENT/fixtures")"
+  WORK_PARENT="$(mktemp -d "$tmpbase/tcs-obs-setup-work.XXXXXX")"
+  export FIXTURES_PARENT FIXTURES_DIR WORK_PARENT
+}
+
+teardown_file() {
+  local d
+  for d in "${FIXTURES_PARENT:-}" "${WORK_PARENT:-}"; do
+    if [ -n "$d" ] && [ -d "$d" ]; then
+      chmod -R u+rwX "$d" 2>/dev/null || true
+      rm -rf "$d"
+    fi
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+_assert_contains() {
+  printf '%s' "$1" | grep -qF -- "$2"
+}
+
+_assert_not_contains() {
+  ! printf '%s' "$1" | grep -qF -- "$2"
+}
+
+_assert_bytes_equal() {
+  cmp -s "$1" "$2"
+}
+
+_assert_bytes_differ() {
+  ! cmp -s "$1" "$2"
+}
+
+# _copy_fixture <fixture-name> <work-name> -- a fresh, independent copy,
+# since setup.sh mutates its target in place.
+_copy_fixture() {
+  local fixture="$1" workname="$2"
+  local dest="$WORK_PARENT/$workname"
+  rm -rf "$dest"
+  cp -pR "$FIXTURES_DIR/$fixture" "$dest"
+  printf '%s\n' "$dest"
+}
+
+# _new_home <work-name> -- a private $HOME for one test, so the bundle
+# install lands somewhere disposable and two tests never share a marker.
+_new_home() {
+  local home="$WORK_PARENT/$1.home"
+  rm -rf "$home"
+  mkdir -p "$home"
+  printf '%s\n' "$home"
+}
+
+# _home_with_bundle_version <work-name> <version> -- a private $HOME that
+# already carries an installed bundle marker at <version>, for the drift
+# assertions.
+_home_with_bundle_version() {
+  local home; home="$(_new_home "$1")"
+  mkdir -p "$home/.claude/observability"
+  printf '%s\n' "$2" > "$home/.claude/observability/tcs-helper-observability-version"
+  printf '%s\n' "$home"
+}
+
+# _run_setup <home> <verb> <target> [args...]
+#
+# The ONLY way this file reaches the feature. The check-ignore override
+# neutralises the DEVELOPER's personal global ignore rule (this machine's
+# ~/.config/git/ignore carries **/.claude/settings.local.json, which would
+# otherwise make write-path-not-ignored read as ignored) purely from the
+# environment -- production code calls plain `git check-ignore`, exactly as
+# observability-detect.bats documents.
+_run_setup() {
+  local home="$1" verb="$2" target="$3"
+  shift 3
+  run env \
+    HOME="$home" \
+    GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=core.excludesFile \
+    GIT_CONFIG_VALUE_0=/dev/null \
+    bash "$SETUP_SH" "$verb" --target "$target" "$@"
+}
+
+# _run_setup_env <home> <extra env assignment> <verb> <target> [args...]
+_run_setup_env() {
+  local home="$1" extra="$2" verb="$3" target="$4"
+  shift 4
+  run env \
+    HOME="$home" \
+    GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=core.excludesFile \
+    GIT_CONFIG_VALUE_0=/dev/null \
+    "$extra" \
+    bash "$SETUP_SH" "$verb" --target "$target" "$@"
+}
+
+# _count_our_hooks <file> -- how many entries in the file point into our
+# $HOME namespace. 0 on an absent file rather than an error.
+_count_our_hooks() {
+  if [ ! -f "$1" ]; then printf '0'; return 0; fi
+  grep -c -F '$HOME/.claude/observability/' "$1" || true
+}
+
+# _make_record <dir> -- a record file where _observability_data_dir would
+# put one, for the three-state liveness assertions.
+_make_record() {
+  mkdir -p "$1/observability"
+  printf '%s\n' '{"kind":"skill","repo":"fixture"}' > "$1/observability/events.jsonl"
+}
+
+# ---------------------------------------------------------------------------
+# Usage / dispatch
+# ---------------------------------------------------------------------------
+
+@test "an unknown verb is refused with a usage message and a non-zero status" {
+  local home; home="$(_new_home unknown-verb)"
+  local dir; dir="$(_copy_fixture absent unknown-verb)"
+  _run_setup "$home" frobnicate "$dir"
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "install"
+  _assert_contains "$output" "remove"
+  _assert_contains "$output" "status"
+}
+
+@test "a missing --target is refused with a non-zero status" {
+  local home; home="$(_new_home missing-target)"
+  run env HOME="$home" bash "$SETUP_SH" install
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "--target"
+}
+
+# ---------------------------------------------------------------------------
+# Journey 1 -- install
+# ---------------------------------------------------------------------------
+
+@test "install on a clean target registers, names the entries it added, and exits 0" {
+  local home dir target
+  home="$(_new_home install-clean)"
+  dir="$(_copy_fixture absent install-clean)"
+  target="$dir/.claude/settings.local.json"
+  [ ! -e "$target" ]
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  # F1: the report names which entries were added.
+  _assert_contains "$output" "InstructionsLoaded"
+  _assert_contains "$output" "PreToolUse"
+  _assert_contains "$output" "SubagentStart"
+  _assert_contains "$output" "CLAUDE_OBSERVABILITY_ENABLED"
+
+  [ -f "$target" ]
+  run _count_our_hooks "$target"
+  [ "$output" -eq 3 ]
+}
+
+@test "install writes the bundle and its version marker into the resolved HOME" {
+  local home dir
+  home="$(_new_home install-bundle)"
+  dir="$(_copy_fixture absent install-bundle)"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  [ -f "$home/.claude/observability/logwrite.sh" ]
+  [ -f "$home/.claude/observability/log_skill.sh" ]
+  [ -f "$home/.claude/observability/tcs-helper-observability-version" ]
+  run cat "$home/.claude/observability/tcs-helper-observability-version"
+  [ "$output" = "$CURRENT_BUNDLE_VERSION" ]
+}
+
+@test "the install summary names how to undo the change" {
+  local home dir
+  home="$(_new_home install-undo)"
+  dir="$(_copy_fixture absent install-undo)"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  # PRD F1: "the report of what changed includes how to undo it".
+  _assert_contains "$output" "remove --target"
+}
+
+@test "re-running install changes nothing and reports the target as already configured" {
+  local home dir target before
+  home="$(_new_home install-idempotent)"
+  dir="$(_copy_fixture absent install-idempotent)"
+  target="$dir/.claude/settings.local.json"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  before="$WORK_PARENT/install-idempotent.after-first"
+  cp -p "$target" "$before"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "already configured"
+  # ...and does NOT claim it added anything. A report that names the three
+  # entries on every run is indistinguishable from one that named them
+  # because they were actually written, which is the whole point of F1.
+  _assert_not_contains "$output" "ADDED"
+  _assert_bytes_equal "$before" "$target"
+}
+
+@test "the first run against a clean target does not report itself as a foreign install" {
+  local home dir
+  home="$(_new_home no-self-conflict)"
+  dir="$(_copy_fixture absent no-self-conflict)"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_not_contains "$output" "CONFLICT"
+  _assert_not_contains "$output" "Foreign hook entries"
+}
+
+# ---------------------------------------------------------------------------
+# The plan step -- and "declining at the confirmation", pinned at the layer
+# that is testable. Ruling (r) keeps the literal interactive confirm in
+# SKILL.md prose, which bats cannot exercise; the dispatcher's no-write path
+# is its mechanical equivalent, so a decline IS "no --yes".
+# ---------------------------------------------------------------------------
+
+@test "install without --yes reports the plan and writes nothing (the decline path)" {
+  local home dir target
+  home="$(_new_home plan-no-yes)"
+  dir="$(_copy_fixture absent plan-no-yes)"
+  target="$dir/.claude/settings.local.json"
+
+  _run_setup "$home" install "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "PLAN"
+  # Nothing anywhere: not the settings file, not the bundle.
+  [ ! -e "$target" ]
+  [ ! -e "$home/.claude/observability" ]
+}
+
+@test "install --plan reports the plan and writes nothing even when --yes is given" {
+  local home dir target
+  home="$(_new_home plan-explicit)"
+  dir="$(_copy_fixture absent plan-explicit)"
+  target="$dir/.claude/settings.local.json"
+
+  _run_setup "$home" install "$dir" --yes --plan
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "PLAN"
+  [ ! -e "$target" ]
+  [ ! -e "$home/.claude/observability" ]
+}
+
+@test "the plan names the settings file it would change and the bundle directory it would install" {
+  local home dir
+  home="$(_new_home plan-names)"
+  dir="$(_copy_fixture absent plan-names)"
+
+  _run_setup "$home" install "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" ".claude/settings.local.json"
+  _assert_contains "$output" "$home/.claude/observability"
+}
+
+@test "remove without --yes reports the plan and writes nothing" {
+  local home dir target after_install
+  home="$(_new_home remove-plan)"
+  dir="$(_copy_fixture absent remove-plan)"
+  target="$dir/.claude/settings.local.json"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  after_install="$WORK_PARENT/remove-plan.after-install"
+  cp -p "$target" "$after_install"
+
+  _run_setup "$home" remove "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "PLAN"
+  _assert_bytes_equal "$after_install" "$target"
+}
+
+# ---------------------------------------------------------------------------
+# Journey 2 -- the foreign-entry stop. SDD-AC-4.
+# ---------------------------------------------------------------------------
+
+@test "a foreign entry under one of our event names stops install, unchanged, at exit 0" {
+  local home dir target original
+  home="$(_new_home foreign-stop)"
+  dir="$(_copy_fixture same-event-names-populated foreign-stop)"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/foreign-stop.orig"
+  cp -p "$target" "$original"
+
+  _run_setup "$home" install "$dir" --yes
+  # detect.sh signals CONFLICT with severity 3; the command must map that
+  # to 0 -- foreign content is a stop condition, not a failure.
+  [ "$status" -eq 0 ]
+  _assert_bytes_equal "$original" "$target"
+  [ ! -e "$home/.claude/observability" ]
+}
+
+@test "the foreign-entry stop reports precisely what it found and where" {
+  local home dir
+  home="$(_new_home foreign-report)"
+  dir="$(_copy_fixture same-event-names-populated foreign-report)"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "/opt/foreign-audit/hook.sh"
+  _assert_contains "$output" ".claude/settings.local.json"
+}
+
+# ---------------------------------------------------------------------------
+# The exit-code mapping's two ABORT-severity halves, asserted as a PAIR.
+# Both come back from detect.sh as exit 2; the SDD gives them opposite
+# command-level statuses. A dispatcher that maps severity alone gets one of
+# these wrong no matter which way it guesses.
+# ---------------------------------------------------------------------------
+
+@test "a target that is not a repository is reported, writes nothing, and exits 0" {
+  local home dir
+  home="$(_new_home non-repo)"
+  dir="$(_copy_fixture not-a-repository non-repo)"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "not"
+  _assert_contains "$output" "repository"
+  [ ! -e "$dir/.claude" ]
+  [ ! -e "$home/.claude/observability" ]
+}
+
+@test "an unparseable settings file is reported as unreadable, writes nothing, and exits NON-ZERO" {
+  local home dir target original
+  home="$(_new_home unparseable)"
+  dir="$(_copy_fixture malformed unparseable)"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/unparseable.orig"
+  cp -p "$target" "$original"
+
+  _run_setup "$home" install "$dir" --yes
+  # THE assertion that catches "any ABORT -> exit 0": this one is a genuine
+  # refusal and the non-repository case above is not.
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "ABORT"
+  _assert_contains "$output" "not valid JSON"
+  _assert_bytes_equal "$original" "$target"
+  [ ! -e "$home/.claude/observability" ]
+}
+
+@test "a valid-JSON-wrong-shape settings file is refused with a non-zero status and nothing written" {
+  local home dir target original
+  home="$(_new_home wrong-shape)"
+  dir="$(_copy_fixture valid-json-wrong-shape wrong-shape)"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/wrong-shape.orig"
+  cp -p "$target" "$original"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "ABORT"
+  _assert_contains "$output" "unexpected shape"
+  _assert_bytes_equal "$original" "$target"
+}
+
+@test "a write path version control does not ignore is refused with a non-zero status" {
+  local home dir
+  home="$(_new_home not-ignored)"
+  dir="$(_copy_fixture write-path-not-ignored not-ignored)"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "ignored"
+  [ ! -e "$dir/.claude/settings.local.json" ]
+  [ ! -e "$home/.claude/observability" ]
+}
+
+@test "a target that ignores the settings file but not its backup is refused, naming the backup path" {
+  local home dir target original
+  home="$(_new_home backup-not-ignored)"
+  dir="$(_copy_fixture ignored-file-but-not-backup backup-not-ignored)"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/backup-not-ignored.orig"
+  cp -p "$target" "$original"
+
+  # detect.sh passes this target -- it gates the settings path alone. The
+  # command's step 4 covers every path registration.py can write, which is
+  # what keeps a committable .bak out of a repository we do not own.
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" ".tcs-observability.bak"
+  _assert_bytes_equal "$original" "$target"
+}
+
+# ---------------------------------------------------------------------------
+# The lock, taken before detection (Runtime View step 2).
+# ---------------------------------------------------------------------------
+
+@test "a lock held by a live process stops the run without writing and without removing the lock" {
+  local home dir target lock
+  home="$(_new_home locked)"
+  dir="$(_copy_fixture absent locked)"
+  target="$dir/.claude/settings.local.json"
+  lock="$target.tcs-observability.lock"
+
+  mkdir -p "$dir/.claude"
+  # $$ is this bats process: a genuinely live owner, so the run must not
+  # reclaim it. A zero wait keeps the test fast without a `timeout` binary.
+  printf '%s:%s\n' "$$" "$(date +%s)" > "$lock"
+
+  _run_setup_env "$home" "TCS_OBSERVABILITY_LOCK_TIMEOUT=0" install "$dir" --yes
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "lock"
+  [ ! -e "$target" ]
+  [ -f "$lock" ]
+  run cat "$lock"
+  _assert_contains "$output" "$$"
+}
+
+@test "a completed install leaves no lock file behind" {
+  local home dir target
+  home="$(_new_home lock-released)"
+  dir="$(_copy_fixture absent lock-released)"
+  target="$dir/.claude/settings.local.json"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  [ ! -e "$target.tcs-observability.lock" ]
+}
+
+# ---------------------------------------------------------------------------
+# Journey 3 -- remove. PRD F2.
+# ---------------------------------------------------------------------------
+
+@test "remove takes out the entries setup authored and reports which" {
+  local home dir target
+  home="$(_new_home remove-ours)"
+  dir="$(_copy_fixture absent remove-ours)"
+  target="$dir/.claude/settings.local.json"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  _run_setup "$home" remove "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "InstructionsLoaded"
+  _assert_contains "$output" "PreToolUse"
+  _assert_contains "$output" "SubagentStart"
+  run _count_our_hooks "$target"
+  [ "$output" -eq 0 ]
+}
+
+@test "remove leaves foreign entries standing" {
+  local home dir target
+  home="$(_new_home remove-foreign)"
+  dir="$(_copy_fixture absent remove-foreign)"
+  target="$dir/.claude/settings.local.json"
+
+  # The foreign entry is added AFTER install, not before: detection refuses
+  # to install into a target that already carries one (see the stop tests
+  # above), so this is the only ordering in which removal can be asked to
+  # step around foreign content at all.
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  python3 - "$target" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    data = json.load(handle)
+data["hooks"]["Notification"] = [
+    {"matcher": "", "hooks": [{"type": "command", "command": "/opt/foreign-audit/hook.sh"}]}
+]
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+PY
+
+  _run_setup "$home" remove "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  _assert_contains "$(cat "$target")" "/opt/foreign-audit/hook.sh"
+  run _count_our_hooks "$target"
+  [ "$output" -eq 0 ]
+}
+
+@test "remove where setup never ran changes nothing, says so, and is not an error" {
+  local home dir target original
+  home="$(_new_home remove-never-ran)"
+  dir="$(_copy_fixture empty-object remove-never-ran)"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/remove-never-ran.orig"
+  cp -p "$target" "$original"
+
+  _run_setup "$home" remove "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "nothing to remove"
+  _assert_bytes_equal "$original" "$target"
+}
+
+@test "remove never deletes existing records" {
+  local home dir data
+  home="$(_new_home remove-keeps-records)"
+  dir="$(_copy_fixture absent remove-keeps-records)"
+  data="$WORK_PARENT/remove-keeps-records.data"
+  _make_record "$data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" remove "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  [ -f "$data/observability/events.jsonl" ]
+  run cat "$data/observability/events.jsonl"
+  _assert_contains "$output" '"kind":"skill"'
+}
+
+@test "remove on a non-repository is reported and writes nothing, at exit 0" {
+  local home dir
+  home="$(_new_home remove-non-repo)"
+  dir="$(_copy_fixture not-a-repository remove-non-repo)"
+
+  _run_setup "$home" remove "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "repository"
+  [ ! -e "$dir/.claude" ]
+}
+
+# ---------------------------------------------------------------------------
+# Journey 4 -- status, and the three states PRD F5 asks for.
+# ---------------------------------------------------------------------------
+
+@test "status reports a target where setup never ran as not configured" {
+  local home dir data
+  home="$(_new_home status-unconfigured)"
+  dir="$(_copy_fixture absent status-unconfigured)"
+  data="$WORK_PARENT/status-unconfigured.data"
+  mkdir -p "$data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "not configured"
+}
+
+@test "status reports a configured target that has produced nothing as configured but silent" {
+  local home dir data
+  home="$(_new_home status-silent)"
+  dir="$(_copy_fixture absent status-silent)"
+  data="$WORK_PARENT/status-silent.data"
+  mkdir -p "$data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "configured but silent"
+  _assert_not_contains "$output" "not configured"
+}
+
+@test "status reports a configured target with records as recording" {
+  local home dir data
+  home="$(_new_home status-recording)"
+  dir="$(_copy_fixture absent status-recording)"
+  data="$WORK_PARENT/status-recording.data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _make_record "$data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "recording"
+  _assert_not_contains "$output" "configured but silent"
+  _assert_not_contains "$output" "not configured"
+}
+
+@test "status counts a rotated record as a record" {
+  local home dir data
+  home="$(_new_home status-rotated)"
+  dir="$(_copy_fixture absent status-rotated)"
+  data="$WORK_PARENT/status-rotated.data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  mkdir -p "$data/observability"
+  printf '%s\n' '{"kind":"skill"}' > "$data/observability/events.jsonl.1"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "recording"
+  _assert_not_contains "$output" "configured but silent"
+}
+
+@test "a target with records but no registration is reported as not configured, never as recording" {
+  local home dir data
+  home="$(_new_home status-records-no-registration)"
+  dir="$(_copy_fixture absent status-records-no-registration)"
+  data="$WORK_PARENT/status-records-no-registration.data"
+  _make_record "$data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "not configured"
+}
+
+@test "status writes nothing at all" {
+  local home dir target original
+  home="$(_new_home status-readonly)"
+  dir="$(_copy_fixture foreign-only status-readonly)"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/status-readonly.orig"
+  cp -p "$target" "$original"
+
+  _run_setup "$home" status "$dir"
+  [ "$status" -eq 0 ]
+  _assert_bytes_equal "$original" "$target"
+  [ ! -e "$home/.claude/observability" ]
+}
+
+@test "status on a non-repository reports the reason and exits 0" {
+  local home dir
+  home="$(_new_home status-non-repo)"
+  dir="$(_copy_fixture not-a-repository status-non-repo)"
+
+  _run_setup "$home" status "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "repository"
+}
+
+# ---------------------------------------------------------------------------
+# SDD-AC-15 -- drift reaches the verb a person actually runs.
+# ---------------------------------------------------------------------------
+
+@test "status reports drift when the installed bundle is behind the plugin's marker" {
+  local home dir
+  home="$(_home_with_bundle_version status-drift h0)"
+  dir="$(_copy_fixture absent status-drift)"
+
+  _run_setup "$home" status "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "DRIFT"
+  _assert_contains "$output" "h0"
+  _assert_contains "$output" "$CURRENT_BUNDLE_VERSION"
+}
+
+@test "status reports the bundle as missing when nothing is installed at the resolved HOME" {
+  local home dir
+  home="$(_new_home status-bundle-missing)"
+  dir="$(_copy_fixture absent status-bundle-missing)"
+
+  _run_setup "$home" status "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "MISSING"
+}
+
+@test "status reports no drift once install has put the current bundle in place" {
+  local home dir
+  home="$(_new_home status-no-drift)"
+  dir="$(_copy_fixture absent status-no-drift)"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  _run_setup "$home" status "$dir"
+  [ "$status" -eq 0 ]
+  _assert_not_contains "$output" "DRIFT"
+  _assert_contains "$output" "$CURRENT_BUNDLE_VERSION"
+}
+
+# ---------------------------------------------------------------------------
+# Foreign content survives an install that DOES write (the fixture carrying
+# both a foreign entry and no registration of ours under a different event).
+# ---------------------------------------------------------------------------
+
+@test "a foreign entry under an event we do NOT register still stops install" {
+  local home dir target original
+  home="$(_new_home install-beside-foreign)"
+  dir="$(_copy_fixture foreign-only install-beside-foreign)"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/install-beside-foreign.orig"
+  cp -p "$target" "$original"
+
+  # detect.sh CONFLICT is broader than "a foreign entry under one of OUR
+  # event names": ANY hook command in settings.local.json outside our
+  # namespace classifies the target as CONFLICT. This fixture foreign entry
+  # sits under PreToolUse with a Bash matcher, which we never claim, and the
+  # target is still refused. Pinned because the command-level consequence is
+  # easy to get wrong in the other direction -- an install that proceeded
+  # here would be merging into a document another tool owns.
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_bytes_equal "$original" "$target"
+  run _count_our_hooks "$target"
+  [ "$output" -eq 0 ]
+}
+
+@test "install preserves non-ASCII bytes in content it did not author" {
+  local home dir target
+  home="$(_new_home install-non-ascii)"
+  dir="$(_copy_fixture absent install-non-ascii)"
+  target="$dir/.claude/settings.local.json"
+
+  # Non-ASCII foreign content with NO foreign hook entry, so the target
+  # classifies CLEAN and install actually writes -- build.sh non-ascii
+  # fixture carries a foreign hook too, which would stop the run and make
+  # this assertion vacuous.
+  mkdir -p "$dir/.claude"
+  printf '%s\n' '{ "env": { "TEAM_LABEL": "Équipe-Café-日本語" } }' > "$target"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  run _count_our_hooks "$target"
+  [ "$output" -eq 3 ]
+  # json.dump defaults to ensure_ascii=True, which would rewrite these bytes
+  # as backslash-u escapes: the document would still parse equal while the
+  # operator bytes had changed (SDD-AC-10).
+  _assert_contains "$(cat "$target")" "Équipe-Café-日本語"
+}

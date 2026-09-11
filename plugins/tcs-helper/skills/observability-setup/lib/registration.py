@@ -421,15 +421,32 @@ def main(argv=None):
         '--remove',
         action='store_true',
         help='remove the observability registration instead of adding it')
+    parser.add_argument(
+        '--lock-held-by-caller',
+        action='store_true',
+        help=(
+            'do not acquire the per-target lock: the caller already holds it '
+            'for a longer sequence. Only lib/setup.sh passes this'))
     args = parser.parse_args(argv)
 
     # The lock is acquired before the document is read, not before it is
     # written, so two concurrent runs serialize across the whole load-merge-
     # write sequence rather than racing to a merge each computed alone
     # (SDD/Runtime View step 2).
+    #
+    # A caller that already owns THIS lock skips the acquisition rather than
+    # deadlocking against itself. The lock is a cooperative file, not a
+    # reentrant primitive: lib/setup.sh takes it before detection so the whole
+    # detect->write sequence serializes, which is a strictly longer hold than
+    # this module could take on its own, and it uses this same path and the
+    # same `<pid>:<epoch>` format so a direct CLI run still contends with it
+    # correctly. The flag suppresses only the acquisition here -- the lock
+    # itself still exists and is still honoured by everyone else.
     parent = os.path.dirname(os.path.abspath(args.settings))
     if parent and not os.path.isdir(parent):
         os.makedirs(parent)
+    if args.lock_held_by_caller:
+        return _edit_under_lock(args)
     lock_file = lock_path(args.settings)
     if not lock.acquire_lock(lock_file):
         sys.stderr.write('another observability setup run holds %s\n' % lock_file)
