@@ -397,11 +397,25 @@ LEGACY_SCRIPTS = {
     'SubagentStart': 'log_agent.sh',
 }
 
+# The in-repo path the legacy registration points at. This module is the one
+# that DELETES, so the basename-only match it used to make was the dangerous
+# half of that pairing: a third party's own log_skill.sh under PreToolUse
+# satisfied it, and a migration removed the entry. Ownership is the namespace
+# here exactly as it is for NAMESPACE above (ADR-5). detect.sh carries the
+# same constant and the two must change together.
+LEGACY_NAMESPACE = 'plugins/tcs-helper/scripts/observability/' 
+
 
 def hook_is_legacy(event, command):
     """One hook command, judged against the legacy shape for its event."""
     if not isinstance(command, str) or NAMESPACE in command:
         # Already pointing at the bundle: that is "ours", never "legacy".
+        return False
+    if LEGACY_NAMESPACE not in command:
+        # Someone else's hook that happens to end in one of our script names.
+        # Not ours to remove -- and once a single match is enough to classify
+        # a target LEGACY (ruling (x)), this is the check standing between
+        # that lowered threshold and deleting a third party's registration.
         return False
     script = LEGACY_SCRIPTS.get(event)
     if not script:

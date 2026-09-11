@@ -1262,3 +1262,126 @@ PY
   [ "$output" -eq 3 ]
   _assert_no_lock "$dir"
 }
+
+# ---------------------------------------------------------------------------
+# Partial legacy shapes at the command level -- maintainer ruling (x).
+# ---------------------------------------------------------------------------
+
+# _rewrite_shared <repo> -- rewrite the target's shared settings.json with the
+# python on stdin.
+_rewrite_shared() {
+  python3 - "$1/.claude/settings.json"
+}
+
+@test "install on a partially legacy target migrates it and leaves no live legacy hook" {
+  local home dir legacy target
+  home="$(_new_home partial-install)"
+  dir="$(_copy_fixture already-configured-observability partial-install)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+
+  # One of the trio replaced by a non-string command: two real legacy hooks
+  # remain, and before ruling (x) this target read CLEAN and got a full
+  # registration added beside them -- six-ish hooks where three belong.
+  _rewrite_shared "$dir" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+d["hooks"]["PreToolUse"] = [{"matcher": "", "hooks": [{"type": "command", "command": 123}]}]
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "MIGRATED"
+
+  # No legacy hook survives, and the standard registration is in place once.
+  run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
+  [ "$status" -ne 0 ]
+  run _count_our_hooks "$target"
+  [ "$output" -eq 3 ]
+  _assert_no_lock "$dir"
+}
+
+@test "remove on a partially legacy target takes out what is there and names it" {
+  local home dir legacy
+  home="$(_new_home partial-remove)"
+  dir="$(_copy_fixture already-configured-observability partial-remove)"
+  legacy="$dir/.claude/settings.json"
+
+  _rewrite_shared "$dir" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+del d["hooks"]["SubagentStart"]
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+
+  _run_setup "$home" remove "$dir" --yes
+  [ "$status" -eq 0 ]
+  # Captured BEFORE the greps below: `run` overwrites $output, so asserting
+  # against it after a `run grep` reads grep's output, not the command's.
+  local report="$output"
+
+  # Nothing legacy left firing -- the false-success shape ruling (u) closes,
+  # reached here through the partial-shape door instead.
+  run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
+  [ "$status" -ne 0 ]
+  # The report names the two events it actually removed, not a flat three.
+  _assert_contains "$report" "InstructionsLoaded"
+  _assert_contains "$report" "PreToolUse"
+  _assert_not_contains "$report" "removed legacy observability hooks (InstructionsLoaded, PreToolUse, SubagentStart)"
+  _assert_no_lock "$dir"
+}
+
+@test "a migration never deletes a third party's hook that merely shares a script name" {
+  local home dir legacy
+  home="$(_new_home third-party-survives)"
+  dir="$(_copy_fixture already-configured-observability third-party-survives)"
+  legacy="$dir/.claude/settings.json"
+
+  # Two real legacy entries plus a third party's own log_skill.sh under the
+  # third event. Basename matching claims that entry as ours and deletes it.
+  _rewrite_shared "$dir" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+d["hooks"]["PreToolUse"] = [{"matcher": "", "hooks": [
+    {"type": "command", "command": "\"/opt/other-tool/log_skill.sh\""}]}]
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  _assert_contains "$(cat "$legacy")" "/opt/other-tool/log_skill.sh"
+  run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
+  [ "$status" -ne 0 ]
+  _assert_no_lock "$dir"
+}
+
+@test "a target left by a partial migration takes the plain install path, not the migration path" {
+  local home dir legacy target
+  home="$(_new_home post-partial)"
+  dir="$(_copy_fixture already-configured-observability post-partial)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+
+  # Exactly what the PARTIAL MIGRATION path leaves: shared fully stripped,
+  # local carrying no registration. "One or more" must not catch zero, or the
+  # two paths collide and setup reports a migration that removed nothing.
+  _rewrite_shared "$dir" <<'PY'
+import json, sys
+json.dump({}, open(sys.argv[1], "w", encoding="utf-8"), indent=2)
+PY
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_not_contains "$output" "MIGRATED"
+  _assert_contains "$output" "ADDED"
+  run _count_our_hooks "$target"
+  [ "$output" -eq 3 ]
+  run cat "$legacy"
+  [ "$output" = "{}" ]
+  _assert_no_lock "$dir"
+}

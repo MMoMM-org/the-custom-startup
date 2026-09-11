@@ -214,6 +214,14 @@ LEGACY_SCRIPTS = {
     "SubagentStart": "log_agent.sh",
 }
 
+# The in-repo path the legacy registration points at. Matching used to be the
+# script BASENAME alone, which a third party's own log_skill.sh satisfies --
+# measured, and it already cost one: a shared file carrying two real legacy
+# entries plus an unrelated /opt/other-tool/log_skill.sh matched all three
+# events, classified LEGACY, and the migration DELETED the third party's hook.
+# Ownership is the namespace (ADR-5), here as everywhere else.
+LEGACY_NAMESPACE = "plugins/tcs-helper/scripts/observability/"
+
 
 class WrongShape(Exception):
     pass
@@ -286,31 +294,48 @@ def hook_commands(hooks, strict=False):
     return commands
 
 
-def is_legacy(shared_data):
+def legacy_events(shared_data):
+    """The event names carrying a legacy in-repo registration, sorted.
+
+    ONE OR MORE IS ENOUGH -- maintainer ruling (x), 2026-09-11. This returned
+    a boolean gated on all three events matching, so every partial shape came
+    back CLEAN: one event absent, one replaced by a malformed hook, one
+    pointing elsewhere, or the env flag removed by hand. Install then added a
+    full registration beside still-live legacy hooks and the target recorded
+    twice -- the state the migration exists to prevent -- while remove
+    reported success and those hooks kept firing. Four doors to one room,
+    measured rather than reasoned about.
+
+    ZERO IS STILL CLEAN, deliberately: a shared file a partial migration has
+    already stripped has nothing left to migrate, and calling it LEGACY would
+    send setup down a migration path with nothing to remove.
+
+    THE ENV FLAG NO LONGER GATES. It was corroboration for a weak match, and
+    with ownership proven by LEGACY_NAMESPACE it adds nothing but another way
+    for a live legacy registration to read as CLEAN.
+    """
     if not isinstance(shared_data, dict):
-        return False
+        return []
     shared_hooks = shared_data.get("hooks", {})
     if not isinstance(shared_hooks, dict):
-        return False
+        return []
     try:
         shared_commands = hook_commands(shared_hooks)
     except WrongShape:
-        return False
-    env = shared_data.get("env", {})
-    env_flag = isinstance(env, dict) and env.get("CLAUDE_OBSERVABILITY_ENABLED") == "1"
-    if not env_flag:
-        return False
+        return []
     matched_events = set()
     for event, cmd in shared_commands:
         if OUR_NAMESPACE in cmd:
             continue  # points at $HOME already -- that would be "ours", not legacy
+        if LEGACY_NAMESPACE not in cmd:
+            continue  # not in our namespace, so not ours to touch
         expected_script = LEGACY_SCRIPTS.get(event)
         # The command string is shell-quoted (wrapped in literal double
         # quotes so the path survives a space), so it ends with `.sh"`, not
         # `.sh` -- strip a single trailing '"' before comparing.
         if expected_script and cmd.rstrip('"').endswith(expected_script):
             matched_events.add(event)
-    return matched_events == set(LEGACY_SCRIPTS.keys())
+    return sorted(matched_events)
 
 
 def main():
@@ -365,8 +390,9 @@ def main():
     # A malformed/unreadable settings.json is not one of this task's ABORT
     # states (only settings.local.json's shape is gated that way) -- treat
     # it as "no legacy shape found" rather than aborting on the shared file.
-    if is_legacy(shared_data):
-        print("LEGACY")
+    found = legacy_events(shared_data)
+    if found:
+        print("LEGACY|" + ", ".join(found))
         return
 
     ours = [cmd for _, cmd in local_commands if OUR_NAMESPACE in cmd]
@@ -402,8 +428,8 @@ case "$CLASSIFY_OUTPUT" in
     _emit "ABORT" "$WRITE_PATH_REL has an unexpected shape (${CLASSIFY_OUTPUT#ABORT_WRONGSHAPE|})"
     exit 2
     ;;
-  LEGACY)
-    _emit "LEGACY" "Observability hooks already registered in .claude/settings.json under the legacy in-repo namespace (plugins/tcs-helper/scripts/observability/); setup will migrate this to \$HOME/.claude/observability/."
+  LEGACY\|*)
+    _emit "LEGACY" "Observability hooks already registered in .claude/settings.json under the legacy in-repo namespace (plugins/tcs-helper/scripts/observability/) for: ${CLASSIFY_OUTPUT#LEGACY|}; setup will migrate these to \$HOME/.claude/observability/."
     exit 4
     ;;
   OURS)

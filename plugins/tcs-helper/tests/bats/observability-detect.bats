@@ -526,3 +526,153 @@ SHAREDJSON
     [ "$lines" -eq 1 ]
   done
 }
+
+# ---------------------------------------------------------------------------
+# PARTIAL LEGACY SHAPES -- maintainer ruling (x), 2026-09-11.
+#
+# is_legacy required all three events to match, so any partial shape came back
+# CLEAN. That is the dangerous direction: install then adds a full
+# registration beside still-live legacy hooks and the target records twice,
+# which is the state the migration exists to prevent, and remove reports
+# success while those hooks keep firing. One or more legacy entries now
+# classifies LEGACY; zero still classifies CLEAN.
+#
+# Lowering the threshold from three to one forces a second change. Matching
+# used to be `command.endswith("log_skill.sh")`, which a third party's own
+# log_skill.sh satisfies -- harmless-ish when all three had to match, and a
+# licence to delete someone else's hook the moment one match is enough. The
+# match is now the legacy NAMESPACE (ADR-5's rule applied to the legacy
+# shape), which is what makes one-is-enough safe.
+# ---------------------------------------------------------------------------
+
+# _shared_variant <name> -- a copy of already-configured-observability whose
+# shared settings.json is rewritten by the python on stdin. Prints the path.
+_shared_variant() {
+  local dest="$FIXTURES_PARENT/variant-$1"
+  rm -rf "$dest"
+  cp -pR "$FIXTURES_DIR/already-configured-observability" "$dest"
+  python3 - "$dest/.claude/settings.json"
+  printf '%s\n' "$dest"
+}
+
+@test "partial legacy: a non-string command replacing one of the trio still classifies LEGACY" {
+  local dir
+  dir="$(_shared_variant nonstring <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+d["hooks"]["PreToolUse"] = [{"matcher": "", "hooks": [{"type": "command", "command": 123}]}]
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+)"
+  _run_detect "$dir"
+  [ "$status" -eq 4 ]
+  _assert_contains "$output" "LEGACY"
+  _assert_not_contains "$output" "CLEAN"
+}
+
+@test "partial legacy: one event simply absent still classifies LEGACY, and names what it found" {
+  local dir
+  dir="$(_shared_variant absent-event <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+del d["hooks"]["SubagentStart"]
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+)"
+  _run_detect "$dir"
+  [ "$status" -eq 4 ]
+  _assert_contains "$output" "LEGACY"
+  # The message names the events actually found rather than implying three.
+  _assert_contains "$output" "InstructionsLoaded"
+  _assert_contains "$output" "PreToolUse"
+  _assert_not_contains "$output" "SubagentStart"
+}
+
+@test "partial legacy: a single legacy entry is enough to classify LEGACY" {
+  local dir
+  dir="$(_shared_variant only-one <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+for ev in ("PreToolUse", "SubagentStart"):
+    del d["hooks"][ev]
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+)"
+  _run_detect "$dir"
+  [ "$status" -eq 4 ]
+  _assert_contains "$output" "LEGACY"
+  _assert_contains "$output" "InstructionsLoaded"
+}
+
+@test "partial legacy: legacy hooks without the env flag still classify LEGACY" {
+  local dir
+  dir="$(_shared_variant no-env <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+del d["env"]
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+)"
+  # The env flag was a GATE, so removing it by hand turned three live legacy
+  # hooks into a CLEAN target -- another door to the same double-recording
+  # room. With ownership proven by the namespace, the flag corroborates and
+  # no longer gates.
+  _run_detect "$dir"
+  [ "$status" -eq 4 ]
+  _assert_contains "$output" "LEGACY"
+}
+
+@test "zero legacy entries still classify CLEAN -- a fully stripped shared file is not a partial one" {
+  local dir
+  dir="$(_shared_variant stripped <<'PY'
+import json, sys
+p = sys.argv[1]
+json.dump({}, open(p, "w", encoding="utf-8"), indent=2)
+PY
+)"
+  # This is exactly the state a PARTIAL MIGRATION leaves behind. There is
+  # nothing legacy left to migrate, so LEGACY would be a lie and would send
+  # setup down a migration path with nothing to remove.
+  _run_detect "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "CLEAN"
+  _assert_not_contains "$output" "LEGACY"
+}
+
+@test "the env flag alone, with no hooks at all, classifies CLEAN" {
+  local dir
+  dir="$(_shared_variant env-only <<'PY'
+import json, sys
+p = sys.argv[1]
+json.dump({"env": {"CLAUDE_OBSERVABILITY_ENABLED": "1"}}, open(p, "w", encoding="utf-8"), indent=2)
+PY
+)"
+  _run_detect "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "CLEAN"
+  _assert_not_contains "$output" "LEGACY"
+}
+
+@test "a third party's own log_skill.sh is never mistaken for a legacy entry" {
+  local dir
+  dir="$(_shared_variant third-party <<'PY'
+import json, sys
+p = sys.argv[1]
+json.dump({
+    "env": {"CLAUDE_OBSERVABILITY_ENABLED": "1"},
+    "hooks": {"PreToolUse": [{"matcher": "", "hooks": [
+        {"type": "command", "command": "\"/opt/other-tool/log_skill.sh\""}]}]},
+}, open(p, "w", encoding="utf-8"), indent=2)
+PY
+)"
+  # Matching on the script BASENAME would claim this, and once one match is
+  # enough that claim becomes a deletion. Ownership is the namespace.
+  _run_detect "$dir"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "CLEAN"
+  _assert_not_contains "$output" "LEGACY"
+}
