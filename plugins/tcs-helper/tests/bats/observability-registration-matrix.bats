@@ -786,3 +786,87 @@ PY
     [ -z "$output" ]
   done
 }
+
+# ---------------------------------------------------------------------------
+# The ordering inside a migration, pinned at the editor because that is where
+# it lives. detect.sh now rejects a shape-invalid local file before setup.sh
+# ever gets here, so these two reach registration.py directly -- which is
+# exactly what makes them a test of the ORDER rather than of the gate. Move
+# _strip_legacy back above the local load and validate, and the first one
+# goes red.
+# ---------------------------------------------------------------------------
+
+@test "--migrate-legacy validates the local document BEFORE it writes to the shared one" {
+  local dir legacy target original
+  dir="$(_copy_fixture already-configured-observability migrate-order)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/migrate-order.shared.orig"
+  cp -p "$legacy" "$original"
+  printf '%s\n' '{ "env": "not-an-object" }' > "$target"
+
+  run python3 "$REGISTRATION_PY" --settings "$target" --migrate-legacy "$legacy"
+  [ "$status" -ne 0 ]
+
+  # The shared file never moved. This is the whole assertion: the second half
+  # cannot fail on shape after the first half has already written, because the
+  # shape is checked first.
+  _assert_bytes_equal "$original" "$legacy"
+  [ ! -e "$legacy.tcs-observability.bak" ]
+  _assert_contains "$output" "nothing was written"
+}
+
+@test "--migrate-legacy names both files and the restore command when the second half fails after the first wrote" {
+  local dir legacy target original
+  dir="$(_copy_fixture already-configured-observability migrate-partial)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/migrate-partial.shared.orig"
+  cp -p "$legacy" "$original"
+
+  # The residual case Fix 1 cannot remove: the shared write succeeds and the
+  # LOCAL write then fails on I/O rather than on shape. Injected through the
+  # filesystem rather than a code seam -- a directory where the settings file
+  # belongs makes os.replace fail at the last step of write_settings, after
+  # _strip_legacy has already completed.
+  rm -f "$target"
+  mkdir -p "$target"
+  printf 'x\n' > "$target/occupied"
+
+  run python3 "$REGISTRATION_PY" --settings "$target" --migrate-legacy "$legacy"
+  [ "$status" -ne 0 ]
+
+  # The shared file DID change -- and the report says so, names the backup,
+  # and gives the command that puts it back. Recording is off until someone
+  # acts, and the operator is told that rather than told the opposite.
+  _assert_bytes_differ "$original" "$legacy"
+  [ -f "$legacy.tcs-observability.bak" ]
+  _assert_contains "$output" "PARTIAL MIGRATION"
+  _assert_contains "$output" "This target is NOT recording"
+  _assert_contains "$output" "$legacy.tcs-observability.bak"
+  _assert_contains "$output" "cp -p"
+  _assert_not_contains "$output" "Traceback"
+
+  # The backup is a faithful copy of what the shared file held before.
+  _assert_bytes_equal "$original" "$legacy.tcs-observability.bak"
+}
+
+@test "--remove survives a non-string command under an event we do not register" {
+  local dir target
+  dir="$(_copy_fixture absent remove-nonstring-command)"
+  target="$dir/.claude/settings.local.json"
+  mkdir -p "$dir/.claude"
+
+  # remove_registration walks EVERY event in the document, not only the three
+  # we register, so it reaches commands no validator has screened. A
+  # non-string command here used to reach `NAMESPACE in 123` and raise a
+  # TypeError that nothing caught.
+  printf '%s\n' '{ "hooks": { "Notification": [ { "matcher": "", "hooks": [ { "type": "command", "command": 123 } ] } ] } }' > "$target"
+
+  run python3 "$REGISTRATION_PY" --settings "$target" --remove
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "nothing to remove"
+  _assert_not_contains "$output" "Traceback"
+  # The foreign entry is untouched -- a non-string command is not ours.
+  _assert_contains "$(cat "$target")" '"command": 123'
+}

@@ -607,7 +607,7 @@ else
 fi
 
 if [ "$APPLY" -eq 0 ]; then
-  _emit "PLAN" "nothing was written. Re-run with --yes to apply."
+  _emit "PLAN" "no file was written and no bundle installed. Re-run with --yes to apply."
   exit 0
 fi
 
@@ -642,7 +642,7 @@ if [ "$VERB" = "install" ]; then
     # twice while looking healthy.
     if ! REG_OUTPUT="$(_run_registration --settings "$LOCAL_SETTINGS" --migrate-legacy "$SHARED_SETTINGS" 2>&1)"; then
       printf '%s\n' "$REG_OUTPUT"
-      _emit "ABORT" "the legacy migration failed. The original files are intact and a backup sits beside each one."
+      _emit "ABORT" "the legacy migration failed. The lines above state exactly which files were changed, where each backup sits, and how to restore them."
       exit 1
     fi
     printf '%s\n' "$REG_OUTPUT"
@@ -654,7 +654,7 @@ if [ "$VERB" = "install" ]; then
 
   if ! REG_OUTPUT="$(_run_registration --settings "$LOCAL_SETTINGS" 2>&1)"; then
     printf '%s\n' "$REG_OUTPUT"
-    _emit "ABORT" "the registration edit failed, so $LOCAL_SETTINGS was left as it was."
+    _emit "ABORT" "the registration edit failed. The lines above state what was and was not written."
     exit 1
   fi
   printf '%s\n' "$REG_OUTPUT"
@@ -688,7 +688,7 @@ if [ "$IS_LEGACY" -eq 1 ]; then
   # legacy entries too.
   if ! REG_OUTPUT="$(_run_registration --settings "$LOCAL_SETTINGS" --remove --remove-legacy "$SHARED_SETTINGS" 2>&1)"; then
     printf '%s\n' "$REG_OUTPUT"
-    _emit "ABORT" "the removal failed. The original files are intact and a backup sits beside each one."
+    _emit "ABORT" "the removal failed. The lines above state exactly which files were changed, where each backup sits, and how to restore them."
     exit 1
   fi
   printf '%s\n' "$REG_OUTPUT"
@@ -696,7 +696,7 @@ if [ "$IS_LEGACY" -eq 1 ]; then
 else
   if ! REG_OUTPUT="$(_run_registration --settings "$LOCAL_SETTINGS" --remove 2>&1)"; then
     printf '%s\n' "$REG_OUTPUT"
-    _emit "ABORT" "the removal failed, so $LOCAL_SETTINGS was left as it was."
+    _emit "ABORT" "the removal failed. The lines above state what was and was not written."
     exit 1
   fi
   printf '%s\n' "$REG_OUTPUT"

@@ -103,8 +103,17 @@ def command_for(script):
 
 
 def is_ours(command):
-    """ADR-5: ownership is the namespace, never the exact string."""
-    return NAMESPACE in command
+    """ADR-5: ownership is the namespace, never the exact string.
+
+    The isinstance guard is load-bearing, not defensive dressing: a settings
+    file we do not own may carry a non-string "command", and `NAMESPACE in
+    123` raises TypeError -- which no caller catches, so it reached the user
+    as a traceback instead of the diagnosis this module's docstring promises.
+    remove_registration walks EVERY event, not only the three we register, so
+    the guard has to live here rather than in a per-event validator. A
+    non-string command is not ours; that is the whole answer.
+    """
+    return isinstance(command, str) and NAMESPACE in command
 
 
 def entry_is_ours(entry):
@@ -171,6 +180,58 @@ def _expected_entry(matcher, script):
     }
 
 
+def validate_registration_shape(data):
+    """Raise ValueError if add_registration() could not merge into `data`.
+
+    Every check add_registration makes, hoisted so a caller can run them
+    BEFORE it writes anything, anywhere. That ordering is the whole point: a
+    cross-file migration removes the legacy registration from one file and
+    adds the standard one to another, and a shape failure discovered during
+    the second half leaves the target with recording removed and nothing put
+    back -- while the write that already landed cannot be un-landed. Checking
+    first makes that particular failure impossible rather than merely rare.
+
+    Pure: mutates nothing, so a caller may run it and then call
+    add_registration on the same document.
+    """
+    env = data.get('env')
+    if env is not None and not isinstance(env, dict):
+        raise ValueError('"env" is not an object (found %s)' % type(env).__name__)
+
+    hooks = data.get('hooks')
+    if hooks is None:
+        return
+    if not isinstance(hooks, dict):
+        raise ValueError('"hooks" is not an object (found %s)' % type(hooks).__name__)
+
+    for event in REGISTRATION:
+        if event not in hooks:
+            continue
+        entries = hooks[event]
+        if not isinstance(entries, list):
+            raise ValueError(
+                '"hooks.%s" is not a list (found %s)' % (event, type(entries).__name__))
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            hooks_field = entry.get('hooks')
+            if hooks_field is None:
+                continue
+            if not isinstance(hooks_field, list):
+                raise ValueError(
+                    '"hooks.%s" contains an entry with malformed "hooks" field (found %s)' % (
+                        event, type(hooks_field).__name__))
+            for hook in hooks_field:
+                if not isinstance(hook, dict):
+                    raise ValueError(
+                        '"hooks.%s" contains an entry with non-object hook in "hooks" list' % event)
+                command = hook.get('command')
+                if command is not None and not isinstance(command, str):
+                    raise ValueError(
+                        '"hooks.%s" contains a hook whose "command" is not a string (found %s)' % (
+                            event, type(command).__name__))
+
+
 def add_registration(data):
     """Merge our entries into a settings document.
 
@@ -197,12 +258,15 @@ def add_registration(data):
     existing entry that is not ours -- including a foreign entry under our
     own event name -- stays exactly where it is.
     """
+    # Same checks a caller may already have run through
+    # validate_registration_shape(); re-running them costs a walk of three
+    # event lists and keeps this function safe to call on its own.
+    validate_registration_shape(data)
+
     changed = False
     replaced = False
 
     env = data.setdefault('env', {})
-    if not isinstance(env, dict):
-        raise ValueError('"env" is not an object (found %s)' % type(env).__name__)
     key, value = ENV_SWITCH
     if key in env:
         if env[key] != value:
@@ -214,29 +278,9 @@ def add_registration(data):
         changed = True
 
     hooks = data.setdefault('hooks', {})
-    if not isinstance(hooks, dict):
-        raise ValueError('"hooks" is not an object (found %s)' % type(hooks).__name__)
 
     for event, (matcher, script) in REGISTRATION.items():
         entries = hooks.setdefault(event, [])
-        if not isinstance(entries, list):
-            raise ValueError(
-                '"hooks.%s" is not a list (found %s)' % (event, type(entries).__name__))
-
-        # Validate that existing entries have proper structure before examining them
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            hooks_field = entry.get('hooks')
-            if hooks_field is not None and not isinstance(hooks_field, list):
-                raise ValueError(
-                    '"hooks.%s" contains an entry with malformed "hooks" field (found %s)' % (
-                        event, type(hooks_field).__name__))
-            if isinstance(hooks_field, list):
-                for hook in hooks_field:
-                    if not isinstance(hook, dict):
-                        raise ValueError(
-                            '"hooks.%s" contains an entry with non-object hook in "hooks" list' % event)
 
         expected = _expected_entry(matcher, script)
         ours_indices = [
@@ -621,6 +665,38 @@ def _strip_legacy(shared_path):
     return 'removed', events
 
 
+def _nothing_written():
+    sys.stdout.flush()
+    sys.stderr.write('nothing was written.\n')
+
+
+def _report_partial(shared_path, local_path):
+    """The one failure Fix 1's ordering cannot remove, reported honestly.
+
+    Once validate_registration_shape has passed, the only way the second half
+    can still fail after the first half wrote is genuine I/O -- a full disk, a
+    permission change, a path that stopped being a file. Rare, and real. The
+    target is then legacy-removed and nothing-re-added, which means it is NOT
+    recording, and the operator has to act. Saying "the originals are intact"
+    here, as this used to, is the difference between a target someone fixes in
+    a minute and a target that is silently off for the whole collection period.
+    """
+    # stdout is block-buffered when it is not a terminal, stderr is not, so
+    # without this the "removed legacy hooks" line lands AFTER the report that
+    # explains it -- exactly backwards for whoever is reading the failure.
+    sys.stdout.flush()
+    sys.stderr.write(
+        'PARTIAL MIGRATION -- what was and was not written:\n'
+        '  CHANGED:   %s (the legacy registration was removed)\n'
+        '  BACKUP:    %s\n'
+        '  UNCHANGED: %s (the standard registration was NOT added)\n'
+        'This target is NOT recording. To put the legacy registration back:\n'
+        '  cp -p %s %s\n'
+        'Or fix the cause and re-run install, which re-adds the standard one.\n'
+        % (shared_path, backup_path(shared_path), local_path,
+           backup_path(shared_path), shared_path))
+
+
 def _edit_under_lock(args):
     # The migration is cross-file: the legacy registration lives in the
     # target's SHARED settings, the standard one in its LOCAL settings, and
@@ -630,20 +706,33 @@ def _edit_under_lock(args):
     # records twice or not at all -- the second path arrives as a flag and
     # both halves happen inside one run of this function, under one lock.
     #
-    # ORDER: remove from the shared file FIRST, then add to the local one.
-    # The intermediate state is "not registered", which `status` reports
-    # honestly and which records nothing. The reverse order's intermediate
-    # state is "registered twice", which records everything twice and looks
-    # exactly like a healthy target while doing it. A failure in the first
-    # half leaves the target entirely untouched.
-    if args.migrate_legacy:
-        status, _events = _strip_legacy(args.migrate_legacy)
-        if status == 'error':
-            return 1
-
+    # ORDER, AND WHY IT IS THREE STEPS RATHER THAN TWO.
+    #
+    # Between the halves, the shared file is written and the local one is not.
+    # So everything that can refuse the local half has to happen BEFORE the
+    # shared file is touched -- load it, and validate it to the exact depth
+    # add_registration requires. A spec-compliance review found what happens
+    # otherwise: "env" as a non-object passed detection, the shared write
+    # completed, add_registration then raised, and the target was left
+    # legacy-removed and nothing-re-added while the command reported the
+    # originals intact.
+    #
+    #   1. load and validate the LOCAL document   (can refuse; nothing written)
+    #   2. remove the legacy from the SHARED file (the first write)
+    #   3. add the standard to the LOCAL file     (the second write)
+    #
+    # Step 1 makes a shape failure at step 3 impossible. What survives is an
+    # I/O failure at step 3, which _report_partial names rather than hides.
+    #
+    # The remove-then-add order of steps 2 and 3 is unchanged and deliberate:
+    # the intermediate state is "not registered", which `status` reports
+    # honestly and which records nothing, where the reverse order's
+    # intermediate state records everything twice and looks like a healthy
+    # target while doing it.
     data, error = load_settings(args.settings)
     if error:
         sys.stderr.write('%s\n' % error)
+        _nothing_written()
         return 1
 
     if args.remove:
@@ -651,23 +740,63 @@ def _edit_under_lock(args):
             # The shared file first here too, and for the same reason: those
             # are the entries that are actually firing on an un-migrated
             # target, so they are the ones whose removal has to land.
+            # remove_registration raises nothing, so there is no shape check
+            # to hoist above this one.
             if _strip_legacy(args.remove_legacy)[0] == 'error':
+                _nothing_written()
                 return 1
-            discard_backup(args.remove_legacy)
         changed = remove_registration(data)
         if not changed:
             print('nothing to remove: %s' % args.settings)
             discard_backup(args.settings)
+            if args.remove_legacy:
+                discard_backup(args.remove_legacy)
             return 0
-        write_settings(args.settings, data)
+        try:
+            write_settings(args.settings, data)
+        except OSError as exc:
+            sys.stderr.write('failed to write %s: %s\n' % (args.settings, exc))
+            if args.remove_legacy:
+                _report_partial(args.remove_legacy, args.settings)
+            else:
+                _nothing_written()
+            return 1
         discard_backup(args.settings)
+        if args.remove_legacy:
+            discard_backup(args.remove_legacy)
         print('removed observability hooks from %s' % args.settings)
         return 0
 
+    # Step 1. Nothing has been written anywhere at this point, and nothing
+    # will be if this refuses.
+    try:
+        validate_registration_shape(data)
+    except ValueError as exc:
+        sys.stderr.write('%s: %s\n' % (args.settings, exc))
+        _nothing_written()
+        return 1
+
+    # Step 2.
+    shared_written = False
+    if args.migrate_legacy:
+        status, _events = _strip_legacy(args.migrate_legacy)
+        if status == 'error':
+            _nothing_written()
+            return 1
+        shared_written = (status == 'removed')
+
+    # Step 3.
     try:
         changed, status = add_registration(data)
     except ValueError as exc:
+        # Unreachable after step 1 -- the same checks on the same unmutated
+        # document. Kept so add_registration stays safe to call directly, and
+        # routed through the same honest reporting if it ever fires.
         sys.stderr.write('%s: %s\n' % (args.settings, exc))
+        if shared_written:
+            _report_partial(args.migrate_legacy, args.settings)
+        else:
+            _nothing_written()
         return 1
 
     if not changed:
@@ -681,7 +810,16 @@ def _edit_under_lock(args):
             discard_backup(args.migrate_legacy)
         return 0
 
-    write_settings(args.settings, data)
+    try:
+        write_settings(args.settings, data)
+    except OSError as exc:
+        sys.stderr.write('failed to write %s: %s\n' % (args.settings, exc))
+        if shared_written:
+            _report_partial(args.migrate_legacy, args.settings)
+        else:
+            _nothing_written()
+        return 1
+
     if args.migrate_legacy:
         # Both halves landed. Only now is the shared file's backup redundant.
         discard_backup(args.migrate_legacy)

@@ -180,6 +180,24 @@ _count_our_hooks() {
   grep -c -F '$HOME/.claude/observability/' "$1" || true
 }
 
+# _assert_git_clean <repo> -- the property T4.2 and T4.4 check, and a
+# stronger one than "the settings file does not exist": nothing this command
+# did is visible to version control. The excludesFile override is deliberate
+# -- without it the DEVELOPER's personal global ignore could mask a file this
+# feature left behind, which is the opposite of what this assertion is for.
+_assert_git_clean() {
+  run git -c core.excludesFile=/dev/null -C "$1" status --porcelain
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# _write_local <repo> <json> -- put a hand-built document in the target's
+# local settings file, creating .claude/ if the fixture has none.
+_write_local() {
+  mkdir -p "$1/.claude"
+  printf '%s\n' "$2" > "$1/.claude/settings.local.json"
+}
+
 # _make_record <dir> -- a record file where _observability_data_dir would
 # put one, for the three-state liveness assertions.
 _make_record() {
@@ -951,4 +969,175 @@ PY
   [ "$status" -ne 0 ]
   _assert_contains "$output" "ignored"
   _assert_bytes_equal "$original" "$legacy"
+}
+
+# ---------------------------------------------------------------------------
+# The shape gate, and the asymmetry a spec-compliance review found in it.
+#
+# detect.sh validated the top-level shape and "hooks" but not "env", so a
+# target whose "env" is a non-object passed the gate -- and on a LEGACY
+# target that meant the migration began, completed its write to the shared
+# file, and only THEN hit add_registration raising on "env". The target was
+# left legacy-removed and nothing-re-added, i.e. not recording, while the
+# command said the originals were intact.
+#
+# Two fixes, pinned separately: detect.sh now rejects the shape (below), and
+# registration.py validates the local document before it writes anything to
+# the shared one (observability-registration-matrix.bats, which reaches the
+# editor directly and so still exercises the ordering even with the gate
+# closed).
+# ---------------------------------------------------------------------------
+
+@test "a legacy target whose local env is a non-object is refused before anything is written" {
+  local home dir legacy original
+  home="$(_new_home badenv-legacy)"
+  dir="$(_copy_fixture already-configured-observability badenv-legacy)"
+  legacy="$dir/.claude/settings.json"
+  original="$WORK_PARENT/badenv-legacy.shared.orig"
+  cp -p "$legacy" "$original"
+  _write_local "$dir" '{ "env": "not-an-object" }'
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -ne 0 ]
+
+  # THE assertion: the shared file is untouched, byte for byte. Before the
+  # fix it was "{}" here, with its real content only in the .bak.
+  _assert_bytes_equal "$original" "$legacy"
+  [ ! -e "$legacy.tcs-observability.bak" ]
+
+  # ...and the report does not claim an intactness it could not know.
+  _assert_not_contains "$output" "The original files are intact"
+}
+
+@test "a local settings file whose env is a non-object is refused with nothing written" {
+  local home dir original
+  home="$(_new_home badenv-clean)"
+  dir="$(_copy_fixture absent badenv-clean)"
+  _write_local "$dir" '{ "env": "not-an-object" }'
+  original="$WORK_PARENT/badenv-clean.orig"
+  cp -p "$dir/.claude/settings.local.json" "$original"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "ABORT"
+  _assert_contains "$output" "unexpected shape"
+  _assert_bytes_equal "$original" "$dir/.claude/settings.local.json"
+  [ ! -e "$home/.claude/observability" ]
+}
+
+@test "a local settings file holding a non-object hook is refused with nothing written" {
+  local home dir original
+  home="$(_new_home badhook-element)"
+  dir="$(_copy_fixture absent badhook-element)"
+  _write_local "$dir" '{ "hooks": { "PreToolUse": [ { "matcher": "Skill", "hooks": [ "not-a-dict" ] } ] } }'
+  original="$WORK_PARENT/badhook-element.orig"
+  cp -p "$dir/.claude/settings.local.json" "$original"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "unexpected shape"
+  _assert_bytes_equal "$original" "$dir/.claude/settings.local.json"
+}
+
+@test "a local settings file whose hook command is not a string is refused with a diagnosis, never a traceback" {
+  local home dir original
+  home="$(_new_home badcommand-type)"
+  dir="$(_copy_fixture absent badcommand-type)"
+  _write_local "$dir" '{ "hooks": { "PreToolUse": [ { "matcher": "Skill", "hooks": [ { "type": "command", "command": 123 } ] } ] } }'
+  original="$WORK_PARENT/badcommand-type.orig"
+  cp -p "$dir/.claude/settings.local.json" "$original"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "unexpected shape"
+  # registration.py's own docstring promises a diagnosis rather than a
+  # traceback; this shape used to reach `NAMESPACE in 123` and raise a
+  # TypeError that nothing caught.
+  _assert_not_contains "$output" "Traceback"
+  _assert_bytes_equal "$original" "$dir/.claude/settings.local.json"
+}
+
+# ---------------------------------------------------------------------------
+# What a plan run actually leaves behind.
+#
+# The lock is taken before detection on purpose, and acquiring it creates the
+# target's .claude/ directory -- so "nothing was written" overstated the case.
+# The claim is corrected and the assertion that matters is added: version
+# control sees nothing. That is the property T4.2 and T4.4 check, and it is
+# stronger than asserting one path does not exist.
+# ---------------------------------------------------------------------------
+
+@test "a plan run leaves version control seeing nothing in the target" {
+  local home dir
+  home="$(_new_home plan-git-clean)"
+  dir="$(_copy_fixture absent plan-git-clean)"
+
+  _run_setup "$home" install "$dir" --yes --plan
+  [ "$status" -eq 0 ]
+  _assert_git_clean "$dir"
+}
+
+@test "a run without --yes leaves version control seeing nothing in the target" {
+  local home dir
+  home="$(_new_home noyes-git-clean)"
+  dir="$(_copy_fixture absent noyes-git-clean)"
+
+  _run_setup "$home" install "$dir"
+  [ "$status" -eq 0 ]
+  _assert_git_clean "$dir"
+}
+
+@test "an applied install leaves version control seeing nothing in the target" {
+  local home dir
+  home="$(_new_home install-git-clean)"
+  dir="$(_copy_fixture absent install-git-clean)"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_git_clean "$dir"
+}
+
+@test "the plan step does not claim that nothing at all was written" {
+  local home dir
+  home="$(_new_home plan-claim)"
+  dir="$(_copy_fixture absent plan-claim)"
+
+  _run_setup "$home" install "$dir"
+  [ "$status" -eq 0 ]
+  # Acquiring the lock creates .claude/, so the old wording was not quite
+  # true. The corrected claim names what it can actually vouch for.
+  _assert_not_contains "$output" "nothing was written"
+  _assert_contains "$output" "no file was written and no bundle installed"
+}
+
+@test "a migration that fails after writing the shared file says so, and does not claim the originals are intact" {
+  local home dir legacy target original
+  home="$(_new_home partial-migration)"
+  dir="$(_copy_fixture already-configured-observability partial-migration)"
+  legacy="$dir/.claude/settings.json"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/partial-migration.shared.orig"
+  cp -p "$legacy" "$original"
+
+  # The residual failure the reordering cannot remove: the shared write lands
+  # and the LOCAL write then fails on I/O rather than on shape. Injected
+  # through the filesystem -- a directory where the settings file belongs
+  # makes os.replace fail at the last step of write_settings. detect.sh sees
+  # a non-file as an absent file, so this target still classifies LEGACY and
+  # the migration genuinely begins.
+  rm -f "$target"
+  mkdir -p "$target"
+  printf 'x\n' > "$target/occupied"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -ne 0 ]
+
+  # The shared file DID change. The command must not say otherwise.
+  _assert_bytes_differ "$original" "$legacy"
+  _assert_not_contains "$output" "The original files are intact"
+  # ...and it relays the detail that tells the operator what to do.
+  _assert_contains "$output" "PARTIAL MIGRATION"
+  _assert_contains "$output" "This target is NOT recording"
+  _assert_contains "$output" "$legacy.tcs-observability.bak"
+  _assert_bytes_equal "$original" "$legacy.tcs-observability.bak"
 }

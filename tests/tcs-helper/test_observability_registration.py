@@ -1085,8 +1085,16 @@ def test_an_interrupted_write_leaves_the_original_and_the_backup_intact(tmp_path
 
     os.replace = exploding_replace
     try:
-        with pytest.raises(OSError):
-            registration.main(['--settings', str(settings)])
+        # main() REPORTS the failure and returns 1; it does not let the OSError
+        # escape. That changed with spec-019 T4.1's partial-write reporting,
+        # and the change is the point rather than a side effect: an escaping
+        # OSError reached the user as a traceback from `sys.exit(main())`,
+        # which is the same thing this module's docstring rules out for a
+        # parse failure ("a diagnosis rather than a traceback"). The
+        # SDD-AC-9 assertions below -- original intact, backup present, temp
+        # cleaned up -- are what this test is actually for, and they are
+        # unchanged.
+        assert registration.main(['--settings', str(settings)]) == 1
     finally:
         os.replace = real_replace
 
@@ -1367,3 +1375,61 @@ def test_junk_in_a_fresh_lock_is_respected_like_an_empty_one(tmp_path):
     assert result.returncode != 0
     assert os.path.exists(lock)
     assert settings.read_text(encoding='utf-8') == original
+
+
+# ---------------------------------------------------------------------------
+# add_registration's own shape validation, called directly.
+#
+# _edit_under_lock now runs validate_registration_shape BEFORE it writes
+# anything, so every one of these shapes is refused before add_registration is
+# reached through the CLI. That makes add_registration's own re-validation
+# unreachable from the outside -- and therefore untested by every suite that
+# goes through a subprocess. It is not dead: it is what keeps the function
+# safe for a direct caller, which is exactly what this file is. Removing it
+# left every bats suite green, which is how it got noticed.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize('document, fragment', [
+    ({'env': 'not-an-object'}, '"env" is not an object'),
+    ({'env': ['a']}, '"env" is not an object'),
+    ({'hooks': 'not-an-object'}, '"hooks" is not an object'),
+    ({'hooks': {'PreToolUse': 'not-a-list'}}, '"hooks.PreToolUse" is not a list'),
+    ({'hooks': {'PreToolUse': [{'matcher': 'Skill', 'hooks': 'nope'}]}},
+     'malformed "hooks" field'),
+    ({'hooks': {'PreToolUse': [{'matcher': 'Skill', 'hooks': ['not-a-dict']}]}},
+     'non-object hook'),
+    ({'hooks': {'PreToolUse': [
+        {'matcher': 'Skill', 'hooks': [{'type': 'command', 'command': 123}]}]}},
+     'is not a string'),
+])
+def test_add_registration_refuses_a_malformed_document_on_its_own(document, fragment):
+    with pytest.raises(ValueError) as excinfo:
+        registration.add_registration(json.loads(json.dumps(document)))
+    assert fragment in str(excinfo.value)
+
+
+def test_add_registration_leaves_a_refused_document_unmerged():
+    """The refusal must not be half a merge: nothing of ours in the document."""
+    document = {'env': 'not-an-object'}
+    with pytest.raises(ValueError):
+        registration.add_registration(document)
+    assert document == {'env': 'not-an-object'}
+
+
+def test_validate_registration_shape_mutates_nothing():
+    """_edit_under_lock calls this and then calls add_registration on the SAME
+    object, so a validator that quietly created containers would change what
+    the second call sees."""
+    document = {'hooks': {'PreToolUse': []}}
+    registration.validate_registration_shape(document)
+    assert document == {'hooks': {'PreToolUse': []}}
+
+
+def test_is_ours_is_total_over_non_string_commands():
+    """remove_registration walks EVERY event, not only the three we register,
+    so it reaches commands no validator has screened. `NAMESPACE in 123`
+    raises TypeError, which no caller catches."""
+    assert registration.is_ours(123) is False
+    assert registration.is_ours(None) is False
+    assert registration.is_ours(['a']) is False
+    assert registration.is_ours(command_for('log_skill.sh')) is True

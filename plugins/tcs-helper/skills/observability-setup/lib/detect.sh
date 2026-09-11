@@ -238,12 +238,22 @@ def load(path):
         return None, ("malformed", "not valid JSON: %s" % exc)
 
 
-def hook_commands(hooks):
+def hook_commands(hooks, strict=False):
     """Walks a parsed "hooks" object, returning [(event, command), ...].
     Raises WrongShape with a diagnosis the moment the structure departs
     from event -> [ {hooks: [ {command: ...}, ... ]}, ... ] -- this is what
     turns a valid-json-wrong-shape file into a diagnosis instead of an
-    unhandled TypeError/KeyError reaching the user."""
+    unhandled TypeError/KeyError reaching the user.
+
+    strict=True adds the two checks registration.py makes and this walk used
+    only to skip over: a non-object element inside an entry hooks array, and
+    a "command" that is present but not a string. Skipping them here while
+    the editor raises on them is the asymmetry that let a target pass the
+    gate and then fail mid-write. strict is used for the LOCAL settings file
+    only -- is_legacy below calls this on the SHARED file to recognise a
+    shape, and raising there would turn an unrelated malformation elsewhere
+    in that file into "not legacy", which is a classification change rather
+    than a gate."""
     commands = []
     for event, groups in hooks.items():
         if not isinstance(groups, list):
@@ -260,6 +270,17 @@ def hook_commands(hooks):
                     % (event, type(entry_hooks).__name__)
                 )
             for one in entry_hooks:
+                if strict and not isinstance(one, dict):
+                    raise WrongShape(
+                        '"hooks.%s" contains a non-object hook in its "hooks" array' % event
+                    )
+                if strict and isinstance(one, dict):
+                    command = one.get("command")
+                    if command is not None and not isinstance(command, str):
+                        raise WrongShape(
+                            '"hooks.%s" contains a hook whose "command" is not a string (found %s)'
+                            % (event, type(command).__name__)
+                        )
                 if isinstance(one, dict) and isinstance(one.get("command"), str):
                     commands.append((event, one["command"]))
     return commands
@@ -311,6 +332,19 @@ def main():
         )
         return
 
+    # registration.py merges the env switch into local_data["env"] and
+    # raises if it is not an object. This gate validated the top-level shape
+    # and "hooks" but never "env", so such a target was classified as safe to
+    # act on and the editor refused it mid-operation. Mirrors the "hooks"
+    # check immediately below; absent is fine, since the editor creates it.
+    local_env = local_data.get("env")
+    if local_env is not None and not isinstance(local_env, dict):
+        print(
+            'ABORT_WRONGSHAPE|"env" is not an object (found %s)'
+            % type(local_env).__name__
+        )
+        return
+
     local_hooks = local_data.get("hooks", {})
     if local_hooks is None:
         local_hooks = {}
@@ -322,7 +356,7 @@ def main():
         return
 
     try:
-        local_commands = hook_commands(local_hooks)
+        local_commands = hook_commands(local_hooks, strict=True)
     except WrongShape as exc:
         print("ABORT_WRONGSHAPE|%s" % exc)
         return
