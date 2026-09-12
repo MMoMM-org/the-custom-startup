@@ -1,7 +1,11 @@
 """`scripts/observability/report.py` must turn the JSONL record into PRD F4's answers.
 
 Why this exists: `report.py` is the only place the raw record becomes an answer
-to "what loaded, how often, and what never did" (SDD-AC-13, PRD F4). Two of
+to "what loaded, how often, and what never did" (spec-018 SDD-AC-13, PRD F4--
+spec-019's own AC-13 is the unrelated no-op-removal criterion; this module
+predates spec-019 and the two tables collide on several numbers below AC-20,
+so every bare reference in this file that means spec-018's table says so).
+Two of
 T2.1's phase-2 findings constrain every test here (see
 docs/XDD/specs/018-observability-load-and-fire-log/plan/phase-3.md, Key
 Decisions): an empty `reason` must be counted as unknown rather than folded
@@ -309,8 +313,10 @@ def test_non_string_reason_is_counted_as_unknown_not_folded(tmp_path):
 def test_instruction_stats_still_collapses_same_filename_across_repos(tmp_path):
     """Baseline/regression pin, not a bug to fix here: `instruction_stats`
     keys on bare path only, so two repos' records for the same filename
-    still merge into one entry (SDD-AC-19's defect). `instruction_stats_by_repo`
-    is the fix; this function is deliberately left alone (spec-019 T3.1 R1)."""
+    still merge into one entry (spec-019 SDD-AC-19's defect -- spec-018 has
+    its own, unrelated AC-19 about the resolver directory match, so this is
+    named explicitly). `instruction_stats_by_repo` is the fix; this function
+    is deliberately left alone (spec-019 T3.1 R1)."""
     events = tmp_path / "events.jsonl"
     _write_jsonl(
         events,
@@ -847,7 +853,7 @@ def test_walk_instruction_inventory_git_unavailable_fails_open(tmp_path, monkeyp
 
 # --- byte accounting: always-loaded vs conditional, honestly (T3.2) -------
 #
-# SDD-AC-14, and the three typing traps in the T3.2 task text: `bytes` is a
+# spec-018 SDD-AC-14, and the three typing traps in the T3.2 task text: `bytes` is a
 # quoted string ("2048", never a bare 2048), it is ABSENT (never "0") when
 # `logwrite.sh` could not stat the file, and it must never be silently
 # folded into a total as if it were free.
@@ -955,7 +961,7 @@ def test_byte_accounting_file_loaded_both_ways_attributes_each_event_by_its_own_
     assert totals.conditional_bytes == 100
 
 
-# --- recording state honesty (SDD-AC-15) ------------------------------------
+# --- recording state honesty (spec-018 SDD-AC-15) ---------------------------
 #
 # `recording_status` takes an injected `now` rather than reading the wall
 # clock, so every case here is deterministic (module docstring / T3.2 task
@@ -1113,7 +1119,8 @@ def test_recording_status_fallback_to_last_on_all_unparseable_ts():
 
 
 # --- the report leads with recording state, never with a load figure ------
-# (SDD-AC-15, Quality Requirements' Honesty row): an empty or stale record
+# (spec-018 SDD-AC-15, and spec-019's Quality Requirements' Honesty row):
+# an empty or stale record
 # must report the recording state as the headline, not present emptiness or
 # a stale figure as if it were a finding.
 
@@ -1448,7 +1455,11 @@ def _assert_redact_parity(path: Path, repo_root: Path) -> None:
 
 
 # --- the skill and agent inventory (T3.3, SDD/The two inventories, second
-# table; PRD F8; SDD-AC-18) ---------------------------------------------------
+# table; PRD F8; spec-018 SDD-AC-18) -------------------------------------------
+# (spec-019 also has an AC-18, tracing to its OWN PRD F8 -- a configured
+# source whose path no longer exists is reported missing, not "recorded
+# nothing"; that is tests/test_observability_sources.py's territory, not
+# this single-source inventory/coverage content.)
 #
 # The namespace hazard this task exists to avoid: SDD/The two inventories
 # says literally "agent name from frontmatter `name:`", but a real plugin
@@ -1916,7 +1927,7 @@ def test_firing_coverage_is_a_fraction():
 
 
 # --- the report renders the join: coverage, unused entries, and the
-# inventory size (SDD-AC-18, PRD F8) -----------------------------------------
+# inventory size (spec-018 SDD-AC-18, PRD F8) --------------------------------
 
 
 def test_build_load_report_states_skill_agent_inventory_size_and_coverage():
@@ -2031,7 +2042,7 @@ def test_redact_path_parity_absolute_path_outside_repo(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Hook durations: wrapper-sourced, single-invocation-scoped (T3.4, SDD-AC-17)
+# Hook durations: wrapper-sourced, single-invocation-scoped (T3.4, spec-018 SDD-AC-17)
 # ---------------------------------------------------------------------------
 #
 # `timed-wrapper.sh` (T3.5) is the only producer of `kind: hook` records, and
@@ -2192,7 +2203,11 @@ def test_hook_duration_stats_ignores_non_hook_kinds():
     assert result.entries == []
 
 
-# --- the report renders hook durations, honestly (SDD-AC-17) ---------------
+# --- the report renders hook durations, honestly (spec-018 SDD-AC-17) ------
+# (spec-019's own AC-21 -- timing installed in one SOURCE not presented as
+# available for others -- is the different, multi-source criterion; its own
+# test is test_build_multi_source_report_hook_timing_installed_only_where_wrapper_was
+# further down in this file.)
 
 
 def test_build_load_report_without_hooks_omits_hook_section():
