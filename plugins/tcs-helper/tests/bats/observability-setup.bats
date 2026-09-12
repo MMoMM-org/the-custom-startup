@@ -1686,3 +1686,148 @@ PY
   [ -z "$output" ]
   _assert_git_clean "$dir"
 }
+
+# ---------------------------------------------------------------------------
+# T4.4 ruling (ac): AC-3, AC-9 and AC-11 are worded "when setup runs" but
+# were tested only against registration.py directly. These three close the
+# letter through the real entry point.
+# ---------------------------------------------------------------------------
+
+@test "unrelated top-level keys in local settings survive a real install byte-for-byte (SDD-AC-3)" {
+  local home dir target
+  home="$(_new_home ac3-command-level)"
+  dir="$(_copy_fixture absent ac3-command-level)"
+  target="$dir/.claude/settings.local.json"
+
+  _write_local "$dir" '{
+  "permissions": { "allow": ["Bash(ls:*)"], "deny": [] },
+  "model": "claude-opus-5",
+  "statusLine": { "type": "command", "command": "my-statusline.sh" },
+  "env": { "SOMETHING_ELSE": "keep me" }
+}'
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  run python3 - "$target" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding='utf-8') as handle:
+    data = json.load(handle)
+
+assert data['permissions'] == {'allow': ['Bash(ls:*)'], 'deny': []}, data.get('permissions')
+assert data['model'] == 'claude-opus-5', data.get('model')
+assert data['statusLine'] == {'type': 'command', 'command': 'my-statusline.sh'}, data.get('statusLine')
+# ours is added BESIDE the existing env key, not instead of it.
+assert data['env']['SOMETHING_ELSE'] == 'keep me', data.get('env')
+assert data['env']['CLAUDE_OBSERVABILITY_ENABLED'] == '1', data.get('env')
+PY
+  [ "$status" -eq 0 ]
+}
+
+# T4.4 ruling (ac): the library test (test_observability_registration.py)
+# patches os.replace to raise -- a seam this command-level test cannot use.
+# What it uses instead is the same real-filesystem technique the residual-I/O
+# tests above rely on (a directory where the settings file belongs makes
+# os.replace fail with no code seam at all), one step further: `chflags uchg`
+# makes the destination itself immutable, so shutil.copy2 (a read plus a NEW
+# file) and the temp-write (also a new file) both still succeed -- only the
+# final `os.replace(temp, path)`, which has to remove the immutable
+# destination, fails. That is the exact window SDD-AC-9 is about: backup
+# already taken, temp already written, only the rename fails.
+@test "an interrupted write through the real entry point leaves the original intact with a backup, and reports failure (SDD-AC-9)" {
+  local home dir target original
+  home="$(_new_home ac9-command-level)"
+  dir="$(_copy_fixture empty-object ac9-command-level)"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/ac9-command-level.orig"
+  cp -p "$target" "$original"
+
+  chflags uchg "$target"
+
+  # Running as root can bypass the immutable flag, the same hazard the
+  # write-protected-directory tests above guard against for chmod.
+  if printf 'canary\n' >> "$target" 2>/dev/null; then
+    chflags nouchg "$target"
+    cp -p "$original" "$target"
+    skip "the immutable file is writable anyway (running as root?)"
+  fi
+
+  _run_setup "$home" install "$dir" --yes
+  # copy2 (write_settings' backup step) preserves st_flags on macOS, so the
+  # immutable flag lands on the BACKUP too -- clear it on both before any
+  # assertion that could abort the body, or teardown_file's rm -rf fails on
+  # a file this test made immutable, not on anything setup.sh left behind.
+  chflags nouchg "$target"
+  chflags nouchg "$target.tcs-observability.bak" 2>/dev/null || true
+
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "ABORT"
+  _assert_contains "$output" "the registration edit failed"
+  _assert_contains "$output" "failed to write"
+  _assert_bytes_equal "$original" "$target"
+
+  local backup="$target.tcs-observability.bak"
+  [ -e "$backup" ]
+  _assert_bytes_equal "$original" "$backup"
+  [ ! -e "$target.tcs-observability.tmp" ]
+  _assert_no_lock "$dir"
+}
+
+# T4.4 ruling (ac): the library test races two subprocesses directly against
+# registration.py; this is the same shape one level up, against setup.sh
+# itself, which takes its own lock BEFORE calling registration.py at all
+# (`--lock-held-by-caller`) -- so what serializes here is the command, not
+# just the module underneath it.
+@test "two concurrent real setup.sh runs against one target serialize, and no observed state is torn (SDD-AC-11)" {
+  local home dir target observations
+  home="$(_new_home ac11-command-level)"
+  dir="$(_copy_fixture empty-object ac11-command-level)"
+  target="$dir/.claude/settings.local.json"
+
+  env HOME="$home" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.excludesFile \
+    GIT_CONFIG_VALUE_0=/dev/null TCS_OBSERVABILITY_LOCK_TIMEOUT=20 \
+    bash "$SETUP_SH" install --target "$dir" --yes \
+    > "$WORK_PARENT/ac11-command-level.out1" 2>&1 &
+  local p1=$!
+  env HOME="$home" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.excludesFile \
+    GIT_CONFIG_VALUE_0=/dev/null TCS_OBSERVABILITY_LOCK_TIMEOUT=20 \
+    bash "$SETUP_SH" install --target "$dir" --yes \
+    > "$WORK_PARENT/ac11-command-level.out2" 2>&1 &
+  local p2=$!
+
+  # At least one observation is required rather than assumed -- the same
+  # posture the library's own version of this test takes -- because a poll
+  # loop that races two fast subprocesses can miss the window entirely and
+  # would otherwise prove nothing while still going green.
+  observations=0
+  while kill -0 "$p1" 2>/dev/null || kill -0 "$p2" 2>/dev/null; do
+    if [ -f "$target" ]; then
+      if python3 -c "
+import json, sys
+json.load(open(sys.argv[1], encoding='utf-8'))
+" "$target" 2>/dev/null; then
+        observations=$((observations + 1))
+      else
+        # A partial write was observed: fail loudly rather than let the
+        # loop exit quietly and the later assertions paper over it.
+        echo "a partial/unparseable document was observed mid-run" >&2
+        observations=-1
+        break
+      fi
+    fi
+  done
+
+  wait "$p1"; local rc1=$?
+  wait "$p2"; local rc2=$?
+
+  [ "$rc1" -eq 0 ]
+  [ "$rc2" -eq 0 ]
+  [ "$observations" -ge 0 ]
+  [ "$observations" -gt 0 ]
+
+  run _count_our_hooks "$target"
+  [ "$output" -eq 3 ]
+  _assert_no_lock "$dir"
+}
