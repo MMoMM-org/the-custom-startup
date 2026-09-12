@@ -85,10 +85,17 @@ No `--yes`, so nothing is written. Surface every line of the output.
 |---|---|---|
 | `STOP: Target is not inside a git repository` | Nothing written | Report and stop |
 | `STOP: Foreign hook entries occupy the event names…` | Another tool owns those events | Report and stop; do not force |
-| `ABORT: …not valid JSON…` | A settings file this feature did not author is unreadable | Report it; leave the file alone |
+| `ABORT: …is not valid JSON…` | A settings file this feature did not author is unreadable | Report it; leave the file alone |
+| `ABORT: …has an unexpected shape…` | That file parses, but a key this feature merges into is the wrong type | Report the key it names; leave the file alone |
+| `ABORT: Detection refused this target…` | Carries the status for the detection line printed above it | Report the line above it, which holds the reason |
 | `ABORT: Refusing to write: version control does not ignore…` | The change would be committable in someone else's repository | Report and stop |
 | `ABORT: another observability setup run holds the lock…` | A live run owns the target | Wait and retry |
+| `ABORT: could not create the lock file…` | No lock exists and no other run is involved: that directory is not writable, or its parent is missing | Check the directory's permissions and that its parent exists. Retrying changes nothing |
+| `ABORT: …` anything else | The run stopped before it could plan — a broken `lib/`, a bad flag, an unreadable version marker | Relay it verbatim; at this step nothing has been written |
 | `PLAN: …` | Nothing written yet | Continue to step 4 |
+
+The two lock lines are not interchangeable: waiting is the right move for the first and useless
+for the second.
 
 ### 4. Take the confirmation
 
@@ -104,7 +111,14 @@ If the user declines, stop and say that nothing was written.
 
 ### 6. Report what changed and how to reverse it
 
-Relay the `ADDED`/`REMOVED`/`MIGRATED` lines, then the `UNDO` line.
+Relay the `ADDED`/`REMOVED`/`MIGRATED` lines, then the `UNDO` line. An `INFO: already configured`
+in place of `ADDED` means nothing was written; say that rather than reporting a change.
+
+If this step aborts instead, relay the dispatcher's lines rather than summarising them — they
+state what was and was not written. A `PARTIAL MIGRATION` block means the shared settings file
+changed and the local one did not, so **the target is not recording**: pass on the `cp` command it
+prints, or fix the cause it names and re-run `install`. Never re-run assuming a failed apply left
+nothing behind.
 
 ### 7. Confirm
 
