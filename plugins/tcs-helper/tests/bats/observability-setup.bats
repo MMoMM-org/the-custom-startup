@@ -490,7 +490,12 @@ _make_record() {
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "ignored"
+  # The literal ABORT wording is "does not ignore", not "ignored" -- see the
+  # AC-6 sweep test below, which found this exact assertion coincidentally
+  # passing only because the WORK-NAME ("not-ignored") contains that
+  # substring, not because the message does.
+  _assert_contains "$output" "does not ignore"
+  _assert_contains "$output" ".claude/settings.local.json"
   [ ! -e "$dir/.claude/settings.local.json" ]
   [ ! -e "$home/.claude/observability" ]
   _assert_no_lock "$dir"
@@ -788,7 +793,12 @@ PY
 
   _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "recording"
+  # The bare word "recording" is also a substring of this test's own
+  # work-name (status-recording), which the TARGET line always prints --
+  # confirmed by mutation that the assertion below stayed green with the
+  # real STATUS line blanked. "STATUS: recording." is the label the message
+  # actually carries and cannot appear via any path.
+  _assert_contains "$output" "STATUS: recording."
   _assert_not_contains "$output" "configured but silent"
   _assert_not_contains "$output" "not configured"
 }
@@ -1122,7 +1132,12 @@ PY
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "ignored"
+  # Same coincidental-pass shape as observability-setup.bats' other
+  # "not-ignored" tests: this test's own work-name (legacy-not-ignored)
+  # contains "ignored", which the TARGET line prints regardless of what
+  # the real ABORT message says. Asserted on the actual wording instead.
+  _assert_contains "$output" "does not ignore"
+  _assert_contains "$output" ".claude/settings.json"
   _assert_bytes_equal "$original" "$legacy"
   _assert_no_lock "$dir"
 }
