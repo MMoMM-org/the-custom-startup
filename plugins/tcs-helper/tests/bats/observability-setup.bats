@@ -523,7 +523,9 @@ _make_record() {
 
   _run_setup_env "$home" "TCS_OBSERVABILITY_LOCK_TIMEOUT=0" install "$dir" --yes
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "lock"
+  # The CONTENTION wording specifically. A fix that made the two lock
+  # failures share one message would still pass a bare "lock" check.
+  _assert_contains "$output" "another observability setup run holds the lock"
   [ ! -e "$target" ]
   [ -f "$lock" ]
   run cat "$lock"
@@ -1481,4 +1483,76 @@ PY
   _assert_contains "$output" "does not ignore .claude/settings.local.json.tcs-observability.bak"
   _assert_not_contains "$output" "does not ignore /"
   _assert_no_lock "$dir"
+}
+
+# ---------------------------------------------------------------------------
+# The lock failing to be CREATED is not the lock being HELD.
+#
+# Found by T4.2 against a real target: a repository whose .claude/ this
+# process could not write produced "another observability setup run holds the
+# lock ...", with no lock file present and no other run in existence. The
+# refusal was right -- nothing is written either way -- but the diagnosis sent
+# the operator looking for a concurrent process that was never there.
+# ---------------------------------------------------------------------------
+
+@test "a lock that cannot be created reports the write restriction, not contention" {
+  local home dir target
+  home="$(_new_home lock-uncreatable)"
+  dir="$(_copy_fixture absent lock-uncreatable)"
+  target="$dir/.claude/settings.local.json"
+
+  mkdir -p "$dir/.claude"
+  chmod 500 "$dir/.claude"
+
+  # Running as root makes chmod cosmetic and the failure unobservable. CI does
+  # not run as root, but a container shell often does, and a test that silently
+  # proves nothing is worse than one that says so.
+  if echo canary > "$dir/.claude/canary" 2>/dev/null; then
+    chmod 700 "$dir/.claude"
+    skip "the write-protected directory is writable anyway (running as root?)"
+  fi
+
+  _run_setup_env "$home" "TCS_OBSERVABILITY_LOCK_TIMEOUT=0" install "$dir" --yes
+  local report="$status|$output"
+  chmod 700 "$dir/.claude"
+
+  [ "${report%%|*}" -ne 0 ]
+  # Names the real problem...
+  _assert_contains "$output" "could not create the lock file"
+  _assert_contains "$output" "$target.tcs-observability.lock"
+  # The errno is what makes the message actionable, so pin that it survived
+  # rather than falling back. Asserted as the ABSENCE of the fallback text
+  # rather than the presence of "Permission denied", which is the shell's
+  # wording and would tie this test to a locale.
+  _assert_not_contains "$output" "no further detail"
+  # ...and does NOT invent a concurrent run.
+  _assert_not_contains "$output" "another observability setup run"
+  _assert_not_contains "$output" "held by a live process"
+
+  # The refusal itself was already correct and stays correct.
+  [ ! -e "$target" ]
+  _assert_no_lock "$dir"
+  [ ! -e "$home/.claude/observability" ]
+}
+
+@test "a lock that cannot be created leaves no sidecar behind" {
+  local home dir
+  home="$(_new_home lock-uncreatable-sidecars)"
+  dir="$(_copy_fixture absent lock-uncreatable-sidecars)"
+
+  mkdir -p "$dir/.claude"
+  chmod 500 "$dir/.claude"
+  if echo canary > "$dir/.claude/canary" 2>/dev/null; then
+    chmod 700 "$dir/.claude"
+    skip "the write-protected directory is writable anyway (running as root?)"
+  fi
+
+  _run_setup_env "$home" "TCS_OBSERVABILITY_LOCK_TIMEOUT=0" install "$dir" --yes
+  chmod 700 "$dir/.claude"
+  [ "$status" -ne 0 ]
+
+  run find "$dir/.claude" -name '*.tcs-observability.*'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  _assert_git_clean "$dir"
 }

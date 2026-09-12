@@ -329,6 +329,12 @@ fi
 
 _LOCK_HELD=0
 
+# Why _lock_acquire failed, for the caller's message. "contention" means a
+# lock file is there and its owner is alive; "create" means the file could not
+# be made at all. set -u safety: both are assigned here, not only on failure.
+_LOCK_FAIL_REASON=""
+_LOCK_FAIL_DETAIL=""
+
 _lock_owner_pid() {
   # Prints the pid from a `<pid>:<epoch>` lock line, or nothing if the file
   # is absent, empty or unparseable.
@@ -367,6 +373,7 @@ _lock_file_age() {
 # same stale lock cannot both succeed.
 _lock_acquire() {
   local timeout ttl grace attempts=0 start now owner pid stamp stale
+  local create_error=""
   timeout="${TCS_OBSERVABILITY_LOCK_TIMEOUT:-10}"
   ttl="${TCS_OBSERVABILITY_LOCK_TTL:-300}"
   grace=2
@@ -381,7 +388,12 @@ _lock_acquire() {
     # `[ -e ]` test followed by a write is a race, and a race here means two
     # runs inside one settings file. $$ is this script's pid even inside the
     # subshell, so the recorded owner is alive for the whole sequence.
-    if ( set -o noclobber; printf '%s:%s\n' "$$" "$(date +%s)" > "$LOCK_FILE" ) 2>/dev/null; then
+    # stderr is CAPTURED rather than discarded: it is the only place the
+    # reason for a failed creation exists, and telling a write restriction
+    # apart from contention is the difference between an operator fixing a
+    # permission and hunting a process that does not exist (found by T4.2
+    # against a real target).
+    if create_error="$( ( set -o noclobber; printf '%s:%s\n' "$$" "$(date +%s)" > "$LOCK_FILE" ) 2>&1 )"; then
       _LOCK_HELD=1
       return 0
     fi
@@ -418,6 +430,30 @@ _lock_acquire() {
     # reclaimable lock into a spurious contention report.
     now="$(date +%s)"
     if [ "$attempts" -ge 2 ] && [ "$(( now - start ))" -ge "$timeout" ]; then
+      # WHY THIS IS DECIDED FROM THE ATTEMPT AND NOT FROM A PRE-CHECK.
+      # Testing whether the directory is writable and then acquiring opens a
+      # window where the answer changes between the two, and the check would
+      # have to run on the happy path as well -- paying for a diagnosis
+      # nobody needs. The creation attempt is already the probe: noclobber
+      # refuses with EEXIST when a lock is present and with EACCES/EPERM/
+      # ENOENT when the file could not be made. Whether the lock file is
+      # there NOW separates those two, and it is consulted only after the
+      # decision to give up has been made, so a race here can change the
+      # WORDING and never the outcome.
+      #
+      # The one shape this does not separate is an unwritable directory that
+      # ALSO holds a lock: it reports contention, which is true as far as it
+      # goes -- a lock is there and this run cannot have it -- while the
+      # deeper cause is the permission. Named here rather than left as a
+      # surprise.
+      if [ -e "$LOCK_FILE" ]; then
+        _LOCK_FAIL_REASON="contention"
+      else
+        _LOCK_FAIL_REASON="create"
+        # Just the errno: the path is already in the caller's message, and
+        # the shell prefixes its own "bash: line N: <path>: " to it.
+        _LOCK_FAIL_DETAIL="${create_error##*: }"
+      fi
       return 1
     fi
     sleep 0.1
@@ -454,7 +490,14 @@ _on_exit() {
 if [ "$VERB" != "status" ]; then
   trap _on_exit EXIT
   if ! _lock_acquire; then
-    _emit "ABORT" "another observability setup run holds the lock $LOCK_FILE -- nothing was written. A lock held by a live process is never force-removed."
+    case "$_LOCK_FAIL_REASON" in
+      create)
+        _emit "ABORT" "could not create the lock file $LOCK_FILE (${_LOCK_FAIL_DETAIL:-no further detail}). No lock file is present and no other run is involved: this is a write restriction on that directory, or a missing parent. Nothing was written."
+        ;;
+      *)
+        _emit "ABORT" "another observability setup run holds the lock $LOCK_FILE -- nothing was written. A lock held by a live process is never force-removed."
+        ;;
+    esac
     exit 1
   fi
 fi
