@@ -84,7 +84,7 @@ No `--yes`, so nothing is written. Surface every line of the output.
 | Line | Meaning | Next |
 |---|---|---|
 | `STOP: Target is not inside a git repository` | Nothing written | Report and stop |
-| `STOP: Foreign hook entries occupy the event names…` | Another tool owns those events | Report and stop; do not force |
+| `STOP: Another tool already hooks event names this feature registers…` | Another tool owns one or more of our three events | Report and stop; do not force. The `CONFLICT` line above it names each event and command |
 | `ABORT: …is not valid JSON…` | A settings file this feature did not author is unreadable | Report it; leave the file alone |
 | `ABORT: …has an unexpected shape…` | That file parses, but a key this feature merges into is the wrong type | Report the key it names; leave the file alone |
 | `ABORT: Detection refused this target…` | Carries the status for the detection line printed above it | Report the line above it, which holds the reason |

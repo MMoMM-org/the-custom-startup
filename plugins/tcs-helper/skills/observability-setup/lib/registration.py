@@ -68,6 +68,11 @@ import lock
 # The bundle is referenced through $HOME rather than an absolute path (ADR-2):
 # one command string has to work on the host and inside a container, and an
 # absolute path has no upgrade story.
+#
+# PAIRED DEFINITION: detect.sh's OUR_NAMESPACE holds this same string and is
+# how detection recognises what this module writes. The two carried no note in
+# either file until spec-019 ruling (aa)'s follow-up swept for the class; they
+# are now equated by the cross-file agreement test.
 NAMESPACE = '$HOME/.claude/observability/'
 
 ENV_SWITCH = ('CLAUDE_OBSERVABILITY_ENABLED', '1')
@@ -86,6 +91,13 @@ TEMP_SUFFIX = '.tcs-observability.tmp'
 
 # event -> (matcher, script). PreToolUse is matched to Skill alone; the other
 # two carry no matcher because their events fire once, not per tool.
+# PAIRED DEFINITION: detect.sh's OUR_EVENTS is these same three keys, and it
+# is what scopes a CONFLICT. Adding a fourth event HERE without adding it
+# there fails in the permissive direction -- a genuine collision under the new
+# event would classify CLEAN and setup would install beside a hook that fires
+# alongside ours. tests/tcs-helper/test_observability_cross_file_agreement.py
+# asserts the two sets are equal, so the drift is caught even by someone who
+# never reads this comment.
 REGISTRATION = {
     'InstructionsLoaded': ('', 'log_instructions.sh'),
     'PreToolUse': ('Skill', 'log_skill.sh'),

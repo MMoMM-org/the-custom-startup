@@ -194,6 +194,7 @@ import json
 import os
 import sys
 
+# PAIRED DEFINITION: registration.py's NAMESPACE holds this same string.
 OUR_NAMESPACE = "$HOME/.claude/observability/"
 
 # The three events this feature registers, and therefore the only events
