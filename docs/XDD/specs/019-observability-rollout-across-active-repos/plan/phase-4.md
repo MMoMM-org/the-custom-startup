@@ -293,7 +293,7 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
 
 
 
-- [ ] **T4.3 The documentation the risk register already promised** `[activity: technical-writing]`
+- [x] **T4.3 The documentation the risk register already promised** `[activity: technical-writing]`
 
   The PRD mitigates the per-event-cost risk with "keep the measured cost visible in the
   documentation", and no other task in this plan writes or updates any documentation. A
