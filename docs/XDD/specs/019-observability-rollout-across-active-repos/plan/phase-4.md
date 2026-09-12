@@ -214,7 +214,7 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
 
 
 
-- [ ] **T4.2 Rollout to the target repositories** `[activity: validate]`
+- [x] **T4.2 Rollout to the target repositories** `[activity: validate]`
 
   1. Prime: read the locations config format `[ref: SDD/ADR-6]`. **The real repository names and
      paths belong only in that gitignored file — never in a commit message, a test fixture, or any
@@ -290,6 +290,21 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
   for me to guess: we register `PreToolUse` with matcher `Skill`, and whether a foreign `PreToolUse`
   hook with a different matcher overlaps at all depends on how the harness treats the matcher as
   part of dispatch identity. Event-level is the floor; matcher-level may be correct on top of it.
+
+  **Closed 2026-09-12, and the closing corrected the config as well as the rollout.** `--home`
+  landed, and the two container homes that needed a bundle now hold one: each verified by a
+  round-trip run with `HOME` pointed at the container home, each leaving its target's registration
+  byte-identical and `git status` untouched. `status --home` turns what had been silence into a
+  stated scope -- `HOME: <path>` followed by `BUNDLE: MISSING` is exactly the reading the first
+  rollout lacked.
+
+  **One home came off the list rather than being supplied.** A third target has a home-shaped
+  directory and no container session that needs these hooks. Listing it would have the report show
+  a home permanently "not yet recording" for a place nothing will ever write -- a standing false
+  alarm, which is the shape this feature exists to remove. **The directory's existence was not
+  evidence that sessions run in it, and that had to be asked rather than inferred.** The same
+  question put to the other target returned the opposite answer, so neither could have been guessed
+  from the filesystem.
 
   **Ruling (ad), 2026-09-12, and it reopens this task.** The rollout was reported complete and was
   not. Measured after T4.2 closed: **no container home holds the bundle.** The registration writes
