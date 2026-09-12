@@ -195,6 +195,30 @@ import os
 import sys
 
 OUR_NAMESPACE = "$HOME/.claude/observability/"
+
+# The three events this feature registers, and therefore the only events
+# under which a foreign hook is a conflict. SDD-AC-4 and PRD F1 both say "a
+# foreign entry under one of the three event names"; this used to be tested
+# by discarding the event name entirely, which refused targets whose hooks
+# did not overlap ours at all (measured during T4.2 on a target carrying only
+# PostToolUse and SessionStart -- neither of them ours).
+#
+# WHY THE TEST IS AT EVENT LEVEL AND NOT MATCHER LEVEL (ruling (aa)). Two of
+# the three are registered with matcher "" which the harness documents as
+# "match all", so any foreign hook under them overlaps ours by construction
+# and a matcher test would change nothing. The third, PreToolUse, we register
+# with matcher "Skill" -- and deciding that a foreign matcher does NOT
+# overlap it means evaluating that matcher the way the harness does: an exact
+# string, or a "|"/"," list, or, the moment it contains any other character,
+# an unanchored JavaScript regular expression tested with RegExp.test. This
+# detector is shell wrapping python and cannot evaluate a JS regex; guessing
+# wrong in the permissive direction installs beside a hook that DOES fire
+# alongside ours, which is the dangerous direction. A CONFLICT costs a
+# conversation; a missed one costs correctness. So the floor is the event.
+#
+# PAIRED DEFINITION: registration.py's REGISTRATION keys are these same three
+# names, and the two must change together.
+OUR_EVENTS = ("InstructionsLoaded", "PreToolUse", "SubagentStart")
 # Event name -> the adapter script this feature's own bundle installs for
 # it. Used ONLY to recognise the legacy in-repo shape (settings.json,
 # scripts under $CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability
@@ -400,7 +424,14 @@ def main():
         print("OURS")
         return
 
-    foreign = sorted({cmd for _, cmd in local_commands if OUR_NAMESPACE not in cmd})
+    # The event name is load-bearing, not a throwaway: a foreign hook under
+    # an event we never register cannot collide with anything we add, and
+    # add_registration leaves foreign entries alone in any case.
+    foreign = sorted({
+        "%s -> %s" % (event, cmd)
+        for event, cmd in local_commands
+        if OUR_NAMESPACE not in cmd and event in OUR_EVENTS
+    })
     if foreign:
         print("CONFLICT|" + ", ".join(foreign))
         return
@@ -459,11 +490,11 @@ case "$CLASSIFY_OUTPUT" in
     esac
     ;;
   CONFLICT\|*)
-    _emit "CONFLICT" "Foreign hook entries found in $WRITE_PATH_REL: ${CLASSIFY_OUTPUT#CONFLICT|}"
+    _emit "CONFLICT" "Foreign hook entries under the event names this feature registers, in $WRITE_PATH_REL: ${CLASSIFY_OUTPUT#CONFLICT|}"
     exit 3
     ;;
   CLEAN)
-    _emit "CLEAN" "No observability registration and no foreign hook entries in $WRITE_PATH_REL."
+    _emit "CLEAN" "No observability registration, and no foreign hook entries under the event names this feature registers, in $WRITE_PATH_REL."
     exit 0
     ;;
   *)

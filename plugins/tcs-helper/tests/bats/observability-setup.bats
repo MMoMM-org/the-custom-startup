@@ -415,6 +415,15 @@ _make_record() {
   [ "$status" -eq 0 ]
   _assert_contains "$output" "/opt/foreign-audit/hook.sh"
   _assert_contains "$output" ".claude/settings.local.json"
+  # "precisely what and where" -- the event name is half of "where", and it
+  # is the half that tells the operator which of their hooks to look at.
+  _assert_contains "$output" "InstructionsLoaded"
+  _assert_contains "$output" "PreToolUse"
+  _assert_contains "$output" "SubagentStart"
+  # The STOP line must route the reader to the line that names them rather
+  # than restate a claim of its own. Pinned because a message that asserts
+  # blindly reads identically to one that checked.
+  _assert_contains "$output" "the CONFLICT line above names each event and command"
   _assert_no_lock "$dir"
 }
 
@@ -790,21 +799,50 @@ PY
 # both a foreign entry and no registration of ours under a different event).
 # ---------------------------------------------------------------------------
 
-@test "a foreign entry under an event we do NOT register still stops install" {
-  local home dir target original
+@test "a foreign entry under an event we do not register leaves the target installable" {
+  local home dir target total
   home="$(_new_home install-beside-foreign)"
-  dir="$(_copy_fixture foreign-only install-beside-foreign)"
+  dir="$(_copy_fixture non-ascii install-beside-foreign)"
   target="$dir/.claude/settings.local.json"
-  original="$WORK_PARENT/install-beside-foreign.orig"
+
+  # Ruling (aa) reverses what this test used to assert. This fixture's only
+  # hook is under `Notification`, which this feature never registers, so
+  # nothing overlaps and the install must proceed. It used to be refused
+  # because the CONFLICT test discarded the event name and treated any
+  # foreign command anywhere as an occupation of our events.
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _assert_not_contains "$output" "STOP"
+
+  run _count_our_hooks "$target"
+  [ "$output" -eq 3 ]
+
+  # The half worth keeping: the foreign entry survives a run that actually
+  # wrote, which is a real preservation assertion rather than one made true
+  # by the install being refused. Its non-ASCII bytes survive too.
+  _assert_contains "$(cat "$target")" "/opt/Café-Tools/notify.sh"
+  _assert_contains "$(cat "$target")" "Équipe-Café-日本語"
+  total="$(grep -c -F '"type": "command"' "$target" || true)"
+  [ "$total" -eq 4 ]
+  _assert_no_lock "$dir"
+}
+
+@test "a foreign entry under one of our events with a different matcher still stops install" {
+  local home dir target original
+  home="$(_new_home foreign-other-matcher)"
+  dir="$(_copy_fixture foreign-only foreign-other-matcher)"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/foreign-other-matcher.orig"
   cp -p "$target" "$original"
 
-  # detect.sh CONFLICT is broader than "a foreign entry under one of OUR
-  # event names": ANY hook command in settings.local.json outside our
-  # namespace classifies the target as CONFLICT. This fixture foreign entry
-  # sits under PreToolUse with a Bash matcher, which we never claim, and the
-  # target is still refused. Pinned because the command-level consequence is
-  # easy to get wrong in the other direction -- an install that proceeded
-  # here would be merging into a document another tool owns.
+  # This fixture's foreign hook is PreToolUse with matcher `Bash`; we register
+  # PreToolUse with matcher `Skill`, so the two would never fire on the same
+  # tool call. The stop is DELIBERATELY event-level anyway: deciding
+  # non-overlap from matcher strings means evaluating an unanchored JavaScript
+  # regular expression against the tool name, and a wrong answer in the
+  # permissive direction installs beside a hook that does fire alongside ours.
+  # SDD-AC-4 is worded at the event level, and a CONFLICT costs a
+  # conversation rather than a wrong write.
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
   _assert_bytes_equal "$original" "$target"

@@ -609,7 +609,7 @@ fi
 # ---------------------------------------------------------------------------
 
 if [ "$DETECT_LABEL" = "CONFLICT" ]; then
-  _emit "STOP" "Foreign hook entries occupy the event names this feature registers, in $LOCAL_SETTINGS. Nothing was changed. Remove or relocate them and re-run, or leave this target unconfigured."
+  _emit "STOP" "Another tool already hooks event names this feature registers, in $LOCAL_SETTINGS -- the CONFLICT line above names each event and command. Nothing was changed. Relocate them and re-run, or leave this target unconfigured."
   exit 0
 fi
 

@@ -205,11 +205,43 @@ _count_state_lines() {
   _assert_not_contains "$output" "LEGACY"
 }
 
-@test "non-ascii: CONFLICT, exit 3, and the non-ASCII bytes survive into the message uncorrupted" {
+@test "non-ascii: CLEAN, exit 0 -- its only hook is under an event we do not register" {
+  # Ruling (aa) reverses this test's verdict. The fixture's foreign hook is
+  # under `Notification`, which this feature never registers, so it cannot
+  # collide with anything we add. It was CONFLICT only because the test
+  # discarded the event name.
   _run_detect "$FIXTURES_DIR/non-ascii"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "CLEAN"
+  _assert_not_contains "$output" "CONFLICT"
+}
+
+@test "the non-ASCII bytes of a conflicting command survive into the message uncorrupted" {
+  # The half of the old non-ascii test worth keeping. It needs a fixture that
+  # still CONFLICTS, so the same non-ASCII command is moved under one of the
+  # three events we do register -- otherwise the command never reaches a
+  # message and the assertion passes without testing anything.
+  local repo="$FIXTURES_PARENT/variant-non-ascii-our-event"
+  rm -rf "$repo"
+  cp -pR "$FIXTURES_DIR/non-ascii" "$repo"
+  python3 - "$repo/.claude/settings.local.json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    data = json.load(handle)
+data["hooks"] = {"PreToolUse": data["hooks"].pop("Notification")}
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+PY
+
+  _run_detect "$repo"
   [ "$status" -eq 3 ]
   _assert_contains "$output" "CONFLICT"
   _assert_contains "$output" "Café"
+  _assert_contains "$output" "PreToolUse"
 }
 
 # ---------------------------------------------------------------------------
@@ -676,4 +708,45 @@ PY
   [ "$status" -eq 0 ]
   _assert_contains "$output" "CLEAN"
   _assert_not_contains "$output" "LEGACY"
+}
+
+# ---------------------------------------------------------------------------
+# Ruling (aa): CONFLICT honours the event name. A foreign hook under an event
+# this feature does not register is not a conflict -- and the CLEAN line must
+# not claim more than it checked.
+# ---------------------------------------------------------------------------
+
+@test "a foreign hook under an event we do not register classifies CLEAN" {
+  local repo
+  repo="$FIXTURES_PARENT/variant-foreign-other-event"
+  rm -rf "$repo"
+  cp -pR "$FIXTURES_DIR/non-ascii" "$repo"
+
+  _run_detect "$repo"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "CLEAN"
+  _assert_not_contains "$output" "CONFLICT"
+}
+
+@test "the CLEAN line does not claim there are no foreign hooks at all" {
+  local repo
+  repo="$FIXTURES_PARENT/variant-clean-wording"
+  rm -rf "$repo"
+  cp -pR "$FIXTURES_DIR/non-ascii" "$repo"
+
+  # This target HAS a foreign hook -- under Notification, which we never
+  # register. Saying "no foreign hook entries" of it is the same overclaim
+  # class as the false ADDED and the phantom lock contention.
+  _run_detect "$repo"
+  [ "$status" -eq 0 ]
+  _assert_not_contains "$output" "no foreign hook entries in"
+  _assert_contains "$output" "under the event names this feature registers"
+}
+
+@test "a foreign hook under one of our events still classifies CONFLICT and names the event" {
+  _run_detect "$FIXTURES_DIR/same-event-names-populated"
+  [ "$status" -eq 3 ]
+  _assert_contains "$output" "CONFLICT"
+  _assert_contains "$output" "InstructionsLoaded"
+  _assert_contains "$output" "SubagentStart"
 }
