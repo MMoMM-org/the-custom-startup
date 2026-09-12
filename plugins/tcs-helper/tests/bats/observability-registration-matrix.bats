@@ -184,13 +184,24 @@ sys.exit(0 if a == b else 1)
 
 # ---------------------------------------------------------------------------
 # Matrix completeness -- fails loudly if build.sh's fixture count drifts
-# without this file being updated to match (13 per the T2.1 header count).
+# without this file being updated to match (15 per the T2.1 header count,
+# plus T4.4's two AC-6 sidecar-ignore fixtures below).
+#
+# T4.4 added ignored-file-and-backup-but-not-lock and
+# ignored-through-lock-but-not-temp to build.sh, closing an SDD-AC-6
+# evidence gap in observability-setup.bats (setup.sh's ignore-check loop).
+# Both are deliberately absent from the matrix and hygiene lists further
+# below: registration.py is git-blind (see write-path-not-ignored's own
+# comment), so against registration.py directly their content ("{}\n") is
+# indistinguishable from empty-object, already covered there. Their whole
+# reason to exist is the .gitignore shape setup.sh's check-ignore call
+# reads, which this file's tests never invoke.
 # ---------------------------------------------------------------------------
 
-@test "the matrix builds exactly 13 target fixtures" {
+@test "the matrix builds exactly 15 target fixtures" {
   local count
   count="$(find "$FIXTURES_DIR" -mindepth 1 -maxdepth 1 -type d ! -name '*.home' | wc -l | tr -d ' ')"
-  [ "$count" -eq 13 ]
+  [ "$count" -eq 15 ]
 }
 
 # ---------------------------------------------------------------------------

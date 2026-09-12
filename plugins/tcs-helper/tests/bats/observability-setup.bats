@@ -514,6 +514,98 @@ _make_record() {
   _assert_no_lock "$dir"
 }
 
+# T4.4 (SDD-AC-6 evidence gap): the settings and backup paths above already
+# had a refusal test each; the lock and temp sidecars registration.py also
+# declares in written_paths() did not. Same shape as the backup case, one
+# fixture per path, so a run over the wrong sidecar or a loop that stops
+# checking early is caught the same way.
+@test "a target that ignores the settings file and backup but not the lock path is refused, naming the lock path" {
+  local home dir target original
+  home="$(_new_home lock-not-ignored)"
+  dir="$(_copy_fixture ignored-file-and-backup-but-not-lock lock-not-ignored)"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/lock-not-ignored.orig"
+  cp -p "$target" "$original"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" ".tcs-observability.lock"
+  _assert_bytes_equal "$original" "$target"
+  _assert_no_lock "$dir"
+}
+
+@test "a target that ignores the settings file, backup and lock but not the temp path is refused, naming the temp path" {
+  local home dir target original
+  home="$(_new_home temp-not-ignored)"
+  dir="$(_copy_fixture ignored-through-lock-but-not-temp temp-not-ignored)"
+  target="$dir/.claude/settings.local.json"
+  original="$WORK_PARENT/temp-not-ignored.orig"
+  cp -p "$target" "$original"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" ".tcs-observability.tmp"
+  _assert_bytes_equal "$original" "$target"
+  _assert_no_lock "$dir"
+}
+
+# A drift guard alongside the four hand-written cases above, not instead of
+# them: the two explicit tests read cleanly on their own when one fails, but
+# neither one notices a FIFTH path added to written_paths() later -- nothing
+# would fail, and nothing would say a case is missing. This test reads the
+# declaration itself, the same way setup.sh's own _written_paths() does, and
+# proves every path it names has its own working refusal, so a future fifth
+# path is swept in without anyone remembering to add a sixth hand-written
+# test for it.
+@test "every path written_paths() declares triggers its own ignore refusal" {
+  local home dir target repo_root paths_file path other
+
+  home="$(_new_home written-paths-sweep)"
+  dir="$(_copy_fixture absent written-paths-sweep)"
+  # rev-parse, not $dir itself -- setup.sh computes its own REPO_ROOT the
+  # same way, and $TMPDIR is a symlink on macOS (/tmp -> /private/tmp), so
+  # a target built from the unresolved $dir would not share a prefix with
+  # the resolved paths registration.py hands back below.
+  repo_root="$(git -C "$dir" rev-parse --show-toplevel)"
+  target="$repo_root/.claude/settings.local.json"
+
+  paths_file="$WORK_PARENT/written-paths-sweep.paths"
+  python3 - "$REPO_ROOT/plugins/tcs-helper/skills/observability-setup/lib" "$target" \
+    > "$paths_file" <<'PY'
+import sys
+
+sys.path.insert(0, sys.argv[1])
+import registration
+
+for path in registration.written_paths(sys.argv[2]):
+    print(path)
+PY
+
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+
+    # Ignore every OTHER declared path by exact name; leave this one out.
+    : > "$dir/.gitignore"
+    while IFS= read -r other; do
+      [ -n "$other" ] || continue
+      [ "$other" = "$path" ] && continue
+      printf '%s\n' "${other#"$repo_root"/}" >> "$dir/.gitignore"
+    done < "$paths_file"
+    git -C "$dir" add .gitignore
+    git -C "$dir" -c user.name=fixture -c user.email=fixture@tcs.invalid \
+      commit -q -m "chore: ignore every declared path but one"
+
+    _run_setup "$home" install "$dir" --yes
+    [ "$status" -ne 0 ]
+    # The literal ABORT wording is "does not ignore", not "ignored" -- a
+    # sibling test's "ignored" check happens to pass only because its own
+    # WORK-NAME contains that substring, which this test's work-name does
+    # not, so it is asserted on the real message text instead.
+    _assert_contains "$output" "does not ignore"
+    _assert_contains "$output" "${path#"$repo_root"/}"
+  done < "$paths_file"
+}
+
 # ---------------------------------------------------------------------------
 # The lock, taken before detection (Runtime View step 2).
 # ---------------------------------------------------------------------------

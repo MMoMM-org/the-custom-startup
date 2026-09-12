@@ -35,7 +35,10 @@
 #
 # Scenarios produced (plan/phase-2.md T2.1, 13 fixtures: the plan named 10,
 # a TDD gate on 2026-09-08 added 3 -- not-a-repository,
-# ignored-file-but-not-backup, valid-json-wrong-shape):
+# ignored-file-but-not-backup, valid-json-wrong-shape; T4.4 added 2 more --
+# ignored-file-and-backup-but-not-lock, ignored-through-lock-but-not-temp --
+# closing the AC-6 evidence gap the ignore loop's OTHER two sidecar paths
+# were missing a refusal test for):
 #   absent/                          - no settings file
 #   empty-object/                    - {}
 #   foreign-only/                    - hooks present, none in our namespace
@@ -48,6 +51,9 @@
 #   already-configured-observability/ - this shipping repo's real hand-made legacy state
 #   not-a-repository/                - a plain directory, no .git/
 #   ignored-file-but-not-backup/     - settings.local.json ignored by exact name, .bak is not
+#   valid-json-wrong-shape/          - parses cleanly, wrong TYPE (hooks a string)
+#   ignored-file-and-backup-but-not-lock/  - settings + .bak ignored, .lock is not
+#   ignored-through-lock-but-not-temp/     - settings + .bak + .lock ignored, .tmp is not
 #   valid-json-wrong-shape/          - parses cleanly, wrong TYPE (hooks a string)
 #
 # All repos use deterministic identity + timestamps so SHAs are reproducible.
@@ -388,6 +394,32 @@ build_valid_json_wrong_shape() {
   printf '{\n  "hooks": "not-an-object"\n}\n' > "$repo/.claude/settings.local.json"
 }
 
+# --- Scenario 14: ignored-file-and-backup-but-not-lock -----------------------
+# T4.4 (SDD-AC-6 evidence gap): the settings file AND its .bak are both
+# ignored, but the .lock sidecar is not -- so the refusal loop's THIRD path
+# is what has to fire here, naming .tcs-observability.lock specifically.
+build_ignored_file_and_backup_but_not_lock() {
+  local repo="$OUT_DIR/ignored-file-and-backup-but-not-lock"
+  _init_scenario "$repo" "ignored-file-and-backup-but-not-lock" \
+    $'.claude/settings.local.json\n.claude/settings.local.json.tcs-observability.bak'
+
+  mkdir -p "$repo/.claude"
+  printf '{}\n' > "$repo/.claude/settings.local.json"
+}
+
+# --- Scenario 15: ignored-through-lock-but-not-temp --------------------------
+# T4.4 (SDD-AC-6 evidence gap): settings, .bak AND .lock are all ignored, so
+# only the FOURTH and last path -- .tcs-observability.tmp -- is left
+# committable, and that is the one the refusal has to name.
+build_ignored_through_lock_but_not_temp() {
+  local repo="$OUT_DIR/ignored-through-lock-but-not-temp"
+  _init_scenario "$repo" "ignored-through-lock-but-not-temp" \
+    $'.claude/settings.local.json\n.claude/settings.local.json.tcs-observability.bak\n.claude/settings.local.json.tcs-observability.lock'
+
+  mkdir -p "$repo/.claude"
+  printf '{}\n' > "$repo/.claude/settings.local.json"
+}
+
 # --- Driver -------------------------------------------------------------
 
 build_absent
@@ -403,5 +435,7 @@ build_already_configured_observability
 build_not_a_repository
 build_ignored_file_but_not_backup
 build_valid_json_wrong_shape
+build_ignored_file_and_backup_but_not_lock
+build_ignored_through_lock_but_not_temp
 
 printf '%s\n' "$OUT_DIR"
