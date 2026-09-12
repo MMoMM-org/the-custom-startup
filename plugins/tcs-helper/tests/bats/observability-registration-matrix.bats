@@ -183,25 +183,60 @@ sys.exit(0 if a == b else 1)
 }
 
 # ---------------------------------------------------------------------------
-# Matrix completeness -- fails loudly if build.sh's fixture count drifts
-# without this file being updated to match (15 per the T2.1 header count,
-# plus T4.4's two AC-6 sidecar-ignore fixtures below).
+# Matrix completeness -- fails loudly if build.sh's fixture set drifts
+# without this file being updated to match. A NAMED set, not a count: a
+# bare number breaks on any legitimate addition and does not say which
+# fixture is missing or unexpected when it does. This lists all 13
+# fixtures this file's per-fixture and hygiene tests enumerate below, PLUS
+# two build.sh does not build for this file at all:
 #
-# T4.4 added ignored-file-and-backup-but-not-lock and
-# ignored-through-lock-but-not-temp to build.sh, closing an SDD-AC-6
-# evidence gap in observability-setup.bats (setup.sh's ignore-check loop).
-# Both are deliberately absent from the matrix and hygiene lists further
-# below: registration.py is git-blind (see write-path-not-ignored's own
-# comment), so against registration.py directly their content ("{}\n") is
-# indistinguishable from empty-object, already covered there. Their whole
-# reason to exist is the .gitignore shape setup.sh's check-ignore call
-# reads, which this file's tests never invoke.
+# ignored-file-and-backup-but-not-lock and ignored-through-lock-but-not-temp
+# are T4.4's SDD-AC-6 sidecar-ignore fixtures, consumed by
+# observability-setup.bats's OWN independent build.sh invocation (setup.sh's
+# ignore-check loop), never by anything in this file. They live in build.sh
+# rather than a second builder because build.sh is already shared this way
+# -- observability-setup.bats has run its own copy of these fixtures since
+# before T4.4, for scenarios this file's registration.py-content matrix has
+# no stake in (absent, empty-object and the rest, reused there for detect.sh
+# and setup.sh's own dispatch, not for the merge/removal behaviour this file
+# pins). Against registration.py directly the two new ones are
+# indistinguishable from empty-object anyway (registration.py is git-blind
+# -- see write-path-not-ignored's own comment below), so folding them into
+# this file's per-fixture/hygiene enumeration would add coverage this file
+# already has under another name, for a property (.gitignore shape) this
+# file's tests never look at.
 # ---------------------------------------------------------------------------
 
-@test "the matrix builds exactly 15 target fixtures" {
-  local count
-  count="$(find "$FIXTURES_DIR" -mindepth 1 -maxdepth 1 -type d ! -name '*.home' | wc -l | tr -d ' ')"
-  [ "$count" -eq 15 ]
+@test "the matrix builds exactly the fixture set this file and observability-setup.bats expect" {
+  local expected found
+  expected="$(cat <<'NAMES'
+absent
+already-configured-observability
+empty-object
+foreign-only
+foreign-plus-ours-current
+foreign-plus-ours-older
+ignored-file-and-backup-but-not-lock
+ignored-file-but-not-backup
+ignored-through-lock-but-not-temp
+malformed
+non-ascii
+not-a-repository
+same-event-names-populated
+valid-json-wrong-shape
+write-path-not-ignored
+NAMES
+)"
+  found="$(find "$FIXTURES_DIR" -mindepth 1 -maxdepth 1 -type d ! -name '*.home' -exec basename {} \; | sort)"
+
+  # A plain string compare would just say "failed"; diff says which name is
+  # missing (< expected) or unaccounted for (> found). Temp files, not
+  # process substitution -- /dev/fd/N under bats' `run` hits "Operation not
+  # permitted" here.
+  printf '%s\n' "$expected" > "$WORK_PARENT/expected-fixture-names.txt"
+  printf '%s\n' "$found" > "$WORK_PARENT/found-fixture-names.txt"
+  run diff "$WORK_PARENT/expected-fixture-names.txt" "$WORK_PARENT/found-fixture-names.txt"
+  [ "$status" -eq 0 ]
 }
 
 # ---------------------------------------------------------------------------
