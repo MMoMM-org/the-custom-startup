@@ -324,7 +324,8 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
      the SDD and enforced by no task — the kind of constraint that is honoured by intention until
      the day it is not.
      - **CON-1 (bash 3.2)**: the mechanism is the `macos-latest` leg of the bats matrix in
-       `.github/workflows/tests.yml:82`, since macOS ships bash 3.2 as `/bin/bash`. Confirm the new
+       `.github/workflows/tests.yml` (the `bats` job at `:87`, its matrix at `:95` -- the cited
+       `:82` was stale, the third stale line reference this plan has carried), since macOS ships bash 3.2 as `/bin/bash`. Confirm the new
        suite actually runs on that leg — a suite that only runs on the Linux leg is tested under
        bash 5 and proves nothing about the constraint. There is no dedicated `BASH_VERSINFO` guard
        anywhere in this repository; the runner *is* the guard, which is worth knowing before relying
@@ -365,6 +366,62 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
   would be an implementer-added restriction the criterion does not ask for. The map therefore
   records SDD-AC-4 as **exactly satisfied**, with matcher-level examined and deliberately rejected
   with documented reasoning -- not as a compromise, and not as an open question.
+
+  **The evidence map, 2026-09-12.** Every SDD acceptance criterion, and the test that exercises it.
+  Built by reading each test body rather than by grepping for `SDD-AC-n` comments: a comment can
+  name a criterion its test does not reach, so a reference is corroboration and never proof. The
+  question applied to each was **would this test go red if the behaviour silently stopped working**
+  -- an answer of "probably" was recorded as a gap, not as coverage.
+
+  | AC | Evidence |
+  |---|---|
+  | 1 | `observability-setup.bats` -- non-repository reported, nothing written, exit 0 |
+  | 2 | `observability-setup.bats` + `test_observability_registration.py` -- created file holds exactly `{env,hooks}` |
+  | 3 | `test_observability_registration.py` (library) + `observability-setup.bats` (command, ruling (ac)) |
+  | 4 | `observability-setup.bats` x3 -- stop under our events; install proceeds under others; different matcher still stops |
+  | 5 | `observability-setup.bats` -- unparseable refused non-zero, and a sibling asserting no traceback |
+  | 6 | `observability-setup.bats` x3 -- lock path, temp path, plus a sweep over `written_paths()` itself |
+  | 7 | `test_observability_registration.py` + `observability-setup.bats` -- "already configured" |
+  | 8 | `test_observability_registration.py` + `observability-bundle-install.bats` |
+  | 9 | `test_observability_registration.py` (patched `os.replace`) + `observability-setup.bats` (`chflags uchg`, ruling (ac)) |
+  | 10 | `test_observability_registration.py` + `observability-setup.bats` -- both layers |
+  | 11 | `test_observability_registration.py` + `observability-setup.bats` -- two real processes, each observation JSON-parsed |
+  | 12, 13, 14 | `test_observability_registration.py` + `observability-setup.bats` -- both layers each |
+  | 15 | `observability-setup.bats` -- drift surfaces through `status`, not through the comparator |
+  | 16 | `test_observability_report.py` (real CLI) + `test_observability_sources.py` |
+  | 17, 18 | `test_observability_sources.py` -- `MISSING` asserted never to read as `NOT_YET_RECORDING` |
+  | 19 | `test_observability_report.py` -- same filename counted separately per repo |
+  | 20, 21, 22, 23 | `test_observability_report.py` -- per-source state, timing, firing detail, denominator |
+  | 24 | `test_observability_report_t30_golden.py` -- real subprocess against a fixture frozen at `eb9b529` |
+  | 25 | `test_observability_sources.py` + `test_observability_report.py` -- both clauses |
+  | 26 | `observability-setup.bats` x5 -- each state cross-asserts the other two are absent |
+
+  **26 tested, 0 prose-only.** spec-018's equivalent map found four criteria in the prose-only
+  state; naming them there proved more useful than counting them, and the same standard was applied
+  here. Two criteria needed work to reach it, both under ruling (ac): AC-6 had only two of the four
+  paths `written_paths()` declares, on the criterion the SDD calls "the one refusal that protects a
+  third party"; and AC-3, AC-9 and AC-11 were tested only against the library while worded "when
+  setup runs".
+
+  **What the map cost to build, recorded because it is the reusable part.** Four findings came out
+  of it that no amount of counting would have produced:
+
+  - **AC-4 is exactly satisfied, not a compromise.** The matcher question was left open for
+    evidence; the criterion never mentions the matcher, so event-level is the only reading its text
+    supports and a matcher-level narrowing would be an implementer-added restriction. The question
+    was wrong, not the answer.
+  - **The stale `SDD-AC-n` comments were not stale.** `test_observability_report.py` predates this
+    spec and cites **spec-018's own** table, which numbers independently and collides on every N
+    from 1 to 20. Six comments were correct for the spec they were written against; the instruction
+    to "fix" them would have broken them. They are now prefixed by spec rather than renumbered.
+  - **A fourth vacuous assertion.** `observability-setup.bats`'s ignore-refusal test asserted the
+    substring `ignored`, which the real message (`does not ignore`) does not contain -- it was
+    matching the fixture's own directory name, `not-ignored`. It would have stayed green with the
+    refusal message deleted.
+  - **AC-9 is reachable through the entry point without a seam.** `chflags uchg` on the destination
+    lets the backup and the temp write succeed and fails only the final `os.replace`, which is
+    exactly the window the criterion describes.
+
 
 
 ---
