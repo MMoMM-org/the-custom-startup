@@ -210,7 +210,7 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
 
 
 
-- [ ] **T4.2 Rollout to the target repositories** `[activity: validate]`
+- [x] **T4.2 Rollout to the target repositories** `[activity: validate]`
 
   1. Prime: read the locations config format `[ref: SDD/ADR-6]`. **The real repository names and
      paths belong only in that gitignored file — never in a commit message, a test fixture, or any
@@ -234,6 +234,29 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
      in the SDD's Known Technical Issues, so they cannot be counted — they carry plausible-looking
      records under names a pytest fixture produced.
   5. Success: all intended targets recording, verifiable individually `[ref: PRD/Success Metrics]`
+
+  **Ruling (z), 2026-09-12, from T4.2's rollout.** The first real rollout found a defect no test
+  had reached: `_lock_acquire` discarded the creation attempt's stderr (`2>/dev/null`), so a lock
+  that could not be **created** was reported as a lock that was **held** -- "another observability
+  setup run holds the lock ... A lock held by a live process is never force-removed." No such run
+  existed and no lock file existed; the real cause was a write restriction on the target's
+  `.claude/` directory. The refusal itself was correct and nothing was written either way, so this
+  was a diagnosis defect rather than a correctness one -- but it is the first message an operator
+  sees when rolling out to a repository whose permissions differ from the shipping one, and it sent
+  me looking for a concurrent process that was never there.
+
+  Fixed by capturing the discarded stderr rather than adding a writability pre-check, which would
+  have opened a TOCTOU gap between check and acquisition and paid for a diagnosis on the happy path
+  too. `noclobber` already refuses with `EEXIST` when a lock is present and `EACCES`/`EPERM`/
+  `ENOENT` when the file cannot be made, so whether the lock file exists at the moment the run gives
+  up separates the two -- and that check is consulted *after* the decision to refuse, so a race
+  there changes the wording and never the outcome. One shape stays deliberately unseparated and is
+  named in a comment rather than left as a surprise: an unwritable directory that also holds a lock
+  reports contention, which is true as far as it goes while the deeper cause is the permission.
+
+  Verified against the original field scenario, not only the fixture: the same command that
+  produced the phantom-contention message now names the directory restriction and the errno.
+
 
 - [ ] **T4.3 The documentation the risk register already promised** `[activity: technical-writing]`
 
