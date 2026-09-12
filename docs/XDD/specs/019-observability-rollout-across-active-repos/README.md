@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-09-08 |
-| **Current Phase** | Implemented |
+| **Current Phase** | PLAN |
 | **Decomposition tier** | Incremental |
 | **Last Updated** | 2026-09-12 |
 
@@ -100,6 +100,7 @@
 | 2026-09-12 | SDD-AC-4 is recorded as exactly satisfied, not as a compromise | I left the matcher question open for evidence -- whether a foreign PreToolUse hook at matcher Bash collides with ours at Skill. Spec compliance answered that the criterion never mentions the matcher, so event-level is not the coarser of two readings needing justification: it is the only one the text supports, and a matcher-level narrowing would be an implementer-added restriction. My question was the wrong one; the answer corrects it rather than settling it |
 | 2026-09-12 | Cross-file constant drift is now a test rather than a reading task | Sweeping the one reported one-way cross-reference found four constant pairs spanning the shell/Python boundary, plus a fifth invariant nobody had named (the legacy events and the registered events must be the same three). `OUR_NAMESPACE`/`NAMESPACE` -- the pair every ownership decision rests on under ADR-5 -- had no cross-reference at all. Derivation was rejected deliberately: `detect.sh` is the read-only classifier, and importing the editor would let a damaged editor stop a target being classified at all |
 | 2026-09-12 | Implementation complete | All four phases shipped on `feat/019-observability-rollout`, PR #162. Four repositories recording, each confirmed by a selfcheck round-trip, collection period 2026-09-11 to 2026-09-30. Evidence map: 26 acceptance criteria, 26 tested, 0 prose-only. CI green on Linux and macOS -- the macOS bats leg is CON-1's only enforcement and it ran. Suites grew from 1120 to 1164 bats and 780 to 806 pytest across phases 3 and 4 |
+| 2026-09-12 | Finalisation withdrawn -- the rollout was incomplete and the report could not see it | Measured after closing: no container home holds the bundle, so the registration's `$HOME/...` command expands to nothing there, the hook fails, and Claude Code ignores it fail-open. A container session in one target ran today and recorded nothing. Configured, healthy-looking, silent -- the signature this spec exists to remove. T4.2 reopens under ruling (ad) |
 
 
 ## Context

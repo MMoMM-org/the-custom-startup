@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: The command, the rollout, and the gates"
-status: completed
+status: in_progress
 version: "1.0"
 phase: 4
 ---
@@ -214,7 +214,7 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
 
 
 
-- [x] **T4.2 Rollout to the target repositories** `[activity: validate]`
+- [ ] **T4.2 Rollout to the target repositories** `[activity: validate]`
 
   1. Prime: read the locations config format `[ref: SDD/ADR-6]`. **The real repository names and
      paths belong only in that gitignored file — never in a commit message, a test fixture, or any
@@ -290,6 +290,39 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
   for me to guess: we register `PreToolUse` with matcher `Skill`, and whether a foreign `PreToolUse`
   hook with a different matcher overlaps at all depends on how the harness treats the matcher as
   part of dispatch identity. Event-level is the floor; matcher-level may be correct on top of it.
+
+  **Ruling (ad), 2026-09-12, and it reopens this task.** The rollout was reported complete and was
+  not. Measured after T4.2 closed: **no container home holds the bundle.** The registration writes
+  `"$HOME/.claude/observability/log_skill.sh"` -- correct and deliberate under ADR-2, because the
+  string must expand in the context of the session that runs it -- but `setup.sh` installs the
+  bundle only into the `$HOME` it is itself running in. The rollout ran from the host, so the bundle
+  exists only in the host home. In a container `$HOME` resolves to the container home, the file is
+  not there, the hook fails, and Claude Code ignores it fail-open: **no record and no message.**
+
+  Confirmed rather than inferred: a container session in one target ran today and produced nothing;
+  none of the three container homes holds a bundle or even a record path; and that target's only
+  real records were written from the host. The failure is the exact signature this spec exists to
+  remove -- configured, healthy-looking, and silent.
+
+  The SDD anticipated the shape in Technical Debt ("the bundle is copied per environment, so a
+  container target and the host each hold one") and nothing implemented it. The structural gap is
+  that **the locations config knows about `homes` and `setup.sh` does not.**
+
+  **`setup.sh` gains `--home <path>`**, governing where the bundle is installed. The maintainer's
+  reasoning is sharper than the question I asked: this is not the alternative to running setup
+  inside the container, it is what makes **both** routes work -- inside the container it functions
+  anyway, and from outside a foreign home can be named as the target. One mechanism, two modes.
+
+  `--home` governs the bundle install **only, never the registration.** The command string stays
+  literally `$HOME/...`, unexpanded, so that it resolves correctly wherever it later runs. Expanding
+  it at write time would destroy the property ADR-2 exists to preserve.
+
+  **What this says about T4.2's own evidence.** The task's success line reads "all intended targets
+  recording, verifiable individually", and a selfcheck round-trip was accepted as that proof. It is
+  not: it proves the writer can write in the environment the check runs in, which was the host in
+  every case. Nothing exercised a hook firing from a real session in a container. A round-trip probe
+  and a fired hook are different claims, and only the second is what "recording" means.
+
 
 
 
