@@ -5,9 +5,9 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-09-08 |
-| **Current Phase** | PLAN |
+| **Current Phase** | Implemented |
 | **Decomposition tier** | Incremental |
-| **Last Updated** | 2026-09-08 |
+| **Last Updated** | 2026-09-12 |
 
 ## Documents
 
@@ -99,6 +99,7 @@
 | 2026-09-12 | Phase 4 ruling (ac): AC-3, AC-9 and AC-11 get command-level tests; AC-6's four declared paths each get a refusal test | The evidence map found 24 of 26 criteria cleanly tested, 1 PARTIAL, 0 prose-only. The three were tested only against `registration.py` while worded "when setup runs"; ruling (r) established the command is exercised through its real entry point. AC-6 is the criterion the SDD calls the one refusal that protects a third party, and only 2 of the 4 paths `written_paths()` declares had a refusal test |
 | 2026-09-12 | SDD-AC-4 is recorded as exactly satisfied, not as a compromise | I left the matcher question open for evidence -- whether a foreign PreToolUse hook at matcher Bash collides with ours at Skill. Spec compliance answered that the criterion never mentions the matcher, so event-level is not the coarser of two readings needing justification: it is the only one the text supports, and a matcher-level narrowing would be an implementer-added restriction. My question was the wrong one; the answer corrects it rather than settling it |
 | 2026-09-12 | Cross-file constant drift is now a test rather than a reading task | Sweeping the one reported one-way cross-reference found four constant pairs spanning the shell/Python boundary, plus a fifth invariant nobody had named (the legacy events and the registered events must be the same three). `OUR_NAMESPACE`/`NAMESPACE` -- the pair every ownership decision rests on under ADR-5 -- had no cross-reference at all. Derivation was rejected deliberately: `detect.sh` is the read-only classifier, and importing the editor would let a damaged editor stop a target being classified at all |
+| 2026-09-12 | Implementation complete | All four phases shipped on `feat/019-observability-rollout`, PR #162. Four repositories recording, each confirmed by a selfcheck round-trip, collection period 2026-09-11 to 2026-09-30. Evidence map: 26 acceptance criteria, 26 tested, 0 prose-only. CI green on Linux and macOS -- the macOS bats leg is CON-1's only enforcement and it ran. Suites grew from 1120 to 1164 bats and 780 to 806 pytest across phases 3 and 4 |
 
 
 ## Context

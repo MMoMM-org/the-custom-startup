@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: The command, the rollout, and the gates"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 4
 ---
@@ -310,7 +310,7 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
   4. Validate: the three questions are answerable by reading, not by inference.
   5. Success: `[ref: PRD/Risks and Mitigations]` — the documentation mitigation has an owner
 
-- [ ] **T4.4 End-to-end validation and the collection gate** `[activity: validate]`
+- [x] **T4.4 End-to-end validation and the collection gate** `[activity: validate]`
 
   1. Run the full suites: `pytest -q` and `bats plugins/*/tests/bats`.
   2. Verify every SDD acceptance criterion has passing evidence, and that each one's evidence is a
@@ -421,6 +421,19 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
   - **AC-9 is reachable through the entry point without a seam.** `chflags uchg` on the destination
     lets the backup and the temp write succeed and fails only the final `os.replace`, which is
     exactly the window the criterion describes.
+
+  **A correction to this map, found after it was written, and the most useful thing in it.** The
+  vacuous assertion above was not alone: sweeping for its shape found **three**, and the third was
+  a test for AC-26 -- the criterion this map had called its best-covered. It asserted the bare word
+  `recording`, and stayed green when the real `STATUS: recording.` line was blanked, because the
+  work directory was named `status-recording` and the TARGET line's path already satisfied the
+  needle. The other four AC-26 tests do pin the distinctions properly, with `_assert_not_contains`
+  on the sibling states, so the criterion was never actually unproven -- but **one of the tests this
+  map counted as evidence was passing by coincidence**, and the map did not catch it. Reading a test
+  body tells you what it asserts; only mutating the behaviour tells you whether the assertion is
+  load-bearing. The sweep's method is worth keeping: match every `_assert_contains` needle against
+  the fixture and work-directory names used in the same test body, then mutation-test each flag
+  rather than trusting the script's output.
 
 
 
