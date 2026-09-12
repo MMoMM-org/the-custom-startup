@@ -339,6 +339,34 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
   6. Success: every SDD acceptance criterion has passing evidence; the collection period has a start
      and a named end `[ref: PRD/Success Metrics]`
 
+  **Ruling (ac), 2026-09-12, from T4.4's evidence map.** Three criteria -- SDD-AC-3 (unrelated
+  top-level keys survive), SDD-AC-9 (an interrupted write leaves the original and a backup) and
+  SDD-AC-11 (two concurrent runs serialize) -- were tested thoroughly but only against
+  `registration.py` directly, never through `setup.sh`. All three are worded "when setup runs", and
+  ruling (r) established that this command is exercised through its real entry point rather than by
+  calling its libraries. Command-level tests are added for all three. The risk was low --
+  `setup.sh` calls the same `main()` with no branch between -- so this closes the letter rather
+  than a hazard, which is exactly what an evidence map is for: the criterion says "setup", so the
+  evidence should say "setup".
+
+  **The map's one real gap was SDD-AC-6**, on the criterion the SDD itself calls "the one refusal
+  that protects a third party". `registration.written_paths()` declares four paths -- the settings
+  file, its backup, its lock and its temp -- and `setup.sh` loops over all four with one uniform
+  `git check-ignore`. Only the settings and backup paths had a refusal test; the lock and temp
+  paths had none. Rated PARTIAL rather than a defect because the uniform loop leaves no per-path
+  special-casing for a bug to hide in, but a criterion stated as "any declared path" deserves proof
+  per path.
+
+  **Recorded for the map, because the reviewer's reading corrects my question rather than answering
+  it.** I left the matcher question open for evidence -- whether a foreign `PreToolUse` hook at
+  matcher `Bash` collides with ours at `Skill`. Spec compliance answered that SDD-AC-4 never
+  mentions the matcher at all, so event-level is not the coarser of two readings needing
+  justification: it is the only one the criterion's text supports, and a matcher-level narrowing
+  would be an implementer-added restriction the criterion does not ask for. The map therefore
+  records SDD-AC-4 as **exactly satisfied**, with matcher-level examined and deliberately rejected
+  with documented reasoning -- not as a compromise, and not as an open question.
+
+
 ---
 
 ## Phase Acceptance Criteria
