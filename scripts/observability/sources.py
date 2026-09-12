@@ -222,9 +222,25 @@ def _parse_source_table(index: int, table: object) -> tuple[str, Path, list[Path
 
     homes_value = table.get("homes")
     if homes_value is None:
+        # The ONLY spelling that means "absent". An explicitly empty list is
+        # refused below, so the empty list reaching the caller can carry
+        # exactly one meaning (spec-019 ruling (ab)).
         homes: list[Path] = []
     elif not isinstance(homes_value, list):
         raise _schema_error(index, label, f"homes must be a list, got {type(homes_value).__name__}")
+    elif not homes_value:
+        # `homes or [default_home]` folded this into the absent branch, so a
+        # source saying "none" silently got "the default one" -- the written
+        # value contradicted rather than merely ignored, with nothing on
+        # stdout to say so. This spec refuses ambiguous config at load time
+        # (duplicate labels, duplicate repo_root basenames); an empty list
+        # joins them rather than acquiring a fourth, silent behaviour.
+        raise _schema_error(
+            index,
+            label,
+            "homes is an empty list -- omit the key entirely for a host-only "
+            "target (the real $HOME applies), or name at least one home",
+        )
     elif not all(isinstance(h, str) and h for h in homes_value):
         raise _schema_error(index, label, "homes must be a list of non-empty strings")
     else:
@@ -347,6 +363,9 @@ def load_sources(config_path: Path, *, default_home: Path) -> list[Source]:
 
     sources: list[Source] = []
     for label, repo_root, homes in parsed:
+        # `homes` is empty only when the key was absent: _parse_source_table
+        # refuses an explicitly empty list, so this fallback cannot silently
+        # override something the operator wrote (ruling (ab)).
         effective_homes = homes or [default_home]
         statuses = [HomeStatus(home=h, state=_classify_home(repo_root, h)) for h in effective_homes]
         sources.append(Source(label=label, repo_root=repo_root, homes=statuses))

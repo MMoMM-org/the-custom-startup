@@ -323,6 +323,51 @@ def test_schema_error_homes_as_string_not_list(tmp_path):
         sources.load_sources(config, default_home=tmp_path)
 
 
+def test_schema_error_homes_as_an_empty_list_is_rejected(tmp_path):
+    """Maintainer ruling (ab).
+
+    `effective_homes = homes or [default_home]` folded an explicitly empty
+    list into the same branch as an absent key, so `homes = []` -- which most
+    plausibly means "none" -- silently produced "the default one". The value
+    the operator wrote was not ignored so much as contradicted, with nothing
+    on stdout to say so. This spec rejects ambiguous config at load time
+    (duplicate labels, duplicate repo_root basenames); an empty list joins
+    them rather than getting a fourth behaviour.
+    """
+    config = _write_config(
+        tmp_path, '[[source]]\nlabel = "repo3"\nrepo_root = "/abs/path"\nhomes = []\n'
+    )
+
+    with pytest.raises(sources.ConfigSchemaError) as exc_info:
+        sources.load_sources(config, default_home=tmp_path)
+
+    message = str(exc_info.value)
+    # Same vocabulary as every other schema refusal: the source is named, so a
+    # config with several entries does not make the reader count brackets.
+    assert "repo3" in message, f"the source must be named: {message!r}"
+    assert "source #1" in message, f"the source index must be given: {message!r}"
+    assert "homes" in message, f"the offending key must be named: {message!r}"
+
+
+def test_omitting_homes_still_resolves_to_the_default_home(tmp_path):
+    """The guard against ruling (ab) over-reaching.
+
+    Omitting `homes` is the ordinary host-only case and most of the real
+    config uses it. Rejecting the empty list must not disturb it.
+    """
+    repo_root = tmp_path / "repo3"
+    repo_root.mkdir()
+    default_home = tmp_path / "the-real-home"
+    default_home.mkdir()
+
+    config = _write_config(tmp_path, _source_entry("repo3", repo_root))
+
+    result = sources.load_sources(config, default_home=default_home)
+
+    assert len(result) == 1
+    assert [h.home for h in result[0].homes] == [default_home]
+
+
 def test_schema_error_unknown_key_names_the_source(tmp_path):
     config = _write_config(
         tmp_path, '[[source]]\nlabel = "repo3"\nrepo_root = "/abs/path"\nnickname = "nope"\n'
