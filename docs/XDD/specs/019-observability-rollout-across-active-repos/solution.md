@@ -586,6 +586,21 @@ time.
   filename sufficed. **Reopen if a target is found carrying that path under one of our event names
   where the file is NOT this plugin's adapter.**
 
+- **The lock's failure *wording* has a narrow race its *outcome* does not.** `_lock_acquire`
+  decides to refuse from `attempts`/`elapsed` alone, and only then consults whether the lock file
+  exists to choose between "held by another run" and "could not be created" -- so no race changes
+  whether the run refuses, only how it explains itself. Found while reviewing spec-019 ruling (z):
+  a stale dead-owner lock discovered and removed on the same loop iteration that crosses the
+  timeout would leave the captured create error holding that iteration's `EEXIST` text while the
+  existence check now reads false, producing a self-contradictory message. Not reducible to a
+  single process -- dead-PID staleness is detected on first read with no aging, so a pre-planted
+  dead lock reclaims an iteration before any retry -- and reaching it needs a second process dying
+  inside the same ~100 ms tick as this run's timeout boundary. Nothing is lost or wrongly written
+  in any case, and it is a property of any TTL/liveness-reclaim lock rather than something ruling
+  (z) introduced. **Reopen if the wording is ever observed contradicting itself in the field**; the
+  remedy is to capture the classification at the moment each individual create attempt fails,
+  before that iteration's stale-reclaim runs, rather than re-deriving it at give-up time.
+
 - **Two of the three adapters lack the early switch check the third has.** Adding one looks like an
   obvious optimisation and is **refuted**: spec-018 measured both mechanisms it would rely on —
   hoisting the check made things worse, and shrinking the script was inside noise. Recorded here so

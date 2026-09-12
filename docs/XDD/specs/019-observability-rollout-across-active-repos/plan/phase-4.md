@@ -158,6 +158,10 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
   catch, and PRD F2's premise is that removal makes turning recording on a reversible decision
   rather than a permanent one. `--remove-legacy` closes it.
 
+  **(v) SUPERSEDED BY (aa) -- read that first.** This ruling diagnosed the over-broad
+  classification correctly but filed it as an evidence-map matter and left the behaviour
+  alone; (aa) fixes it. Kept for the audit trail.
+
   **(v) PRD F1's "foreign entries are still present and unmodified afterwards" is satisfied
   vacuously at command level, and T4.4 must say so rather than count it.** `detect.sh:336` collects
   every hook command outside our namespace, not only those under our three event names, so CONFLICT
@@ -256,6 +260,37 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
 
   Verified against the original field scenario, not only the fixture: the same command that
   produced the phantom-contention message now names the directory restriction and the errno.
+
+  **Ruling (aa), 2026-09-12, and it revises (v).** `detect.sh:403` built its foreign set as
+  `{cmd for _, cmd in local_commands if OUR_NAMESPACE not in cmd}` -- the event name discarded, so
+  **any** foreign hook under **any** event classified the target CONFLICT. SDD-AC-4 and PRD F1 both
+  say "a foreign entry **under one of the three event names**". The test must honour the event.
+
+  Found by the maintainer asking where a refused target's hooks actually came from. Measured: that
+  target's only hooks were `PostToolUse` (matcher `Bash`) and `SessionStart`, while this feature
+  registers `InstructionsLoaded`, `PreToolUse` (matcher `Skill`) and `SubagentStart`. Nothing
+  overlapped, and the target was refused anyway. `setup.sh`'s stop message additionally asserted
+  that foreign entries "occupy the event names this feature registers", which in that case was
+  simply untrue -- the same failure class as the false `ADDED` and the phantom lock contention.
+
+  What settles it: the settings schema is `hooks: { EVENT: [ {matcher, hooks: [...]}, ... ] }`, an
+  array of groups each holding an array of hooks, so several hooks under one event is the designed
+  shape rather than a collision. `add_registration`'s own docstring already states that every
+  existing entry that is not ours -- *including a foreign entry under our own event name* -- stays
+  exactly where it is. Coexistence is not merely possible; it is what the editor does.
+
+  **(v) was too weak and is superseded here.** It recorded the same over-broad classification but
+  filed it as an evidence-map matter -- "PRD F1's foreign-entry preservation is satisfied vacuously
+  at command level" -- and left the behaviour alone. That was wrong: the consequence is not a thin
+  evidence map, it is that targets which are genuinely clean get refused. With (aa) in place PRD F1's
+  preservation promise is exercised for real rather than never reached, so T4.4's evidence map
+  records it as tested rather than prose-only.
+
+  One question is deliberately left open for the implementer to answer with evidence rather than
+  for me to guess: we register `PreToolUse` with matcher `Skill`, and whether a foreign `PreToolUse`
+  hook with a different matcher overlaps at all depends on how the harness treats the matcher as
+  part of dispatch identity. Event-level is the floor; matcher-level may be correct on top of it.
+
 
 
 - [ ] **T4.3 The documentation the risk register already promised** `[activity: technical-writing]`
