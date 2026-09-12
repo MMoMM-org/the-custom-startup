@@ -93,6 +93,20 @@
 # leave a dead-PID owner between subprocesses and be reclaimable by a
 # concurrent run.
 #
+# --home, AND THE ONE THING IT MUST NOT TOUCH (ruling (ad)). The bundle is
+# installed per environment: a container and the host each hold their own copy
+# under their own $HOME (ADR-2's technical debt, made operable here). --home
+# names which environment to install into or inspect, so a rollout driven from
+# the host can supply a container home it is not running in.
+#
+# It moves the BUNDLE and nothing else. The command string written into a
+# target stays the literal, unexpanded "$HOME/.claude/observability/..." so it
+# resolves in whichever session runs the hook -- which is the entire point of
+# ADR-2 and the reason --home is needed at all. Expanding it at write time
+# would produce a settings file that looks correct and works in exactly one
+# environment, failing silently everywhere else. That is the defect this flag
+# exists to end, so do not "simplify" it by resolving the path here.
+#
 # bash 3.2 (CON-1): no associative arrays, no ${var^^}, no `[[ =~ ]]` with
 # PCRE classes or bounded quantifiers. JSON is never parsed here — that is
 # registration.py's and detect.sh's job.
@@ -158,7 +172,7 @@ fi
 
 _usage() {
   cat <<'USAGE'
-Usage: setup.sh <verb> --target <path> [--yes] [--plan]
+Usage: setup.sh <verb> --target <path> [--home <path>] [--yes] [--plan]
 
 Verbs:
   install   register observability recording in the target repository
@@ -167,6 +181,9 @@ Verbs:
 
 Options:
   --target <path>   the repository (or a subdirectory of one) to act on
+  --home <path>     the environment whose bundle to install or inspect,
+                    instead of the one this command is running in. install
+                    and status only. It NEVER changes the registration
   --yes             apply the change; without it, install and remove report
                     the plan and write nothing
   --plan            report the plan and write nothing, even with --yes
@@ -195,6 +212,7 @@ case "$VERB" in
 esac
 
 TARGET=""
+OPT_HOME=""
 ASSUME_YES=0
 PLAN_ONLY=0
 
@@ -210,6 +228,18 @@ while [ $# -gt 0 ]; do
       ;;
     --target=*)
       TARGET="${1#--target=}"
+      shift
+      ;;
+    --home)
+      if [ $# -lt 2 ]; then
+        _emit "ABORT" "--home needs a path" >&2
+        exit 2
+      fi
+      OPT_HOME="$2"
+      shift 2
+      ;;
+    --home=*)
+      OPT_HOME="${1#--home=}"
       shift
       ;;
     --yes)
@@ -234,6 +264,39 @@ if [ -z "$TARGET" ]; then
   exit 2
 fi
 
+# A malformed invocation is refused before the target is even resolved: these
+# are operator errors, not states of the world.
+if [ -n "$OPT_HOME" ]; then
+  # Removal never touches the bundle -- the remove path holds no reference to
+  # it at all -- so --home has nothing to act on there. Accepting and ignoring
+  # it is the silently-ignored-flag shape this feature already closed once in
+  # registration.py's own flag surface.
+  if [ "$VERB" = "remove" ]; then
+    _emit "ABORT" "--home has no effect on remove, which never touches the bundle -- only the registration in the target. Drop the flag." >&2
+    exit 2
+  fi
+  if [ ! -d "$OPT_HOME" ]; then
+    _emit "ABORT" "--home does not exist or is not a directory: $OPT_HOME" >&2
+    exit 2
+  fi
+  # Writability is required for install and NOT for status: status writes
+  # nothing, and demanding it would refuse a legitimate read-only inspection
+  # of a home somebody else owns.
+  if [ "$VERB" = "install" ] && [ ! -w "$OPT_HOME" ]; then
+    _emit "ABORT" "--home is not writable: $OPT_HOME" >&2
+    exit 2
+  fi
+fi
+
+# Everything below resolves against this rather than $HOME directly.
+RESOLVED_HOME="${OPT_HOME:-$HOME}"
+# Carried into the "run this to fix it" hints, so a reader who needed --home
+# is not handed a command that would supply the wrong environment.
+_HOME_HINT=""
+if [ -n "$OPT_HOME" ]; then
+  _HOME_HINT=" --home $OPT_HOME"
+fi
+
 # status is read-only in every mode, so neither flag applies to it. install
 # and remove write only when told to.
 APPLY=0
@@ -256,6 +319,23 @@ fi
 LOCAL_SETTINGS="$REPO_ROOT/.claude/settings.local.json"
 SHARED_SETTINGS="$REPO_ROOT/.claude/settings.json"
 LOCK_FILE="$LOCAL_SETTINGS.tcs-observability.lock"
+# Phase 1 built _bundle_install_target_dir to honour this variable precisely
+# so a caller could install into another environment's home (bundle_install.sh
+# :103-114). Setting it here is that seam being used, not a new mechanism --
+# _install_observability_bundle and _drift_check_observability_bundle both
+# resolve through the same function, so install and status follow --home
+# together and cannot disagree.
+_BUNDLE_INSTALL_TARGET_DIR="$RESOLVED_HOME/.claude/observability"
+# EXPORTED, and that is load-bearing rather than tidiness. detect.sh runs as a
+# SUBPROCESS and performs its own drift check to tell OURS-CURRENT from
+# OURS-OLD; without inheriting this it reads the home this command happens to
+# run in and reports "no bundle marker is installed at the resolved home"
+# directly above a BUNDLE line saying the bundle is current -- one report
+# describing two different homes, with nothing to tell the reader which.
+# detect.sh's own header anticipates exactly this: "a caller that sets
+# _BUNDLE_INSTALL_TARGET_DIR (or a test $HOME override) is honoured
+# automatically".
+export _BUNDLE_INSTALL_TARGET_DIR
 BUNDLE_DIR="$(_bundle_install_target_dir)"
 
 _emit "TARGET" "$REPO_ROOT"
@@ -546,6 +626,12 @@ if [ "$VERB" = "status" ]; then
   # The drift comparator does NOT fetch the expected version itself (T1.3):
   # the two-line pattern below is bundle_install.sh:167 and is followed
   # rather than reinvented.
+  # This command sees ONE environment. Naming it turns its silence about a
+  # target's other homes into a stated scope rather than an omission -- it
+  # cannot know which other homes a target uses (that lives in the locations
+  # config, which this skill deliberately does not read, so that it works
+  # installed into any repository).
+  _emit "HOME" "$RESOLVED_HOME"
   EXPECTED_VERSION="$(_read_observability_bundle_version 2>/dev/null)" || EXPECTED_VERSION=""
   if [ -z "$EXPECTED_VERSION" ]; then
     _emit "ABORT" "could not read this plugin's own observability bundle version marker"
@@ -557,10 +643,10 @@ if [ "$VERB" = "status" ]; then
       _emit "BUNDLE" "installed at $BUNDLE_DIR, current ($EXPECTED_VERSION)."
       ;;
     MISSING)
-      _emit "BUNDLE" "MISSING -- no bundle is installed at $BUNDLE_DIR (expected $EXPECTED_VERSION). Run: install --target $REPO_ROOT --yes"
+      _emit "BUNDLE" "MISSING -- no bundle is installed at $BUNDLE_DIR (expected $EXPECTED_VERSION). Run: install --target $REPO_ROOT --yes$_HOME_HINT"
       ;;
     DRIFT:*)
-      _emit "BUNDLE" "DRIFT -- installed ${DRIFT_RESULT#DRIFT:} at $BUNDLE_DIR, expected $EXPECTED_VERSION. Run: install --target $REPO_ROOT --yes"
+      _emit "BUNDLE" "DRIFT -- installed ${DRIFT_RESULT#DRIFT:} at $BUNDLE_DIR, expected $EXPECTED_VERSION. Run: install --target $REPO_ROOT --yes$_HOME_HINT"
       ;;
     *)
       _emit "ABORT" "Unexpected drift-check result: $DRIFT_RESULT"
@@ -575,7 +661,10 @@ if [ "$VERB" = "status" ]; then
   RECORD_PRESENT=0
   DATA_DIR=""
   if [ -n "$_LOGWRITE_SH" ]; then
-    DATA_DIR="$(_observability_data_dir "$REPO_ROOT")" || DATA_DIR=""
+    # In a subshell so the override cannot leak: a status that took the
+    # bundle from one home and the records from another would be a mixed
+    # answer presented as a single one.
+    DATA_DIR="$(HOME="$RESOLVED_HOME"; _observability_data_dir "$REPO_ROOT")" || DATA_DIR=""
   fi
   if [ -n "$DATA_DIR" ]; then
     RECORD_BASE="$DATA_DIR/observability/events.jsonl"

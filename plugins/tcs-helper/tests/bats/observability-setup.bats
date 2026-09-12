@@ -1846,3 +1846,236 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   [ "$output" -eq 3 ]
   _assert_no_lock "$dir"
 }
+
+# ---------------------------------------------------------------------------
+# --home: which environment the BUNDLE is installed into.
+#
+# Maintainer ruling (ad), from a defect the rollout only showed in operation.
+# The registration written into a target says "$HOME/.claude/observability/..."
+# and expands in the session that runs it (ADR-2) -- but setup.sh installed
+# the bundle only into the $HOME it was itself running in. A rollout driven
+# from the host therefore left every container home without a bundle: the
+# hook path did not exist, the hook failed, Claude Code ignored it fail-open,
+# and the target recorded nothing while looking configured. That is the exact
+# signature this spec exists to eliminate.
+#
+# --home moves the BUNDLE. It must never touch the registration, whose whole
+# value is being unexpanded.
+# ---------------------------------------------------------------------------
+
+@test "install --home puts the bundle in the named home, not the running one" {
+  local home other dir
+  home="$(_new_home home-flag-running)"
+  other="$(_new_home home-flag-target)"
+  dir="$(_copy_fixture absent home-flag)"
+
+  _run_setup "$home" install "$dir" --yes --home "$other"
+  [ "$status" -eq 0 ]
+
+  [ -f "$other/.claude/observability/logwrite.sh" ]
+  [ -f "$other/.claude/observability/tcs-helper-observability-version" ]
+  # ...and nothing landed in the home the command itself ran in.
+  [ ! -e "$home/.claude/observability" ]
+  _assert_no_lock "$dir"
+}
+
+@test "install without --home still installs into the running home" {
+  local home dir
+  home="$(_new_home home-flag-absent)"
+  dir="$(_copy_fixture absent home-flag-absent)"
+
+  # The guard against ruling (ad) over-reaching: this is how every target
+  # configured so far was set up.
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  [ -f "$home/.claude/observability/logwrite.sh" ]
+}
+
+@test "install --home leaves the registration command unexpanded" {
+  local home other dir target
+  home="$(_new_home home-flag-unexpanded-running)"
+  other="$(_new_home home-flag-unexpanded-target)"
+  dir="$(_copy_fixture absent home-flag-unexpanded)"
+  target="$dir/.claude/settings.local.json"
+
+  _run_setup "$home" install "$dir" --yes --home "$other"
+  [ "$status" -eq 0 ]
+
+  # THE assertion. The command string must stay the literal "$HOME/..." so it
+  # expands in whichever session runs it (ADR-2). Writing the resolved path
+  # would destroy exactly the property --home exists to serve, and would do
+  # it invisibly -- the file would look right and work only on one machine.
+  run _count_our_hooks "$target"
+  [ "$output" -eq 3 ]
+  _assert_not_contains "$(cat "$target")" "$other/.claude/observability"
+  # The bytes as JSON actually holds them: the inner quotes are escaped, and
+  # $HOME is a literal four characters, not an expansion.
+  _assert_contains "$(cat "$target")" '\"$HOME/.claude/observability/log_skill.sh\"'
+}
+
+@test "status --home reports the named home's bundle, not the running one" {
+  local home other dir
+  home="$(_new_home status-home-running)"
+  other="$(_new_home status-home-target)"
+  dir="$(_copy_fixture absent status-home)"
+
+  # A current bundle in the RUNNING home only. Asking about the other home
+  # must not answer with this one.
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  _run_setup "$home" status "$dir" --home "$other"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "MISSING"
+  _assert_contains "$output" "$other/.claude/observability"
+}
+
+@test "status --home reports drift against the named home" {
+  local home other dir
+  home="$(_new_home status-home-drift-running)"
+  other="$(_home_with_bundle_version status-home-drift-target h0)"
+  dir="$(_copy_fixture absent status-home-drift)"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+
+  _run_setup "$home" status "$dir" --home "$other"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "DRIFT"
+  _assert_contains "$output" "h0"
+  _assert_contains "$output" "$CURRENT_BUNDLE_VERSION"
+}
+
+@test "status --home looks for records under the named home too" {
+  local home other dir
+  home="$(_new_home status-home-records-running)"
+  other="$(_new_home status-home-records-target)"
+  dir="$(_copy_fixture absent status-home-records)"
+
+  _run_setup "$home" install "$dir" --yes --home "$other"
+  [ "$status" -eq 0 ]
+
+  # A status that took the bundle from one home and the records from another
+  # would be a mixed answer presented as one -- the overclaim shape again.
+  _run_setup "$home" status "$dir" --home "$other"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "$other/.claude/plugins/data/observability-"
+  _assert_not_contains "$output" "$home/.claude/plugins/data/observability-"
+}
+
+@test "status names the home it checked, so its silence about other homes is stated" {
+  local home dir
+  home="$(_new_home status-home-named)"
+  dir="$(_copy_fixture absent status-home-named)"
+
+  _run_setup "$home" status "$dir"
+  [ "$status" -eq 0 ]
+  # This command sees one environment. Saying which one converts silence
+  # about a target's other homes into a stated scope rather than an omission.
+  _assert_contains "$output" "HOME: $home"
+}
+
+@test "remove refuses --home rather than accepting and ignoring it" {
+  local home dir
+  home="$(_new_home remove-home-flag)"
+  dir="$(_copy_fixture absent remove-home-flag)"
+
+  # Removal never touches the bundle -- verified: the remove path holds no
+  # reference to it at all -- so --home has nothing to act on. Accepting it
+  # silently is the ignored-flag defect this task already closed once in
+  # registration.py's own flag surface.
+  _run_setup "$home" remove "$dir" --yes --home "$home"
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "--home has no effect on remove"
+  _assert_not_contains "$output" "unknown option"
+}
+
+@test "a --home that does not exist is refused, and nothing is written" {
+  local home dir target
+  home="$(_new_home home-missing)"
+  dir="$(_copy_fixture absent home-missing)"
+  target="$dir/.claude/settings.local.json"
+
+  _run_setup "$home" install "$dir" --yes --home "$WORK_PARENT/no-such-home"
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "--home does not exist or is not a directory"
+  _assert_contains "$output" "$WORK_PARENT/no-such-home"
+  _assert_not_contains "$output" "unknown option"
+  [ ! -e "$target" ]
+  [ ! -e "$home/.claude/observability" ]
+  _assert_no_lock "$dir"
+}
+
+@test "a --home that is not writable is refused before anything is written" {
+  local home other dir target
+  home="$(_new_home home-unwritable-running)"
+  other="$(_new_home home-unwritable-target)"
+  dir="$(_copy_fixture absent home-unwritable)"
+  target="$dir/.claude/settings.local.json"
+
+  chmod 500 "$other"
+  if echo canary > "$other/canary" 2>/dev/null; then
+    chmod 700 "$other"
+    skip "the write-protected directory is writable anyway (running as root?)"
+  fi
+
+  _run_setup "$home" install "$dir" --yes --home "$other"
+  chmod 700 "$other"
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "--home is not writable"
+  _assert_not_contains "$output" "unknown option"
+  [ ! -e "$target" ]
+  _assert_no_lock "$dir"
+}
+
+@test "status refuses a --home that does not exist rather than reporting it MISSING" {
+  local home dir
+  home="$(_new_home status-home-missing)"
+  dir="$(_copy_fixture absent status-home-missing)"
+
+  # Reporting MISSING for a mistyped path is the wrong-diagnosis shape: the
+  # bundle genuinely is not there, and saying so sends the reader to install
+  # it instead of to their typo.
+  _run_setup "$home" status "$dir" --home "$WORK_PARENT/no-such-home-either"
+  [ "$status" -ne 0 ]
+  _assert_contains "$output" "--home does not exist or is not a directory"
+  _assert_not_contains "$output" "unknown option"
+  _assert_not_contains "$output" "MISSING"
+}
+
+@test "status does not require --home to be writable" {
+  local home other dir
+  home="$(_new_home status-home-ro-running)"
+  other="$(_home_with_bundle_version status-home-ro-target h0)"
+  dir="$(_copy_fixture absent status-home-ro)"
+
+  chmod 500 "$other"
+  _run_setup "$home" status "$dir" --home "$other"
+  local saved="$status"
+  chmod 700 "$other"
+
+  # status writes nothing, so demanding write permission would refuse a
+  # legitimate read-only inspection of a home someone else owns.
+  [ "$saved" -eq 0 ]
+}
+
+@test "status --home does not contradict itself: detection reads the same home as the bundle check" {
+  local home other dir
+  home="$(_new_home home-agree-running)"
+  other="$(_new_home home-agree-target)"
+  dir="$(_copy_fixture absent home-agree)"
+
+  _run_setup "$home" install "$dir" --yes --home "$other"
+  [ "$status" -eq 0 ]
+
+  # detect.sh runs as a subprocess and does its OWN drift check to tell
+  # OURS-CURRENT from OURS-OLD. Unless it is told which home to read, it
+  # reads the one this command runs in -- and reports "no bundle marker is
+  # installed at the resolved home" directly above a BUNDLE line saying the
+  # bundle is current. One report, two homes, no way for a reader to tell.
+  _run_setup "$home" status "$dir" --home "$other"
+  [ "$status" -eq 0 ]
+  _assert_contains "$output" "OURS-CURRENT"
+  _assert_not_contains "$output" "OURS-OLD"
+  _assert_not_contains "$output" "no bundle marker is installed"
+}
