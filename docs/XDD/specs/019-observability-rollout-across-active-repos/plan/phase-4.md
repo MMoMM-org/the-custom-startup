@@ -306,6 +306,23 @@ Phase 2's detection classifies this legacy shape distinctly for exactly this rea
   question put to the other target returned the opposite answer, so neither could have been guessed
   from the filesystem.
 
+  **Two further corrections, 2026-09-13, both found by the maintainer asking a question rather than
+  by any check here.**
+
+  **The shipping repository's own container home was missing from the config.** It had been written
+  host-only without anyone asking whether a container session runs there, and one does. That makes
+  three targets asked the same question with three different answers -- one needs no container home
+  though the directory exists, two do -- so it is not derivable from the filesystem, and the
+  repository whose records the collection period rests on was the one most expensive to get wrong.
+  Bundle installed, home listed, round-trip confirmed.
+
+  **The three test-fixture record directories do exist, and the earlier claim that they do not was
+  wrong.** T4.2's closing commit reported them absent. They were in the shipping repository's
+  *container* home, and only the host home had been searched; not finding them in one place was
+  reported as a fact about all places. They carried `"session": "x"` rather than a real identifier
+  and one `hook` record each, dated to spec-018's development day. Removed, with a copy kept
+  outside the repository. T4.2's step 4 is now satisfied rather than declared moot.
+
   **Ruling (ad), 2026-09-12, and it reopens this task.** The rollout was reported complete and was
   not. Measured after T4.2 closed: **no container home holds the bundle.** The registration writes
   `"$HOME/.claude/observability/log_skill.sh"` -- correct and deliberate under ADR-2, because the
