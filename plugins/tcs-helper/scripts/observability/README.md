@@ -14,8 +14,8 @@ feature is usable at all, so read the next section before the table.
 
 ### Where to put the switch
 
-**Put it in the `env` block of a `.claude/settings.json`.** That file is per repository and
-gitignored, so the choice is yours alone and cannot travel to anyone else:
+**Put it in the `env` block of `.claude/settings.local.json`.** That file is per repository and
+untracked, so the choice is yours alone and cannot travel to anyone else:
 
 ```json
 {
@@ -25,8 +25,18 @@ gitignored, so the choice is yours alone and cannot travel to anyone else:
 }
 ```
 
+**Why `settings.local.json`, and not the plain `settings.json` this section used to name.**
+`settings.json` is version-controlled in most of the repositories this feature has actually been
+rolled out to, and every one of them has a remote — a switch set there would show up in a diff,
+could be committed, and once pushed would silently start recording for anyone who clones the
+repository next. `settings.local.json` is the untracked local layer: same `env` block, same effect
+once the harness reads it, but nothing about the choice can leave your own machine. This is ADR-1
+from spec-019's solution design, and it is also where the `observability-setup` skill's `install`
+verb writes this switch for you (see "Setting this up automatically", below) — hand-editing the
+file yourself is still a legitimate route, just aim it at the file that stays yours.
+
 **Verified, not assumed (2026-09-08):** a value set this way does reach a hook the harness spawns —
-checked by pointing `CLAUDE_OBSERVABILITY_DATA` at a scratch directory from `settings.json` alone
+checked by pointing `CLAUDE_OBSERVABILITY_DATA` at a scratch directory from the settings file alone
 and confirming that the next instruction load wrote its record there instead of the usual path.
 The change was also picked up in the running session, without a restart.
 
@@ -35,7 +45,7 @@ The alternative — exporting it in your shell profile, or typing
 deliberate measurement session. It is the wrong choice for the question this feature exists to
 answer. "Which of our instruction files and skills are actually used?" needs weeks of ordinary
 sessions, and a switch you have to remember at every launch is a switch that is off. The
-`settings.json` route is set once and then simply true.
+`settings.local.json` route is set once and then simply true.
 
 Neither route weakens the safety property. Recording is still off until you take an explicit
 action, and that action is editing your own configuration file — nothing a plugin update can do
@@ -49,21 +59,59 @@ for you.
 Turning `ENABLED` off again does not delete anything already written — it just stops new records
 from being added. See "How to delete it", below, for actually clearing the record.
 
+## What this costs
+
+Registering a hook is not free even when it records nothing. On macOS, a registered hook costs
+roughly **3–5 ms per matching event** whether or not `CLAUDE_OBSERVABILITY_ENABLED` is set — this
+is measured on macOS specifically, not Linux (see the wrapper's own, considerably more detailed
+Linux/macOS split under "Caveats, stated plainly", far below, for a tool that measures one hook
+in isolation rather than the fleet of registered hooks this figure describes).
+
+**This is a platform floor, not something this design got wrong, and two obvious fixes were tried
+and refuted** (spec-018 README, Decisions Log, 2026-09-07): shrinking the hook script and moving
+its early-exit check earlier both changed nothing measurable. The cost is macOS running a
+code-signature check on every `exec`, before the script's own body ever runs at all — a script
+whose entire body is `exec "$@"` already pays it, and Linux does not pay it at all. This design
+cannot reduce that floor; it can only decide where to spend it, which is why "Registering the
+hooks" (below) wires up only the three events this recorder actually needs, and why the report of
+which repositories to register it in (see "Setting this up automatically", below) names them
+explicitly rather than matching everything.
+
 ## Where the record lives
 
 One file per repository, named `events.jsonl`, one JSON object per line (JSONL — newline-delimited
 JSON). It lives **outside this repository's working tree**, so `git add -A` cannot reach it and it
-never ends up in a commit or a diff by accident:
+never ends up in a commit or a diff by accident.
 
-```
-$HOME/.claude/plugins/data/observability-<repo-name>/observability/events.jsonl
-```
+**Two shapes, because `$HOME` is not always the same directory.** Both use the same formula —
+`$HOME` plus a fixed suffix built from `<repo-name>`, this repository's git toplevel basename — but
+which `$HOME` applies depends on where the session that wrote the record actually ran:
+
+- **Worked on the host**, where `$HOME` is your ordinary home directory:
+  ```
+  $HOME/.claude/plugins/data/observability-<repo-name>/observability/events.jsonl
+  ```
+- **Worked inside a container** with its own `$HOME` (for example, a repository's
+  `claude-docker-home` mount), the identical formula applies against the *container's* `$HOME` —
+  a different filesystem location, same suffix:
+  ```
+  <container's $HOME>/.claude/plugins/data/observability-<repo-name>/observability/events.jsonl
+  ```
+
+`<repo-name>` is the git toplevel's basename in both cases, so the `repo` field inside every record
+is the same either way — that is what makes these one source with two record locations, not two
+unrelated sources. A repository worked in both places has **two** record files, and reading only
+one of them under-counts: whichever environment you didn't check looks silent, even while it is
+actually recording. See "Watching several repositories at once" (below) for the config that reports
+both locations together instead of one at a time.
 
 `<repo-name>` is this repository's directory name (its git toplevel's basename) — for this repo,
-that resolves to `$HOME/.claude/plugins/data/observability-the-custom-startup/observability/events.jsonl`.
+that resolves to `$HOME/.claude/plugins/data/observability-the-custom-startup/observability/events.jsonl`
+on the host.
 
 If you ever need the exact path without doing that arithmetic by hand, run `selfcheck.sh` (below)
-— it prints it as the first thing it does, whether or not recording is on.
+— it prints it as the first thing it does, whether or not recording is on, for whichever `$HOME`
+the session running it actually has.
 
 You can override where it lives entirely by setting `CLAUDE_OBSERVABILITY_DATA` to a directory of
 your choosing; the file then lives at `<that directory>/observability/events.jsonl`. Ordinary use
@@ -167,10 +215,17 @@ tree, so deleting it cannot break anything else.
 
 ## Registering the hooks
 
+This is the by-hand route. Most repositories should use the `observability-setup` skill instead
+(see "Setting this up automatically", below) — it does exactly what this section describes, plus
+the checks a hand edit cannot perform on itself, like whether version control actually ignores
+what it is about to write. Read this section anyway if you want to understand what that skill is
+doing, or if you're registering somewhere the skill can't reach.
+
 The recorder only sees anything once the three hooks below are registered in **this repository's
-own** `.claude/settings.json` (not a plugin's `hooks.json` — see the caveat right after the
-snippet for why that distinction matters). Merge this into the `"hooks"` object of that file,
-alongside anything already there for the same event names:
+own** `.claude/settings.local.json` (not a plugin's `hooks.json`, and not the shared
+`.claude/settings.json` — see the caveat right after the snippet for why `$CLAUDE_PROJECT_DIR`
+matters, and "Where to put the switch," above, for why the *local* layer specifically). Merge this
+into the `"hooks"` object of that file, alongside anything already there for the same event names:
 
 ```json
 {
@@ -220,7 +275,7 @@ has no equivalent filter, hence the empty matcher there too.
 
 **Why `$CLAUDE_PROJECT_DIR`, not `$CLAUDE_PLUGIN_ROOT`.** A hook registered by a *plugin's own*
 `hooks.json` gets `$CLAUDE_PLUGIN_ROOT` set for it automatically. A hook registered in a
-*repository's own* `.claude/settings.json` — which is what these three are — does **not**; that
+*repository's own* `.claude/settings.local.json` — which is what these three are — does **not**; that
 variable simply isn't set at invocation time for this kind of registration. `$CLAUDE_PROJECT_DIR`
 (or a plain absolute path) is what actually resolves regardless of the current working directory at
 the moment the hook fires.
@@ -233,6 +288,94 @@ is set. In other words: recording being off means no *records* are written, not 
 nothing to have registered at all. If that eager-load cost matters to you and you are not currently
 recording, the honest move is to not register the `InstructionsLoaded` hook until you actually want
 to turn recording on.
+
+## Setting this up automatically: the observability-setup skill
+
+There's a companion skill, `observability-setup`, backed by a dispatcher script at
+`plugins/tcs-helper/skills/observability-setup/lib/setup.sh`. It does everything "Registering the
+hooks" (above) walks through by hand, plus one thing a hand edit cannot check for itself: whether
+version control actually ignores what it is about to write.
+
+Three verbs, each taking `--target <path>` (the repository, or a subdirectory of one, to act on):
+
+| Verb | Does |
+|---|---|
+| `install` | registers the three hooks and the `CLAUDE_OBSERVABILITY_ENABLED` switch in the target's `.claude/settings.local.json` |
+| `remove` | takes this feature's own entries back out of that file |
+| `status` | reports whether the target is recording, configured but silent, or not configured at all — plus whether the installed script bundle is current |
+
+`install` and `remove` write nothing by default: they print the plan and stop there. Only `--yes`
+actually applies it (and `--plan` forces the report-only behaviour even with `--yes`, for scripting
+a dry run). That plan-first shape stands in for a confirmation prompt — the skill that drives this
+script shows the plan and waits for an explicit `y`/`yes` before it ever passes `--yes` through.
+
+A few things worth knowing before running it:
+
+- **A target with a foreign hook under one of these three event names is stopped, not failed.** If
+  something else already owns an entry under `InstructionsLoaded`, `PreToolUse`, or `SubagentStart`
+  in the target's local settings — regardless of that entry's own matcher — `install` exits `0`,
+  changes nothing, and says so. A foreign hook under any *other* event name is not a conflict at all
+  and does not stop anything. Either way, this feature will never overwrite another tool's
+  registration or merge into it by force.
+- **A target whose version control does not ignore every path this feature would write is
+  refused.** Before writing anything, `install` checks that `.claude/settings.local.json` (and its
+  backup, and its lock file) are actually git-ignored in the target repository — checked, never
+  assumed. If any of them are not, it refuses and writes nothing, naming exactly which path failed.
+- **`remove` takes out only what this feature itself registered, and it never deletes a record.**
+  Stopping recording and discarding what was already recorded are two separate acts; `remove` only
+  ever performs the first. Use "How to delete it" (above) if discarding records is what you
+  actually want.
+
+## Watching several repositories at once: the locations config
+
+`scripts/observability/report.py`, run with no arguments, reads a locations config at
+`.claude/observability-sources.toml` in this repository and reports every listed repository side by
+side instead of just this one. The file is never committed — `.claude/` is gitignored wholesale
+here — so the names and paths inside it can be real without ever reaching a diff. The example below
+uses placeholder names for exactly that reason: put your own repositories in the real, gitignored
+file, never in this README.
+
+```toml
+# .claude/observability-sources.toml -- never committed
+[[source]]
+label     = "repo-one"
+repo_root = "/abs/path/to/repo-one"
+# no `homes` -- the real $HOME applies
+
+[[source]]
+label     = "repo-two"
+repo_root = "/abs/path/to/repo-two"
+homes     = ["/abs/path/to/repo-two/claude-docker-home", "~"]
+```
+
+- `label` — what the report prints for this source.
+- `repo_root` — the repository's path; also the root the instruction-inventory walk uses for it.
+- `homes` — optional. Each entry is a `$HOME` this repository has actually been worked from — see
+  "Where the record lives" (above) for why a repository worked in both a container and the host
+  needs both listed.
+
+**`homes` replaces the default `$HOME`; it does not add to it.** Omit it, and the report looks
+under the real `$HOME` (the ordinary case). List it, and the report looks *only* at what you
+listed — the real `$HOME` is no longer checked unless you name it too (as `"~"` in the `repo-two`
+example above). A repository worked in both a container and the host that lists only the
+container's home has the report look only there: the host's records sit unread, and the source
+reports its recording state as `UNKNOWN` even though it is actually recording — just in the
+location the config didn't name. This is not a hypothetical: it caught the rollout itself. List
+every home a repository has actually been worked from, or the report will confidently tell you the
+wrong thing.
+
+Listing two or more homes also turns on a per-home breakdown beneath the source's headline
+verdict — one line per configured home, not just the merged answer. That is what makes a home that
+quietly stopped recording visible, rather than absorbed into an otherwise-healthy headline (the
+headline itself reads "recording" if *any* home is; with only one home listed there is nothing a
+sub-line would add, so none renders).
+
+**`repo_root` basenames must be unique across every source in the file.** The record file's
+directory name and the `repo` field inside every record it holds are both built from `repo_root`'s
+basename alone, never its full path — two sources whose paths differ but share a basename would
+write to the same record file and be reported under the same `repo` value, indistinguishably. The
+config loader rejects a file that does this at load time, rather than let it quietly corrupt the
+split.
 
 ## Investigating one slow hook: `timed-wrapper.sh`
 
@@ -249,9 +392,11 @@ of one investigation, read what it wrote, then take it back out (see "How to rem
 
 ### How to install it
 
-Wrap the real hook command in this repository's own `.claude/settings.json` — the same file the
-"Registering the hooks" snippet above uses, and for the same reason: a repo's own registration gets
-no `$CLAUDE_PLUGIN_ROOT`. Say you want to know whether a `PreToolUse`/`Bash` hook at
+Wrap the real hook command in this repository's own `.claude/settings.local.json` — the same file
+the "Registering the hooks" snippet above uses, and for the same two reasons: a repo's own
+registration gets no `$CLAUDE_PLUGIN_ROOT`, and the local layer is the one nobody else's clone can
+ever pick up (ADR-1, "Where to put the switch," above). Say you want to know whether a
+`PreToolUse`/`Bash` hook at
 `/abs/path/to/real-hook.sh` is the slow one:
 
 ```json
@@ -329,7 +474,7 @@ duration in the report is labelled with which kind it is rather than left for yo
 
 ### How to remove it
 
-Edit `.claude/settings.json` again and put the original hook command back exactly where the wrapped
+Edit `.claude/settings.local.json` again and put the original hook command back exactly where the wrapped
 one was — that is the entire removal procedure. There is nothing else to undo: `timed-wrapper.sh` is
 not a daemon, it installs nothing outside that one registration line, and it leaves no running
 process or cached state behind. Once the registration is reverted, nothing of it remains anywhere in

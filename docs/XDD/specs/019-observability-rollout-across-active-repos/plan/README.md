@@ -152,9 +152,9 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 > **Tracking Principle**: track logical units that produce verifiable outcomes. The TDD cycle is the
 > method, not separate tracked items.
 
-- [ ] [Phase 1: The bundle and its versioning](phase-1.md)
-- [ ] [Phase 2: The registration editor](phase-2.md)
-- [ ] [Phase 3: Reading several records](phase-3.md)
+- [x] [Phase 1: The bundle and its versioning](phase-1.md)
+- [x] [Phase 2: The registration editor](phase-2.md)
+- [x] [Phase 3: Reading several records](phase-3.md)
 - [ ] [Phase 4: The command, the rollout, and the gates](phase-4.md)
 
 **Phase dependencies** — phases 1 and 2 build the writing side, phase 3 the reading side. They touch
@@ -215,7 +215,7 @@ worth having if its rows are true, and hand-editing is how they stopped being tr
 | 20 | T3.3 |
 | 21, 22, 23 | T3.4 |
 | 24 | T3.0, T3.5 |
-| 25 | T3.2 |
+| 25 | T3.2 (per-home data), T3.3 (the merge and the union walk) |
 | 26 | T4.1 |
 
 ### Coverage map — PRD features to phases

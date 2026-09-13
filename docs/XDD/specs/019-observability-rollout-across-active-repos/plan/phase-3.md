@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Reading several records"
-status: pending
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -48,7 +48,7 @@ file is written by both, so the two sides can proceed concurrently.
 Delivers a reader that answers the cross-repository question without pretending four repositories
 are one.
 
-- [ ] **T3.0 Capture the spec-018 output fixture — before anything else** `[activity: test-strategy]`
+- [x] **T3.0 Capture the spec-018 output fixture — before anything else** `[activity: test-strategy]`
 
   **This must happen before T3.1 touches `report.py`.** T3.5 asserts that `--events <path>` behaves
   exactly as it did in spec-018, "against a recorded fixture of the old output rather than by
@@ -63,7 +63,18 @@ are one.
   4. Validate: the fixture reproduces byte-identically on a second run of the unmodified reader.
   5. Success: T3.5 has something real to compare against `[ref: SDD/SDD-AC-24]`
 
-- [ ] **T3.1 `repo` as a first-class dimension in the existing analyses** `[activity: backend-api]`
+  **Deviation, approved by the maintainer 2026-09-10.** Step 2 said "Test: none yet", and the
+  byte-diff assertion belonged to T3.5 step 1. It landed here instead, as
+  `tests/test_observability_report_t30_golden.py`. Rationale: T3.0 exists to protect T3.1, T3.3
+  and T3.4 from silently breaking `--events`, and an assertion that only lands at T3.5 lands
+  *after* all three have changed the reader — its implementer would meet accumulated drift across
+  three commits with no signal about which change caused what. Wired in now, whoever breaks
+  SDD-AC-24 gets a red test at the commit that breaks it. Proven to have teeth before acceptance:
+  three mutations of `report.py`'s rendered output (a section label, `never_loaded`'s sort order,
+  an off-by-one in the unreachable count) each failed the test. Spec compliance had ruled this
+  scope creep and was correct to; the ruling is the maintainer's, not the implementer's.
+
+- [x] **T3.1 `repo` as a first-class dimension in the existing analyses** `[activity: backend-api]`
 
   1. Prime: read `scripts/observability/report.py` — `instruction_stats:151`, `_redact_path:453`,
      `recording_status:412`, `hook_duration_stats:1183` `[ref: SDD/Runtime View — Complex Logic]`.
@@ -76,9 +87,9 @@ are one.
   4. Validate: `pytest -q` green; existing single-record tests unchanged and still passing.
   5. Success: `[ref: SDD/SDD-AC-19]`; `[ref: SDD/ADR-7]`
 
-- [ ] **T3.2 The locations config and its reader** `[activity: backend-api]`
+- [x] **T3.2 The locations config and its reader** `[activity: backend-api]`
 
-  1. Prime: read ADR-6 and `_resolve_events_path:1561-1573`, which the reader must feed rather than
+  1. Prime: read ADR-6 and `_resolve_events_path:1603-1614`, which the reader must feed rather than
      duplicate `[ref: SDD/ADR-6]` `[ref: PRD/F3]`.
   2. Test: a config with a container source (`homes` given) and a host source (none) resolves both
      record paths correctly; **a single source carrying two homes resolves both its record
@@ -99,7 +110,86 @@ are one.
   5. Success: `[ref: SDD/SDD-AC-16, SDD-AC-17, SDD-AC-18, SDD-AC-25]`; `[ref: PRD/F3]`;
      `[ref: SDD/Constraints — CON-3]`
 
-- [ ] **T3.3 Per-source rendering, and the honesty rules** `[activity: backend-api]`
+  **Three rulings, 2026-09-10, after the TDD gate blocked on genuine gaps.**
+
+  **(a) A two-home source reports one verdict plus per-home sub-lines** *(maintainer ruling — the
+  plan and the SDD were both silent, and SDD-AC-25 is one of this task's own success criteria).*
+  SDD-AC-25 requires one section under one label, but each home is independently *missing*, *not
+  yet recording* or *recording*, and no rule said how to combine two into one. The section's
+  headline is **recording if any home is recording** — there is real data, and the two streams
+  merge exactly as `read_events` already merges a rotation chain, one level up — and each home's
+  own state is listed beneath it:
+
+  ```
+  repo3 -- recording
+    container home: recording (newest 2026-09-10T08:12Z)
+    host home:      missing (path no longer exists)
+  ```
+
+  A single combined verdict with no sub-lines was rejected: a source whose second home died months
+  ago would look identical to a healthy one, which is the collapse ADR-7 exists to prevent, at
+  per-home scale. This mirrors the reasoning already recorded for the inventory union — a
+  primary-home rule "would have dropped it with nothing to show it was gone".
+
+  **(b) "An error naming the line" applies to TOML syntax errors only.** `tomllib` reports a
+  position while parsing and nothing afterwards, so once a document parses into a plain dict there
+  is no line to name. A *schema* violation — a `[[source]]` missing `repo_root`, a `homes` given as
+  a string, an unknown key, a duplicate label — therefore cannot name a line without a
+  span-preserving parser, and pulling one in would violate CON-3. Two error classes: syntax errors
+  name the line; schema errors name the source, e.g. `source #2 (label='repo3'): homes must be a
+  list, got str`.
+
+  **The line number must NOT be read from `TOMLDecodeError.lineno`.** Measured on both
+  interpreters: `lineno`/`colno`/`msg` exist on Python 3.14.3 (local) and do **not** exist on
+  3.11.14, where the position survives only inside `str(e)` ("Invalid value (at line 2, column
+  13)"). CI runs 3.11 on both ubuntu and macos (`.github/workflows/tests.yml:61-72`), so an
+  implementation reading `e.lineno` passes locally and raises `AttributeError` in CI.
+
+  **The line number comes from the message text only — the native attribute is deliberately not
+  read at all.** The obvious remedy, `getattr(e, "lineno", None)` with a message fallback, is also
+  wrong, and hides the same failure inside the fix for it. Measured on both interpreters against
+  `'[[source]]\nlabel = '` (an error at end of document): `getattr` yields **2** on 3.14 and no
+  attribute at all on 3.11, while the message yields `None` on both. A test asserting a line for
+  that fixture would pass locally and fail in CI. Every message string, by contrast, is
+  byte-identical across 3.11.14 and 3.14.3 — verified over four malformed documents — so
+  `re.search(r"at line (\d+)", str(e))` is the one path that cannot diverge. `None` is a legitimate
+  result on **both** versions, meaning the position could not be determined; the error must then
+  read as position-unknown rather than formatting `None` into "at line None". `sources.py` raises
+  its own error type carrying `lineno: int | None`, and the tests assert against that contract —
+  never against `tomllib`'s version-dependent surface. A test for the end-of-document case
+  asserting `lineno is None` is what keeps this ruling enforced, since that is the single input
+  where the two designs disagree.
+
+  **(c) T3.2 does not touch `report.py`.** Step 3's deliverables are `sources.py` and the example
+  config. `sources.py` stays pure: it parses the config into sources carrying `repo_root` and
+  `homes`, classifies each home's state from the filesystem, and imports **nothing local** — not
+  even `report`. `_resolve_events_path` stays private to `report.py`; the caller feeds it, which is
+  what step 1's "feed rather than duplicate" means. That also keeps the CON-3 import test's
+  allowlist exactly `sys.stdlib_module_names` with no local-module exception, and keeps the T3.0
+  golden fixture green trivially. **Wiring the config into `main()` is T3.3's**, which is the first
+  task that actually needs several sources read; step 2's "the report falls back to single-record
+  behaviour" is exercised here as a `sources.py` contract (an absent config yields no sources, not
+  an error) and rendered there.
+
+  **(d) SDD-AC-25 is jointly owned, and the plan said otherwise.** The criterion has two halves:
+  records from both homes merged into one section under one label, and the instruction inventory
+  taken as the union of both homes' trees. T3.2 delivers the *data* for both — `Source.homes` is an
+  ordered list of per-home states, which is everything a caller needs — but it cannot perform
+  either merge itself: `walk_instruction_inventory` and `_resolve_events_path` both live in
+  `report.py`, which ruling (c) bars this task from importing. Both halves therefore land in T3.3,
+  whose text and Success line have been amended to say so. Caught by review before T3.3 began: the
+  coverage map assigned AC-25 to T3.2 alone and T3.3's Success line did not cite it at all, so the
+  union walk was assigned to the task that could not do it and absent from the one that could. Left
+  alone, T3.3 would have walked one home per source, every test would have passed, and a file
+  present only in the other home would have vanished from the denominator — a wrong number that
+  looks right.
+
+  **(e) One verdict combination the ruling did not name.** `Source.verdict` resolves
+  `missing` + `not_yet_recording` to **not yet recording**, on the reading that a configured but
+  silent home is more informative than a dead one. Reasonable, and previously written down
+  nowhere; recorded here so it is a decision rather than an accident.
+
+- [x] **T3.3 Per-source rendering, and the honesty rules** `[activity: backend-api]`
 
   1. Prime: re-read why merging is misleading for two specific analyses `[ref: SDD/ADR-7]`
      `[ref: SDD/Runtime View — Complex Logic]`.
@@ -107,13 +197,72 @@ are one.
      recording state is reported separately and the stale one is named — **the merged form of this
      test must fail before the split is implemented**, so write it against the merged behaviour
      first and watch it report everything as fresh; the never-loaded list is a per-source difference
-     against that source's own inventory walk, never against a pooled set; byte accounting is
-     reported per source.
+     against that source's own inventory walk, never against a pooled set; **for a source with
+     several homes that walk is the UNION of every home's tree, walked from the one `repo_root`
+     (SDD-AC-25, CON-6)** — `walk_instruction_inventory(repo_root, home_dir)` takes a single home,
+     so it must be called once per entry in `source.homes` and the results combined; a file present
+     in only one home must still appear in the denominator, or it shows up as neither loaded nor
+     never-loaded and vanishes with nothing to say it was gone, which is precisely the failure the
+     SDD says a primary-home rule causes; byte accounting is reported per source.
   3. Implement: per-source sections in the renderer.
   4. Validate: `pytest -q` green.
-  5. Success: `[ref: SDD/SDD-AC-20]`; `[ref: SDD/ADR-7]`
+  5. Success: `[ref: SDD/SDD-AC-20]`; `[ref: SDD/SDD-AC-25]` (the inventory-union half — T3.2 delivers the per-home data, this task performs the walk); `[ref: SDD/ADR-7]`
 
-- [ ] **T3.4 The one union: firing coverage across sources** `[activity: backend-api]`
+  **Rulings, 2026-09-10, after the TDD gate blocked.**
+
+  **(f) A section is looked up by `repo_root.name` and headed by `label`.** Nothing said how a
+  per-source section finds its own entry in `instruction_stats_by_repo`, and the two candidates are
+  not interchangeable: the outer key is the record's own `repo` field, which `logwrite.sh` freezes
+  as the git toplevel's **basename** (`:328-329,339-347`), while `Source.label` is free text a human
+  chose. The SDD's own example config uses `label = "repo3"` for a `repo_root` whose basename could
+  be anything. So: look up `stats_by_repo.get(source.repo_root.name, {})`, render under
+  `source.label`. Not a design choice — the label is display-only and the basename is the only key
+  the data actually carries. **The plan lacked the test that would catch getting this wrong**: a
+  source whose `label` differs from its `repo_root.name`, asserting the section is headed by the
+  label and populated from the basename key. Without it every specified test passes either way.
+
+  **(g) Two sources whose `repo_root` basenames collide are rejected at config load** *(maintainer
+  ruling; reopens T3.2 for a follow-up).* `_record_base_path` derives the data directory from
+  `repo_root.name` alone, and `logwrite.sh` freezes `repo` to the same basename — so `~/work/tcs`
+  and `~/archive/tcs` resolve to the **same record file**, carry the **identical `repo` value**, and
+  cannot be told apart even in principle. They would render as two sections with identical content
+  under different labels: two plausible, wrong repositories, which is the dishonesty ADR-7 exists to
+  prevent. `sources.py` already rejects duplicate labels; it now rejects duplicate basenames the
+  same way, naming both offending sources. Failing loudly at load beats a silent duplicate in the
+  report.
+
+  **(h) `--events` keeps the golden green because the mode branch lives in `main()`.** The SDD is
+  explicit that "`--events` continues to mean 'this one record', so every existing invocation keeps
+  working" (`solution.md:333-334`) — it is a mode selector, and when given, the config is never
+  consulted. So `main()` branches: `--events` takes today's block unchanged; otherwise load
+  `args.repo_root/.claude/observability-sources.toml` and loop. `build_load_report` gains one more
+  optional `None`-default keyword (a section title), exactly the precedent every prior extension
+  used, and never branches on how many sources exist. The golden test never executes the new branch,
+  so it stays green trivially. **No deviation, and no reason to regenerate the golden — if it goes
+  red, something is wrong with the change, not with the fixture.** An absent config and a config
+  with zero sources both fall back to the single-record path identically; there is no third case.
+
+  **(i) The inventory union: `entries` unions, `git_filtered` ANDs.** `InstructionInventory` has
+  exactly two fields. `entries` is a plain set union — safe by construction, because
+  `walk_instruction_inventory` already redacts to strings and is documented to over-list rather than
+  under-list, so unioning is the same collapse it already performs internally, one level up.
+  `git_filtered` combines with **AND**: both walks share a `repo_root` so they should always agree,
+  but if they ever disagree, reporting the *less* confident state is honest and `or` would overclaim
+  filtering the other home never achieved.
+
+  **(j) Within a source, concatenate; across sources, never.** Each home's stream is read with
+  `read_events`, which is safe on a path that does not exist (`rotation_chain` returns `[]`), so a
+  *missing* or *not yet recording* home needs no special case. The homes' streams concatenate for
+  that one source — it is one repository, and `newest_ts` taking a max is exactly why that is
+  honest, the rotated-chain merge one level up. Concatenating two different sources is the ADR-7
+  collapse and is forbidden.
+
+  **(k) Scope: leave T3.4 its work.** Every per-source `build_load_report` call this task writes
+  passes `skill_agent_inventory=None`, `firing=None`, `hooks=None`. The firing-coverage union
+  (ADR-8) and the per-source hook-timing split are T3.4's, and this leaves them clean insertion
+  points — the union appended after the per-source loop, not inside it.
+
+- [x] **T3.4 The one union: firing coverage across sources** `[activity: backend-api]`
 
   1. Prime: read `walk_skill_agent_inventory:857-922` and `fired_names:927`, and ADR-8 on why the
      denominator must not be globbed across sources `[ref: SDD/ADR-8]` `[ref: PRD/F4]`.
@@ -128,17 +277,84 @@ are one.
   4. Validate: `pytest -q` green.
   5. Success: `[ref: SDD/SDD-AC-21, SDD-AC-22, SDD-AC-23]`; `[ref: PRD/F4]`
 
-- [ ] **T3.5 Backwards compatibility and phase validation** `[activity: validate]`
+  **Rulings, 2026-09-10, from T3.4's gate.** The plan's cited line numbers were stale again —
+  `walk_skill_agent_inventory` is at `:936` not `:857`, `fired_names` at `:1006` not `:927`.
+
+  **(l) The denominator is walked once, from `args.repo_root`.** That is the shipping repository —
+  never any `Source.repo_root`, which are targets. Other sources' local agents are then excluded by
+  construction, which is exactly ADR-8's stated purpose. The shipping repo's OWN `.claude/agents/`
+  does enter, via `_local_agent_entry:925`, and that is correct rather than a defect: ADR-8's harm
+  names "a **target's** own local agents", contrasted with "the shipping repository" in the same
+  ADR. It is also not new — `_print_single_record_report` already walks it. Moot in practice today:
+  measured, this repo's `.claude/agents/` holds no `.md` files, so the denominator is 83 entries
+  (64 skills, 19 agents) with zero repo-local agents. **A test asserting "a target's local agents do
+  not enter" must therefore build a synthetic source root carrying one** — using the real repo
+  proves nothing, because there are none to exclude.
+
+  **(m) The union may pool, the per-source detail must not.** Measured: `fired_names` over pooled
+  records is identical to unioning per-source sets, because it has no cross-record state — so the
+  union figure can be built either way. The per-source detail cannot: pooling first destroys the
+  "which source" information it exists to show, so `firing_coverage` is called once per source
+  against that source's own records and the **same shared `entries`**. The ambiguous-bare-name rule
+  is unaffected either way, because `bare_counts` is computed from `entries` alone — verified by
+  running it: a bare-name record matching two same-kind entries credits neither and is reported as
+  ambiguous, pooled or not.
+
+  **(n) Both the union figure and the per-source detail render in `main()`, after the joined
+  sections.** Not inside each source's `=== label ===` section: ruling (k) fixed those calls at
+  `firing=None`, the SDD says the per-repository detail is reported *alongside* the union, and the
+  task's own title says **one** union. The insertion point T3.3 left is where both go.
+
+  **(o) `_build_source_report` returns its records; the union does not re-read them.** The union
+  needs every source's records and `_build_source_report`'s `read_events` calls are the only place
+  they are read — it currently discards them. It returns `(text, records)` and
+  `build_multi_source_report` threads them back. The alternative, re-reading each source's homes a
+  second time outside the loop, is safe but duplicates I/O and invites the two paths to drift.
+
+  **(p) Per-source detail shape.** No acceptance criterion pins the text, so: for each source, state
+  how many of the shipped inventory fired there, and **name the entries that fired in at least one
+  OTHER source but not in this one**. That divergence is the PRD's actual question — "fired
+  somewhere" and "fired in both places it should" are different, and it asks the second. Unmatched
+  and ambiguous names are reported **pooled** on the union figure only, not attributed per source:
+  no AC asks for attribution, and this is recorded as a deliberate assumption rather than an
+  accident.
+
+  **(q) Hook timing goes inside `_build_source_report`, and one existing test must be retired on
+  purpose.** Hook timing is not a union — ADR-7 says per repository — so `hooks=None` at that call
+  site becomes `hook_duration_stats(records)` over the source's own concatenated stream.
+  `installed` is False only with zero `kind: hook` records, so per-source concatenation is the right
+  granularity. Completing this stub is **not** reopening T3.3: ruling (k) assigned it to T3.4
+  explicitly. Consequence to handle deliberately:
+  `test_build_multi_source_report_leaves_skill_agent_and_hook_sections_out` asserts hook sections
+  are ABSENT from `build_multi_source_report`'s output, and inspects exactly the function hooks are
+  being wired into — **it must go red, and must be rewritten as a named step rather than discovered
+  as a surprise.** Its firing-coverage half stays valid and would pass by construction anyway, since
+  the union renders in `main()` and that test never calls it — so the test is misleading on that
+  half and should say so.
+
+- [x] **T3.5 Backwards compatibility and phase validation** `[activity: validate]`
 
   1. Test: `--events <path>` behaves exactly as it did in spec-018 — same output for the same input,
-     asserted against a recorded fixture of the old output rather than by inspection; no argument
-     reads the config; `--data-dir` still means what it meant.
+     asserted against a recorded fixture of the old output rather than by inspection **(already
+     delivered by T3.0 as `tests/test_observability_report_t30_golden.py`, by approved deviation —
+     verify it is still green and still frozen against commit `eb9b529`; do NOT regenerate the
+     golden to make it pass)**; no argument reads the config **(already delivered by T3.3's
+     `test_cli_multi_source_config_renders_a_section_per_source`, which runs the CLI with no
+     `--events` and a real config on disk)**; `--data-dir` still means what it meant. The last
+     assertion is T3.5's own to write, alongside ruling (h)'s negative half (`--events` makes the
+     config irrelevant, proven with a poison config) — both landed as
+     `test_cli_events_flag_ignores_config_even_when_config_is_unparseable` and
+     `test_cli_data_dir_has_no_effect_once_a_config_is_in_play` in `tests/test_observability_report.py`.
   2. Validate: run `pytest -q` in full. Every spec-018 report test must still pass unmodified; if one
-     needs changing, that is a deviation and is recorded rather than absorbed.
-  3. **Optional scope, PRD F6 (Could-have)**: assisted discovery. If implemented, a discovered
-     location is *proposed* and never added silently. The three test-fixture record directories on
-     this machine are the standing argument for that rule — a discovery pass would have offered them
-     as repositories, and they look entirely plausible.
+     needs changing, that is a deviation and is recorded rather than absorbed. Confirmed: no existing
+     test was modified by this task (`git diff --stat` against `scripts/` is empty; only tests and
+     this plan changed).
+  3. **Optional scope, PRD F6 (Could-have): deferred.** *Deliberately not implemented — ruled out of
+     scope by the maintainer, 2026-09-11.* Assisted discovery would scan for plausible repository
+     locations and propose them (never add silently). The condition that reopens it: the config
+     becomes a hand-maintenance burden across more than the current four repositories, or a target's
+     record location stops being mechanically derivable from `repo_root` + `homes` (ADR-6) — either
+     of which would make manual authorship the actual bottleneck rather than a one-time cost.
   4. Success: `[ref: SDD/SDD-AC-24]`
 
 ---

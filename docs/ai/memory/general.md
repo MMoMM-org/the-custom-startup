@@ -17,3 +17,13 @@
 <!-- 2026-09-04 -->
 - **A skill's examples silently language-lock its grep step** — `testing`'s smell patterns were Jest-shaped, so a pytest suite grepped clean and read as passing. → Have the step name the framework first, then list the equivalents.
 - **`tr` maps byte to byte** — `tr ' ' '█'` writes only the first byte of a multibyte replacement, so a rendered bar is invalid UTF-8 shown as replacement glyphs. → Append whole characters in a loop.
+
+<!-- 2026-09-10 -->
+- **Golden-output fixtures live in `tests/fixtures/<area>/<task>_golden/`** — a committed `regenerate.py` builds the input and diffs (`--write` captures once), the `.txt` holds the frozen output, and a sibling test wires the diff into `pytest`. First instance: `observability/t30_golden`. → Never `--write` to silence a mismatch.
+- **Build a fixture tree that must NOT be a git repo under `tempfile.TemporaryDirectory()`** — inside the worktree, `check-ignore` answers with *this* repo's `.gitignore` instead of failing, so the "not a repository" branch never runs and nothing errors. → Materialise outside the worktree at run time.
+
+<!-- 2026-09-12 -->
+- **A bats needle can match the fixture name, not the message** — `_assert_contains "$output" "ignored"` passed because the work dir was `not-ignored`; the message says `does not ignore`. → Assert literal wording, then blank it and confirm red.
+- **A reported defect is usually one of several** — sweeping for the class behind a reported instance found 9 shapes where 1 was named, 3 emit sites where 1 was, 4 constant pairs where 1 was. → Fix the class; the instance is the cheapest part.
+- **Green is not evidence until the behaviour is broken** — a test that reads correctly can pass for a reason unrelated to what it claims, and reading the body does not reveal it. → Mutate what it covers; if it stays green it proves nothing.
+- **Two specs' `SDD-AC-n` numbers collide** — each numbers from 1, so a bare reference in a file predating the current spec cites the older one's table. → Prefix every acceptance-criterion reference with its spec.

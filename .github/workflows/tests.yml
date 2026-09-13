@@ -71,6 +71,19 @@ jobs:
       - name: Run pytest
         run: pytest -q
 
+      # Perf tests are opt-in (deselected by default via pytest.ini's
+      # addopts) because subprocess-exec latency swings past any fixed
+      # budget on a load-variable shared runner — measured p95 124.8-156.4ms
+      # against a 100ms hard limit under contention, see docs/ai/memory/active.md.
+      # continue-on-error (not `|| true`) keeps the job green while still
+      # marking this step failed in the UI, so a bad measurement stays
+      # visible at a glance instead of being swallowed by an always-0 exit.
+      # A blocking perf gate here would only move the flake from a
+      # developer's machine into CI, not remove it.
+      - name: Run perf tests (non-blocking)
+        continue-on-error: true
+        run: pytest -m perf -q
+
   bats:
     name: bats (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

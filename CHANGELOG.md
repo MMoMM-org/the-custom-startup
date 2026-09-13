@@ -44,6 +44,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+- **Spec 019 rolls the observability instrument out across the repositories where work
+  actually happens (#162, in progress).** Spec 018 shipped a working recorder and left it
+  pointed at a repository where little happens; its own Won't-Have deferred distribution
+  until "the record has answered a real question", a condition that could never be met from
+  there. Phases 1 and 2 (the versioned bundle, and the registration editor) and the first
+  three tasks of phase 3 have landed; **phases 3 and 4 are not finished, and nothing new is
+  wired into a hook yet.**
+
+  `scripts/observability/sources.py` is new: a stdlib-only reader for a TOML locations
+  config, resolving each configured repository to its record locations and classifying every
+  configured home as missing, not-yet-recording, or recording. `report.py` gains
+  `instruction_stats_by_repo`, so two repositories' identically-named instruction files are
+  counted separately instead of collapsing into a single plausible, wrong number.
+
+  Two things worth knowing before touching this code. **`tomllib.TOMLDecodeError` carries
+  `lineno` on Python 3.14 and not on 3.11**, which is what CI runs — and the obvious remedy,
+  `getattr(e, "lineno", None)` with a message fallback, is *also* wrong: for an
+  end-of-document error the attribute returns a line while the error's own message names
+  none, so one malformed config produced two different errors depending on the interpreter.
+  The line is derived from the message text only, measured byte-identical across both
+  versions. **And `sources.py` imports nothing local on purpose** — the reader that consumes
+  it must import it, so the reverse edge would be a genuine cycle. The record-path formula is
+  duplicated once, deliberately, with a test calling both private functions to pin that they
+  agree.
+
+  The reader's `--events` output is frozen as a golden fixture captured *before* any of this
+  landed, so backwards compatibility is proven rather than asserted; regenerating it requires
+  an explicit `--force`, because a golden fixture quietly overwritten to silence a red test is
+  the usual way one dies.
+
 ## [Unreleased] — memory
 
 ### Added
