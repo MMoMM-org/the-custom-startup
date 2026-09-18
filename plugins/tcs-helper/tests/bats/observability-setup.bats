@@ -1752,6 +1752,16 @@ PY
 # destination, fails. That is the exact window SDD-AC-9 is about: backup
 # already taken, temp already written, only the rename fails.
 @test "an interrupted write through the real entry point leaves the original intact with a backup, and reports failure (SDD-AC-9)" {
+  # `chflags` is BSD-only; on Linux this line exits 127 and the test fails for
+  # a reason that has nothing to do with the behaviour under test. The nearest
+  # Linux equivalent, `chattr +i`, needs CAP_LINUX_IMMUTABLE and does not work
+  # on every filesystem, so an unprivileged runner cannot create this window at
+  # all. SDD-AC-9 itself stays covered everywhere: the library test patches
+  # os.replace directly. What is platform-bound is only the real-filesystem
+  # version of it, which runs on the platform that can express it.
+  command -v chflags >/dev/null 2>&1 \
+    || skip "chflags is BSD-only; this window cannot be created on this platform"
+
   local home dir target original
   home="$(_new_home ac9-command-level)"
   dir="$(_copy_fixture empty-object ac9-command-level)"
