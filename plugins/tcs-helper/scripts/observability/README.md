@@ -181,6 +181,42 @@ Running it while recording is on adds one more line to the log, of `kind: state`
 check-in record itself, and it's the mechanism the script uses to prove writing actually works,
 not an accident.
 
+## How to read the coverage figure
+
+`report.py` ends with a line like `Coverage: 13/84 fired.` and a list headed *"Never fired -- unused,
+not missing"*. Both are narrower claims than they look, in three specific ways. None is a defect;
+all three are properties of where the record comes from.
+
+**It counts model-chosen skill invocations, not typed ones.** The `PreToolUse` hook matches on the
+`Skill` *tool*. Typing `/plugin:skill-name` makes no tool call, so nothing observes it. Measured
+across this repository's whole record: after the rollout day, every `Skill` tool call produced a
+record and **none of eight typed invocations did**. Most skills here carry `user-invocable: true`
+and exist to be typed, so for those, "never fired" cannot tell *unused* apart from *only ever
+typed*.
+
+**A subagent given a `name:` is unattributable.** `SubagentStart`'s `agent_type` field carries the
+agent's *name*, not its type — the hooks documentation defines it as "Agent name (for example,
+`Explore` or `security-reviewer`)" — and the payload has no other field. A dispatch named
+`impl-t41` records `impl-t41`, which matches no inventory entry. The report pools these separately
+rather than dropping them (`N record(s) named a skill/agent not found in this inventory`), so they
+are visible, but they cannot be credited. Cross-referencing the session transcripts resolves them
+— they carry both `name` and `subagent_type` — but that is an offline join this tooling does not
+perform.
+
+**A per-source gap is an absence of records.** The per-source detail says an entry is *absent from
+that source's records*, never that it did not run there. Both effects above hit the per-source
+figure harder than the union, because the union only needs an entry to fire once, anywhere, under
+its own name.
+
+What the figure *does* support, stated the way it should be quoted:
+
+> Of 84 shipped skills and agents, 13 left a record naming them, across four repositories over the
+> collection period. The other 71 left none — which for a user-invocable skill may mean it was
+> never used, or only ever typed.
+
+What it does not support is "71 of our skills are unused". Getting from one to the other needs the
+typed route observed as well, which would take a second adapter on a different hook event.
+
 ## What is recorded, and what is deliberately not
 
 By default (`DETAIL` off), each record keeps only what is needed to know *that* something loaded or
