@@ -2949,6 +2949,48 @@ def test_build_multi_source_report_union_and_per_source_firing_coverage(tmp_path
     assert "plugin:skill-y [skill]" not in section_b
 
 
+def test_per_source_firing_gap_does_not_assert_the_entry_did_not_run_here(tmp_path):
+    """A per-source gap is an absence of RECORDS, never evidence of absence.
+
+    Measured 2026-09-22 against the live record: `the-custom-startup` listed
+    `tcs-workflow:spec-compliance-reviewer` and `tcs-workflow:tdd-guardian`
+    under "fired in another source but not here", while the session
+    transcripts show they ran there 23 and 15 times. The hook payload's
+    `agent_type` is the agent's NAME, not its type -- the official hooks
+    documentation defines it as "Agent name (for example, `Explore` or
+    `security-reviewer`)" -- so a subagent dispatched with a `name:` records
+    that name and is unattributable to its inventory entry.
+
+    The rendering must therefore not claim the entry did not run here, and
+    must say why a gap is not proof. Asserted on the text because the text is
+    the claim: the counts were already right.
+    """
+    shipping_root = tmp_path / "shipping-repo"
+    _make_skill(shipping_root, "plugin", "skill-x")
+    _make_skill(shipping_root, "plugin", "skill-y")
+    inventory = report.walk_skill_agent_inventory(shipping_root)
+
+    fired_by_source = [
+        ("source-a", {("skill", "plugin:skill-x")}),
+        ("source-b", {("skill", "plugin:skill-y")}),
+    ]
+    text = "\n".join(report._render_per_source_firing_detail(inventory, fired_by_source))
+
+    # The gap is still named -- that is the divergence the section exists for.
+    assert "plugin:skill-y [skill]" in text
+
+    # But it is never asserted as "did not fire here".
+    assert "but not here" not in text
+
+    # Each gap says only that no record names it -- one line per source.
+    assert text.count("no record here names it") == 2
+
+    # And the reason a gap is not proof is stated ONCE, at the section head,
+    # rather than repeated per source where it would read as boilerplate.
+    assert text.count("it is not shown to be") == 1
+    assert "agent_type" in text
+
+
 def test_build_multi_source_report_union_reports_unrecognised_name_not_dropped(tmp_path):
     """spec-019 T3.4 task text: "a record naming something outside the
     inventory is reported as unrecognised rather than dropped" -- exercised

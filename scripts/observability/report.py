@@ -1896,23 +1896,39 @@ def _render_per_source_firing_detail(
 ) -> list[str]:
     """Per-source coverage detail beside the union figure (ruling (p)): for
     each source, how many of the shipped inventory fired there, and which
-    entries fired in another source but not this one -- the divergence the
-    union figure alone cannot show. Unmatched/ambiguous record names are
-    deliberately NOT repeated here: ruling (p) pools those on the union
-    figure only, since no acceptance criterion asks for per-source
-    attribution of a name that matched no entry at all.
+    entries no record there names -- the divergence the union figure alone
+    cannot show. Unmatched/ambiguous record names are deliberately NOT
+    repeated here: ruling (p) pools those on the union figure only, since no
+    acceptance criterion asks for per-source attribution of a name that
+    matched no entry at all.
+
+    A gap is an absence of RECORDS and never evidence that the entry did not
+    run. `SubagentStart`'s `agent_type` is the agent's NAME -- the hooks
+    documentation defines it as "Agent name (for example, `Explore` or
+    `security-reviewer`)" -- so a subagent dispatched with a `name:` records
+    that name and cannot be credited to its inventory entry at all. Measured
+    2026-09-22: this section listed two reviewer agents as absent from the
+    shipping repository while the transcripts showed 23 and 15 runs there.
+    The counts were right; the sentence around them was not, so the sentence
+    is what changed.
     """
     denominator = len(inventory.entries)
     fired_entries_by_label = {
         label: firing_coverage(inventory.entries, fired).fired for label, fired in fired_by_source
     }
-    lines = ["Per-source firing detail:"]
+    lines = [
+        "Per-source firing detail:",
+        "  An entry listed below is absent from this source's RECORDS -- it is not shown to be",
+        "  absent from this source. A subagent dispatched with a `name:` records that name in",
+        "  `agent_type` (the payload carries the agent's name, not its type), so a named dispatch",
+        "  leaves no trace under its own entry.",
+    ]
     for label, _ in fired_by_source:
         fired_here = fired_entries_by_label[label]
         lines.append(f"  {label}: {len(fired_here)}/{denominator} of the shipped inventory fired here.")
         gap = _firing_divergence(fired_entries_by_label, label)
         if gap:
-            lines.append(f"    fired in another source but not here ({len(gap)}):")
+            lines.append(f"    fired in another source, no record here names it ({len(gap)}):")
             for entry in gap:
                 lines.append(f"      {entry.qualified} [{entry.kind}]")
     lines.append("")
