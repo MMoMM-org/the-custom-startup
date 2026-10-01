@@ -76,6 +76,14 @@ would plausibly re-propose it, leave it out.
   list only because they are *not* read-only — a constraint, not a recommendation.
 - **Revisit if:** `plugin eval` is enabled (#84), or #144 reports that the unscoped `Write`/`Edit`
   grant has been confined, which puts the reviewer agents back in play.
+- **⚡ CONDITION MET 2026-09-19** — `plugin eval` is available. The 2026-09-05 reading was wrong
+  about the cause: it was a version floor (GA needs Claude Code 2.1.269; we were on 2.1.252), not
+  an account gate. A suite ran end to end here — one case, one run, `$0.22`, score 1.00. The
+  deferral's own reasoning is therefore satisfied: a measured before/after is now possible, so the
+  pilot need not be an opinion with frontmatter. The entry stands as written; only its blocking
+  condition has lifted. **#144 is untouched by this and still open** — `plugin eval` measures
+  whether recall improves output, and says nothing about what the `Write`/`Edit` grant can reach.
+  Evidence and the operational traps: #84.
 
 ### 2026-09-05 — adopt upstream's `evals.json` layout for eval suites
 
