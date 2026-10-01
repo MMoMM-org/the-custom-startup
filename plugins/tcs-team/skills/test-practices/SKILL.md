@@ -1,5 +1,5 @@
 ---
-name: testing
+name: test-practices
 user-invocable: false
 description: Writing effective tests and running them successfully. Covers layer-specific mocking rules, test design principles, debugging failures, and flaky test management. Use when writing tests, reviewing test quality, or debugging test failures.
 ---
