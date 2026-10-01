@@ -1,0 +1,40 @@
+Recording state: STALE -- the newest entry in this log (2026-09-07T09:10:00Z) is older than the 6-hour threshold this report uses for "the current session," so the figures below describe a previous session, not this one.
+
+Instruction inventory (filesystem walk, unfiltered -- git unavailable or repo_root is not a git repository): 6 configured file(s) found.
+1 log line(s) could not be parsed and were skipped.
+
+Byte cost -- always-loaded layer: 550 byte(s); conditional loads: 200 byte(s).
+  999 byte(s) recorded under an unknown load reason, counted separately (not folded into either total above).
+  1 record(s) were unmeasurable (no usable `bytes` -- the file could not be stat'ed, or its size was not a valid number) and are excluded from every total above -- never counted as zero.
+
+Loaded instruction files (4):
+  .claude/rules/other.md: 1 load(s) [always] (compact=1)
+  .claude/rules/style.md: 1 load(s) [unknown] (unknown=1)
+  CLAUDE.md: 2 load(s) [always+conditional] (path_glob_match=1, session_start=1)
+  docs/ai/memory/general.md: 1 load(s) [conditional] (nested_traversal=1)
+
+Configured but never loaded (2):
+  docs/ai/memory/context.md
+  nested/CLAUDE.md
+
+Skill and agent inventory (glob at report time): 4 entries found (2 skill(s), 2 agent(s)).
+Matching rule: a record fires an entry when it names either that entry's qualified name (<plugin>:<path under skills/ or agents/>) or its bare name (a skill's directory name, or an agent's frontmatter `name:`) -- but a bare name is only ever used to credit an entry when that bare name is unique across the whole inventory; two entries sharing one bare name are never both marked fired by an ambiguous bare-name record. Which form a real record actually carries is confirmed at T3.6 against a live session -- this join accepts either deliberately until then.
+Coverage: 2/4 fired.
+
+Never fired -- unused, not missing (2):
+  pluginA:beta [skill]
+  pluginA:unused-agent [agent]
+
+1 record(s) named a skill/agent not found in this inventory at all (a built-in agent, or one this glob does not cover):
+  Explore [agent]
+
+Unreachable skill files -- found on disk but the harness cannot discover them at all (not exactly one level deep under a plugin's skills/ directory -- nested deeper, or a SKILL.md placed directly at skills/SKILL.md with no name directory), so they can NEVER fire. This is NOT the same finding as "never fired" above: do not try to fix these by using them more -- the fix is moving or flattening the file. NOT counted in the coverage fraction above (1):
+  plugins/pluginA/skills/nested/inner/SKILL.md
+
+
+Hook durations (timed-wrapper.sh, scope_note: single only):
+  PreToolUse / Skill (1 invocation(s)):
+    120 ms (exit 0)
+  1 record(s) carried scope_note: batch and are EXCLUDED above -- a batch figure covers several hooks collapsed into one measurement group (ADR-7) and must never be shown as any single hook's own duration.
+  1 record(s) carried no usable scope_note at all and are EXCLUDED above for the same reason -- never assumed to mean a single invocation.
+

@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-05-21 |
-| **Current Phase** | Ready (implement-ready) |
-| **Last Updated** | 2026-05-21 |
+| **Current Phase** | Implemented |
+| **Last Updated** | 2026-09-12 |
 
 ## Documents
 
@@ -29,6 +29,7 @@
 | 2026-05-21 | SDD complete, all 8 ADRs confirmed | Architecture pattern: router skill + content-injection hook. Direct precedent in `capture_learning.py` (same plugin, same UserPromptSubmit event). Inline scaffold templates for 2 established patterns (CI auto-bump, pre-push docs-gate); hand-off via Skill tool for everything else. Hook in python3, never blocks (graceful degradation per CON-4). |
 | 2026-05-21 | PLAN complete | 3 phases, 13 tasks. Phase 1 (Intercept Hook Foundation): T1.1 trigger-phrases ref+lib, T1.2 hook script, T1.3 registration. Phase 2 (Triage Skill + Hand-offs): T2.1 skill scaffold, T2.2 matrix ref, T2.3 4-question workflow, T2.4 hand-offs, T2.5 examples. Phase 3 (Templates + Self-test + Docs): T3.1 CI template, T3.2 pre-push template, T3.3 self-test fixtures, T3.4 E2E, T3.5 docs. Spec is implement-ready. |
 | 2026-05-21 | PRD/SDD revisions from Marcus inline review | 8 inline notes addressed: (1) graceful degradation when target skill missing made explicit in PRD; (2) **memory-first model** — Q1 restructured so `First time` defers to /memory-add, only `Recurring` enters the mechanism matrix (enforcer is now escalation, not replacement); (3) trigger phrases broadened to ALL grammatical persons + speakers (user AND Claude prompts both scanned); (4) multi-language scope clarified (DE+EN day-1, ML deferred not language); (5) **ADR-2 REVERSED** — pre-push hooks now use tcs-git-helpers bundle-versioning pattern (templates in plugins/tcs-helper/templates/githooks/, sibling version marker, drift-check integration); (6) ADR-3 confirmed (no persistence v1); (7) Q2/Q3 must include concrete examples per option so users can pick without jargon; (8) pre-push docs gate defaults to `Nudge` not `Block` (honest enforcement — block-with-`--no-verify`-bypass is ignore-with-extra-step). PLAN updated: T3.2 rewritten + new T3.2a for drift-check integration → 14 tasks total. |
+| 2026-09-12 | Implementation complete -- status corrected 2026-05-22 to 2026-09-12, verified against git rather than this table | All three phases carry `status: completed`, `8602cdf` says "Phase 3 complete + spec 013 fully implemented", and PR #33 merged it on 2026-05-22. The skill has been extended since, under spec-016 (`c5b1fd6`). Only this Status row stayed on `Ready (implement-ready)`, for nearly four months after the spec was declared finished in its own commit message |
 
 ## Context
 

@@ -15,6 +15,8 @@ import sys
 import time
 import unittest
 
+import pytest
+
 SCRIPT = os.path.join(os.path.dirname(__file__), 'intercept_rule_recurrence.py')
 
 
@@ -116,6 +118,7 @@ class TestInterceptBehavior(unittest.TestCase):
         self.assertIn('[rule-enforcer]', result.stdout)
 
 
+@pytest.mark.perf
 class TestPerformance(unittest.TestCase):
 
     def test_p95_latency_under_50ms(self):

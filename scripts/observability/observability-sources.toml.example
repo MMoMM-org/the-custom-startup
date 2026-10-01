@@ -1,0 +1,26 @@
+# observability-sources.toml -- place at .claude/observability-sources.toml
+# (never committed -- .claude/ is gitignored wholesale, ADR-6).
+#
+# Read by scripts/observability/sources.py. `report.py`, run with no
+# arguments, uses this file to read several repositories' records as one
+# report (spec-019). Each [[source]] is one repository, identified by
+# `label` -- never by `repo_root`'s basename, which is not guaranteed
+# unique -- and its `repo` field in the record is frozen at write time
+# (logwrite.sh), so one label always means one repository, however many
+# places its record lives.
+
+[[source]]
+label     = "repo1"                     # what the report prints
+repo_root = "/abs/path/to/repo1"        # also the inventory walk root
+homes     = ["/abs/path/to/repo1/claude-docker-home"]   # optional; omit for a host-only target
+
+[[source]]
+label     = "repo2"
+repo_root = "/abs/path/to/repo2"
+# no `homes` -- the real $HOME applies
+
+[[source]]
+label     = "repo3"
+repo_root = "/abs/path/to/repo3"
+# worked in BOTH environments: one source, two record locations, one identity
+homes     = ["/abs/path/to/repo3/claude-docker-home", "~"]
