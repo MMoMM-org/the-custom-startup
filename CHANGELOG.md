@@ -174,6 +174,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   binary: per-turn `<{agentName}-activity>` blocks carrying assistant text, `<tool-call name="…">`
   with full JSON arguments, and the matching `<tool-result>`.
 
+### Fixed
+
+- **`tcs-team` registered a reference document as an agent (PR #168).**
+  `agents/the-architect/reference/robustness-checklists.md` is reference material for the
+  `review-robustness` agent, not an agent itself. The agents tree is scanned recursively for
+  `.md` files, so it was registered as one and appeared in **every** session's agent roster as
+  `tcs-team:the-architect:reference:robustness-checklists`, carrying the placeholder description
+  "Agent from tcs-team plugin" — what a file with no frontmatter gets.
+  `claude plugin validate` had been reporting it as a warning.
+
+  Moved to `plugins/tcs-team/reference/the-architect/`, outside the scanned tree, mirroring the
+  role nesting the agents themselves use. `agents/` now holds 15 files, all of them agents, and
+  validation passes with no warnings. Nesting agents under a role is deliberate and documented
+  (`agent-author/SKILL.md:110`); what is unsupported is a non-agent file anywhere beneath
+  `agents/`. This was the only one in any plugin.
+
+  Side effect worth knowing: the skill/agent inventory drops from 84 entries to 83, so spec-019's
+  firing coverage reads `15/83` rather than `15/84`. That is a correction — the phantom entry had
+  no frontmatter and could never have been dispatched, so it was inflating the denominator. The
+  figure in spec 019's decision log describes the inventory as it stood during the collection
+  period and is left as the point-in-time record it is.
+
+  Not fixed here: the reference is still named by a bare path, and a plugin agent cannot reliably
+  resolve one — at runtime the plugin loads from the cache, not the repository, and
+  `$CLAUDE_PLUGIN_ROOT` is empty in a Bash-tool subprocess. That is the same class as #163 and is
+  recorded there.
+
 ---
 
 ## [Unreleased] — git hooks
