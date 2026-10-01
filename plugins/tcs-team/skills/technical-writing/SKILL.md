@@ -1,7 +1,7 @@
 ---
 name: technical-writing
 user-invocable: false
-description: Create architectural decision records (ADRs), system documentation, API documentation, and operational runbooks. Use when capturing design decisions, documenting system architecture, creating API references, or writing operational procedures.
+description: "Writing documents a human decides from: architectural decision records, system overviews, and operational runbooks. Use when capturing a decision or an operational procedure. Do NOT use to generate or refresh documentation from code — tcs-workflow:document does that, and API references belong there too."
 ---
 
 ## Persona

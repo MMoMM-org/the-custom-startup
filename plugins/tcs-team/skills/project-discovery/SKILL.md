@@ -1,7 +1,7 @@
 ---
 name: project-discovery
 user-invocable: false
-description: Unified codebase discovery across structure navigation, tech-stack detection, and documentation extraction. Use when onboarding to a project, locating implementation paths, identifying frameworks/tooling, or validating docs against code reality.
+description: "Orienting in a repository you do not know yet: structure navigation, tech-stack and tooling detection, and checking documentation against code reality. Use before touching unfamiliar code. Do NOT use to produce an analysis document — tcs-workflow:analyze discovers and documents business rules and interfaces as a deliverable."
 ---
 
 ## Persona
