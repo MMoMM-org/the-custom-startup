@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: The command, the rollout, and the gates"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 4
 ---
