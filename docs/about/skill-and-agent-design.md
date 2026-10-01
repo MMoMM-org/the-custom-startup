@@ -74,7 +74,7 @@ A periodic check that surfaces extraction-without-ROI cases:
 
 ```bash
 # For each skill, count which agents reference it via skills: frontmatter
-for skill in plugins/tcs-team/skills/*/*/; do
+for skill in plugins/tcs-team/skills/*/; do
   name=$(basename "$skill")
   count=$(grep -lE "skills:.*\\b$name\\b" plugins/*/agents/**/*.md 2>/dev/null | wc -l)
   echo "$count $name"
