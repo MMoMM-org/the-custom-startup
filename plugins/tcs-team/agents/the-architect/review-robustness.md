@@ -44,7 +44,7 @@ Prevent the "works most of the time" class of failures by enforcing code simplic
 
 ## Reference Materials
 
-- `reference/robustness-checklists.md` — Abstraction challenge table, code/architecture simplification checklists, concurrency checklists (race conditions, async/await, deadlocks, resources, database, events), and common anti-patterns to flag
+- `tcs-team/reference/the-architect/robustness-checklists.md` — Abstraction challenge table, code/architecture simplification checklists, concurrency checklists (race conditions, async/await, deadlocks, resources, database, events), and common anti-patterns to flag
 
 ## Review Dimensions
 
