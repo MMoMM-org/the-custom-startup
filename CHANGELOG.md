@@ -201,6 +201,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `$CLAUDE_PLUGIN_ROOT` is empty in a Bash-tool subprocess. That is the same class as #163 and is
   recorded there.
 
+- **`tcs-team`'s 15 skills were invisible, and with them every agent's declared context
+  (`tcs-team` 3.4.4).** The skills sat one directory level too deep for the harness to discover
+  (`skills/<category>/<name>/` instead of `skills/<name>/`). Since all 15 are
+  `user-invocable: false` and exist to be **preloaded** into the plugin's agents via their
+  `skills:` frontmatter — which resolves by name against the discovered registry and skips an
+  unresolvable name with only a debug-log warning — all 15 agents ran without the context they
+  declare. Silently, for as long as they existed.
+
+  Flattened to one level as 14 pure renames. `testing` became `test-practices`, because making
+  the skills discoverable would otherwise have put two skills named `testing` in one registry and
+  left preload resolution undefined. 11 descriptions were rewritten into routing contracts, each
+  naming the reachable skill it must not be confused with, since they were authored when nothing
+  competed with them.
+
+  Two things worth carrying forward: `claude plugin details <name>` reads the **installed cache
+  copy**, not the working tree, so it cannot verify a change like this before publication — the
+  observability report's inventory walk can, and went from 83 to 98 entries with its "unreachable
+  skill files" section disappearing. And `claude plugin validate` passed over ten skill frontmatter
+  blocks that YAML could not parse at all; it does not validate skill frontmatter.
+
 ---
 
 ## [Unreleased] — git hooks

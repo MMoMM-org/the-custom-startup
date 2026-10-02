@@ -91,7 +91,11 @@ skills: project-discovery, pattern-detection, api-contract-design
 ---
 ```
 
-### Available Skills (16)
+### Available Skills (15)
+
+The **Category** column is editorial grouping only — every skill lives directly at
+`skills/<name>/`, which is the one depth Claude Code discovers. Do not recreate category
+directories.
 
 | Category | Skill | Description |
 |----------|-------|-------------|
@@ -105,7 +109,7 @@ skills: project-discovery, pattern-detection, api-contract-design
 | | `domain-modeling` | Domain + data modeling, invariants, schema evolution |
 | | `frontend-patterns` | Frontend component patterns and UI architecture |
 | | `technical-writing` | ADRs, system docs, runbooks, API docs |
-| | `testing` | Layered testing strategy and execution patterns |
+| | `test-practices` | Mocking rules by layer, failing-test debugging, flaky-test management |
 | **Infrastructure** | `platform-operations` | Pipeline design + observability + release reliability controls |
 | **Quality** | `code-quality-review` | Holistic review including security/perf/a11y/error handling |
 | | `performance-analysis` | Profiling and bottleneck identification |

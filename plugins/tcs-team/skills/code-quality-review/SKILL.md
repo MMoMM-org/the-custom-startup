@@ -1,7 +1,7 @@
 ---
 name: code-quality-review
 user-invocable: false
-description: Unified code review skill for correctness, design, readability, security, performance, testability, accessibility, and error-handling conventions. Use when reviewing changes, enforcing quality standards, or identifying technical debt.
+description: "The criteria a code review applies: correctness, design, readability, security, performance, testability, accessibility, and error-handling conventions. Use when you need the checklist a reviewer works through. Do NOT use to run a review — tcs-workflow:review orchestrates that — and do NOT use for language- or stack-specific audits, which tcs-patterns covers per technology."
 ---
 
 ## Persona

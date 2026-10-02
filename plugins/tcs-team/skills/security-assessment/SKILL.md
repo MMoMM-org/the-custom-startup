@@ -1,7 +1,7 @@
 ---
 name: security-assessment
 user-invocable: false
-description: Vulnerability review, threat modeling, OWASP patterns, and secure coding assessment. Use when reviewing code security, designing secure systems, performing threat analysis, or validating security implementations.
+description: "Assessing security across a system: threat modelling, vulnerability review against OWASP patterns, and secure-coding assessment. Use when the scope is a system or a change set. Do NOT use for OAuth 2.0 and OpenID Connect specifically — authorization servers, flows and token handling are tcs-patterns:secure-oauth-oidc."
 ---
 
 ## Persona

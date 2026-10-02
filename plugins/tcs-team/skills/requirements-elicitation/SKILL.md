@@ -1,7 +1,7 @@
 ---
 name: requirements-elicitation
 user-invocable: false
-description: Requirement gathering techniques, stakeholder analysis, user story patterns, and specification validation. Use when clarifying vague requirements, resolving conflicting needs, documenting specifications, or validating requirements with stakeholders.
+description: "Turning unclear intent into testable requirements: elicitation techniques, stakeholder analysis, conflict resolution between stakeholders, and specification validation. Use when requirements are contested or vague. Do NOT use to explore a feature through dialogue (tcs-workflow:brainstorm) or to write the PRD itself (tcs-workflow:xdd-prd)."
 ---
 
 ## Persona

@@ -1,7 +1,7 @@
 ---
 name: pattern-detection
 user-invocable: false
-description: Identify existing codebase patterns (naming conventions, architectural patterns, testing patterns) to maintain consistency. Use when generating code, reviewing changes, or understanding established practices.
+description: Read the conventions a codebase already follows — naming, architecture, test structure — so new code matches them. Use immediately before writing or extending code in an existing project. Do NOT use for a standalone pattern analysis (tcs-workflow:analyze) or to judge whether a pattern is any good (code-quality-review).
 ---
 
 ## Persona

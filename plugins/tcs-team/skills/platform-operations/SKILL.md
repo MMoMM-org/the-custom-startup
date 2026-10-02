@@ -1,7 +1,7 @@
 ---
 name: platform-operations
 user-invocable: false
-description: Unified platform operations guidance for CI/CD pipeline design, deployment strategies, observability, SLI/SLOs, and incident-ready rollouts. Use when building release workflows, production monitoring, or reliability controls.
+description: "Getting a service to production and keeping it there: CI/CD pipeline design, deployment and rollback strategy, SLI/SLO definition, and incident-ready rollouts. Use when the question is how a service ships or how its health is defined. Do NOT use to instrument telemetry (tcs-patterns:observability) or to audit configuration and runtime behaviour (tcs-patterns:twelve-factor)."
 ---
 
 ## Persona
