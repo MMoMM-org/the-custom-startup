@@ -1,0 +1,1048 @@
+---
+title: "tcs-patterns selective install"
+status: draft
+version: "1.0"
+---
+
+# Solution Design Document
+
+## Validation Checklist
+
+### CRITICAL GATES (Must Pass)
+
+- [x] All required sections are complete
+- [x] No clarification markers remain
+- [x] Architecture pattern is clearly stated with rationale
+- [x] All architecture decisions confirmed by user
+- [x] Every interface has specification
+
+### QUALITY CHECKS (Should Pass)
+
+- [x] All context sources are listed with relevance ratings
+- [x] Project commands are discovered from actual project files
+- [x] Constraints → Strategy → Design → Implementation path is logical
+- [x] Every component in the diagram has a directory mapping
+- [x] Error handling covers all error types
+- [x] Quality requirements are specific and measurable
+- [x] Component names consistent across diagrams
+- [x] A developer could implement from this design
+- [x] Implementation examples use real field names, verified against the files they describe
+- [x] Complex logic includes a traced walkthrough with example data
+
+---
+
+## Output Schema
+
+### SDD Status Report
+
+| Field | Value |
+|-------|-------|
+| specId | 020-tcs-patterns-selective-install |
+| architecture.pattern | Catalogue-and-installer: the plugin ships templates plus a scanner, the repository holds the selection |
+| architecture.keyComponents | Catalogue, Detector, Interview, Collision guard, Installer, Manifest store, Drift reporter, Catalogue reader, CI gate entry |
+| architecture.externalIntegrations | none — no network, no services |
+| validationPassed | 14 |
+| validationPending | 0 |
+
+### ADR Status
+
+| ID | Decision | Status |
+|----|----------|--------|
+| ADR-1 | Installed patterns always carry a `tcs-` name prefix | CONFIRMED |
+| ADR-2 | Detector and installer in Python; only the advisory segment in bash | CONFIRMED |
+| ADR-3 | One `VERSION` file per pattern in the catalogue | CONFIRMED |
+| ADR-4 | Content hash at install, unified diff on conflict | CONFIRMED |
+| ADR-5 | An unrecognised stack gets no proposal and no default | CONFIRMED |
+| ADR-6 | Manifest at `.claude/skills/.tcs-patterns-manifest` | CONFIRMED |
+| ADR-7 | Obsidian rule stays duplicated, with a consistency test | CONFIRMED |
+| ADR-8 | Install offers to commit and never commits | CONFIRMED |
+| ADR-9 | The existing multi-bundle CI gate gains a per-pattern rule | CONFIRMED |
+
+---
+
+## Constraints
+
+- **CON-1 Listing budget is external.** `skillListingBudgetFraction` defaults to 0.01 of the
+  context window measured in characters — observed 8000 on a 200k-class model and 30000 in a
+  1M-context session — and `skillListingMaxDescChars` caps each description at 1536. The design
+  reduces pressure on that budget; it cannot raise it. No design element may assume a description
+  arrives in full.
+- **CON-2 Per-skill control exists only outside plugins.** `skillOverrides` is ignored when a
+  skill's source is a plugin (the resolver returns `"on"` before consulting it). Any design that
+  keeps patterns inside the plugin forfeits per-skill control. This is the load-bearing reason the
+  patterns are copied into the repository rather than flagged in place.
+- **CON-3 No name shadowing.** A repository skill and a plugin skill with the same name are both
+  listed; measured as a 3-token difference against a free name, which is noise. The harness will
+  not resolve a duplicate, so the design must prevent one.
+- **CON-4 A skill registers under its frontmatter `name:`, not its directory.** Renaming a
+  directory does not rename a skill. Any rename must edit the frontmatter.
+- **CON-5 bash 3.2 for anything written in shell** — no associative arrays — and shellcheck-clean.
+  macOS and Linux both: `stat -f` is a format string on BSD and means *filesystem* on GNU,
+  `[[:<:]]` is BSD-only, `timeout` is absent on macOS. ADR-2 exists largely to keep new code out
+  of this constraint's way.
+- **CON-6 Version numbers in `plugin.json` are set by CI** (`scripts/ci/bump-and-push.sh`) and
+  never by hand. The per-pattern versions of ADR-3 are a separate, maintainer-set namespace.
+- **CON-7 Distribution must follow the established bundle-versioning pattern** (spec 012), which
+  already has three instances in this repository. This is the fourth; it does not get a fourth
+  mechanism.
+- **CON-8 Real repository names and paths must never appear** in a specification document, commit
+  message or test fixture. They belong only in the gitignored sources file.
+- **CON-9 The patterns are 21 directories, 80 files, 848K.** Copying a selection is cheap; copying
+  all of it into every repository would not be, which is a second reason selection matters.
+
+## Implementation Context
+
+**IMPORTANT**: Every source below was read during design. The three marked HIGH are the ones this
+design copies rather than invents.
+
+### Required Context Sources
+
+#### Documentation Context
+
+```yaml
+- doc: docs/XDD/specs/020-tcs-patterns-selective-install/requirements.md
+  relevance: HIGH
+  why: "The 36 acceptance criteria this design must satisfy, and the business rules for the scan"
+
+- doc: docs/XDD/specs/012-tcs-git-helpers-hook-runtime-contract/solution.md
+  relevance: HIGH
+  why: "Defines the bundle-versioning pattern (source of truth, mirrored marker, drift check, CI
+        gate) that CON-7 requires this work to follow"
+
+- doc: docs/about/principles.md
+  relevance: MEDIUM
+  why: "Line 167 states plugin skills do not support disable-model-invocation. Measured false this
+        session. The correction belongs to this work even though the flag is not the chosen
+        mechanism"
+
+- doc: docs/about/skill-and-agent-design.md
+  relevance: MEDIUM
+  why: "Granularity rules for skills; the catalogue reader is one skill serving 21 bodies and has
+        to be justified against them"
+```
+
+#### Code Context
+
+```yaml
+- file: plugins/tcs-git-helpers/skills/git-setup/lib/install_files.sh
+  relevance: HIGH
+  why: "The structural template for an installer: reads the plugin version from plugin.json,
+        substitutes placeholders, writes the marker atomically via .tmp then mv, performs every
+        write inside a subshell that exports a setup sentinel, and prints that it did not
+        auto-commit"
+
+- file: plugins/tcs-git-helpers/scripts/lib/drift_check.sh
+  relevance: HIGH
+  why: "drift_check_hook_bundle <repo> <expected> [marker-filename] already takes an arbitrary
+        marker name and returns OK / MISSING / DRIFT:<installed>. The directory is hardcoded to
+        .githooks/ and is the only thing that needs generalizing"
+
+- file: plugins/tcs-git-helpers/scripts/ci/check-hook-bundle-version.sh
+  relevance: HIGH
+  why: "Already a table-driven multi-bundle gate (sources_dir|marker_file|glob), extended in
+        spec-019 for exactly this kind of addition. ADR-9 adds a rule shape rather than a script"
+
+- file: plugins/tcs-git-helpers/scripts/session-start-brief.sh
+  relevance: HIGH
+  why: "Lines 145-185 build the drift segment and compose the advisory. The patterns advisory is a
+        sibling segment in the same composition, not a second mechanism"
+
+- file: plugins/tcs-helper/skills/observability-setup/SKILL.md
+  relevance: MEDIUM
+  why: "The closest precedent for a skill that installs a bundle into a target repository:
+        <install|remove|status> verbs, abort-before-write discipline, and an explicit refusal when
+        the target would be committable. Its stance is the opposite of ours and the contrast is
+        instructive — it writes machine-local state, we write shared content"
+
+- file: scripts/observability/report.py
+  relevance: MEDIUM
+  why: "Walks the real skill and agent tree and reports unreachable skill files. It is the
+        instrument that verifies the relocation, and the only one that reads the working tree
+        rather than the installed cache"
+
+- file: plugins/tcs-patterns/skills/*/SKILL.md
+  relevance: MEDIUM
+  why: "The 21 bodies being relocated; three of them reference material outside their own
+        directory and break on the move"
+```
+
+#### External APIs
+
+None. The design performs no network access and integrates no service.
+
+### Implementation Boundaries
+
+**In scope**
+
+- Relocating the 21 pattern directories inside the plugin, and the three outward references that
+  relocation breaks.
+- Two new skills in `tcs-patterns` (setup, catalogue reader) and the Python modules behind them.
+- One new segment in the existing session-start advisory.
+- One new rule shape in the existing CI gate.
+- A fixture-based detection test suite.
+- Correcting `docs/about/principles.md:167`.
+
+**Out of scope** (from the PRD, restated so the boundary is testable)
+
+- Raising or working around the listing budget for the other three large plugins.
+- Any judgement on the 21 patterns' content: no merging, no pruning, no rewriting of bodies beyond
+  the `name:` line and the three broken references.
+- Changing any pattern's `user-invocable` setting.
+- A graphical or non-interactive selection UI beyond the `--update` path.
+
+### External Interfaces
+
+The system's only boundaries are the filesystem and the Claude Code harness.
+
+| Partner | Direction | Contract |
+|---|---|---|
+| Target repository filesystem | read | manifests, configuration files, directory shapes, file contents for the content greps |
+| Target repository filesystem | write | `<repo>/.claude/skills/tcs-<name>/**` and `<repo>/.claude/skills/.tcs-patterns-manifest`, and nothing else |
+| Claude Code skill discovery | indirect | installed patterns are discovered as repository skills at `<repo>/.claude/skills/<name>/SKILL.md`, exactly one level deep |
+| Claude Code SessionStart hook | write (stdout) | one advisory segment appended to the existing composition |
+| git | read | repository root resolution, and the diff range in CI |
+| The user | interactive | at most three multiSelect questions, one confirmation of the selection, one offer to commit |
+
+### Cross-Component Boundaries
+
+Not applicable — single plugin, single repository, no team boundary.
+
+### Project Commands
+
+Discovered from the repository's own configuration rather than assumed:
+
+```bash
+# Tests — pytest.ini at the repo root, bats suites under plugins/*/tests/bats
+python3 -m pytest -q                              # full suite (perf tests deselected by default)
+python3 -m pytest -m perf                          # the perf-marked tests
+bats plugins/tcs-helper/tests/bats                 # bats suite for tcs-helper
+bats plugins/tcs-git-helpers/tests/bats            # bats suite for tcs-git-helpers
+
+# Plugin validation and inspection
+claude plugin validate plugins/tcs-patterns        # smoke test only; does not validate skill frontmatter
+python3 scripts/observability/report.py            # walks the real skill/agent tree
+
+# CI gates runnable locally
+plugins/tcs-git-helpers/scripts/ci/check-hook-bundle-version.sh "origin/main..HEAD"
+scripts/ci/check-docs-sync.sh
+scripts/ci/check-changelog-version-sync.sh
+```
+
+## Solution Strategy
+
+The plugin stops being a library of skills and becomes a **catalogue plus an installer**. Three
+properties of the harness, all measured, force this shape:
+
+1. A plugin skill is in every session's listing whether or not it applies (CON-1), and the
+   consumer cannot turn one off individually (CON-2).
+2. A repository skill is in the listing too — so it still auto-routes — but only in that
+   repository, and it *does* honour per-skill control.
+3. Nothing resolves a duplicate name for us (CON-3).
+
+So: the 21 bodies move out of `skills/` into `templates/patterns/`, where the harness does not see
+them; a setup skill decides which belong in a given repository and copies them into
+`.claude/skills/`; and the copy is renamed on the way in so a duplicate cannot arise.
+
+The decision procedure is deliberately asymmetric. Eight patterns follow from a *stack fact* and
+are proposed with the file that proves them. Thirteen follow from an *architectural intent* that no
+file states; for those, file signals decide only **whether the question is worth asking**, and three
+gated questions settle them. A repository with no server framework and no tests is asked nothing.
+This asymmetry is the design's core claim and the fixture suite exists to keep it honest.
+
+Distribution follows spec 012's bundle-versioning pattern (CON-7) at a finer grain: per pattern
+rather than per bundle, because a change to one pattern must not raise an advisory in repositories
+that installed a different one.
+
+## Building Block View
+
+### Components
+
+```
+                         ┌───────────────────────────────────────┐
+                         │  C1 Catalogue                         │
+                         │  templates/patterns/<name>/           │
+                         │    SKILL.md, reference/, VERSION      │
+                         └───────┬───────────────────────┬───────┘
+                                 │ reads                 │ reads
+                                 ▼                       ▼
+   target repo ──reads──▶ ┌──────────────┐        ┌──────────────────┐
+                          │ C2 Detector  │        │ C8 Catalogue     │
+                          │ detect.py    │        │    reader        │
+                          └──────┬───────┘        │ skills/pattern/  │
+                                 │ DetectionReport└──────────────────┘
+                                 ▼
+                          ┌──────────────┐
+                          │ C3 Interview │  ≤3 gated multiSelect questions
+                          │ SKILL.md     │
+                          └──────┬───────┘
+                                 │ Selection
+                                 ▼
+                          ┌──────────────┐  refuses on collision
+                          │ C4 Collision │◀──reads── repo skills, user skills,
+                          │    guard     │           reachable plugin skills
+                          └──────┬───────┘
+                                 │ approved Selection
+                                 ▼
+                          ┌──────────────┐  writes ──▶ <repo>/.claude/skills/tcs-<name>/
+                          │ C5 Installer │  writes ──▶ ┌──────────────────┐
+                          │ install.py   │             │ C6 Manifest store│
+                          └──────────────┘             │ .tcs-patterns-   │
+                                                       │    manifest      │
+                                                       └────────┬─────────┘
+                                                                │ reads
+                                                                ▼
+                     ┌──────────────────┐   advisory   ┌──────────────────┐
+                     │ C9 CI gate entry │              │ C7 Drift reporter│
+                     │ (maintainer side)│              │ drift + brief    │
+                     └──────────────────┘              └──────────────────┘
+```
+
+**Responsibility matrix** — every PRD Must feature traces to exactly one owning component:
+
+| PRD feature | Owner | Note |
+|---|---|---|
+| F1 plugin stops shipping pattern skills | C1 | the relocation *is* C1 coming into existence |
+| F2 scan and propose | C2 | evidence collection and the auto set |
+| F3 ask only what the repo cannot answer | C3 | C2 supplies the gates, C3 owns the asking |
+| F4 install the selection | C5 | |
+| F5 refuse a duplicate name | C4 | separate from C5 so the refusal is testable without writing |
+| F6 record what was installed | C6 | |
+| F7 tell the user when a pattern moved on | C7 | |
+| F8 update installed patterns | C5 | divergence data from C6; no new owner |
+| F9 no shipping without a version change | C9 | |
+| Should: consult without installing | C8 | |
+
+No feature has two owners; no component is without a feature.
+
+### Directory Map
+
+```
+plugins/tcs-patterns/
+├── .claude-plugin/plugin.json          MODIFIED  2.0.0 (by CI, not by hand)
+├── templates/patterns/                 NEW       C1 — the catalogue
+│   ├── <name>/                         MOVED     21 dirs, git mv from skills/<name>/
+│   │   ├── SKILL.md                    MOVED     `name: <name>` kept; installer rewrites it
+│   │   ├── reference/ examples/ ...    MOVED     unchanged
+│   │   └── VERSION                     NEW       single line, maintainer-set (ADR-3)
+│   └── REFERENCES.md                   MOVED     from skills/REFERENCES.md; two patterns cite it
+├── skills/
+│   ├── patterns-setup/                 NEW       C3 — the interview and orchestration
+│   │   ├── SKILL.md                    NEW       argument-hint: <install|update|remove|status> [path]
+│   │   └── lib/
+│   │       ├── detect.py               NEW       C2 — pure, fixture-callable
+│   │       ├── guard.py                NEW       C4 — namespace collision check
+│   │       ├── install.py              NEW       C5 — copy, rename, hash, manifest
+│   │       └── manifest.py             NEW       C6 — read/write/compare the manifest
+│   └── pattern/                        NEW       C8 — the catalogue reader
+│       └── SKILL.md                    NEW       argument-hint: <pattern-name>
+├── scripts/
+│   ├── block-eslint-disable.sh         UNCHANGED stays in the plugin (ADR-7)
+│   └── patterns_drift.py               NEW       C7 — manifest vs catalogue, OK/MISSING/DRIFT
+└── README.md, CHANGELOG.md             MODIFIED  layout, the 2.0.0 entry, the kept promise
+
+plugins/tcs-git-helpers/
+├── scripts/lib/drift_check.sh          MODIFIED  directory becomes a parameter
+├── scripts/lib/drift_check.py          MODIFIED  same change, same contract
+├── scripts/session-start-brief.sh      MODIFIED  one new advisory segment (C7)
+└── scripts/ci/check-hook-bundle-version.sh  MODIFIED  per-pattern rule (C9, ADR-9)
+
+tests/
+├── test_patterns_detect.py             NEW       parametrized over every fixture
+├── test_patterns_install.py            NEW       rename, hash, manifest, idempotency
+├── test_patterns_guard.py              NEW       three namespaces, refusal, partial install
+├── test_patterns_drift.py              NEW       per-pattern drift, silence when current
+├── test_obsidian_rule_agreement.py     NEW       ADR-7's consistency test
+└── fixtures/patterns-detection/        NEW       synthetic repos, one per rule and trap
+    └── <case>/
+        ├── repo/                       NEW       the synthetic tree
+        └── expected.json               NEW       expected auto set, gates, and evidence
+
+docs/about/principles.md                MODIFIED  line 167 correction
+docs/guides/tcs-patterns.md             MODIFIED  the guide the obsidian pattern cites
+```
+
+### Interface Specifications
+
+No database and no HTTP surface. The interfaces are four file formats and three process contracts.
+
+#### Data model: catalogue entry (C1)
+
+One directory per pattern under `templates/patterns/`. Unchanged from today apart from two
+additions:
+
+| File | Required | Content |
+|---|---|---|
+| `SKILL.md` | yes | the body, frontmatter `name: <name>` (unprefixed — the installer rewrites it) |
+| `VERSION` | yes | one line, a bare integer, maintainer-set. Not semver: a pattern body has no API, only "newer than what you have" |
+| `reference/`, `examples/`, `templates/`, `checklists/` | no | copied verbatim with the pattern |
+
+`VERSION` is an integer rather than semver on purpose. Semver invites a judgement about whether a
+change is breaking, which for prose has no stable meaning, and the only question the drift reporter
+asks is whether the numbers differ.
+
+#### Data model: the manifest (C6)
+
+`<repo>/.claude/skills/.tcs-patterns-manifest`, TOML — the format `observability-sources.toml` and
+`startup.toml` already use in this repository, so it is reviewable in a pull request and parseable
+with `tomllib`.
+
+```toml
+# Written by /tcs-patterns:patterns-setup. Reviewed and committed like any other file.
+bundle = "2.0.0"            # the plugin version that produced this selection
+
+[patterns.ddd]
+version = "3"               # the catalogue VERSION at install time
+installed_as = "tcs-ddd"    # the skill name actually written (ADR-1)
+sha256 = "9f2b…"            # hash of the installed SKILL.md, for divergence detection (ADR-4)
+
+[patterns.hexagonal]
+version = "2"
+installed_as = "tcs-hexagonal"
+sha256 = "41ac…"
+```
+
+The hash covers the installed `SKILL.md` only, not the whole subtree. A reference file edited
+locally is a weaker signal of intent than an edited body, and hashing 80 files to catch it is not
+worth the cost. Stated here so the limit is deliberate rather than discovered.
+
+#### Data model: detection report (C2 → C3)
+
+`detect.py` returns this and writes nothing. It is the whole contract between scanning and asking,
+which is what makes the scanner testable in isolation.
+
+```json
+{
+  "schema": 1,
+  "repo": "<absolute path as given>",
+  "auto": [
+    {"pattern": "typescript-strict", "evidence": "tsconfig.json"},
+    {"pattern": "mcp-server", "evidence": "packages/server/package.json: dependencies.@modelcontextprotocol/sdk"}
+  ],
+  "baseline": [
+    {"pattern": "testing", "evidence": "pytest.ini", "surface": false}
+  ],
+  "gates": {"q1_backend": false, "q2_architecture": true, "q3_test_quality": true},
+  "gate_evidence": {
+    "q2_architecture": ["src/orders/events.py", "src/event_store/"],
+    "q3_test_quality": ["pytest.ini"]
+  },
+  "manifests_walked": ["package.json", "packages/server/package.json"],
+  "unrecognised_stack": false
+}
+```
+
+Three fields carry design decisions rather than data:
+
+- `baseline` with `surface: false` is trap 1 made structural. `testing` is detected and installed
+  when chosen, but C3 must not present it as a recommendation, because it fires in nearly every
+  repository with a test suite and therefore tells the user nothing.
+- `gates` is a decision about *whether to ask*, never about what to install. No pattern is ever
+  installed because a gate opened.
+- `unrecognised_stack` is distinct from all gates being false (ADR-5). A repository can have an
+  unrecognised language and still reach Q2 through a content signal.
+
+#### Data model: fixture expectation (test suite)
+
+`tests/fixtures/patterns-detection/<case>/expected.json` sits beside a synthetic `repo/` tree and
+declares the full expected verdict. The test asserts equality of the normalised report, so an
+unexpected extra proposal fails just as loudly as a missing one.
+
+```json
+{
+  "why": "trap 3 — session auth must not be read as federated identity",
+  "auto": ["python-project"],
+  "baseline": ["testing"],
+  "gates": {"q1_backend": true, "q2_architecture": true, "q3_test_quality": true},
+  "must_not_propose": ["secure-oauth-oidc"],
+  "unrecognised_stack": false
+}
+```
+
+`must_not_propose` is redundant against `auto` and deliberately so: it names the trap in the
+fixture, so a future reader sees what the case is defending and a careless widening of `auto` fails
+with a message that explains itself.
+
+#### Process contract: drift reporter (C7)
+
+`patterns_drift.py <repo>` prints zero or more lines and exits 0 regardless — the caller decides
+what to do, exactly as `drift_check_hook_bundle` does today.
+
+```
+OK                              # manifest present, every installed pattern current
+MISSING                         # no manifest — the repository never ran the setup
+DRIFT:ddd:3:4                   # installed pattern, installed version, catalogue version
+DRIFT:hexagonal:2:5             # one line per drifted pattern
+```
+
+`MISSING` is reported, not acted on: F7's fourth criterion requires that a repository without
+patterns is *not* nagged, so the advisory suppresses `MISSING` entirely and only the `status` verb
+surfaces it.
+
+#### Process contract: the generalized drift check
+
+`drift_check.sh` and `drift_check.py` gain a directory parameter, keeping the existing contract:
+
+```
+drift_check_bundle <repo_path> <expected_version> [<marker_filename>] [<marker_dir>]
+  marker_filename  default: tcs-git-helpers-version
+  marker_dir       default: .githooks        <-- new, was hardcoded
+  stdout           OK | MISSING | DRIFT:<installed>
+  exit             always 0
+```
+
+The existing name `drift_check_hook_bundle` stays as a thin wrapper so no current caller changes.
+
+#### Process contract: the skills
+
+```
+/tcs-patterns:patterns-setup <install|update|remove|status> [path]
+  install   scan, ask at most three questions, propose, guard, write, offer to commit
+  update    refresh drifted patterns only — no scan, no questions (F8)
+  remove    delete a pattern and its manifest entry
+  status    report what is installed, at which version, and what has drifted
+
+/tcs-patterns:pattern <pattern-name>
+  prints the named pattern's body from the catalogue; writes nothing.
+  An unknown name lists the available 21 rather than returning empty (Should-have AC-2).
+```
+
+### Implementation Examples
+
+Three places where the obvious implementation is wrong. Everything else follows the components.
+
+**Nested manifests, runtime dependencies only (traps 4 and 5).** The validated monorepo has an
+empty root `dependencies`; the signal is three levels down. Reading only the root finds nothing, and
+reading `devDependencies` finds a framework that is only there to drive tests.
+
+```python
+SKIP_DIRS = {"node_modules", ".venv", "venv", "vendor", ".git", "dist", "build"}
+
+def walk_manifests(root, filename):
+    """Every manifest named `filename`, root first, vendored trees excluded."""
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        if filename in filenames:
+            yield os.path.join(dirpath, filename)
+
+def runtime_deps(root):
+    """Runtime dependencies only. devDependencies is a different question (trap 4)."""
+    found = {}
+    for path in walk_manifests(root, "package.json"):
+        try:
+            data = json.load(io.open(path, encoding="utf-8"))
+        except (ValueError, OSError):
+            continue                      # an unparseable manifest is not a signal, not a crash
+        for name in (data.get("dependencies") or {}):
+            found.setdefault(name, path)  # first occurrence wins; the path is the evidence
+    return found
+```
+
+**The name rewrite (ADR-1 against CON-4).** A skill registers under its frontmatter `name:`, so
+copying the directory to `tcs-ddd/` is not enough — the frontmatter must change, and nothing else
+may. The rewrite touches the first `name:` line inside the frontmatter block and refuses if it is
+not there, because a silent no-op would install a pattern under the unprefixed name and defeat
+ADR-1.
+
+```python
+def rename_in_frontmatter(text, new_name):
+    if not text.startswith("---\n"):
+        raise InstallError("SKILL.md does not open with a frontmatter block")
+    end = text.index("\n---", 4)
+    head, body = text[:end], text[end:]
+    patched, count = re.subn(r"(?m)^name:[ \t]*\S.*$", "name: " + new_name, head, count=1)
+    if count != 1:
+        raise InstallError("no `name:` line in frontmatter; refusing to install unprefixed")
+    return patched + body
+```
+
+**The per-pattern CI rule (ADR-9).** The existing gate asks "did this bundle's marker change". For
+patterns that is too coarse: changing `ddd` while bumping `hexagonal`'s VERSION would pass the gate
+and leave `ddd` silently stale — the exact failure the gate exists to prevent. The rule is
+per-directory instead, and needs no parsing:
+
+```bash
+# For every changed file under templates/patterns/<name>/, that pattern's own
+# VERSION must be in the same changeset. One rule, 21 patterns, no table.
+changed_patterns="$(printf '%s\n' "$changed_paths" \
+  | sed -n 's|^plugins/tcs-patterns/templates/patterns/\([^/]*\)/.*|\1|p' \
+  | sort -u)"
+for p in $changed_patterns; do
+  marker="plugins/tcs-patterns/templates/patterns/$p/VERSION"
+  if ! printf '%s\n' "$changed_paths" | grep -qxF "$marker"; then
+    printf 'pattern %s changed without bumping %s\n' "$p" "$marker" >&2
+    overall_fail=1
+  fi
+done
+```
+
+## Runtime View
+
+### Primary Flow
+
+`install` in a repository that has never run the setup:
+
+1. **Resolve.** C3 resolves the repository root via git and refuses outside a repository.
+2. **Scan.** C3 calls C2 with that path. C2 reads manifests (nested, vendored trees skipped),
+   configuration files, directory shapes, and runs the content greps. It returns a DetectionReport
+   and writes nothing.
+3. **Propose.** C3 renders `auto` with per-entry evidence and the character cost each description
+   adds to the listing. `baseline` entries are listed separately and not as recommendations.
+4. **Ask.** C3 asks only the questions whose gate is open — zero to three, each multiSelect. A
+   closed gate produces no question at all, rather than a question whose answer is "none".
+5. **Confirm.** C3 presents the final selection — auto plus baseline plus question answers — and
+   the user adjusts or accepts. Nothing has been written at this point.
+6. **Guard.** C4 checks every intended name `tcs-<pattern>` against the repository's skills, the
+   user's global skills, and the reachable plugin skills. A collision stops that pattern only.
+7. **Write.** C5 copies each approved pattern's directory to `<repo>/.claude/skills/tcs-<name>/`,
+   rewrites the frontmatter `name:`, computes the hash of the installed `SKILL.md`, and writes the
+   manifest atomically (`.tmp` then `mv`, following `install_files.sh`).
+8. **Offer.** C5 prints what it wrote, states that it did not commit, and offers to commit
+   (ADR-8). Declining leaves the files in place.
+9. **Next session.** The installed patterns appear in the listing and route automatically; C7 finds
+   the manifest current and says nothing.
+
+### Error Handling
+
+| Error | Detected by | Behaviour |
+|---|---|---|
+| Not inside a git repository | C3, step 1 | Abort before any read of the target. Message names the resolution. |
+| An unparseable `package.json` / `pyproject.toml` | C2 | Skipped, not fatal. A broken manifest is not a signal. The file is listed in `manifests_walked` so its absence from evidence is explicable. |
+| Target repository unreadable in part | C2 | Scan continues over what is readable; the report names what it could not read, so a thin proposal is never silently a permissions artefact. |
+| Name collision | C4, step 6 | That pattern is not written; the collision is reported with both locations; the remaining patterns still install (F5's fourth criterion). No rescan. |
+| `SKILL.md` without a frontmatter `name:` line | C5 | `InstallError`, nothing written for that pattern. Prevents installing under the unprefixed name. |
+| Write fails mid-selection | C5 | Patterns already written stay; the manifest records exactly what succeeded. Re-running `install` is idempotent by name and hash. |
+| Manifest present but unparseable | C6 | Treated as `MISSING` for the advisory and reported verbatim by `status`. Never silently overwritten — overwriting it would erase the record of what is installed. |
+| Installed pattern diverges from its hash | C5 on `update` | The user is asked per pattern with a unified diff (ADR-4). Default is to skip, so an unanswered prompt cannot destroy local work. |
+| Catalogue `VERSION` missing or non-numeric | C7, C9 | C7 reports the pattern as unknown rather than drifted; C9 fails the gate. A pattern without a version cannot be distributed. |
+| Pattern name given to the catalogue reader is unknown | C8 | Lists the 21 available names. |
+
+### Complex Logic
+
+The gating is the only conditional structure in the design worth tracing, because the asymmetry
+between "decidable" and "intent" is where it can go quietly wrong. Traced against the validated
+Python web service — generically: a server-rendered web service with cookie sessions, a large test
+suite, and a hand-rolled append-only event store.
+
+```
+INPUT SIGNALS FOUND
+  pyproject.toml: dependencies -> fastapi, jinja2, pyjwt, bcrypt
+  pytest.ini present, tests/ with 150+ files
+  src/<feature>/events.py in ~15 feature directories
+  src/event_store/ directory, schema columns seq / occurred_at
+  no tsconfig.json, no go.mod, no manifest.json, no obsidian dep
+  no @testing-library/*, no render( / screen. in any test
+
+STEP 1 — auto set, from stack facts only
+  python-project        <- .py files + pyproject.toml                      PROPOSE (evidence: pyproject.toml)
+  typescript-strict     <- no tsconfig.json                               no
+  go-idiomatic          <- no go.mod                                      no
+  obsidian-plugin       <- no manifest.json with minAppVersion            no
+  mcp-server            <- no mcp SDK dependency                         no
+  react-testing         <- no react                                       no
+  frontend-testing      <- no render evidence  (TRAP 2 holds)             no
+  testing               <- pytest.ini + tests/                            BASELINE, surface:false (TRAP 1)
+
+STEP 2 — gates, deciding only whether to ask
+  q1_backend       fastapi in [dependencies]  (TRAP 4: not devDependencies) -> OPEN
+  q2_architecture  q1 open, and content signals: events.py per module,
+                   event_store/ dir  (TRAP 6: no broker dependency exists)   -> OPEN
+  q3_test_quality  pytest detected                                           -> OPEN
+  unrecognised_stack = false
+
+STEP 3 — questions actually asked: three. Answers given by the user:
+  Q1 -> REST API conventions, Browser-facing auth/session boundary, 12-factor
+        (user did NOT pick OAuth/OIDC, and nothing proposed it — TRAP 3 holds:
+         pyjwt + bcrypt are present and are not federated-identity evidence)
+  Q2 -> Event-driven, Event sourcing            (not DDD, not hexagonal, not functional)
+  Q3 -> neither
+
+STEP 4 — selection, and every one of the 21 decided exactly once
+  install: python-project (auto), testing (baseline),
+           api-design, bff-entry-points, twelve-factor (Q1),
+           event-driven, event-sourcing (Q2)                            = 7
+  declined by question: secure-oauth-oidc, observability, node-service,
+           ddd, hexagonal, functional, mutation-testing,
+           test-design-reviewer                                          = 8
+  excluded by stack fact: typescript-strict, go-idiomatic, obsidian-plugin,
+           mcp-server, react-testing, frontend-testing                   = 6
+  7 + 8 + 6 = 21  ✓  no pattern decided twice, none left undecided
+
+STEP 5 — names written: tcs-python-project, tcs-testing, tcs-api-design,
+         tcs-bff-entry-points, tcs-twelve-factor, tcs-event-driven,
+         tcs-event-sourcing.  Listing cost: 7 descriptions in this repository,
+         0 in every other.
+```
+
+The arithmetic in step 4 is not decoration. "Each of the 21 is decided exactly once" is F3's fourth
+acceptance criterion, and summing the three disjoint outcomes to 21 is how a fixture asserts it.
+
+## Deployment View
+
+### Single Application Deployment
+
+Nothing is deployed. Three distribution paths, all existing:
+
+1. **The plugin** reaches users through the marketplace. `2.0.0` is published by the normal CI
+   bump on merge (CON-6). A user on `1.x` keeps 21 plugin skills until they update; after updating
+   they have none until they run the setup, which is what makes this a major version.
+2. **The patterns** reach a repository only by the setup writing them, and reach other developers
+   only if the files are committed (ADR-8). An uncommitted install is per-developer by
+   construction.
+3. **The advisory** reaches a session through the existing SessionStart hook in `tcs-git-helpers`,
+   which already composes segments; this adds one.
+
+Rollback: the patterns are files in the repository, so `git revert` removes them, and `remove`
+takes them out with their manifest entries. Rolling the plugin back to `1.x` restores the 21 plugin
+skills, at which point an installed `tcs-<name>` and a plugin `<name>` coexist — different names,
+no collision, duplicated content. Named in Technical Debt rather than solved.
+
+### Multi-Component Coordination
+
+One coordination point: `tcs-patterns` writes the manifest, and `tcs-git-helpers` reads it to build
+the advisory. The dependency is one-way and through a documented file format, not through code.
+`tcs-git-helpers` must tolerate `tcs-patterns` being absent or at `1.x` — the advisory segment
+stays silent when `patterns_drift.py` cannot be found.
+
+## Cross-Cutting Concepts
+
+### Pattern Documentation
+
+The bundle-versioning pattern (spec 012) is reused at a finer grain. Its four parts map as:
+
+| spec-012 part | Here |
+|---|---|
+| Source of truth in the plugin | `templates/patterns/<name>/VERSION` — per pattern, not per bundle |
+| Mirrored in the consumer repo | one entry per pattern in `.tcs-patterns-manifest` |
+| Drift-check skill | `patterns_drift.py` plus the advisory segment, reporting per pattern |
+| CI gate on the maintainer contract | the per-directory rule in the existing multi-bundle gate |
+
+The grain change is the only deviation and it is forced: a per-bundle marker would raise an
+advisory in every repository for a change to one pattern, which F7's second criterion forbids.
+
+### User Interface & UX
+
+The interaction is three screens at most: a proposal with evidence, up to three multiSelect
+questions, a confirmation. The bar set by the PRD is `claude init`, not an interview, and the gates
+are what enforce it — a repository with no server framework and no tests sees one screen.
+
+Costs are shown per entry at the moment of choosing, in characters of listing, because that is the
+scarce resource (CON-1) and the user cannot otherwise see it.
+
+### System-Wide Patterns
+
+- **Nothing is written before every check has passed.** C4 runs to completion across the whole
+  selection before C5 writes anything, mirroring `observability-setup`'s abort-before-write
+  discipline.
+- **Atomic single-file writes.** `.tmp` then `mv`, as `install_files.sh` does for its marker. Note
+  the known hazard: `$TMPDIR` and the repository may be on different filesystems, so the temporary
+  file is created in the destination directory, never in `$TMPDIR`.
+- **Reading is free, writing is announced.** Every write is listed in the final report, and the
+  report states that nothing was committed.
+- **No network, no services, no environment variables.** The plugin root is resolved the way
+  `install_files.sh` does it — `CLAUDE_PLUGIN_ROOT` when present, otherwise relative to the
+  module's own location — because that variable does not reach every context.
+
+## Architecture Decisions
+
+### ADR-1: Installed patterns always carry a `tcs-` name prefix — CONFIRMED
+
+**Decision.** A pattern installed into a repository is named `tcs-<pattern>`: the directory is
+`.claude/skills/tcs-ddd/` and the frontmatter reads `name: tcs-ddd`. The catalogue keeps the plain
+name; the installer rewrites the one frontmatter line (CON-4).
+
+**Rationale.** Collisions become structurally impossible within our namespace rather than merely
+detected. There are zero exact collisions today — the 21 names clash with no other plugin skill and
+with none of the user's seven global skills — so the alternative (plain names plus a guard) would
+have worked today and been fragile tomorrow: a repository is free to create a skill called
+`testing` or `observability` at any time, and with plain names that repository could then never
+install that pattern at all. The prefix also makes provenance visible at the point of use: `/tcs-ddd`
+is identifiably ours, `/ddd` is not.
+
+**Trade-offs accepted.** The user types a name they did not choose: `/tcs-ddd` in the slash menu,
+and `skillOverrides: { "tcs-ddd": "name-only" }` when reaching for the per-skill dial that CON-2
+makes available — so the key never reads quite like the thing it refers to. Seven characters are
+added to each entry's listing cost, which is a real if small charge against the budget this spec
+exists to relieve. And the prefix does nothing about the four near-misses (`api-design` versus
+`api-contract-design`, `frontend-testing` versus `frontend-patterns`, `observability` versus
+`observability-setup`, `test-design-reviewer` versus `test-practices`); in fact `tcs-api-design`
+sits no further from `api-contract-design` than `api-design` did. Near-misses are a description
+problem and remain one.
+
+**Consequence for F5.** The collision guard is still built and still tested, but it now rarely
+fires. Its criteria are unchanged — a repository could hold a `tcs-ddd` of its own — and it remains
+the mechanism that keeps a partial install coherent.
+
+### ADR-2: Detector and installer in Python; only the advisory segment in bash — CONFIRMED
+
+**Decision.** `detect.py`, `guard.py`, `install.py`, `manifest.py` and `patterns_drift.py` are
+Python 3. The only shell this work adds is the advisory segment inside the existing
+`session-start-brief.sh` and the per-pattern rule inside the existing CI gate script.
+
+**Rationale.** Two of the seven traps are structural-parsing problems. Trap 4 requires
+distinguishing `dependencies` from `devDependencies` inside JSON, and trap 5 requires walking
+nested manifests while excluding vendored trees. In bash that means either a hand-rolled JSON
+reader built from `grep` and `sed` — which is how a detector comes to believe a package named
+`"express"` in a comment is a dependency — or a `jq` dependency this repository cannot assume.
+Python also steps around CON-5 entirely for all new code: no `stat -f` divergence, no BSD-only
+`[[:<:]]`, no absent `timeout`. And it puts the detector in the repository's own test home, where
+`pytest` can parametrize over fixture directories and call the detection function directly, which
+is what the PRD's top risk demands.
+
+**Trade-offs accepted.** The design diverges from `install_files.sh`, the installer it otherwise
+copies, so the structural template is followed in spirit rather than line by line — the subshell
+sentinel in particular has no Python equivalent and its purpose (bounding a sentinel environment
+variable) does not apply. Two languages now implement installers in this repository. That is
+already true of `drift_check`, which ships as both `.sh` and `.py`, so the precedent exists.
+
+### ADR-3: One `VERSION` file per pattern in the catalogue — CONFIRMED
+
+**Decision.** `templates/patterns/<name>/VERSION`, a single line holding a bare integer, set by the
+maintainer. No central catalogue file.
+
+**Rationale.** F7's second criterion — a change to a pattern this repository did not install says
+nothing — requires per-pattern versions. Given that, the version can live in a central file keyed
+by pattern or in each pattern's own directory. Per-directory wins on the CI gate: "every changed
+pattern directory must contain a changed `VERSION`" needs no parsing, no table and no per-pattern
+registration, and a pattern added later is covered by the rule that already exists. A central file
+would need the gate to diff individual lines to answer the same question, and bumping the wrong
+line would pass.
+
+An integer rather than semver because a prose body has no API surface for "breaking" to describe,
+and the only question asked of it is whether two numbers differ.
+
+**Trade-offs accepted.** 21 extra files. No single place to read the whole catalogue's state —
+`status` has to walk the directories, which is cheap but is a walk rather than a read.
+
+### ADR-4: Content hash at install, unified diff on conflict — CONFIRMED
+
+**Decision.** The manifest records a SHA-256 of the installed `SKILL.md`. On `update`, a pattern
+whose file no longer matches its hash is reported as diverged, and the user is asked per pattern
+with a unified diff available. The default is skip.
+
+**Rationale.** Without a hash the installer cannot distinguish "never touched" from "deliberately
+adapted", and its only safe behaviour would be to never overwrite — which leaves a diverged pattern
+permanently stale and the advisory repeating every session. With the hash, overwriting is safe
+precisely when it is uninteresting. The diff costs three lines of `difflib` given ADR-2, so the
+machinery being bought here is the hash; the diff is nearly free once it exists.
+
+**Trade-offs accepted.** The hash covers only `SKILL.md`. A locally edited `reference/` file is not
+detected, and `update` will replace it. This is a deliberate limit, recorded in the Interface
+Specifications so it is not discovered later. Hashing 80 files per pattern to catch a rarer case
+costs more than it returns.
+
+### ADR-5: An unrecognised stack gets no proposal and no default — CONFIRMED
+
+**Decision.** When no stack fact matches, `unrecognised_stack` is true, nothing is proposed, and the
+setup says so plainly. It does not fall back to a stack-independent selection. Crucially,
+`unrecognised_stack` does not suppress the gates: a repository in a language none of the 21 cover
+that nonetheless shows a ports-and-adapters shape still reaches Q2.
+
+**Rationale.** The validated set deliberately included a desktop application in a language no
+pattern addresses, and the right answer there was nothing — a default selection would be the
+product guessing, which is what the whole spec is replacing. But "nothing detected" and "nothing
+applicable" are different states: architectural intent is language-independent, and gating Q2 on a
+recognised language would deny patterns to exactly the repositories whose architecture is
+deliberate. Separating the two states is the point of the flag existing at all.
+
+**Trade-offs accepted.** A user in an unsupported stack may see a question and then a short
+proposal, which can read as the tool straining to be useful. The alternative — silence — denies a
+real case.
+
+### ADR-6: Manifest at `.claude/skills/.tcs-patterns-manifest` — CONFIRMED
+
+**Decision.** The manifest lives beside the installed skills, as decided before this SDD began.
+Format TOML (see Interface Specifications).
+
+**Rationale and evidence.** It was verified this session that a non-skill dotfile placed in
+`.claude/skills/` produces no warning and is not mentioned by the skill discovery walk at all — the
+walk reports only directory entries it skips for reserved names, and the manifest is not one.
+Beside the skills is also where a reviewer looks: the file and the thing it describes appear in the
+same diff. The PRD listed this as an open question in error; it was already settled, and the
+evidence is recorded here rather than the question being re-asked.
+
+**Trade-offs accepted.** A non-skill file inside a skills directory is a small structural
+impurity, and it depends on discovery continuing to ignore plain files there. The behaviour is
+measured, not assumed, but it is the harness's behaviour and not our contract.
+
+### ADR-7: The Obsidian rule stays duplicated, with a consistency test — CONFIRMED
+
+**Decision.** `scripts/block-eslint-disable.sh` keeps its own Obsidian gate in bash, `detect.py`
+has its own, and `tests/test_obsidian_rule_agreement.py` asserts that both answer identically over
+the detection fixtures.
+
+**Rationale.** The hook is a write-time guard: it must work standalone, and making it depend on a
+file outside itself is the failure mode issue #163 already records twice in this repository — a
+plugin file referencing something by a path that resolves to nothing at runtime. Two independent
+implementations with a test that fails when they disagree gets the safety of a shared source
+without the coupling. The test is also the cheaper artefact: it needs no new abstraction, only the
+fixtures the detection suite builds anyway.
+
+**Trade-offs accepted.** The rule is written twice, so a change must be made twice. The test turns
+that from a silent divergence into a failing build, which is the trade being bought. It does not
+prevent someone changing both in the same wrong way.
+
+### ADR-8: Install offers to commit and never commits — CONFIRMED
+
+**Decision.** After writing, the setup reports what it wrote, states that it did not commit, and
+offers to. Declining leaves the files uncommitted.
+
+**Rationale.** Decided before this SDD; recorded for completeness. It matches
+`install_files.sh`, which deliberately does not auto-commit (spec-012 PRD M10 AC5), and the
+selection is a project-level decision worth sharing and reviewing. Writing to someone's history
+unasked is a different class of action from writing files.
+
+**Trade-offs accepted.** An uncommitted install is per-developer, so the inheriting teammate
+persona gets nothing until someone commits — and the drift advisory will then differ between
+developers in the same repository. The `status` verb is what makes that visible.
+
+### ADR-9: The existing multi-bundle CI gate gains a per-pattern rule — CONFIRMED
+
+**Decision.** `check-hook-bundle-version.sh` keeps its bundle table for the existing three bundles
+and gains one additional rule: for every changed file under
+`templates/patterns/<name>/`, that pattern's own `VERSION` must be in the same changeset. No new
+script, no new workflow.
+
+**Rationale.** The gate was already generalized in spec-019 from one bundle to a table of them, and
+its workflow already runs on every pull request. The patterns bundle does not fit the table's shape
+— the table asks "did this bundle's single marker change", which for 21 independently versioned
+patterns would pass when the wrong one was bumped, leaving a pattern silently stale. That is the
+precise failure the gate exists to prevent, so the rule is per-directory instead. It is a sed
+extraction and a membership test; see Implementation Examples.
+
+**Trade-offs accepted.** The script now has two rule shapes rather than one, so its own structure
+is slightly less uniform. The alternative — a second script and a second workflow — splits a
+single contract across two places, which is worse.
+
+## Quality Requirements
+
+| Quality | Requirement | How it is measured |
+|---|---|---|
+| Listing footprint | `tcs-patterns` contributes at most 2 skill descriptions to a session | `python3 scripts/observability/report.py` reports the plugin's skills; a session's listing confirms |
+| Relocation fidelity | every pattern file is a rename with unchanged content | `git log --follow` survives, and `git diff -M --summary` reports R100 for all 80 files |
+| Interaction cost | zero questions for a repository with no server framework and no test framework; never more than three | the fixture suite asserts `gates` for those cases |
+| Detection correctness | every fixture classified exactly as declared, extra proposals failing as loudly as missing ones | `pytest tests/test_patterns_detect.py`, normalised-report equality |
+| Trap coverage | all seven traps have a fixture that fails if the trap is reintroduced | one fixture per trap, each naming it in `why` and `must_not_propose` |
+| True negative | a stack none of the 21 cover yields nothing | a fixture with `auto: []` and `unrecognised_stack: true` |
+| Scan cost | the scan reads no vendored tree and completes without a visible pause on a repository of this one's size — 1114 Python files, 457 shell files | measured on this repository; the excluded-directory list is asserted by a fixture containing a populated `node_modules` |
+| Write safety | nothing is written until every name has been checked | a guard test with one colliding and two free names asserts the two are written and the third is not |
+| Idempotency | a second `install` with the same selection writes no change | hash comparison before write; asserted by test |
+| Advisory precision | a changed pattern raises an advisory only where installed, and in every such repository | drift test over a manifest holding a subset |
+| Portability | all new Python runs on macOS and Linux; the two shell edits stay bash 3.2 and shellcheck-clean | CI runs both platforms per leg, read per leg and not from the run verdict |
+
+## Acceptance Criteria
+
+System-level and **group-level, not 1:1**: 17 criteria here cover the PRD's 36. Every one of the
+nine Must features and the Should-have is traced, which was verified mechanically rather than by
+eye. Three PRD criteria had no counterpart on the first pass — the per-entry listing cost and the
+baseline-not-surfaced rule from F2, and the "a second party can determine currency" rule from F6 —
+and AC-16 and AC-17 were added to close them. The remaining compression is one SDD criterion
+standing for two or three PRD criteria that assert the same behaviour from different angles.
+
+| # | Criterion | PRD trace |
+|---|---|---|
+| AC-1 | After the relocation, a session's listing contains at most 2 `tcs-patterns` descriptions, and the inventory walk reports 21 catalogue entries and 0 unreachable skill files | F1 |
+| AC-2 | All 80 pattern files are reported by git as renames at 100% similarity; the three outward references resolve or are inlined | F1 |
+| AC-3 | For every detection fixture, the normalised report equals `expected.json` exactly | F2, F3 |
+| AC-4 | A fixture with a populated `node_modules` and an empty root `dependencies` still finds the nested signal, and does not report anything from the vendored tree | F2, trap 5 |
+| AC-5 | A fixture with no server framework and no test framework yields all gates closed and no questions | F3 |
+| AC-6 | For every fixture, the three outcome sets — installed, declined by question, excluded by stack fact — are disjoint and sum to 21 | F3 |
+| AC-7 | An install writes exactly the chosen patterns under `tcs-<name>`, each with `name: tcs-<name>` in its frontmatter, and the manifest records version, installed name and hash for each | F4, F6 |
+| AC-8 | A pattern installed into a fixture repository appears in that repository's skill listing in a following session | F4 |
+| AC-9 | The install reports its writes, states that it did not commit, and commits only when the user accepts | F4, ADR-8 |
+| AC-10 | A selection containing one name already present in any of the three namespaces installs the others, writes nothing for the colliding one, and reports both locations | F5 |
+| AC-11 | `patterns_drift.py` prints one `DRIFT:` line per behind pattern, `OK` when all are current, `MISSING` without a manifest; the advisory shows drift and suppresses `MISSING` | F7 |
+| AC-12 | `update` refreshes only drifted patterns, asks nothing about the selection, and prompts per diverged file with skip as the default | F8, ADR-4 |
+| AC-13 | A change to a pattern file without that pattern's `VERSION` in the same changeset fails the CI gate; with it, the gate passes; a change touching no pattern leaves the gate silent | F9, ADR-9 |
+| AC-14 | The bash Obsidian gate and the Python Obsidian rule return the same verdict for every detection fixture | ADR-7 |
+| AC-15 | The catalogue reader prints a named pattern's body and writes nothing; an unknown name lists the 21 | Should-have |
+| AC-16 | The proposal shows each entry's listing cost in characters, and lists baseline patterns separately from recommendations | F2 (4th, 5th) |
+| AC-17 | After `update`, every refreshed pattern's manifest version equals its catalogue `VERSION`, and currency is determinable from the manifest alone without reading any pattern file | F6 (3rd), F8 (3rd) |
+
+## Risks and Technical Debt
+
+### Known Technical Issues
+
+- **`docs/about/principles.md:167` is wrong** and this work corrects it. It states that plugin
+  skills do not support `disable-model-invocation`; measured this session, the flag removes a
+  plugin skill's entry from the listing entirely (−628 tokens). The correction matters even though
+  the flag is not the chosen mechanism, because the next person weighing these options will read
+  that line.
+- **`obsidian-plugin/SKILL.md:220` already points at nothing.** Its `../../../../docs/guides/…`
+  reference does not resolve from the installed plugin cache today — issue #163's second instance.
+  The relocation forces it to be fixed rather than merely moved.
+- **The listing stays over budget.** 40191 characters against 8000–30000 depending on the model;
+  this removes 5918. Out of scope by decision, and the three remaining large plugins are each
+  comparable.
+
+### Technical Debt
+
+- **Rolling the plugin back to `1.x` with patterns installed** leaves an installed `tcs-ddd` and a
+  plugin `ddd` side by side: different names, no collision, duplicated content and two entries
+  describing the same material. Accepted rather than solved; `remove` is the exit.
+- **The content hash covers `SKILL.md` only** (ADR-4), so a locally edited reference file is
+  replaced by `update` without a prompt.
+- **The Obsidian rule exists twice** (ADR-7), kept honest by a test rather than by construction.
+- **`VERSION` integers are maintainer-set**, so a forgotten bump is caught by CI only for changed
+  files, not for a change that should have happened and did not.
+
+### Implementation Gotchas
+
+Each of these has cost time in this repository before:
+
+- **`$TMPDIR` and the repository are on different filesystems**, so `os.rename` from a temp file in
+  `$TMPDIR` into the repository raises `Cross-device link` — and `shutil.move` silently falls back
+  to copy-then-delete, which is not atomic. Create the temporary file in the destination directory.
+- **A skill registers under its frontmatter `name:`, not its directory** (CON-4). Renaming the
+  directory without rewriting the frontmatter installs the pattern under the unprefixed name and
+  quietly defeats ADR-1. `install.py` raises instead.
+- **A clause ending in `: ` inside a frontmatter value makes YAML read it as a key.** Ten skill
+  descriptions in this repository stopped parsing this way, and `claude plugin validate` passed
+  over all ten — it does not validate skill frontmatter. Parse the 21 frontmatter blocks with a
+  YAML parser as part of the test suite.
+- **A bare `[[ ]]` only fails a bats test as the body's last statement.** Relevant to the two shell
+  edits; assert substrings through a `grep -qF` helper.
+- **Read CI per leg, not from the run verdict.** A green aggregate hid a red Linux leg for four
+  days in the previous spec.
+- **The plugin cache is stale within the session that updated it**, so a skill run immediately
+  after a plugin update loads the old version. Verification of the relocation must happen in a new
+  session, or through the inventory walk, which reads the working tree.
+- **`claude plugin details <name>` reads the installed cache copy**, never the working tree, so it
+  cannot verify this change before publication.
+
+## Glossary
+
+### Domain Terms
+
+| Term | Definition | Context |
+|------|------------|---------|
+| Pattern | One of the 21 bodies of guidance `tcs-patterns` ships — a stack convention or an architectural style | The unit of selection, versioning and installation |
+| Catalogue | The 21 patterns as they live in the plugin, invisible to skill discovery | `templates/patterns/`, component C1 |
+| Selection | The subset of the 21 a given repository installs | Recorded in the manifest |
+| Stack fact | Something a repository's files state outright — a language, a dependency, a config key | Decides the 8 auto-proposed patterns |
+| Architectural intent | Something no file states, which only the user knows | Decides the other 13, through the gated questions |
+| Gate | A cheap existence check that decides whether a question is worth asking | Never decides what to install |
+| Baseline pattern | A pattern that applies so widely it carries no information — `testing` | Installed when chosen, never surfaced as a recommendation |
+| Drift | An installed pattern whose version is behind the catalogue | Reported per pattern |
+| Divergence | An installed pattern whose content no longer matches its recorded hash | A local edit, handled by ADR-4 |
+
+### Technical Terms
+
+| Term | Definition | Context |
+|------|------------|---------|
+| Skill listing | The set of skill names and descriptions sent to the model each turn | The scarce resource; budgeted and truncated (CON-1) |
+| `skillListingBudgetFraction` | Fraction of the context window, in characters, reserved for the listing. Default 0.01 | 8000 chars on a 200k model, 30000 observed at 1M |
+| `skillListingMaxDescChars` | Per-description character cap in the listing. Default 1536 | Why a long description buys nothing |
+| `skillOverrides` | Per-skill listing control: `on`, `name-only`, `user-invocable-only`, `off` | Works on repository skills, ignored for plugin skills (CON-2) |
+| `disable-model-invocation` | Frontmatter flag removing a skill from the model's reach while keeping it typeable | Works on plugin skills; rejected here because it costs auto-routing |
+| Repository skill | A skill at `<repo>/.claude/skills/<name>/SKILL.md`, exactly one level deep | What an installed pattern becomes |
+| Bundle versioning | The spec-012 pattern: source of truth, mirrored marker, drift check, CI gate | Reused at per-pattern grain (CON-7) |
+| Marker | The file carrying an installed bundle's version | Here: one `VERSION` per pattern, mirrored into the manifest |
+
+### API/Interface Terms
+
+| Term | Definition | Context |
+|------|------------|---------|
+| DetectionReport | The JSON `detect.py` returns: auto set, baseline, gates, evidence, flags | The entire scanning-to-asking contract; makes the scanner testable alone |
+| Manifest | `.claude/skills/.tcs-patterns-manifest`, TOML, one section per installed pattern | Components C6; read by C5 and C7 |
+| `OK` / `MISSING` / `DRIFT:<p>:<installed>:<catalogue>` | The drift reporter's stdout contract | Mirrors `drift_check_hook_bundle`'s existing contract |
+| `expected.json` | A fixture's declared verdict, including `must_not_propose` | How a trap names what it defends |

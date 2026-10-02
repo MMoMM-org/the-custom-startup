@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-10-02 |
-| **Current Phase** | SDD |
+| **Current Phase** | PLAN |
 | **Decomposition tier** | {{DECOMPOSITION_TIER}} |
 | **Last Updated** | 2026-10-02 |
 
@@ -14,7 +14,7 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | 36 acceptance criteria, 0 clarification markers |
-| solution.md | in_progress | |
+| solution.md | completed | 9 ADRs confirmed, 17 acceptance criteria, 0 markers |
 | plan/ | pending | |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
@@ -30,6 +30,14 @@
 | 2026-10-02 | patterns-setup offers to commit the installed files, never forces it | Same stance as `install_files.sh`, which deliberately does not auto-commit (spec-012 PRD M10 AC5). The selection is a project decision worth sharing and reviewing, but the install must not write to someone's history unasked. |
 | 2026-10-02 | Full PRD -> SDD -> PLAN before implementation | Breaking change to a published plugin, a new CI gate and a new bundle distribution. Marcus's standing rule after M3 was built ad-hoc and its spec never completed. |
 | 2026-10-02 | Catalogue access demoted from Must to Should | Nothing in the Must set depends on it: the relocation, the scan, the install, the collision refusal, the record, the advisory and the gate all stand without it. It is the strongest Should because it preserves what the all-21 install made possible at one description's cost, but shipping the Must set without it still solves the stated problem. |
+| 2026-10-02 | ADR-1: installed patterns always carry a `tcs-` prefix | Zero exact collisions exist today, so plain names would have worked now and been fragile later: a repo may create `testing` or `observability` at any time and could then never install that pattern. The prefix makes collision structurally impossible and provenance visible. Accepted cost: the user types a name they did not choose, in the slash menu and in every `skillOverrides` key, and it does nothing for the four near-misses. |
+| 2026-10-02 | ADR-2: scanner and installer in Python, only the advisory in bash | Two of the seven traps are structural-parsing problems — runtime vs development dependencies inside JSON, and walking nested manifests — which in bash means a hand-rolled JSON reader or an unavailable `jq`. Python also steps around the whole BSD/GNU constraint list for new code and puts the detector where pytest can call it against fixtures. |
+| 2026-10-02 | ADR-3: one `VERSION` integer per pattern, no central catalogue file | Per-pattern versions are required by F7. Given that, per-directory beats a central file on the CI gate: "every changed pattern directory contains a changed VERSION" needs no parsing, and a pattern added later is covered by the rule that already exists. An integer rather than semver because prose has no API for "breaking" to describe. |
+| 2026-10-02 | ADR-4: content hash at install, unified diff on conflict | Without a hash the installer cannot tell "never touched" from "deliberately adapted", and its only safe behaviour would be to never overwrite — leaving a diverged pattern permanently stale and the advisory repeating forever. The machinery bought is the hash; given Python the diff is three lines of difflib. Limit accepted: the hash covers SKILL.md only. |
+| 2026-10-02 | ADR-5: an unrecognised stack gets nothing, but still reaches the architecture question | The validated set included a desktop app in an uncovered language, where the right answer was nothing. But architectural intent is language-independent, so gating that question on a recognised language would deny patterns to exactly the repos whose architecture is deliberate. "Nothing detected" and "nothing applicable" are separate states. |
+| 2026-10-02 | ADR-7: the Obsidian rule stays duplicated, kept honest by a test | The write-time hook must work standalone; making it depend on a file outside itself is the failure mode #163 already records twice. Two implementations plus a test that fails when they disagree buys the safety without the coupling, and needs no new abstraction — only the fixtures the detection suite builds anyway. |
+| 2026-10-02 | ADR-9: the existing multi-bundle CI gate gains a per-pattern rule | The gate was already generalized to a table in spec-019 and already runs on every PR. The table's shape does not fit: it asks whether a bundle's single marker changed, which for 21 independently versioned patterns passes when the wrong one was bumped — the precise failure it exists to prevent. Per-directory rule instead, no new script, no new workflow. |
+| 2026-10-02 | SDD validation added AC-16 and AC-17 | Mechanical traceability found three PRD criteria with no counterpart: the per-entry listing cost and the baseline-not-surfaced rule from F2, and "a second party can determine currency" from F6. Found by checking rather than by eye, which is the reason the check is run. |
 
 ## Context
 
