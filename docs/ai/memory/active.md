@@ -17,3 +17,7 @@
 - **A `|| fallback` inside `$( )` appends to partial output, not replaces it** — a command that writes and *then* fails leaves both: `printf '%.0f' 23.5` in a comma locale yields `230`. → Assign whole values: `x=$(cmd) || x=0`.
 - **`stat -f` is a format string on BSD and means *filesystem* on GNU** — `stat -f %m file` on Linux prints a whole filesystem report to stdout, then exits non-zero, so a `||` fallback appends the real value to it (235 chars where an mtime is 10). The free-block counts inside then change between calls, so an "untouched file" assertion fails under load only. → `m="$(stat -c %Y "$f" 2>/dev/null)" || m="$(stat -f %m "$f")"`.
 - **Perf test p95 exceeds 100ms cap (2x the 50ms target) under load** — 124.8/156.4ms parallel-agent, 193.5ms alone; max 269ms = macOS's 151-286ms first-exec cost, warmup can't absorb. → `perf`-marked, deselected by default; run `pytest -m perf`.
+
+<!-- 2026-10-02 -->
+- **The skill listing is budgeted, so every skill added truncates every description** — a live session warns `115 skills, 42086 chars > 8000 budget`; defaults are `skillListingBudgetFraction` 0.01 of the context window in chars and `skillListingMaxDescChars` 1536. → Count the listing's chars before adding a skill.
+- **`skillOverrides` cannot reach a plugin skill** — the resolver returns `"on"` early when `source === "plugin"`, so `off`/`name-only` are silently ignored; only `enabledPlugins` (whole plugin) works. A repo skill in `.claude/skills/` does honour it. → Per-skill control requires installing into the repo.
