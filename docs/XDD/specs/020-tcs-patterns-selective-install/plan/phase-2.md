@@ -1,0 +1,160 @@
+---
+title: "Phase 2: Detection, fixtures before rules"
+status: pending
+version: "1.0"
+phase: 2
+---
+
+# Phase 2: Detection, fixtures before rules
+
+## Phase Context
+
+**GATE**: Read all referenced files before starting this phase.
+
+**Specification References**:
+- `[ref: SDD/Interface Specifications/Data model: detection report]` — the JSON contract, including
+  why `baseline`, `gates` and `unrecognised_stack` are separate fields
+- `[ref: SDD/Interface Specifications/Data model: fixture expectation]` — `expected.json` and why
+  `must_not_propose` is deliberately redundant
+- `[ref: SDD/Runtime View/Complex Logic]` — the gating traced step by step against a real stack,
+  ending in the 7 + 8 + 6 = 21 arithmetic
+- `[ref: SDD/Implementation Examples]` — nested manifests and runtime-only dependencies
+- `[ref: SDD/Architecture Decisions/ADR-2]` — why this is Python
+- `[ref: SDD/Architecture Decisions/ADR-5]` — unrecognised stack versus closed gates
+- `[ref: SDD/Architecture Decisions/ADR-7]` — the duplicated Obsidian rule
+- `[ref: PRD/F2, PRD/F3]` — nine acceptance criteria between them
+- `[ref: PRD/Detailed Feature Specifications]` — the six business rules and seven edge cases
+- `[ref: PRD/Risks and Mitigations]` — the top risk this phase exists to answer
+
+**Key Decisions**:
+- **Fixtures come before rules.** The PRD's top risk is that the detection rules were authored and
+  graded by the same party. A fixture written after the rule it checks inherits that rule's blind
+  spots, so `expected.json` is written from the *specification* and the rule is then made to
+  satisfy it.
+- The detector is **pure**: it reads a directory and returns a report. It writes nothing, asks
+  nothing, and never consults the catalogue for anything but the list of pattern names. That is
+  what makes it callable against a fixture without the interactive setup.
+- A gate decides **whether to ask**, never what to install. No pattern is installed because a gate
+  opened.
+
+**Dependencies**:
+- Phase 1 complete — the detector needs the catalogue's pattern name list, and the Obsidian
+  agreement test needs the relocated pattern.
+
+---
+
+## Tasks
+
+Delivers a detector that a second party can trust, because the corpus it is measured against was
+written from the specification rather than from the implementation.
+
+- [ ] **T2.1 The fixture corpus and its expectation format** `[activity: testing]`
+
+  1. Prime: Read the fixture expectation contract
+     `[ref: SDD/Interface Specifications/Data model: fixture expectation]` and the PRD's edge cases
+     `[ref: PRD/Detailed Feature Specifications]`. Build each fixture from the written rule, not
+     from any code — no detector exists yet, which is the point.
+  2. Test: The loader itself is tested first: every fixture directory contains `repo/` and
+     `expected.json`; every `expected.json` validates against the declared shape; every pattern
+     named anywhere in any fixture is one of the 21. A typo in a fixture must fail loudly rather
+     than quietly assert nothing.
+  3. Implement: `tests/fixtures/patterns-detection/<case>/` with `repo/` and `expected.json`.
+     Cases required:
+     - one per auto rule (8)
+     - one per trap (7), each naming the trap in `why` and listing `must_not_propose`
+     - one true-negative: a stack none of the 21 cover, `auto: []`, `unrecognised_stack: true`
+     - one monorepo: empty root `dependencies`, the real signal three levels down, **and a
+       populated `node_modules`** so the exclusion is asserted rather than assumed
+     - one bare repository: no server framework, no tests — all gates closed, zero questions
+     Fixtures are synthetic. No real repository is copied, and no real repository name or path
+     appears in any fixture `[ref: SDD/Constraints/CON-8]`.
+  4. Validate: `python3 -m pytest tests/test_patterns_detect.py -q` — every case collected, every
+     one failing for want of a detector. A case that passes at this point is a case that asserts
+     nothing.
+  5. Success:
+     - [ ] 18 fixtures collected, all failing for the right reason `[ref: PRD/Risks and Mitigations]`
+     - [ ] Each of the seven traps has a fixture naming it `[ref: SDD/Quality Requirements]`
+     - [ ] The true-negative and the monorepo case exist `[ref: PRD/F2 3rd; SDD/AC-4]`
+
+- [ ] **T2.2 The eight stack-fact rules** `[activity: backend-api]`
+
+  1. Prime: Read the auto rules and their evidence requirements
+     `[ref: SDD/Interface Specifications/Data model: detection report]` and the parsing example
+     `[ref: SDD/Implementation Examples]`. Two traps are load-bearing here: runtime dependencies
+     only, and nested manifests with vendored trees excluded.
+  2. Test: The T2.1 fixtures for the eight rules, plus traps 2, 3, 4, 5 and 7 — DOM-render evidence
+     required rather than a `ui/` directory name or `jsdom`; federated identity never inferred from
+     session-token or password-hashing libraries; `devDependencies` never read as a runtime signal;
+     nested manifests found and `node_modules` skipped; both `venv` and `.venv` recognised.
+  3. Implement: `plugins/tcs-patterns/skills/patterns-setup/lib/detect.py` — the manifest walk, the
+     runtime-dependency reader, the eight rules, and `evidence` naming the concrete file or
+     dependency for every proposal. An unparseable manifest is skipped, never fatal.
+  4. Validate: those fixtures green; `python3 -m pytest -q` for the full leg.
+  5. Success:
+     - [ ] Every auto proposal carries the file or dependency that justified it `[ref: PRD/F2 1st]`
+     - [ ] Traps 2, 3, 4, 5 and 7 each have a passing fixture that fails if the trap returns `[ref: SDD/Quality Requirements]`
+     - [ ] `testing` is reported in `baseline` with `surface: false`, never as a recommendation `[ref: PRD/F2 5th; trap 1]`
+
+- [ ] **T2.3 The three gates and the unrecognised-stack flag** `[activity: backend-api]`
+
+  1. Prime: Read the gating walkthrough `[ref: SDD/Runtime View/Complex Logic]` and ADR-5
+     `[ref: SDD/Architecture Decisions/ADR-5]`. The subtlety: `unrecognised_stack` is not "all
+     gates closed". A repository in an uncovered language with a ports-and-adapters shape must
+     still open Q2.
+  2. Test: Q1 opens on a server framework in `dependencies` and not on one in `devDependencies`;
+     Q2 opens on Q1 or on a content signal alone; Q3 opens on any test framework; the bare
+     repository closes all three; the true-negative sets `unrecognised_stack` true while gates
+     follow their own evidence; trap 6 — a hand-rolled event store with no broker dependency opens
+     Q2 and auto-proposes nothing.
+  3. Implement: the gate evaluation and `gate_evidence` in `detect.py`, plus `unrecognised_stack`
+     computed independently of the gates.
+  4. Validate: all 18 fixtures green; `python3 -m pytest -q`.
+  5. Success:
+     - [ ] Zero questions for the bare repository `[ref: PRD/F3 1st]`
+     - [ ] Never more than three gates open `[ref: PRD/F3 2nd]`
+     - [ ] A closed gate yields no question rather than a question answered "none" `[ref: PRD/F3 3rd]`
+     - [ ] An uncovered language with an architectural shape still opens Q2 `[ref: SDD/ADR-5]`
+
+- [ ] **T2.4 The decided-exactly-once invariant** `[activity: testing]` `[parallel: true]`
+
+  1. Prime: Read the arithmetic at the end of the walkthrough
+     `[ref: SDD/Runtime View/Complex Logic]`. "Each of the 21 is decided exactly once" is F3's
+     fourth criterion and is only a claim until something sums it.
+  2. Test: For every fixture, and for every combination of answers to the open gates, the three
+     outcome sets — installed, declined by question, excluded by stack fact — are pairwise disjoint
+     and their union is exactly the 21 pattern names. Generated over the answer space, not written
+     per case.
+  3. Implement: the partition function in `detect.py` (or a thin module beside it) that returns the
+     three sets, and the parametrized test that asserts the invariant.
+  4. Validate: `python3 -m pytest -q`; introduce a deliberate double-assignment locally and confirm
+     the test fails — an invariant test that cannot fail is decoration.
+  5. Success:
+     - [ ] Disjoint and summing to 21 for every fixture and every answer combination `[ref: PRD/F3 4th; SDD/AC-6]`
+     - [ ] The test demonstrably fails on a seeded double-assignment `[ref: SDD/Quality Requirements]`
+
+- [ ] **T2.5 The Obsidian rule agreement test** `[activity: testing]` `[parallel: true]`
+
+  1. Prime: Read ADR-7 `[ref: SDD/Architecture Decisions/ADR-7]` and the existing bash gate in
+     `plugins/tcs-patterns/scripts/block-eslint-disable.sh`. The hook must stay standalone: giving
+     a write-time guard a dependency outside itself is the failure mode issue #163 already records
+     twice here.
+  2. Test: For every detection fixture, the bash gate's verdict on `repo/` equals the Python rule's
+     `obsidian-plugin` proposal. Both directions matter — a fixture the bash gate accepts and the
+     detector rejects is as much a divergence as the reverse.
+  3. Implement: `tests/test_obsidian_rule_agreement.py`, invoking the bash gate as a subprocess
+     against each fixture and comparing. No new abstraction, no shared source.
+  4. Validate: `python3 -m pytest tests/test_obsidian_rule_agreement.py -q`; change one rule
+     locally and confirm the test fails.
+  5. Success:
+     - [ ] Identical verdicts across all fixtures `[ref: SDD/AC-14]`
+     - [ ] A one-sided change to either rule fails the test `[ref: SDD/ADR-7]`
+
+- [ ] **T2.6 Phase validation** `[activity: validate]`
+
+  Both legs, reported per leg. Confirm the detector is callable against a fixture directory with no
+  interactive setup and no catalogue writes — the property the PRD's top-risk mitigation depends on.
+  Confirm every fixture's `why` field reads as an explanation a second party could act on, because
+  a fixture whose purpose is unclear will be deleted by someone later.
+
+  - Success: 18 fixtures green; detection suite runnable standalone; both legs green per leg
+    `[ref: SDD/AC-3, AC-4, AC-5, AC-6, AC-14]`

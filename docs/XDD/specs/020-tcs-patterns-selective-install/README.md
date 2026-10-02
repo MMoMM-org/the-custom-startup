@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-10-02 |
-| **Current Phase** | PLAN |
-| **Decomposition tier** | {{DECOMPOSITION_TIER}} |
+| **Current Phase** | Ready |
+| **Decomposition tier** | Incremental |
 | **Last Updated** | 2026-10-02 |
 
 ## Documents
@@ -15,7 +15,7 @@
 |----------|--------|-------|
 | requirements.md | completed | 36 acceptance criteria, 0 clarification markers |
 | solution.md | completed | 9 ADRs confirmed, 17 acceptance criteria, 0 markers |
-| plan/ | pending | |
+| plan/ | completed | 5 phases, 25 tasks, 139 spec references, all resolvable |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -38,6 +38,8 @@
 | 2026-10-02 | ADR-7: the Obsidian rule stays duplicated, kept honest by a test | The write-time hook must work standalone; making it depend on a file outside itself is the failure mode #163 already records twice. Two implementations plus a test that fails when they disagree buys the safety without the coupling, and needs no new abstraction — only the fixtures the detection suite builds anyway. |
 | 2026-10-02 | ADR-9: the existing multi-bundle CI gate gains a per-pattern rule | The gate was already generalized to a table in spec-019 and already runs on every PR. The table's shape does not fit: it asks whether a bundle's single marker changed, which for 21 independently versioned patterns passes when the wrong one was bumped — the precise failure it exists to prevent. Per-directory rule instead, no new script, no new workflow. |
 | 2026-10-02 | SDD validation added AC-16 and AC-17 | Mechanical traceability found three PRD criteria with no counterpart: the per-entry listing cost and the baseline-not-surfaced rule from F2, and "a second party can determine currency" from F6. Found by checking rather than by eye, which is the reason the check is run. |
+| 2026-10-02 | Decomposition tier: Incremental | Classifier recommended Incremental and rule 1 fired twice: 8 new components (C1-C8; C9 only modifies the existing CI gate script and does not count) and 9 Must features, with 36 acceptance criteria. No parallel work flagged in the design. Accepted. |
+| 2026-10-02 | Plan: 5 phases, 25 tasks | Ordering is forced by dependency, not preference: the catalogue first because everything reads it and because its verification needs a fresh session; detection second and alone, because fixtures written before the rules are the PRD's answer to its own top risk and there is nothing to run them against but fixtures; then the write path, then drift, then the user-facing surface. Validation found the spec reference count stated as 68 against 139 actual; corrected. |
 
 ## Context
 
