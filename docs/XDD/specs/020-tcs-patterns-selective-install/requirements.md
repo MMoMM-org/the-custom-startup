@@ -79,14 +79,15 @@ The cost is not what it appears to be. Claude Code **rations the skill listing**
 TCS accounted for. A live session on CLI 2.1.286 warns:
 
 ```
-[WARN] Skill listing over budget: 115 skills, 42086 chars > 8000 budget
+[WARN] Skill listing over budget: 112 skills, 40191 chars > 30000 budget
        -- descriptions will be truncated.
 ```
 
 The defaults behind that warning are `skillListingBudgetFraction` 0.01 of the context window
-measured in characters (8000 at 200k, 40000 at 1M) and `skillListingMaxDescChars` 1536 per
+measured in characters -- 8000 on a 200k-class model and 30000 in a 1M-context session, both
+observed -- and `skillListingMaxDescChars` 1536 per
 description. `tcs-patterns` contributes 5918 of the 21128 characters the six TCS plugins put into
-that listing — 28% of the TCS share, roughly 14% of the whole.
+that listing — 28% of the TCS share, roughly 15% of the whole.
 
 **The damage is description quality, not token cost.** Measured 2026-10-02, readings reproducing
 to ~3 tokens:
@@ -348,8 +349,9 @@ their say.
 
 ### Won't Have (This Phase)
 
-- **Getting the skill listing under budget.** 42086 characters falls to roughly 36200 against a
-  budget of 8000. `tcs-team` (4924), `tcs-helper` (4460) and `tcs-workflow` (4401) are each
+- **Getting the skill listing under budget.** 40191 characters falls to roughly 34300 against a
+  budget between 8000 and 30000 depending on the model. `tcs-team` (4924), `tcs-helper` (4460)
+  and `tcs-workflow` (4401) are each
   comparable to `tcs-patterns`, so being under budget requires the same treatment across all four
   or a raised budget fraction. This phase removes the largest single contributor and no more.
 - **Judging the 21 patterns on content.** Merging overlapping patterns, or dropping ones nobody
