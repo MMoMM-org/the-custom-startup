@@ -19,5 +19,5 @@
 - **Perf test p95 exceeds 100ms cap (2x the 50ms target) under load** — 124.8/156.4ms parallel-agent, 193.5ms alone; max 269ms = macOS's 151-286ms first-exec cost, warmup can't absorb. → `perf`-marked, deselected by default; run `pytest -m perf`.
 
 <!-- 2026-10-02 -->
-- **The skill listing is budgeted, so every skill added truncates every description** — a live session warns `115 skills, 42086 chars > 8000 budget`; defaults are `skillListingBudgetFraction` 0.01 of the context window in chars and `skillListingMaxDescChars` 1536. → Count the listing's chars before adding a skill.
+- **The skill listing is budgeted, so every skill added truncates every description** — a live session warns `112 skills, 40191 chars > 30000 budget`; defaults are `skillListingBudgetFraction` 0.01 of the context window in chars and `skillListingMaxDescChars` 1536. → Count the listing's chars before adding a skill.
 - **`skillOverrides` cannot reach a plugin skill** — the resolver returns `"on"` early when `source === "plugin"`, so `off`/`name-only` are silently ignored; only `enabledPlugins` (whole plugin) works. A repo skill in `.claude/skills/` does honour it. → Per-skill control requires installing into the repo.
