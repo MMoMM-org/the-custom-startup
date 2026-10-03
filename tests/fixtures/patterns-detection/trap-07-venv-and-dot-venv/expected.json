@@ -1,0 +1,16 @@
+{
+  "auto": [
+    "python-project"
+  ],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "typescript-strict"
+  ],
+  "unrecognised_stack": false,
+  "why": "trap 7 -- a virtual-environment check that knows one spelling; both venv/ and .venv/ must be excluded from the walk, so the decoy tsconfig.json planted inside each must not fire typescript-strict"
+}

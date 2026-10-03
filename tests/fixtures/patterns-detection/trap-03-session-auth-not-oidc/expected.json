@@ -1,0 +1,16 @@
+{
+  "auto": [
+    "python-project"
+  ],
+  "baseline": [],
+  "gates": {
+    "q1_backend": true,
+    "q2_architecture": true,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "secure-oauth-oidc"
+  ],
+  "unrecognised_stack": false,
+  "why": "trap 3 -- session auth must not be read as federated identity; pyjwt and bcrypt are session/hashing tools, not protocol evidence, so secure-oauth-oidc must not be proposed even though fastapi opens q1 (and q2 opens with it)"
+}
