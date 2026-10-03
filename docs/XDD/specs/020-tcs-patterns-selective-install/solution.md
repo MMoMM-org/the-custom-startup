@@ -517,6 +517,15 @@ Three consequences the fixtures must assert rather than assume:
   nested Python or Go signal at the root and never exercise trap 5 for those ecosystems.
   `manifest.json` is read for `obsidian-plugin` but is not a dependency manifest and does not
   contribute to `manifests_walked`.
+- **`manifests_walked` lists every dependency manifest whose contents were read, not only the
+  three the walk discovers by.** `requirements.txt` and `setup.py` are read where present --
+  `python-project` needs one of them, and `mcp-server` looks for `mcp` in them -- so both
+  belong in the list. Settled on 2026-10-03 after T2.2 read the earlier wording the other way,
+  which was a fair reading of "the manifests walked are" plus the `manifest.json` exception.
+  The field's only purpose is making a missing signal explicable, and a `requirements.txt`
+  that was read and held no `mcp` is indistinguishable from one that was never found unless it
+  appears. `manifest.json` remains the exception because it carries no dependencies to
+  explain -- it is Obsidian metadata the `obsidian-plugin` rule reads for one key.
 
 
 **What counts as a test framework — decided 2026-10-03.** Two rules depend on this and neither
