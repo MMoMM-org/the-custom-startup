@@ -480,11 +480,22 @@ opened `[ref: SDD/Interface Specifications/Data model: detection report]`.
 | Gate | Opens when | Settles |
 |---|---|---|
 | `q1_backend` | a server framework in **`dependencies`**, never `devDependencies` (trap 4): Node `express`, `fastify`, `koa`, `@nestjs/core`, `hono`; Python `fastapi`, `flask`, `django`, `aiohttp`; Go `gin`, `echo`, `chi` | `api-design`, `bff-entry-points`, `secure-oauth-oidc`, `observability`, `twelve-factor`, `node-service` (6) |
-| `q2_architecture` | `q1_backend` opened, **or** a weak content signal: `ports/` + `adapters/` + `domain/` directories; a per-module `events.py` / `events.ts`; a directory named `event_store` or `eventstore`; a broker dependency `kafkajs`, `amqplib`, `@aws-sdk/client-sqs`, `celery` | `ddd`, `event-driven`, `event-sourcing`, `hexagonal`, `functional` (5) |
+| `q2_architecture` | `q1_backend` opened, **or** any one weak content signal: all three of `ports/` + `adapters/` + `domain/` as directories; **two or more** `events.py` / `events.ts` in distinct module directories; one directory named `event_store` or `eventstore`; one broker dependency `kafkajs`, `amqplib`, `@aws-sdk/client-sqs`, `celery` | `ddd`, `event-driven`, `event-sourcing`, `hexagonal`, `functional` (5) |
 | `q3_test_quality` | any test framework present — framework evidence only, no tests shape required, defined under *What counts as a test framework* below | `mutation-testing`, `test-design-reviewer` (2) |
 
 Three consequences the fixtures must assert rather than assume:
 
+- **Each weak signal's quantity is fixed, not left to taste.** `ports/` + `adapters/` +
+  `domain/` needs all three; `event_store` and a broker dependency need one; the per-module
+  events file needs **two or more in distinct module directories**. One `events.py` is a
+  utility file, not a convention. The threshold is deliberately low rather than matched to
+  the validated repository's ~15 feature directories, because a gate only decides whether to
+  *ask*: a false open costs the user one extra question, while a false close denies patterns
+  to exactly the repositories whose architecture is deliberate — the asymmetry ADR-5's
+  rationale already argues. The `~15` in the traced walkthrough
+  `[ref: SDD/Runtime View/Complex Logic]` describes what one real repository happened to
+  have; it is not a minimum, and reading it as one would close the gate on most deliberate
+  architectures.
 - **`q2_architecture` can open while `q1_backend` is shut.** That is the whole point of the `or`
   (trap 6): event-driven and event-sourcing are routinely hand-rolled with no distinctive
   dependency, so a repository in an uncovered language with a ports/adapters shape must still reach
