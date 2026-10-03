@@ -165,10 +165,13 @@ changed_patterns="$(printf '%s\n' "$changed_paths" \
   | sed -n 's|^plugins/tcs-patterns/templates/patterns/\([^/]*\)/.*|\1|p' \
   | sort -u)"
 
-for pattern_name in $changed_patterns; do
+while IFS= read -r pattern_name; do
+  [ -z "$pattern_name" ] && continue
   check_bundle "plugins/tcs-patterns/templates/patterns/$pattern_name" \
                "plugins/tcs-patterns/templates/patterns/$pattern_name/VERSION" \
                '*'
-done
+done <<PATTERNS_EOF
+$changed_patterns
+PATTERNS_EOF
 
 exit "$overall_fail"
