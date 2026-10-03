@@ -72,8 +72,10 @@ written from the specification rather than from the implementation.
      - `@pytest.mark.parametrize` over that same empty glob reports `1 skipped`, **exit 0**,
        with `got empty parameter set` — a green suite containing zero cases, which is worse,
        because T2.1's own validate step reads "every case collected";
-     - a module-level `ImportError` reports `ERROR collecting` and **exit 2**, distinguishable
-       from exit 1.
+     - a module-level `ImportError` reports `ERROR collecting` and **exit 2** — and aborts the
+       **whole session**, so `pytest -q` runs none of the repo's other tests. Measured on this
+       branch when the detection test imported the absent detector at module level:
+       `1 deselected, 1 error`, exit 2, with all 821 existing tests left unmeasured.
 
      So: (1) assert the corpus size in a **standalone, non-parametrized** test —
      `assert len(fixtures) == 18` — never only as a parametrize source, or an empty corpus
@@ -97,6 +99,16 @@ written from the specification rather than from the implementation.
   4. Validate: `python3 -m pytest tests/test_patterns_detect.py -q` — every case collected, every
      one failing for want of a detector. A case that passes at this point is a case that asserts
      nothing.
+
+     **The detector must be imported at *runtime*, inside the test or a fixture — never at module
+     level.** "Every case collected" and a module-level `ImportError` are mutually exclusive: a
+     collection error collects **zero** cases, fails this step and its success criterion on its
+     own terms, and additionally aborts the full suite so the other 821 tests go unrun. The
+     correct RED state is 18 collected, 18 failed, exit 1, with the rest of the suite still
+     reported. This is written down because the opposite was tried on 2026-10-03 — the
+     orchestrator's own dispatch brief demanded the module-level form, citing the exit-2
+     measurement above as if it were the target rather than a hazard, and the implementer
+     followed it and flagged the consequence.
   5. Success:
      - [ ] 18 fixtures collected, all failing for the right reason `[ref: PRD/Risks and Mitigations]`
      - [ ] Each of the seven traps has a fixture naming it `[ref: SDD/Quality Requirements]`
