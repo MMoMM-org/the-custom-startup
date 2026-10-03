@@ -48,7 +48,7 @@ phase: 2
 Delivers a detector that a second party can trust, because the corpus it is measured against was
 written from the specification rather than from the implementation.
 
-- [ ] **T2.1 The fixture corpus and its expectation format** `[activity: testing]`
+- [x] **T2.1 The fixture corpus and its expectation format** `[activity: testing]`
 
   1. Prime: Read the fixture expectation contract
      `[ref: SDD/Interface Specifications/Data model: fixture expectation]`, **the detection rules
