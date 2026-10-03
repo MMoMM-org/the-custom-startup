@@ -530,6 +530,17 @@ fixtures is not a test suite.
 | Go | any `*_test.go` — Go tests declare no dependency, which is why dependency-only detection was rejected |
 | Shell | any `*.bats` |
 
+**Why Node is the only row that demands a declared runner.** Python, Go and Shell accept a
+bare test file as framework evidence; Node does not, and that asymmetry is deliberate rather
+than an oversight. A bare test file is evidence exactly where the language ships the runner
+that executes it: `go test` is part of the Go toolchain, `unittest` is in the Python standard
+library and `test_*.py` is the convention both it and pytest discover by. Node has no single
+such convention — `*.test.js` is shared between jest, vitest, mocha and others and names none
+of them — so a `*.test.js` file alone does not establish that any runner is present. Written
+down because the asymmetry reads as an inconsistency at a glance, and "fixing" it by
+accepting bare `*.test.js` would make `q3_test_quality` open on a repository that cannot run
+its own tests.
+
 Three distinctions the fixtures must preserve, because the two rules are deliberately asymmetric:
 
 - **`q3_test_quality` needs framework evidence only.** Any row above opens it.
