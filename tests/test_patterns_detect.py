@@ -5,33 +5,47 @@ by the same party. This file is written against `detect.py` before that module
 exists, so every one of the 18 fixtures in `tests/fixtures/patterns-detection/`
 fails for want of a detector rather than passing by construction -- the RED half of
 T2.1's TDD gate. `detect.py` lands in T2.2 (SDD/Building Block View, C2 -- "pure,
-fixture-callable"); until then this module fails to COLLECT at all, which is the
-point: `import detect` below is deliberately module-level, not lazily caught inside
-a test body, so `pytest tests/test_patterns_detect.py` reports `ERROR collecting` at
-exit code 2 -- distinguishable from the ordinary exit-1 failure of a false
-assertion, and from the exit-0 `1 skipped` a parametrize-over-an-empty-glob would
-report if the corpus itself were broken instead.
+fixture-callable").
+
+The import of `detect` happens at RUNTIME, inside each test, not at module level.
+T2.1's own success criterion is "18 fixtures collected, all failing for the right
+reason" -- a module-level import would collect ZERO cases (an `ImportError` at
+import time aborts collection for the whole file) and would abort the entire
+`pytest -q` run besides, since one file's collection error stops the whole session
+by default. A per-test import gives the actual required RED state instead:
+`pytest tests/test_patterns_detect.py -q` reports 18 collected, 18 failed, exit 1 --
+each one failing with `ModuleNotFoundError`/`ImportError` for want of a detector,
+distinguishable from a false assertion only by its traceback, not by its exit code
+or collected count. The earlier module-level version of this file (exit 2, 0
+collected) was measured and reported, then corrected once it was checked against
+this task's own success criterion.
 
 Corpus-integrity (shape, count, pattern-name validity) is deliberately NOT
 re-checked here -- `test_patterns_detection_corpus.py` owns that, does not import
-`detect`, and keeps reporting pass/fail on the corpus itself even while this file
-cannot collect.
+`detect`, and keeps reporting pass/fail on the corpus itself regardless of whether
+the detector exists.
 """
 
 from __future__ import annotations
 
+import importlib
 import sys
-from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 from patterns_detection_corpus_lib import REPO_ROOT, discover_fixtures, load_expected
 
 LIB_DIR = REPO_ROOT / "plugins" / "tcs-patterns" / "skills" / "patterns-setup" / "lib"
-sys.path.insert(0, str(LIB_DIR))
 
-import detect  # noqa: E402  -- intentionally module-level and unguarded: `detect.py`
-# does not exist until T2.2, so this import failing IS T2.1's verifiable RED state.
+
+def _load_detect() -> ModuleType:
+    """Imports `detect` at call time, not at module import time, so its absence
+    (until T2.2) fails the individual test that calls this, not collection of the
+    whole file."""
+    if str(LIB_DIR) not in sys.path:
+        sys.path.insert(0, str(LIB_DIR))
+    return importlib.import_module("detect")
 
 
 def _fixture_ids() -> list[str]:
@@ -43,6 +57,7 @@ def test_detector_matches_expected(fixture) -> None:
     """The normalised report must equal the fixture's declared verdict exactly -- an
     unexpected extra proposal fails just as loudly as a missing one (SDD/Data model:
     fixture expectation)."""
+    detect = _load_detect()
     expected = load_expected(fixture)
     report = detect.detect(fixture.repo_dir)
 
