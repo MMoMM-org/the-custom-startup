@@ -115,7 +115,30 @@ written from the specification rather than from the implementation.
      - [ ] A closed gate yields no question rather than a question answered "none" `[ref: PRD/F3 3rd]`
      - [ ] An uncovered language with an architectural shape still opens Q2 `[ref: SDD/ADR-5]`
 
-- [ ] **T2.4 The decided-exactly-once invariant** `[activity: testing]` `[parallel: true]`
+- [ ] **T2.4 The companion map, derived from the catalogue** `[activity: domain-modeling]`
+
+  1. Prime: Read the companion map contract `[ref: SDD/Interface Specifications/Data model: companion map]`
+     and the install unit `[ref: SDD/Runtime View]` — C5 copies one pattern directory, which is the
+     whole reason this exists. Read `tests/test_tcs_patterns_catalogue_links.py`, whose resolution
+     rule this reuses rather than reinvents.
+  2. Test: Assert the derived map equals the nine measured pairs exactly — `ddd`→`hexagonal`,
+     `event-driven`→`hexagonal`+`event-sourcing`, `event-sourcing`→`event-driven`+`hexagonal`,
+     `hexagonal`→`ddd`, `observability`→`hexagonal`. Assert the relation is treated as a cycle and
+     not a tree: `ddd`/`hexagonal` and `event-driven`/`event-sourcing` are mutual, so a naive
+     transitive closure must not recurse forever. Assert a tenth cross-pattern reference, injected
+     into a fixture, makes the test fail — a hardcoded table would pass and go stale.
+  3. Implement: Derive the map by the link test's resolution rule: a code-span path resolving under
+     no pattern root but another's is a companion edge. Expose it for C3 to read.
+  4. Validate: `python3 -m pytest -q`; confirm the derived map's nine pairs against the table in
+     the SDD.
+  5. Success:
+     - [ ] The derived map equals the nine pairs `[ref: SDD/Acceptance Criteria/AC-18]`
+     - [ ] A tenth cross-pattern reference fails the test `[ref: SDD/Acceptance Criteria/AC-18]`
+     - [ ] The cycle does not cause unbounded recursion `[ref: SDD/Interface Specifications]`
+     - [ ] Nothing is installed by the map alone — it produces a proposal the user can decline
+           `[ref: ADR-8]`
+
+- [ ] **T2.5 The decided-exactly-once invariant** `[activity: testing]` `[parallel: true]`
 
   1. Prime: Read the arithmetic at the end of the walkthrough
      `[ref: SDD/Runtime View/Complex Logic]`. "Each of the 21 is decided exactly once" is F3's
@@ -132,7 +155,7 @@ written from the specification rather than from the implementation.
      - [ ] Disjoint and summing to 21 for every fixture and every answer combination `[ref: PRD/F3 4th; SDD/AC-6]`
      - [ ] The test demonstrably fails on a seeded double-assignment `[ref: SDD/Quality Requirements]`
 
-- [ ] **T2.5 The Obsidian rule agreement test** `[activity: testing]` `[parallel: true]`
+- [ ] **T2.6 The Obsidian rule agreement test** `[activity: testing]` `[parallel: true]`
 
   1. Prime: Read ADR-7 `[ref: SDD/Architecture Decisions/ADR-7]` and the existing bash gate in
      `plugins/tcs-patterns/scripts/block-eslint-disable.sh`. The hook must stay standalone: giving
@@ -149,7 +172,7 @@ written from the specification rather than from the implementation.
      - [ ] Identical verdicts across all fixtures `[ref: SDD/AC-14]`
      - [ ] A one-sided change to either rule fails the test `[ref: SDD/ADR-7]`
 
-- [ ] **T2.6 Phase validation** `[activity: validate]`
+- [ ] **T2.7 Phase validation** `[activity: validate]`
 
   Both legs, reported per leg. Confirm the detector is callable against a fixture directory with no
   interactive setup and no catalogue writes — the property the PRD's top-risk mitigation depends on.

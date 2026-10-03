@@ -57,6 +57,7 @@ version: "1.0"
 | ADR-7 | Obsidian rule stays duplicated, with a consistency test | CONFIRMED |
 | ADR-8 | Install offers to commit and never commits | CONFIRMED |
 | ADR-9 | The existing multi-bundle CI gate gains a per-pattern rule | CONFIRMED |
+| ADR-10 | Cross-pattern references become co-recommendations from a derived map | CONFIRMED |
 
 ---
 
@@ -439,6 +440,40 @@ Three fields carry design decisions rather than data:
   installed because a gate opened.
 - `unrecognised_stack` is distinct from all gates being false (ADR-5). A repository can have an
   unrecognised language and still reach Q2 through a content signal.
+
+#### Data model: companion map (C1 → C2 → C3)
+
+Nine pattern pairs cite each other's files, measured over the catalogue on 2026-10-03: 14
+references in total, reduced to nine distinct (pattern, cited path) pairs.
+
+| Pattern | Cites a file living in |
+|---|---|
+| `ddd` | `hexagonal` |
+| `event-driven` | `hexagonal`, `event-sourcing` |
+| `event-sourcing` | `event-driven`, `hexagonal` |
+| `hexagonal` | `ddd` |
+| `observability` | `hexagonal` |
+
+`ddd`/`hexagonal` and `event-driven`/`event-sourcing` are mutual, so the relation is a cycle and
+must not be treated as a dependency tree.
+
+This matters because C5 copies **one** pattern directory `[ref: SDD/Runtime View]`. Install `ddd`
+alone and `ddd/reference/testing-by-layer.md`'s citation of `reference/testing-hex-arch.md` — which
+lives in `hexagonal/` — resolves to nothing in the consumer repository. Q2 is multiSelect, so that
+selection is reachable, not hypothetical. Before this spec the defect was invisible: shipping all
+21 made every citation resolve.
+
+**Derived, not hardcoded.** The map is computed from the catalogue by the same resolution rule the
+link test uses: a code-span path that resolves under no pattern root but its own, yet does resolve
+under another pattern's root, is a companion edge. A test asserts the derived map equals the nine
+pairs above, so adding a tenth cross-pattern reference either updates the map or fails the suite.
+A hardcoded table would silently go stale the first time a pattern's references changed.
+
+**Consumed as a proposal, never as a rule.** When the interview settles on a pattern, C3 adds its
+companions to the proposal with the reason stated — "`ddd`'s testing reference lives in
+`hexagonal`" — and the user may still decline. Companions join the proposal **before** the outcome
+partition is computed, so the three sets stay disjoint and still sum to 21; a companion is
+installed because the user accepted it, not because the map said so.
 
 #### Data model: fixture expectation (test suite)
 
@@ -956,8 +991,49 @@ standing for two or three PRD criteria that assert the same behaviour from diffe
 | AC-15 | The catalogue reader prints a named pattern's body and writes nothing; an unknown name lists the 21 | F10 |
 | AC-16 | The proposal shows each entry's listing cost in characters, and lists baseline patterns separately from recommendations | F2 (4th, 5th) |
 | AC-17 | After `update`, every refreshed pattern's manifest version equals its catalogue `VERSION`, and currency is determinable from the manifest alone without reading any pattern file | F6 (3rd), F8 (3rd) |
+| AC-18 | The companion map derived from the catalogue equals the nine measured pairs; a new cross-pattern reference fails the test rather than shipping a pattern whose citation dangles once installed alone | F4, ADR-10 |
 
 ## Risks and Technical Debt
+
+### ADR-10: Cross-pattern references become co-recommendations, from a derived map — CONFIRMED
+
+**Context.** Nine pattern pairs cite each other's files — measured 2026-10-03, 14 references
+reduced to nine distinct pairs, forming a cycle rather than a tree. C5 copies one pattern
+directory, so installing `ddd` alone leaves its citation of `reference/testing-hex-arch.md`, a file
+living in `hexagonal/`, dangling in the consumer repository. Q2 is multiSelect, so that selection
+is reachable rather than hypothetical.
+
+The defect is created by this spec, not found by it. Shipping all 21 patterns made every one of
+those citations resolve; selective installation is what breaks them. That is why it is in scope
+despite "judging the 21 patterns on content" being out of scope — this is distribution, not
+content.
+
+**Decision.** When the interview settles on a pattern, C3 adds its companions to the proposal with
+the reason stated, and the user may decline. The map is **derived** from the catalogue by the link
+test's resolution rule — a code-span path resolving under no pattern root but another's is a
+companion edge — and a test asserts the derived map equals the nine known pairs.
+
+**Alternatives considered.**
+
+- *Installer-side warning at write time (C5).* Technically the best-informed point, because it
+  knows the actual selection rather than predicting it. Rejected as the primary mechanism because
+  it tells the user about a problem after they have finished deciding, and the fix is to go back and
+  re-run the interview. A proposal is the moment the information is actionable.
+- *Issue plus a documented limitation.* Cheapest, and keeps a 26-task spec from growing. Rejected
+  because the first repository to install `ddd` alone gets a dead reference that nothing detects —
+  the catalogue link test checks the source tree, not consumer repositories, so the defect would
+  surface as a reader's confusion rather than as a failure.
+- *A hardcoded companion table.* Rejected on staleness: the table would be correct the day it was
+  written and silently wrong the first time a pattern's references changed. Deriving it costs the
+  same resolution code the link test already needs.
+
+**Trade-offs accepted.** A derived map is only as good as its resolution rule, and that rule
+deliberately ignores bare code-span paths that do not begin `../`
+`[ref: SDD/Interface Specifications/Data model: companion map]`. The nine pairs were found by
+resolving bare paths against other pattern roots, which is a different and broader rule than the
+link test enforces — so the map's derivation and the link test's check are related but not
+identical, and the test asserting nine pairs is what keeps them honest. The cycle also forbids a
+transitive closure: companions are one hop, not a dependency graph to resolve.
 
 ### Known Technical Issues
 

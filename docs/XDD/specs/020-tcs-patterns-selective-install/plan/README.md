@@ -39,9 +39,9 @@ version: "1.0"
 | specId | 020-tcs-patterns-selective-install |
 | title | tcs-patterns selective install |
 | status | IN_REVIEW |
-| totalTasks | 25 |
+| totalTasks | 26 |
 | parallelTasks | 6 |
-| specReferences | 139 |
+| specReferences | 151 |
 | clarificationsRemaining | 0 |
 
 ### PhaseStatus
