@@ -60,9 +60,12 @@ def _require_tomllib() -> None:
     this module under a different interpreter."""
     if tomllib is None:
         raise RuntimeError(
-            "tcs-patterns requires Python 3.11 or newer: the standard-library "
-            "`tomllib` module (needed to parse pyproject.toml) does not exist "
-            f"before 3.11. This interpreter is Python {sys.version.split()[0]}."
+            "tcs-patterns cannot parse pyproject.toml: the standard-library "
+            "`tomllib` module is unavailable. It entered the standard library in "
+            f"Python 3.11; this interpreter reports {sys.version.split()[0]}. If that "
+            "is 3.11 or newer, the standard library is incomplete -- some "
+            "distributions package it in pieces -- and `tomllib` needs installing "
+            "rather than Python upgrading."
         )
 
 

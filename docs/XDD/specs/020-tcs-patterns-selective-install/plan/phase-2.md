@@ -114,7 +114,7 @@ written from the specification rather than from the implementation.
      - [ ] Each of the seven traps has a fixture naming it `[ref: SDD/Quality Requirements]`
      - [ ] The true-negative and the monorepo case exist `[ref: PRD/F2 3rd; SDD/AC-4]`
 
-- [ ] **T2.2 The eight stack-fact rules** `[activity: backend-api]`
+- [x] **T2.2 The eight stack-fact rules** `[activity: backend-api]`
 
   1. Prime: Read the auto rules and their evidence requirements
      `[ref: SDD/Interface Specifications/Detection rules: the eight stack facts and the three
