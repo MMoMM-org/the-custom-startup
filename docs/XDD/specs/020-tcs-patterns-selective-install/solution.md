@@ -673,6 +673,23 @@ cites it, which is trap 5 reintroduced, and it does so for every fixture rather 
 two that plant decoys there. None of the three needs per-case data, so the fixture contract is
 unchanged.
 
+**`gate_evidence` is the fourth field of this kind, and takes the same treatment.** The report
+carries `gate_evidence` naming what opened each gate; `expected.json` has no such key and the
+detection test compares none, so T2.3 could emit `{}` for every fixture and satisfy all 18
+while leaving every gate unjustified. Caught at T2.3's task-validation gate on 2026-10-04,
+before the task was dispatched, by asking what the corpus can prove rather than what the task
+claims. Assert it as two invariants:
+
+1. **every gate reported open has a non-empty `gate_evidence` entry**, and each path it cites
+   resolves inside that fixture's `repo/` and has no segment in `node_modules`, `.venv`,
+   `venv`, `vendor`;
+2. **every gate reported closed has no entry**, so a gate cannot carry evidence it did not act
+   on.
+
+Together these make "no gate opens without a signal from its own rule" a mechanical check
+rather than a reading. They need no per-case data: which gates are open is already declared in
+each `expected.json`, and the invariants key off that.
+
 The trap numbers used in `why` are defined in **The seven traps, numbered** under Quality
 Requirements. Use those numbers; do not renumber them.
 

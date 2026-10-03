@@ -173,8 +173,10 @@ written from the specification rather than from the implementation.
      repository closes all three; the true-negative sets `unrecognised_stack` true while gates
      follow their own evidence; trap 6 — a hand-rolled event store with no broker dependency opens
      Q2 and auto-proposes nothing.
-  3. Implement: the gate evaluation and `gate_evidence` in `detect.py`, plus `unrecognised_stack`
-     computed independently of the gates.
+  3. Implement: the gate evaluation and `gate_evidence` in `detect.py`. `unrecognised_stack` is
+     **already done** — T2.2 computed it from `auto` alone per ADR-5, which is independent of
+     the gates by construction. Do not rework it; confirm it still holds once gates are live,
+     since the whole point of ADR-5's clause is that an open gate must not flip the flag.
   4. Validate: all 18 fixtures green — `python3 -m pytest tests/test_patterns_detect.py -q`
      reports `19 passed`, exit 0, the 18 comparisons plus the standalone corpus guard. Then
      `python3 -m pytest -q`. This task inherits **6 red fixtures** from T2.2 and its job is
@@ -183,11 +185,25 @@ written from the specification rather than from the implementation.
      `trap-06` (q2). It also replaces T2.2's all-`false` gate placeholder with real
      evaluation, so a fixture that was green on the placeholder and goes red here means the
      gate logic is wrong, not the fixture.
-  5. Success:
-     - [ ] Zero questions for the bare repository `[ref: PRD/F3 1st]`
-     - [ ] Never more than three gates open `[ref: PRD/F3 2nd]`
-     - [ ] A closed gate yields no question rather than a question answered "none" `[ref: PRD/F3 3rd]`
-     - [ ] An uncovered language with an architectural shape still opens Q2 `[ref: SDD/ADR-5]`
+  5. Success — restated 2026-10-04 to what this task's output can actually show. Two of the
+     four criteria were transcribed from PRD/F3 lines about **questions asked**, which is
+     C3's behaviour and T5.1's task; one of those could not fail at all, since there are
+     exactly three gate keys and `EXPECTED_GATE_KEYS` enforces them:
+     - [ ] The bare repository closes all three gates. "Zero questions" rests on that, but
+           the question count itself is T5.1's to show `[ref: PRD/F3 1st]`
+     - [ ] Every gate reported open carries non-empty `gate_evidence` whose paths resolve in
+           the fixture's `repo/` and avoid excluded directories; every gate reported closed
+           carries none. Asserted as invariants because no fixture declares `gate_evidence`
+           and the exact-key guard would reject one
+           `[ref: SDD/Interface Specifications/Data model: fixture expectation]`
+     - [ ] Q1 stays shut on a server framework that appears only in `devDependencies`
+           (trap 4), and Q2 opens on a content signal alone with Q1 shut (trap 6)
+     - [ ] An uncovered language with an architectural shape still opens Q2, and
+           `unrecognised_stack` stays true there `[ref: SDD/ADR-5]`
+
+     Moved to T5.1, where the behaviour actually lives: "no more than three questions, each
+     allowing multiple answers" `[ref: PRD/F3 2nd]` and "a closed gate yields no question
+     rather than a question answered 'none'" `[ref: PRD/F3 3rd]`.
 
 - [ ] **T2.4 The companion map, derived from the catalogue** `[activity: domain-modeling]`
 

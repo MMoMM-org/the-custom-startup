@@ -72,6 +72,14 @@ four passing test suites.
      test; walk the skill by hand against a fixture repository — green tests over skill Markdown
      have missed defects here before that a walkthrough found at step one.
   5. Success:
+     - [ ] No more than three questions in total, each allowing multiple answers — moved here
+           from T2.3 on 2026-10-04, where it had been transcribed as "never more than three
+           gates open" and could not fail: there are exactly three gate keys and the corpus
+           guard enforces them. The falsifiable form is about questions, which only this task
+           asks `[ref: PRD/F3 2nd]`
+     - [ ] A question whose gate is closed is skipped entirely, never asked and answered
+           "none" — also moved from T2.3, which builds gates in `detect.py` and asks nothing
+           `[ref: PRD/F3 3rd]`
      - [ ] Frontmatter parses; description is a routing contract `[ref: SDD/Quality Requirements]`
      - [ ] Proposal shows per-entry listing cost; baseline listed separately from recommendations `[ref: PRD/F2 4th, 5th; SDD/AC-16]`
      - [ ] Commit is offered and never performed unasked `[ref: PRD/F4 3rd, 4th; SDD/ADR-8]`
