@@ -39,13 +39,16 @@ except ImportError:  # pragma: no cover - exercised only on pre-3.11 runtimes
 # dependency manifests `[ref: SDD/Detection rules, "The walk excludes..."]`.
 SKIP_DIRS = {"node_modules", ".venv", "venv", "vendor"}
 
-# The three dependency-manifest filenames that get the nested, exclusion-aware
-# walk `[ref: SDD/Detection rules, "The walk excludes..."]`. `manifest.json`
-# (obsidian) and the python presence-only files (requirements.txt, setup.py)
-# are read too, but are not "dependency manifests" in this sense and do not
-# populate `manifests_walked` -- stated explicitly for manifest.json in the
-# SDD and extended here to the other presence-only files for the same reason.
-DEPENDENCY_MANIFEST_NAMES = ("package.json", "pyproject.toml", "go.mod")
+# Dependency-manifest filenames, walked at the nested, exclusion-aware depth
+# `[ref: SDD/Detection rules, "The walk excludes..."]`, and reported in
+# `manifests_walked` -- clarified on review: that field exists so "a missing
+# signal is explicable", and `requirements.txt` / `setup.py` are exactly the
+# files the mcp-server rule opens looking for `mcp`. Leaving them out would
+# make "contained no `mcp`" and "never found" indistinguishable to a reader
+# of the report, which is the one failure mode the field exists to prevent.
+# `manifest.json` (obsidian) stays out: it is not a dependency manifest at
+# all, which the SDD states as its own named exception.
+DEPENDENCY_MANIFEST_NAMES = ("package.json", "pyproject.toml", "go.mod", "requirements.txt", "setup.py")
 
 # python-project `[ref: SDD/Detection rules, row "python-project"]`: any .py
 # file AND one of these.
@@ -510,6 +513,34 @@ _AUTO_RULES = (
 )
 
 
+_MANIFEST_READERS = {
+    "package.json": _node_deps,
+    "pyproject.toml": _pyproject_deps_and_pytest,
+    "go.mod": _go_mod_requires,
+    "requirements.txt": _requirements_txt_deps,
+    "setup.py": _setup_py_deps,
+}
+
+
+def _manifests_walked(tree: "_Tree") -> list[str]:
+    """Every discovered instance of the five dependency-manifest filenames,
+    with its content actually opened (never only discovered by name) before
+    being reported -- independent of whether any individual rule's own
+    early-return would have skipped it. `mcp_server`'s scan over
+    `requirements.txt`, for instance, stops at the first match across
+    several instances; this still opens every one, so a repository with two
+    `requirements.txt` files never under-reports the one the rule never
+    reached. An unparseable manifest is skipped by its reader, never fatal,
+    and still appears here."""
+    walked = []
+    for name in DEPENDENCY_MANIFEST_NAMES:
+        reader = _MANIFEST_READERS[name]
+        for path in tree.files_named(name):
+            reader(path)
+            walked.append(tree.rel(path))
+    return sorted(walked)
+
+
 def detect(repo_dir) -> dict:
     """Scan `repo_dir` and return the detection report
     `[ref: SDD/Interface Specifications/Data model: detection report]`. Pure:
@@ -536,11 +567,7 @@ def detect(repo_dir) -> dict:
         entry["surface"] = False
         baseline.append(entry)
 
-    manifests_walked = sorted(
-        tree.rel(path)
-        for name in DEPENDENCY_MANIFEST_NAMES
-        for path in tree.files_named(name)
-    )
+    manifests_walked = _manifests_walked(tree)
 
     return {
         "schema": 1,

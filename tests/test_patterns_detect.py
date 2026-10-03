@@ -47,6 +47,7 @@ fixture would duplicate a constant and widen the exact-key shape guard in
 from __future__ import annotations
 
 import importlib
+import pathlib
 import sys
 from types import ModuleType
 
@@ -82,6 +83,37 @@ def test_corpus_is_not_empty_here_either() -> None:
     )
 
 
+EXCLUDED_SEGMENTS = frozenset({"node_modules", ".venv", "venv", "vendor"})
+
+
+def _evidence_problems(entry: dict, repo_dir) -> list[str]:
+    """The three `evidence` invariants, per SDD/Data model: fixture expectation.
+
+    `evidence` is asserted as an invariant rather than declared per fixture:
+    exact paths would add a key the corpus's exact-shape guard rejects and pin 18
+    fixtures to incidental strings. Nothing asserted `evidence` at all until this
+    was added -- a detector emitting `evidence: ""` satisfied every fixture while
+    failing T2.2's first success criterion, which is PRD/F2 1st.
+
+    Dependency evidence is formatted `"packages/server/package.json: dependencies.foo"`,
+    so the path is everything before the first ": ".
+    """
+    ev = entry.get("evidence", "")
+    problems: list[str] = []
+    if not isinstance(ev, str) or not ev.strip():
+        return ["%s: evidence is empty" % entry.get("pattern")]
+
+    path_part = ev.split(": ", 1)[0]
+    if not (pathlib.Path(repo_dir) / path_part).exists():
+        problems.append("%s: evidence path does not exist in repo/: %r"
+                        % (entry.get("pattern"), path_part))
+    hit = EXCLUDED_SEGMENTS.intersection(pathlib.PurePath(path_part).parts)
+    if hit:
+        problems.append("%s: evidence cites an excluded directory (%s): %r"
+                        % (entry.get("pattern"), ",".join(sorted(hit)), path_part))
+    return problems
+
+
 @pytest.mark.parametrize("fixture", discover_fixtures(), ids=_fixture_ids())
 def test_detector_matches_expected(fixture) -> None:
     """The normalised report must equal the fixture's declared verdict exactly -- an
@@ -100,5 +132,87 @@ def test_detector_matches_expected(fixture) -> None:
     assert report["unrecognised_stack"] == expected["unrecognised_stack"], fixture.name
     assert auto_names.isdisjoint(expected["must_not_propose"]), fixture.name
 
+    # The three `evidence` invariants. Accumulated so every bad entry reports,
+    # not just the first.
+    evidence_problems: list[str] = []
+    for entry in list(report["auto"]) + list(report["baseline"]):
+        evidence_problems.extend(_evidence_problems(entry, fixture.repo_dir))
+    assert not evidence_problems, (
+        "%s: evidence invariants violated:\n  %s"
+        % (fixture.name, "\n  ".join(evidence_problems))
+    )
+
     non_surfaced = [entry["pattern"] for entry in report["baseline"] if entry.get("surface") is not False]
     assert not non_surfaced, f"{fixture.name}: baseline entries not surface:false: {non_surfaced}"
+
+
+class _FakeDetectModule(ModuleType):
+    """A stand-in for the real `detect` module that returns one fixed report
+    regardless of `repo_dir` -- used only to mutation-test the evidence
+    invariants above, never to replace the real detector in the parametrized
+    comparison."""
+
+    def __init__(self, report: dict) -> None:
+        super().__init__("fake_detect_for_mutation_test")
+        self._report = report
+
+    def detect(self, repo_dir) -> dict:
+        return self._report
+
+
+def _honest_report(tmp_path: pathlib.Path) -> dict:
+    """A report over one real file, used as the mutation baseline that must
+    NOT trip any invariant below."""
+    (tmp_path / "tsconfig.json").write_text("{}", encoding="utf-8")
+    return {"auto": [{"pattern": "typescript-strict", "evidence": "tsconfig.json"}], "baseline": []}
+
+
+def _evidence_problems_via_fake_detector(monkeypatch, tmp_path, report: dict) -> list[str]:
+    """Feeds `report` through the exact same `_load_detect()` -> `.detect()`
+    -> `_evidence_problems` path `test_detector_matches_expected` uses above,
+    via a monkeypatched fake detector module. A mutant this path cannot catch
+    is a hole in the real test, not merely in a sibling helper never wired
+    into it `[ref: SDD/Data model: fixture expectation]`."""
+    monkeypatch.setattr(sys.modules[__name__], "_load_detect", lambda: _FakeDetectModule(report))
+    detect = _load_detect()
+    produced = detect.detect(tmp_path)
+    problems: list[str] = []
+    for entry in list(produced["auto"]) + list(produced["baseline"]):
+        problems.extend(_evidence_problems(entry, tmp_path))
+    return problems
+
+
+def test_evidence_invariant_accepts_an_honest_entry(tmp_path, monkeypatch) -> None:
+    """The baseline fed to every mutant below must itself pass, or the
+    mutants prove nothing."""
+    problems = _evidence_problems_via_fake_detector(monkeypatch, tmp_path, _honest_report(tmp_path))
+    assert problems == []
+
+
+def test_evidence_invariant_catches_empty_evidence(tmp_path, monkeypatch) -> None:
+    """Invariant 1: a non-empty `evidence` string."""
+    report = _honest_report(tmp_path)
+    report["auto"][0]["evidence"] = ""
+    problems = _evidence_problems_via_fake_detector(monkeypatch, tmp_path, report)
+    assert problems and "evidence is empty" in problems[0]
+
+
+def test_evidence_invariant_catches_a_missing_path(tmp_path, monkeypatch) -> None:
+    """Invariant 2: the path part resolves to a file that exists inside the
+    repo."""
+    report = _honest_report(tmp_path)
+    report["auto"][0]["evidence"] = "does-not-exist.json"
+    problems = _evidence_problems_via_fake_detector(monkeypatch, tmp_path, report)
+    assert problems and "does not exist" in problems[0]
+
+
+def test_evidence_invariant_catches_an_excluded_directory(tmp_path, monkeypatch) -> None:
+    """Invariant 3: the path is not under an excluded directory -- trap 5
+    reintroduced, caught even though the file genuinely exists there."""
+    decoy_dir = tmp_path / "vendor" / "x"
+    decoy_dir.mkdir(parents=True)
+    (decoy_dir / "tsconfig.json").write_text("{}", encoding="utf-8")
+    report = _honest_report(tmp_path)
+    report["auto"][0]["evidence"] = "vendor/x/tsconfig.json"
+    problems = _evidence_problems_via_fake_detector(monkeypatch, tmp_path, report)
+    assert problems and "excluded directory" in problems[0]
