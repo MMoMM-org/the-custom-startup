@@ -131,7 +131,23 @@ written from the specification rather than from the implementation.
   3. Implement: `plugins/tcs-patterns/skills/patterns-setup/lib/detect.py` — the manifest walk, the
      runtime-dependency reader, the eight rules, and `evidence` naming the concrete file or
      dependency for every proposal. An unparseable manifest is skipped, never fatal.
-  4. Validate: those fixtures green; `python3 -m pytest -q` for the full leg.
+  4. Validate: **12 of the 18 fixtures green, 6 still red** — `python3 -m pytest tests/test_patterns_detect.py -q` reports `12 passed, 6 failed` plus the standalone corpus
+     guard, so `13 passed, 6 failed`, exit 1. Then `python3 -m pytest -q` for the full leg.
+
+     **Not "those fixtures green", which this task cannot achieve.** The detection test
+     asserts `report["gates"] == expected["gates"]`, so a fixture with any gate open stays
+     red until T2.3 evaluates gates — including three this task's own Test step names:
+     `auto-testing-baseline` and `trap-02` (q3), and `trap-03` (q1 and q2). Counted against
+     the corpus, not estimated: 12 of the 18 fixtures have all three gates closed and are
+     reachable here; the 6 that are not are `auto-testing-baseline`,
+     `edge-unrecognised-stack-with-tests`, `trap-01`, `trap-02` (q3), `trap-03` (q1+q2) and
+     `trap-06` (q2).
+
+     This task must still **emit** the `gates` key or every fixture fails on a missing key.
+     Emit all three as `false` — an honest placeholder that T2.3 replaces with real
+     evaluation, not a rule. `unrecognised_stack` is different and belongs here: it is
+     derived from `auto` alone `[ref: SDD/Architecture Decisions/ADR-5]`, so this task can
+     and must compute it correctly.
   5. Success:
      - [ ] Every auto proposal carries the file or dependency that justified it `[ref: PRD/F2 1st]`
      - [ ] Traps 2, 3, 4, 5 and 7 each have a passing fixture that fails if the trap returns `[ref: SDD/Quality Requirements]`
@@ -153,7 +169,14 @@ written from the specification rather than from the implementation.
      Q2 and auto-proposes nothing.
   3. Implement: the gate evaluation and `gate_evidence` in `detect.py`, plus `unrecognised_stack`
      computed independently of the gates.
-  4. Validate: all 18 fixtures green; `python3 -m pytest -q`.
+  4. Validate: all 18 fixtures green — `python3 -m pytest tests/test_patterns_detect.py -q`
+     reports `19 passed`, exit 0, the 18 comparisons plus the standalone corpus guard. Then
+     `python3 -m pytest -q`. This task inherits **6 red fixtures** from T2.2 and its job is
+     to turn exactly those green: `auto-testing-baseline`,
+     `edge-unrecognised-stack-with-tests`, `trap-01` and `trap-02` (q3), `trap-03` (q1+q2),
+     `trap-06` (q2). It also replaces T2.2's all-`false` gate placeholder with real
+     evaluation, so a fixture that was green on the placeholder and goes red here means the
+     gate logic is wrong, not the fixture.
   5. Success:
      - [ ] Zero questions for the bare repository `[ref: PRD/F3 1st]`
      - [ ] Never more than three gates open `[ref: PRD/F3 2nd]`
