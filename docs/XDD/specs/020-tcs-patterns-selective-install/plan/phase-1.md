@@ -172,8 +172,15 @@ contract that keeps a distributed copy detectably stale rather than silently sta
      the pattern is self-contained once copied into a consumer repository.
   4. Validate: `python3 -m pytest -q`; the new link test fails if any escaping path is reintroduced.
   5. Success:
-     - [ ] No reference escapes its own pattern directory `[ref: PRD/F1 3rd]`
-     - [ ] Every remaining relative link resolves to an existing file `[ref: PRD/F1 3rd]`
+     - [ ] No markdown link, and no code-span path beginning `../`, escapes its own pattern
+           directory `[ref: PRD/F1 3rd]`
+     - [ ] Every markdown link, and every code-span path beginning `../`, resolves to a file that
+           exists `[ref: PRD/F1 3rd]`
+     - [ ] A bare code-span path is **not** treated as a link, and the reason is recorded in the
+           test module — measured over the catalogue, 188 file-like paths appear in code spans:
+           80 resolve from the containing file, 39 from the pattern root, 69 from neither, and the
+           69 include MIME types, URL schemes, GitHub slugs and illustrative consumer paths. One
+           syntax carries six meanings and no mechanical rule separates them `[ref: SDD/Risks]`
      - [ ] The set of patterns carrying a `reference/references.md` is unchanged — exactly
            `observability` and `event-sourcing`, none under `hexagonal/` or `ddd/` — and no
            existing `references.md` gained a line `[ref: SDD/Risks]`
