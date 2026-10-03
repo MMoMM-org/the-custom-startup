@@ -513,31 +513,21 @@ _AUTO_RULES = (
 )
 
 
-_MANIFEST_READERS = {
-    "package.json": _node_deps,
-    "pyproject.toml": _pyproject_deps_and_pytest,
-    "go.mod": _go_mod_requires,
-    "requirements.txt": _requirements_txt_deps,
-    "setup.py": _setup_py_deps,
-}
-
-
 def _manifests_walked(tree: "_Tree") -> list[str]:
-    """Every discovered instance of the five dependency-manifest filenames,
-    with its content actually opened (never only discovered by name) before
-    being reported -- independent of whether any individual rule's own
-    early-return would have skipped it. `mcp_server`'s scan over
-    `requirements.txt`, for instance, stops at the first match across
-    several instances; this still opens every one, so a repository with two
-    `requirements.txt` files never under-reports the one the rule never
-    reached. An unparseable manifest is skipped by its reader, never fatal,
-    and still appears here."""
-    walked = []
-    for name in DEPENDENCY_MANIFEST_NAMES:
-        reader = _MANIFEST_READERS[name]
-        for path in tree.files_named(name):
-            reader(path)
-            walked.append(tree.rel(path))
+    """Every discovered instance of the five dependency-manifest filenames
+    `[ref: SDD/Detection rules, "The walk excludes..."]`, named by filename
+    alone -- this function does not open any of them itself. `manifests_walked`
+    exists so that a stack fact's absence is explicable as "this file does
+    not carry it" rather than "this file was never found"; naming every
+    discovered instance is sufficient for that job regardless of whether any
+    particular rule above went on to read its content (a rule may
+    short-circuit once it finds a match, e.g. `_rule_mcp_server` returning
+    before it reaches a later manifest type). A second, discarded read here
+    to force every instance "actually opened" would only add a crash
+    surface this module does not otherwise have: today's five readers
+    swallow their own parse errors, but a call whose result nobody checks
+    does not."""
+    walked = [tree.rel(path) for name in DEPENDENCY_MANIFEST_NAMES for path in tree.files_named(name)]
     return sorted(walked)
 
 

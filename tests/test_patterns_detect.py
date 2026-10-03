@@ -114,6 +114,36 @@ def _evidence_problems(entry: dict, repo_dir) -> list[str]:
     return problems
 
 
+# Deliberately duplicated from detect.py's own `DEPENDENCY_MANIFEST_NAMES`,
+# not imported: this is the one constant where importing it would defeat the
+# whole point of the invariant below. If `detect.py`'s set is ever narrowed
+# back to the original three names, this hardcoded copy must NOT move with
+# it -- that is what makes the completeness check below able to fail at all,
+# rather than silently re-deriving "whatever detect.py currently walks" and
+# always agreeing with it by construction.
+EXPECTED_MANIFEST_NAMES = frozenset({"package.json", "pyproject.toml", "go.mod", "requirements.txt", "setup.py"})
+
+
+def _expected_manifests_walked(repo_dir) -> list[str]:
+    """Every file under `repo_dir` whose basename is a dependency-manifest
+    name, computed independently of `detect.py` by walking the fixture tree
+    directly, excluding any path with a segment in `EXCLUDED_SEGMENTS`.
+    `manifests_walked` exists so that a missing signal is explicable
+    (SDD/Detection rules), and that job is satisfied exactly by this set --
+    every such manifest that exists and was not excluded, named relative to
+    `repo_dir`."""
+    root = pathlib.Path(repo_dir)
+    found = []
+    for path in root.rglob("*"):
+        if not path.is_file() or path.name not in EXPECTED_MANIFEST_NAMES:
+            continue
+        rel = path.relative_to(root)
+        if EXCLUDED_SEGMENTS.intersection(rel.parts):
+            continue
+        found.append(rel.as_posix())
+    return sorted(found)
+
+
 @pytest.mark.parametrize("fixture", discover_fixtures(), ids=_fixture_ids())
 def test_detector_matches_expected(fixture) -> None:
     """The normalised report must equal the fixture's declared verdict exactly -- an
@@ -131,6 +161,11 @@ def test_detector_matches_expected(fixture) -> None:
     assert report["gates"] == expected["gates"], fixture.name
     assert report["unrecognised_stack"] == expected["unrecognised_stack"], fixture.name
     assert auto_names.isdisjoint(expected["must_not_propose"]), fixture.name
+
+    # manifests_walked completeness invariant: not per-fixture data (no
+    # expected.json mentions it), asserted universally instead, against a
+    # set of names this file owns independently of detect.py.
+    assert report["manifests_walked"] == _expected_manifests_walked(fixture.repo_dir), fixture.name
 
     # The three `evidence` invariants. Accumulated so every bad entry reports,
     # not just the first.
@@ -245,7 +280,12 @@ def test_the_evidence_and_surface_assertions_are_wired_into_the_real_test(monkey
                          for p in expected["baseline"]],
             "gates": expected["gates"],
             "unrecognised_stack": expected["unrecognised_stack"],
-            "manifests_walked": [],
+            # Not `[]`: this fixture genuinely has a `requirements.txt`, and
+            # the manifests_walked completeness invariant (added after this
+            # control was first written) now holds the "everything correct"
+            # control to that too -- reusing the same independent
+            # computation the invariant itself checks against.
+            "manifests_walked": _expected_manifests_walked(fixture.repo_dir),
         }
 
     honest = "requirements.txt"
