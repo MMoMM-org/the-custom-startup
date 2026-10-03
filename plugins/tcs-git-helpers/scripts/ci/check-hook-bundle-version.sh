@@ -21,6 +21,14 @@
 #     force a marker bump. The marker lives in a different directory from
 #     the sources it gates.
 #
+# Extended again in spec-020 T1.4 for the per-pattern rule below: each
+# pattern under plugins/tcs-patterns/templates/patterns/<name>/ owns its own
+# VERSION marker, so a single bundle-table row (one marker) cannot gate all
+# of them — bumping ANY one pattern's VERSION would satisfy the row no
+# matter which pattern's files actually changed. The pattern names are
+# derived from the diff itself and check_bundle is invoked once per changed
+# pattern, each call scoped to that pattern's own marker.
+#
 # Usage:
 #   check-hook-bundle-version.sh [<diff-range>] [<repo-path>]
 #
@@ -141,5 +149,26 @@ while IFS='|' read -r bundle_sources_dir bundle_marker_file bundle_glob; do
 done <<BUNDLES_EOF
 $BUNDLES
 BUNDLES_EOF
+
+# ---------------------------------------------------------------------------
+# Per-pattern check (spec-020 T1.4): each pattern under
+# plugins/tcs-patterns/templates/patterns/<name>/ owns its own VERSION file.
+# One bundle-table row keyed to a single marker cannot gate this — bumping
+# ANY pattern's VERSION would satisfy the row no matter which pattern's
+# files actually changed (ADR-9). So the names are read from the diff
+# itself (a pattern added in the same changeset is gated too, with nobody
+# needing to register it), and check_bundle is called once per changed
+# pattern, each with its OWN marker.
+# ---------------------------------------------------------------------------
+
+changed_patterns="$(printf '%s\n' "$changed_paths" \
+  | sed -n 's|^plugins/tcs-patterns/templates/patterns/\([^/]*\)/.*|\1|p' \
+  | sort -u)"
+
+for pattern_name in $changed_patterns; do
+  check_bundle "plugins/tcs-patterns/templates/patterns/$pattern_name" \
+               "plugins/tcs-patterns/templates/patterns/$pattern_name/VERSION" \
+               '*'
+done
 
 exit "$overall_fail"
