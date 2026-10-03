@@ -149,7 +149,13 @@ written from the specification rather than from the implementation.
      derived from `auto` alone `[ref: SDD/Architecture Decisions/ADR-5]`, so this task can
      and must compute it correctly.
   5. Success:
-     - [ ] Every auto proposal carries the file or dependency that justified it `[ref: PRD/F2 1st]`
+     - [ ] Every auto and baseline proposal carries `evidence` naming the file or dependency
+           that justified it, asserted as three invariants in the detection test rather than
+           declared per fixture: non-empty; its path part resolves to a file that exists in
+           the fixture's `repo/`; and that path is not under `node_modules`, `.venv`, `venv`
+           or `vendor`. Nothing asserted `evidence` before 2026-10-03, so a detector emitting
+           `evidence: ""` satisfied all 18 fixtures while failing this criterion
+           `[ref: PRD/F2 1st; SDD/Interface Specifications/Data model: fixture expectation]`
      - [ ] Traps 2, 3, 4, 5 and 7 each have a passing fixture that fails if the trap returns `[ref: SDD/Quality Requirements]`
      - [ ] `testing` is reported in `baseline` with `surface: false`, never as a recommendation `[ref: PRD/F2 5th; trap 1]`
 

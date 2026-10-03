@@ -632,6 +632,27 @@ the user as a recommendation, which is exactly the trap. That would violate
 trap is reintroduced". Found by the T2.1 spec-compliance review on 2026-10-03: the trap-1 fixture
 says "must report as baseline with surface:false" in its `why` and had no means to check it.
 
+**`evidence` is the same shape of problem, and the same shape of answer.** Every `auto` and
+`baseline` entry in the report carries `evidence` naming the file or dependency that justified
+it `[ref: PRD/F2 1st]`, and it is T2.2's first success criterion — but `expected.json` has no
+`evidence` key either, and the detection test does not compare one, so a detector emitting
+`evidence: ""` satisfies all 18 fixtures while failing the criterion outright. Declaring exact
+paths per fixture would be the wrong fix: it adds a key the exact-key guard rejects, and it
+pins 18 fixtures to incidental path strings.
+
+Assert it as three universal invariants instead, in the detection test:
+
+1. every `auto` and `baseline` entry has a non-empty `evidence` string;
+2. its path part — everything before the first `": "`, since dependency evidence is formatted
+   `"packages/server/package.json: dependencies.foo"` — resolves to a file that **exists**
+   inside that fixture's `repo/`;
+3. that path is **not** under `node_modules`, `.venv`, `venv` or `vendor`.
+
+The third invariant is the one with teeth: it fails any detector that reads a vendored tree and
+cites it, which is trap 5 reintroduced, and it does so for every fixture rather than only the
+two that plant decoys there. None of the three needs per-case data, so the fixture contract is
+unchanged.
+
 The trap numbers used in `why` are defined in **The seven traps, numbered** under Quality
 Requirements. Use those numbers; do not renumber them.
 
