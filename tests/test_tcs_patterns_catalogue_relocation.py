@@ -14,6 +14,21 @@ T1.3, not this file, repairs the dangling `REFERENCES.md` citations (there is no
 this repository; nothing to move). T1.2's `VERSION` files and the frontmatter `name:` rewrite
 (a later, install-time phase) are both out of scope here -- this task moves bytes and nothing
 else; it must not change any file's content.
+
+Rename purity (PRD/F1 4th -- every file a 100%-similarity rename, not a delete+add pair that
+would sever `git log --follow`) is NOT asserted below as a standing test. It was verified once,
+at migration time, and cannot be re-asserted from a clean checkout: `git diff --name-status -M
+HEAD` compares the working tree against HEAD, which is empty on any tree with nothing pending --
+true the instant the move was made and uncommitted, false one commit later, and false forever
+after on a fresh clone or in CI, since there is no state a committed tree can be in where a
+pending rename exists to see. The branch this shipped on is squash-merged, so pinning the
+assertion to a parent commit or SHA does not survive either. Verified directly instead, and
+recorded here because the evidence does not survive as a runnable assertion:
+commit 2a5f192 ("refactor(tcs-patterns): relocate 21 pattern skills to templates/patterns
+catalogue") shows `git diff --name-status -M HEAD~1 HEAD` reporting all 80 moved files as
+`R100`, and `git diff --cached --stat -M` at the time of that commit reported
+"80 files changed, 0 insertions(+), 0 deletions(-)" -- zero content changed across every one of
+them.
 """
 
 from __future__ import annotations
@@ -100,26 +115,6 @@ def test_old_skills_location_has_no_pattern_left() -> None:
     half-move, not a move."""
     remaining = {p.name for p in OLD_SKILLS_DIR.iterdir() if p.is_dir()} if OLD_SKILLS_DIR.is_dir() else set()
     assert not (remaining & PATTERN_NAMES)
-
-
-def test_git_recognizes_all_80_files_as_pure_renames() -> None:
-    """`git mv` must produce a 100%-similarity rename for every file -- not a delete+add pair,
-    which would sever `git log --follow` (PRD/F1 4th)."""
-    result = subprocess.run(
-        ["git", "diff", "--name-status", "-M", "HEAD"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    pattern_renames = [
-        line
-        for line in result.stdout.splitlines()
-        if line.startswith("R100\t")
-        and "/tcs-patterns/skills/" in line
-        and "/tcs-patterns/templates/patterns/" in line
-    ]
-    assert len(pattern_renames) == 80
 
 
 def test_all_21_frontmatter_blocks_still_parse_as_yaml() -> None:
