@@ -496,6 +496,9 @@ unexpected extra proposal fails just as loudly as a missing one.
 fixture, so a future reader sees what the case is defending and a careless widening of `auto` fails
 with a message that explains itself.
 
+The trap numbers used in `why` are defined in **The seven traps, numbered** under Quality
+Requirements. Use those numbers; do not renumber them.
+
 #### Process contract: drift reporter (C7)
 
 `patterns_drift.py <repo>` prints zero or more lines and exits 0 regardless — the caller decides
@@ -974,7 +977,7 @@ single contract across two places, which is worse.
 | Quality | Requirement | How it is measured |
 |---|---|---|
 | Listing footprint | `tcs-patterns` contributes at most 2 skill descriptions to a session | `python3 scripts/observability/report.py` reports the plugin's skills; a session's listing confirms |
-| Relocation fidelity | every pattern file is a rename with unchanged content | `git log --follow` survives, and `git diff -M --summary` reports R100 for all 80 files |
+| Relocation fidelity | every pattern file is a rename with unchanged content | `git log --follow` survives, and `git diff -M --name-status` reports `R100` for all 80 files. Not `--summary`, which renders a rename as ` rename a/b (100%)` and never emits the token `R100` -- measured 0 matches against 80. Verified at the T1.1 commit, where the claim is still meaningful; against `HEAD` it reads 0 forever |
 | Interaction cost | zero questions for a repository with no server framework and no test framework; never more than three | the fixture suite asserts `gates` for those cases |
 | Detection correctness | every fixture classified exactly as declared, extra proposals failing as loudly as missing ones | `pytest tests/test_patterns_detect.py`, normalised-report equality |
 | Trap coverage | all seven traps have a fixture that fails if the trap is reintroduced | one fixture per trap, each naming it in `why` and `must_not_propose` |
@@ -985,9 +988,31 @@ single contract across two places, which is worse.
 | Advisory precision | a changed pattern raises an advisory only where installed, and in every such repository | drift test over a manifest holding a subset |
 | Portability | all new Python runs on macOS and Linux; the two shell edits stay bash 3.2 and shellcheck-clean | CI runs both platforms per leg, read per leg and not from the run verdict |
 
+#### The seven traps, numbered
+
+This document refers to a trap by number **13 times across 12 lines**, citing traps 1 through 6
+and never 7, and T2.1 requires one fixture per trap naming it in `why`. Until now the numbering
+existed only as the order of a prose sentence in `[ref: PRD/Supporting Research]` -- narrative,
+not contract -- so trap 7 was recoverable only by elimination. The order below is
+the one already in use -- it was checked against every existing numeric reference in this document
+before being written down, not chosen.
+
+| # | Trap | What must not happen | The rule that defends it |
+|---|---|---|---|
+| 1 | A near-universal signal with no discriminating power | `testing` presented as a recommendation | detected, but `baseline` with `surface: false` |
+| 2 | UI testing inferred from a directory name | `frontend-testing` or `react-testing` firing on a `ui/` directory, or on jsdom alone | require render evidence: `render(`, `screen.`, `fireEvent`, `userEvent` |
+| 3 | Federated identity inferred from session tooling | `secure-oauth-oidc` firing on jwt / bcrypt / pyjwt | require an AS/client/RP library, or `.well-known`, or `redirect_uri` + `client_id` |
+| 4 | A development dependency read as a runtime one | a server framework present only to drive a test harness opening Q1 | server frameworks count only from `dependencies` |
+| 5 | A workspace root whose manifest declares nothing | the real signal three levels down being missed, or a vendored tree being read as source | walk nested manifests, excluding `node_modules`, `.venv`, `venv`, `vendor` |
+| 6 | Architecture that is routinely hand-rolled | `event-driven` or `event-sourcing` auto-proposed, or false-negatived by manifest-only detection | content signals gate Q2 only; never auto-propose |
+| 7 | A virtual-environment check that knows one spelling | `venv` recognised and `.venv` missed, or the reverse | both directory names tested |
+
+Trap 1 is the only one that changes a report *field* rather than suppressing a proposal, which is
+why it appears in the detection-report contract above and not only here.
+
 ## Acceptance Criteria
 
-System-level and **group-level, not 1:1**: 17 criteria here cover the PRD's 36. Every one of the
+System-level and **group-level, not 1:1**: 18 criteria here cover the PRD's 36. Every one of the
 ten Must features is traced, which was verified mechanically rather than by
 eye. Three PRD criteria had no counterpart on the first pass — the per-entry listing cost and the
 baseline-not-surfaced rule from F2, and the "a second party can determine currency" rule from F6 —
