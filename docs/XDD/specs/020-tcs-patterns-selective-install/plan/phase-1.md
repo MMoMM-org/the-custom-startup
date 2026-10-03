@@ -48,21 +48,35 @@ contract that keeps a distributed copy detectably stale rather than silently sta
      files and nothing else — in particular there is **no** `skills/REFERENCES.md`. Three citations
      point at one; it has never existed in this repository (`git log --diff-filter=ADR --all --
      '*REFERENCES.md'` returns nothing), so there is nothing to move and T1.3 owns the repair.
-  2. Test: Assert the inventory walk reports 0 unreachable skill files under
-     `plugins/tcs-patterns/` and 21 catalogue entries; assert `git diff -M --summary` reports a
-     rename for every one of the 80 files; assert all 21 frontmatter blocks still parse with a YAML
-     parser. The last one is not paranoia — ten skill descriptions in this repository once stopped
-     parsing while `claude plugin validate` passed over all ten.
+  2. Test: Assert the numbers that actually move. The pre-move baseline, measured 2026-10-03, is
+     **98 inventory entries (80 skills, 18 agents)**, of which exactly 21 are `tcs-patterns` skills,
+     and **810 passed / 1 skipped / 1 deselected** on the pytest leg. After the move the inventory
+     must read **77 entries (59 skills, 18 agents)** with no `tcs-patterns:` skill left in the list,
+     and the pytest leg must be unchanged. Assert directly against the tree that
+     `templates/patterns/` holds 21 `SKILL.md` files and 80 tracked files in total, because
+     `report.py` globs `plugins/*/skills/*/SKILL.md` one level deep and cannot see a catalogue at
+     all. Assert `git diff -M --summary` reports a rename for every one of the 80 files. Assert all
+     21 frontmatter blocks still parse with a YAML parser — not paranoia: ten skill descriptions in
+     this repository once stopped parsing while `claude plugin validate` passed over all ten.
+
+     The report's "Unreachable skill files" section is **already empty** today, so treat it as a
+     regression guard and never as evidence the move worked. A criterion whose value is identical
+     before and after the change cannot distinguish success from doing nothing.
   3. Implement: `git mv plugins/tcs-patterns/skills/<name> plugins/tcs-patterns/templates/patterns/<name>`
      for all 21. That is the whole move; there is no loose file beside the 21 directories. Move
      **directories**, not files, so each subtree travels in one rename and `git log --follow`
      survives. Confirm no `.gitkeep` or hidden file is left behind before relying on git not
      tracking empty directories — verified none on 2026-10-03, so a hit means something changed.
-  4. Validate: `python3 scripts/observability/report.py`; `git diff -M --summary | grep -c R100`;
-     `python3 -m pytest -q` unchanged from baseline.
+  4. Validate: `python3 scripts/observability/report.py` and read the `entries found` line;
+     `git diff -M --summary | grep -c R100`; `python3 -m pytest -q` against the baseline above. Do
+     not use `claude plugin details` — it resolves the installed cache copy and cannot see this
+     change.
   5. Success:
      - [ ] All 80 files reported as renames at 100% similarity `[ref: PRD/F1 4th]`
-     - [ ] Inventory walk shows 21 catalogue entries, 0 unreachable skill files `[ref: PRD/F1 2nd]`
+     - [ ] Inventory walk falls from 98 entries to 77, with no `tcs-patterns:` skill remaining, and
+           `templates/patterns/` holds 21 `SKILL.md` and 80 tracked files `[ref: PRD/F1 2nd]`
+     - [ ] The report's unreachable list stays empty — a guard, not evidence, since it was already
+           empty `[ref: SDD/Quality Requirements]`
      - [ ] No test moves. If one does, the premise that nothing reads the real tree was wrong —
            stop and investigate rather than updating the test `[ref: SDD/Quality Requirements]`
 
@@ -151,8 +165,8 @@ contract that keeps a distributed copy detectably stale rather than silently sta
 
 - [ ] **T1.5 Phase validation** `[activity: validate]`
 
-  Run both legs: `python3 -m pytest -q` and the bats suites, reporting each leg's numbers
-  separately rather than an aggregate. Run `claude plugin validate plugins/tcs-patterns` as a smoke
+  Run both legs: `python3 -m pytest -q` (baseline 810 passed, 1 skipped, 1 deselected) and the
+  bats suites, reporting each leg's numbers separately rather than an aggregate. Run `claude plugin validate plugins/tcs-patterns` as a smoke
   test only — it validated the broken layout cleanly in a previous spec and proves nothing about
   discovery. Verify the relocation with `python3 scripts/observability/report.py`, which reads the
   working tree; do **not** use `claude plugin details`, which resolves the installed cache copy and

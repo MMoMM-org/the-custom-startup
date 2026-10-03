@@ -939,7 +939,7 @@ standing for two or three PRD criteria that assert the same behaviour from diffe
 
 | # | Criterion | PRD trace |
 |---|---|---|
-| AC-1 | After the relocation, a session's listing contains at most 2 `tcs-patterns` descriptions, and the inventory walk reports 21 catalogue entries and 0 unreachable skill files | F1 |
+| AC-1 | After the relocation, a session's listing contains at most 2 `tcs-patterns` descriptions; the inventory walk falls from 98 entries to 77 with no `tcs-patterns` skill remaining, and `templates/patterns/` holds 21 `SKILL.md` files checked directly against the tree | F1 |
 | AC-2 | All 80 pattern files are reported by git as renames at 100% similarity; no file cites a path above its own pattern directory, and every remaining relative link resolves | F1 |
 | AC-3 | For every detection fixture, the normalised report equals `expected.json` exactly | F2, F3 |
 | AC-4 | A fixture with a populated `node_modules` and an empty root `dependencies` still finds the nested signal, and does not report anything from the vendored tree | F2, trap 5 |
