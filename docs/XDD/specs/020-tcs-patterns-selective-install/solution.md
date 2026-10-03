@@ -439,7 +439,10 @@ Three fields carry design decisions rather than data:
 - `gates` is a decision about *whether to ask*, never about what to install. No pattern is ever
   installed because a gate opened.
 - `unrecognised_stack` is distinct from all gates being false (ADR-5). A repository can have an
-  unrecognised language and still reach Q2 through a content signal.
+  unrecognised language and still reach Q2 through a content signal. It is computed from `auto`
+  **alone** — a `baseline` entry does not make a stack recognised, because `testing` is a stack
+  fact with near-zero discriminating power and must not flip the headline state (ADR-5, *Which
+  set the flag reads*).
 
 #### Detection rules: the eight stack facts and the three gates (C2)
 
@@ -957,9 +960,23 @@ applicable" are different states: architectural intent is language-independent, 
 recognised language would deny patterns to exactly the repositories whose architecture is
 deliberate. Separating the two states is the point of the flag existing at all.
 
+**Which set the flag reads — decided 2026-10-03.** `unrecognised_stack` is computed from `auto`
+alone. `baseline` is ignored. This matters because `testing` is one of the eight stack facts and
+would otherwise make almost any repository "recognised": trap 1 exists precisely because
+`testing` fires in nearly every repository with a test suite and therefore tells the user
+nothing. A signal declared non-discriminating must not flip the headline state either, or adding
+one test file to a desktop application in an uncovered language changes the message from "nothing
+here fits your stack" to "recognised" while the proposal stays empty. It also keeps AC-4
+satisfiable: `auto: []` with `unrecognised_stack: true` is reachable for any uncovered stack,
+with or without tests, so the true-negative fixture does not have to be artificially testless.
+The validated set's uncovered stack was a desktop application whose test situation the study
+never recorded, which is how the ambiguity survived into the plan.
+
 **Trade-offs accepted.** A user in an unsupported stack may see a question and then a short
 proposal, which can read as the tool straining to be useful. The alternative — silence — denies a
-real case.
+real case. With the clause above, such a user may also see `baseline: [testing]` reported
+alongside `unrecognised_stack: true`; those two are consistent, not contradictory, and C3 words
+the message from the flag.
 
 ### ADR-6: Manifest at `.claude/skills/.tcs-patterns-manifest` — CONFIRMED
 

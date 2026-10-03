@@ -61,13 +61,34 @@ written from the specification rather than from the implementation.
      rule for this step to read.
   2. Test: The loader itself is tested first: every fixture directory contains `repo/` and
      `expected.json`; every `expected.json` validates against the declared shape; every pattern
-     named anywhere in any fixture is one of the 21. A typo in a fixture must fail loudly rather
-     than quietly assert nothing.
+     named anywhere in any fixture is one of the 21 read from the catalogue, not hardcoded. A typo
+     in a fixture must fail loudly rather than quietly assert nothing.
+
+     **Three guards are mandatory, because "fail loudly" does not happen by default.** Measured
+     on 2026-10-03, same pytest as the repo baseline:
+
+     - a bare `for p in corpus.glob(...)` loop over an **empty** corpus reports `1 passed` —
+       the body never runs and the test asserts nothing;
+     - `@pytest.mark.parametrize` over that same empty glob reports `1 skipped`, **exit 0**,
+       with `got empty parameter set` — a green suite containing zero cases, which is worse,
+       because T2.1's own validate step reads "every case collected";
+     - a module-level `ImportError` reports `ERROR collecting` and **exit 2**, distinguishable
+       from exit 1.
+
+     So: (1) assert the corpus size in a **standalone, non-parametrized** test —
+     `assert len(fixtures) == 18` — never only as a parametrize source, or an empty corpus
+     passes; (2) assert `repo/` and `expected.json` exist per fixture before validating either;
+     (3) accumulate every validation failure and assert once at the end, so eight bad pattern
+     names report as eight and not as the first one.
   3. Implement: `tests/fixtures/patterns-detection/<case>/` with `repo/` and `expected.json`.
      Cases required:
      - one per auto rule (8)
      - one per trap (7), each naming the trap in `why` and listing `must_not_propose`
-     - one true-negative: a stack none of the 21 cover, `auto: []`, `unrecognised_stack: true`
+     - one true-negative: a stack none of the 21 cover, `auto: []`, `unrecognised_stack: true`.
+       It may carry tests: `unrecognised_stack` reads `auto` alone, so `baseline: ["testing"]`
+       alongside `unrecognised_stack: true` is the correct, consistent verdict and the fixture
+       must not be made artificially testless to reach it
+       `[ref: SDD/Architecture Decisions/ADR-5]`
      - one monorepo: empty root `dependencies`, the real signal three levels down, **and a
        populated `node_modules`** so the exclusion is asserted rather than assumed
      - one bare repository: no server framework, no tests — all gates closed, zero questions
