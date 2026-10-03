@@ -39,7 +39,7 @@ version: "1.0"
 | title | tcs-patterns selective install |
 | status | IN_REVIEW |
 | clarificationsRemaining | 0 |
-| acceptanceCriteria | 36 (34 across the nine Must features, 2 for the Should-Have catalogue entry) |
+| acceptanceCriteria | 36 across the ten Must features |
 
 ### SectionStatus
 
@@ -48,7 +48,7 @@ version: "1.0"
 | Product Overview | COMPLETE | |
 | User Personas | COMPLETE | Three personas, each with a journey |
 | User Journey Maps | COMPLETE | Four journeys including the error path |
-| Feature Requirements | COMPLETE | 9 Must, 3 Should, 2 Could, 4 Won't |
+| Feature Requirements | COMPLETE | 10 Must, 2 Should, 2 Could, 4 Won't |
 | Detailed Feature Specifications | COMPLETE | Scan and propose, the most complex feature |
 | Success Metrics | COMPLETE | Five KPIs, all measurable without new instrumentation |
 | Constraints and Assumptions | COMPLETE | |
@@ -325,16 +325,23 @@ their say.
   - [ ] Given a change that touches no pattern file, When it is proposed for merge, Then the gate
         does not apply.
 
-### Should Have Features
+#### Feature 10: Consult a pattern without installing it
 
-- **Consulting a pattern without installing it.** A single catalogue entry that serves any of the
-  21 bodies on request. Significantly improves the experience for the "one look at it" case and
-  preserves what the old all-21 install made possible, at one description's cost instead of 21.
-  Not critical: without it the patterns remain readable in the plugin's own files.
+- **User Story:** As a repository owner, I want any of the 21 patterns served to me on request
+  without installing it, so that moving the bodies out of the listing does not take away the
+  ad-hoc access that shipping all 21 gave me.
+- **Why this is a Must and not a Should:** before this change, 21 pattern names are typable in
+  every repository. After it, none are, and the only route to a body is to install it — which is
+  exactly the thing a reader who wants one look does not want to do. Without this entry the
+  relocation is a net loss of capability for that case, at one description's cost instead of 21.
+- **Acceptance Criteria:**
   - [ ] Given a pattern is named, When it is requested through the catalogue, Then its full body is
         returned without anything being written to the repository.
   - [ ] Given a name that is not one of the 21, When it is requested, Then the available names are
         listed rather than a silent empty result.
+
+### Should Have Features
+
 - **Removing a pattern.** Taking a pattern back out, with its record entry, in one step rather than
   by hand.
 - **Non-interactive update.** The update path usable without prompts, for a maintainer sweeping

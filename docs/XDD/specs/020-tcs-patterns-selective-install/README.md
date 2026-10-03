@@ -7,13 +7,13 @@
 | **Created** | 2026-10-02 |
 | **Current Phase** | Ready |
 | **Decomposition tier** | Incremental |
-| **Last Updated** | 2026-10-02 |
+| **Last Updated** | 2026-10-03 |
 
 ## Documents
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| requirements.md | completed | 36 acceptance criteria, 0 clarification markers |
+| requirements.md | completed | 36 acceptance criteria across 10 Must features, 0 clarification markers |
 | solution.md | completed | 9 ADRs confirmed, 17 acceptance criteria, 0 markers |
 | plan/ | completed | 5 phases, 25 tasks, 139 spec references, all resolvable |
 
@@ -40,6 +40,7 @@
 | 2026-10-02 | SDD validation added AC-16 and AC-17 | Mechanical traceability found three PRD criteria with no counterpart: the per-entry listing cost and the baseline-not-surfaced rule from F2, and "a second party can determine currency" from F6. Found by checking rather than by eye, which is the reason the check is run. |
 | 2026-10-02 | Decomposition tier: Incremental | Classifier recommended Incremental and rule 1 fired twice: 8 new components (C1-C8; C9 only modifies the existing CI gate script and does not count) and 9 Must features, with 36 acceptance criteria. No parallel work flagged in the design. Accepted. |
 | 2026-10-02 | Plan: 5 phases, 25 tasks | Ordering is forced by dependency, not preference: the catalogue first because everything reads it and because its verification needs a fresh session; detection second and alone, because fixtures written before the rules are the PRD's answer to its own top risk and there is nothing to run them against but fixtures; then the write path, then drift, then the user-facing surface. Validation found the spec reference count stated as 68 against 139 actual; corrected. |
+| 2026-10-03 | The catalogue reader is promoted to Must as Feature 10 | Flagged at the end of planning rather than discovered: nothing in the Must set depends on it, so MoSCoW put it in Should, but that reading ignores what the relocation takes away. Today 21 pattern names are typable in every repository; afterwards none are, and the only route to a body is to install it. Marcus ruled it Must. The criteria count is unchanged at 36 — the two were already counted; Should drops from 3 entries to 2, and SDD AC-15 now traces to F10 instead of to a Should-have. T5.2 stays in Phase 5, since C8 depends only on C1 and nothing in Phase 5 can now be cut. |
 
 ## Context
 

@@ -92,7 +92,7 @@ had been measured.
 
 **Specification**:
 
-- `docs/XDD/specs/020-tcs-patterns-selective-install/requirements.md` — the problem, nine Must
+- `docs/XDD/specs/020-tcs-patterns-selective-install/requirements.md` — the problem, ten Must
   features, 36 acceptance criteria, the scan's business rules and edge cases
 - `docs/XDD/specs/020-tcs-patterns-selective-install/solution.md` — components, directory map, the
   four file formats, the traced gating walkthrough, and Implementation Gotchas

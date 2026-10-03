@@ -310,7 +310,7 @@ that installed a different one.
 | F7 tell the user when a pattern moved on | C7 | |
 | F8 update installed patterns | C5 | divergence data from C6; no new owner |
 | F9 no shipping without a version change | C9 | |
-| Should: consult without installing | C8 | |
+| F10 consult without installing | C8 | |
 
 No feature has two owners; no component is without a feature.
 
@@ -503,7 +503,7 @@ The existing name `drift_check_hook_bundle` stays as a thin wrapper so no curren
 
 /tcs-patterns:pattern <pattern-name>
   prints the named pattern's body from the catalogue; writes nothing.
-  An unknown name lists the available 21 rather than returning empty (Should-have AC-2).
+  An unknown name lists the available 21 rather than returning empty (F10 2nd).
 ```
 
 ### Implementation Examples
@@ -932,7 +932,7 @@ single contract across two places, which is worse.
 ## Acceptance Criteria
 
 System-level and **group-level, not 1:1**: 17 criteria here cover the PRD's 36. Every one of the
-nine Must features and the Should-have is traced, which was verified mechanically rather than by
+ten Must features is traced, which was verified mechanically rather than by
 eye. Three PRD criteria had no counterpart on the first pass — the per-entry listing cost and the
 baseline-not-surfaced rule from F2, and the "a second party can determine currency" rule from F6 —
 and AC-16 and AC-17 were added to close them. The remaining compression is one SDD criterion
@@ -954,7 +954,7 @@ standing for two or three PRD criteria that assert the same behaviour from diffe
 | AC-12 | `update` refreshes only drifted patterns, asks nothing about the selection, and prompts per diverged file with skip as the default | F8, ADR-4 |
 | AC-13 | A change to a pattern file without that pattern's `VERSION` in the same changeset fails the CI gate; with it, the gate passes; a change touching no pattern leaves the gate silent | F9, ADR-9 |
 | AC-14 | The bash Obsidian gate and the Python Obsidian rule return the same verdict for every detection fixture | ADR-7 |
-| AC-15 | The catalogue reader prints a named pattern's body and writes nothing; an unknown name lists the 21 | Should-have |
+| AC-15 | The catalogue reader prints a named pattern's body and writes nothing; an unknown name lists the 21 | F10 |
 | AC-16 | The proposal shows each entry's listing cost in characters, and lists baseline patterns separately from recommendations | F2 (4th, 5th) |
 | AC-17 | After `update`, every refreshed pattern's manifest version equals its catalogue `VERSION`, and currency is determinable from the manifest alone without reading any pattern file | F6 (3rd), F8 (3rd) |
 

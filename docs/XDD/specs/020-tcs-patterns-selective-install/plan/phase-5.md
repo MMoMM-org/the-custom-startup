@@ -19,7 +19,7 @@ phase: 5
   entry at the moment of choosing
 - `[ref: SDD/Runtime View/Error Handling]` — the rows owned by the interview: not a git repository,
   partially unreadable target
-- `[ref: PRD/F2 4th, F3, F4 3rd-4th]` and `[ref: PRD/Should Have Features]`
+- `[ref: PRD/F2 4th, F3, F4 3rd-4th]` and `[ref: PRD/F10]`
 - `[ref: SDD/Risks and Technical Debt/Known Technical Issues]` — the `principles.md:167` correction
 
 **Key Decisions**:
@@ -74,16 +74,16 @@ four passing test suites.
 - [ ] **T5.2 The catalogue reader skill** `[activity: frontend-ui]` `[parallel: true]`
 
   1. Prime: Read the reader's contract
-     `[ref: SDD/Interface Specifications/Process contract: the skills]` and the Should-have criteria
-     `[ref: PRD/Should Have Features]`.
+     `[ref: SDD/Interface Specifications/Process contract: the skills]` and F10's criteria
+     `[ref: PRD/F10]`.
   2. Test: A named pattern's full body is returned and **nothing** is written to the repository; an
      unknown name lists the 21 available rather than returning empty; the frontmatter parses.
   3. Implement: `plugins/tcs-patterns/skills/pattern/SKILL.md`, `argument-hint: "<pattern-name>"`.
   4. Validate: `python3 -m pytest -q`; invoke it for a pattern and confirm the repository is
      untouched afterwards.
   5. Success:
-     - [ ] Body served, nothing written `[ref: PRD/Should Have 1st; SDD/AC-15]`
-     - [ ] Unknown name lists the 21 `[ref: PRD/Should Have 2nd]`
+     - [ ] Body served, nothing written `[ref: PRD/F10 1st; SDD/AC-15]`
+     - [ ] Unknown name lists the 21 `[ref: PRD/F10 2nd]`
 
 - [ ] **T5.3 Documentation** `[activity: technical-writing]` `[parallel: true]`
 
