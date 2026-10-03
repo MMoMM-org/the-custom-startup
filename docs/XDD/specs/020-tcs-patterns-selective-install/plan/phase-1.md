@@ -68,9 +68,17 @@ contract that keeps a distributed copy detectably stale rather than silently sta
      survives. Confirm no `.gitkeep` or hidden file is left behind before relying on git not
      tracking empty directories — verified none on 2026-10-03, so a hit means something changed.
   4. Validate: `python3 scripts/observability/report.py` and read the `entries found` line;
-     `git diff -M --summary | grep -c R100`; `python3 -m pytest -q` against the baseline above. Do
-     not use `claude plugin details` — it resolves the installed cache copy and cannot see this
-     change.
+     `git diff --name-status -M <parent> HEAD | grep -c '^R100'` for the rename count; `python3 -m
+     pytest -q` against the baseline above. Do not use `claude plugin details` — it resolves the
+     installed cache copy and cannot see this change.
+
+     Two command-level traps, both hit for real on 2026-10-03. `git diff -M --summary` renders a
+     rename as ` rename a/b (100%)`; the literal token `R100` exists only in `--name-status`
+     output, so `--summary | grep -c R100` returns 0 on a flawless rename and reads as total
+     failure. And **run every assertion against the committed tree, never the working tree**: a
+     check written as `git diff … HEAD` compares the working tree to HEAD, so it is green while the
+     move is pending and 0 the instant it is committed. Asserted that way it passes exactly once,
+     at a moment when the task is unfinished, and is red forever after.
   5. Success:
      - [ ] All 80 files reported as renames at 100% similarity `[ref: PRD/F1 4th]`
      - [ ] Inventory walk falls from 98 entries to 77, with no `tcs-patterns:` skill remaining, and
@@ -165,8 +173,11 @@ contract that keeps a distributed copy detectably stale rather than silently sta
 
 - [ ] **T1.5 Phase validation** `[activity: validate]`
 
-  Run both legs: `python3 -m pytest -q` (baseline 810 passed, 1 skipped, 1 deselected) and the
-  bats suites, reporting each leg's numbers separately rather than an aggregate. Run `claude plugin validate plugins/tcs-patterns` as a smoke
+  Run both legs on a **clean, committed tree** — nothing staged, nothing dirty — because an
+  assertion that reads `git diff` or the index answers differently before and after a commit, and
+  the difference is invisible when a leg is run immediately after an edit. `python3 -m pytest -q`
+  (baseline 810 passed, 1 skipped, 1 deselected; Phase 1 adds 6, so 816) and the bats suites,
+  reporting each leg's numbers separately rather than an aggregate. Run `claude plugin validate plugins/tcs-patterns` as a smoke
   test only — it validated the broken layout cleanly in a previous spec and proves nothing about
   discovery. Verify the relocation with `python3 scripts/observability/report.py`, which reads the
   working tree; do **not** use `claude plugin details`, which resolves the installed cache copy and
