@@ -126,25 +126,57 @@ contract that keeps a distributed copy detectably stale rather than silently sta
      the moment it is installed — the same defect with a version number attached. Two patterns
      (`event-sourcing`, `observability`) already own a per-pattern `reference/references.md`, which
      is the shape that survives installation.
-  2. Test: Assert that no file under `templates/patterns/<name>/` contains a relative path that
-     escapes **its own pattern directory** — per pattern, not per catalogue, because the pattern
-     directory is the unit C5 copies and a catalogue-relative link is dead in a consumer repository.
-     Assert every remaining relative link resolves to an existing file. Write this as a
-     repository-wide test, because it is the check that would have caught all four of these
-     years ago.
+  2. Test: Two rules, and they are **not** the same rule. For every file under
+     `templates/patterns/<name>/`: no relative path may resolve **above its own pattern directory**
+     — per pattern, not per catalogue, because the pattern directory is the unit C5 copies and a
+     catalogue-relative link is dead in a consumer repository — and every remaining relative path
+     must resolve to a file that exists.
+
+     The two rules land on different sites, so both are genuinely exercised. `../../REFERENCES.md`
+     from `hexagonal/reference/` resolves to `templates/patterns/REFERENCES.md` and **escapes**;
+     `../REFERENCES.md` from the same directory resolves to `templates/patterns/hexagonal/
+     REFERENCES.md`, which stays **inside** the pattern and is merely unresolvable. "Contains
+     `../`" is therefore necessary but not sufficient for the escape rule — resolve the path and
+     compare against the pattern root.
+
+     **Two checks are needed, because the four sites are caught by different code.** Only site 4 is
+     a markdown link. Sites 1-3 are bare relative paths inside inline code spans, with no link
+     syntax at all:
+     - extend `tests/test_docs_links.py`'s surfaces to the catalogue for the markdown-link form.
+       Its `DOC_FILES` is `docs/**/*.md` minus `docs/XDD/` plus the two root files, which is why
+       none of the four was ever caught.
+     - add a check for bare paths in code spans. Note that `test_docs_links.py` **blanks inline
+       code spans deliberately** (`_linkable_lines`), because `docs/reference/xdd.md` quotes the
+       plan checklist format literally and would false-positive. So the new check must inspect
+       exactly what that one discards, without reintroducing its false positives.
+
+     Both checks must fail together in one suite run, so partial coverage cannot read as a pass.
+
+     Four controls, and the fourth is the one that proves the check is not a blunt instrument:
+     - **A** an escaping path in a code span → the code-span check FAILS
+     - **B** a non-escaping path in a code span naming a file that does not exist → the resolve
+       check FAILS
+     - **C** an escaping markdown link → the link check FAILS
+     - **D** a path containing `../` that resolves **inside** the pattern and exists → both checks
+       PASS. Without D, a check that rejects every `../` passes A, B and C and is still wrong.
   3. Implement: Keep the attribution, drop the dead pointer. In `testing-hex-arch.md:3` and
      `testing-by-layer.md:5` the clause offering sources at `../../REFERENCES.md` goes and the
      attribution to Valentina Jemuović's Use Case Driven Design stays; in `hexagonal-layers.md:17`
-     the pointer is the entire sentence, so the line goes. **Invent no source notes to replace
-     them** — the sources were never in this repository, and a guessed citation inside a sources
-     list is worse than no list. Replace the obsidian citation with an inline statement of what the
+     the pointer is the entire sentence, so the line goes. **Add no source citations at all** — the
+     sources were never in this repository, and a guessed citation inside a sources list is worse
+     than no list. If a reader needs UCDD sources later, that is a per-pattern
+     `reference/references.md` written from material somebody actually has, and it is a separate
+     piece of work. Today exactly two patterns carry one, `observability` and `event-sourcing`;
+     that set must be the same when this task ends. Replace the obsidian citation with an inline statement of what the
      guide says about the hook's scope gate and the `CLAUDE_ALLOW_ESLINT_DISABLE=1` escape hatch, so
      the pattern is self-contained once copied into a consumer repository.
   4. Validate: `python3 -m pytest -q`; the new link test fails if any escaping path is reintroduced.
   5. Success:
      - [ ] No reference escapes its own pattern directory `[ref: PRD/F1 3rd]`
      - [ ] Every remaining relative link resolves to an existing file `[ref: PRD/F1 3rd]`
-     - [ ] No source note was invented to fill the gap the dead pointers leave `[ref: SDD/Risks]`
+     - [ ] The set of patterns carrying a `reference/references.md` is unchanged — exactly
+           `observability` and `event-sourcing`, none under `hexagonal/` or `ddd/` — and no
+           existing `references.md` gained a line `[ref: SDD/Risks]`
      - [ ] The obsidian pattern is self-contained for a consumer repository `[ref: SDD/Risks/Known Technical Issues]`
 
 - [ ] **T1.4 The per-pattern CI gate rule** `[activity: platform-operations]` `[parallel: true]`
