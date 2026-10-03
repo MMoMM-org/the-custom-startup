@@ -149,7 +149,7 @@ context), **Test** (red), **Implement** (green), **Validate** (refactor + verify
 > **Tracking Principle**: Track logical units that produce verifiable outcomes. The TDD cycle is
 > the method, not separate tracked items.
 
-- [ ] [Phase 1: The catalogue and its maintainer contract](phase-1.md)
+- [x] [Phase 1: The catalogue and its maintainer contract](phase-1.md)
 - [ ] [Phase 2: Detection, fixtures before rules](phase-2.md)
 - [ ] [Phase 3: The install path](phase-3.md)
 - [ ] [Phase 4: Drift and the advisory](phase-4.md)

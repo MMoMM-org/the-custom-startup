@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: The catalogue and its maintainer contract"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -214,12 +214,14 @@ contract that keeps a distributed copy detectably stale rather than silently sta
            said three and could not have been met as written
            `[ref: SDD/Architecture Decisions/ADR-9]`
 
-- [ ] **T1.5 Phase validation** `[activity: validate]`
+- [x] **T1.5 Phase validation** `[activity: validate]`
 
   Run both legs on a **clean, committed tree** — nothing staged, nothing dirty — because an
   assertion that reads `git diff` or the index answers differently before and after a commit, and
   the difference is invisible when a leg is run immediately after an edit. `python3 -m pytest -q`
-  (baseline 810 passed, 1 skipped, 1 deselected; Phase 1 adds 6, so 816) and the bats suites,
+  (baseline 810 passed, 1 skipped, 1 deselected; Phase 1 adds **11** -- 6 relocation,
+  3 `VERSION`, 2 link checks -- so **821**. This line first read "adds 6, so 816", written
+  before T1.2's and T1.3's test files existed; left alone, a green run reads as a failure) and the bats suites,
   reporting each leg's numbers separately rather than an aggregate. Run `claude plugin validate plugins/tcs-patterns` as a smoke
   test only — it validated the broken layout cleanly in a previous spec and proves nothing about
   discovery. Verify the relocation with `python3 scripts/observability/report.py`, which reads the
