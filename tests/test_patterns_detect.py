@@ -168,11 +168,15 @@ def _honest_report(tmp_path: pathlib.Path) -> dict:
 
 
 def _evidence_problems_via_fake_detector(monkeypatch, tmp_path, report: dict) -> list[str]:
-    """Feeds `report` through the exact same `_load_detect()` -> `.detect()`
-    -> `_evidence_problems` path `test_detector_matches_expected` uses above,
-    via a monkeypatched fake detector module. A mutant this path cannot catch
-    is a hole in the real test, not merely in a sibling helper never wired
-    into it `[ref: SDD/Data model: fixture expectation]`."""
+    """Feeds `report` to `_evidence_problems` via a monkeypatched fake detector,
+    reproducing the loop `test_detector_matches_expected` runs.
+
+    It does NOT prove that loop is still wired into the real test: this helper
+    re-implements it rather than calling it, so commenting the assertion out of
+    `test_detector_matches_expected` leaves all four mutants below green --
+    measured on 2026-10-03, `4 passed`. `test_the_evidence_and_surface_assertions_are_wired_into_the_real_test`
+    is what covers the wiring; these four cover the invariants themselves.
+    `[ref: SDD/Data model: fixture expectation]`"""
     monkeypatch.setattr(sys.modules[__name__], "_load_detect", lambda: _FakeDetectModule(report))
     detect = _load_detect()
     produced = detect.detect(tmp_path)
@@ -216,3 +220,49 @@ def test_evidence_invariant_catches_an_excluded_directory(tmp_path, monkeypatch)
     report["auto"][0]["evidence"] = "vendor/x/tsconfig.json"
     problems = _evidence_problems_via_fake_detector(monkeypatch, tmp_path, report)
     assert problems and "excluded directory" in problems[0]
+
+
+def test_the_evidence_and_surface_assertions_are_wired_into_the_real_test(monkeypatch) -> None:
+    """The four mutation tests above exercise `_evidence_problems` but re-implement
+    the loop that calls it, so they stay green if that loop is deleted from
+    `test_detector_matches_expected` -- measured: `4 passed` with the assertion
+    commented out. This test closes that hole by driving the real parametrized
+    function and requiring it to reject a report that is correct in every respect
+    except the invariants, for `evidence` and for `surface` alike.
+
+    Both are checked here because both are assertions living inside that one
+    function, and a regression that removes either is invisible to every other test
+    in this file.
+    """
+    fixture = next(f for f in discover_fixtures() if f.name == "auto-testing-baseline")
+    expected = load_expected(fixture)
+
+    def report_with(evidence: str, surface: bool) -> dict:
+        return {
+            "schema": 1,
+            "auto": [{"pattern": p, "evidence": evidence} for p in expected["auto"]],
+            "baseline": [{"pattern": p, "evidence": evidence, "surface": surface}
+                         for p in expected["baseline"]],
+            "gates": expected["gates"],
+            "unrecognised_stack": expected["unrecognised_stack"],
+            "manifests_walked": [],
+        }
+
+    honest = "requirements.txt"
+
+    # Control: everything correct, including both invariants -- must not raise.
+    monkeypatch.setattr(sys.modules[__name__], "_load_detect",
+                        lambda: _FakeDetectModule(report_with(honest, False)))
+    test_detector_matches_expected(fixture)
+
+    # `evidence` violated and nothing else -- the real test must reject it.
+    monkeypatch.setattr(sys.modules[__name__], "_load_detect",
+                        lambda: _FakeDetectModule(report_with("", False)))
+    with pytest.raises(AssertionError, match="evidence"):
+        test_detector_matches_expected(fixture)
+
+    # `surface` violated and nothing else -- trap 1 reintroduced.
+    monkeypatch.setattr(sys.modules[__name__], "_load_detect",
+                        lambda: _FakeDetectModule(report_with(honest, True)))
+    with pytest.raises(AssertionError, match="surface"):
+        test_detector_matches_expected(fixture)
