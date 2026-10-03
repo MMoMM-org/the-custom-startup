@@ -104,7 +104,7 @@ contract that keeps a distributed copy detectably stale rather than silently sta
      - [ ] 21 `VERSION` files, each a single positive integer `[ref: SDD/Interface Specifications]`
      - [ ] A new pattern directory without a `VERSION` fails the suite `[ref: SDD/Risks/Technical Debt]`
 
-- [ ] **T1.3 The four broken outward references repaired** `[activity: refactor]`
+- [x] **T1.3 The four broken outward references repaired** `[activity: refactor]`
 
   1. Prime: Read all **four** sites. The first three cite a `REFERENCES.md` that has never
      existed in this repository, verified 2026-10-03 against the working tree and against

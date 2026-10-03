@@ -596,18 +596,40 @@ per-directory instead, and needs no parsing:
 
 ```bash
 # For every changed file under templates/patterns/<name>/, that pattern's own
-# VERSION must be in the same changeset. One rule, 21 patterns, no table.
+# VERSION must be in the same changeset. One rule, 21 patterns, no table rows.
+#
+# Derive the names from the DIFF, not from the working tree: a pattern added in
+# the same changeset is gated without anyone registering it, and a deleted one
+# raises nothing.
 changed_patterns="$(printf '%s\n' "$changed_paths" \
   | sed -n 's|^plugins/tcs-patterns/templates/patterns/\([^/]*\)/.*|\1|p' \
   | sort -u)"
+
+# Then reuse check_bundle rather than reimplementing the failure path. It takes
+# ONE marker per call, so per-pattern invocation is exactly the semantics the
+# rule needs -- bumping a different pattern's VERSION cannot satisfy this call.
+# It already owns the FAIL banner, the offending-file list and the "Fix: bump
+# <marker>" line; a second loop with its own printf would drift from those.
 for p in $changed_patterns; do
-  marker="plugins/tcs-patterns/templates/patterns/$p/VERSION"
-  if ! printf '%s\n' "$changed_paths" | grep -qxF "$marker"; then
-    printf 'pattern %s changed without bumping %s\n' "$p" "$marker" >&2
-    overall_fail=1
-  fi
+  check_bundle "plugins/tcs-patterns/templates/patterns/$p" \
+               "plugins/tcs-patterns/templates/patterns/$p/VERSION" \
+               '*'
 done
 ```
+
+Three properties of `check_bundle` make this work, each verified by reading it rather than assumed:
+
+- **It takes one marker per call.** The bundle table's single-marker-per-row shape is what ADR-9
+  rejects; the *function* is fine, and per-pattern invocation gives each pattern its own marker, so
+  bumping the wrong one cannot satisfy another pattern's call.
+- **Its path match spans subdirectories.** `case "$path" in "${sources_dir}"/*)` is a shell case
+  glob, where `*` crosses `/`, so `<name>/reference/x.md` matches. A filesystem glob would not have.
+- **`'*'` is already an accepted glob value.** Its dispatch is a literal `case` over `'*'` and
+  `'*.sh'` that hard-errors on anything else, so the rule needs no new glob and must not introduce
+  one.
+
+The marker file itself is skipped by the function's own `[ "$path" = "$marker_file" ]` branch, so a
+changeset containing only a `VERSION` bump is not treated as a changed source.
 
 ## Runtime View
 
