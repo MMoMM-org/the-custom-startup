@@ -690,6 +690,22 @@ Together these make "no gate opens without a signal from its own rule" a mechani
 rather than a reading. They need no per-case data: which gates are open is already declared in
 each `expected.json`, and the invariants key off that.
 
+**`repo` and `schema` complete the sweep.** Having found four of these one at a time, the
+remaining report fields were checked mechanically on 2026-10-04 — every key `detect.py` emits,
+against every `report[...]` the detection test reads — and two more were unasserted:
+
+- **`schema`** must equal `1`. This is the field a consumer would read to refuse an
+  incompatible report, so letting it drift silently makes the only versioning handle in the
+  contract worthless. Asserting it also means a future `schema: 2` cannot ship without the
+  change being deliberate.
+- **`repo`** must equal the path `detect()` was given. Low stakes on its own, free to check,
+  and it is the field every error message and every piece of evidence is relative to.
+
+Neither is interesting in itself. They are listed because the sweep is the point: four fields
+were found one at a time, in review or at a task gate, and the fifth and sixth took one
+command. **When a contract gains a field, it gains an assertion in the same change, or the
+field is decoration.**
+
 The trap numbers used in `why` are defined in **The seven traps, numbered** under Quality
 Requirements. Use those numbers; do not renumber them.
 

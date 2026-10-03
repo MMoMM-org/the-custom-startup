@@ -196,6 +196,11 @@ written from the specification rather than from the implementation.
            carries none. Asserted as invariants because no fixture declares `gate_evidence`
            and the exact-key guard would reject one
            `[ref: SDD/Interface Specifications/Data model: fixture expectation]`
+     - [ ] `schema` and `repo` asserted too — the 2026-10-04 sweep over every report field
+           found both unasserted. `schema == 1` is the handle a consumer would use to refuse
+           an incompatible report; `repo` is what all evidence is relative to. Cheap, and
+           they close the last of the six fields found this way
+           `[ref: SDD/Interface Specifications/Data model: fixture expectation]`
      - [ ] Q1 stays shut on a server framework that appears only in `devDependencies`
            (trap 4), and Q2 opens on a content signal alone with Q1 shut (trap 6)
      - [ ] An uncovered language with an architectural shape still opens Q2, and
