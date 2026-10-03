@@ -38,12 +38,12 @@ import json
 from patterns_detection_corpus_lib import (
     CATALOGUE_DIR,
     CORPUS_DIR,
+    EXPECTED_CASE_COUNT,
     catalogue_pattern_names,
     discover_fixtures,
     load_expected,
 )
 
-EXPECTED_CASE_COUNT = 18
 EXPECTED_SHAPE_KEYS = {"why", "auto", "baseline", "gates", "must_not_propose", "unrecognised_stack"}
 EXPECTED_GATE_KEYS = {"q1_backend", "q2_architecture", "q3_test_quality"}
 
@@ -178,22 +178,30 @@ def test_must_not_propose_is_disjoint_from_auto_per_fixture() -> None:
     assert not failures, "fixtures with self-contradictory must_not_propose:\n" + "\n".join(failures)
 
 
-def test_unrecognised_stack_is_false_whenever_auto_is_non_empty() -> None:
+def test_unrecognised_stack_equals_auto_is_empty() -> None:
     """`unrecognised_stack` is computed from `auto` alone (SDD/Data model: detection
-    report, ADR-5) -- a fixture with a non-empty `auto` list must declare
-    `unrecognised_stack: false`. The inverse (empty auto, false flag) is legitimate --
-    a hand-rolled architecture can still open q2 with no stack fact firing -- so only
-    this direction is checked."""
+    report, ADR-5): it is true IFF `auto` is empty, with no legitimate inverse. A
+    hand-rolled architecture can open q2 with no stack fact firing (`auto: []`) and
+    that case still reports `unrecognised_stack: true` -- `trap-06-hand-rolled-
+    architecture`'s own `why` says so verbatim. "q2 can open with no stack fact" is
+    true; "therefore the flag may be false" is exactly the gate-opened-means-
+    recognised conflation ADR-5 forbids. Both directions are asserted, not one."""
     fixtures = discover_fixtures()
     assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_18_cases"
 
     failures: list[str] = []
     for fixture in fixtures:
         expected = load_expected(fixture)
-        if expected.get("auto") and expected.get("unrecognised_stack") is not False:
-            failures.append(f"{fixture.name}: auto is non-empty but unrecognised_stack is not false")
+        auto_is_empty = not expected.get("auto")
+        unrecognised = expected.get("unrecognised_stack")
+        if unrecognised is not auto_is_empty:
+            failures.append(
+                f"{fixture.name}: auto empty={auto_is_empty} but unrecognised_stack={unrecognised!r}"
+            )
 
-    assert not failures, "fixtures with inconsistent unrecognised_stack:\n" + "\n".join(failures)
+    assert not failures, "fixtures where unrecognised_stack does not equal (auto is empty):\n" + "\n".join(
+        failures
+    )
 
 
 def test_each_trap_fixture_names_its_trap_number_and_defends_something() -> None:

@@ -16,6 +16,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CORPUS_DIR = REPO_ROOT / "tests" / "fixtures" / "patterns-detection"
 CATALOGUE_DIR = REPO_ROOT / "plugins" / "tcs-patterns" / "templates" / "patterns"
 
+# The single source of truth for the corpus size (task text step 2's mandatory
+# guard). Both `test_patterns_detection_corpus.py` and `test_patterns_detect.py`
+# assert against this constant -- each file must stay safe to run alone, so each
+# needs its own standalone, non-parametrized count assertion, but there is still
+# only one number to keep in sync with the fixture directory.
+EXPECTED_CASE_COUNT = 18
+
 
 @dataclass(frozen=True)
 class Fixture:
