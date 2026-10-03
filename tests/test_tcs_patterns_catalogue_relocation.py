@@ -29,6 +29,20 @@ catalogue") shows `git diff --name-status -M HEAD~1 HEAD` reporting all 80 moved
 `R100`, and `git diff --cached --stat -M` at the time of that commit reported
 "80 files changed, 0 insertions(+), 0 deletions(-)" -- zero content changed across every one of
 them.
+
+Migration evidence, not invariants (measured 2026-10-03, pre-move baseline immediately before
+commit 2a5f192, vs. the post-move reading taken right after it): `report.py`'s inventory read 98
+entries (80 skills, 18 agents), 21 of the 80 skills qualified `tcs-patterns:`; after the move it
+read 77 entries (59 skills, 18 agents unchanged) and the catalogue held 80 tracked files (21
+`SKILL.md` + their sibling reference/asset files). None of these absolute figures are asserted
+below as standing invariants, because later tasks legitimately change them: T1.2 writes a
+`VERSION` file into each of the 21 catalogue directories (80 tracked files becomes 101), and
+Phase 5 adds two new skills -- `patterns-setup` and `pattern` -- under
+`plugins/tcs-patterns/skills/` (skill_count, entries and the tcs-patterns-qualified set all grow
+again, for names outside `PATTERN_NAMES`). The invariants that survive both are: the catalogue
+holds exactly the 21 named directories with a parseable `SKILL.md` each, none of those 21 names
+is reachable as a skill under any `plugins/*/skills/` path, and the inventory's unreachable list
+stays empty.
 """
 
 from __future__ import annotations
@@ -98,16 +112,22 @@ def test_catalogue_holds_exactly_the_21_pattern_directories() -> None:
     assert found == PATTERN_NAMES
 
 
-def test_catalogue_holds_21_skill_md_and_80_tracked_files_total() -> None:
+def test_catalogue_holds_21_skill_md_each_tracked_by_git() -> None:
     """`report.py` globs `skills/*/SKILL.md` one level deep and cannot see a catalogue
     directory at all (SDD/Building Block View) -- so the only way to confirm the move landed
-    intact is to assert directly against the tree, never through the report."""
+    intact is to assert directly against the tree, never through the report.
+
+    Checks presence AND that git actually tracks each `SKILL.md` -- a filesystem walk alone
+    could pass against an untracked stray copy. Does not assert a total tracked-file count:
+    T1.2 adds a `VERSION` file to every one of these 21 directories, which would otherwise
+    break this test for reasons unrelated to the relocation regressing."""
     skill_mds = sorted(CATALOGUE_DIR.glob("*/SKILL.md"))
     assert len(skill_mds) == 21
     assert {p.parent.name for p in skill_mds} == PATTERN_NAMES
 
-    tracked = _tracked_files(CATALOGUE_DIR)
-    assert len(tracked) == 80
+    for name in sorted(PATTERN_NAMES):
+        tracked_here = _tracked_files(CATALOGUE_DIR / name)
+        assert any(f.endswith("SKILL.md") for f in tracked_here), f"{name}'s SKILL.md is not tracked by git"
 
 
 def test_old_skills_location_has_no_pattern_left() -> None:
@@ -134,19 +154,22 @@ def test_all_21_frontmatter_blocks_still_parse_as_yaml() -> None:
         assert "name" in frontmatter
 
 
-def test_inventory_drops_from_98_to_77_with_no_tcs_patterns_skill_left() -> None:
-    """The pre-move baseline (measured 2026-10-03) is 98 entries (80 skills, 18 agents). After
-    the move it must read 77 (59 skills, 18 agents) -- agents untouched, exactly 21 fewer
-    skills, and none of the remaining skills still qualified `tcs-patterns:`."""
-    inventory = report.walk_skill_agent_inventory(REPO_ROOT)
-    assert inventory.skill_count == 59
-    assert inventory.agent_count == 18
-    assert len(inventory.entries) == 77
+def test_no_pattern_skill_reachable_in_inventory() -> None:
+    """None of the 21 moved names is reachable as a skill, by its fully-qualified
+    `tcs-patterns:<name>` form, through `report.py`'s inventory walk.
 
-    tcs_patterns_skills = [
-        entry.qualified for entry in inventory.entries if entry.kind == "skill" and entry.qualified.startswith("tcs-patterns:")
-    ]
-    assert tcs_patterns_skills == []
+    Scoped to `PATTERN_NAMES` rather than a blanket "no skill qualifies tcs-patterns:" check
+    (follows `test_old_skills_location_has_no_pattern_left`'s shape) because Phase 5
+    deliberately adds two new skills under `plugins/tcs-patterns/skills/` --
+    `patterns-setup` and `pattern`, neither a pattern name -- which the inventory is meant to
+    keep seeing."""
+    inventory = report.walk_skill_agent_inventory(REPO_ROOT)
+    pattern_qualified_names = {f"tcs-patterns:{name}" for name in PATTERN_NAMES}
+
+    reachable_pattern_skills = {
+        entry.qualified for entry in inventory.entries if entry.kind == "skill" and entry.qualified in pattern_qualified_names
+    }
+    assert reachable_pattern_skills == set()
 
 
 def test_unreachable_list_stays_empty() -> None:
