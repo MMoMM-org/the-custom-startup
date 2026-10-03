@@ -306,3 +306,30 @@ def test_the_evidence_and_surface_assertions_are_wired_into_the_real_test(monkey
                         lambda: _FakeDetectModule(report_with(honest, True)))
     with pytest.raises(AssertionError, match="surface"):
         test_detector_matches_expected(fixture)
+
+
+def test_pre_311_interpreter_is_refused_loudly(tmp_path, monkeypatch) -> None:
+    """ADR-2's 3.11 floor: on an interpreter without `tomllib`, `detect()`
+    must refuse with an actionable `RuntimeError` naming the required
+    version -- never degrade to a weaker parser, which is exactly the
+    failure mode of the regex fallback that used to live in `detect.py` and
+    silently produced a false `mcp-server` proposal.
+
+    A test asserting only "no false positive" would pass against that
+    silently-degraded parser too, since its output was individually
+    defensible-looking; the refusal itself is the property worth asserting.
+    Simulated by monkeypatching the real `detect` module's `tomllib`
+    attribute to `None` rather than reimporting under a different
+    interpreter -- `_require_tomllib` is checked at call time inside
+    `detect()` for exactly this reason, not at import time."""
+    detect = _load_detect()
+    monkeypatch.setattr(detect, "tomllib", None)
+    with pytest.raises(RuntimeError, match="3.11"):
+        detect.detect(tmp_path)
+
+
+def test_a_current_interpreter_is_not_refused(tmp_path) -> None:
+    """Control for the test above: on this repo's own floor (`tomllib`
+    present), `detect()` must not raise."""
+    detect = _load_detect()
+    detect.detect(tmp_path)

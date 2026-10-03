@@ -20,6 +20,16 @@ Every rule implemented below is cited to its clause in
 `[ref: SDD/Interface Specifications/Detection rules: the eight stack facts and
 the three gates]` and `[ref: SDD/Interface Specifications/Detection rules:
 What counts as a test framework]`.
+
+Requires Python 3.11 or newer, standard library only
+`[ref: SDD/Architecture Decisions/ADR-2, "The 3.11 floor"]`. `tomllib` only
+entered the stdlib in 3.11, and a pre-3.11 regex fallback for `pyproject.toml`
+used to live here; it matched a dependency array across the *whole file*
+rather than scoping to `[project]`, which produced a confidently wrong
+`mcp-server` proposal that the evidence invariants could not catch (the cited
+path genuinely existed). Deleted rather than fixed: refusing loudly on an
+unsupported interpreter is the decision, not a better regex -- see
+`_require_tomllib`.
 """
 
 from __future__ import annotations
@@ -27,13 +37,34 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Optional
 
 try:
-    import tomllib  # Python 3.11+
-except ImportError:  # pragma: no cover - exercised only on pre-3.11 runtimes
+    import tomllib  # Python 3.11+ -- the required floor; see _require_tomllib
+except ImportError:  # pragma: no cover - this module's floor is 3.11
     tomllib = None  # type: ignore[assignment]
+
+_MIN_PYTHON_VERSION = (3, 11)
+
+
+def _require_tomllib() -> None:
+    """Refuse loudly on a pre-3.11 interpreter instead of degrading to a
+    weaker parser `[ref: SDD/Architecture Decisions/ADR-2, "The 3.11
+    floor"]`. Called from `detect()` -- the module's one public entry point
+    -- rather than at import time, so every call fails the same deterministic
+    way regardless of whether the particular repository under scan happens
+    to contain a `pyproject.toml`, and so a test can simulate the missing
+    module by monkeypatching `tomllib` to `None` without needing to reimport
+    this module under a different interpreter."""
+    if tomllib is None:
+        raise RuntimeError(
+            "tcs-patterns requires Python 3.11 or newer: the standard-library "
+            "`tomllib` module (needed to parse pyproject.toml) does not exist "
+            f"before 3.11. This interpreter is Python {sys.version.split()[0]}."
+        )
+
 
 # Trap 5 + trap 7: excluded at every depth, for every file search, not only for
 # dependency manifests `[ref: SDD/Detection rules, "The walk excludes..."]`.
@@ -55,11 +86,18 @@ DEPENDENCY_MANIFEST_NAMES = ("package.json", "pyproject.toml", "go.mod", "requir
 PYTHON_PRESENCE_MANIFESTS = ("pyproject.toml", "requirements.txt", "setup.py")
 
 # testing, Node row `[ref: SDD/Detection rules, "What counts as a test
-# framework"]`.
-NODE_TEST_FRAMEWORK_DEPS = {"jest", "vitest", "mocha", "jasmine", "ava"}
+# framework"]`. A tuple, not a set: both this and REACT_TEST_LIB_DEPS below
+# are iterated for first-match evidence, and a set's iteration order is
+# randomised per-process, so two simultaneous matches would make the chosen
+# evidence string vary run to run even though every value is individually
+# defensible -- a report that changes between identical runs is a bad
+# report. No fixture hits two today, but the ordering should not be left to
+# hash randomisation regardless.
+NODE_TEST_FRAMEWORK_DEPS = ("jest", "vitest", "mocha", "jasmine", "ava")
 
-# react-testing `[ref: SDD/Detection rules, row "react-testing"]`.
-REACT_TEST_LIB_DEPS = {"@testing-library/react", "react-test-renderer", "enzyme"}
+# react-testing `[ref: SDD/Detection rules, row "react-testing"]`. Also a
+# tuple for the same determinism reason as NODE_TEST_FRAMEWORK_DEPS above.
+REACT_TEST_LIB_DEPS = ("@testing-library/react", "react-test-renderer", "enzyme")
 
 # mcp-server `[ref: SDD/Detection rules, row "mcp-server"]`: the three
 # ecosystems' SDK names.
@@ -196,63 +234,46 @@ def _setup_py_deps(path: Path) -> list[str]:
     return names
 
 
-_PYPROJECT_PEP621_FALLBACK_RE = re.compile(r'dependencies\s*=\s*\[(.*?)\]', re.DOTALL)
-_PYPROJECT_POETRY_SECTION_RE = re.compile(
-    r"\[tool\.poetry\.dependencies\]\s*(.*?)(?:\n\[|\Z)", re.DOTALL
-)
-_POETRY_DEP_NAME_RE = re.compile(r'^\s*([A-Za-z0-9_.\-]+)\s*=', re.MULTILINE)
 _PYTEST_INI_OPTIONS_RE = re.compile(r"^\s*\[tool\.pytest\.ini_options\]", re.MULTILINE)
 
 
 def _pyproject_deps_and_pytest(path: Path) -> tuple[list[str], bool]:
     """Returns (dependency names, has a `[tool.pytest.ini_options]` table).
-    Tries `tomllib` first (3.11+); falls back to a regex scan on older
-    runtimes so this module stays stdlib-only everywhere `[ref: plan/phase-2.md
-    T2.2, "Python 3, standard library only ... macOS and Linux"]`."""
+    Requires `tomllib` -- `detect()` calls `_require_tomllib()` before this
+    function is ever reached, so a pre-3.11 interpreter never gets here.
+    There is deliberately no regex fallback any more: the one that used to
+    live here matched `dependencies = [...]` across the whole file instead
+    of scoping to `[project]`, so an unrelated `[tool.x] dependencies =
+    [...]` array produced a false positive `[ref: SDD/Architecture
+    Decisions/ADR-2, "The 3.11 floor"]`."""
     text = _read_text(path)
     if text is None:
         return [], False
 
     has_pytest_table = bool(_PYTEST_INI_OPTIONS_RE.search(text))
 
-    if tomllib is not None:
-        try:
-            data = tomllib.loads(text)
-        except (tomllib.TOMLDecodeError, ValueError):
-            data = None
-        if isinstance(data, dict):
-            names: list[str] = []
-            project = data.get("project")
-            if isinstance(project, dict):
-                for dep in project.get("dependencies") or []:
-                    match = _REQUIREMENT_NAME_RE.match(str(dep))
-                    if match:
-                        names.append(match.group(1).lower())
-            tool = data.get("tool")
-            if isinstance(tool, dict):
-                poetry = tool.get("poetry")
-                if isinstance(poetry, dict):
-                    poetry_deps = poetry.get("dependencies")
-                    if isinstance(poetry_deps, dict):
-                        names.extend(k.lower() for k in poetry_deps if k != "python")
-            return names, has_pytest_table
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return [], has_pytest_table
 
-    # Fallback: no tomllib. Regex-scan PEP 621's `dependencies = [...]` array
-    # and poetry's `[tool.poetry.dependencies]` table. Approximate, but an
-    # unparseable file is skipped rather than fatal either way.
-    names = []
-    pep621 = _PYPROJECT_PEP621_FALLBACK_RE.search(text)
-    if pep621:
-        for quoted in _QUOTED_RE.findall(pep621.group(1)):
-            match = _REQUIREMENT_NAME_RE.match(quoted)
+    if not isinstance(data, dict):
+        return [], has_pytest_table
+
+    names: list[str] = []
+    project = data.get("project")
+    if isinstance(project, dict):
+        for dep in project.get("dependencies") or []:
+            match = _REQUIREMENT_NAME_RE.match(str(dep))
             if match:
                 names.append(match.group(1).lower())
-    poetry_section = _PYPROJECT_POETRY_SECTION_RE.search(text)
-    if poetry_section:
-        for match in _POETRY_DEP_NAME_RE.finditer(poetry_section.group(1)):
-            name = match.group(1).lower()
-            if name != "python":
-                names.append(name)
+    tool = data.get("tool")
+    if isinstance(tool, dict):
+        poetry = tool.get("poetry")
+        if isinstance(poetry, dict):
+            poetry_deps = poetry.get("dependencies")
+            if isinstance(poetry_deps, dict):
+                names.extend(k.lower() for k in poetry_deps if k != "python")
     return names, has_pytest_table
 
 
@@ -540,7 +561,13 @@ def detect(repo_dir) -> dict:
     them with real evaluation `[ref: plan/phase-2.md T2.2 step 4]`.
     `unrecognised_stack` is computed from `auto` alone, which this task can and
     must get right `[ref: SDD/Architecture Decisions/ADR-5]`.
+
+    Raises `RuntimeError` on a pre-3.11 interpreter -- checked here, the
+    module's one public entry point, so every call refuses the same way
+    regardless of whether `repo_dir` happens to contain a `pyproject.toml`.
     """
+    _require_tomllib()
+
     root = Path(repo_dir)
     tree = _Tree(root)
 
