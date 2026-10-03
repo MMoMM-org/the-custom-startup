@@ -472,7 +472,7 @@ T2.5 rather than a claim here.
 | `python-project` | any `.py` file **and** one of `pyproject.toml`, `requirements.txt`, `setup.py` | trap 7: both `venv` and `.venv` are recognised wherever a virtual environment is tested for |
 | `react-testing` | a `react` dependency **and** one of `@testing-library/react`, `react-test-renderer`, `enzyme` | `react` alone is not evidence |
 | `frontend-testing` | DOM-render evidence in test files: `render(`, `screen.`, `fireEvent`, `userEvent` | trap 2: never a directory name, never jsdom alone |
-| `testing` | any non-UI test framework together with a tests shape | trap 1: `baseline` with `surface: false`, never surfaced as a recommendation |
+| `testing` | any non-UI test framework together with a tests shape — both defined under *What counts as a test framework* below | trap 1: `baseline` with `surface: false`, never surfaced as a recommendation |
 
 **The three gates.** A gate decides only **whether to ask**. Nothing is installed because a gate
 opened `[ref: SDD/Interface Specifications/Data model: detection report]`.
@@ -481,7 +481,7 @@ opened `[ref: SDD/Interface Specifications/Data model: detection report]`.
 |---|---|---|
 | `q1_backend` | a server framework in **`dependencies`**, never `devDependencies` (trap 4): Node `express`, `fastify`, `koa`, `@nestjs/core`, `hono`; Python `fastapi`, `flask`, `django`, `aiohttp`; Go `gin`, `echo`, `chi` | `api-design`, `bff-entry-points`, `secure-oauth-oidc`, `observability`, `twelve-factor`, `node-service` (6) |
 | `q2_architecture` | `q1_backend` opened, **or** a weak content signal: `ports/` + `adapters/` + `domain/` directories; a per-module `events.py` / `events.ts`; a directory named `event_store` or `eventstore`; a broker dependency `kafkajs`, `amqplib`, `@aws-sdk/client-sqs`, `celery` | `ddd`, `event-driven`, `event-sourcing`, `hexagonal`, `functional` (5) |
-| `q3_test_quality` | any test framework present | `mutation-testing`, `test-design-reviewer` (2) |
+| `q3_test_quality` | any test framework present — framework evidence only, no tests shape required, defined under *What counts as a test framework* below | `mutation-testing`, `test-design-reviewer` (2) |
 
 Three consequences the fixtures must assert rather than assume:
 
@@ -496,6 +496,44 @@ Three consequences the fixtures must assert rather than assume:
 - **The walk excludes `node_modules`, `.venv`, `venv` and `vendor`** (trap 5), and walks nested
   manifests so a workspace root declaring nothing still yields its children's signals. Every
   manifest actually read is listed in `manifests_walked`, so a missing signal is explicable.
+  The manifests walked are **`package.json`, `pyproject.toml` and `go.mod`**, at every depth
+  outside the excluded directories -- not only at the root. Naming the set matters because the
+  only walk shown in this document is `walk_manifests(root, "package.json")`
+  `[ref: SDD/Implementation Examples]`, and a fixture author reading that alone would place a
+  nested Python or Go signal at the root and never exercise trap 5 for those ecosystems.
+  `manifest.json` is read for `obsidian-plugin` but is not a dependency manifest and does not
+  contribute to `manifests_walked`.
+
+
+**What counts as a test framework — decided 2026-10-03.** Two rules depend on this and neither
+defined it: `testing` fires on "any non-UI test framework together with a tests shape", and
+`q3_test_quality` opens on "any test framework present". The only concrete instance anywhere in this
+spec was `pytest.ini`, in a single walkthrough. Evidence is **config or manifest**, enumerated per
+ecosystem, never a directory name — trap 2's lesson generalises, and a `tests/` folder holding only
+fixtures is not a test suite.
+
+| Ecosystem | Framework evidence |
+|---|---|
+| Python | `pytest.ini`, `tox.ini`, a `[tool.pytest.ini_options]` table in `pyproject.toml`, or any `test_*.py` / `*_test.py` |
+| Node | `jest`, `vitest`, `mocha`, `jasmine` or `ava` in `devDependencies` **or** `dependencies`, or a `jest.config.*` / `vitest.config.*` |
+| Go | any `*_test.go` — Go tests declare no dependency, which is why dependency-only detection was rejected |
+| Shell | any `*.bats` |
+
+Three distinctions the fixtures must preserve, because the two rules are deliberately asymmetric:
+
+- **`q3_test_quality` needs framework evidence only.** Any row above opens it.
+- **`testing` needs framework evidence AND a tests shape, and the framework must be non-UI.** The
+  tests shape is a `tests/`, `test/`, `spec/` or `__tests__/` directory, or test files beside the
+  code they cover. "Non-UI" excludes the react/frontend evidence of the two rows above it: a
+  repository whose only testing is `@testing-library/react` with `render(` calls yields
+  `react-testing` and `frontend-testing`, and does **not** additionally yield `testing`. Otherwise
+  trap 1's near-universal signal would also be double-counted against trap 2's cases.
+- A `go.mod` repository with `*_test.go` and no `tests/` directory **does** fire
+  `testing`, and opens `q3`. Go convention places tests beside the code, which is exactly
+  what the "test files beside the code they cover" clause is for; requiring a `tests/`
+  directory would make `testing` unreachable for every idiomatic Go repository. Stated
+  explicitly because the directory-only reading is the tempting one, and a fixture will
+  fix whichever reading its author happens to hold.
 
 
 #### Data model: companion map (C1 → C2 → C3)
