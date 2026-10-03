@@ -41,7 +41,7 @@ phase: 1
 Establishes the catalogue as the single source of truth for the 21 patterns, and the maintainer
 contract that keeps a distributed copy detectably stale rather than silently stale.
 
-- [ ] **T1.1 The 21 patterns relocated as pure renames** `[activity: refactor]`
+- [x] **T1.1 The 21 patterns relocated as pure renames** `[activity: refactor]`
 
   1. Prime: Read the directory map `[ref: SDD/Building Block View/Directory Map]` and confirm the
      current layout with `ls plugins/tcs-patterns/skills/`. It holds 21 directories and 80 tracked
