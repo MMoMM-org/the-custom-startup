@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: The catalogue and its maintainer contract"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 1
 ---
@@ -22,8 +22,10 @@ phase: 1
 
 **Key Decisions**:
 - The relocation is a **rename**, not a rewrite. Content does not change in this phase; the only
-  edits are the three broken outward references (T1.3), and they are a separate task so the rename
-  commit stays clean and reviewable as R100.
+  edits are the four broken outward references (T1.3), and they are a separate task so the rename
+  commit stays clean and reviewable as R100. Three of the four were already broken before this spec
+  existed and the relocation neither causes nor fixes them; they are repaired here because this is
+  the task that reads every one of these files.
 - `VERSION` is a bare integer, not semver. A prose body has no API for "breaking" to describe, and
   the only question asked of it is whether two numbers differ.
 - The gate is **per directory**, not per bundle. The existing bundle table would pass when the
@@ -42,19 +44,20 @@ contract that keeps a distributed copy detectably stale rather than silently sta
 - [ ] **T1.1 The 21 patterns relocated as pure renames** `[activity: refactor]`
 
   1. Prime: Read the directory map `[ref: SDD/Building Block View/Directory Map]` and confirm the
-     current layout with `ls plugins/tcs-patterns/skills/`. Note that `skills/REFERENCES.md` moves
-     too — two patterns cite it as `../../REFERENCES.md` and that relative path survives the move
-     only if the file travels with them.
+     current layout with `ls plugins/tcs-patterns/skills/`. It holds 21 directories and 80 tracked
+     files and nothing else — in particular there is **no** `skills/REFERENCES.md`. Three citations
+     point at one; it has never existed in this repository (`git log --diff-filter=ADR --all --
+     '*REFERENCES.md'` returns nothing), so there is nothing to move and T1.3 owns the repair.
   2. Test: Assert the inventory walk reports 0 unreachable skill files under
      `plugins/tcs-patterns/` and 21 catalogue entries; assert `git diff -M --summary` reports a
      rename for every one of the 80 files; assert all 21 frontmatter blocks still parse with a YAML
      parser. The last one is not paranoia — ten skill descriptions in this repository once stopped
      parsing while `claude plugin validate` passed over all ten.
   3. Implement: `git mv plugins/tcs-patterns/skills/<name> plugins/tcs-patterns/templates/patterns/<name>`
-     for all 21, and `git mv plugins/tcs-patterns/skills/REFERENCES.md plugins/tcs-patterns/templates/patterns/REFERENCES.md`.
-     Move **directories**, not files, so each subtree travels in one rename and `git log --follow`
+     for all 21. That is the whole move; there is no loose file beside the 21 directories. Move
+     **directories**, not files, so each subtree travels in one rename and `git log --follow`
      survives. Confirm no `.gitkeep` or hidden file is left behind before relying on git not
-     tracking empty directories.
+     tracking empty directories — verified none on 2026-10-03, so a hit means something changed.
   4. Validate: `python3 scripts/observability/report.py`; `git diff -M --summary | grep -c R100`;
      `python3 -m pytest -q` unchanged from baseline.
   5. Success:
@@ -79,26 +82,47 @@ contract that keeps a distributed copy detectably stale rather than silently sta
      - [ ] 21 `VERSION` files, each a single positive integer `[ref: SDD/Interface Specifications]`
      - [ ] A new pattern directory without a `VERSION` fails the suite `[ref: SDD/Risks/Technical Debt]`
 
-- [ ] **T1.3 The three broken outward references repaired** `[activity: refactor]`
+- [ ] **T1.3 The four broken outward references repaired** `[activity: refactor]`
 
-  1. Prime: Read all three sites. `templates/patterns/hexagonal/reference/testing-hex-arch.md:3`
-     and `templates/patterns/ddd/reference/testing-by-layer.md:5` cite `../../REFERENCES.md`, which
-     after T1.1 resolves again because the file moved with them — **verify this rather than assume
-     it**. `templates/patterns/obsidian-plugin/SKILL.md:220` cites
-     `../../../../docs/guides/tcs-patterns.md`, which already resolves to nothing from the installed
-     plugin cache today — issue #163's second instance.
-  2. Test: Assert that no file under `templates/patterns/` contains a relative path that escapes
-     `templates/patterns/`; assert every intra-catalogue relative link resolves to an existing file.
-     Write this as a repository-wide test, because it is the check that would have caught the
-     obsidian reference years ago.
-  3. Implement: Confirm the two `REFERENCES.md` citations resolve post-move and leave them. Replace
-     the obsidian citation with an inline statement of what the guide says about the hook's scope
-     gate and the `CLAUDE_ALLOW_ESLINT_DISABLE=1` escape hatch, so the pattern is self-contained
-     once copied into a consumer repository.
+  1. Prime: Read all **four** sites. The first three cite a `REFERENCES.md` that has never
+     existed in this repository, verified 2026-10-03 against the working tree and against
+     `git log --diff-filter=ADR --all -- '*REFERENCES.md'`, which returns nothing. They have always
+     resolved to nothing, and the relocation neither causes nor fixes that.
+
+     | Site | Citation | Resolves to |
+     | --- | --- | --- |
+     | `hexagonal/reference/testing-hex-arch.md:3` | `../../REFERENCES.md` | catalogue root — absent |
+     | `hexagonal/reference/hexagonal-layers.md:17` | `../REFERENCES.md` | pattern root — absent |
+     | `ddd/reference/testing-by-layer.md:5` | `../../REFERENCES.md` | catalogue root — absent |
+     | `obsidian-plugin/SKILL.md:220` | `../../../../docs/guides/tcs-patterns.md` | repo root — exists |
+
+     The obsidian target does exist and resolves from the working tree; it resolves to nothing from
+     the installed plugin cache, which is issue #163's second instance.
+
+     A catalogue-level `REFERENCES.md` is **not** the repair. C5 copies one pattern directory
+     `[ref: SDD/Runtime View]`, so anything a pattern cites above its own directory is unreachable
+     the moment it is installed — the same defect with a version number attached. Two patterns
+     (`event-sourcing`, `observability`) already own a per-pattern `reference/references.md`, which
+     is the shape that survives installation.
+  2. Test: Assert that no file under `templates/patterns/<name>/` contains a relative path that
+     escapes **its own pattern directory** — per pattern, not per catalogue, because the pattern
+     directory is the unit C5 copies and a catalogue-relative link is dead in a consumer repository.
+     Assert every remaining relative link resolves to an existing file. Write this as a
+     repository-wide test, because it is the check that would have caught all four of these
+     years ago.
+  3. Implement: Keep the attribution, drop the dead pointer. In `testing-hex-arch.md:3` and
+     `testing-by-layer.md:5` the clause offering sources at `../../REFERENCES.md` goes and the
+     attribution to Valentina Jemuović's Use Case Driven Design stays; in `hexagonal-layers.md:17`
+     the pointer is the entire sentence, so the line goes. **Invent no source notes to replace
+     them** — the sources were never in this repository, and a guessed citation inside a sources
+     list is worse than no list. Replace the obsidian citation with an inline statement of what the
+     guide says about the hook's scope gate and the `CLAUDE_ALLOW_ESLINT_DISABLE=1` escape hatch, so
+     the pattern is self-contained once copied into a consumer repository.
   4. Validate: `python3 -m pytest -q`; the new link test fails if any escaping path is reintroduced.
   5. Success:
-     - [ ] No reference escapes the pattern catalogue `[ref: PRD/F1 3rd]`
-     - [ ] Every intra-catalogue relative link resolves `[ref: PRD/F1 3rd]`
+     - [ ] No reference escapes its own pattern directory `[ref: PRD/F1 3rd]`
+     - [ ] Every remaining relative link resolves to an existing file `[ref: PRD/F1 3rd]`
+     - [ ] No source note was invented to fill the gap the dead pointers leave `[ref: SDD/Risks]`
      - [ ] The obsidian pattern is self-contained for a consumer repository `[ref: SDD/Risks/Known Technical Issues]`
 
 - [ ] **T1.4 The per-pattern CI gate rule** `[activity: platform-operations]` `[parallel: true]`

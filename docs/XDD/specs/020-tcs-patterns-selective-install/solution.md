@@ -174,7 +174,7 @@ None. The design performs no network access and integrates no service.
 
 **In scope**
 
-- Relocating the 21 pattern directories inside the plugin, and the three outward references that
+- Relocating the 21 pattern directories inside the plugin, and the four outward references that
   relocation breaks.
 - Two new skills in `tcs-patterns` (setup, catalogue reader) and the Python modules behind them.
 - One new segment in the existing session-start advisory.
@@ -324,7 +324,6 @@ plugins/tcs-patterns/
 │   │   ├── SKILL.md                    MOVED     `name: <name>` kept; installer rewrites it
 │   │   ├── reference/ examples/ ...    MOVED     unchanged
 │   │   └── VERSION                     NEW       single line, maintainer-set (ADR-3)
-│   └── REFERENCES.md                   MOVED     from skills/REFERENCES.md; two patterns cite it
 ├── skills/
 │   ├── patterns-setup/                 NEW       C3 — the interview and orchestration
 │   │   ├── SKILL.md                    NEW       argument-hint: <install|update|remove|status> [path]
@@ -941,7 +940,7 @@ standing for two or three PRD criteria that assert the same behaviour from diffe
 | # | Criterion | PRD trace |
 |---|---|---|
 | AC-1 | After the relocation, a session's listing contains at most 2 `tcs-patterns` descriptions, and the inventory walk reports 21 catalogue entries and 0 unreachable skill files | F1 |
-| AC-2 | All 80 pattern files are reported by git as renames at 100% similarity; the three outward references resolve or are inlined | F1 |
+| AC-2 | All 80 pattern files are reported by git as renames at 100% similarity; no file cites a path above its own pattern directory, and every remaining relative link resolves | F1 |
 | AC-3 | For every detection fixture, the normalised report equals `expected.json` exactly | F2, F3 |
 | AC-4 | A fixture with a populated `node_modules` and an empty root `dependencies` still finds the nested signal, and does not report anything from the vendored tree | F2, trap 5 |
 | AC-5 | A fixture with no server framework and no test framework yields all gates closed and no questions | F3 |

@@ -364,7 +364,9 @@ their say.
 - **Judging the 21 patterns on content.** Merging overlapping patterns, or dropping ones nobody
   wants, is a content decision across plugins and not a distribution fix.
 - **Changing any pattern's invocability flag.** The patterns stay as they are, bodies untouched
-  apart from relocation and the outward references that relocation breaks.
+  apart from relocation and the four outward references repaired alongside it. Three of those four
+  were already dead before this phase and are fixed because this is the work that reads those files,
+  not because relocation broke them.
 - **Applying this to the other three plugins.** Named as the follow-on, deliberately not started
   here.
 
