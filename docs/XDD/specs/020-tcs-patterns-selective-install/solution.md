@@ -1048,6 +1048,18 @@ transitive closure: companions are one hop, not a dependency graph to resolve.
 - **The listing stays over budget.** 40191 characters against 8000–30000 depending on the model;
   this removes 5918. Out of scope by decision, and the three remaining large plugins are each
   comparable.
+- **One provenance pointer survives into consumer repositories as a dead path.**
+  `event-sourcing/reference/references.md:64` cites `docs/about/sources.md`, which resolves only
+  from this repository's root and therefore points at nothing once C5 copies the pattern alone.
+  Same class as the obsidian citation above, but without link syntax, so the catalogue link test
+  does not see it — the test treats a bare code-span path as prose by design
+  `[ref: SDD/Interface Specifications/Data model: companion map]`. It is one line, found by
+  scanning for code-span paths that resolve from the repository root but not from the pattern:
+  that scan returned 8 hits of which **7 were false positives** — `README.md`, `LICENSE`,
+  `.DS_Store`, `tests/`, `conftest.py`, `.gitignore`, `venv`, all generic filenames mentioned in
+  prose that happen to exist at this repository's root. One genuine instance, not a class, and the
+  7-of-8 rate is further evidence that bare code-span paths cannot be classified mechanically.
+  Left for Phase 5's documentation task rather than widening T1.3, whose scope named four sites.
 
 ### Technical Debt
 
