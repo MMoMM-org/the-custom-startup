@@ -253,5 +253,33 @@ written from the specification rather than from the implementation.
   Confirm every fixture's `why` field reads as an explanation a second party could act on, because
   a fixture whose purpose is unclear will be deleted by someone later.
 
-  - Success: 18 fixtures green; detection suite runnable standalone; both legs green per leg
-    `[ref: SDD/AC-3, AC-4, AC-5, AC-6, AC-14]`
+  **Held-out validation, mandatory and specified here because the corpus cannot provide it.**
+  The 18 fixtures are the detector's own test data, so a detector that fits them passes them.
+  The PRD's top risk is not answered by green fixtures; it is answered by rules holding on a
+  tree the implementer never saw. Four such cases were built on 2026-10-03 **before** T2.2's
+  implementer began, with every expectation derived from `[ref: SDD/Interface Specifications/
+  Detection rules: the eight stack facts and the three gates]` and cited clause by clause.
+  Rebuild and run them; they are deliberately **not** fixtures, because the corpus count is
+  asserted at exactly 18 and these must never become data the implementation is tuned to:
+
+  | Case | Tree | What only this case proves |
+  |---|---|---|
+  | mixed Go + Python | root `go.mod`, `cmd/main.go`, `cmd/main_test.go`, `services/api/backend/pyproject.toml` with `django` + `pyjwt`, `services/api/backend/app.py`, `vendor/github.com/x/ui/tsconfig.json` | two ecosystems at once; `vendor/` as the excluded dir; a **server framework three levels down**; Go tests as framework evidence; `typescript-strict` refused from a vendored tree |
+  | bare Go | `go.mod`, `cmd/main.go`, `cmd/hello_test.go` | `testing` firing with no test directory at all, via the tests-beside-code clause |
+  | vendor only | `vendor/x/tsconfig.json` and nothing else | `auto: []` with `unrecognised_stack: true`, and the exclusion applying to a non-manifest file search |
+  | setup.py | `setup.py` with `install_requires` holding `mcp`, plus `src/app.py` | the `setup.py` reader, which **no fixture exercises** -- flagged by T2.2's implementer as implemented and unverified |
+
+  Run the evidence invariants against these too, since they are the only trees where a
+  fabricated `evidence` path cannot hide behind a fixture that happens to contain it.
+
+  Measured against T2.2's detector (`94da599`..`bc6e28f`): all four correct on `auto`,
+  `baseline`, `unrecognised_stack`, `must_not_propose`, `manifests_walked` and every evidence
+  invariant; only `gates` diverged, which is T2.2's placeholder. Re-run after T2.3 and expect
+  zero divergence.
+
+  **The rule that makes this worth anything:** a divergence is resolved against the SDD, never
+  against the fixtures, and never by editing an expectation to match the output.
+
+  - Success: 18 fixtures green; all four held-out cases matching the written rules with no
+    divergence; detection suite runnable standalone; both legs green per leg
+    `[ref: SDD/AC-3, AC-4, AC-5, AC-6, AC-14; PRD/Risks and Mitigations]`
