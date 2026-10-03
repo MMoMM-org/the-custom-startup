@@ -28,9 +28,15 @@ phase: 5
 - **The catalogue reader is one skill serving 21 bodies.** It is justified against the granularity
   rules in `docs/about/skill-and-agent-design.md` because the alternative is 21 descriptions in
   every session's listing, which is the problem this spec exists to remove.
-- **Both changelogs or the push fails.** `docs-sync` requires a root `CHANGELOG.md` entry for
-  user-facing change; a previous spec lost a push to exactly this. Run `check-docs-sync.sh`
-  locally before pushing, not after CI complains.
+- **Both changelogs, or the pull request fails.** `docs-sync` requires a root `CHANGELOG.md`
+  entry for user-facing change; a previous spec lost a push to exactly this. It is a **pull
+  request** gate -- `if: github.event_name == 'pull_request'`, and `push` triggers only on
+  `main` -- so pushing a feature branch runs no legs at all and cannot tell you anything.
+  Measured on 2026-10-03 after Phase 1: `docs-sync` already **fails** on this branch, because
+  the relocated pattern files are user-facing and no changelog entry exists yet. That failure
+  is expected and is this task's to clear -- do not read it as a regression if a pull request
+  is opened before T5.4 lands. Run `check-docs-sync.sh` locally rather than waiting for CI,
+  and note it wants a file path or `-`, never a space-separated list.
 
 **Dependencies**:
 - Phases 1-4 all complete. The interview needs detection and installation; the end-to-end test
