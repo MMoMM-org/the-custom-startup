@@ -348,6 +348,8 @@ plugins/tcs-git-helpers/
 
 tests/
 ├── test_patterns_detect.py             NEW       parametrized over every fixture
+├── test_patterns_detection_corpus.py   NEW       corpus integrity; green without a detector
+├── patterns_detection_corpus_lib.py    NEW       shared fixture loading for the two above
 ├── test_patterns_install.py            NEW       rename, hash, manifest, idempotency
 ├── test_patterns_guard.py              NEW       three namespaces, refusal, partial install
 ├── test_patterns_drift.py              NEW       per-pattern drift, silence when current
@@ -357,6 +359,7 @@ tests/
         ├── repo/                       NEW       the synthetic tree
         └── expected.json               NEW       expected auto set, gates, and evidence
 
+conftest.py                             MODIFIED  collect_ignore_glob for fixture repo/ trees
 docs/about/principles.md                MODIFIED  line 167 correction
 docs/guides/tcs-patterns.md             MODIFIED  the guide the obsidian pattern cites
 ```
@@ -612,6 +615,22 @@ unexpected extra proposal fails just as loudly as a missing one.
 `must_not_propose` is redundant against `auto` and deliberately so: it names the trap in the
 fixture, so a future reader sees what the case is defending and a careless widening of `auto` fails
 with a message that explains itself.
+
+**`surface` is an invariant, not fixture data — and must be asserted as one.** `baseline` here is a
+list of bare pattern names, while the report's `baseline` carries objects with a `surface` field.
+That field exists only to mark a baseline entry as never-surfaced, is `false` for every baseline
+entry by definition, and has no counterpart on `auto` entries — so it is not per-case data and
+adding a `surface` key here would be wrong (it would also break the exact-key guard this contract
+is checked by). It must instead be asserted **universally** in the detection test: every entry in
+the report's `baseline` has `surface is False`.
+
+Without that assertion trap 1 cannot fail if it is reintroduced. A detector emitting
+`{"pattern": "testing", "surface": true}` satisfies every one of the 18 fixtures, because the
+comparison reads `entry["pattern"]` and nothing else — while `testing` would then be surfaced to
+the user as a recommendation, which is exactly the trap. That would violate
+`[ref: SDD/Quality Requirements]`'s own row, "all seven traps have a fixture that fails if the
+trap is reintroduced". Found by the T2.1 spec-compliance review on 2026-10-03: the trap-1 fixture
+says "must report as baseline with surface:false" in its `why` and had no means to check it.
 
 The trap numbers used in `why` are defined in **The seven traps, numbered** under Quality
 Requirements. Use those numbers; do not renumber them.
