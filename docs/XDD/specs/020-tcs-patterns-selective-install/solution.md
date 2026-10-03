@@ -486,6 +486,17 @@ opened `[ref: SDD/Interface Specifications/Data model: detection report]`.
 | `q2_architecture` | `q1_backend` opened, **or** any one weak content signal: all three of `ports/` + `adapters/` + `domain/` as directories; **two or more** `events.py` / `events.ts` in distinct module directories; one directory named `event_store` or `eventstore`; one broker dependency `kafkajs`, `amqplib`, `@aws-sdk/client-sqs`, `celery` | `ddd`, `event-driven`, `event-sourcing`, `hexagonal`, `functional` (5) |
 | `q3_test_quality` | any test framework present — framework evidence only, no tests shape required, defined under *What counts as a test framework* below | `mutation-testing`, `test-design-reviewer` (2) |
 
+**Which dependency sections a rule may read — settled 2026-10-03.** A **stack fact** reads both
+`dependencies` and `devDependencies`: a repository with `react` or `@modelcontextprotocol/sdk`
+declared as a development dependency is still a React repository, still an MCP server, and the
+pattern still applies to it. A **gate** reads `dependencies` only — trap 4 — because `q1_backend`
+asks whether this repository *runs a service*, and a server framework present solely to drive a
+test harness does not make it one. The split is therefore about the question being asked, not
+about the section being tidier. Stated because the table above gave the restriction only for
+`q1_backend` and the permission only for `testing`'s Node row, leaving `mcp-server`,
+`obsidian-plugin` and `react-testing` genuinely ambiguous; T2.2 read both for all three, which
+is now the rule rather than an unreviewed choice.
+
 Three consequences the fixtures must assert rather than assume:
 
 - **Each weak signal's quantity is fixed, not left to taste.** `ports/` + `adapters/` +
@@ -718,7 +729,10 @@ empty root `dependencies`; the signal is three levels down. Reading only the roo
 reading `devDependencies` finds a framework that is only there to drive tests.
 
 ```python
-SKIP_DIRS = {"node_modules", ".venv", "venv", "vendor", ".git", "dist", "build"}
+# The normative exclusion list is exactly these four -- see the walked-manifest bullet
+# under "Detection rules". This sample once added ".git", "dist" and "build", which
+# widened it beyond the rule and would have been copied as if authoritative.
+SKIP_DIRS = {"node_modules", ".venv", "venv", "vendor"}
 
 def walk_manifests(root, filename):
     """Every manifest named `filename`, root first, vendored trees excluded."""
@@ -1000,8 +1014,27 @@ the mechanism that keeps a partial install coherent.
 ### ADR-2: Detector and installer in Python; only the advisory segment in bash — CONFIRMED
 
 **Decision.** `detect.py`, `guard.py`, `install.py`, `manifest.py` and `patterns_drift.py` are
-Python 3. The only shell this work adds is the advisory segment inside the existing
-`session-start-brief.sh` and the per-pattern rule inside the existing CI gate script.
+Python **3.11 or newer**, standard library only. The only shell this work adds is the advisory
+segment inside the existing `session-start-brief.sh` and the per-pattern rule inside the
+existing CI gate script.
+
+**The 3.11 floor, decided 2026-10-03 by Marcus.** `tomllib` entered the standard library in
+3.11, and `pyproject.toml` must be parsed. No floor was stated anywhere in this document
+before now, which is the root cause of a real defect: T2.2's implementer, facing a question
+the specification had not answered, wrote a regex fallback for older runtimes. Measured, that
+fallback matched `dependencies\s*=\s*\[(.*?)\]` across the **whole file** rather than the
+`[project]` table, so a `pyproject.toml` carrying an unrelated `[tool.x] dependencies = ["mcp"]`
+array produced a false `mcp-server` proposal — citing `pyproject.toml: dependencies.mcp`, a
+confidently wrong evidence string that the evidence invariants cannot catch because the path
+genuinely exists. A silently wrong answer, which is worse than no answer.
+
+So: **detect it and refuse, loudly.** On a pre-3.11 interpreter the setup must fail with a
+message naming the required version, never degrade to a weaker parser. A consumer on a stock
+macOS `python3` gets an actionable error instead of a wrong proposal. The alternatives were
+rejected: scoping the regex to `[project]` keeps every other regex-TOML trap (multi-line
+arrays, comments, inline tables), each needing its own fixture; and skipping dependency
+extraction on pre-3.11 would silently disable the `q1_backend` gate for `pyproject`-only
+repositories, which is the more damaging loss.
 
 **Rationale.** Two of the seven traps are structural-parsing problems. Trap 4 requires
 distinguishing `dependencies` from `devDependencies` inside JSON, and trap 5 requires walking
@@ -1189,6 +1222,27 @@ before being written down, not chosen.
 
 Trap 1 is the only one that changes a report *field* rather than suppressing a proposal, which is
 why it appears in the detection-report contract above and not only here.
+
+**Traps 3, 4 and 6 are designed out, not defended by code — recorded 2026-10-03.** All three
+concern patterns settled by a gated question, and **no gate-settled pattern is ever emitted by
+the detector**: `detect.py` cannot name `secure-oauth-oidc`, `node-service`, `ddd`,
+`event-driven`, `event-sourcing`, `hexagonal`, `functional` or any of the other gate-settled
+patterns, verified by grep. The trap cannot occur, so there is nothing for a rule to defend.
+
+This matters for how their fixtures are read. `trap-03`'s `must_not_propose:
+["secure-oauth-oidc"]` passes because the pattern is unreachable, not because any code
+distinguishes protocol evidence from session tooling. That is **not** a vacuous guard: it is a
+forward regression guard, and it fails the moment anyone makes a gate-settled pattern
+auto-proposable — which is the only way the trap could return. Same for traps 4 and 6.
+
+One consequence to state plainly rather than leave as a loose end: trap 3's protocol-evidence
+definition — an AS/client/RP library, or `.well-known`, or `redirect_uri` with `client_id` —
+**has no implementer and is not assigned to any task**. It is research residue from when
+auto-detecting OIDC was still on the table; the design answered the trap by never auto-proposing
+the pattern at all. It is retained because it documents what *would* be required if that ever
+changed, and a future reader should not go hunting for the code that implements it. Found by the
+T2.2 spec-compliance review, which checked phases 3, 4 and 5 and T5.1 for an owner and found
+none.
 
 ## Acceptance Criteria
 
