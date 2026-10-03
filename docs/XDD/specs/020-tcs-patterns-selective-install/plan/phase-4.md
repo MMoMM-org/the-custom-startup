@@ -59,7 +59,9 @@ only where it exists.
      wrapper defaulting to `.githooks`. bash 3.2, shellcheck-clean. Remember that a bare `[[ ]]`
      only fails a bats test as the body's last statement.
   4. Validate: the bats leg for `tcs-git-helpers`; `python3 -m pytest -q`; `shellcheck` on the
-     changed script. The three existing bundles must behave exactly as before.
+     changed script. The two existing bundle-table rows must behave exactly as before — three
+     markers exist, but the rule-enforcer bundle is ungated (#174), so there is no third row
+     to leave alone.
   5. Success:
      - [ ] Existing callers unchanged in behaviour `[ref: SDD/Interface Specifications]`
      - [ ] Both implementations return the same verdicts for the same inputs `[ref: SDD/Interface Specifications]`

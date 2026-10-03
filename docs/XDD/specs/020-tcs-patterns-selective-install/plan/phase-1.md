@@ -186,7 +186,7 @@ contract that keeps a distributed copy detectably stale rather than silently sta
            existing `references.md` gained a line `[ref: SDD/Risks]`
      - [ ] The obsidian pattern is self-contained for a consumer repository `[ref: SDD/Risks/Known Technical Issues]`
 
-- [ ] **T1.4 The per-pattern CI gate rule** `[activity: platform-operations]` `[parallel: true]`
+- [x] **T1.4 The per-pattern CI gate rule** `[activity: platform-operations]` `[parallel: true]`
 
   1. Prime: Read the existing gate and its bundle table
      (`plugins/tcs-git-helpers/scripts/ci/check-hook-bundle-version.sh`), ADR-9
@@ -208,7 +208,11 @@ contract that keeps a distributed copy detectably stale rather than silently sta
      - [ ] Pattern changed with its `VERSION` → passes `[ref: PRD/F9 2nd]`
      - [ ] Wrong pattern's `VERSION` bumped → still fails `[ref: SDD/Architecture Decisions/ADR-9]`
      - [ ] A change touching no pattern → gate silent `[ref: PRD/F9 3rd]`
-     - [ ] The three pre-existing bundles unaffected `[ref: SDD/Architecture Decisions/ADR-9]`
+     - [ ] The **two** pre-existing bundle-table rows unaffected — git-helpers githooks and
+           observability scripts. Three markers exist but only two are gated; the
+           rule-enforcer bundle has a marker and no row (#174), which is why this criterion
+           said three and could not have been met as written
+           `[ref: SDD/Architecture Decisions/ADR-9]`
 
 - [ ] **T1.5 Phase validation** `[activity: validate]`
 
