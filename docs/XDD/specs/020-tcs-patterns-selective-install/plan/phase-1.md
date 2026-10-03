@@ -88,7 +88,7 @@ contract that keeps a distributed copy detectably stale rather than silently sta
      - [ ] No test moves. If one does, the premise that nothing reads the real tree was wrong —
            stop and investigate rather than updating the test `[ref: SDD/Quality Requirements]`
 
-- [ ] **T1.2 A `VERSION` file per pattern** `[activity: data-architecture]`
+- [x] **T1.2 A `VERSION` file per pattern** `[activity: data-architecture]`
 
   1. Prime: Read the catalogue entry contract `[ref: SDD/Interface Specifications/Data model: catalogue entry]`
      and ADR-3's rationale `[ref: SDD/Architecture Decisions/ADR-3]`.
