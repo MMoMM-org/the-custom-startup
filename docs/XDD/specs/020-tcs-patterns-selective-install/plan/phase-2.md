@@ -51,9 +51,14 @@ written from the specification rather than from the implementation.
 - [ ] **T2.1 The fixture corpus and its expectation format** `[activity: testing]`
 
   1. Prime: Read the fixture expectation contract
-     `[ref: SDD/Interface Specifications/Data model: fixture expectation]` and the PRD's edge cases
-     `[ref: PRD/Detailed Feature Specifications]`. Build each fixture from the written rule, not
-     from any code — no detector exists yet, which is the point.
+     `[ref: SDD/Interface Specifications/Data model: fixture expectation]`, **the detection rules
+     themselves** `[ref: SDD/Interface Specifications/Detection rules: the eight stack facts and
+     the three gates]`, the numbered traps `[ref: SDD/Quality Requirements/The seven traps,
+     numbered]` and the PRD's edge cases `[ref: PRD/Detailed Feature Specifications]`. Build each
+     fixture from the written rule, not from any code — no detector exists yet, which is the
+     point. Both of those first two references were added on 2026-10-03 because neither the rule
+     signals nor the trap numbering had ever been written down; before that there was no written
+     rule for this step to read.
   2. Test: The loader itself is tested first: every fixture directory contains `repo/` and
      `expected.json`; every `expected.json` validates against the declared shape; every pattern
      named anywhere in any fixture is one of the 21. A typo in a fixture must fail loudly rather
@@ -79,8 +84,12 @@ written from the specification rather than from the implementation.
 - [ ] **T2.2 The eight stack-fact rules** `[activity: backend-api]`
 
   1. Prime: Read the auto rules and their evidence requirements
+     `[ref: SDD/Interface Specifications/Detection rules: the eight stack facts and the three
+     gates]`, the report they fill
      `[ref: SDD/Interface Specifications/Data model: detection report]` and the parsing example
-     `[ref: SDD/Implementation Examples]`. Two traps are load-bearing here: runtime dependencies
+     `[ref: SDD/Implementation Examples]`. The first reference replaces a mis-pointer: this step
+     used to send you to the detection-report model for "the auto rules", and that model is a
+     JSON shape naming two patterns, not a rule set. Two traps are load-bearing here: runtime dependencies
      only, and nested manifests with vendored trees excluded.
   2. Test: The T2.1 fixtures for the eight rules, plus traps 2, 3, 4, 5 and 7 — DOM-render evidence
      required rather than a `ui/` directory name or `jsdom`; federated identity never inferred from
@@ -97,8 +106,11 @@ written from the specification rather than from the implementation.
 
 - [ ] **T2.3 The three gates and the unrecognised-stack flag** `[activity: backend-api]`
 
-  1. Prime: Read the gating walkthrough `[ref: SDD/Runtime View/Complex Logic]` and ADR-5
-     `[ref: SDD/Architecture Decisions/ADR-5]`. The subtlety: `unrecognised_stack` is not "all
+  1. Prime: Read the gate table
+     `[ref: SDD/Interface Specifications/Detection rules: the eight stack facts and the three
+     gates]`, the gating walkthrough `[ref: SDD/Runtime View/Complex Logic]` and ADR-5
+     `[ref: SDD/Architecture Decisions/ADR-5]`. The walkthrough traces one stack; the table is
+     the rule set. The subtlety: `unrecognised_stack` is not "all
      gates closed". A repository in an uncovered language with a ports-and-adapters shape must
      still open Q2.
   2. Test: Q1 opens on a server framework in `dependencies` and not on one in `devDependencies`;

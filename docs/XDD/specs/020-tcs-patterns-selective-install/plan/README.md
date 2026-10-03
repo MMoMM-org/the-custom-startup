@@ -41,7 +41,7 @@ version: "1.0"
 | status | IN_REVIEW |
 | totalTasks | 26 |
 | parallelTasks | 6 |
-| specReferences | 151 |
+| specReferences | 155 |
 | clarificationsRemaining | 0 |
 
 ### PhaseStatus

@@ -441,6 +441,60 @@ Three fields carry design decisions rather than data:
 - `unrecognised_stack` is distinct from all gates being false (ADR-5). A repository can have an
   unrecognised language and still reach Q2 through a content signal.
 
+#### Detection rules: the eight stack facts and the three gates (C2)
+
+Everything `detect.py` decides, stated as rules rather than as prose about rules. **This section was
+added on 2026-10-03, after Phase 1**, because the signals were missing: `fastify`, `nestjs`, `hono`,
+`gin`, `chi`, `celery`, `kafkajs`, `amqplib`, `enzyme` and `mark3labs` appeared nowhere in this spec
+directory, and the only concrete signals present were the four in the trap table. The rules
+themselves are not new -- they are the set validated against six repositories during this SDD's
+research, which this document described in effect and never transcribed. T2.1 requires each fixture
+to be built from the written rule; without this section there was no written rule to build from, and
+T2.2's rules would have been written to satisfy whatever the fixture author guessed. That is the
+circularity `[ref: PRD/Risks and Mitigations]` names as the top risk.
+
+The partition was checked against the catalogue before being recorded: 8 + 6 + 5 + 2 = 21, no
+pattern in two groups, no pattern in none, and every name a real directory under
+`templates/patterns/`. That check is AC-6's "decided exactly once" invariant, and it is a test in
+T2.5 rather than a claim here.
+
+**The eight stack facts.** Decided from files alone, proposed with evidence, never asked about.
+
+| Pattern | Fires when | Notes |
+|---|---|---|
+| `obsidian-plugin` | a `manifest.json` carrying `minAppVersion`, **or** an `obsidian` dependency | the manifest key matters; a bare `manifest.json` is not evidence |
+| `mcp-server` | dependency `@modelcontextprotocol/sdk`, or `mcp`, or `github.com/mark3labs/mcp-go` | the three ecosystems' SDK names |
+| `typescript-strict` | any `tsconfig.json` | presence only; the `strict` flag is not required to fire |
+| `go-idiomatic` | a `go.mod` | |
+| `python-project` | any `.py` file **and** one of `pyproject.toml`, `requirements.txt`, `setup.py` | trap 7: both `venv` and `.venv` are recognised wherever a virtual environment is tested for |
+| `react-testing` | a `react` dependency **and** one of `@testing-library/react`, `react-test-renderer`, `enzyme` | `react` alone is not evidence |
+| `frontend-testing` | DOM-render evidence in test files: `render(`, `screen.`, `fireEvent`, `userEvent` | trap 2: never a directory name, never jsdom alone |
+| `testing` | any non-UI test framework together with a tests shape | trap 1: `baseline` with `surface: false`, never surfaced as a recommendation |
+
+**The three gates.** A gate decides only **whether to ask**. Nothing is installed because a gate
+opened `[ref: SDD/Interface Specifications/Data model: detection report]`.
+
+| Gate | Opens when | Settles |
+|---|---|---|
+| `q1_backend` | a server framework in **`dependencies`**, never `devDependencies` (trap 4): Node `express`, `fastify`, `koa`, `@nestjs/core`, `hono`; Python `fastapi`, `flask`, `django`, `aiohttp`; Go `gin`, `echo`, `chi` | `api-design`, `bff-entry-points`, `secure-oauth-oidc`, `observability`, `twelve-factor`, `node-service` (6) |
+| `q2_architecture` | `q1_backend` opened, **or** a weak content signal: `ports/` + `adapters/` + `domain/` directories; a per-module `events.py` / `events.ts`; a directory named `event_store` or `eventstore`; a broker dependency `kafkajs`, `amqplib`, `@aws-sdk/client-sqs`, `celery` | `ddd`, `event-driven`, `event-sourcing`, `hexagonal`, `functional` (5) |
+| `q3_test_quality` | any test framework present | `mutation-testing`, `test-design-reviewer` (2) |
+
+Three consequences the fixtures must assert rather than assume:
+
+- **`q2_architecture` can open while `q1_backend` is shut.** That is the whole point of the `or`
+  (trap 6): event-driven and event-sourcing are routinely hand-rolled with no distinctive
+  dependency, so a repository in an uncovered language with a ports/adapters shape must still reach
+  Q2. `unrecognised_stack` is therefore not the same state as all gates closed `[ref: SDD/Architecture Decisions/ADR-5]`.
+- **`secure-oauth-oidc` is settled by Q1 but defended by trap 3.** Opening Q1 does not propose it;
+  and nothing may propose it on `jwt`, `bcrypt` or `pyjwt`, which are session and hashing tools, not
+  a federated-identity protocol. Protocol evidence means an AS/client/RP library, or `.well-known`,
+  or `redirect_uri` together with `client_id`.
+- **The walk excludes `node_modules`, `.venv`, `venv` and `vendor`** (trap 5), and walks nested
+  manifests so a workspace root declaring nothing still yields its children's signals. Every
+  manifest actually read is listed in `manifests_walked`, so a missing signal is explicable.
+
+
 #### Data model: companion map (C1 → C2 → C3)
 
 Nine pattern pairs cite each other's files, measured over the catalogue on 2026-10-03: 14
