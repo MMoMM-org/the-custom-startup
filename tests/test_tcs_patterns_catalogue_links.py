@@ -104,9 +104,13 @@ def _non_fenced_lines(text: str):
 def _violation(path: Path, target: str, n: int) -> str | None:
     """Apply both rules to one candidate relative path. Escape is checked first and
     independently of existence: a path that climbs out of its pattern directory is wrong
-    on arrival even when, as it happens, something exists at the far end in this checkout
-    (site 4's link resolves to a real `docs/guides/tcs-patterns.md` in THIS repo -- that
-    does not save it, because that file is not copied out with the pattern)."""
+    on arrival even when something might exist at the far end in this checkout, because
+    when C5 copies a single pattern directory to a consumer repository, the far end does
+    not travel with it. Therefore escaping is defective regardless of what this repository
+    contains. For example, a hypothetical `../../README.md` from a pattern's `reference/`
+    directory would resolve to a file that does exist here and is still wrong once the
+    pattern is installed alone. The relocation of obsidian-plugin/SKILL.md deepened the
+    path by one level, breaking its four-../ link in the working tree as well."""
     pattern_root = _pattern_root(path).resolve()
     resolved = (path.parent / target).resolve()
     try:
