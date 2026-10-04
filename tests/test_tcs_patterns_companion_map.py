@@ -350,10 +350,18 @@ def test_a_hidden_directory_in_the_catalogue_is_not_a_pattern(tmp_path: Path) ->
     catalogue as its working directory makes the harness create
     `.claude/.cc-writes` there; it is gitignored, so `git status` shows a clean
     tree, and the same stray broke three unrelated suites the day this filter
-    was written. This fixture plants the worst shape: a hidden directory that
-    *would* satisfy a citation. Without the filter `.claude` is a pattern,
-    `alpha`'s citation resolves under it, and the map gains a spurious edge --
-    so this fails loudly rather than merely counting one directory too many.
+    was written.
+
+    This fixture plants a hidden directory holding **the same relative path**
+    `beta` holds, so without the filter the citation resolves under two roots at
+    once, is classified **ambiguous**, and is dropped: the map comes back
+    `{}` and a **real** edge is lost. Measured, because the first version of
+    this docstring said the map "gains a spurious edge", which is a different
+    failure mode and not this one -- the mutant yields
+    `assert {} == {'alpha': frozenset({'beta'})}`, and
+    `ambiguous_citations` reports `('.claude', 'beta')`. The companion case
+    below covers the spurious-edge mode, which is real but which this fixture
+    cannot reach.
     """
     _write_pattern_file(tmp_path, "beta", "reference/shared.md", "# shared\n")
     _write_pattern_file(tmp_path, ".claude", "reference/shared.md", "# stray\n")
@@ -364,4 +372,32 @@ def test_a_hidden_directory_in_the_catalogue_is_not_a_pattern(tmp_path: Path) ->
 
     companions = _load_companions()
     assert companions.companion_map(tmp_path) == {"alpha": frozenset({"beta"})}
+    assert companions.ambiguous_citations(tmp_path) == ()
+
+
+def test_a_hidden_directory_cannot_supply_a_companion_edge(tmp_path: Path) -> None:
+    """The other half of the hidden-directory filter, and the failure mode the
+    test above was mistakenly documented as catching: a stray `.claude` holding
+    a file that **nothing else holds**.
+
+    The two modes are genuinely different and only one is reachable per fixture.
+    Measured 2026-10-04 against a mutant with the filter removed:
+
+        colliding fixture (above)   map == {}                  a real edge is LOST
+        this fixture                map == {"alpha": {".claude"}}   a false edge is GAINED
+
+    A lost edge means a companion the user is never offered. A gained edge means
+    a companion that does not exist, named after a directory the harness created
+    while someone ran a grep. The second is the worse report and was the one
+    nothing asserted.
+    """
+    _write_pattern_file(tmp_path, "beta", "reference/other.md", "# other\n")
+    _write_pattern_file(tmp_path, ".claude", "reference/only-here.md", "# stray\n")
+    _write_pattern_file(
+        tmp_path, "alpha", "SKILL.md",
+        "See `reference/only-here.md` for the details.\n",
+    )
+
+    companions = _load_companions()
+    assert companions.companion_map(tmp_path) == {}
     assert companions.ambiguous_citations(tmp_path) == ()
