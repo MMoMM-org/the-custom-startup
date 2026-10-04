@@ -1,4 +1,4 @@
-"""The tcs-patterns detector (spec-020 T2.2).
+"""The tcs-patterns detector (spec-020 T2.2 + T2.3).
 
 `detect(repo_dir)` is the whole contract between scanning and asking
 `[ref: SDD/Interface Specifications/Data model: detection report]`: it reads a
@@ -7,14 +7,13 @@ consults the catalogue for anything but the list of pattern names -- and this
 module does not even need that list, since the eight stack facts below name
 their own patterns directly.
 
-Scope of this module (T2.2): the eight stack facts, the manifest walk, the
-runtime-dependency reader, `evidence`, `manifests_walked`, and
-`unrecognised_stack`. The three gates (`q1_backend`, `q2_architecture`,
-`q3_test_quality`) are emitted as an honest `False` placeholder -- real gate
-evaluation is T2.3's job
-`[ref: docs/XDD/specs/020-tcs-patterns-selective-install/plan/phase-2.md#T2.2]`.
-Implementing them here would collapse the task split the plan deliberately
-drew.
+Scope: the eight stack facts, the manifest walk, the runtime-dependency
+reader, `evidence`, `manifests_walked`, and `unrecognised_stack` (T2.2); the
+three gates (`q1_backend`, `q2_architecture`, `q3_test_quality`) and
+`gate_evidence` (T2.3, see `_evaluate_gates` and the functions above it)
+`[ref: docs/XDD/specs/020-tcs-patterns-selective-install/plan/phase-2.md#T2.3]`.
+A gate decides only whether to ask; no pattern is ever installed because a
+gate opened.
 
 Every rule implemented below is cited to its clause in
 `[ref: SDD/Interface Specifications/Detection rules: the eight stack facts and
@@ -117,6 +116,34 @@ RENDER_EVIDENCE_MARKERS = ("render(", "screen.", "fireEvent", "userEvent")
 # framework", the three preserved distinctions]`.
 TESTS_DIR_NAMES = {"tests", "test", "spec", "__tests__"}
 
+# q1_backend `[ref: SDD/Detection rules, row "q1_backend"]`: a server
+# framework in `dependencies`, never `devDependencies` (trap 4). Three
+# ecosystem-specific sets; Go is matched separately below because a Go
+# module path's last segment, not the whole path, is the framework name.
+NODE_SERVER_FRAMEWORK_DEPS = {"express", "fastify", "koa", "@nestjs/core", "hono"}
+PYTHON_SERVER_FRAMEWORK_DEPS = {"fastapi", "flask", "django", "aiohttp"}
+GO_SERVER_FRAMEWORK_MODULES = {"gin", "echo", "chi"}
+
+# q2_architecture's broker-dependency weak signal `[ref: SDD/Detection rules,
+# row "q2_architecture"]`. A gate, so dependencies only -- same restriction
+# as q1_backend, for the same reason: a broker pulled in to drive a test
+# harness does not mean this repository runs one.
+NODE_BROKER_DEPS = {"kafkajs", "amqplib", "@aws-sdk/client-sqs"}
+PYTHON_BROKER_DEPS = {"celery"}
+
+# q2_architecture's other two weak content signals: the ports/adapters/domain
+# triad (all three required, no common parent, no depth restriction) and the
+# event-store directory (either spelling) `[ref: SDD/Detection rules,
+# "Each weak signal's quantity is fixed, not left to taste"]`.
+ARCHITECTURE_TRIAD_DIR_NAMES = {"ports", "adapters", "domain"}
+EVENT_STORE_DIR_NAMES = {"event_store", "eventstore"}
+
+# q2_architecture's per-module events signal: two or more of these filenames
+# in distinct module directories -- one is a utility file, not a convention.
+EVENTS_FILENAMES = {"events.py", "events.ts"}
+
+_GO_MODULE_VERSION_SEGMENT_RE = re.compile(r"^v\d+$")
+
 
 def _is_test_filename(name: str) -> bool:
     """A filename recognised as a test file across the four ecosystems. Used
@@ -145,12 +172,21 @@ class _Tree:
         self.root = root
         self.files: list[Path] = []
         self.dir_names: set[str] = set()
+        # Full paths of every directory seen, post-exclusion, for gate
+        # evidence that must cite *where* a content signal sits (q2's triad,
+        # event_store) rather than merely that a name occurs somewhere in the
+        # tree `[ref: SDD/Detection rules, "The triad's three directories
+        # need no common parent"]`.
+        self.dir_paths: list[Path] = []
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
             self.dir_names.update(dirnames)
+            for d in dirnames:
+                self.dir_paths.append(Path(dirpath) / d)
             for name in sorted(filenames):
                 self.files.append(Path(dirpath) / name)
         self.files.sort()
+        self.dir_paths.sort()
 
     def rel(self, path: Path) -> str:
         return path.relative_to(self.root).as_posix()
@@ -163,6 +199,9 @@ class _Tree:
 
     def has_dir_named(self, names: set[str]) -> bool:
         return bool(self.dir_names & names)
+
+    def dirs_named(self, names: set[str]) -> list[Path]:
+        return [p for p in self.dir_paths if p.name in names]
 
 
 def _read_text(path: Path) -> Optional[str]:
@@ -283,32 +322,66 @@ def _pyproject_deps_and_pytest(path: Path) -> tuple[list[str], bool]:
 _GO_REQUIRE_LINE_RE = re.compile(r"^([A-Za-z0-9._\-/]+)\s+v\S+")
 
 
-def _go_mod_requires(path: Path) -> list[str]:
+def _go_mod_requires_detailed(path: Path) -> list[tuple[str, bool]]:
+    """Every `require`d module in `path`, as `(module, is_indirect)`.
+
+    Unlike the old single-list `_go_mod_requires`, this keeps the `//
+    indirect` marker instead of discarding it with the rest of the trailing
+    comment -- the marker must survive parsing for gate purposes
+    `[ref: SDD/Detection rules, "_go_mod_requires strips // comments..."]`:
+    a gate excludes a transitive require (q1_backend asks whether this
+    repository *runs* a service), and `gate-q1-go-direct-require` pins a
+    `gin` (direct) against a `chi` (`// indirect`) in the same file, where
+    only the comment distinguishes them."""
     text = _read_text(path)
     if text is None:
         return []
-    modules = []
+    modules: list[tuple[str, bool]] = []
     in_block = False
     for raw_line in text.splitlines():
-        line = raw_line.split("//", 1)[0].strip()
-        if not line:
+        stripped = raw_line.strip()
+        if not stripped:
             continue
-        if line.startswith("require ("):
+        if stripped.startswith("require ("):
             in_block = True
             continue
         if in_block:
-            if line == ")":
+            if stripped == ")":
                 in_block = False
                 continue
-            match = _GO_REQUIRE_LINE_RE.match(line)
+            is_indirect = "// indirect" in stripped
+            code = stripped.split("//", 1)[0].strip()
+            match = _GO_REQUIRE_LINE_RE.match(code)
             if match:
-                modules.append(match.group(1))
+                modules.append((match.group(1), is_indirect))
             continue
-        if line.startswith("require "):
-            match = _GO_REQUIRE_LINE_RE.match(line[len("require "):].strip())
+        if stripped.startswith("require "):
+            rest = stripped[len("require "):].strip()
+            is_indirect = "// indirect" in rest
+            code = rest.split("//", 1)[0].strip()
+            match = _GO_REQUIRE_LINE_RE.match(code)
             if match:
-                modules.append(match.group(1))
+                modules.append((match.group(1), is_indirect))
     return modules
+
+
+def _go_mod_requires(path: Path) -> list[str]:
+    """Every required module, direct or indirect. Used by the stack facts
+    (`mcp-server`, via `MCP_GO_MODULE`) that do not distinguish the two --
+    harmless there, per the SDD note this function's docstring in
+    `_go_mod_requires_detailed` cites. Gate evaluation uses that richer
+    function instead, because it must exclude indirect requires."""
+    return [module for module, _is_indirect in _go_mod_requires_detailed(path)]
+
+
+def _go_module_short_name(module: str) -> str:
+    """The last path segment of a Go module path, with any trailing major-
+    version segment (`/v5`, `/v2`, ...) stripped first -- `gin` from
+    `github.com/gin-gonic/gin`, `chi` from `github.com/go-chi/chi/v5`."""
+    segments = module.split("/")
+    while segments and _GO_MODULE_VERSION_SEGMENT_RE.match(segments[-1]):
+        segments.pop()
+    return segments[-1] if segments else module
 
 
 def _fmt_dep_evidence(tree: _Tree, manifest_path: Path, key: str, name: str) -> str:
@@ -555,15 +628,197 @@ def _manifests_walked(tree: "_Tree") -> list[str]:
     return sorted(walked)
 
 
+# --- T2.3: the three gates ------------------------------------------------
+#
+# A gate decides only *whether to ask*; nothing below proposes a pattern
+# `[ref: SDD/Interface Specifications/Data model: detection report]`. Every
+# function here returns the list of `gate_evidence` strings that justify an
+# open gate -- empty means closed -- and every entry lists EVERY contributing
+# signal, not the first one found
+# `[ref: SDD/Interface Specifications, "lists EVERY signal that contributed"]`.
+
+
+def _gate_runtime_dependency_evidence(tree: _Tree, node_names: set[str], python_names: set[str]) -> list[str]:
+    """Every runtime (never dev, never transitive) dependency declaration
+    across the four non-Go manifests that names one of `node_names` /
+    `python_names`, formatted the same way `_fmt_dep_evidence` already
+    formats a stack fact's dependency evidence
+    `[ref: SDD/Detection rules, "Which declaration counts as dependencies
+    outside package.json"]`. Go is handled separately
+    (`_gate_go_direct_require_evidence`) because its "direct vs. indirect"
+    split lives in a parsed marker, not a manifest section.
+
+    Shared between `q1_backend` (server frameworks) and `q2_architecture`'s
+    broker signal -- both are gates, so both read the same restricted
+    sections: `package.json` `dependencies` only (never `devDependencies`,
+    trap 4); `pyproject.toml`'s `[project]`/`[tool.poetry]` dependencies
+    (never `optional-dependencies` or a `group.*`); every `requirements.txt`
+    line (the format has no development section); `setup.py`'s
+    `install_requires` (never `extras_require`) -- exactly what the existing
+    readers already parse, since every one of them already excludes the
+    development-only counterpart."""
+    evidence: list[str] = []
+    for pkg_path in tree.files_named("package.json"):
+        deps, _dev_deps = _node_deps(pkg_path)
+        for name in deps:
+            if name in node_names:
+                evidence.append(_fmt_dep_evidence(tree, pkg_path, "dependencies", name))
+    for req_path in tree.files_named("requirements.txt"):
+        for name in _requirements_txt_deps(req_path):
+            if name in python_names:
+                evidence.append(f"{tree.rel(req_path)}: requirements.{name}")
+    for pyproject_path in tree.files_named("pyproject.toml"):
+        deps, _has_pytest = _pyproject_deps_and_pytest(pyproject_path)
+        for name in deps:
+            if name in python_names:
+                evidence.append(_fmt_dep_evidence(tree, pyproject_path, "dependencies", name))
+    for setup_path in tree.files_named("setup.py"):
+        for name in _setup_py_deps(setup_path):
+            if name in python_names:
+                evidence.append(f"{tree.rel(setup_path)}: install_requires.{name}")
+    return evidence
+
+
+def _gate_go_direct_require_evidence(tree: _Tree) -> list[str]:
+    """`go.mod` requires that are both direct (not `// indirect`) and match
+    one of `GO_SERVER_FRAMEWORK_MODULES` by their module path's last segment
+    `[ref: SDD/Detection rules, "gate-q1-go-direct-require"]`. An indirect
+    match is skipped entirely, never merely unlabelled, so `gin` and `chi` in
+    the same file resolve to one entry and not two."""
+    evidence: list[str] = []
+    for go_mod_path in tree.files_named("go.mod"):
+        for module, is_indirect in _go_mod_requires_detailed(go_mod_path):
+            if is_indirect:
+                continue
+            if _go_module_short_name(module) in GO_SERVER_FRAMEWORK_MODULES:
+                evidence.append(f"{tree.rel(go_mod_path)}: require.{module}")
+    return evidence
+
+
+def _gate_q1_backend_evidence(tree: _Tree) -> list[str]:
+    """Row `q1_backend`: a server framework in `dependencies`, never
+    `devDependencies` (trap 4), across Node, Python and Go."""
+    return (
+        _gate_runtime_dependency_evidence(tree, NODE_SERVER_FRAMEWORK_DEPS, PYTHON_SERVER_FRAMEWORK_DEPS)
+        + _gate_go_direct_require_evidence(tree)
+    )
+
+
+def _architecture_triad_evidence(tree: _Tree) -> list[str]:
+    """q2's `ports/` + `adapters/` + `domain/` triad -- all three required,
+    no common parent, no depth restriction
+    `[ref: SDD/Detection rules, "The triad's three directories need no
+    common parent"]`. Empty unless all three are present anywhere in the
+    tree."""
+    found = {name: tree.dirs_named({name}) for name in ARCHITECTURE_TRIAD_DIR_NAMES}
+    if not all(found.values()):
+        return []
+    return sorted(f"{tree.rel(paths[0])}/" for paths in found.values())
+
+
+def _events_per_module_evidence(tree: _Tree) -> list[str]:
+    """q2's per-module events signal: `events.py` / `events.ts` in two or
+    more *distinct* module directories -- one such file is a utility, not a
+    convention `[ref: SDD/Detection rules, "Each weak signal's quantity is
+    fixed, not left to taste"]`."""
+    found = tree.files_matching(lambda name: name in EVENTS_FILENAMES)
+    distinct_parents = {p.parent for p in found}
+    if len(distinct_parents) < 2:
+        return []
+    return sorted(tree.rel(p) for p in found)
+
+
+def _event_store_dir_evidence(tree: _Tree) -> list[str]:
+    """q2's event-store signal: one directory named `event_store` or
+    `eventstore`, at any depth."""
+    return sorted(f"{tree.rel(p)}/" for p in tree.dirs_named(EVENT_STORE_DIR_NAMES))
+
+
+def _broker_dependency_evidence(tree: _Tree) -> list[str]:
+    """q2's broker-dependency signal: `kafkajs`, `amqplib`,
+    `@aws-sdk/client-sqs` (Node) or `celery` (Python), read the same
+    restricted, runtime-only way `q1_backend` reads its server frameworks --
+    this also doubles as the check that a broker is not itself credited to
+    `q1_backend` `[ref: SDD/Detection rules, "gate-q2-broker-dependency"]`."""
+    return _gate_runtime_dependency_evidence(tree, NODE_BROKER_DEPS, PYTHON_BROKER_DEPS)
+
+
+def _gate_q2_architecture_evidence(tree: _Tree, q1_evidence: list[str]) -> list[str]:
+    """Row `q2_architecture`: `q1_backend` opened, **or** any one weak
+    content signal. When it opens solely because `q1_backend` opened, the
+    justification for the one gate *is* the justification for the other, so
+    `q1_evidence` is folded in -- the alternative, an empty `gate_evidence`
+    entry for an open gate, violates the invariant this task is required to
+    hold `[ref: SDD/Interface Specifications, "every gate reported open has
+    a non-empty gate_evidence entry"]`. `trap-03`, `gate-q1-go-direct-require`
+    and `gate-q1-node-runtime-dependency` all open q2 this way, with no
+    content signal of its own present."""
+    content_evidence = (
+        _architecture_triad_evidence(tree)
+        + _events_per_module_evidence(tree)
+        + _event_store_dir_evidence(tree)
+        + _broker_dependency_evidence(tree)
+    )
+    if q1_evidence:
+        return sorted(set(q1_evidence) | set(content_evidence))
+    return content_evidence
+
+
+def _gate_q3_test_quality_evidence(tree: _Tree) -> list[str]:
+    """Row `q3_test_quality`: any test framework present -- framework
+    evidence only, no tests shape required, unlike the `testing` stack fact
+    `[ref: SDD/Detection rules, "q3_test_quality needs framework evidence
+    only"]`. Every ecosystem's framework evidence is included, not only the
+    first found, for the same completeness reason every other gate's
+    evidence is complete."""
+    matches = [
+        p
+        for p in (
+            _python_testing_framework_evidence(tree),
+            _node_testing_framework_evidence(tree),
+            _go_testing_framework_evidence(tree),
+            _shell_testing_framework_evidence(tree),
+        )
+        if p is not None
+    ]
+    return [p.evidence for p in matches]
+
+
+def _evaluate_gates(tree: _Tree) -> tuple[dict, dict]:
+    """Returns `(gates, gate_evidence)`. A closed gate's key is absent from
+    `gate_evidence` entirely -- "no entry", not an empty list
+    `[ref: SDD/Interface Specifications, "every gate reported closed has no
+    entry"]`."""
+    q1_evidence = _gate_q1_backend_evidence(tree)
+    q2_evidence = _gate_q2_architecture_evidence(tree, q1_evidence)
+    q3_evidence = _gate_q3_test_quality_evidence(tree)
+
+    gates = {
+        "q1_backend": bool(q1_evidence),
+        "q2_architecture": bool(q2_evidence),
+        "q3_test_quality": bool(q3_evidence),
+    }
+    gate_evidence = {}
+    if gates["q1_backend"]:
+        gate_evidence["q1_backend"] = sorted(set(q1_evidence))
+    if gates["q2_architecture"]:
+        gate_evidence["q2_architecture"] = sorted(set(q2_evidence))
+    if gates["q3_test_quality"]:
+        gate_evidence["q3_test_quality"] = sorted(set(q3_evidence))
+    return gates, gate_evidence
+
+
 def detect(repo_dir) -> dict:
     """Scan `repo_dir` and return the detection report
     `[ref: SDD/Interface Specifications/Data model: detection report]`. Pure:
     reads the filesystem, writes nothing, asks nothing.
 
-    `gates` and `gate_evidence` are an honest placeholder here -- T2.3 replaces
-    them with real evaluation `[ref: plan/phase-2.md T2.2 step 4]`.
-    `unrecognised_stack` is computed from `auto` alone, which this task can and
-    must get right `[ref: SDD/Architecture Decisions/ADR-5]`.
+    `gates` and `gate_evidence` are evaluated by `_evaluate_gates` (T2.3) --
+    a gate decides only whether to ask, never what to install
+    `[ref: SDD/Interface Specifications/Detection rules: the eight stack
+    facts and the three gates]`. `unrecognised_stack` is computed from `auto`
+    alone, independently of the gates by construction, so an open gate never
+    flips it `[ref: SDD/Architecture Decisions/ADR-5]`.
 
     Raises `RuntimeError` on a pre-3.11 interpreter -- checked here, the
     module's one public entry point, so every call refuses the same way
@@ -588,14 +843,15 @@ def detect(repo_dir) -> dict:
         baseline.append(entry)
 
     manifests_walked = _manifests_walked(tree)
+    gates, gate_evidence = _evaluate_gates(tree)
 
     return {
         "schema": 1,
         "repo": str(repo_dir),
         "auto": [p.as_dict() for p in auto],
         "baseline": baseline,
-        "gates": {"q1_backend": False, "q2_architecture": False, "q3_test_quality": False},
-        "gate_evidence": {},
+        "gates": gates,
+        "gate_evidence": gate_evidence,
         "manifests_walked": manifests_walked,
         "unrecognised_stack": len(auto) == 0,
     }

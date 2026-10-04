@@ -114,6 +114,54 @@ def _evidence_problems(entry: dict, repo_dir) -> list[str]:
     return problems
 
 
+GATE_NAMES = ("q1_backend", "q2_architecture", "q3_test_quality")
+
+
+def _gate_evidence_problems(report: dict, repo_dir) -> list[str]:
+    """The two `gate_evidence` invariants, per SDD/Interface Specifications
+    (Data model: detection report; the `gate_evidence` clauses under Data
+    model: fixture expectation). No `expected.json` declares `gate_evidence`
+    -- the exact-key shape guard in `test_patterns_detection_corpus.py` would
+    reject one -- so this is asserted universally rather than per fixture,
+    the same treatment `evidence` already gets above:
+
+    1. every gate reported **open** has a non-empty `gate_evidence` entry,
+       and each path it cites resolves inside `repo_dir` and avoids the
+       excluded directories (same path-part rule as `_evidence_problems`:
+       everything before the first `": "`);
+    2. every gate reported **closed** carries no entry -- a gate cannot be
+       justified by evidence it did not act on.
+
+    Without this, T2.3 could emit `{}` for every fixture (as the T2.2
+    placeholder effectively did) and still satisfy every comparison in
+    `test_detector_matches_expected`, since `expected.json` has no
+    `gate_evidence` key for that function to compare against."""
+    problems: list[str] = []
+    gates = report.get("gates", {})
+    gate_evidence = report.get("gate_evidence", {})
+    for name in GATE_NAMES:
+        entries = gate_evidence.get(name)
+        if gates.get(name):
+            if not entries:
+                problems.append("%s: open gate has no gate_evidence entry" % name)
+                continue
+            for entry in entries:
+                if not isinstance(entry, str) or not entry.strip():
+                    problems.append("%s: gate_evidence entry is empty" % name)
+                    continue
+                path_part = entry.split(": ", 1)[0]
+                if not (pathlib.Path(repo_dir) / path_part).exists():
+                    problems.append("%s: gate_evidence path does not exist in repo/: %r"
+                                    % (name, path_part))
+                hit = EXCLUDED_SEGMENTS.intersection(pathlib.PurePath(path_part).parts)
+                if hit:
+                    problems.append("%s: gate_evidence cites an excluded directory (%s): %r"
+                                    % (name, ",".join(sorted(hit)), path_part))
+        elif entries:
+            problems.append("%s: closed gate carries gate_evidence: %r" % (name, entries))
+    return problems
+
+
 # Deliberately duplicated from detect.py's own `DEPENDENCY_MANIFEST_NAMES`,
 # not imported: this is the one constant where importing it would defeat the
 # whole point of the invariant below. If `detect.py`'s set is ever narrowed
@@ -179,6 +227,19 @@ def test_detector_matches_expected(fixture) -> None:
 
     non_surfaced = [entry["pattern"] for entry in report["baseline"] if entry.get("surface") is not False]
     assert not non_surfaced, f"{fixture.name}: baseline entries not surface:false: {non_surfaced}"
+
+    # The two `gate_evidence` invariants -- not per-case data, asserted
+    # universally the same way the `evidence` invariants above are.
+    gate_evidence_problems = _gate_evidence_problems(report, fixture.repo_dir)
+    assert not gate_evidence_problems, (
+        "%s: gate_evidence invariants violated:\n  %s"
+        % (fixture.name, "\n  ".join(gate_evidence_problems))
+    )
+
+    # schema and repo complete the sweep over every report field (SDD/Data
+    # model: fixture expectation, "repo and schema complete the sweep").
+    assert report["schema"] == 1, fixture.name
+    assert report["repo"] == str(fixture.repo_dir), fixture.name
 
 
 class _FakeDetectModule(ModuleType):
@@ -257,6 +318,66 @@ def test_evidence_invariant_catches_an_excluded_directory(tmp_path, monkeypatch)
     assert problems and "excluded directory" in problems[0]
 
 
+def test_gate_evidence_invariant_accepts_an_honest_entry(tmp_path) -> None:
+    """The baseline fed to every mutant below must itself pass, or the
+    mutants prove nothing -- mirroring `test_evidence_invariant_accepts_an_honest_entry`."""
+    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    report = {
+        "gates": {"q1_backend": True, "q2_architecture": False, "q3_test_quality": False},
+        "gate_evidence": {"q1_backend": ["package.json: dependencies.express"]},
+    }
+    assert _gate_evidence_problems(report, tmp_path) == []
+
+
+def test_gate_evidence_invariant_catches_an_open_gate_with_no_evidence(tmp_path) -> None:
+    """Invariant 1: every gate reported open has a non-empty `gate_evidence`
+    entry. Without this, T2.3 emitting `{}` for every gate -- the T2.2
+    placeholder's shape -- would satisfy the fixture comparison and go
+    undetected."""
+    report = {
+        "gates": {"q1_backend": True, "q2_architecture": False, "q3_test_quality": False},
+        "gate_evidence": {},
+    }
+    problems = _gate_evidence_problems(report, tmp_path)
+    assert problems and "no gate_evidence entry" in problems[0]
+
+
+def test_gate_evidence_invariant_catches_a_closed_gate_carrying_evidence(tmp_path) -> None:
+    """Invariant 2: a closed gate carries no `gate_evidence` entry -- a gate
+    cannot be justified by evidence it did not act on."""
+    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    report = {
+        "gates": {"q1_backend": False, "q2_architecture": False, "q3_test_quality": False},
+        "gate_evidence": {"q1_backend": ["package.json: dependencies.express"]},
+    }
+    problems = _gate_evidence_problems(report, tmp_path)
+    assert problems and "closed gate carries gate_evidence" in problems[0]
+
+
+def test_gate_evidence_invariant_catches_a_missing_path(tmp_path) -> None:
+    """Same path-resolution rule `_evidence_problems` applies, reused here."""
+    report = {
+        "gates": {"q1_backend": True, "q2_architecture": False, "q3_test_quality": False},
+        "gate_evidence": {"q1_backend": ["does-not-exist.json: dependencies.express"]},
+    }
+    problems = _gate_evidence_problems(report, tmp_path)
+    assert problems and "does not exist" in problems[0]
+
+
+def test_gate_evidence_invariant_catches_an_excluded_directory(tmp_path) -> None:
+    """A `gate_evidence` path under an excluded directory is caught even
+    though the file genuinely exists there -- trap 5's lesson, reapplied."""
+    decoy_dir = tmp_path / "vendor" / "x"
+    decoy_dir.mkdir(parents=True)
+    (decoy_dir / "package.json").write_text("{}", encoding="utf-8")
+    report = {
+        "gates": {"q1_backend": True, "q2_architecture": False, "q3_test_quality": False},
+        "gate_evidence": {"q1_backend": ["vendor/x/package.json: dependencies.express"]},
+    }
+    problems = _gate_evidence_problems(report, tmp_path)
+    assert problems and "excluded directory" in problems[0]
+
+
 def test_the_evidence_and_surface_assertions_are_wired_into_the_real_test(monkeypatch) -> None:
     """The four mutation tests above exercise `_evidence_problems` but re-implement
     the loop that calls it, so they stay green if that loop is deleted from
@@ -275,10 +396,16 @@ def test_the_evidence_and_surface_assertions_are_wired_into_the_real_test(monkey
     def report_with(evidence: str, surface: bool) -> dict:
         return {
             "schema": 1,
+            "repo": str(fixture.repo_dir),
             "auto": [{"pattern": p, "evidence": evidence} for p in expected["auto"]],
             "baseline": [{"pattern": p, "evidence": evidence, "surface": surface}
                          for p in expected["baseline"]],
             "gates": expected["gates"],
+            # One honest entry per open gate -- this fixture's q3_test_quality
+            # is True, so an "everything correct" control needs a non-empty
+            # entry there too, or the gate_evidence invariant added alongside
+            # this control (below) would reject its own control case.
+            "gate_evidence": {name: [evidence] for name, is_open in expected["gates"].items() if is_open},
             "unrecognised_stack": expected["unrecognised_stack"],
             # Not `[]`: this fixture genuinely has a `requirements.txt`, and
             # the manifests_walked completeness invariant (added after this
@@ -305,6 +432,75 @@ def test_the_evidence_and_surface_assertions_are_wired_into_the_real_test(monkey
     monkeypatch.setattr(sys.modules[__name__], "_load_detect",
                         lambda: _FakeDetectModule(report_with(honest, True)))
     with pytest.raises(AssertionError, match="surface"):
+        test_detector_matches_expected(fixture)
+
+
+def test_the_gate_evidence_schema_and_repo_assertions_are_wired_into_the_real_test(monkeypatch) -> None:
+    """Mirrors the test above, for T2.3's three additions: `gate_evidence`
+    (both directions), `schema`, and `repo`. The dedicated unit tests above
+    (`test_gate_evidence_invariant_catches_*`) exercise `_gate_evidence_problems`
+    directly but re-implement the call rather than making it, so they would stay
+    green if the `assert not gate_evidence_problems` line were deleted from
+    `test_detector_matches_expected` -- measured by temporarily commenting that
+    line (and the `schema`/`repo` asserts) out and re-running this file: those
+    five unit tests still pass, proving they alone cannot catch the regression.
+    This test closes that hole the same way the `evidence`/`surface` wiring test
+    above does: by driving the real parametrized function.
+
+    Uses `gate-q1-node-runtime-dependency` rather than `auto-testing-baseline`
+    because it has two open gates (q1, q2) and one closed (q3), exercising both
+    invariant directions in one fixture."""
+    fixture = next(f for f in discover_fixtures() if f.name == "gate-q1-node-runtime-dependency")
+    expected = load_expected(fixture)
+    dep_evidence = "package.json: dependencies.express"
+
+    def base_report(**overrides) -> dict:
+        report = {
+            "schema": 1,
+            "repo": str(fixture.repo_dir),
+            "auto": [{"pattern": p, "evidence": dep_evidence} for p in expected["auto"]],
+            "baseline": [{"pattern": p, "evidence": dep_evidence, "surface": False}
+                         for p in expected["baseline"]],
+            "gates": dict(expected["gates"]),
+            "gate_evidence": {name: [dep_evidence] for name, is_open in expected["gates"].items() if is_open},
+            "unrecognised_stack": expected["unrecognised_stack"],
+            "manifests_walked": _expected_manifests_walked(fixture.repo_dir),
+        }
+        report.update(overrides)
+        return report
+
+    # Control: everything correct, including all three invariants -- must not raise.
+    monkeypatch.setattr(sys.modules[__name__], "_load_detect",
+                        lambda: _FakeDetectModule(base_report()))
+    test_detector_matches_expected(fixture)
+
+    # gate_evidence invariant 1: an open gate (q1_backend) loses its entry.
+    missing_q1 = base_report()
+    del missing_q1["gate_evidence"]["q1_backend"]
+    monkeypatch.setattr(sys.modules[__name__], "_load_detect",
+                        lambda: _FakeDetectModule(missing_q1))
+    with pytest.raises(AssertionError, match="gate_evidence"):
+        test_detector_matches_expected(fixture)
+
+    # gate_evidence invariant 2: a closed gate (q3_test_quality) gains an entry
+    # it did not act on.
+    unjustified_q3 = base_report()
+    unjustified_q3["gate_evidence"]["q3_test_quality"] = [dep_evidence]
+    monkeypatch.setattr(sys.modules[__name__], "_load_detect",
+                        lambda: _FakeDetectModule(unjustified_q3))
+    with pytest.raises(AssertionError, match="gate_evidence"):
+        test_detector_matches_expected(fixture)
+
+    # `schema` violated and nothing else.
+    monkeypatch.setattr(sys.modules[__name__], "_load_detect",
+                        lambda: _FakeDetectModule(base_report(schema=2)))
+    with pytest.raises(AssertionError):
+        test_detector_matches_expected(fixture)
+
+    # `repo` violated and nothing else.
+    monkeypatch.setattr(sys.modules[__name__], "_load_detect",
+                        lambda: _FakeDetectModule(base_report(repo="/not/the/fixture/repo")))
+    with pytest.raises(AssertionError):
         test_detector_matches_expected(fixture)
 
 
