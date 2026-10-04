@@ -791,11 +791,19 @@ The narrower behaviour is right, and the general wording was too broad. **Comple
 an entry's contents are the only observable that can discriminate a rule.** There are exactly
 three such places, and in each one a first-match entry would let a wrong implementation pass:
 
-| Where | What the contents have to discriminate |
-|---|---|
-| `q1_backend`, every ecosystem | a runtime declaration from one excluded as development-only or transitive. Whenever an excluded framework sits beside a runtime one, the gate opens either way and only the contents say which was credited. Go's `// indirect` split is one instance of this, not a separate case |
-| `q2_architecture`, the triad | two `ports/` directories are two contributing signals; citing one under-reports |
-| `q2_architecture`, the union | q1 and a content signal both contributing, which no fixture can see because `gates` carries booleans |
+| Where | Mechanism | What the contents have to discriminate |
+|---|---|---|
+| `q1_backend`, every ecosystem | **exclusion** | a runtime declaration from one excluded as development-only or transitive. Whenever an excluded framework sits beside a runtime one, the gate opens either way and only the contents say which was credited. Go's `// indirect` split is one instance of this, not a separate case |
+| `q2_architecture`, the triad | **count truncation** | two `ports/` directories are two contributing signals; citing one under-reports a count rather than admitting something excluded |
+| `q2_architecture`, the union | **disjunction collapse** | q1 and a content signal both contributing, where reporting either alone loses the fact that both did |
+
+**Three mechanisms, not three instances of one** — named that way on a reviewer's observation,
+and the distinction is what makes the rule checkable. The unifying test is the middle column's
+consequence: a wrong implementation produces the *same* `gates` boolean as a correct one, so the
+boolean cannot grip it and the contents are the only hold a test has. Listing mechanisms rather
+than instances is what the first version of this table got wrong: it named only Go's `// indirect`
+split, and the q1 row above was found an hour later by someone looking for more instances of
+*exclusion* — when the thing to look for is a fourth mechanism.
 
 The first row was **not** in this table when it was written an hour earlier — it named only
 Go's `// indirect` split. Found by probing the scoped rule for a place it had missed, which is

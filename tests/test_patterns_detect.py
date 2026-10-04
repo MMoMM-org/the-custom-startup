@@ -61,7 +61,18 @@ LIB_DIR = REPO_ROOT / "plugins" / "tcs-patterns" / "skills" / "patterns-setup" /
 def _load_detect() -> ModuleType:
     """Imports `detect` at call time, not at module import time, so its absence
     (until T2.2) fails the individual test that calls this, not collection of the
-    whole file."""
+    whole file.
+
+    **Mutation-testing this module: do not point `PYTHONPATH` at a mutated copy.**
+    The `sys.path.insert(0, ...)` below puts `LIB_DIR` ahead of everything
+    `PYTHONPATH` contributes, so a harness that copies `detect.py` elsewhere,
+    mutates it and sets `PYTHONPATH` loads the **unmutated** module and reports
+    the mutant as survived. A false SURVIVED is invisible -- it looks exactly
+    like a well-behaved test suite. Found 2026-10-04 by a reviewer who hit it.
+    Load a mutated copy with `importlib.util.spec_from_file_location` against its
+    real path instead, and copy to a scratch directory rather than mutating the
+    working tree -- a file here may belong to an agent that is still editing it,
+    which was the other half of the same day's lesson."""
     if str(LIB_DIR) not in sys.path:
         sys.path.insert(0, str(LIB_DIR))
     return importlib.import_module("detect")

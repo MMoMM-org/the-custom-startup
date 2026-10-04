@@ -163,7 +163,7 @@ written from the specification rather than from the implementation.
      - [ ] Traps 2, 3, 4, 5 and 7 each have a passing fixture that fails if the trap returns `[ref: SDD/Quality Requirements]`
      - [ ] `testing` is reported in `baseline` with `surface: false`, never as a recommendation `[ref: PRD/F2 5th; trap 1]`
 
-- [ ] **T2.3 The three gates and the unrecognised-stack flag** `[activity: backend-api]`
+- [x] **T2.3 The three gates and the unrecognised-stack flag** `[activity: backend-api]`
 
   1. Prime: Read the gate table
      `[ref: SDD/Interface Specifications/Detection rules: the eight stack facts and the three
