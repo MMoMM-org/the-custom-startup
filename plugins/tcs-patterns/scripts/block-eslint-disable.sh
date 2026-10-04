@@ -158,7 +158,7 @@ REPO_DIR=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null || true)
 # `|| WALK_DIR="$DIR"` guards the `cd` the same way line 134 guards `git`:
 # under `set -e`, an unguarded failing `cd` here would exit this script
 # non-zero, violating the "exit: always 0" contract at the top of the file.
-# Measured 2026-10-04: this is currently UNREACHABLE, not merely defensive.
+# Measured 2026-10-05: this is currently UNREACHABLE, not merely defensive.
 # Every shape that makes `cd "$DIR"` fail (mode 000, mode 600, mode 400, a
 # dangling symlink) also makes `git -C "$DIR" rev-parse` fail, since that
 # must chdir into the same directory -- so line 135 already exits 0 first
