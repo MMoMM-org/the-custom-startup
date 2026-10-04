@@ -117,10 +117,17 @@ def test_excluded_segments_matches_skip_dirs() -> None:
     """The two drift risks the comment above describes are different
     directions of the same mistake; this test is the standing guard against
     the second one (`SKIP_DIRS` widened, this file not updated to match),
-    which is the one that just happened. It does not protect against the
-    first (a narrowing) -- that is `EXCLUDED_SEGMENTS` staying independent,
-    not this test, and is why this asserts equality rather than replacing
-    the literal with a derived one."""
+    which is the one that just happened. It also catches an UNSYNCED
+    narrowing -- either side dropping a segment without the other -- since
+    equality fails the moment the two sets differ in either direction. What
+    it cannot see is a narrowing applied to BOTH sides in lockstep (e.g.
+    `.claude` removed from `SKIP_DIRS` and from this literal in the same
+    change): equality is symmetric, so two sets shrinking together still
+    match each other and this assertion stays green. Guarding against THAT
+    is what keeping `EXCLUDED_SEGMENTS` independent (not derived) is for,
+    not this test -- a derived value could never disagree with its own
+    source no matter how either changed, which is why this asserts equality
+    explicitly rather than replacing the literal with a derived one."""
     detect = _load_detect()
     assert EXCLUDED_SEGMENTS == frozenset(detect.SKIP_DIRS), (
         f"tests/test_patterns_detect.py's EXCLUDED_SEGMENTS {sorted(EXCLUDED_SEGMENTS)} "

@@ -92,7 +92,23 @@ from patterns_detection_corpus_lib import EXPECTED_CASE_COUNT, REPO_ROOT, discov
 HOOK = REPO_ROOT / "plugins" / "tcs-patterns" / "scripts" / "block-eslint-disable.sh"
 LIB_DIR = REPO_ROOT / "plugins" / "tcs-patterns" / "skills" / "patterns-setup" / "lib"
 
-_GIT_ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
+# CLAUDE_ALLOW_ESLINT_DISABLE explicitly unset -- the bats suite's setup()
+# does this too (`unset CLAUDE_ALLOW_ESLINT_DISABLE`), and this file skipped
+# it. The hook's own deny message tells a developer to set exactly this
+# variable for a repo that will never be submitted to the community
+# directory, so it is plausibly already set in a real shell; left in a
+# bare `**os.environ` splat, it makes the hook exit 0 before reading
+# anything else, which fails this file's dirty-case assertions loudly
+# (measured: `CLAUDE_ALLOW_ESLINT_DISABLE=1 pytest tests/test_obsidian_rule_agreement.py -q`
+# -> 4 failed) rather than silently -- a hygiene gap, not a correctness
+# one, but one worth closing so a developer with the variable set does not
+# spend time on failures that are not theirs.
+_GIT_ENV = {
+    **os.environ,
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_SYSTEM": os.devnull,
+    "CLAUDE_ALLOW_ESLINT_DISABLE": "0",
+}
 
 DIRTY = "// eslint-disable-next-line\n"
 CLEAN = "const x = 1;\n"
