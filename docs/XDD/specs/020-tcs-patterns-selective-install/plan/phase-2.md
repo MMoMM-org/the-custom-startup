@@ -733,6 +733,28 @@ written from the specification rather than from the implementation.
   **The rule that makes this worth anything:** a divergence is resolved against the SDD, never
   against the fixtures, and never by editing an expectation to match the output.
 
+  **Measured 2026-10-05, both legs reported per leg as the task requires.**
+  - **Leg 1, pytest:** `999 passed, 1 skipped, 1 deselected, 0 failed`.
+  - **Leg 2, bats:** `1187 ok, 0 not ok` across all four plugin suites -- `tcs-git-helpers` 835,
+    `tcs-helper` 330, `tcs-issues` 7, `tcs-patterns` 15. Counted per suite rather than from a run
+    verdict, and `plugins/tcs-helper/tests/bats` alone is **not** the bats leg: it is 330 of 1187,
+    so running only that one would report a quarter of the suite as all of it. No perf flakiness
+    appeared in `tcs-git-helpers` on this run, which had been a carried suspicion.
+
+  **"Callable against a fixture directory with no interactive setup and no catalogue writes",
+  discharged by digest rather than by reading.** `detect.py` imports standalone via
+  `spec_from_file_location` with no harness, no `SKILL.md` and no interview. Every file under
+  `templates/patterns/` (101) and under `tests/fixtures/patterns-detection/` (81) was hashed with
+  sha256, `detect()` was run against all 26 fixtures, and every hash was unchanged. An mtime check
+  would have missed a rewrite with identical content, which is why the content digest is the
+  instrument.
+
+  **Every fixture's `why` reviewed: 24 of 26 held.** The `gate`, `trap` and `edge` entries name the
+  rule, the pair they belong to and often the mutation that proved the gap --
+  `gate-q2-partial-triad` records that relaxing `all()` to `any()` left every test green, which is
+  precisely what a second party needs to know before deleting it. The two that failed are fixed in
+  `92000b7`.
+
   - Success: all **26** fixtures green -- the figure read 18 until 2026-10-04, before T2.3 added
     eight gate-coverage cases; count `EXPECTED_CASE_COUNT`, do not inherit the number. All four
     held-out cases matching the written rules with no divergence; detection suite runnable
