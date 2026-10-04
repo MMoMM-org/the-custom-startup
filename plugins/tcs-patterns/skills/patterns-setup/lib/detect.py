@@ -709,11 +709,17 @@ def _architecture_triad_evidence(tree: _Tree) -> list[str]:
     no common parent, no depth restriction
     `[ref: SDD/Detection rules, "The triad's three directories need no
     common parent"]`. Empty unless all three are present anywhere in the
-    tree."""
+    tree. Lists every matching directory for every name, not only the first
+    found per name -- completeness, the same property that makes the Go
+    direct/indirect split enforceable
+    `[ref: SDD/Interface Specifications, "lists EVERY signal that
+    contributed"]`: a repository with two `ports/` directories has two
+    contributing signals, and citing only one would under-report exactly as
+    crediting only the first-matched `go.mod` require would."""
     found = {name: tree.dirs_named({name}) for name in ARCHITECTURE_TRIAD_DIR_NAMES}
     if not all(found.values()):
         return []
-    return sorted(f"{tree.rel(paths[0])}/" for paths in found.values())
+    return sorted(f"{tree.rel(p)}/" for paths in found.values() for p in paths)
 
 
 def _events_per_module_evidence(tree: _Tree) -> list[str]:

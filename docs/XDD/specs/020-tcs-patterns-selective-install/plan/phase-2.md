@@ -80,8 +80,8 @@ written from the specification rather than from the implementation.
      So: (1) assert the corpus size in a **standalone, non-parametrized** test —
      `assert len(fixtures) == 18` — never only as a parametrize source, or an empty corpus
      passes. (The literal `18` is what T2.1 was asked for and delivered; the count now lives in
-     `tests/patterns_detection_corpus_lib.py`'s `EXPECTED_CASE_COUNT`, which T2.3 took to **24**
-     when it added six gate-coverage fixtures. The guard was renamed off its hardcoded count at
+     `tests/patterns_detection_corpus_lib.py`'s `EXPECTED_CASE_COUNT`, which T2.3 took to **26**
+     when it added eight gate-coverage fixtures. The guard was renamed off its hardcoded count at
      the same time. The requirement here is the *standalone, non-parametrized* shape, not the
      number.) (2) assert `repo/` and `expected.json` exist per fixture before validating either;
      (3) accumulate every validation failure and assert once at the end, so eight bad pattern
@@ -178,8 +178,11 @@ written from the specification rather than from the implementation.
      follow their own evidence; trap 6 — a hand-rolled event store with no broker dependency opens
      Q2 and auto-proposes nothing.
 
-     **Six fixtures were added on 2026-10-04 and the corpus is now 24, not 18** -- two for q1
-     here, four for q2 below. Measured before
+     **Eight fixtures were added on 2026-10-04 and the corpus is now 26, not 18** -- three for q1
+     below (including the `// indirect` negative), five for q2 further down (including two
+     threshold negatives). Two of the eight came from mutating T2.3's own output after the
+     implementer reported done, which found two written thresholds that nothing enforced.
+     Measured before
      dispatch: `q1_backend` had exactly one positive case in the whole corpus — `trap-03`, Python
      via `requirements.txt` — and one negative, `trap-04`, Node via `devDependencies`. No fixture
      declared a Node or Go server framework in `dependencies`, so a detector implementing Node's
@@ -263,7 +266,7 @@ written from the specification rather than from the implementation.
      2026-10-04 and was stale twice over: it counted 18 comparisons plus the standalone corpus
      guard, written before T2.1 and T2.2 added the four evidence-invariant tests, the wiring test
      and the two interpreter tests, and before the six gate fixtures took the corpus to 24.
-     Measured after those were added: 32 collected, 11 failed / 21 passed. A target figure nobody
+     Measured after those were added: 32 collected, 11 failed / 21 passed; the corpus later grew to 26 as T2.3 found two more unenforced thresholds. A target figure nobody
      re-measures is the same defect class as an unasserted field — count the file, do not inherit
      the number. Then `python3 -m pytest -q`; baseline before this task is
      **11 failed, 852 passed, 1 skipped, 1 deselected**.

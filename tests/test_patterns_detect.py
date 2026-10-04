@@ -504,6 +504,42 @@ def test_the_gate_evidence_schema_and_repo_assertions_are_wired_into_the_real_te
         test_detector_matches_expected(fixture)
 
 
+def test_q1_backend_gate_evidence_excludes_an_indirect_go_require(tmp_path) -> None:
+    """Drives the real detector (not a fake) against a constructed `go.mod`
+    with one direct and one indirect server-framework require, and asserts
+    exact equality against the independent computation above -- completeness
+    AND exclusivity in one fixture not drawn from the corpus, so this cannot
+    be satisfied by the corpus's one such case alone
+    `[ref: SDD/Interface Specifications, "gate-q1-go-direct-require"]`."""
+    (tmp_path / "go.mod").write_text(
+        "module example.com/sample\n\ngo 1.22\n\n"
+        "require (\n"
+        "\tgithub.com/gin-gonic/gin v1.9.1\n"
+        "\tgithub.com/labstack/echo/v4 v4.11.1 // indirect\n"
+        ")\n",
+        encoding="utf-8",
+    )
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+    assert report["gate_evidence"]["q1_backend"] == ["go.mod: require.github.com/gin-gonic/gin"]
+
+
+def test_q2_architecture_triad_evidence_lists_every_matching_directory(tmp_path) -> None:
+    """Completeness for the triad signal, the same property the test above
+    pins for Go: two directories named `ports` are two contributing signals,
+    and citing only the first found would under-report
+    `[ref: SDD/Interface Specifications, "lists EVERY signal that
+    contributed"]`. Drives the real detector, not a fake."""
+    (tmp_path / "a" / "ports").mkdir(parents=True)
+    (tmp_path / "b" / "ports").mkdir(parents=True)
+    (tmp_path / "adapters").mkdir()
+    (tmp_path / "domain").mkdir()
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+    q2_evidence = set(report["gate_evidence"]["q2_architecture"])
+    assert {"a/ports/", "b/ports/"} <= q2_evidence, q2_evidence
+
+
 def test_pre_311_interpreter_is_refused_loudly(tmp_path, monkeypatch) -> None:
     """ADR-2's 3.11 floor: on an interpreter without `tomllib`, `detect()`
     must refuse with an actionable `RuntimeError` naming the required

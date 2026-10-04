@@ -759,6 +759,16 @@ than the bare manifest path:
   credited either. The named dependency can: q1's evidence must name `gin` and must not name
   `chi`. Without this form, the ruling above would be unenforceable by any fixture.
 
+**What `q2_architecture`'s evidence is when it opens purely through the `q1_backend` disjunct —
+settled 2026-10-04.** The row makes q2 open on "`q1_backend` opened, **or** any one weak content
+signal", and the invariant demands non-empty evidence for every open gate, but nothing said what
+that evidence is when no content signal exists at all. `trap-03` and both q1 fixtures are in
+exactly that state. **q2 carries q1's evidence list.** It is the only reading that keeps the
+invariant satisfiable without fabricating a content signal the repository does not have, and it
+is honest: what opened q2 there really was q1, and the report should say so rather than cite a
+`ports/` directory nobody found. Raised by T2.3's implementer as a genuine silence rather than
+quietly resolved, which is the behaviour the task asked for.
+
 **And a `gate_evidence` entry lists EVERY signal that contributed to that gate, not the first
 one found.** This is not a new shape — the example report above already gives `q2_architecture`
 two entries — but it has to be stated, because the `// indirect` discrimination collapses

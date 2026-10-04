@@ -21,7 +21,7 @@ CATALOGUE_DIR = REPO_ROOT / "plugins" / "tcs-patterns" / "templates" / "patterns
 # assert against this constant -- each file must stay safe to run alone, so each
 # needs its own standalone, non-parametrized count assertion, but there is still
 # only one number to keep in sync with the fixture directory.
-EXPECTED_CASE_COUNT = 24
+EXPECTED_CASE_COUNT = 26
 
 
 @dataclass(frozen=True)
