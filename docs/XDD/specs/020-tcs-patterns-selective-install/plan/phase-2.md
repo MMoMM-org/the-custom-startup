@@ -462,7 +462,7 @@ written from the specification rather than from the implementation.
      installer, so nothing in its output can observe it; the same reason two of T2.3's
      criteria moved there.
 
-- [ ] **T2.5 The decided-exactly-once invariant** `[activity: testing]` `[parallel: true]`
+- [x] **T2.5 The decided-exactly-once invariant** `[activity: testing]` `[parallel: true]`
 
   1. Prime: Read the arithmetic at the end of the walkthrough
      `[ref: SDD/Runtime View/Complex Logic]`. "Each of the 21 is decided exactly once" is F3's
