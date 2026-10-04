@@ -10,12 +10,18 @@
 #   - Allow: CLAUDE_ALLOW_ESLINT_DISABLE=1 escape hatch
 #   - Repo detection via package.json "obsidian" dependency
 #   - Remediation hint is rule-specific for obsidianmd/ui/sentence-case
-#   - Repo detection via a manifest.json nested below the repo root (spec-020 T2.6)
 #   - Allow: "obsidian" as a package.json script name or resolutions entry,
 #     not a dependency (spec-020 T2.6 -- the Python rule agreement test)
-#   - Perf: the nested manifest walk runs only on the rare path -- not for a
-#     clean payload, not for a root-level Obsidian repo -- and does still run
-#     when a nested manifest is the only signal (spec-020 T2.6 follow-up)
+#   - Repo detection is FILE-scoped, not repo-scoped (spec-020 T2.6 follow-up,
+#     2026-10-04): a write INSIDE a nested plugin denies; a write OUTSIDE
+#     one, in a repo that merely contains a plugin elsewhere, allows. The
+#     hook walks UPWARD from the file being written to the repository root
+#     rather than across the whole tree -- a whole-tree walk was tried,
+#     measured, and found to deny `eslint-disable` writes to every
+#     non-Markdown file anywhere in the-custom-startup itself, because this
+#     repository happens to contain several test-fixture manifest.json
+#     files. See tests/test_obsidian_rule_agreement.py's module docstring
+#     for the measured false positive.
 
 bats_require_minimum_version 1.5.0
 
@@ -68,30 +74,6 @@ payload() {
   # payload <tool> <file_path> <json_field> <text>
   jq -nc --arg tool "$1" --arg fp "$2" --arg field "$3" --arg text "$4" \
     '{tool_name: $tool, tool_input: ({file_path: $fp} + {($field): $text})}'
-}
-
-# Perf regression guard (spec-020 T2.6 follow-up, 2026-10-04): the nested
-# manifest walk was measured at ~158ms over a tree this repo's size, so the
-# hook must reach it only on the rare path (a violation already found, and
-# no root-level Obsidian signal). Asserting that in a bats case as a
-# wall-clock number would be unreliable -- macOS charges 151-286ms for a
-# file's first exec, which a fresh fixture always pays -- so this asserts
-# CONTROL FLOW instead: a `find` stub, prepended onto PATH, touches a
-# marker file if and only if it is actually invoked. Whether the marker
-# exists afterward is a direct observation of whether the walk was reached,
-# with no coupling to the hook's own source.
-install_find_stub() {
-  local real_find marker
-  real_find="$(command -v find)"
-  marker="$TEST_DIR/find-was-called"
-  mkdir -p "$TEST_DIR/stub-bin"
-  cat > "$TEST_DIR/stub-bin/find" <<STUB
-#!/bin/bash
-touch "$marker"
-exec "$real_find" "\$@"
-STUB
-  chmod +x "$TEST_DIR/stub-bin/find"
-  printf '%s' "$marker"
 }
 
 @test "non-editing tool is ignored" {
@@ -172,12 +154,25 @@ STUB
   [ -z "$output" ]
 }
 
-@test "detects a manifest.json nested below the repo root" {
+@test "denies a write inside a plugin nested below the repo root" {
   repo="$(make_repo nested plain)"
-  mkdir -p "$repo/packages/plugin"
+  mkdir -p "$repo/packages/plugin/src"
   printf '{"id":"demo","name":"Demo","minAppVersion":"1.5.0"}\n' > "$repo/packages/plugin/manifest.json"
-  run -0 bash -c "printf '%s' '$(payload Write "$repo/src/main.ts" content "// eslint-disable-next-line")' | '$HOOK'"
+  run -0 bash -c "printf '%s' '$(payload Write "$repo/packages/plugin/src/main.ts" content "// eslint-disable-next-line")' | '$HOOK'"
   [ "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = "deny" ]
+}
+
+@test "allows a write OUTSIDE a plugin nested elsewhere in the same repo" {
+  # The false positive this round fixed: a whole-tree walk would have
+  # classified this repo as an Obsidian plugin because packages/plugin/
+  # exists somewhere in it, denying this write even though it is nowhere
+  # near the plugin. The hook is file-scoped (walks UPWARD from the file),
+  # so a sibling tree's manifest.json must not matter here.
+  repo="$(make_repo nested2 plain)"
+  mkdir -p "$repo/packages/plugin/src" "$repo/tools"
+  printf '{"id":"demo","name":"Demo","minAppVersion":"1.5.0"}\n' > "$repo/packages/plugin/manifest.json"
+  run -0 bash -c "printf '%s' '$(payload Write "$repo/tools/x.ts" content "// eslint-disable-next-line")' | '$HOOK'"
+  [ -z "$output" ]
 }
 
 @test "allows package.json where obsidian is a script name or a resolutions entry, not a dependency" {
@@ -185,30 +180,4 @@ STUB
   printf '{"name":"demo","scripts":{"obsidian":"echo hi"},"resolutions":{"obsidian":"1.0.0"},"dependencies":{"react":"^18.2.0"}}\n' > "$repo/package.json"
   run -0 bash -c "printf '%s' '$(payload Write "$repo/src/main.ts" content "// eslint-disable-next-line")' | '$HOOK'"
   [ -z "$output" ]
-}
-
-@test "a clean payload never invokes the nested manifest walk" {
-  repo="$(make_repo obs obsidian-manifest)"
-  marker="$(install_find_stub)"
-  run -0 bash -c "export PATH=\"$TEST_DIR/stub-bin:\$PATH\"; printf '%s' '$(payload Write "$repo/src/main.ts" content "const x = 1;")' | '$HOOK'"
-  [ -z "$output" ]
-  [ ! -e "$marker" ]
-}
-
-@test "a violation in a root-level Obsidian repo never invokes the nested manifest walk" {
-  repo="$(make_repo obs obsidian-manifest)"
-  marker="$(install_find_stub)"
-  run -0 bash -c "export PATH=\"$TEST_DIR/stub-bin:\$PATH\"; printf '%s' '$(payload Write "$repo/src/main.ts" content "// eslint-disable-next-line")' | '$HOOK'"
-  [ "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = "deny" ]
-  [ ! -e "$marker" ]
-}
-
-@test "a violation in a repo whose manifest sits below the root does invoke the walk (sanity)" {
-  repo="$(make_repo nested-walk-sanity plain)"
-  mkdir -p "$repo/packages/plugin"
-  printf '{"id":"demo","name":"Demo","minAppVersion":"1.5.0"}\n' > "$repo/packages/plugin/manifest.json"
-  marker="$(install_find_stub)"
-  run -0 bash -c "export PATH=\"$TEST_DIR/stub-bin:\$PATH\"; printf '%s' '$(payload Write "$repo/src/main.ts" content "// eslint-disable-next-line")' | '$HOOK'"
-  [ "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = "deny" ]
-  [ -e "$marker" ]
 }

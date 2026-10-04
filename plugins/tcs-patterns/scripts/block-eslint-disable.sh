@@ -19,19 +19,28 @@
 #      `eslint-disable` in any file, or a rule mapped to "off" in an ESLint
 #      config file / package.json;
 #   3. the target file lives inside a git repository, and
-#   4. that repository looks like an Obsidian plugin (a manifest.json
-#      carrying "minAppVersion" at any depth, excluding node_modules/
-#      .venv/venv/vendor, or a root package.json depending on "obsidian").
+#   4. the file being written is itself inside an Obsidian plugin: walking
+#      UPWARD from it to the repository root, the nearest manifest.json
+#      carries "minAppVersion", OR the root package.json depends on
+#      "obsidian".
 #
-# Detection (#2) runs BEFORE the scope gate (#3-4), not in the order listed
-# above: #2 is a grep over the payload string and touches no filesystem,
-# while #4's nested-manifest walk costs ~158ms measured over a repo this
-# size. Almost every write carries no violation, so running detection first
-# exits the common (allow) path before that walk is ever reached — the AND
-# is commutative, so whichever side is cheaper to fail on goes first. The
-# scope gate's own root-level checks (manifest.json, package.json at the
-# repo root) are tried before the nested walk for the same reason: a
-# root-level Obsidian repo, the common shape, never pays it.
+# #4 is deliberately file-scoped, not repo-scoped: "does the repository this
+# file lives in contain a manifest.json ANYWHERE" (a whole-tree walk, tried
+# and measured here 2026-10-04) answers a different question and answers it
+# wrong -- it classifies a repository that merely CONTAINS a plugin fixture
+# (e.g. a test fixture several directories away from the file being
+# written) as an Obsidian plugin for every file in it. The upward walk
+# answers the question the guard exists for. It is also cheap regardless of
+# repository size (measured: 0.03ms, versus 155-254ms for the whole-tree
+# walk it replaced), so there is no perf reason left to short-circuit on a
+# root-level check before it.
+#
+# Detection (#2) still runs BEFORE the scope gate (#3-4): #2 is a grep over
+# the payload string and touches no filesystem, so it is free, and running
+# it first exits the common (allow) path before any filesystem access at
+# all -- the AND is commutative, so whichever side is cheaper to fail on
+# goes first. This no longer carries the perf cost #4 once did, but it is
+# still correct and costs nothing to keep.
 #
 # Escape hatch: CLAUDE_ALLOW_ESLINT_DISABLE=1 in the environment.
 #
@@ -123,37 +132,46 @@ done
 REPO_DIR=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null || true)
 [ -z "$REPO_DIR" ] && exit 0
 
-# Root-level checks first -- one stat+grep and one jq call, both near-free --
-# so a root-level Obsidian repo (the common shape) never reaches the nested
-# walk below. Only a monorepo whose manifest.json sits below the root
-# reaches it, and only for a write that already carries a violation.
+# Walk UPWARD from the file's own directory to the repository root,
+# stopping at the root, looking for the nearest manifest.json carrying
+# "minAppVersion". "Nearest" and "stop at the root" are what make this
+# file-scoped rather than repo-scoped: a manifest two levels below the file,
+# or three levels above it in an unrelated sibling tree, must not match.
+# Pure directory arithmetic -- no `find`, no subprocess per candidate -- so
+# there is nothing here to prune (no node_modules/.venv/vendor/.git concern:
+# the walk never descends, only ascends past directories already on the
+# path to the file).
+#
+# WALK_DIR starts from the CANONICAL form of $DIR (`cd` + `pwd -P`, resolving
+# symlinks), not the literal string -- `git rev-parse --show-toplevel`
+# already returns a canonical $REPO_DIR, and comparing a literal path
+# against a canonical one is a bug, not a style choice: on macOS $TMPDIR is
+# commonly a symlink (e.g. /tmp -> /private/tmp), so a `dirname`-walked
+# literal path never string-equals $REPO_DIR, the loop never hits its only
+# intended exit, and `dirname "/"` is "/" forever. Hung this script for real
+# while testing a monorepo fixture under $TMPDIR before this line was added.
+# The `[ "$WALK_DIR" = "/" ]` bound stays anyway, as a second line of
+# defense against any other case the canonicalization doesn't cover.
 IS_OBSIDIAN=0
-if [ -f "${REPO_DIR}/manifest.json" ] && grep -q "minAppVersion" "${REPO_DIR}/manifest.json" 2>/dev/null; then
-  IS_OBSIDIAN=1
-fi
+WALK_DIR=$(cd "$DIR" && pwd -P)
+while :; do
+  if [ -f "${WALK_DIR}/manifest.json" ] && grep -q "minAppVersion" "${WALK_DIR}/manifest.json" 2>/dev/null; then
+    IS_OBSIDIAN=1
+    break
+  fi
+  if [ "$WALK_DIR" = "$REPO_DIR" ] || [ "$WALK_DIR" = "/" ]; then
+    break
+  fi
+  WALK_DIR=$(dirname "$WALK_DIR")
+done
 
+# The package.json dependency check stays root-only, unchanged from before
+# T2.6 -- it was never the source of the repo-wide false positive above,
+# since this repository's own root carries no "obsidian" dependency.
 if [ "$IS_OBSIDIAN" != "1" ] && [ -f "${REPO_DIR}/package.json" ] \
   && jq -e '(.dependencies.obsidian // .devDependencies.obsidian) != null' \
     "${REPO_DIR}/package.json" >/dev/null 2>&1; then
   IS_OBSIDIAN=1
-fi
-
-if [ "$IS_OBSIDIAN" != "1" ]; then
-  # Process substitution here relies on running as this script's own
-  # subprocess, which is how every caller (Claude Code, bats) invokes it; it
-  # would break on /dev/fd/N if this file were ever sourced instead of run.
-  #
-  # .git is pruned alongside node_modules/.venv/venv/vendor -- not because a
-  # plugin's manifest.json could ever live there, but because walking it
-  # costs real time on a repo this size (measured: ~32ms of the walk's
-  # total) for zero possible payoff.
-  while IFS= read -r MANIFEST_CANDIDATE; do
-    if grep -q "minAppVersion" "$MANIFEST_CANDIDATE" 2>/dev/null; then
-      IS_OBSIDIAN=1
-      break
-    fi
-  done < <(find "$REPO_DIR" \( -name node_modules -o -name .venv -o -name venv -o -name vendor -o -name .git \) \
-    -prune -o -name manifest.json -type f -print 2>/dev/null || true)
 fi
 [ "$IS_OBSIDIAN" = "1" ] || exit 0
 

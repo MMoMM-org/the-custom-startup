@@ -28,23 +28,50 @@ the hook, not a disagreement worth reporting as one).
 Corpus agreement over the 26 fixtures holds already and is nearly powerless on
 its own: 25 of them are non-Obsidian and only `auto-obsidian-plugin` is. A hook
 that never denies passes 25 of 26; a Python rule that never proposes passes
-25 of 26. The corpus is the floor, not the proof -- which is why the four
+25 of 26. The corpus is the floor, not the proof -- which is why the
 constructed trees below are the substance of this task. Two are real,
-measured bugs in the hook, each in the opposite direction, neither reachable
-from any fixture in the corpus:
+measured bugs in the hook (closed 2026-10-04), each in the opposite direction,
+neither reachable from any fixture in the corpus:
 
   - a `manifest.json` carrying `minAppVersion` nested below the repository
     root: the Python rule finds it (it walks the whole tree); the unfixed
-    bash gate only looks at `${REPO_DIR}/manifest.json` and misses it.
+    bash gate only looked at `${REPO_DIR}/manifest.json` and missed it.
   - a root `package.json` with `"obsidian"` as a script name (or, the same
     bug found in the same probe, under `resolutions`), `dependencies` holding
     only `react`: the Python rule reads only `dependencies`/`devDependencies`
     and stays silent; the unfixed bash gate greps `"obsidian"[[:space:]]*:`
-    across the whole file and denies on the stray match.
+    across the whole file and denied on the stray match.
 
-A root `manifest.json` with `minAppVersion` is included as a fourth,
+A root `manifest.json` with `minAppVersion` is included as a further,
 already-agreeing case -- both sides fire -- so the divergences are read
 against a baseline rather than in isolation.
+
+**The first fix for the nested-manifest divergence was itself wrong, found
+2026-10-04 on this repository.** A whole-tree `find` for `manifest.json`
+(mirroring the Python rule, which is genuinely repo-scoped by design) makes
+the hook classify a repository as an Obsidian plugin if it merely CONTAINS
+one anywhere -- and this repository does, in six places, all test fixtures
+(`tests/fixtures/patterns-detection/auto-obsidian-plugin/repo/manifest.json`
+plus five more under a vendored plugin cache). The result: the hook denied
+`eslint-disable` writes to ANY non-Markdown file anywhere in the-custom-startup
+itself. `detect()` has the same false positive from the other direction,
+proposing `obsidian-plugin` for this repository -- so the two rules agreed,
+on a wrong answer. Agreement is not correctness; it was never more than a
+necessary condition.
+
+The fix: the hook walks UPWARD from the file being written to the repository
+root, not across the whole tree, answering "is the file I am about to write
+inside an Obsidian plugin?" -- a file-scoped question -- rather than "does
+this repository contain one anywhere?" -- a repo-scoped one. `detect()` stays
+repo-scoped; that is the right question for it to answer, since it decides
+what the repository as a whole should install. The two rules now legitimately
+answer different questions, which means **one corpus case is a deliberate,
+asserted divergence, not a bug**: a write outside a nested plugin in a
+monorepo allows under bash (the file itself is not in a plugin) while
+`detect()` still proposes `obsidian-plugin` (the repository contains one).
+`test_nested_manifest_file_outside_plugin_diverges_deliberately` asserts
+exactly that, so a later reader who "fixes" the hook back into a tree walk
+breaks a test instead of reintroducing the bug silently.
 """
 
 from __future__ import annotations
@@ -105,15 +132,22 @@ def _materialize(tmp_path: Path, name: str, source: Path | None = None, builder=
     return repo_root
 
 
-def _run_hook(repo_root: Path, content: str) -> dict | None:
+def _run_hook(repo_root: Path, content: str, probe_rel: str = "src/probe.ts") -> dict | None:
     """Invoke `block-eslint-disable.sh` exactly as PreToolUse does: the
-    payload arrives on stdin, never as an argument. The probe path need not
+    payload arrives on stdin, never as an argument. `probe_rel` need not
     exist -- the hook walks up to the nearest existing ancestor -- so every
-    tree can be probed the same way regardless of what it actually contains."""
+    tree can be probed the same way regardless of what it actually contains.
+
+    It defaults to a path at the repository root, which is correct for every
+    case except the nested-plugin ones: the hook is now file-scoped (it
+    walks UPWARD from the file to the repo root), so WHERE the probe file
+    sits relative to a nested `manifest.json` changes the verdict, unlike
+    before this round's fix when the hook walked the whole tree regardless
+    of probe location."""
     payload = json.dumps(
         {
             "tool_name": "Write",
-            "tool_input": {"file_path": str(repo_root / "src" / "probe.ts"), "content": content},
+            "tool_input": {"file_path": str(repo_root / probe_rel), "content": content},
         }
     )
     result = subprocess.run(
@@ -131,8 +165,8 @@ def _run_hook(repo_root: Path, content: str) -> dict | None:
     return json.loads(out) if out else None
 
 
-def _bash_verdict(repo_root: Path, content: str) -> str:
-    out = _run_hook(repo_root, content)
+def _bash_verdict(repo_root: Path, content: str, probe_rel: str = "src/probe.ts") -> str:
+    out = _run_hook(repo_root, content, probe_rel)
     if out is None:
         return "allow"
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -145,17 +179,43 @@ def _python_proposes_obsidian(repo_root: Path) -> bool:
     return "obsidian-plugin" in [p["pattern"] for p in report["auto"]]
 
 
-def _assert_agrees(repo_root: Path, label: str) -> None:
-    clean_verdict = _bash_verdict(repo_root, CLEAN)
+def _assert_agrees(repo_root: Path, label: str, probe_rel: str = "src/probe.ts") -> None:
+    clean_verdict = _bash_verdict(repo_root, CLEAN, probe_rel)
     assert clean_verdict == "allow", (
         f"{label}: DENY on clean content means the gate fired on something "
         "other than the eslint-disable violation, not a real scope-gate verdict"
     )
-    dirty_verdict = _bash_verdict(repo_root, DIRTY)
+    dirty_verdict = _bash_verdict(repo_root, DIRTY, probe_rel)
     python_proposes = _python_proposes_obsidian(repo_root)
     assert (dirty_verdict == "deny") == python_proposes, (
         f"{label}: bash gate verdict={dirty_verdict!r}, "
         f"python proposes obsidian-plugin={python_proposes!r} -- these must agree"
+    )
+
+
+def _assert_diverges_by_scope(repo_root: Path, label: str, probe_rel: str) -> None:
+    """Assert the ONE deliberate divergence: bash (file-scoped, walks UPWARD
+    from the probe file) allows, while python (repo-scoped, walks the whole
+    tree) still proposes. A later reader must not "fix" this into agreement
+    -- doing so means making the hook repo-scoped again, which is exactly
+    the false positive this round closed: it denied `eslint-disable` writes
+    to every non-Markdown file anywhere in the-custom-startup itself, because
+    this repository happens to contain six test-fixture `manifest.json`
+    files with `minAppVersion`, none of them anywhere near most writes."""
+    clean_verdict = _bash_verdict(repo_root, CLEAN, probe_rel)
+    assert clean_verdict == "allow", (
+        f"{label}: DENY on clean content means the gate fired on something "
+        "other than the eslint-disable violation"
+    )
+    dirty_verdict = _bash_verdict(repo_root, DIRTY, probe_rel)
+    python_proposes = _python_proposes_obsidian(repo_root)
+    assert dirty_verdict == "allow", (
+        f"{label}: expected bash to allow (the probe file is outside the plugin), "
+        f"got {dirty_verdict!r}"
+    )
+    assert python_proposes is True, (
+        f"{label}: expected python to propose obsidian-plugin (the repo contains one "
+        f"somewhere), got {python_proposes!r}"
     )
 
 
@@ -189,15 +249,32 @@ def test_corpus_agreement(fixture, tmp_path) -> None:
 
 def _build_nested_manifest(repo_root: Path) -> None:
     """`packages/plugin/manifest.json` carries `minAppVersion`; the root
-    `package.json` declares nothing. Diverges before the fix: the Python
-    rule walks the whole tree and finds it, while the unfixed bash gate only
-    looks at `${REPO_DIR}/manifest.json`."""
+    `package.json` declares nothing. Used by two cases that probe different
+    files in this same tree: a write INSIDE `packages/plugin/` agrees with
+    python (both see the plugin), a write OUTSIDE it deliberately diverges
+    (bash is file-scoped, python is repo-scoped) -- see
+    `test_nested_manifest_file_outside_plugin_diverges_deliberately`."""
     plugin_dir = repo_root / "packages" / "plugin"
     plugin_dir.mkdir(parents=True)
     (plugin_dir / "manifest.json").write_text(
         json.dumps({"id": "demo", "name": "Demo", "minAppVersion": "1.5.0"}), encoding="utf-8"
     )
     (repo_root / "package.json").write_text(json.dumps({"name": "root-app"}), encoding="utf-8")
+
+
+def _build_obsidian_dependency(repo_root: Path) -> None:
+    """Root `package.json` with `"obsidian"` as a genuine `dependencies`
+    entry, no `manifest.json` anywhere. The only agreement case that
+    exercises python's `dependencies`/`devDependencies` branch of
+    `_rule_obsidian_plugin` as the reason it proposes, rather than the
+    `manifest.json` branch -- added 2026-10-04 after a mutation that
+    disabled that whole branch passed this file's agreement tests without
+    this case, because every other tree that agrees does so via
+    `manifest.json` instead."""
+    (repo_root / "package.json").write_text(
+        json.dumps({"name": "has-obsidian-dependency", "dependencies": {"obsidian": "1.5.0"}}),
+        encoding="utf-8",
+    )
 
 
 def _build_script_name_not_dependency(repo_root: Path) -> None:
@@ -245,20 +322,46 @@ def _build_control_root_manifest(repo_root: Path) -> None:
     )
 
 
-CONSTRUCTED_TREES = {
-    "nested-manifest-at-depth": _build_nested_manifest,
-    "script-name-not-dependency": _build_script_name_not_dependency,
-    "resolutions-not-dependency": _build_resolutions_not_dependency,
-    "control-root-manifest": _build_control_root_manifest,
+# name -> (builder, probe path relative to repo_root). Everything here is
+# expected to AGREE -- the one deliberate divergence has its own test below,
+# not folded into this table, so this table's whole point (asserting
+# agreement) stays undiluted.
+AGREEMENT_TREES = {
+    "nested-manifest-inside-plugin": (_build_nested_manifest, "packages/plugin/src/probe.ts"),
+    "obsidian-dependency": (_build_obsidian_dependency, "src/probe.ts"),
+    "script-name-not-dependency": (_build_script_name_not_dependency, "src/probe.ts"),
+    "resolutions-not-dependency": (_build_resolutions_not_dependency, "src/probe.ts"),
+    "control-root-manifest": (_build_control_root_manifest, "src/probe.ts"),
 }
 
 
-@pytest.mark.parametrize("name", list(CONSTRUCTED_TREES), ids=list(CONSTRUCTED_TREES))
+@pytest.mark.parametrize("name", list(AGREEMENT_TREES), ids=list(AGREEMENT_TREES))
 def test_constructed_tree_agreement(name, tmp_path) -> None:
-    """The two measured divergences (`nested-manifest-at-depth`,
+    """The two measured-and-fixed divergences (`nested-manifest-inside-plugin`,
     `script-name-not-dependency`), the related `resolutions-not-dependency`
     false positive found in the same probe, and the `control-root-manifest`
-    baseline both sides already agree on. Before the hook is fixed, the first
-    three fail here -- that failure is this task's RED."""
-    repo_root = _materialize(tmp_path, name, builder=CONSTRUCTED_TREES[name])
-    _assert_agrees(repo_root, name)
+    baseline both sides already agree on.
+
+    `nested-manifest-inside-plugin` probes a file INSIDE
+    `packages/plugin/` deliberately: the hook is file-scoped (walks UPWARD
+    from the probe file to the repo root) and python is repo-scoped (walks
+    the whole tree), so the two coincide only when the probe file is itself
+    inside the plugin. The reverse case -- a probe file OUTSIDE the plugin,
+    where the two legitimately diverge -- is its own test below, not here."""
+    builder, probe_rel = AGREEMENT_TREES[name]
+    repo_root = _materialize(tmp_path, name, builder=builder)
+    _assert_agrees(repo_root, name, probe_rel)
+
+
+def test_nested_manifest_file_outside_plugin_diverges_deliberately(tmp_path) -> None:
+    """Same tree as `nested-manifest-inside-plugin` above, but the probe file
+    sits at `tools/probe.ts` -- outside `packages/plugin/` entirely. bash
+    (file-scoped) allows; python (repo-scoped) still proposes `obsidian-plugin`
+    because the repository genuinely contains one. This is NOT a bug: it is
+    the direct, intended consequence of making the hook answer "is this FILE
+    in a plugin" rather than "does this REPO contain one anywhere" -- the
+    question whose old (repo-scoped) answer produced the false positive this
+    round's fix closed. See the module docstring for the measured false
+    positive on this actual repository."""
+    repo_root = _materialize(tmp_path, "nested-manifest-outside-plugin", builder=_build_nested_manifest)
+    _assert_diverges_by_scope(repo_root, "nested-manifest-outside-plugin", "tools/probe.ts")
