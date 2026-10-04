@@ -665,13 +665,17 @@ written from the specification rather than from the implementation.
   a fixture whose purpose is unclear will be deleted by someone later.
 
   **Held-out validation, mandatory and specified here because the corpus cannot provide it.**
-  The 18 fixtures are the detector's own test data, so a detector that fits them passes them.
+  The 26 fixtures are the detector's own test data, so a detector that fits them passes them.
   The PRD's top risk is not answered by green fixtures; it is answered by rules holding on a
   tree the implementer never saw. Four such cases were built on 2026-10-03 **before** T2.2's
   implementer began, with every expectation derived from `[ref: SDD/Interface Specifications/
   Detection rules: the eight stack facts and the three gates]` and cited clause by clause.
   Rebuild and run them; they are deliberately **not** fixtures, because the corpus count is
-  asserted at exactly 18 and these must never become data the implementation is tuned to:
+  asserted at exactly **26** (`EXPECTED_CASE_COUNT`, `tests/patterns_detection_corpus_lib.py:26`,
+  enforced in two test files) and these must never become data the implementation is tuned to.
+  This sentence read "exactly 18" until 2026-10-04 -- the same stale figure the success criterion
+  below already warns about, left standing in the paragraph that explains why the cases are held
+  out:
 
   | Case | Tree | What only this case proves |
   |---|---|---|
