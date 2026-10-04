@@ -1485,7 +1485,14 @@ evidence is recorded here rather than the question being re-asked.
 impurity, and it depends on discovery continuing to ignore plain files there. The behaviour is
 measured, not assumed, but it is the harness's behaviour and not our contract.
 
-### ADR-7: The Obsidian rule stays duplicated, with a consistency test — CONFIRMED
+### ADR-7: The Obsidian rule stays duplicated, with a consistency test — CONFIRMED (amended 2026-10-05)
+
+> **Amendment.** The decision stands: two independent implementations plus a test, no shared
+> source. What was wrong is the framing below — this ADR described the two as answering one
+> question. Since 2026-10-05 they answer two distinct ones, the hook file-scoped and
+> `detect()` repo-scoped, and the test asserts a deliberate divergence as well as agreement.
+> Corrected in *Rationale* and in AC-14. The amendment is a consequence of the file-scoped
+> ruling, not a reopening of this ADR's choice.
 
 **Decision.** `scripts/block-eslint-disable.sh` keeps its own Obsidian gate in bash, `detect.py`
 has its own, and `tests/test_obsidian_rule_agreement.py` asserts that both answer identically over
@@ -1497,6 +1504,23 @@ plugin file referencing something by a path that resolves to nothing at runtime.
 implementations with a test that fails when they disagree gets the safety of a shared source
 without the coupling. The test is also the cheaper artefact: it needs no new abstraction, only the
 fixtures the detection suite builds anyway.
+
+**The two answer different questions — corrected 2026-10-05.** This ADR originally read as two
+implementations of one question, "is this an Obsidian plugin?". They are not. The hook answers
+a **file-scoped** question — is the file about to be written inside a plugin — because that is
+what a write-time guard must decide. `detect()` answers a **repo-scoped** one — does this
+repository contain a plugin anywhere — because that is what an install decision needs. The two
+coincide for every detection fixture, and for any write inside a nested plugin. They diverge,
+and are asserted to diverge by name, for a write **outside** a nested plugin in a repository
+that contains one elsewhere.
+
+The distinction was forced by measurement rather than chosen: while both rules asked the
+repo-scoped question, both classified **this** repository as an Obsidian plugin, because six
+`manifest.json` files carrying `minAppVersion` live here as test fixtures. The hook therefore
+denied every write of a non-Markdown file containing `eslint-disable` anywhere in the tree.
+Both rules agreed, so AC-14 was satisfied while both were wrong — **agreement is not
+correctness, and an agreement test cannot tell the two apart.** That is the limit of what this
+ADR's mechanism buys, and it is worth stating plainly next to the mechanism itself.
 
 **Trade-offs accepted.** The rule is written twice, so a change must be made twice. The test turns
 that from a silent divergence into a failing build, which is the trade being bought. It does not
@@ -1617,7 +1641,7 @@ standing for two or three PRD criteria that assert the same behaviour from diffe
 | AC-11 | `patterns_drift.py` prints one `DRIFT:` line per behind pattern, `OK` when all are current, `MISSING` without a manifest; the advisory shows drift and suppresses `MISSING` | F7 |
 | AC-12 | `update` refreshes only drifted patterns, asks nothing about the selection, and prompts per diverged file with skip as the default | F8, ADR-4 |
 | AC-13 | A change to a pattern file without that pattern's `VERSION` in the same changeset fails the CI gate; with it, the gate passes; a change touching no pattern leaves the gate silent | F9, ADR-9 |
-| AC-14 | The bash Obsidian gate and the Python Obsidian rule return the same verdict for every detection fixture | ADR-7 |
+| AC-14 | The bash Obsidian gate and the Python Obsidian rule return the same verdict for every detection fixture **and for any write inside a nested plugin**; a write **outside** a nested plugin in a repository containing one elsewhere is an intentional, asserted exception, because the gate is file-scoped and the rule is repo-scoped | ADR-7 |
 | AC-15 | The catalogue reader prints a named pattern's body and writes nothing; an unknown name lists the 21 | F10 |
 | AC-16 | The proposal shows each entry's listing cost in characters, and lists baseline patterns separately from recommendations | F2 (4th, 5th) |
 | AC-17 | After `update`, every refreshed pattern's manifest version equals its catalogue `VERSION`, and currency is determinable from the manifest alone without reading any pattern file | F6 (3rd), F8 (3rd) |
