@@ -154,8 +154,23 @@ REPO_DIR=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null || true)
 # while testing a monorepo fixture under $TMPDIR before this line was added.
 # The `[ "$WALK_DIR" = "/" ]` bound stays anyway, as a second line of
 # defense against any other case the canonicalization doesn't cover.
+#
+# `|| WALK_DIR="$DIR"` guards the `cd` the same way line 134 guards `git`:
+# under `set -e`, an unguarded failing `cd` here would exit this script
+# non-zero, violating the "exit: always 0" contract at the top of the file.
+# Measured 2026-10-04: this is currently UNREACHABLE, not merely defensive.
+# Every shape that makes `cd "$DIR"` fail (mode 000, mode 600, mode 400, a
+# dangling symlink) also makes `git -C "$DIR" rev-parse` fail, since that
+# must chdir into the same directory -- so line 135 already exits 0 first
+# in all four cases, measured. The shield is INCIDENTAL, not designed: it
+# holds only because resolving the repository root happens to require a
+# chdir today. If that resolution ever stopped needing one, this line
+# would start exiting non-zero on a statable-but-not-enterable directory
+# with nothing above it to catch that -- so the guard stays even though no
+# reachable case was found, rather than depending on an earlier line's
+# side effect for a property this file's own contract promises.
 IS_OBSIDIAN=0
-WALK_DIR=$(cd "$DIR" && pwd -P)
+WALK_DIR=$(cd "$DIR" 2>/dev/null && pwd -P) || WALK_DIR="$DIR"
 while :; do
   if [ -f "${WALK_DIR}/manifest.json" ] && grep -q "minAppVersion" "${WALK_DIR}/manifest.json" 2>/dev/null; then
     IS_OBSIDIAN=1
