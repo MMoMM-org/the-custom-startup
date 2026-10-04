@@ -608,3 +608,68 @@ def test_q2_evidence_unions_q1_and_a_content_signal(tmp_path) -> None:
         "package.json: dependencies.express",
         "src/event_store/",
     ]
+
+
+# The four-manifest table, row by row, against the real detector
+# `[ref: SDD/Interface Specifications/Detection rules, "Which declaration counts
+# as `dependencies` outside `package.json`"]`. Three of these six rows are
+# covered by no fixture at all, and three are satisfied only by OMISSION -- the
+# dependency readers simply never parse a development table. Correct today and
+# fragile tomorrow: adding `[project.optional-dependencies]` support to the
+# stack-fact reader for a perfectly good reason would silently open gates on
+# development-only declarations, and before this test nothing would have failed.
+# Trees are hand-written here rather than added to the corpus: a gate's boolean
+# is all these need, which `detect()` already reports, and six more fixtures to
+# assert six booleans would be a poor trade.
+GATE_DEPENDENCY_SOURCE_CASES = [
+    ("optional_dependencies_do_not_open_q1", False, {
+        "pyproject.toml": '[project]\nname = "s"\ndependencies = []\n\n'
+                          '[project.optional-dependencies]\ndev = ["fastapi"]\n',
+        "app.py": "x = 1\n",
+    }),
+    ("poetry_dev_group_does_not_open_q1", False, {
+        "pyproject.toml": '[tool.poetry]\nname = "s"\n\n'
+                          '[tool.poetry.group.dev.dependencies]\nfastapi = "^0.104"\n',
+        "app.py": "x = 1\n",
+    }),
+    ("extras_require_does_not_open_q1", False, {
+        "setup.py": "from setuptools import setup\n"
+                    "setup(name='s', install_requires=[], extras_require={'dev': ['fastapi']})\n",
+        "app.py": "x = 1\n",
+    }),
+    ("project_dependencies_open_q1", True, {
+        "pyproject.toml": '[project]\nname = "s"\ndependencies = ["fastapi"]\n',
+        "app.py": "x = 1\n",
+    }),
+    ("install_requires_opens_q1", True, {
+        "setup.py": "from setuptools import setup\nsetup(name='s', install_requires=['flask'])\n",
+        "app.py": "x = 1\n",
+    }),
+    ("poetry_dependencies_open_q1", True, {
+        "pyproject.toml": '[tool.poetry]\nname = "s"\n\n'
+                          '[tool.poetry.dependencies]\ndjango = "^5.0"\n',
+        "app.py": "x = 1\n",
+    }),
+]
+
+
+@pytest.mark.parametrize(
+    "case_id,expect_open,files",
+    GATE_DEPENDENCY_SOURCE_CASES,
+    ids=[c[0] for c in GATE_DEPENDENCY_SOURCE_CASES],
+)
+def test_q1_reads_runtime_declarations_and_not_development_ones(
+    case_id, expect_open, files, tmp_path
+) -> None:
+    """Each case is one row of the four-manifest table, with the three
+    development-table rows paired against three runtime-table controls. The
+    controls are what make the negatives mean anything: a detector that reads no
+    Python manifest at all would pass the three negatives and fail all three
+    positives, which is the failure this pairing is here to tell apart."""
+    for name, body in files.items():
+        (tmp_path / name).write_text(body, encoding="utf-8")
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+    assert report["gates"]["q1_backend"] is expect_open, (
+        "%s: gate_evidence was %r" % (case_id, report["gate_evidence"].get("q1_backend"))
+    )
