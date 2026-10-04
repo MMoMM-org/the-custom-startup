@@ -645,7 +645,7 @@ def _gate_runtime_dependency_evidence(tree: _Tree, node_names: set[str], python_
     formats a stack fact's dependency evidence
     `[ref: SDD/Detection rules, "Which declaration counts as dependencies
     outside package.json"]`. Go is handled separately
-    (`_gate_go_direct_require_evidence`) because its "direct vs. indirect"
+    (`_go_direct_require_evidence`) because its "direct vs. indirect"
     split lives in a parsed marker, not a manifest section.
 
     Shared between `q1_backend` (server frameworks) and `q2_architecture`'s
@@ -679,7 +679,7 @@ def _gate_runtime_dependency_evidence(tree: _Tree, node_names: set[str], python_
     return evidence
 
 
-def _gate_go_direct_require_evidence(tree: _Tree) -> list[str]:
+def _go_direct_require_evidence(tree: _Tree) -> list[str]:
     """`go.mod` requires that are both direct (not `// indirect`) and match
     one of `GO_SERVER_FRAMEWORK_MODULES` by their module path's last segment
     `[ref: SDD/Detection rules, "gate-q1-go-direct-require"]`. An indirect
@@ -700,7 +700,7 @@ def _gate_q1_backend_evidence(tree: _Tree) -> list[str]:
     `devDependencies` (trap 4), across Node, Python and Go."""
     return (
         _gate_runtime_dependency_evidence(tree, NODE_SERVER_FRAMEWORK_DEPS, PYTHON_SERVER_FRAMEWORK_DEPS)
-        + _gate_go_direct_require_evidence(tree)
+        + _go_direct_require_evidence(tree)
     )
 
 
@@ -788,9 +788,24 @@ def _gate_q3_test_quality_evidence(tree: _Tree) -> list[str]:
     """Row `q3_test_quality`: any test framework present -- framework
     evidence only, no tests shape required, unlike the `testing` stack fact
     `[ref: SDD/Detection rules, "q3_test_quality needs framework evidence
-    only"]`. Every ecosystem's framework evidence is included, not only the
-    first found, for the same completeness reason every other gate's
-    evidence is complete."""
+    only"]`.
+
+    **One signal per ecosystem, every ecosystem checked.** All four are
+    always consulted, so a repository with both `pytest.ini` and a `jest`
+    dependency cites both; but each per-ecosystem helper returns on its
+    first match, so `pytest.ini` beside a `tox.ini` cites only
+    `pytest.ini`. Measured 2026-10-04 across all four ecosystems, not
+    inferred.
+
+    This docstring claimed full completeness -- "not only the first found,
+    for the same completeness reason every other gate's evidence is
+    complete" -- and a review caught it. The narrower behaviour is correct
+    and the claim was not: completeness binds where an entry's CONTENTS are
+    the only observable that can discriminate a rule, and q3 has no such
+    rule `[ref: SDD/Interface Specifications, "Where completeness binds,
+    and where one signal is a complete explanation"]`. A second Python
+    config does not change the answer to "is there a test framework here",
+    and q3's evidence exists to tell the user why they are being asked."""
     matches = [
         p
         for p in (

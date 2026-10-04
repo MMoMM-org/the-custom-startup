@@ -781,8 +781,31 @@ exactly one reason. It is pinned instead by a direct test against a constructed 
 an `express` dependency and an `event_store/` directory; mutating away either half of the union
 fails exactly that test and nothing else.
 
-**And a `gate_evidence` entry lists EVERY signal that contributed to that gate, not the first
-one found.** This is not a new shape — the example report above already gives `q2_architecture`
+**Where completeness binds, and where one signal is a complete explanation — settled
+2026-10-04.** The clause below was written generally, and a code-quality review then found
+`q3_test_quality` not honouring it: all four ecosystems are consulted, but each per-ecosystem
+helper returns on its first match, so a repository with `pytest.ini` beside a `tox.ini` cites only
+`pytest.ini`. Measured across all four ecosystems rather than inferred from one.
+
+The narrower behaviour is right, and the general wording was too broad. **Completeness binds where
+an entry's contents are the only observable that can discriminate a rule.** There are exactly
+three such places, and in each one a first-match entry would let a wrong implementation pass:
+
+| Where | What the contents have to discriminate |
+|---|---|
+| `q1_backend`, Go | a direct require from a `// indirect` one, which the `gates` boolean cannot separate when both are server frameworks in one file |
+| `q2_architecture`, the triad | two `ports/` directories are two contributing signals; citing one under-reports |
+| `q2_architecture`, the union | q1 and a content signal both contributing, which no fixture can see because `gates` carries booleans |
+
+`q3_test_quality` has no such rule. Nothing is excluded from its evidence, so there is no wrong
+match for the contents to rule out, and a second Python config does not change the answer to "is
+there a test framework here". Its evidence exists to tell the user why they are being asked, and
+one config file says that completely. Recorded as a scoped rule with its reason rather than left
+as a general claim the code quietly fails, because narrowing a rule to fit the code is precisely
+the move this phase has caught nine times.
+
+**Within those three places, a `gate_evidence` entry lists EVERY signal that contributed to that
+gate, not the first one found.** This is not a new shape — the example report above already gives `q2_architecture`
 two entries — but it has to be stated, because the `// indirect` discrimination collapses
 without it. Written and then checked on 2026-10-04: a detector that strips `//` comments (which
 `_go_mod_requires` does today), credits both requires, and reports whichever it matched first

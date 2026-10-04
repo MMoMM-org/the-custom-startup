@@ -673,3 +673,34 @@ def test_q1_reads_runtime_declarations_and_not_development_ones(
     assert report["gates"]["q1_backend"] is expect_open, (
         "%s: gate_evidence was %r" % (case_id, report["gate_evidence"].get("q1_backend"))
     )
+
+
+def test_q3_evidence_is_one_signal_per_ecosystem_across_all_ecosystems(tmp_path) -> None:
+    """q3's evidence is deliberately NOT complete within an ecosystem, and this
+    pins both halves so neither can drift
+    `[ref: SDD/Interface Specifications, "Where completeness binds, and where one
+    signal is a complete explanation"]`.
+
+    Completeness binds only where an entry's contents are the only observable
+    that can discriminate a rule -- q1's Go direct/indirect split, the triad's
+    repeated directories, and q2's union. q3 excludes nothing, so there is no
+    wrong match for its contents to rule out, and one config file completely
+    answers "is there a test framework here".
+
+    This behaviour was undocumented and its docstring claimed the opposite until
+    2026-10-04, so it is pinned in both directions: a change making it complete
+    within an ecosystem fails here just as loudly as one dropping an ecosystem.
+    """
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+    (tmp_path / "tox.ini").write_text("[tox]\n", encoding="utf-8")
+    (tmp_path / "go.mod").write_text("module example.com/s\n\ngo 1.22\n", encoding="utf-8")
+    (tmp_path / "a_test.go").write_text("package a\n", encoding="utf-8")
+    (tmp_path / "b_test.go").write_text("package a\n", encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert report["gates"]["q3_test_quality"] is True
+    # Python contributes pytest.ini and not tox.ini; Go contributes a_test.go
+    # and not b_test.go; both ecosystems are present.
+    assert report["gate_evidence"]["q3_test_quality"] == ["a_test.go", "pytest.ini"]
