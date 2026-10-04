@@ -1522,10 +1522,15 @@ standing for two or three PRD criteria that assert the same behaviour from diffe
 
 ## Risks and Technical Debt
 
-### ADR-10: Cross-pattern references become co-recommendations, from a derived map — CONFIRMED
+### ADR-10: Cross-pattern references become co-recommendations, from a derived map — CONFIRMED (amended 2026-10-04)
 
-**Context.** Nine pattern pairs cite each other's files — measured 2026-10-03, 14 references
-reduced to nine distinct pairs, forming a cycle rather than a tree. C5 copies one pattern
+> **Amendment.** The decision stands; its *Trade-offs accepted* paragraph was wrong in three
+> places and is corrected at the end of this ADR. One of the three is a reversal rather than a
+> clarification: companion expansion is the **transitive closure**, where this ADR said one hop.
+
+**Context.** Pattern files cite each other — measured 2026-10-03 and re-measured 2026-10-04:
+14 references, 9 distinct (pattern, cited path) pairs, **7** distinct pattern-to-pattern
+edges, forming a cycle rather than a tree. The map is the 7. C5 copies one pattern
 directory, so installing `ddd` alone leaves its citation of `reference/testing-hex-arch.md`, a file
 living in `hexagonal/`, dangling in the consumer repository. Q2 is multiSelect, so that selection
 is reachable rather than hypothetical.
@@ -1554,13 +1559,36 @@ companion edge — and a test asserts the derived map equals the seven known edg
   written and silently wrong the first time a pattern's references changed. Deriving it costs the
   same resolution code the link test already needs.
 
-**Trade-offs accepted.** A derived map is only as good as its resolution rule, and that rule
-deliberately ignores bare code-span paths that do not begin `../`
-`[ref: SDD/Interface Specifications/Data model: companion map]`. The nine pairs were found by
-resolving bare paths against other pattern roots, which is a different and broader rule than the
-link test enforces — so the map's derivation and the link test's check are related but not
-identical, and the test asserting nine pairs is what keeps them honest. The cycle also forbids a
-transitive closure: companions are one hop, not a dependency graph to resolve.
+**Trade-offs accepted — amended 2026-10-04, three claims in this paragraph were wrong.** A derived
+map is only as good as its resolution rule, and that rule resolves **bare** code-span paths against
+every other pattern root `[ref: SDD/Interface Specifications/Data model: companion map]` — a
+different and broader rule than the link test enforces, which keys on `../` climbs. So the map's
+derivation and the link test's check are related but not identical, and the test asserting the
+seven edges is what keeps them honest.
+
+The three corrections, in the order they matter:
+
+1. **Expansion is the transitive closure, not one hop.** This paragraph said "the cycle also
+   forbids a transitive closure: companions are one hop, not a dependency graph to resolve", and
+   both halves of that fail. A cycle does not *forbid* a closure; it requires a **visited set** —
+   measured, the closure over both mutual pairs terminates immediately with one. And one hop does
+   not achieve what this ADR is for: install `observability`, accept `hexagonal`, and
+   `hexagonal`'s own citation of a file under `ddd/` dangles — the same defect this ADR exists to
+   prevent, one step further out. Reversed by Marcus on 2026-10-04 with the blast radius measured
+   first: at most three companions for any one selection. **This is a deliberate reversal of a
+   CONFIRMED decision, not a clarification of it.** It was found because the orchestrator read the
+   Data Model section, asked Marcus to settle a depth it described as unspecified, and a review
+   then located this paragraph — so the first ruling was made without this text in view. The
+   consequences are written out under *Expansion is the transitive closure*
+   `[ref: SDD/Interface Specifications/Data model: companion map]`.
+2. **The rule does not ignore paths lacking `../`** — it depends on them. This paragraph claimed
+   the opposite and then, two sentences later, said the pairs "were found by resolving bare paths
+   against other pattern roots", contradicting itself inside one breath. The measurement settles
+   it: the real citations never climb, and a derivation built on the `../` rule finds **zero**
+   edges.
+3. **Seven edges, not nine pairs.** Nine is the distinct (source pattern, cited *path*) count;
+   the map C3 consumes is the seven pattern-to-pattern edges, since a companion is a pattern and
+   not a path.
 
 ### Known Technical Issues
 
