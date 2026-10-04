@@ -21,7 +21,7 @@ CATALOGUE_DIR = REPO_ROOT / "plugins" / "tcs-patterns" / "templates" / "patterns
 # assert against this constant -- each file must stay safe to run alone, so each
 # needs its own standalone, non-parametrized count assertion, but there is still
 # only one number to keep in sync with the fixture directory.
-EXPECTED_CASE_COUNT = 18
+EXPECTED_CASE_COUNT = 20
 
 
 @dataclass(frozen=True)
@@ -39,15 +39,29 @@ class Fixture:
 
 
 def discover_fixtures() -> list[Fixture]:
-    """Every immediate subdirectory of the corpus, sorted for stable test IDs.
+    """Every immediate non-hidden subdirectory of the corpus, sorted for stable test IDs.
 
     Deliberately not filtered by whether `repo/` or `expected.json` exist inside --
     a case directory missing either must still appear here, so the existence check
-    (not a silently empty corpus) is what catches it."""
+    (not a silently empty corpus) is what catches it.
+
+    Hidden directories ARE filtered, and that is a different thing: a dot-prefixed
+    name is never a fixture, so skipping it cannot hide a malformed case. Measured
+    2026-10-04: running a Bash tool call with this directory as its working
+    directory makes the harness create `.claude/.cc-writes` here, which
+    `p.is_dir()` then counted as a 21st fixture -- breaking the exact-count guard
+    and both existence checks on a developer's machine while CI, which never cds
+    here, stayed green. The directory is gitignored, so no amount of `git status`
+    would have shown it. A stray dot-directory that happened to contain `repo/`
+    and `expected.json` would have been worse: a silent extra case."""
     if not CORPUS_DIR.is_dir():
         return []
     return sorted(
-        (Fixture(name=p.name, path=p) for p in CORPUS_DIR.iterdir() if p.is_dir()),
+        (
+            Fixture(name=p.name, path=p)
+            for p in CORPUS_DIR.iterdir()
+            if p.is_dir() and not p.name.startswith(".")
+        ),
         key=lambda f: f.name,
     )
 

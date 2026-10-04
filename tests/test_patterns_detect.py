@@ -2,7 +2,7 @@
 
 Why this exists: the PRD's top risk is that detection rules are authored and graded
 by the same party. This file is written against `detect.py` before that module
-exists, so every one of the 18 fixtures in `tests/fixtures/patterns-detection/`
+exists, so every one of the fixtures in `tests/fixtures/patterns-detection/`
 fails for want of a detector rather than passing by construction -- the RED half of
 T2.1's TDD gate. `detect.py` lands in T2.2 (SDD/Building Block View, C2 -- "pure,
 fixture-callable").
@@ -73,7 +73,7 @@ def _fixture_ids() -> list[str]:
 
 def test_corpus_is_not_empty_here_either() -> None:
     """Standalone and non-parametrized, mirroring `test_patterns_detection_corpus.py
-    ::test_corpus_has_exactly_18_cases` -- this file parametrizes over the same
+    ::test_corpus_has_exactly_the_expected_number_of_cases` -- this file parametrizes over the same
     corpus but has no count guard of its own, so a vanished or emptied corpus must
     fail THIS assertion when this file is run alone, not skip quietly at exit 0."""
     fixtures = discover_fixtures()
@@ -90,8 +90,8 @@ def _evidence_problems(entry: dict, repo_dir) -> list[str]:
     """The three `evidence` invariants, per SDD/Data model: fixture expectation.
 
     `evidence` is asserted as an invariant rather than declared per fixture:
-    exact paths would add a key the corpus's exact-shape guard rejects and pin 18
-    fixtures to incidental strings. Nothing asserted `evidence` at all until this
+    exact paths would add a key the corpus's exact-shape guard rejects and pin every
+    fixture to incidental strings. Nothing asserted `evidence` at all until this
     was added -- a detector emitting `evidence: ""` satisfied every fixture while
     failing T2.2's first success criterion, which is PRD/F2 1st.
 

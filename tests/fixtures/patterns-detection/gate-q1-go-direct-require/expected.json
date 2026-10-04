@@ -1,0 +1,18 @@
+{
+  "auto": [
+    "go-idiomatic"
+  ],
+  "baseline": [],
+  "gates": {
+    "q1_backend": true,
+    "q2_architecture": true,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "node-service",
+    "api-design",
+    "twelve-factor"
+  ],
+  "unrecognised_stack": false,
+  "why": "Go's q1_backend path, which no other fixture reaches -- `gin`, `echo` and `chi` appear in no fixture's go.mod, so a detector omitting Go's q1 entirely passed all 18 cases. `gin` is a DIRECT require and opens q1; `chi` carries `// indirect` and must not be credited, per the 2026-10-04 ruling that a gate excludes transitive declarations because q1 asks whether this repository RUNS a service. The gates dict alone cannot separate the two -- both are server frameworks in the same file -- so the discrimination lives in q1's gate_evidence, which must name the direct module and must not name the indirect one. go-idiomatic fires on the go.mod, so unrecognised_stack is false here, unlike the Node half of this pair. No *_test.go, so q3 stays shut and testing does not reach baseline"
+}

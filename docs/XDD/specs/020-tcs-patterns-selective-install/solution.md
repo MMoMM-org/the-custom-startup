@@ -497,6 +497,43 @@ about the section being tidier. Stated because the table above gave the restrict
 `obsidian-plugin` and `react-testing` genuinely ambiguous; T2.2 read both for all three, which
 is now the rule rather than an unreviewed choice.
 
+**Which declaration counts as `dependencies` outside `package.json` — settled 2026-10-04.** The
+paragraph above states the split in `package.json` vocabulary, and nothing anywhere in this
+document mapped it onto the other three ecosystems. Found at T2.3's task-validation gate, before
+dispatch, by asking which clause `trap-03` traces to: that fixture opens `q1_backend` on `fastapi`
+in a `requirements.txt`, and no written rule permitted a gate to read that file at all. Searching
+the spec directory for `optional-dependencies` and `install_requires` returned nothing, and
+`indirect` appeared once, in an unrelated row about skill discovery. So three of the four
+ecosystems' `q1_backend` path were unwritten, and an implementer would have had to read a fixture
+to resolve them — the circularity `[ref: PRD/Risks and Mitigations]` names as the top risk.
+
+**The rule: a gate reads every runtime-dependency declaration the detector already parses, and
+excludes every declaration that is development-only or transitive.**
+
+| Manifest | A gate reads | A gate does not read |
+|---|---|---|
+| `package.json` | `dependencies` | `devDependencies` |
+| `pyproject.toml` | `[project] dependencies`, `[tool.poetry] dependencies` | `[project.optional-dependencies]`, `[tool.poetry.group.*.dependencies]` |
+| `requirements.txt` | every requirement line | — (the format has no development section) |
+| `setup.py` | `install_requires` | `extras_require` |
+| `go.mod` | a direct `require` | a `require` marked `// indirect` |
+
+The principle is the one already written above and is simply applied consistently: `q1_backend`
+asks whether this repository *runs a service*. A development-only declaration does not make it
+one, and neither does a transitive one — a CLI tool whose dependency happens to pull in `gin` does
+not run an HTTP service, and `// indirect` is exactly how Go records that distinction. Two
+consequences worth naming because they are easy to get wrong:
+
+- **`requirements.txt` has no development section, so every line counts.** The absence of a
+  `devDependencies` analogue is not a reason to exclude the file; it means the exclusion has
+  nothing to bite on. A repository that pins its test-only tooling in a separate
+  `requirements-dev.txt` is served correctly by this rule, because that file is a different file.
+- **`_go_mod_requires` strips `//` comments and therefore reads an indirect require as direct**
+  (measured 2026-10-04 in `detect.py`). That is harmless for the stack facts as they stand —
+  `go-idiomatic` fires on the file's presence — but it would make `mcp-server` fire on a
+  transitively pulled `mark3labs/mcp-go`, and under this rule it would open `q1_backend` on a
+  transitive `gin`. The indirect marker must survive parsing for gate purposes.
+
 Three consequences the fixtures must assert rather than assume:
 
 - **Each weak signal's quantity is fixed, not left to taste.** `ports/` + `adapters/` +
@@ -689,6 +726,25 @@ claims. Assert it as two invariants:
 Together these make "no gate opens without a signal from its own rule" a mechanical check
 rather than a reading. They need no per-case data: which gates are open is already declared in
 each `expected.json`, and the invariants key off that.
+
+**What a `gate_evidence` entry looks like when the signal is a dependency — settled 2026-10-04.**
+The example report above shows only path-shaped entries (`"pytest.ini"`, `"src/event_store/"`),
+because the one gate it opens on a dependency is not shown. `q1_backend` opens on a dependency in
+every case, so its entries take the **same form the `evidence` field already uses** for a
+dependency-sourced stack fact: `"<manifest path>: <section>.<name>"`, as in
+`"go.mod: require.github.com/gin-gonic/gin"` or
+`"packages/api/package.json: dependencies.express"`. Two reasons it has to be this form rather
+than the bare manifest path:
+
+- It reuses the resolution rule already in the suite rather than adding a second one. The
+  existing `evidence` invariants take the part before the first `": "` and resolve that as a
+  path, so the dependency form costs T2.3's two `gate_evidence` invariants nothing: a bare
+  `"go.mod"` would satisfy them as well, and say nothing about which require opened the gate.
+- It is the only way the corpus can discriminate the `// indirect` rule. `gate-q1-go-direct-require`
+  declares both a direct `gin` and an indirect `chi`; both are server frameworks in the same file,
+  so the `gates` dict cannot tell a detector that credited the right one from a detector that
+  credited either. The named dependency can: q1's evidence must name `gin` and must not name
+  `chi`. Without this form, the ruling above would be unenforceable by any fixture.
 
 **`repo` and `schema` complete the sweep.** Having found four of these one at a time, the
 remaining report fields were checked mechanically on 2026-10-04 — every key `detect.py` emits,

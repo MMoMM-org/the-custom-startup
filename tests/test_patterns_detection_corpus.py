@@ -1,7 +1,7 @@
 """T2.1 (spec-020): corpus-integrity tests for the patterns-detection fixture corpus.
 
 Why this exists: the PRD's top risk is that detection rules get authored and graded
-by the same party (SDD/Phase 2 context), so T2.1 writes 18 fixtures from the written
+by the same party (SDD/Phase 2 context), so T2.1 writes the fixtures from the written
 rules -- SDD/Detection rules: the eight stack facts and the three gates, and SDD/The
 seven traps, numbered -- before any detector exists. This file is the loader half of
 that gate: it proves the corpus itself is well-formed (right count, every case shaped
@@ -14,11 +14,11 @@ Three guards are mandatory here (task text step 2), each measured on 2026-10-03
 against this repo's pytest, each defending a specific way a fixture-corpus test goes
 quietly green over nothing:
 
-  1. corpus size is asserted in `test_corpus_has_exactly_18_cases`, standalone and
+  1. corpus size is asserted in `test_corpus_has_exactly_the_expected_number_of_cases`, standalone and
      non-parametrized. A bare `for` loop over an empty glob reports `1 passed` (the
      body never runs); `@pytest.mark.parametrize` over the same empty glob reports
      `1 skipped` at exit 0 ("got empty parameter set") -- a green suite of zero
-     cases. Asserting `len(fixtures) == 18` directly, never only as a parametrize
+     cases. Asserting `len(fixtures) == EXPECTED_CASE_COUNT` directly, never only as a parametrize
      source, is the only shape that fails loudly when the corpus is short or empty.
   2. `repo/` and `expected.json` existence is checked per fixture, in
      `test_every_fixture_has_repo_and_expected_json`, BEFORE either is read -- a
@@ -52,7 +52,7 @@ def test_corpus_directory_exists() -> None:
     assert CORPUS_DIR.is_dir(), f"{CORPUS_DIR} does not exist -- no fixtures were written"
 
 
-def test_corpus_has_exactly_18_cases() -> None:
+def test_corpus_has_exactly_the_expected_number_of_cases() -> None:
     """Guard 1 -- standalone and non-parametrized. Never `>=`, and never only as a
     parametrize source: an empty or short corpus must fail THIS assertion, not skip
     quietly or pass with an unexercised loop body."""
@@ -76,7 +76,7 @@ def test_every_fixture_has_repo_and_expected_json() -> None:
     """Guard 2 -- existence checked before either path is validated, and every
     missing path across every fixture is reported, not just the first."""
     fixtures = discover_fixtures()
-    assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_18_cases"
+    assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_the_expected_number_of_cases"
 
     missing: list[str] = []
     for fixture in fixtures:
@@ -94,7 +94,7 @@ def test_every_expected_json_parses_and_has_the_declared_shape() -> None:
     declares exactly the three gate keys. Guard 3: every failure across every fixture
     is collected and asserted once."""
     fixtures = discover_fixtures()
-    assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_18_cases"
+    assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_the_expected_number_of_cases"
 
     failures: list[str] = []
     for fixture in fixtures:
@@ -131,7 +131,7 @@ def test_every_pattern_named_in_any_fixture_is_one_of_the_21() -> None:
     assert valid_names, "no pattern names available -- see test_catalogue_has_pattern_names_to_validate_against"
 
     fixtures = discover_fixtures()
-    assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_18_cases"
+    assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_the_expected_number_of_cases"
 
     failures: list[str] = []
     for fixture in fixtures:
@@ -149,7 +149,7 @@ def test_auto_and_baseline_are_disjoint_per_fixture() -> None:
     never both (PRD business rule) -- no fixture should declare the same name in
     both `auto` and `baseline`."""
     fixtures = discover_fixtures()
-    assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_18_cases"
+    assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_the_expected_number_of_cases"
 
     failures: list[str] = []
     for fixture in fixtures:
@@ -166,7 +166,7 @@ def test_must_not_propose_is_disjoint_from_auto_per_fixture() -> None:
     fixture expectation) -- a name listed as defended against must not also appear
     in the same fixture's own `auto` list, which would be self-contradictory."""
     fixtures = discover_fixtures()
-    assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_18_cases"
+    assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_the_expected_number_of_cases"
 
     failures: list[str] = []
     for fixture in fixtures:
@@ -187,7 +187,7 @@ def test_unrecognised_stack_equals_auto_is_empty() -> None:
     true; "therefore the flag may be false" is exactly the gate-opened-means-
     recognised conflation ADR-5 forbids. Both directions are asserted, not one."""
     fixtures = discover_fixtures()
-    assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_18_cases"
+    assert fixtures, "no fixtures discovered -- see test_corpus_has_exactly_the_expected_number_of_cases"
 
     failures: list[str] = []
     for fixture in fixtures:

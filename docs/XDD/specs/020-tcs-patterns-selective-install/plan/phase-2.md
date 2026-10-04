@@ -173,21 +173,59 @@ written from the specification rather than from the implementation.
      repository closes all three; the true-negative sets `unrecognised_stack` true while gates
      follow their own evidence; trap 6 — a hand-rolled event store with no broker dependency opens
      Q2 and auto-proposes nothing.
+
+     **Two fixtures were added on 2026-10-04 and the corpus is now 20, not 18.** Measured before
+     dispatch: `q1_backend` had exactly one positive case in the whole corpus — `trap-03`, Python
+     via `requirements.txt` — and one negative, `trap-04`, Node via `devDependencies`. No fixture
+     declared a Node or Go server framework in `dependencies`, so a detector implementing Node's
+     q1 path wrongly, or omitting Go's entirely, passed all 18. The two new cases close that, and
+     both were written by the orchestrator from the rules as written, before any gate code existed,
+     keeping T2.1's separation between who declares the expectation and who writes the rule:
+     - `gate-q1-node-runtime-dependency` — `trap-04`'s package.json with the section renamed and
+       nothing else changed except `name`, which no rule reads. The only detectable difference is
+       the section, so it is the positive half of trap 4's pair. It also pins ADR-5 harder than
+       `trap-06` does: no stack fact fires on a bare package.json, so `unrecognised_stack` stays
+       **true while q1 AND q2 are open**.
+     - `gate-q1-go-direct-require` — a `go.mod` with a direct `gin` and an indirect `chi`. q1 opens
+       on `gin`; `chi` carries `// indirect` and must not be credited. The `gates` dict cannot
+       separate those two, so the discrimination lives in q1's `gate_evidence`, which must name the
+       direct module and not the indirect one
+       `[ref: SDD/Interface Specifications, "What a gate_evidence entry looks like when the signal
+       is a dependency"]`.
+
+     `EXPECTED_CASE_COUNT` is 20, and the guard was renamed from
+     `test_corpus_has_exactly_18_cases` to `test_corpus_has_exactly_the_expected_number_of_cases`
+     — it encoded the count in its own identifier and was cited by seven other assertion messages,
+     so a corpus change left eight places reading `18` and only one of them checked.
+
+     Read the 2026-10-04 ruling **"Which declaration counts as `dependencies` outside
+     `package.json`"** before implementing q1 `[ref: SDD/Interface Specifications/Detection rules]`.
+     It is new, and without it three of the four ecosystems' q1 path are unwritten: a gate reads
+     `package.json` `dependencies`, `pyproject.toml`'s `[project]` and `[tool.poetry]`
+     dependencies, every line of `requirements.txt`, `setup.py`'s `install_requires`, and only
+     **direct** `go.mod` requires. Note that `_go_mod_requires` currently strips `//` comments, so
+     the indirect marker does not survive parsing and must be made to.
   3. Implement: the gate evaluation and `gate_evidence` in `detect.py`. `unrecognised_stack` is
      **already done** — T2.2 computed it from `auto` alone per ADR-5, which is independent of
      the gates by construction. Do not rework it; confirm it still holds once gates are live,
      since the whole point of ADR-5's clause is that an open gate must not flip the flag.
-  4. Validate: all 18 fixtures green — `python3 -m pytest tests/test_patterns_detect.py -q`
-     reports **`26 passed`** plus whatever this task adds, exit 0. The figure was `19` until
-     2026-10-04 and was stale: it counted the 18 comparisons plus the standalone corpus guard,
-     written before T2.1 and T2.2 added the four evidence-invariant tests, the wiring test and
-     the two interpreter tests. Measured at `3fc2b2a`: 26 collected, 6 failed / 20 passed. A
-     target figure nobody re-measures is the same defect class as an unasserted field — count
-     the file, do not inherit the number. Then
-     `python3 -m pytest -q`. This task inherits **6 red fixtures** from T2.2 and its job is
-     to turn exactly those green: `auto-testing-baseline`,
-     `edge-unrecognised-stack-with-tests`, `trap-01` and `trap-02` (q3), `trap-03` (q1+q2),
-     `trap-06` (q2). It also replaces T2.2's all-`false` gate placeholder with real
+  4. Validate: all 20 fixtures green — `python3 -m pytest tests/test_patterns_detect.py -q`
+     reports **`28 passed`** plus whatever this task adds, exit 0. The figure was `19` until
+     2026-10-04 and was stale twice over: it counted 18 comparisons plus the standalone corpus
+     guard, written before T2.1 and T2.2 added the four evidence-invariant tests, the wiring test
+     and the two interpreter tests, and before the two q1 fixtures took the corpus to 20. Measured
+     after those were added: 28 collected, 8 failed / 20 passed. A target figure nobody
+     re-measures is the same defect class as an unasserted field — count the file, do not inherit
+     the number. Then `python3 -m pytest -q`; baseline before this task is
+     **8 failed, 851 passed, 1 skipped, 1 deselected**.
+
+     This task inherits **8 red fixtures** and its job is to turn exactly those green:
+     `auto-testing-baseline`, `edge-unrecognised-stack-with-tests`, `trap-01` and `trap-02` (q3),
+     `trap-03` (q1+q2), `trap-06` (q2), and the two added above (q1+q2). Verified before dispatch
+     that all eight fail on the `gates` comparison at `test_patterns_detect.py:161` and on nothing
+     else — the two new ones pass their `auto` and `baseline` assertions already, which is
+     independent agreement between rules derived by the orchestrator and a detector written by
+     T2.2's implementer. It also replaces T2.2's all-`false` gate placeholder with real
      evaluation, so a fixture that was green on the placeholder and goes red here means the
      gate logic is wrong, not the fixture.
   5. Success — restated 2026-10-04 to what this task's output can actually show. Two of the
@@ -210,6 +248,19 @@ written from the specification rather than from the implementation.
            (trap 4), and Q2 opens on a content signal alone with Q1 shut (trap 6)
      - [ ] An uncovered language with an architectural shape still opens Q2, and
            `unrecognised_stack` stays true there `[ref: SDD/ADR-5]`
+     - [ ] Added 2026-10-04 with the two new fixtures. `q1_backend` opens on all three
+           ecosystems and not only Python: Node from `dependencies`
+           (`gate-q1-node-runtime-dependency`) and Go from a direct `go.mod` require
+           (`gate-q1-go-direct-require`). Before those existed, q1 had one positive case in
+           the corpus and omitting Go's path entirely cost nothing
+           `[ref: SDD/Interface Specifications/Detection rules, "Which declaration counts as
+           `dependencies` outside `package.json`"]`
+     - [ ] A `go.mod` require marked `// indirect` does not open `q1_backend`, shown by q1's
+           `gate_evidence` naming the direct module and not the indirect one in
+           `gate-q1-go-direct-require`. `_go_mod_requires` strips `//` comments today, so this
+           fails until the marker survives parsing
+           `[ref: SDD/Interface Specifications, "What a gate_evidence entry looks like when the
+           signal is a dependency"]`
 
      Moved to T5.1, where the behaviour actually lives: "no more than three questions, each
      allowing multiple answers" `[ref: PRD/F3 2nd]` and "a closed gate yields no question
