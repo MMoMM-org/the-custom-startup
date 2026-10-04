@@ -256,9 +256,12 @@ written from the specification rather than from the implementation.
            `[ref: SDD/Interface Specifications/Detection rules, "Which declaration counts as
            `dependencies` outside `package.json`"]`
      - [ ] A `go.mod` require marked `// indirect` does not open `q1_backend`, shown by q1's
-           `gate_evidence` naming the direct module and not the indirect one in
-           `gate-q1-go-direct-require`. `_go_mod_requires` strips `//` comments today, so this
-           fails until the marker survives parsing
+           `gate_evidence` in `gate-q1-go-direct-require` listing **every** contributing
+           dependency and that list containing `gin` and not `chi`. The completeness is what
+           carries the check, not the naming: "names the direct one" alone is satisfied by luck,
+           since a detector that strips `//` comments — which `_go_mod_requires` does today —
+           credits both and would report `gin` first anyway, in file order and in sort order
+           alike. `_go_mod_requires` must be made to preserve the marker
            `[ref: SDD/Interface Specifications, "What a gate_evidence entry looks like when the
            signal is a dependency"]`
 

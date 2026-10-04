@@ -746,6 +746,19 @@ than the bare manifest path:
   credited either. The named dependency can: q1's evidence must name `gin` and must not name
   `chi`. Without this form, the ruling above would be unenforceable by any fixture.
 
+**And a `gate_evidence` entry lists EVERY signal that contributed to that gate, not the first
+one found.** This is not a new shape — the example report above already gives `q2_architecture`
+two entries — but it has to be stated, because the `// indirect` discrimination collapses
+without it. Written and then checked on 2026-10-04: a detector that strips `//` comments (which
+`_go_mod_requires` does today), credits both requires, and reports whichever it matched first
+would name `gin`, because `gin` precedes `chi` both in the file and in sort order. It would
+therefore satisfy "names the direct module, not the indirect one" while implementing the rule
+wrongly, and reordering the fixture only moves the luck around — a detector that sorts what it
+finds is unaffected by file order. Requiring the complete set removes the luck: crediting `chi`
+puts it in the list, and the assertion fails on its presence rather than on which entry happened
+to come first. The completeness requirement is what carries the check; the dependency form only
+makes the contents legible.
+
 **`repo` and `schema` complete the sweep.** Having found four of these one at a time, the
 remaining report fields were checked mechanically on 2026-10-04 — every key `detect.py` emits,
 against every `report[...]` the detection test reads — and two more were unasserted:
