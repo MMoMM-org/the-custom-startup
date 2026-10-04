@@ -635,6 +635,22 @@ down because the asymmetry reads as an inconsistency at a glance, and "fixing" i
 accepting bare `*.test.js` would make `q3_test_quality` open on a repository that cannot run
 its own tests.
 
+**`frontend-testing` reading only test *files* also prevents a feedback loop, which nobody
+designed against — do not relax it.** Measured 2026-10-05: five catalogue files quote the DOM-render
+markers in prose — `frontend-testing/SKILL.md`, `frontend-testing/reference/testing-patterns.md`,
+`react-testing/SKILL.md`, `react-testing/reference/react-patterns.md` and
+`obsidian-plugin/reference/architectural-patterns.md`. C5 installs a pattern by copying its whole
+directory into `<repo>/.claude/skills/<name>/`, so after an install those files are inside the
+target repository. They are invisible to the rule only because it searches `files_matching(
+_is_test_filename)` and a `.md` never matches that. If the rule were ever relaxed to "markers
+anywhere", installing `frontend-testing` or `react-testing` would make the detector propose them on
+the **next** run, from its own output — a pattern recommending itself. A repository built only from
+installed patterns was measured both with and without `.claude` in `SKIP_DIRS` and proposes nothing
+either way, so this is a constraint on future change rather than a live defect, and it is **not** an
+additional justification for the `.claude` exclusion, which rests on the vendored plugin cache
+alone. The catalogue also carries no manifest-named file, no `.py` and no test-named file, so no
+other stack fact has the same exposure today.
+
 Three distinctions the fixtures must preserve, because the two rules are deliberately asymmetric:
 
 - **`q3_test_quality` needs framework evidence only.** Any row above opens it.
