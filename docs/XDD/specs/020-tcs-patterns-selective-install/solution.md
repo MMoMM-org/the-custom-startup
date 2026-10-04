@@ -536,6 +536,19 @@ consequences worth naming because they are easy to get wrong:
 
 Three consequences the fixtures must assert rather than assume:
 
+- **The triad's three directories need no common parent, and none of the four signals is
+  depth-restricted — settled 2026-10-04.** The row says "all three of `ports/` + `adapters/` +
+  `domain/` as directories" and says nothing about where. `trap-06` happens to place them as
+  siblings under `src/`, so it passes under either reading and cannot settle the question — which
+  means this is a genuine silence rather than something a fixture lookup would resolve. Ruled the
+  loose way, by the asymmetry already argued below: a gate only decides whether to *ask*, so a
+  false open costs one question while a false close denies patterns to exactly the repositories
+  whose architecture is deliberate. A Go service with `internal/ports`, `internal/adapters` and
+  `pkg/domain` has the shape the signal is looking for and must reach Q2. The same applies to the
+  other three signals, consistent with the traced walkthrough, which finds `events.py` at
+  `src/<feature>/` and the store at `src/event_store/` rather than at the root
+  `[ref: SDD/Runtime View/Complex Logic]`. The exclusion list still applies at every depth:
+  nothing inside `node_modules`, `.venv`, `venv` or `vendor` is a signal.
 - **Each weak signal's quantity is fixed, not left to taste.** `ports/` + `adapters/` +
   `domain/` needs all three; `event_store` and a broker dependency need one; the per-module
   events file needs **two or more in distinct module directories**. One `events.py` is a

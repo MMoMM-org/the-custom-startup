@@ -79,7 +79,11 @@ written from the specification rather than from the implementation.
 
      So: (1) assert the corpus size in a **standalone, non-parametrized** test —
      `assert len(fixtures) == 18` — never only as a parametrize source, or an empty corpus
-     passes; (2) assert `repo/` and `expected.json` exist per fixture before validating either;
+     passes. (The literal `18` is what T2.1 was asked for and delivered; the count now lives in
+     `tests/patterns_detection_corpus_lib.py`'s `EXPECTED_CASE_COUNT`, which T2.3 took to **24**
+     when it added six gate-coverage fixtures. The guard was renamed off its hardcoded count at
+     the same time. The requirement here is the *standalone, non-parametrized* shape, not the
+     number.) (2) assert `repo/` and `expected.json` exist per fixture before validating either;
      (3) accumulate every validation failure and assert once at the end, so eight bad pattern
      names report as eight and not as the first one.
   3. Implement: `tests/fixtures/patterns-detection/<case>/` with `repo/` and `expected.json`.
@@ -174,7 +178,8 @@ written from the specification rather than from the implementation.
      follow their own evidence; trap 6 — a hand-rolled event store with no broker dependency opens
      Q2 and auto-proposes nothing.
 
-     **Two fixtures were added on 2026-10-04 and the corpus is now 20, not 18.** Measured before
+     **Six fixtures were added on 2026-10-04 and the corpus is now 24, not 18** -- two for q1
+     here, four for q2 below. Measured before
      dispatch: `q1_backend` had exactly one positive case in the whole corpus — `trap-03`, Python
      via `requirements.txt` — and one negative, `trap-04`, Node via `devDependencies`. No fixture
      declared a Node or Go server framework in `dependencies`, so a detector implementing Node's
@@ -193,7 +198,29 @@ written from the specification rather than from the implementation.
        `[ref: SDD/Interface Specifications, "What a gate_evidence entry looks like when the signal
        is a dependency"]`.
 
-     `EXPECTED_CASE_COUNT` is 20, and the guard was renamed from
+     **`q2_architecture` had the same hole, and four more fixtures close it.** Measured: of the
+     four weak content signals in the q2 row, only the `ports/`+`adapters/`+`domain/` triad had any
+     fixture at all (`trap-06`). The per-module events files, the `event_store` directory and the
+     broker dependency had **none**, so a detector implementing the triad and the q1 disjunct alone
+     passed every case. One signal per fixture, because a fixture carrying two cannot say which one
+     opened the gate:
+     - `gate-q2-events-per-module` — two `events.py` in distinct module directories. q2 opens.
+     - `gate-q2-single-events-file` — the same tree with **one**. q2 stays shut, enforcing the
+       written "two or more" threshold and the reason given for it, that one such file is a utility
+       rather than a convention. Note this case is **green on T2.2's all-`false` placeholder** and
+       must stay green: it is a forward regression guard, not a RED→GREEN case, the same standing
+       the spec gives traps 3, 4 and 6.
+     - `gate-q2-event-store-dir` — one `src/event_store/` directory. q2 opens. Nested rather than
+       at the root, so a detector inspecting only root-level names goes red.
+     - `gate-q2-broker-dependency` — `kafkajs` in `dependencies`. q2 opens and **q1 stays shut**, so
+       a detector matching any networking dependency for q1 goes red.
+
+     Read also the 2026-10-04 ruling that the triad needs no common parent and that none of the
+     four signals is depth-restricted `[ref: SDD/Interface Specifications/Detection rules]`. It was
+     a genuine silence: `trap-06` places the three as siblings and therefore passes under either
+     reading, so no fixture could have settled it.
+
+     `EXPECTED_CASE_COUNT` is 24, and the guard was renamed from
      `test_corpus_has_exactly_18_cases` to `test_corpus_has_exactly_the_expected_number_of_cases`
      — it encoded the count in its own identifier and was cited by seven other assertion messages,
      so a corpus change left eight places reading `18` and only one of them checked.
@@ -209,21 +236,23 @@ written from the specification rather than from the implementation.
      **already done** — T2.2 computed it from `auto` alone per ADR-5, which is independent of
      the gates by construction. Do not rework it; confirm it still holds once gates are live,
      since the whole point of ADR-5's clause is that an open gate must not flip the flag.
-  4. Validate: all 20 fixtures green — `python3 -m pytest tests/test_patterns_detect.py -q`
-     reports **`28 passed`** plus whatever this task adds, exit 0. The figure was `19` until
+  4. Validate: all 24 fixtures green — `python3 -m pytest tests/test_patterns_detect.py -q`
+     reports **`32 passed`** plus whatever this task adds, exit 0. The figure was `19` until
      2026-10-04 and was stale twice over: it counted 18 comparisons plus the standalone corpus
      guard, written before T2.1 and T2.2 added the four evidence-invariant tests, the wiring test
-     and the two interpreter tests, and before the two q1 fixtures took the corpus to 20. Measured
-     after those were added: 28 collected, 8 failed / 20 passed. A target figure nobody
+     and the two interpreter tests, and before the six gate fixtures took the corpus to 24.
+     Measured after those were added: 32 collected, 11 failed / 21 passed. A target figure nobody
      re-measures is the same defect class as an unasserted field — count the file, do not inherit
      the number. Then `python3 -m pytest -q`; baseline before this task is
-     **8 failed, 851 passed, 1 skipped, 1 deselected**.
+     **11 failed, 852 passed, 1 skipped, 1 deselected**.
 
-     This task inherits **8 red fixtures** and its job is to turn exactly those green:
+     This task inherits **11 red fixtures** and its job is to turn exactly those green:
      `auto-testing-baseline`, `edge-unrecognised-stack-with-tests`, `trap-01` and `trap-02` (q3),
-     `trap-03` (q1+q2), `trap-06` (q2), and the two added above (q1+q2). Verified before dispatch
-     that all eight fail on the `gates` comparison at `test_patterns_detect.py:161` and on nothing
-     else — the two new ones pass their `auto` and `baseline` assertions already, which is
+     `trap-03` (q1+q2), `trap-06` (q2), the two q1 cases (q1+q2) and the three q2-positive cases
+     (q2). The sixth added fixture, `gate-q2-single-events-file`, is already green and must stay
+     green. Verified before dispatch that all eleven fail on the `gates` comparison at
+     `test_patterns_detect.py:161` and on nothing else — every new fixture passes its `auto` and
+     `baseline` assertions already, which is
      independent agreement between rules derived by the orchestrator and a detector written by
      T2.2's implementer. It also replaces T2.2's all-`false` gate placeholder with real
      evaluation, so a fixture that was green on the placeholder and goes red here means the

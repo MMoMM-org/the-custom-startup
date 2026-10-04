@@ -1,0 +1,18 @@
+{
+  "auto": [],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": true,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "ddd",
+    "event-driven",
+    "event-sourcing",
+    "hexagonal",
+    "functional"
+  ],
+  "unrecognised_stack": true,
+  "why": "q2's per-module events signal, which no fixture reached: two `events.py` in DISTINCT module directories (src/orders, src/billing). The quantity is a written rule, not a preference -- solution.md calls each weak signal's quantity \"fixed, not left to taste\" and sets this one at two or more -- so this is the positive half of a pair with gate-q2-single-events-file, which has one and must stay shut. No manifest accompanies the .py files, so python-project does not fire (it needs a .py AND one of pyproject/requirements/setup) and unrecognised_stack stays true with q2 open"
+}
