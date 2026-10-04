@@ -156,11 +156,15 @@ def decide(report: Mapping, answers: Mapping[str, Iterable[str]] | None = None) 
             "decide() cannot partition honestly (" + "; ".join(culprits) + ")"
         )
 
-    # Belt-and-braces, not load-bearing: the raise above is what actually
-    # catches a leak. This intersection would otherwise absorb one silently
-    # -- dropping a gate-settled name from `installed` while the four sets
-    # still summed to 21 is the exact failure mode the raise exists to
-    # prevent. Do not delete the raise believing this covers it.
+    # Belt-and-braces, and not load-bearing for AC-6's arithmetic: the sum
+    # stays 21 either way, because a leaked gate-settled name is still
+    # assigned exactly once by the gate loop below. The raise above catches
+    # a different thing -- a pattern decided by both a file signal and a
+    # question -- which this intersection would otherwise let through
+    # invisibly, behind a partition that looks clean precisely because the
+    # sum was never what went wrong. Membership and disjointness cannot see
+    # provenance. Do not delete the raise believing this intersection
+    # covers it.
     installed: set[str] = set(fired & STACK_FACT_PATTERNS)
     excluded_by_stack_fact = frozenset(STACK_FACT_PATTERNS - fired)
 
