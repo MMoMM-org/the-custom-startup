@@ -193,8 +193,11 @@ written from the specification rather than from the implementation.
        **true while q1 AND q2 are open**.
      - `gate-q1-go-direct-require` — a `go.mod` with a direct `gin` and an indirect `chi`. q1 opens
        on `gin`; `chi` carries `// indirect` and must not be credited. The `gates` dict cannot
-       separate those two, so the discrimination lives in q1's `gate_evidence`, which must name the
-       direct module and not the indirect one
+       separate those two, so the discrimination lives in q1's `gate_evidence`, which must list
+       **every** contributing dependency, with `gin` present and `chi` absent. Completeness is what
+       carries it and the naming does not: "names the direct one" is satisfied by luck, because a
+       detector stripping `//` comments credits both and reports `gin` first anyway — it precedes
+       `chi` at position 13 in file order and in sort order alike
        `[ref: SDD/Interface Specifications, "What a gate_evidence entry looks like when the signal
        is a dependency"]`.
 
@@ -224,6 +227,25 @@ written from the specification rather than from the implementation.
      `test_corpus_has_exactly_18_cases` to `test_corpus_has_exactly_the_expected_number_of_cases`
      — it encoded the count in its own identifier and was cited by seven other assertion messages,
      so a corpus change left eight places reading `18` and only one of them checked.
+
+     **Four assertions this step must direct, not merely require in its Success list.** Noted
+     2026-10-04 after a gate observed that criteria 2 and 3 demand `gate_evidence`, `schema` and
+     `repo` while this Test step never asked for any of them, and `grep -rn gate_evidence tests/`
+     returned nothing but one fixture's prose. A requirement that lives only in a success checkbox
+     is a requirement nobody is told to build. All four are **universal invariants in
+     `tests/test_patterns_detect.py`**, never per-fixture data — the exact-key guard forbids a new
+     `expected.json` key — and they follow the shape the existing `evidence` and `surface`
+     invariants already use there:
+     - every gate reported **open** has a non-empty `gate_evidence` entry, listing every signal
+       that contributed, each citing a path that resolves inside that fixture's `repo/` and has no
+       segment in `node_modules`, `.venv`, `venv` or `vendor`;
+     - every gate reported **closed** has no entry at all;
+     - `report["schema"] == 1`;
+     - `report["repo"]` is the directory that was passed in, since all evidence is relative to it.
+
+     Each must be shown to discriminate by deleting or weakening it and watching something go red.
+     An invariant that survives its own mutation is decoration, and four tests in this phase were
+     already found re-implementing the loop they claimed to exercise.
 
      Read the 2026-10-04 ruling **"Which declaration counts as `dependencies` outside
      `package.json`"** before implementing q1 `[ref: SDD/Interface Specifications/Detection rules]`.
@@ -272,7 +294,14 @@ written from the specification rather than from the implementation.
            found both unasserted. `schema == 1` is the handle a consumer would use to refuse
            an incompatible report; `repo` is what all evidence is relative to. Cheap, and
            they close the last of the six fields found this way
-           `[ref: SDD/Interface Specifications/Data model: fixture expectation]`
+           `[ref: SDD/Interface Specifications/Data model: fixture expectation]`.
+           **Kept deliberately against the objection** that these guard constants T2.2 already
+           shipped rather than logic T2.3 writes, and so share the character of the two criteria
+           this phase discarded. They do not: those two could not fail under any report the
+           detector is able to emit, while changing the `schema` literal turns this one red. A
+           regression guard on a one-line contract field is weak, which is a different thing
+           from vacuous, and weakness is the correct price for the only versioning handle the
+           report has
      - [ ] Q1 stays shut on a server framework that appears only in `devDependencies`
            (trap 4), and Q2 opens on a content signal alone with Q1 shut (trap 6)
      - [ ] An uncovered language with an architectural shape still opens Q2, and
