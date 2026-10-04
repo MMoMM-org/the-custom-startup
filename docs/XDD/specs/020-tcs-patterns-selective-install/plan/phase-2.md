@@ -336,6 +336,26 @@ written from the specification rather than from the implementation.
      and the install unit `[ref: SDD/Runtime View]` — C5 copies one pattern directory, which is the
      whole reason this exists. Read `tests/test_tcs_patterns_catalogue_links.py`, whose resolution
      rule this reuses rather than reinvents.
+
+     **That last sentence is half true, and the half that is false is the "resolution rule" —
+     checked 2026-10-04 before dispatch.** Reuse what is genuinely shared and do not reach for the
+     rest:
+
+     | In `test_tcs_patterns_catalogue_links.py` | For T2.4 |
+     |---|---|
+     | `_pattern_root(path)` | **reuse** — maps a catalogue file to its pattern directory |
+     | `_non_fenced_lines(text)` | **reuse** — a fenced example must not read as a real citation |
+     | `FENCE`, `INLINE_CODE`, `LINK` | **reuse** — the same two citation surfaces |
+     | `CODE_SPAN_PATH` | **do not reuse** — it requires `^(?:\.\./)+`, a leading climb, and rejects every companion citation, which has none |
+     | `_violation(path, target, n)` | **do not reuse** — it resolves `path.parent / target`, relative to the *citing* file; T2.4 resolves against each *target pattern's* root |
+
+     The two rules also have **opposite polarity**, which is worth holding in mind while reading
+     that file: for the link test a path leaving its own pattern directory is a **defect**; for
+     T2.4 a path resolving under another pattern is a **companion edge**. They do not conflict in
+     practice — the link test keys on climbs and the companion citations never climb, so the two
+     operate on disjoint sets — but an implementer who reuses `_violation` will report every
+     companion as an escape violation. An instrument built on the `../` rule was measured at
+     **zero** edges, which is how this was found.
   2. Test: Assert the derived map equals the **seven measured pattern-to-pattern edges** exactly —
      `ddd`→`hexagonal`, `event-driven`→`hexagonal`+`event-sourcing`,
      `event-sourcing`→`event-driven`+`hexagonal`, `hexagonal`→`ddd`, `observability`→`hexagonal`.
