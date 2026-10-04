@@ -84,6 +84,17 @@ four passing test suites.
      - [ ] Proposal shows per-entry listing cost; baseline listed separately from recommendations `[ref: PRD/F2 4th, 5th; SDD/AC-16]`
      - [ ] Commit is offered and never performed unasked `[ref: PRD/F4 3rd, 4th; SDD/ADR-8]`
      - [ ] A walkthrough from a clean fixture reaches an installed selection `[ref: SDD/Runtime View/Primary Flow]`
+     - [ ] Nothing is installed by the companion map alone: a selection's transitive companions
+           join the **proposal**, each with the citation that justified it named, and every one is
+           individually declinable. Moved here from T2.4 on 2026-10-04 — that task derives the map
+           and runs no installer, so nothing in its output could observe this, the same reason the
+           two criteria above moved from T2.3 `[ref: ADR-8; SDD/Interface Specifications/Data
+           model: companion map]`
+     - [ ] A declined intermediate companion is handled honestly: accepting `hexagonal` for
+           `observability` while declining `ddd` still ships a dangling citation, and the closure
+           informs rather than guarantees. The proposal must not claim every citation will resolve
+           `[ref: SDD/Interface Specifications/Data model: companion map, "Expansion is the
+           transitive closure"]`
 
 - [ ] **T5.2 The catalogue reader skill** `[activity: frontend-ui]` `[parallel: true]`
 

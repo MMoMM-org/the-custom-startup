@@ -340,9 +340,28 @@ written from the specification rather than from the implementation.
      `ddd`→`hexagonal`, `event-driven`→`hexagonal`+`event-sourcing`,
      `event-sourcing`→`event-driven`+`hexagonal`, `hexagonal`→`ddd`, `observability`→`hexagonal`.
      Assert the relation is treated as a cycle and not a tree: `ddd`/`hexagonal` and
-     `event-driven`/`event-sourcing` are mutual, so a naive transitive closure must not recurse
-     forever. Assert a cross-pattern reference to a **new target**, injected into a fixture, makes
+     `event-driven`/`event-sourcing` are mutual, so the closure traversal must carry a visited set.
+     Assert a cross-pattern reference to a **new target**, injected into a fixture, makes
      the test fail — a hardcoded table would pass and go stale.
+
+     **Expansion is the transitive closure (Marcus, 2026-10-04), and three sources make the depth
+     observable** `[ref: SDD/Interface Specifications/Data model: companion map, "Expansion is the
+     transitive closure"]`. Assert all three, because a one-level implementation passes the other
+     two and the seven-edge map equally:
+     - `observability` → `hexagonal`, **`ddd`** (direct would give `hexagonal` alone)
+     - `event-driven` → `event-sourcing`, `hexagonal`, **`ddd`**
+     - `event-sourcing` → `event-driven`, `hexagonal`, **`ddd`**
+
+     And assert the two that do **not** discriminate, so the closure is not over-applied:
+     `ddd` → `hexagonal` only, and `hexagonal` → `ddd` only — a closure that returned the source
+     itself, or that walked into `ddd`'s own companions and back, would differ here.
+
+     **The cycle criterion is only falsifiable now that a traversal exists.** Until the closure was
+     the rule, step 3 asked for a flat edge map and nothing recursed, so "must not recurse forever"
+     could not fail — the same shape as two criteria this phase already discarded. With the closure
+     it is real: an unguarded depth-first walk from any of the four patterns in a mutual pair never
+     terminates. Test it with a timeout or a recursion-depth guard rather than by inspection, so
+     the assertion fails rather than hangs the suite.
 
      **This step said "the nine measured pairs" three times until 2026-10-04 and then listed the
      seven-edge table beneath it.** Both numbers are real and describe different things, re-measured
@@ -354,7 +373,11 @@ written from the specification rather than from the implementation.
      was found. An implementer reading the old text could have asserted either count and been
      compliant, and AC-18 carried the same ambiguity.
   3. Implement: Derive the map by the link test's resolution rule: a code-span path resolving under
-     no pattern root but another's is a companion edge. Expose it for C3 to read.
+     no pattern root but another's is a companion edge. Expose **two** things for C3 to read:
+     the seven-edge map itself, and a closure function that takes a set of selected patterns
+     and returns the companions to propose. The closure carries a visited set; it excludes
+     the selections themselves from its result, so a caller can present "and these come
+     with it" without filtering.
 
      **Read the 2026-10-04 clause "How the citations are actually written, and why the path rule is
      the right one" before writing the derivation**
@@ -385,9 +408,18 @@ written from the specification rather than from the implementation.
      - [ ] A cross-pattern reference to a new target fails the test `[ref: SDD/Acceptance Criteria/AC-18]`
      - [ ] No candidate path resolves under more than one other pattern -- zero do today, and
            the assertion is what makes the first one audible `[ref: SDD/Interface Specifications]`
-     - [ ] The cycle does not cause unbounded recursion `[ref: SDD/Interface Specifications]`
-     - [ ] Nothing is installed by the map alone — it produces a proposal the user can decline
-           `[ref: ADR-8]`
+     - [ ] The closure traversal terminates on both mutual pairs, shown by a timeout or a
+           recursion-depth guard rather than by inspection -- falsifiable only because the
+           closure is now the rule; while step 3 asked for a flat map, nothing recursed and
+           this criterion could not fail `[ref: SDD/Interface Specifications]`
+     - [ ] The closure equals the direct edges for `ddd` and `hexagonal`, and adds `ddd` for
+           `observability`, `event-driven` and `event-sourcing` -- the three cases where
+           depth is observable `[ref: SDD/Interface Specifications/Data model: companion map]`
+
+     Moved to T5.1, where the behaviour lives: "nothing is installed by the map alone -- it
+     produces a proposal the user can decline" `[ref: ADR-8]`. T2.4 returns data and runs no
+     installer, so nothing in its output can observe it; the same reason two of T2.3's
+     criteria moved there.
 
 - [ ] **T2.5 The decided-exactly-once invariant** `[activity: testing]` `[parallel: true]`
 

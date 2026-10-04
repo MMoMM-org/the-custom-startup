@@ -700,6 +700,32 @@ against the citing file's directory, and treat a path that resolves under **more
 pattern as ambiguous rather than picking one. Zero are ambiguous today — measured — which is worth
 asserting so the day one appears is the day the suite says so.
 
+**Expansion is the transitive closure, not one level — settled 2026-10-04 (Marcus).** The document
+said "adds its companions" and never fixed the depth, and the difference is observable on three of
+the five sources, all of them gaining `ddd`:
+
+| Selected | Direct companions | Transitive closure |
+|---|---|---|
+| `ddd` | `hexagonal` | `hexagonal` |
+| `hexagonal` | `ddd` | `ddd` |
+| `observability` | `hexagonal` | `hexagonal`, **`ddd`** |
+| `event-driven` | `event-sourcing`, `hexagonal` | + **`ddd`** |
+| `event-sourcing` | `event-driven`, `hexagonal` | + **`ddd`** |
+
+One level does not achieve what this map is for. Install `observability` and accept `hexagonal`,
+and `hexagonal`'s own citation of a file under `ddd/` then dangles — the same defect one step
+further out. The closure is what makes "no citation resolves to nothing" reachable at all.
+Measured blast radius: at most **three** companions for any one selection, so four patterns from
+one choice, which is why the cheaper rule was not worth its residual defect.
+
+Two consequences. The traversal **must** carry a visited set: `ddd`↔`hexagonal` and
+`event-driven`↔`event-sourcing` are mutual, so an unguarded depth-first walk from any of the four
+never terminates — this is the hazard T2.4's cycle criterion names, and it is only a real hazard
+once a traversal exists, which is to say once the closure is the rule. And the closure **informs
+rather than guarantees**: a user who accepts `hexagonal` and declines `ddd` still ships a dangling
+citation. The map's job is to make that visible and declinable, not to prevent it — ADR-8 already
+settles that nothing is installed without acceptance.
+
 **Consumed as a proposal, never as a rule.** When the interview settles on a pattern, C3 adds its
 companions to the proposal with the reason stated — "`ddd`'s testing reference lives in
 `hexagonal`" — and the user may still decline. Companions join the proposal **before** the outcome
