@@ -576,18 +576,46 @@ Three consequences the fixtures must assert rather than assume:
   with two directories the rule never enumerated. The same omission had made the write-time
   Obsidian guard and this rule disagree, since the guard excludes `.git` and this walk did
   not `[ref: SDD/ADR-7]`.
-- **Residual, accepted rather than closed: a *tracked* test fixture can still fire a stack
-  fact.** After the addition, `detect('.')` on this repository still proposes
-  `obsidian-plugin`, now citing
-  `plugins/tcs-helper/skills/doc-product/tests/fixtures/extract/with-manifest-only/manifest.json`
-  -- a committed fixture belonging to a different plugin. No directory-name exclusion can
-  separate that from a real plugin manifest, and excluding test-shaped paths generally would
-  be wrong: `testing` and `frontend-testing` read test files deliberately, so the same
-  exclusion would break two rules to fix one. The design already answers it -- every
-  proposal carries the path that justified it and every proposal is declinable, so the user
-  sees `.../tests/fixtures/...` and says no `[ref: SDD/Interface Specifications/Data model:
-  detection report; PRD/F2 1st]`. Worth knowing that a repository of tools containing other
-  tools' fixtures is the shape that provokes it.
+- **Residual, accepted rather than closed: tracked test fixtures fire most of the detector.**
+  This clause first read "still proposes `obsidian-plugin`", citing one foreign fixture. That
+  understated it by most of the report, and was corrected on 2026-10-05 after the Phase 2 drift
+  check ran `detect('.')` instead of reading the note. Measured on this repository:
+
+  | | |
+  |---|---|
+  | `auto` | **7 of the 8 stack facts** -- `typescript-strict`, `go-idiomatic`, `python-project`, `mcp-server`, `obsidian-plugin`, `react-testing`, `frontend-testing` |
+  | `baseline` | `testing` -- so all eight are accounted for |
+  | `gates` | **all three open** |
+  | `q1_backend` evidence | 3 of 3 entries from `tests/fixtures/patterns-detection/` |
+  | `q2_architecture` evidence | 13 of 13 entries from `tests/fixtures/patterns-detection/` |
+  | `manifests_walked` | 23, of which **19** are the corpus's own |
+
+  So the dominant source is not another plugin's fixture; it is **the detection corpus this
+  spec created**. A repository that contains a detector's own test data is the hardest possible
+  input for that detector, and this one is it.
+
+  **One consequence is worth naming on its own: the q2 triad assembles across unrelated
+  subtrees.** `gate-q2-partial-triad` contributes `src/ports/` and `src/domain/` and
+  `trap-06-hand-rolled-architecture` contributes `src/adapters/`, so q2 opens from three
+  directories that belong to two different fixtures. That follows directly from the
+  2026-10-04 ruling that the triad needs no common parent and no depth restriction, and it
+  means a **threshold negative stops being negative at repository scope** --
+  `gate-q2-partial-triad` exists precisely to assert that two of three must keep q2 shut, and
+  at repo scope a sibling supplies the third. The same shape reaches a real monorepo: three
+  unrelated services each owning one of the three directories opens q2.
+
+  That is tolerable rather than wrong, and the reason is structural: **a gate decides only
+  whether to ask.** Nothing is installed because a gate opened, so a triad assembled across
+  siblings costs exactly one question the user answers "none" to. Were the triad ever promoted
+  from a gate to a proposal, the no-common-parent ruling would have to be revisited with this
+  measurement in front of it.
+
+  Why the residual is not chased: no directory-name exclusion separates a committed fixture
+  from a real manifest, and excluding test-shaped paths generally would break two rules to fix
+  one -- `testing` and `frontend-testing` read test files deliberately. The design already
+  answers it: every proposal carries the path that justified it and every proposal is
+  declinable, so the user sees `.../tests/fixtures/...` and says no
+  `[ref: SDD/Interface Specifications/Data model: detection report; PRD/F2 1st]`.
 - **The walk excludes `node_modules`, `.venv`, `venv`, `vendor`, `.git` and `.claude`** (trap 5),
   and walks nested
   manifests so a workspace root declaring nothing still yields its children's signals. Every

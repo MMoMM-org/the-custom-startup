@@ -602,11 +602,26 @@ written from the specification rather than from the implementation.
         Write this first and watch the two divergence cases **fail** — that is this task's RED.
 
      b. **Close both divergences in the hook**, keeping it standalone and bash 3.2 clean:
-        - *Depth*: look for `manifest.json` at any depth below the repository root rather than
-          only at the root, excluding `node_modules`, `.venv` and `vendor` — the same exclusion
-          set the detector's walk uses. Decided by Marcus on 2026-10-04: fix the hook rather than
-          assert the asymmetry, because writing a live bug down as intent is worse than either
-          leaving it or fixing it.
+        - *Depth*: the gate must stop missing a plugin that sits below the repository root.
+          Decided by Marcus on 2026-10-04: fix the hook rather than assert the asymmetry,
+          because writing a live bug down as intent is worse than either leaving it or fixing it.
+
+          **This bullet originally said "look for `manifest.json` at any depth **below** the
+          repository root ... excluding `node_modules`, `.venv` and `vendor`", and that is not
+          what shipped.** The downward tree walk was built, measured, and then rejected on
+          2026-10-05 for two measured reasons, and the bullet is corrected here because
+          `plan/phase-2.md` was the last document still carrying it — ADR-7 and AC-14 were
+          amended the same day. The shipped gate walks **upward** from the file being written to
+          the repository root, looking for the nearest `manifest.json` that carries
+          `minAppVersion` `[ref: SDD/ADR-7, as amended 2026-10-05]`. Why the downward walk was
+          wrong, both measured:
+          - It answered the wrong question. Six `manifest.json` files carrying `minAppVersion`
+            live in **this** repository as test fixtures, so a walk from the root classified
+            the-custom-startup itself as an Obsidian plugin and denied every write of a
+            non-Markdown file containing `eslint-disable` anywhere in the tree.
+          - It cost 155-254 ms on a tree this size, paid by every such write; the upward walk
+            costs 0.03 ms and needs no exclusion list at all, because it never descends — it only
+            ascends through directories already on the path to the file.
         - *Precision*: decide the `package.json` signal by parsing the dependency maps with `jq`
           (which the hook already depends on at line 53) instead of grepping
           `"obsidian"[[:space:]]*:` across the whole file. Keep `devDependencies` accepted — the
@@ -614,17 +629,20 @@ written from the specification rather than from the implementation.
         - Every jq pipeline keeps its `2>/dev/null || true`: a malformed payload must still fall
           through to exit 0, never hard-block an unrelated edit.
 
-        **Both halves were probed on bash 3.2.57 before dispatch, 2026-10-04 — they work, so
-        the open question is only where they go in the file.** For the depth half,
-        `find "$root" \( -name node_modules -o -name .venv -o -name venv -o -name vendor \)
-        -prune -o -name manifest.json -type f -print` then `grep -q minAppVersion` per candidate
-        finds `packages/plugin/manifest.json`, prunes all three excluded trees, and correctly
-        passes over a `manifest.json` that carries no `minAppVersion`; a tree whose only
-        `manifest.json` lives inside an excluded directory yields nothing. For the precision
-        half, `jq -e '(.dependencies.obsidian // .devDependencies.obsidian) != null'` gives the
-        right answer on all six shapes probed — `dependencies`, `devDependencies`, a script
-        name, a `resolutions` entry, no `obsidian` at all, and malformed JSON, which falls
+        **Both halves were probed on bash 3.2.57 before dispatch, 2026-10-04.** The precision
+        half shipped as probed: `jq -e '(.dependencies.obsidian // .devDependencies.obsidian) !=
+        null'` gives the right answer on all six shapes — `dependencies`, `devDependencies`, a
+        script name, a `resolutions` entry, no `obsidian` at all, and malformed JSON, which falls
         through to allow.
+
+        The depth half was probed as a `find ... -prune` tree walk and that probe was sound on
+        its own terms — it found a nested `packages/plugin/manifest.json`, pruned the excluded
+        trees, and passed over a `manifest.json` with no `minAppVersion`. **It was the wrong
+        instrument, and the probe could not have shown that**, because it was run against
+        purpose-built trees rather than against a real repository. One run of the shipped hook
+        against this repository is what exposed it. Worth keeping as the lesson: a probe that
+        confirms an idiom works says nothing about whether the idiom answers the right question,
+        and a synthetic tree cannot tell you what a real one contains.
 
         **A third false positive turned up in that probe and was not in the original pair:** the
         current whole-file grep also denies on `"obsidian"` inside `resolutions`. Any
