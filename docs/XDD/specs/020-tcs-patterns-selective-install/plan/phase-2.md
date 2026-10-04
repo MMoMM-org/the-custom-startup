@@ -344,6 +344,18 @@ written from the specification rather than from the implementation.
      Assert a cross-pattern reference to a **new target**, injected into a fixture, makes
      the test fail — a hardcoded table would pass and go stale.
 
+     **"Injected into a fixture" needs a mechanism, and the precedent already exists.** The
+     derivation reads the catalogue, and a test must never mutate
+     `plugins/tcs-patterns/templates/patterns/` — the `.claude` incident on 2026-10-04 showed how
+     loudly a stray entry there breaks unrelated suites, and a mutated real catalogue would be
+     worse. So the derivation takes the **catalogue root as a parameter**, defaulting to the real
+     one, exactly as `detect(repo_dir)` takes the repository root. The injection test then builds a
+     two-pattern tree under `tmp_path`, plants a citation crossing into a target the real catalogue
+     has no edge to, and asserts the derived map contains that edge — which a hardcoded table
+     cannot produce. Parameterising it is also what makes the ambiguity assertion cheap: a
+     `tmp_path` catalogue with the same filename under two patterns is one fixture, not a
+     contortion.
+
      **Expansion is the transitive closure (Marcus, 2026-10-04), and three sources make the depth
      observable** `[ref: SDD/Interface Specifications/Data model: companion map, "Expansion is the
      transitive closure"]`. Assert all three, because a one-level implementation passes the other
