@@ -665,19 +665,30 @@ selection is reachable, not hypothetical. Before this spec the defect was invisi
 21 made every citation resolve.
 
 **Derived, not hardcoded.** The map is computed from the catalogue by a resolution rule of its own,
-sharing the link test's extraction plumbing but not its rule: a code-span path that resolves under
-no pattern root but its own, yet does resolve under another pattern's root, is a companion edge.
-A test asserts the derived map equals the seven edges above, so adding a cross-pattern reference to
-a new target either updates the map or fails the suite. A hardcoded table would silently go stale
-the first time a pattern's references changed.
+sharing the link test's extraction plumbing but not its rule: **a code-span path that does *not*
+resolve under its own pattern root, yet does resolve under exactly one other pattern's root, is a
+companion edge.** A test asserts the derived map equals the seven edges above, so adding a
+cross-pattern reference to a new target either updates the map or fails the suite. A hardcoded
+table would silently go stale the first time a pattern's references changed.
 
-This sentence read "by the same resolution rule the link test uses" until 2026-10-04 — the fourth
-and last place that attribution survived, after the task's Prime step, the task's Implement step
-and ADR-10's trade-offs. The description after the colon was correct in every one of them; only
-the attribution was wrong, which is why it kept surviving corrections aimed at the substance. It
-is contradicted two paragraphs below, under *How the citations are actually written*: the link
-test's rule keys on `../` climbs, companion citations never climb, and a derivation built on that
-rule finds **zero** edges.
+Two things were wrong with that sentence and both are corrected above.
+
+**The rule itself was garbled** — it read "resolves under no pattern root but its own, yet does
+resolve under another pattern's root", whose two halves contradict each other: the first says its
+own root is the only match, the second says another root matches too. Read literally it declares
+an own-plus-other match a companion edge, which is the **opposite** of what the own-root
+precedence requires and of what the implementation does. Found 2026-10-04 by T2.4's
+spec-compliance review, in the one sentence a future reader would go to in order to learn the
+rule. It survived two same-day rewrites of this paragraph because both were aimed at the
+attribution clause in front of it.
+
+**And the attribution was wrong**, reading "by the same resolution rule the link test uses" until
+2026-10-04. It is contradicted two paragraphs below, under *How the citations are actually
+written*: the link test's rule keys on `../` climbs, companion citations never climb, and a
+derivation built on that rule finds **zero** edges. This paragraph previously called itself the
+"fourth and last" place that attribution survived, which was also false — a sixth was found
+afterwards in ADR-10's own *Decision* paragraph, by a reviewer rather than by my sweep, because
+the sentence wrapped across a line break and a line-wise `grep` cannot match it.
 
 **How the citations are actually written, and why the path rule is the right one — measured
 2026-10-04.** The real shape is not a `../` climb, which is what the link test's own rule keys on,
@@ -754,6 +765,13 @@ once a traversal exists, which is to say once the closure is the rule. And the c
 rather than guarantees**: a user who accepts `hexagonal` and declines `ddd` still ships a dangling
 citation. The map's job is to make that visible and declinable, not to prevent it — ADR-8 already
 settles that nothing is installed without acceptance.
+
+**Three things are exposed for C3, not two** — the seven-edge map, the closure function, and the
+list of ambiguous citations. The third was called out as possible over-building by T2.4's review
+and judged in scope by it, correctly: an ambiguous candidate is simply *absent* from the map,
+indistinguishable from "no citation existed", so the requirement that a future ambiguity be
+**audible** cannot be met by the map alone. Zero are ambiguous today, which is exactly why the
+reporting path needs to exist before one appears.
 
 **Consumed as a proposal, never as a rule.** When the interview settles on a pattern, C3 adds its
 companions to the proposal with the reason stated — "`ddd`'s testing reference lives in
@@ -1569,10 +1587,16 @@ those citations resolve; selective installation is what breaks them. That is why
 despite "judging the 21 patterns on content" being out of scope — this is distribution, not
 content.
 
-**Decision.** When the interview settles on a pattern, C3 adds its companions to the proposal with
-the reason stated, and the user may decline. The map is **derived** from the catalogue by the link
-test's resolution rule — a code-span path resolving under no pattern root but another's is a
-companion edge — and a test asserts the derived map equals the seven known edges.
+**Decision.** When the interview settles on a pattern, C3 adds its companions **and their
+transitive companions** to the proposal with the reason stated, and the user may decline any of
+them. The map is **derived** from the catalogue by a resolution rule of its own — a code-span path
+that does *not* resolve under its own pattern root, yet does resolve under exactly one other
+pattern's root, is a companion edge — and a test asserts the derived map equals the seven known
+edges. This paragraph attributed the rule to "the link test's resolution rule" until 2026-10-04:
+the sixth and genuinely last instance of that misattribution, found by T2.4's spec-compliance
+review after a sweep of mine had declared the fourth to be the last. The sweep missed it because
+the sentence wrapped across a line break, so no single line contained the phrase and a line-wise
+`grep` could not see it.
 
 **Alternatives considered.**
 

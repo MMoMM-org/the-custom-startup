@@ -330,7 +330,7 @@ written from the specification rather than from the implementation.
      allowing multiple answers" `[ref: PRD/F3 2nd]` and "a closed gate yields no question
      rather than a question answered 'none'" `[ref: PRD/F3 3rd]`.
 
-- [ ] **T2.4 The companion map, derived from the catalogue** `[activity: domain-modeling]`
+- [x] **T2.4 The companion map, derived from the catalogue** `[activity: domain-modeling]`
 
   1. Prime: Read the companion map contract `[ref: SDD/Interface Specifications/Data model: companion map]`
      and the install unit `[ref: SDD/Runtime View]` — C5 copies one pattern directory, which is the
@@ -408,12 +408,15 @@ written from the specification rather than from the implementation.
      step 1: a code-span path resolving under no pattern root but another's is a companion edge.
      This sentence read "by the link test's resolution rule" until 2026-10-04 — the substance after
      the colon was always right, the attribution never was, and leaving it there meant a reader of
-     this step met the false instruction twice before the correction below landed. Expose **two**
-     things for C3 to read:
-     the seven-edge map itself, and a closure function that takes a set of selected patterns
-     and returns the companions to propose. The closure carries a visited set; it excludes
-     the selections themselves from its result, so a caller can present "and these come
-     with it" without filtering.
+     this step met the false instruction twice before the correction below landed. Expose **three**
+     things for C3 to read — this step said "two" until 2026-10-04:
+     the seven-edge map itself; a closure function that takes a set of selected patterns
+     and returns the companions to propose; and the list of **ambiguous** citations. The closure
+     carries a visited set; it excludes the selections themselves from its result, so a caller can
+     present "and these come with it" without filtering. The third was flagged as possible
+     over-building by T2.4's review and judged in scope by it, correctly: an ambiguous candidate is
+     merely *absent* from the map and indistinguishable there from "no citation existed", so this
+     step's own requirement that the first ambiguity be **audible** cannot be met by the map alone.
 
      **Read the 2026-10-04 clause "How the citations are actually written, and why the path rule is
      the right one" before writing the derivation**
