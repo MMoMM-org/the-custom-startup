@@ -12,6 +12,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from visible_dirs import visible_dir_names, visible_dirs
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CORPUS_DIR = REPO_ROOT / "tests" / "fixtures" / "patterns-detection"
 CATALOGUE_DIR = REPO_ROOT / "plugins" / "tcs-patterns" / "templates" / "patterns"
@@ -56,14 +58,7 @@ def discover_fixtures() -> list[Fixture]:
     and `expected.json` would have been worse: a silent extra case."""
     if not CORPUS_DIR.is_dir():
         return []
-    return sorted(
-        (
-            Fixture(name=p.name, path=p)
-            for p in CORPUS_DIR.iterdir()
-            if p.is_dir() and not p.name.startswith(".")
-        ),
-        key=lambda f: f.name,
-    )
+    return [Fixture(name=p.name, path=p) for p in visible_dirs(CORPUS_DIR)]
 
 
 def catalogue_pattern_names() -> set[str]:
@@ -71,7 +66,7 @@ def catalogue_pattern_names() -> set[str]:
     so a renamed or added pattern directory is picked up automatically."""
     if not CATALOGUE_DIR.is_dir():
         return set()
-    return {p.name for p in CATALOGUE_DIR.iterdir() if p.is_dir()}
+    return visible_dir_names(CATALOGUE_DIR)
 
 
 def load_expected(fixture: Fixture) -> dict:

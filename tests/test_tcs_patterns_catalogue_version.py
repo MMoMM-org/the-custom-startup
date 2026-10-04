@@ -26,6 +26,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from visible_dirs import visible_dir_names, visible_dirs
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CATALOGUE_DIR = REPO_ROOT / "plugins" / "tcs-patterns" / "templates" / "patterns"
@@ -36,7 +37,7 @@ def _pattern_dirs() -> list[Path]:
     never a fixed name list (Requirement 1: a pattern added later with no VERSION must fail
     here, not be silently skipped because it is absent from some constant)."""
     assert CATALOGUE_DIR.is_dir(), f"{CATALOGUE_DIR} does not exist -- has the catalogue moved?"
-    return sorted(p for p in CATALOGUE_DIR.iterdir() if p.is_dir())
+    return visible_dirs(CATALOGUE_DIR)
 
 
 def test_every_pattern_directory_has_a_version_file() -> None:

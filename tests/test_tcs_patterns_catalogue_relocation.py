@@ -57,6 +57,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "observability"))
 
 import report  # noqa: E402  (sys.path must be extended first)
+from visible_dirs import visible_dir_names, visible_dirs
 
 PATTERNS_PLUGIN = REPO_ROOT / "plugins" / "tcs-patterns"
 CATALOGUE_DIR = PATTERNS_PLUGIN / "templates" / "patterns"
@@ -108,7 +109,7 @@ def _tracked_files(path: Path) -> list[str]:
 def test_catalogue_holds_exactly_the_21_pattern_directories() -> None:
     """templates/patterns/ exists and holds exactly the 21 moved directories -- no more, no fewer."""
     assert CATALOGUE_DIR.is_dir(), f"{CATALOGUE_DIR} does not exist yet -- the patterns have not moved"
-    found = {p.name for p in CATALOGUE_DIR.iterdir() if p.is_dir()}
+    found = visible_dir_names(CATALOGUE_DIR)
     assert found == PATTERN_NAMES
 
 
@@ -133,7 +134,7 @@ def test_catalogue_holds_21_skill_md_each_tracked_by_git() -> None:
 def test_old_skills_location_has_no_pattern_left() -> None:
     """Every one of the 21 names must be gone from skills/ -- a name left behind there is a
     half-move, not a move."""
-    remaining = {p.name for p in OLD_SKILLS_DIR.iterdir() if p.is_dir()} if OLD_SKILLS_DIR.is_dir() else set()
+    remaining = visible_dir_names(OLD_SKILLS_DIR) if OLD_SKILLS_DIR.is_dir() else set()
     assert not (remaining & PATTERN_NAMES)
 
 
