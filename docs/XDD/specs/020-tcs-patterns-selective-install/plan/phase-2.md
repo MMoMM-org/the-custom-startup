@@ -475,9 +475,11 @@ written from the specification rather than from the implementation.
      **This step said "three" until 2026-10-04 and no fixture could have satisfied it.** Computed
      over all 26 before dispatch: a three-set partition covers the 21 in **zero** of them. A
      pattern settled by a closed gate falls outside all three — nobody was asked, so it is neither
-     installed nor declined, and no stack fact excluded it. Twenty fixtures leave 8 or 13 patterns
-     unaccounted; the best case in the corpus still leaves 2, because no fixture opens all three
-     gates. The SDD's walkthrough satisfies the three-set form only because the stack it traces
+     installed nor declined, and no stack fact excluded it. **Every one of the 26 leaves patterns
+     unaccounted**: fifteen leave 13, four leave 11, four leave 8, and three leave 2 -- the best
+     case in the corpus -- because no fixture opens all three gates. Re-measured 2026-10-04;
+     the earlier "twenty fixtures leave 8 or 13" undercounted and omitted the eleven-pattern
+     bucket altogether. The SDD's walkthrough satisfies the three-set form only because the stack it traces
      opens every gate, which is exactly why the gap survived review
      `[ref: SDD/Runtime View/Complex Logic, "There are four outcomes, not three"]`.
 
@@ -501,7 +503,7 @@ written from the specification rather than from the implementation.
            that only catches double-assignment would have passed the broken specification
            `[ref: SDD/AC-6]`
      - [ ] `not reached` is non-empty for at least one fixture and empty for at least one, so
-           neither state is asserted by accident. Measured 2026-10-04: 20 fixtures have a non-empty
+           neither state is asserted by accident. Measured 2026-10-04: **all 26** fixtures have a non-empty
            fourth set under every answer combination, and **no** fixture in the corpus has an empty
            one, because none opens all three gates — so the empty case needs a constructed report
            rather than a fixture `[ref: SDD/Runtime View/Complex Logic]`

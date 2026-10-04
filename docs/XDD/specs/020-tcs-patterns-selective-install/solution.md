@@ -1215,8 +1215,14 @@ gate-settled patterns is either installed or declined and the fourth set is empt
 normal case. Computed across all 26 detection fixtures: a three-set partition covers the 21 in
 **zero** of them, because a pattern settled by a gate that stayed **shut** falls outside all
 three — nobody was asked, so it is neither installed nor declined by a question, and no stack fact
-excluded it either. Twenty of the 26 leave 8 or 13 patterns unaccounted for; the best case in the
-corpus still leaves 2, since no fixture opens all three gates.
+excluded it either. **Every one of the 26 leaves patterns unaccounted for**: fifteen leave 13,
+four leave 11, four leave 8, and three leave 2 -- the best case in the corpus -- since no
+fixture opens all three gates. Re-measured 2026-10-04 across the full corpus with the
+gate-to-pattern mapping taken from the gate table above rather than from `detect.py`. The
+figure this paragraph carried until then, "twenty of the 26 leave 8 or 13", was wrong twice
+over: it undercounted, and "8 or 13" omits the eleven-pattern bucket that the four
+test-framework-only fixtures produce. It was computed while the corpus was smaller, and
+survived the corpus growing 18 -> 26 in the same session.
 
 So the fourth outcome is **not reached: the gate that settles it stayed shut**, and the invariant
 is `installed + declined-by-question + excluded-by-stack-fact + not-reached = 21`.
