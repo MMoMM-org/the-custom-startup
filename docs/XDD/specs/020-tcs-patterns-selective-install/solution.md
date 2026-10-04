@@ -867,7 +867,13 @@ claims. Assert it as two invariants:
 
 1. **every gate reported open has a non-empty `gate_evidence` entry**, and each path it cites
    resolves inside that fixture's `repo/` and has no segment in `node_modules`, `.venv`,
-   `venv`, `vendor`;
+   `venv`, `vendor`, `.git` or `.claude` -- the list is duplicated in
+   `tests/test_patterns_detect.py` as `EXCLUDED_SEGMENTS` rather than derived from
+   `SKIP_DIRS`, deliberately: a derived copy would agree by construction, so a future
+   **narrowing** of `SKIP_DIRS` would narrow this invariant along with it and never be
+   caught. A separate test asserts the two are equal, which catches the opposite
+   direction -- `SKIP_DIRS` widened and the invariant left behind, which is what happened
+   on 2026-10-05 when `.git` and `.claude` were added;
 2. **every gate reported closed has no entry**, so a gate cannot carry evidence it did not act
    on.
 
