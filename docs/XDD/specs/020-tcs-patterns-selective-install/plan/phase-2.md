@@ -488,10 +488,34 @@ written from the specification rather than from the implementation.
      2^6 x 2^5 x 2^2 = 8192 answer combinations and a fixture with none has exactly one. Enumerate
      rather than sample: the invariant must hold for every combination, and a sampled one that
      holds says nothing about the rest.
-  3. Implement: the partition function in `detect.py` (or a thin module beside it) that returns the
-     **four** sets, and the parametrized test that asserts the invariant. A pattern's set must be
-     derivable from the report plus an answer set alone — the function takes the detection report
-     and the answers, and returns the partition; it does not re-scan anything.
+  3. Implement: the partition function in a thin module beside `detect.py` — `outcomes.py`, the way
+     `companions.py` already sits beside it, because `detect.py` is 39 KB — returning the **four**
+     sets, plus the parametrized test that asserts the invariant. The function takes the detection
+     report and the answers and returns the partition; it does **not** re-scan the target
+     repository.
+
+     **The gate-to-pattern table does not exist yet, and this task introduces it.** Measured
+     2026-10-04: `detect.py` holds the constants deciding whether a gate *opens*
+     (`NODE_SERVER_FRAMEWORK_DEPS`, `ARCHITECTURE_TRIAD_DIR_NAMES` and the rest) but nothing
+     mapping a gate to the patterns it *settles*; and `detect()`'s report carries exactly `auto`,
+     `baseline`, `gate_evidence`, `gates`, `manifests_walked`, `repo`, `schema` and
+     `unrecognised_stack` — no list of the 21, no excluded-by-stack-fact set. So "derivable from
+     the report plus an answer set alone" cannot be met literally. Resolve it this way:
+
+     - The module holds an explicit table — each gate to the patterns it settles (6 + 5 + 2 = 13,
+       copied from the `Settles` column of the gate table in `[ref: SDD/Interface Specifications]`)
+       and the eight stack-fact names.
+     - The **function** touches no filesystem. Do not have it read the catalogue.
+     - A **test** cross-checks the table against reality: the union of the two groups is exactly
+       the 21 directories under `templates/patterns/`, and the groups are disjoint.
+
+     **The union check alone is not enough and must not be the only one.** Swapping two names
+     between the groups — putting `testing` under a gate and `mutation-testing` under stack facts —
+     leaves the union at 21 and the groups disjoint, so a union-only test passes a table that is
+     wrong in the way most likely to happen. Assert the gate-settled group against a **hand-typed
+     literal of the thirteen names**, written from the SDD's gate table rather than derived from
+     the module under test. A check that re-derives the code's own logic agrees with it wherever
+     both are wrong.
   4. Validate: `python3 -m pytest -q`; introduce a deliberate double-assignment locally and confirm
      the test fails — an invariant test that cannot fail is decoration.
   5. Success:
