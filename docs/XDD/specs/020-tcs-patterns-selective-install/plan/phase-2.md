@@ -506,22 +506,111 @@ written from the specification rather than from the implementation.
            one, because none opens all three gates — so the empty case needs a constructed report
            rather than a fixture `[ref: SDD/Runtime View/Complex Logic]`
 
-- [ ] **T2.6 The Obsidian rule agreement test** `[activity: testing]` `[parallel: true]`
+- [ ] **T2.6 The Obsidian rule agreement test, and the two divergences it exposed**
+  `[activity: testing]` `[parallel: true]`
 
-  1. Prime: Read ADR-7 `[ref: SDD/Architecture Decisions/ADR-7]` and the existing bash gate in
-     `plugins/tcs-patterns/scripts/block-eslint-disable.sh`. The hook must stay standalone: giving
-     a write-time guard a dependency outside itself is the failure mode issue #163 already records
-     twice here.
-  2. Test: For every detection fixture, the bash gate's verdict on `repo/` equals the Python rule's
-     `obsidian-plugin` proposal. Both directions matter — a fixture the bash gate accepts and the
-     detector rejects is as much a divergence as the reverse.
-  3. Implement: `tests/test_obsidian_rule_agreement.py`, invoking the bash gate as a subprocess
-     against each fixture and comparing. No new abstraction, no shared source.
-  4. Validate: `python3 -m pytest tests/test_obsidian_rule_agreement.py -q`; change one rule
-     locally and confirm the test fails.
+  1. Prime: Read ADR-7 `[ref: SDD/Architecture Decisions/ADR-7]`, the bash gate in
+     `plugins/tcs-patterns/scripts/block-eslint-disable.sh`, its 12 existing cases in
+     `plugins/tcs-patterns/tests/bats/block-eslint-disable.bats`, and `_rule_obsidian_plugin` in
+     `lib/detect.py`. The hook must stay standalone: giving a write-time guard a dependency
+     outside itself is the failure mode issue #163 already records twice here. ADR-7 buys
+     agreement through two independent implementations plus a test, **not** through a shared
+     source — that stance is unchanged by this task.
+
+     **How the gate must be invoked, measured 2026-10-04 — three ways to get a false verdict.**
+     The hook takes a PreToolUse payload on **stdin**, never an argument:
+     `{"tool_name":"Write","tool_input":{"file_path":"<root>/src/probe.ts","content":"…"}}`.
+     Its scope gate resolves the repository with `git -C "$DIR" rev-parse --show-toplevel`
+     (line 83), so:
+     - **In place inside this worktree: every fixture returns `allow`, the Obsidian one
+       included.** `show-toplevel` resolves to the TCS repository root, which has neither
+       `manifest.json` nor `package.json`, so `IS_OBSIDIAN=0` for all 26. A test built this way
+       reports a divergence on `auto-obsidian-plugin` that is an artefact of the instrument.
+       Same family as the fixture-inherits-the-repo's-`.gitignore` hazard already recorded.
+     - **Copied out of the worktree without `git init`: still `allow` for all 26.** Line 84 exits
+       silently when there is no repository.
+     - **Copied out and `git init`-ed: the gate answers about the fixture.** Use
+       `GIT_CONFIG_GLOBAL=/dev/null git -C "$tmpdir" init`, and `diff -r` the copy against the
+       source before trusting any verdict.
+
+     Hold the payload content constant so the only thing that varies is the scope gate — the rule
+     actually under comparison. Probe each fixture twice: a content carrying a real
+     `eslint-disable`, and a clean content. A `DENY` on the clean payload means the gate fired on
+     something other than the violation.
+  2. Test: For every detection fixture, the bash gate's verdict on `repo/` equals the Python
+     rule's `obsidian-plugin` proposal. Both directions matter — a fixture the bash gate accepts
+     and the detector rejects is as much a divergence as the reverse.
+
+     **Agreement over the corpus already holds, and is nearly powerless on its own.** Measured
+     across all 26 on 2026-10-04 with the method above: **0 disagreements**, but the distribution
+     is 25 × `allow` and exactly 1 × `DENY` (`auto-obsidian-plugin`). A hook that never denies
+     passes 25 of 26; a Python rule that never proposes passes 25 of 26. The corpus can only
+     catch a one-sided change that makes a rule *more restrictive*. Everything in the
+     *permissive* direction rests on one fixture — which is why the two cases below are the
+     substance of this task and the corpus sweep is the floor, not the proof.
+
+     **Two real divergences, measured and in opposite directions. Neither is reachable from any
+     fixture.** `trap-05` does not reach the first: its nested signal sits in `node_modules`,
+     which both sides exclude, and its `expected.json` lists `obsidian-plugin` under
+     `must_not_propose`, so the two agree there for the right reason.
+
+     | Constructed tree | Bash gate | Python rule | |
+     |---|---|---|---|
+     | `packages/plugin/manifest.json` with `minAppVersion`, root `package.json` declaring nothing | `allow` | `propose` | **diverges** |
+     | root `package.json` with `"obsidian"` as a **script name**, `dependencies` holding only `react` | `DENY` | `silent` | **diverges** |
+     | root `manifest.json` with `minAppVersion` (control) | `DENY` | `propose` | agrees |
+
+     Both are **bugs in the hook**, not a legitimate difference of question, and both are live:
+     the hook is registered at `plugins/tcs-patterns/hooks/hooks.json:10`, so every session with
+     the plugin enabled carries them. The first leaves a nested Obsidian plugin unguarded at
+     exactly the point where community-directory submission is at stake. The second denies writes
+     anywhere in a repository that is not an Obsidian plugin at all. Neither is covered by any of
+     the hook's 12 bats cases on either side.
+  3. Implement, in this order:
+
+     a. **`tests/test_obsidian_rule_agreement.py`** — the corpus sweep plus the three constructed
+        trees above, invoking the bash gate as a subprocess. No new abstraction, no shared source.
+        The constructed trees are built in the test at run time and are **not** added to
+        `tests/fixtures/patterns-detection/`: the corpus count is asserted at exactly 26, and a
+        tracked fixture is fittable by the next implementer in a way a constructed tree is not.
+        Write this first and watch the two divergence cases **fail** — that is this task's RED.
+
+     b. **Close both divergences in the hook**, keeping it standalone and bash 3.2 clean:
+        - *Depth*: look for `manifest.json` at any depth below the repository root rather than
+          only at the root, excluding `node_modules`, `.venv` and `vendor` — the same exclusion
+          set the detector's walk uses. Decided by Marcus on 2026-10-04: fix the hook rather than
+          assert the asymmetry, because writing a live bug down as intent is worse than either
+          leaving it or fixing it.
+        - *Precision*: decide the `package.json` signal by parsing the dependency maps with `jq`
+          (which the hook already depends on at line 53) instead of grepping
+          `"obsidian"[[:space:]]*:` across the whole file. Keep `devDependencies` accepted — the
+          detector accepts it (`detect.py` lines 478-479) and one existing bats case covers it.
+        - Every jq pipeline keeps its `2>/dev/null || true`: a malformed payload must still fall
+          through to exit 0, never hard-block an unrelated edit.
+
+     c. **Two bats cases** in `block-eslint-disable.bats`, one per divergence, so the hook's own
+        suite covers them independently of the Python comparison.
+  4. Validate: `python3 -m pytest tests/test_obsidian_rule_agreement.py -q`;
+     `bats plugins/tcs-patterns/tests/bats/block-eslint-disable.bats` — expect 14 ok, and confirm
+     the 12 pre-existing cases still pass unchanged; then `python3 -m pytest -q` and
+     `shellcheck plugins/tcs-patterns/scripts/block-eslint-disable.sh`. Change one rule locally,
+     on each side in turn, and confirm the test fails — an agreement test that cannot fail is
+     decoration, and over this corpus it very nearly is.
+
+     The hook's behaviour changes for users, so it needs changelog entries. **T5.4 owns both
+     changelogs** — do not write them here; note the change in the commit message so T5.4 has it.
+     Never hand-bump `plugin.json`.
   5. Success:
-     - [ ] Identical verdicts across all fixtures `[ref: SDD/AC-14]`
-     - [ ] A one-sided change to either rule fails the test `[ref: SDD/ADR-7]`
+     - [ ] Identical verdicts across all 26 fixtures `[ref: SDD/AC-14]`
+     - [ ] A one-sided change to either rule fails the test, demonstrated on **each** side
+           `[ref: SDD/ADR-7]`
+     - [ ] The nested-`manifest.json` tree and the `"obsidian"`-as-script-name tree both agree
+           after the fix, and both are shown to have **failed before it** — the RED is part of the
+           deliverable, not a claim `[ref: SDD/ADR-7; SDD/AC-14]`
+     - [ ] The hook still exits 0 on a malformed payload and still honours
+           `CLAUDE_ALLOW_ESLINT_DISABLE=1`; all 12 pre-existing bats cases pass unchanged
+           `[ref: SDD/Runtime View/Error Handling]`
+     - [ ] The hook depends on nothing outside itself `[ref: SDD/ADR-7]`
 
 - [ ] **T2.7 Phase validation** `[activity: validate]`
 
