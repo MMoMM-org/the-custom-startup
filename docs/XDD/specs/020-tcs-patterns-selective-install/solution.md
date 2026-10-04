@@ -664,11 +664,20 @@ lives in `hexagonal/` — resolves to nothing in the consumer repository. Q2 is 
 selection is reachable, not hypothetical. Before this spec the defect was invisible: shipping all
 21 made every citation resolve.
 
-**Derived, not hardcoded.** The map is computed from the catalogue by the same resolution rule the
-link test uses: a code-span path that resolves under no pattern root but its own, yet does resolve
-under another pattern's root, is a companion edge. A test asserts the derived map equals the seven
-edges above, so adding a cross-pattern reference to a new target either updates the map or fails
-the suite. A hardcoded table would silently go stale the first time a pattern's references changed.
+**Derived, not hardcoded.** The map is computed from the catalogue by a resolution rule of its own,
+sharing the link test's extraction plumbing but not its rule: a code-span path that resolves under
+no pattern root but its own, yet does resolve under another pattern's root, is a companion edge.
+A test asserts the derived map equals the seven edges above, so adding a cross-pattern reference to
+a new target either updates the map or fails the suite. A hardcoded table would silently go stale
+the first time a pattern's references changed.
+
+This sentence read "by the same resolution rule the link test uses" until 2026-10-04 — the fourth
+and last place that attribution survived, after the task's Prime step, the task's Implement step
+and ADR-10's trade-offs. The description after the colon was correct in every one of them; only
+the attribution was wrong, which is why it kept surviving corrections aimed at the substance. It
+is contradicted two paragraphs below, under *How the citations are actually written*: the link
+test's rule keys on `../` climbs, companion citations never climb, and a derivation built on that
+rule finds **zero** edges.
 
 **How the citations are actually written, and why the path rule is the right one — measured
 2026-10-04.** The real shape is not a `../` climb, which is what the link test's own rule keys on,
@@ -1556,8 +1565,13 @@ companion edge — and a test asserts the derived map equals the seven known edg
   the catalogue link test checks the source tree, not consumer repositories, so the defect would
   surface as a reader's confusion rather than as a failure.
 - *A hardcoded companion table.* Rejected on staleness: the table would be correct the day it was
-  written and silently wrong the first time a pattern's references changed. Deriving it costs the
-  same resolution code the link test already needs.
+  written and silently wrong the first time a pattern's references changed. Deriving it reuses the
+  link test's extraction plumbing and needs a resolution rule of its own — **corrected 2026-10-04**,
+  where this read "costs the same resolution code the link test already needs". That was the fifth
+  and most load-bearing instance of the same misattribution, because it is the cost argument this
+  rejection rests on: the plumbing is shared, the rule is not, so deriving costs a new rule rather
+  than nothing. The rejection still holds — a new resolution rule is perhaps thirty lines and a
+  hardcoded table goes stale silently, which is not a close call — but it is now priced honestly.
 
 **Trade-offs accepted — amended 2026-10-04, three claims in this paragraph were wrong.** A derived
 map is only as good as its resolution rule, and that rule resolves **bare** code-span paths against
