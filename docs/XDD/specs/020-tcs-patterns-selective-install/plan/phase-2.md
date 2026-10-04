@@ -614,6 +614,25 @@ written from the specification rather than from the implementation.
         - Every jq pipeline keeps its `2>/dev/null || true`: a malformed payload must still fall
           through to exit 0, never hard-block an unrelated edit.
 
+        **Both halves were probed on bash 3.2.57 before dispatch, 2026-10-04 — they work, so
+        the open question is only where they go in the file.** For the depth half,
+        `find "$root" \( -name node_modules -o -name .venv -o -name venv -o -name vendor \)
+        -prune -o -name manifest.json -type f -print` then `grep -q minAppVersion` per candidate
+        finds `packages/plugin/manifest.json`, prunes all three excluded trees, and correctly
+        passes over a `manifest.json` that carries no `minAppVersion`; a tree whose only
+        `manifest.json` lives inside an excluded directory yields nothing. For the precision
+        half, `jq -e '(.dependencies.obsidian // .devDependencies.obsidian) != null'` gives the
+        right answer on all six shapes probed — `dependencies`, `devDependencies`, a script
+        name, a `resolutions` entry, no `obsidian` at all, and malformed JSON, which falls
+        through to allow.
+
+        **A third false positive turned up in that probe and was not in the original pair:** the
+        current whole-file grep also denies on `"obsidian"` inside `resolutions`. Any
+        `"obsidian":` anywhere in the root `package.json` trips it — `overrides`, `pnpm.overrides`
+        and a `workspaces` entry are the same shape. Cover at least the `resolutions` form
+        alongside the script-name one, since both are ordinary things to find in a repository
+        that is not an Obsidian plugin.
+
      c. **Two bats cases** in `block-eslint-disable.bats`, one per divergence, so the hook's own
         suite covers them independently of the Python comparison.
   4. Validate: `python3 -m pytest tests/test_obsidian_rule_agreement.py -q`;
