@@ -10,6 +10,9 @@
 #   - Allow: CLAUDE_ALLOW_ESLINT_DISABLE=1 escape hatch
 #   - Repo detection via package.json "obsidian" dependency
 #   - Remediation hint is rule-specific for obsidianmd/ui/sentence-case
+#   - Repo detection via a manifest.json nested below the repo root (spec-020 T2.6)
+#   - Allow: "obsidian" as a package.json script name or resolutions entry,
+#     not a dependency (spec-020 T2.6 -- the Python rule agreement test)
 
 bats_require_minimum_version 1.5.0
 
@@ -139,5 +142,20 @@ payload() {
 @test "path outside any git repo is ignored" {
   mkdir -p "$TEST_DIR/loose"
   run -0 bash -c "printf '%s' '$(payload Write "$TEST_DIR/loose/main.ts" content "// eslint-disable")' | '$HOOK'"
+  [ -z "$output" ]
+}
+
+@test "detects a manifest.json nested below the repo root" {
+  repo="$(make_repo nested plain)"
+  mkdir -p "$repo/packages/plugin"
+  printf '{"id":"demo","name":"Demo","minAppVersion":"1.5.0"}\n' > "$repo/packages/plugin/manifest.json"
+  run -0 bash -c "printf '%s' '$(payload Write "$repo/src/main.ts" content "// eslint-disable-next-line")' | '$HOOK'"
+  [ "$(printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision')" = "deny" ]
+}
+
+@test "allows package.json where obsidian is a script name or a resolutions entry, not a dependency" {
+  repo="$(make_repo plain plain)"
+  printf '{"name":"demo","scripts":{"obsidian":"echo hi"},"resolutions":{"obsidian":"1.0.0"},"dependencies":{"react":"^18.2.0"}}\n' > "$repo/package.json"
+  run -0 bash -c "printf '%s' '$(payload Write "$repo/src/main.ts" content "// eslint-disable-next-line")' | '$HOOK'"
   [ -z "$output" ]
 }

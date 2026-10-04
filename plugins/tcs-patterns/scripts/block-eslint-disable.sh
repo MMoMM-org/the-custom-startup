@@ -84,9 +84,17 @@ REPO_DIR=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null || true)
 [ -z "$REPO_DIR" ] && exit 0
 
 IS_OBSIDIAN=0
-if [ -f "${REPO_DIR}/manifest.json" ] && grep -q "minAppVersion" "${REPO_DIR}/manifest.json" 2>/dev/null; then
-  IS_OBSIDIAN=1
-elif [ -f "${REPO_DIR}/package.json" ] && grep -qE '"obsidian"[[:space:]]*:' "${REPO_DIR}/package.json" 2>/dev/null; then
+while IFS= read -r MANIFEST_CANDIDATE; do
+  if grep -q "minAppVersion" "$MANIFEST_CANDIDATE" 2>/dev/null; then
+    IS_OBSIDIAN=1
+    break
+  fi
+done < <(find "$REPO_DIR" \( -name node_modules -o -name .venv -o -name venv -o -name vendor \) \
+  -prune -o -name manifest.json -type f -print 2>/dev/null || true)
+
+if [ "$IS_OBSIDIAN" != "1" ] && [ -f "${REPO_DIR}/package.json" ] \
+  && jq -e '(.dependencies.obsidian // .devDependencies.obsidian) != null' \
+    "${REPO_DIR}/package.json" >/dev/null 2>&1; then
   IS_OBSIDIAN=1
 fi
 [ "$IS_OBSIDIAN" = "1" ] || exit 0
