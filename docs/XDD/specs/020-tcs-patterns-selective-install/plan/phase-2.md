@@ -519,12 +519,29 @@ written from the specification rather than from the implementation.
 
   Measured against T2.2's detector (`94da599`..`bc6e28f`): all four correct on `auto`,
   `baseline`, `unrecognised_stack`, `must_not_propose`, `manifests_walked` and every evidence
-  invariant; only `gates` diverged, which is T2.2's placeholder. Re-run after T2.3 and expect
-  zero divergence.
+  invariant; only `gates` diverged, which is T2.2's placeholder.
+
+  **Re-run after T2.3 (`03d3c31`): zero divergence on all four.** `auto`, `baseline`, `gates`,
+  `unrecognised_stack`, `schema`, `must_not_propose` and every evidence and `gate_evidence`
+  invariant matched the clauses as written, on trees the detector had never seen. Two results
+  worth keeping: q1 fired from a **nested** `pyproject.toml`
+  (`services/api/backend/pyproject.toml: dependencies.django`), which is the four-manifest table
+  working at depth and which no fixture reaches; and q2's evidence was q1's folded in, which is
+  the 2026-10-04 pure-disjunct ruling holding outside the corpus. This is the PRD's top-risk
+  mitigation actually discharged rather than asserted -- green fixtures could never have done it,
+  because the fixtures are the detector's own test data.
+
+  **Do not promote these four into tracked tests, tempting though the rebuild cost makes it.**
+  Three sessions have now rebuilt them, and the tax is the price of the property: a tracked test
+  is visible to the next implementer and can be fitted exactly as a fixture can. Held-out means
+  held out of the tree, not merely out of `tests/fixtures/`. The specification above is what
+  makes them reconstructible; keep it accurate instead.
 
   **The rule that makes this worth anything:** a divergence is resolved against the SDD, never
   against the fixtures, and never by editing an expectation to match the output.
 
-  - Success: 18 fixtures green; all four held-out cases matching the written rules with no
-    divergence; detection suite runnable standalone; both legs green per leg
+  - Success: all **26** fixtures green -- the figure read 18 until 2026-10-04, before T2.3 added
+    eight gate-coverage cases; count `EXPECTED_CASE_COUNT`, do not inherit the number. All four
+    held-out cases matching the written rules with no divergence; detection suite runnable
+    standalone; both legs green per leg
     `[ref: SDD/AC-3, AC-4, AC-5, AC-6, AC-14; PRD/Risks and Mitigations]`
