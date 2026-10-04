@@ -124,12 +124,43 @@ def decide(report: Mapping, answers: Mapping[str, Iterable[str]] | None = None) 
     there is nothing to have answered
     `[ref: SDD/Runtime View/Complex Logic, "There are four outcomes, not
     three"]`.
+
+    Raises `ValueError` if `report["auto"]` or `report["baseline"]` names a
+    gate-settled pattern -- `detect()` proposing e.g. `ddd` as a stack fact
+    is a detector bug, and a report like that cannot be partitioned
+    honestly. The alternative, silently dropping the name from `installed`,
+    is the worst outcome available: the four sets would still sum to 21 and
+    look exactly like a clean partition while hiding exactly the defect this
+    module exists to surface. Caught here because the corpus-wide test in
+    `tests/test_patterns_outcomes.py` only catches a leak from a fixture
+    `detect()` is actually run against in CI -- this raise catches it in
+    whatever session the detector starts misbehaving in, which is a
+    different moment.
     """
     answers = answers or {}
 
-    fired = {p["pattern"] for p in report.get("auto", [])}
-    fired |= {p["pattern"] for p in report.get("baseline", [])}
+    auto_names = {p["pattern"] for p in report.get("auto", [])}
+    baseline_names = {p["pattern"] for p in report.get("baseline", [])}
+    fired = auto_names | baseline_names
 
+    leaked_from_auto = sorted(auto_names - STACK_FACT_PATTERNS)
+    leaked_from_baseline = sorted(baseline_names - STACK_FACT_PATTERNS)
+    if leaked_from_auto or leaked_from_baseline:
+        culprits = []
+        if leaked_from_auto:
+            culprits.append(f"auto: {leaked_from_auto}")
+        if leaked_from_baseline:
+            culprits.append(f"baseline: {leaked_from_baseline}")
+        raise ValueError(
+            "report proposes a gate-settled pattern as a stack fact, which "
+            "decide() cannot partition honestly (" + "; ".join(culprits) + ")"
+        )
+
+    # Belt-and-braces, not load-bearing: the raise above is what actually
+    # catches a leak. This intersection would otherwise absorb one silently
+    # -- dropping a gate-settled name from `installed` while the four sets
+    # still summed to 21 is the exact failure mode the raise exists to
+    # prevent. Do not delete the raise believing this covers it.
     installed: set[str] = set(fired & STACK_FACT_PATTERNS)
     excluded_by_stack_fact = frozenset(STACK_FACT_PATTERNS - fired)
 

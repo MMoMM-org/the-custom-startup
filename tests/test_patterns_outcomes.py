@@ -152,6 +152,69 @@ def test_the_two_groups_are_disjoint_and_union_to_the_21_catalogue_directories()
     assert len(stack_facts) == 8
 
 
+@pytest.mark.parametrize("fixture", discover_fixtures(), ids=lambda f: f.name)
+def test_no_fixtures_auto_or_baseline_names_a_gate_settled_pattern(fixture) -> None:
+    """Corpus-wide guard for the leak `decide()` now raises on: `auto` or
+    `baseline` naming one of the 13 gate-settled patterns instead of one of
+    the 8 stack facts.
+
+    Why this is not already covered by the existing corpus comparisons in
+    `test_patterns_detect.py`: those assert each fixture's `auto`/`baseline`
+    against its *own* hand-written `expected.json`, and none of those 26
+    expectations happens to contain a gate-settled name -- so the absence is
+    enforced by coincidence of what the fixture authors wrote, not as an
+    invariant. A new fixture whose author mistakenly listed `ddd` under
+    `auto`, or a `detect()` regression that starts proposing one, would
+    satisfy every per-fixture comparison and slip through. This test runs
+    the real `detect()` against every real fixture `repo/` and checks the
+    one thing those comparisons do not: that `auto ∪ baseline` never
+    contains a name outside `STACK_FACT_PATTERNS`, regardless of what any
+    `expected.json` says."""
+    outcomes = _load_outcomes()
+    detect = _load_detect()
+
+    report = detect.detect(fixture.repo_dir)
+    fired = {p["pattern"] for p in report["auto"]} | {p["pattern"] for p in report["baseline"]}
+
+    leaked = fired - outcomes.STACK_FACT_PATTERNS
+    assert not leaked, (
+        f"{fixture.name}: auto/baseline named a gate-settled pattern, not a stack fact: {sorted(leaked)}"
+    )
+
+
+def test_decide_raises_when_auto_names_a_gate_settled_pattern() -> None:
+    """The other half of the same guard, at the point `decide()` itself can
+    be called with a bad report -- a hand-built one here, not a fixture, so
+    this does not depend on `detect()` ever actually producing this shape.
+    `decide()` must refuse rather than silently drop the leaked name from
+    `installed`, which would otherwise leave the four sets summing to 21 and
+    looking exactly like a clean partition."""
+    outcomes = _load_outcomes()
+    report = {
+        "auto": [{"pattern": "ddd", "evidence": "constructed"}],
+        "baseline": [],
+        "gates": {"q1_backend": False, "q2_architecture": False, "q3_test_quality": False},
+    }
+
+    with pytest.raises(ValueError, match="ddd"):
+        outcomes.decide(report, answers={})
+
+
+def test_decide_raises_when_baseline_names_a_gate_settled_pattern() -> None:
+    """Same guard, the `baseline` side -- `decide()`'s raise names which
+    field the leak came from, so this and the test above must each name a
+    different field in the message, not just the pattern."""
+    outcomes = _load_outcomes()
+    report = {
+        "auto": [],
+        "baseline": [{"pattern": "mutation-testing", "evidence": "constructed", "surface": False}],
+        "gates": {"q1_backend": False, "q2_architecture": False, "q3_test_quality": False},
+    }
+
+    with pytest.raises(ValueError, match="baseline"):
+        outcomes.decide(report, answers={})
+
+
 def _powerset(items) -> list[frozenset[str]]:
     """Every subset of `items`, as frozensets -- each open gate is
     multiSelect, so any subset of its settled patterns (including none of
