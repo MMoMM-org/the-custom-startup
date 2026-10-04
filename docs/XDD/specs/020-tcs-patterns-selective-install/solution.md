@@ -709,6 +709,26 @@ against the citing file's directory, and treat a path that resolves under **more
 pattern as ambiguous rather than picking one. Zero are ambiguous today — measured — which is worth
 asserting so the day one appears is the day the suite says so.
 
+**The citing pattern's own root wins, always — recorded 2026-10-04 after T2.4's implementer hit
+it.** A path that resolves under the citing pattern's own root is never a companion edge
+**regardless of what else it also matches**, and that precedence is load-bearing rather than
+pedantic: `reference/node-patterns.md` exists under **both** `node-service` and `observability`,
+different content at the same relative path. Without own-root-first, `node-service`'s reference to
+its own file reads as an edge to `observability`. Measured: a naive "exclude own, single other is
+an edge" reading yields **12** edges instead of 7. The rule follows from reading "resolves under
+no pattern root but its own" strictly, and it is written down here because the *collision* that
+makes it matter is a fact about this catalogue that no amount of careful reading would predict.
+
+**Cross-checked against the authors' intent, which is the one thing that could have falsified the
+precedence.** If a citation the own-root rule excludes actually meant another pattern's copy, the
+rule would be hiding a real edge. The catalogue records intent beside the path, in the
+`tcs-patterns:<name>` marker, so the two can be compared — and they agree completely: all **14**
+resolving citations carry a marker, every marker names the pattern the path resolved to, nothing
+is hidden by the precedence, and nothing is mistargeted. This also confirms from the other
+direction why the path rule is the right derivation and the marker is not: the gap between 7 edges
+and 43 markers is entirely markers with **no resolving path** — prose cross-references, where
+nothing breaks when the pattern is installed alone.
+
 **Expansion is the transitive closure, not one level — settled 2026-10-04 (Marcus).** The document
 said "adds its companions" and never fixed the depth, and the difference is observable on three of
 the five sources, all of them gaining `ddd`:
