@@ -701,6 +701,29 @@ written from the specification rather than from the implementation.
   mitigation actually discharged rather than asserted -- green fixtures could never have done it,
   because the fixtures are the detector's own test data.
 
+  **Re-run after T2.5 and T2.6 (`66e83b1`): zero divergence on all four, now including the
+  partition.** `auto`, `baseline`, `gates`, `gate_evidence`, `unrecognised_stack`,
+  `must_not_propose` and every evidence invariant matched the clauses as written. Added this run:
+  T2.5's `outcomes.decide()` was asserted on each held-out report as well, and the four sets are
+  pairwise disjoint and sum to 21 on all four trees -- `3 + 13 + 5 + 0`, `2 + 2 + 6 + 11`,
+  `0 + 0 + 8 + 13`, `2 + 0 + 6 + 13`. These are the only reports the partition has ever run
+  against that the implementation was not fitted to.
+
+  **One result this run that the specification did not predict: the empty fourth set is reachable
+  from a real tree.** T2.5 records that no corpus fixture opens all three gates, so its empty
+  `not_reached` case needs a constructed report. The mixed Go + Python tree opens all three --
+  q1 from `django` in a nested `pyproject.toml`, q2 from q1, q3 from a `*_test.go` -- and yields
+  `not_reached = 0` from an actual `detect()` run. So T2.5's constructed case is corroborated by
+  a real detector against a real tree rather than only by a hand-built report, which is a
+  stronger position than either artefact reaches alone. It does not change T2.5: a held-out tree
+  must not become the fixture that covers the case, for the same reason these four are not
+  fixtures.
+
+  Two results from the earlier run still hold and are worth keeping: q1 fires from a **nested**
+  `pyproject.toml` (`services/api/backend/pyproject.toml: dependencies.django`), the
+  four-manifest table working at depth, which no fixture reaches; and q2's `gate_evidence` is
+  q1's folded in, the 2026-10-04 pure-disjunct ruling holding outside the corpus.
+
   **Do not promote these four into tracked tests, tempting though the rebuild cost makes it.**
   Three sessions have now rebuilt them, and the tax is the price of the property: a tracked test
   is visible to the next implementer and can be fitted exactly as a fixture can. Held-out means
