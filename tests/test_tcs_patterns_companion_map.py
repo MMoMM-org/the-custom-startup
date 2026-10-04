@@ -201,17 +201,29 @@ def test_a_leading_climb_resolves_nothing_the_real_shape_has_no_climb(tmp_path: 
     """The real citation shape is not a `../` climb -- a derivation written
     for that shape finds zero edges in the real catalogue, measured
     `[ref: SDD/Interface Specifications/Data model: companion map, "How the
-    citations are actually written..."]`. This mirrors the real escaping
-    citations exactly -- `../../REFERENCES.md` from `hexagonal/reference/`,
-    a generic filename naming no pattern -- rather than a path that climbs
-    out and then explicitly re-descends into a named sibling (a different,
+    citations are actually written..."]`. The shape is a generic filename
+    naming no pattern, climbed to from inside a pattern -- **not** a path
+    that climbs out and then explicitly re-descends into a named sibling (a
+    different,
     legitimately-resolving shape this map does not need to rule out, and
     does not: resolving under a root by any path arithmetic, climb or not,
     is still "resolves under that root" by this module's own rule). The
     climbed-to file exists one level above every pattern root, sibling to
     all of them -- real estate no single pattern root's own subtree reaches
     -- so even though the target exists, it must resolve under none of
-    them."""
+    them.
+
+    This docstring claimed until 2026-10-04 that the fixture "mirrors the real
+    escaping citations exactly -- `../../REFERENCES.md` from
+    `hexagonal/reference/`". It did not, in two ways. Those citations were
+    removed from the catalogue by `56ae369`, which is an ancestor of this
+    task's own base commit, so they were already gone when this test was
+    written -- there are zero `../` citations in the catalogue today. And the
+    real ones were *dangling* (`56ae369`'s message: the target "has never
+    existed in this repo"), while this fixture deliberately writes the target
+    so that it exists, making it escaping-but-present -- the opposite fact
+    pattern. The test is sound and discriminating either way; only the
+    illustration was false. Found by T2.4's code-quality review."""
     companions = _load_companions()
     _write_pattern_file(
         tmp_path,
@@ -304,3 +316,52 @@ def test_a_path_resolving_under_two_other_patterns_is_ambiguous_not_guessed(tmp_
     assert len(ambiguous) == 1
     assert ambiguous[0].target == "reference/shared.md"
     assert ambiguous[0].candidate_patterns == ("beta", "gamma")
+
+
+def test_a_markdown_link_citation_is_a_candidate_too(tmp_path: Path) -> None:
+    """`_candidate_targets` extracts from two surfaces -- inline code spans and
+    `[text](href)` markdown links -- and **only the first produces any edge in
+    the real catalogue**. Measured 2026-10-04: of the 14 resolving citations,
+    14 come from code spans and 0 from markdown links.
+
+    So the link branch was dead to this suite. Deleting it entirely left all 16
+    tests passing, confirmed by a code-quality review that ran the real test
+    file against a mutated scratch copy, and no fixture here wrote
+    `[text](path)` syntax at all. A branch no test can reach is a branch that
+    silently stops working: the catalogue uses one surface today and nothing
+    would notice the other breaking before a pattern author used it.
+    """
+    _write_pattern_file(tmp_path, "beta", "reference/shared.md", "# shared\n")
+    _write_pattern_file(
+        tmp_path, "alpha", "SKILL.md",
+        "See [the shared note](reference/shared.md) in `tcs-patterns:beta`.\n",
+    )
+
+    companions = _load_companions()
+    assert companions.companion_map(tmp_path) == {"alpha": frozenset({"beta"})}
+
+
+def test_a_hidden_directory_in_the_catalogue_is_not_a_pattern(tmp_path: Path) -> None:
+    """`_pattern_names` filters dot-directories, and nothing exercised it: the
+    real catalogue has none today, so removing the filter left all 16 tests
+    green (measured 2026-10-04 in a scratch copy of the repo).
+
+    The filter is not hypothetical. Running a single Bash call with the
+    catalogue as its working directory makes the harness create
+    `.claude/.cc-writes` there; it is gitignored, so `git status` shows a clean
+    tree, and the same stray broke three unrelated suites the day this filter
+    was written. This fixture plants the worst shape: a hidden directory that
+    *would* satisfy a citation. Without the filter `.claude` is a pattern,
+    `alpha`'s citation resolves under it, and the map gains a spurious edge --
+    so this fails loudly rather than merely counting one directory too many.
+    """
+    _write_pattern_file(tmp_path, "beta", "reference/shared.md", "# shared\n")
+    _write_pattern_file(tmp_path, ".claude", "reference/shared.md", "# stray\n")
+    _write_pattern_file(
+        tmp_path, "alpha", "SKILL.md",
+        "See `reference/shared.md` in `tcs-patterns:beta`.\n",
+    )
+
+    companions = _load_companions()
+    assert companions.companion_map(tmp_path) == {"alpha": frozenset({"beta"})}
+    assert companions.ambiguous_citations(tmp_path) == ()
