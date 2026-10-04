@@ -548,7 +548,7 @@ Three consequences the fixtures must assert rather than assume:
   other three signals, consistent with the traced walkthrough, which finds `events.py` at
   `src/<feature>/` and the store at `src/event_store/` rather than at the root
   `[ref: SDD/Runtime View/Complex Logic]`. The exclusion list still applies at every depth:
-  nothing inside `node_modules`, `.venv`, `venv` or `vendor` is a signal.
+  nothing inside `node_modules`, `.venv`, `venv`, `vendor`, `.git` or `.claude` is a signal.
 - **Each weak signal's quantity is fixed, not left to taste.** `ports/` + `adapters/` +
   `domain/` needs all three; `event_store` and a broker dependency need one; the per-module
   events file needs **two or more in distinct module directories**. One `events.py` is a
@@ -568,7 +568,28 @@ Three consequences the fixtures must assert rather than assume:
   and nothing may propose it on `jwt`, `bcrypt` or `pyjwt`, which are session and hashing tools, not
   a federated-identity protocol. Protocol evidence means an AS/client/RP library, or `.well-known`,
   or `redirect_uri` together with `client_id`.
-- **The walk excludes `node_modules`, `.venv`, `venv` and `vendor`** (trap 5), and walks nested
+- **`.git` and `.claude` were added on 2026-10-05, and the list was wrong without them.**
+  Found at T2.6, by measuring `detect('.')` against this repository rather than against a
+  fixture: it proposed `obsidian-plugin`, citing a `manifest.json` inside a vendored plugin
+  cache at `claude-docker-home/.claude/plugins/cache/.../with-manifest-only/manifest.json`.
+  That is trap 5's own family -- an embedded foreign tree read as this repository's signal --
+  with two directories the rule never enumerated. The same omission had made the write-time
+  Obsidian guard and this rule disagree, since the guard excludes `.git` and this walk did
+  not `[ref: SDD/ADR-7]`.
+- **Residual, accepted rather than closed: a *tracked* test fixture can still fire a stack
+  fact.** After the addition, `detect('.')` on this repository still proposes
+  `obsidian-plugin`, now citing
+  `plugins/tcs-helper/skills/doc-product/tests/fixtures/extract/with-manifest-only/manifest.json`
+  -- a committed fixture belonging to a different plugin. No directory-name exclusion can
+  separate that from a real plugin manifest, and excluding test-shaped paths generally would
+  be wrong: `testing` and `frontend-testing` read test files deliberately, so the same
+  exclusion would break two rules to fix one. The design already answers it -- every
+  proposal carries the path that justified it and every proposal is declinable, so the user
+  sees `.../tests/fixtures/...` and says no `[ref: SDD/Interface Specifications/Data model:
+  detection report; PRD/F2 1st]`. Worth knowing that a repository of tools containing other
+  tools' fixtures is the shape that provokes it.
+- **The walk excludes `node_modules`, `.venv`, `venv`, `vendor`, `.git` and `.claude`** (trap 5),
+  and walks nested
   manifests so a workspace root declaring nothing still yields its children's signals. Every
   manifest actually read is listed in `manifests_walked`, so a missing signal is explicable.
   The manifests walked are **`package.json`, `pyproject.toml` and `go.mod`**, at every depth
@@ -830,7 +851,7 @@ Assert it as three universal invariants instead, in the detection test:
 2. its path part — everything before the first `": "`, since dependency evidence is formatted
    `"packages/server/package.json: dependencies.foo"` — resolves to a file that **exists**
    inside that fixture's `repo/`;
-3. that path is **not** under `node_modules`, `.venv`, `venv` or `vendor`.
+3. that path is **not** under `node_modules`, `.venv`, `venv`, `vendor`, `.git` or `.claude`.
 
 The third invariant is the one with teeth: it fails any detector that reads a vendored tree and
 cites it, which is trap 5 reintroduced, and it does so for every fixture rather than only the
@@ -1025,7 +1046,7 @@ reading `devDependencies` finds a framework that is only there to drive tests.
 # The normative exclusion list is exactly these four -- see the walked-manifest bullet
 # under "Detection rules". This sample once added ".git", "dist" and "build", which
 # widened it beyond the rule and would have been copied as if authoritative.
-SKIP_DIRS = {"node_modules", ".venv", "venv", "vendor"}
+SKIP_DIRS = {"node_modules", ".venv", "venv", "vendor", ".git", ".claude"}
 
 def walk_manifests(root, filename):
     """Every manifest named `filename`, root first, vendored trees excluded."""
@@ -1538,7 +1559,7 @@ before being written down, not chosen.
 | 2 | UI testing inferred from a directory name | `frontend-testing` or `react-testing` firing on a `ui/` directory, or on jsdom alone | require render evidence: `render(`, `screen.`, `fireEvent`, `userEvent` |
 | 3 | Federated identity inferred from session tooling | `secure-oauth-oidc` firing on jwt / bcrypt / pyjwt | require an AS/client/RP library, or `.well-known`, or `redirect_uri` + `client_id` |
 | 4 | A development dependency read as a runtime one | a server framework present only to drive a test harness opening Q1 | server frameworks count only from `dependencies` |
-| 5 | A workspace root whose manifest declares nothing | the real signal three levels down being missed, or a vendored tree being read as source | walk nested manifests, excluding `node_modules`, `.venv`, `venv`, `vendor` |
+| 5 | A workspace root whose manifest declares nothing | the real signal three levels down being missed, or a vendored tree being read as source | walk nested manifests, excluding `node_modules`, `.venv`, `venv`, `vendor`, `.git`, `.claude` |
 | 6 | Architecture that is routinely hand-rolled | `event-driven` or `event-sourcing` auto-proposed, or false-negatived by manifest-only detection | content signals gate Q2 only; never auto-propose |
 | 7 | A virtual-environment check that knows one spelling | `venv` recognised and `.venv` missed, or the reverse | both directory names tested |
 
