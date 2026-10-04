@@ -12,16 +12,26 @@
 # This is the write-time counterpart to the `obsidian-plugin` skill's Step 11,
 # which only catches disables at audit time (i.e. after they were written).
 #
-# Scope gate — the hook stays silent unless ALL of these hold:
-#   1. The target file lives inside a git repository, and
-#   2. that repository looks like an Obsidian plugin
-#      (manifest.json with "minAppVersion", or package.json depending on
-#      "obsidian"), and
-#   3. the target file is not Markdown (docs legitimately quote the pattern).
+# A DENY requires ALL of these to hold:
+#   1. the target file is not Markdown (docs legitimately quote the pattern);
+#   2. the write actually introduces a violation (mirrors the grep patterns
+#      in obsidian-plugin/SKILL.md Step 11): the literal string
+#      `eslint-disable` in any file, or a rule mapped to "off" in an ESLint
+#      config file / package.json;
+#   3. the target file lives inside a git repository, and
+#   4. that repository looks like an Obsidian plugin (a manifest.json
+#      carrying "minAppVersion" at any depth, excluding node_modules/
+#      .venv/venv/vendor, or a root package.json depending on "obsidian").
 #
-# Detection (mirrors the grep patterns in obsidian-plugin/SKILL.md Step 11):
-#   - any file:    the literal string `eslint-disable` (line, block, file form)
-#   - ESLint config files and package.json: a rule mapped to "off"
+# Detection (#2) runs BEFORE the scope gate (#3-4), not in the order listed
+# above: #2 is a grep over the payload string and touches no filesystem,
+# while #4's nested-manifest walk costs ~158ms measured over a repo this
+# size. Almost every write carries no violation, so running detection first
+# exits the common (allow) path before that walk is ever reached — the AND
+# is commutative, so whichever side is cheaper to fail on goes first. The
+# scope gate's own root-level checks (manifest.json, package.json at the
+# repo root) are tried before the nested walk for the same reason: a
+# root-level Obsidian repo, the common shape, never pays it.
 #
 # Escape hatch: CLAUDE_ALLOW_ESLINT_DISABLE=1 in the environment.
 #
@@ -71,35 +81,10 @@ CONTENT=$(printf '%s' "$INPUT" | jq -r '
   | map(select(. != null)) | join("\n")' 2>/dev/null || true)
 [ -z "$CONTENT" ] && exit 0
 
-# ── Scope gate: is the target inside an Obsidian plugin repo? ──────────────
-# Walk up to the nearest existing ancestor — the file itself may not exist yet
-# and its parent directory may be created by the same tool call.
-DIR=$(dirname "$FILE_PATH")
-while [ ! -d "$DIR" ] && [ "$DIR" != "/" ] && [ -n "$DIR" ]; do
-  DIR=$(dirname "$DIR")
-done
-[ -d "$DIR" ] || exit 0
-
-REPO_DIR=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null || true)
-[ -z "$REPO_DIR" ] && exit 0
-
-IS_OBSIDIAN=0
-while IFS= read -r MANIFEST_CANDIDATE; do
-  if grep -q "minAppVersion" "$MANIFEST_CANDIDATE" 2>/dev/null; then
-    IS_OBSIDIAN=1
-    break
-  fi
-done < <(find "$REPO_DIR" \( -name node_modules -o -name .venv -o -name venv -o -name vendor \) \
-  -prune -o -name manifest.json -type f -print 2>/dev/null || true)
-
-if [ "$IS_OBSIDIAN" != "1" ] && [ -f "${REPO_DIR}/package.json" ] \
-  && jq -e '(.dependencies.obsidian // .devDependencies.obsidian) != null' \
-    "${REPO_DIR}/package.json" >/dev/null 2>&1; then
-  IS_OBSIDIAN=1
-fi
-[ "$IS_OBSIDIAN" = "1" ] || exit 0
-
 # ── Detection ─────────────────────────────────────────────────────────────
+# Moved ahead of the scope gate (below): a string grep over the payload,
+# free of filesystem access, so failing here first costs nothing on the
+# common path where no violation is present.
 VIOLATION=""
 MATCH=""
 
@@ -121,6 +106,48 @@ if [ -z "$VIOLATION" ]; then
 fi
 
 [ -z "$VIOLATION" ] && exit 0
+
+# ── Scope gate: is the target inside an Obsidian plugin repo? ──────────────
+# Reached only once a violation is already present above -- the rare path,
+# so the nested manifest walk a few lines down is no longer paid by every
+# edit to every git repo.
+#
+# Walk up to the nearest existing ancestor — the file itself may not exist yet
+# and its parent directory may be created by the same tool call.
+DIR=$(dirname "$FILE_PATH")
+while [ ! -d "$DIR" ] && [ "$DIR" != "/" ] && [ -n "$DIR" ]; do
+  DIR=$(dirname "$DIR")
+done
+[ -d "$DIR" ] || exit 0
+
+REPO_DIR=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null || true)
+[ -z "$REPO_DIR" ] && exit 0
+
+# Root-level checks first -- one stat+grep and one jq call, both near-free --
+# so a root-level Obsidian repo (the common shape) never reaches the nested
+# walk below. Only a monorepo whose manifest.json sits below the root
+# reaches it, and only for a write that already carries a violation.
+IS_OBSIDIAN=0
+if [ -f "${REPO_DIR}/manifest.json" ] && grep -q "minAppVersion" "${REPO_DIR}/manifest.json" 2>/dev/null; then
+  IS_OBSIDIAN=1
+fi
+
+if [ "$IS_OBSIDIAN" != "1" ] && [ -f "${REPO_DIR}/package.json" ] \
+  && jq -e '(.dependencies.obsidian // .devDependencies.obsidian) != null' \
+    "${REPO_DIR}/package.json" >/dev/null 2>&1; then
+  IS_OBSIDIAN=1
+fi
+
+if [ "$IS_OBSIDIAN" != "1" ]; then
+  while IFS= read -r MANIFEST_CANDIDATE; do
+    if grep -q "minAppVersion" "$MANIFEST_CANDIDATE" 2>/dev/null; then
+      IS_OBSIDIAN=1
+      break
+    fi
+  done < <(find "$REPO_DIR" \( -name node_modules -o -name .venv -o -name venv -o -name vendor \) \
+    -prune -o -name manifest.json -type f -print 2>/dev/null || true)
+fi
+[ "$IS_OBSIDIAN" = "1" ] || exit 0
 
 # ── Deny ──────────────────────────────────────────────────────────────────
 # Trim the matched line so the reason stays readable in the tool result.
