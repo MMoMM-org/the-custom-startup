@@ -70,7 +70,17 @@ def _require_tomllib() -> None:
 
 # Trap 5 + trap 7: excluded at every depth, for every file search, not only for
 # dependency manifests `[ref: SDD/Detection rules, "The walk excludes..."]`.
-SKIP_DIRS = {"node_modules", ".venv", "venv", "vendor"}
+#
+# `.git` and `.claude` added 2026-10-04 -- the same trap-5 family (an
+# embedded foreign tree read as the repository's own signal), found on
+# this actual repository: a vendored plugin cache under
+# `claude-docker-home/.claude/plugins/.../with-manifest-only/manifest.json`
+# made `detect('.')` propose `obsidian-plugin` for the-custom-startup
+# itself. `.claude/` holds installed Claude Code config, not stack
+# evidence, for a target repository's own copy too, so excluding it is
+# right on the merits independent of this bug. Measured: none of the 26
+# corpus fixtures depend on walking `.git` or `.claude`.
+SKIP_DIRS = {"node_modules", ".venv", "venv", "vendor", ".git", ".claude"}
 
 # Dependency-manifest filenames, walked at the nested, exclusion-aware depth
 # `[ref: SDD/Detection rules, "The walk excludes..."]`, and reported in
