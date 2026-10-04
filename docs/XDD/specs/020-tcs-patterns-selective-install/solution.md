@@ -793,9 +793,20 @@ three such places, and in each one a first-match entry would let a wrong impleme
 
 | Where | What the contents have to discriminate |
 |---|---|
-| `q1_backend`, Go | a direct require from a `// indirect` one, which the `gates` boolean cannot separate when both are server frameworks in one file |
+| `q1_backend`, every ecosystem | a runtime declaration from one excluded as development-only or transitive. Whenever an excluded framework sits beside a runtime one, the gate opens either way and only the contents say which was credited. Go's `// indirect` split is one instance of this, not a separate case |
 | `q2_architecture`, the triad | two `ports/` directories are two contributing signals; citing one under-reports |
 | `q2_architecture`, the union | q1 and a content signal both contributing, which no fixture can see because `gates` carries booleans |
+
+The first row was **not** in this table when it was written an hour earlier — it named only
+Go's `// indirect` split. Found by probing the scoped rule for a place it had missed, which is
+the check a scoping needs if it is not to be a convenience: the mixed case (`express` in
+`devDependencies` beside `fastapi` in `dependencies`) opens q1 under both a correct and an
+incorrect detector, so `gate-q1-node-runtime-dependency` and the paired dependency-source test,
+which assert only the boolean, are both satisfied by a detector that credits the development
+dependency. Measured: the implementation is correct in every case probed, and q1's evidence is
+genuinely complete — two runtime frameworks in one `package.json` cite both — but nothing asserted
+either property until `test_q1_evidence_omits_an_excluded_declaration_while_the_gate_still_opens`
+and `test_q1_evidence_lists_every_runtime_framework_not_only_the_first`.
 
 `q3_test_quality` has no such rule. Nothing is excluded from its evidence, so there is no wrong
 match for the contents to rule out, and a second Python config does not change the answer to "is

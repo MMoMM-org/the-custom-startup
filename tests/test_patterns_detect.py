@@ -704,3 +704,58 @@ def test_q3_evidence_is_one_signal_per_ecosystem_across_all_ecosystems(tmp_path)
     # Python contributes pytest.ini and not tox.ini; Go contributes a_test.go
     # and not b_test.go; both ecosystems are present.
     assert report["gate_evidence"]["q3_test_quality"] == ["a_test.go", "pytest.ini"]
+
+
+def test_q1_evidence_omits_an_excluded_declaration_while_the_gate_still_opens(tmp_path) -> None:
+    """The mixed case the boolean cannot see: a development-only framework
+    beside a runtime one. q1 opens either way, so only the evidence CONTENTS
+    distinguish a detector that correctly ignored `express` in
+    `devDependencies` from one that credited it
+    `[ref: SDD/Interface Specifications, "Where completeness binds, and where
+    one signal is a complete explanation"]`.
+
+    Found 2026-10-04 by probing whether the scoped completeness rule had missed
+    a place, after that rule was written naming three. It had: q1's
+    development-and-transitive exclusion is content-discriminated for EVERY
+    ecosystem, and Go's `// indirect` split -- which the rule did name -- is one
+    instance of it rather than a separate case. `gate-q1-node-runtime-dependency`
+    and the paired dependency-source test both assert only the boolean, which a
+    detector crediting the devDependency would still satisfy here.
+
+    Both halves asserted together: `fastapi` present, `express` absent, against
+    hand-typed literals.
+    """
+    (tmp_path / "package.json").write_text(
+        '{"name": "s", "version": "1.0.0", "devDependencies": {"express": "^4.18.0"}}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "requirements.txt").write_text("fastapi==0.104.0\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert report["gates"]["q1_backend"] is True
+    assert report["gate_evidence"]["q1_backend"] == ["requirements.txt: requirements.fastapi"]
+
+
+def test_q1_evidence_lists_every_runtime_framework_not_only_the_first(tmp_path) -> None:
+    """The completeness half of the same rule, which nothing asserted either:
+    two server frameworks declared as runtime dependencies are two contributing
+    signals, and citing one would under-report exactly as crediting only the
+    first-matched `go.mod` require would. Two in ONE manifest, so this cannot be
+    satisfied by a per-manifest loop that returns on its first hit.
+    """
+    (tmp_path / "package.json").write_text(
+        '{"name": "s", "version": "1.0.0", '
+        '"dependencies": {"express": "^4.18.0", "koa": "^2.14.0"}}\n',
+        encoding="utf-8",
+    )
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert report["gate_evidence"]["q1_backend"] == [
+        "package.json: dependencies.express",
+        "package.json: dependencies.koa",
+    ]
