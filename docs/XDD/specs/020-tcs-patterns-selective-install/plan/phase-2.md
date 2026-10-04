@@ -336,19 +336,55 @@ written from the specification rather than from the implementation.
      and the install unit `[ref: SDD/Runtime View]` — C5 copies one pattern directory, which is the
      whole reason this exists. Read `tests/test_tcs_patterns_catalogue_links.py`, whose resolution
      rule this reuses rather than reinvents.
-  2. Test: Assert the derived map equals the nine measured pairs exactly — `ddd`→`hexagonal`,
-     `event-driven`→`hexagonal`+`event-sourcing`, `event-sourcing`→`event-driven`+`hexagonal`,
-     `hexagonal`→`ddd`, `observability`→`hexagonal`. Assert the relation is treated as a cycle and
-     not a tree: `ddd`/`hexagonal` and `event-driven`/`event-sourcing` are mutual, so a naive
-     transitive closure must not recurse forever. Assert a tenth cross-pattern reference, injected
-     into a fixture, makes the test fail — a hardcoded table would pass and go stale.
+  2. Test: Assert the derived map equals the **seven measured pattern-to-pattern edges** exactly —
+     `ddd`→`hexagonal`, `event-driven`→`hexagonal`+`event-sourcing`,
+     `event-sourcing`→`event-driven`+`hexagonal`, `hexagonal`→`ddd`, `observability`→`hexagonal`.
+     Assert the relation is treated as a cycle and not a tree: `ddd`/`hexagonal` and
+     `event-driven`/`event-sourcing` are mutual, so a naive transitive closure must not recurse
+     forever. Assert a cross-pattern reference to a **new target**, injected into a fixture, makes
+     the test fail — a hardcoded table would pass and go stale.
+
+     **This step said "the nine measured pairs" three times until 2026-10-04 and then listed the
+     seven-edge table beneath it.** Both numbers are real and describe different things, re-measured
+     against the catalogue before this correction: **14** raw cross-pattern references, **9**
+     distinct (source pattern, cited *path*) pairs, **7** distinct (source, target) *edges*, which
+     is what the rows above sum to. Nine collapses to seven because two sources each cite two files
+     inside one target. The map is the seven edges — a companion is a pattern to add to a proposal,
+     not a path — so that is what the test asserts; the 9 and the 14 are provenance for how the 7
+     was found. An implementer reading the old text could have asserted either count and been
+     compliant, and AC-18 carried the same ambiguity.
   3. Implement: Derive the map by the link test's resolution rule: a code-span path resolving under
      no pattern root but another's is a companion edge. Expose it for C3 to read.
-  4. Validate: `python3 -m pytest -q`; confirm the derived map's nine pairs against the table in
-     the SDD.
+
+     **Read the 2026-10-04 clause "How the citations are actually written, and why the path rule is
+     the right one" before writing the derivation**
+     `[ref: SDD/Interface Specifications/Data model: companion map]`. The real citation shape is
+     not a `../` climb — a derivation written for that shape, which is what the link test's own
+     rule keys on, finds **zero edges**, measured. The path is relative to the **target** pattern's
+     root and a `tcs-patterns:<name>` marker names the target beside it:
+
+     ```
+     ddd/reference/testing-by-layer.md:3
+       … see `tcs-patterns:hexagonal` `reference/testing-hex-arch.md`.
+     ```
+
+     So: resolve each candidate against **every** pattern root, not against the citing file's
+     directory. Treat a path resolving under more than one other pattern as **ambiguous** rather
+     than picking one; zero are ambiguous today, which is worth asserting so that the day one
+     appears is the day the suite says so. And do **not** derive from the marker: it yields **43**
+     edges against the path rule's 7, because a marker means "mentions" while a path means
+     "breaks when installed alone", and the second is the defect this map exists to prevent. A
+     marker-derived map would add up to six companions to a single-pattern selection and justify
+     none of them.
+  4. Validate: `python3 -m pytest -q`; confirm the derived map's seven edges against the table in
+     the SDD, and that the 9 and the 14 appear nowhere as an assertion -- they are provenance.
   5. Success:
-     - [ ] The derived map equals the nine pairs `[ref: SDD/Acceptance Criteria/AC-18]`
-     - [ ] A tenth cross-pattern reference fails the test `[ref: SDD/Acceptance Criteria/AC-18]`
+     - [ ] The derived map equals the seven pattern-to-pattern edges, and the derivation is
+           keyed on paths resolving under another pattern's root rather than on the
+           `tcs-patterns:<name>` marker, which yields 43 `[ref: SDD/Acceptance Criteria/AC-18]`
+     - [ ] A cross-pattern reference to a new target fails the test `[ref: SDD/Acceptance Criteria/AC-18]`
+     - [ ] No candidate path resolves under more than one other pattern -- zero do today, and
+           the assertion is what makes the first one audible `[ref: SDD/Interface Specifications]`
      - [ ] The cycle does not cause unbounded recursion `[ref: SDD/Interface Specifications]`
      - [ ] Nothing is installed by the map alone — it produces a proposal the user can decline
            `[ref: ADR-8]`

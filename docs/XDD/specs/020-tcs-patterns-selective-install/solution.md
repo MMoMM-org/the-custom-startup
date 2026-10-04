@@ -636,6 +636,17 @@ Three distinctions the fixtures must preserve, because the two rules are deliber
 Nine pattern pairs cite each other's files, measured over the catalogue on 2026-10-03: 14
 references in total, reduced to nine distinct (pattern, cited path) pairs.
 
+**Three different counts, and the table below is the third — disambiguated 2026-10-04.** All
+three numbers above and below are correct, and re-measured against the catalogue on 2026-10-04 to
+confirm it: **14** raw cross-pattern references, **9** distinct (source pattern, cited *path*)
+pairs, **7** distinct (source pattern, target *pattern*) edges, which is what the table rows sum
+to. Nine collapses to seven because two sources each cite two different files inside one target.
+Stated because T2.4 said "the derived map equals the nine measured pairs" three times while
+listing the seven-edge table beneath it, so an implementer could assert either count and claim
+compliance, and AC-18 inherited the same ambiguity. **The map is the 7 pattern-to-pattern edges**
+— that is what C3 consumes, since a companion is a *pattern* to add to the proposal, not a path.
+The 9 and the 14 are provenance for how the 7 was found, not assertions the test makes.
+
 | Pattern | Cites a file living in |
 |---|---|
 | `ddd` | `hexagonal` |
@@ -655,9 +666,39 @@ selection is reachable, not hypothetical. Before this spec the defect was invisi
 
 **Derived, not hardcoded.** The map is computed from the catalogue by the same resolution rule the
 link test uses: a code-span path that resolves under no pattern root but its own, yet does resolve
-under another pattern's root, is a companion edge. A test asserts the derived map equals the nine
-pairs above, so adding a tenth cross-pattern reference either updates the map or fails the suite.
-A hardcoded table would silently go stale the first time a pattern's references changed.
+under another pattern's root, is a companion edge. A test asserts the derived map equals the seven
+edges above, so adding a cross-pattern reference to a new target either updates the map or fails
+the suite. A hardcoded table would silently go stale the first time a pattern's references changed.
+
+**How the citations are actually written, and why the path rule is the right one — measured
+2026-10-04.** The real shape is not a `../` climb, which is what the link test's own rule keys on,
+and a derivation written for that shape finds **nothing**:
+
+```
+ddd/reference/testing-by-layer.md:3
+  … see `tcs-patterns:hexagonal` `reference/testing-hex-arch.md`.
+```
+
+The path is relative to the **target** pattern's root, not to the citing file, and a
+`tcs-patterns:<name>` marker names the target beside it. So two derivations are available, and
+they describe different relations:
+
+| Derivation | Edges | What it means |
+|---|---|---|
+| the path rule, above | **7** | the citation would **dangle** if this pattern were installed alone |
+| the `tcs-patterns:<name>` marker | **43** | this pattern **mentions** that pattern |
+
+The path rule is correct for this map's purpose, and the measurement is what makes that an
+argument rather than an assumption: the map exists because C5 copies one directory, so the thing
+worth repairing is a path that resolves to nothing in the consumer repository. A marker with no
+accompanying path is prose — "see also `tcs-patterns:testing`" — and nothing breaks when it is
+absent. 43 is "mentions"; 7 is "breaks". An implementation keyed on the marker would add up to six
+companions to a single-pattern selection and justify none of them.
+
+Two consequences for T2.4: resolve each candidate path against **every** pattern root rather than
+against the citing file's directory, and treat a path that resolves under **more than one** other
+pattern as ambiguous rather than picking one. Zero are ambiguous today — measured — which is worth
+asserting so the day one appears is the day the suite says so.
 
 **Consumed as a proposal, never as a rule.** When the interview settles on a pattern, C3 adds its
 companions to the proposal with the reason stated — "`ddd`'s testing reference lives in
@@ -1451,7 +1492,7 @@ standing for two or three PRD criteria that assert the same behaviour from diffe
 | AC-15 | The catalogue reader prints a named pattern's body and writes nothing; an unknown name lists the 21 | F10 |
 | AC-16 | The proposal shows each entry's listing cost in characters, and lists baseline patterns separately from recommendations | F2 (4th, 5th) |
 | AC-17 | After `update`, every refreshed pattern's manifest version equals its catalogue `VERSION`, and currency is determinable from the manifest alone without reading any pattern file | F6 (3rd), F8 (3rd) |
-| AC-18 | The companion map derived from the catalogue equals the nine measured pairs; a new cross-pattern reference fails the test rather than shipping a pattern whose citation dangles once installed alone | F4, ADR-10 |
+| AC-18 | The companion map derived from the catalogue equals the **seven measured pattern-to-pattern edges**; a cross-pattern reference to a new target fails the test rather than shipping a pattern whose citation dangles once installed alone. Said "nine measured pairs" until 2026-10-04, which is the distinct (pattern, cited *path*) count and not the edge count the map is made of | F4, ADR-10 |
 
 ## Risks and Technical Debt
 
@@ -1471,7 +1512,7 @@ content.
 **Decision.** When the interview settles on a pattern, C3 adds its companions to the proposal with
 the reason stated, and the user may decline. The map is **derived** from the catalogue by the link
 test's resolution rule — a code-span path resolving under no pattern root but another's is a
-companion edge — and a test asserts the derived map equals the nine known pairs.
+companion edge — and a test asserts the derived map equals the seven known edges.
 
 **Alternatives considered.**
 
