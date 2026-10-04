@@ -125,22 +125,47 @@ def decide(report: Mapping, answers: Mapping[str, Iterable[str]] | None = None) 
     `[ref: SDD/Runtime View/Complex Logic, "There are four outcomes, not
     three"]`.
 
-    Raises `ValueError` if `report["auto"]` or `report["baseline"]` names a
-    gate-settled pattern -- `detect()` proposing e.g. `ddd` as a stack fact
-    is a detector bug, and a report like that cannot be partitioned
-    honestly. The alternative, silently dropping the name from `installed`,
-    is the worst outcome available: the four sets would still sum to 21 and
-    look exactly like a clean partition while hiding exactly the defect this
-    module exists to surface. Caught here because the corpus-wide test in
-    `tests/test_patterns_outcomes.py` only catches a leak from a fixture
-    `detect()` is actually run against in CI -- this raise catches it in
-    whatever session the detector starts misbehaving in, which is a
-    different moment.
+    Raises `ValueError` if `report["auto"]` or `report["baseline"]` names any
+    pattern outside `STACK_FACT_PATTERNS`. Today that always means a
+    gate-settled pattern -- `detect()` proposing e.g. `ddd` as if it were a
+    stack fact is a detector bug -- because `STACK_FACT_PATTERNS` and
+    `GATE_SETTLED_PATTERNS` exhaustively partition the 21 catalogue
+    directories (asserted in `tests/test_patterns_outcomes.py`). But the
+    condition this checks is narrower than that: it is "not one of the 8
+    stack facts", not "is one of the 13 gate-settled patterns" -- a 22nd
+    catalogue pattern added to neither table would trip this same raise
+    without being gate-settled at all. A report like that cannot be
+    partitioned honestly either way. The alternative, silently dropping the
+    name from `installed`, is the worst outcome available: the four sets
+    would still sum to 21 and look exactly like a clean partition while
+    hiding exactly the defect this module exists to surface. Caught here
+    because the corpus-wide test in `tests/test_patterns_outcomes.py` only
+    catches a leak from a fixture `detect()` is actually run against in CI
+    -- this raise catches it in whatever session the detector starts
+    misbehaving in, which is a different moment.
+
+    Also raises `ValueError`, naming the malformed entry, if an `auto` or
+    `baseline` entry has no `"pattern"` key -- every other malformed report
+    shape degrades safely elsewhere in this function (a missing `gates` key
+    puts all 13 in `not_reached`; an `answers` entry for a gate that is not
+    open, or that names a pattern its gate does not settle, is simply
+    ignored), so a bare `KeyError` here would be the one path that crashes
+    uninformatively instead.
     """
     answers = answers or {}
 
-    auto_names = {p["pattern"] for p in report.get("auto", [])}
-    baseline_names = {p["pattern"] for p in report.get("baseline", [])}
+    auto_names: set[str] = set()
+    for entry in report.get("auto", []):
+        if "pattern" not in entry:
+            raise ValueError(f"report['auto'] entry has no 'pattern': {entry!r}")
+        auto_names.add(entry["pattern"])
+
+    baseline_names: set[str] = set()
+    for entry in report.get("baseline", []):
+        if "pattern" not in entry:
+            raise ValueError(f"report['baseline'] entry has no 'pattern': {entry!r}")
+        baseline_names.add(entry["pattern"])
+
     fired = auto_names | baseline_names
 
     leaked_from_auto = sorted(auto_names - STACK_FACT_PATTERNS)
@@ -152,7 +177,7 @@ def decide(report: Mapping, answers: Mapping[str, Iterable[str]] | None = None) 
         if leaked_from_baseline:
             culprits.append(f"baseline: {leaked_from_baseline}")
         raise ValueError(
-            "report proposes a gate-settled pattern as a stack fact, which "
+            "report proposes a pattern outside STACK_FACT_PATTERNS, which "
             "decide() cannot partition honestly (" + "; ".join(culprits) + ")"
         )
 

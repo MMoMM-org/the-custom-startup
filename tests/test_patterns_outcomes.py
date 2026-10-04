@@ -103,6 +103,22 @@ EXPECTED_STACK_FACT_PATTERNS = frozenset(
     }
 )
 
+# Deliberately brittle, the same role `EXPECTED_CASE_COUNT` plays for the
+# fixture count -- re-derive by hand after adding a fixture, never from
+# `GATE_SETTLED_PATTERNS` itself. A table that collapsed (one gate's settled
+# set shrunk, say) would collapse this figure right along with it and
+# assert nothing, the same circularity the hand-typed literals above exist
+# to avoid. Measured against the real corpus: `q1_backend` opening always
+# brings `q2_architecture` open with it (the gate table's `or`), so no
+# fixture has q1 open alone, and none of the 26 opens all three at once.
+#
+#   15 fixtures, no gate open         -> 2**0             = 1  each -> 15
+#    4 fixtures, q3 open alone        -> 2**2             = 4  each -> 16
+#    4 fixtures, q2 open alone        -> 2**5             = 32 each -> 128
+#    3 fixtures, q1 and q2 both open  -> 2**6 * 2**5 = 2048    each -> 6144
+#                                                       15+16+128+6144 = 6303
+EXPECTED_ANSWER_COMBINATION_TOTAL = 6303
+
 
 def test_corpus_is_not_empty_here_either() -> None:
     """Standalone and non-parametrized, mirroring the same guard in
@@ -123,6 +139,28 @@ def test_gate_settled_group_matches_the_hand_typed_literal() -> None:
     it wherever both are wrong."""
     outcomes = _load_outcomes()
     assert outcomes.GATE_SETTLED_PATTERNS == EXPECTED_GATE_SETTLED_PATTERNS
+
+
+def test_gate_keys_match_what_detect_actually_emits() -> None:
+    """Closes a gap the code-quality reviewer measured directly: renaming a
+    key in `GATE_SETTLED_PATTERNS` is today only *transitively* defended --
+    this file's own `EXPECTED_GATE_SETTLED_PATTERNS` literal pins one side,
+    and `detect.py`'s own literal `gates = {...}` construction pins the
+    other (via `test_patterns_detect.py`'s comparisons against
+    `expected.json`) -- so the **same wrong key typed into both literals**
+    slips past both, and the exhaustive sweep below still partitions
+    cleanly: it only ever reads whichever key `GATE_SETTLED_PATTERNS`
+    happens to use, never detect()'s own `gates` dict, so disjointness and
+    the sum-to-21 hold regardless of which string is used. This ties the
+    two directly to close that gap, with no literal standing in for either
+    side -- any real fixture's report carries the three real gate keys,
+    since `_evaluate_gates` in detect.py always emits all three
+    `[ref: SDD/Runtime View/Complex Logic]`."""
+    outcomes = _load_outcomes()
+    detect = _load_detect()
+    fixtures = {f.name: f for f in discover_fixtures()}
+    report = detect.detect(fixtures["edge-bare-repository"].repo_dir)
+    assert set(outcomes.GATE_SETTLED_PATTERNS) == set(report["gates"])
 
 
 def test_stack_fact_group_matches_the_hand_typed_literal() -> None:
@@ -150,6 +188,28 @@ def test_the_two_groups_are_disjoint_and_union_to_the_21_catalogue_directories()
     )
     assert len(gate_settled) == 13
     assert len(stack_facts) == 8
+
+
+def test_total_answer_combinations_across_the_corpus_matches_the_hand_typed_total() -> None:
+    """The reviewer measured the answer space collapsing from 6,303 to a
+    fraction of that with nothing noticing, because nothing anywhere stated
+    6,303 -- the per-fixture, per-combination sweep
+    (`test_every_answer_combination_decides_each_of_the_21_exactly_once`)
+    checks a *property* of each combination it is given, not how many
+    combinations there should have been, so an enumeration bug that
+    silently returns fewer combinations per gate still passes every one it
+    does generate. This is the brittle count that would catch that: not
+    derived from `GATE_SETTLED_PATTERNS` (see `EXPECTED_ANSWER_COMBINATION_TOTAL`'s
+    comment for why), and not derived from this file's own `_answer_combinations`/
+    `_powerset` either -- it counts what they actually produce against the
+    real corpus and compares that count to the hand-typed total."""
+    outcomes = _load_outcomes()
+    detect = _load_detect()
+    total = 0
+    for fixture in discover_fixtures():
+        report = detect.detect(fixture.repo_dir)
+        total += sum(1 for _ in _answer_combinations(report, outcomes.GATE_SETTLED_PATTERNS))
+    assert total == EXPECTED_ANSWER_COMBINATION_TOTAL
 
 
 @pytest.mark.parametrize("fixture", discover_fixtures(), ids=lambda f: f.name)
@@ -212,6 +272,37 @@ def test_decide_raises_when_baseline_names_a_gate_settled_pattern() -> None:
     }
 
     with pytest.raises(ValueError, match="baseline"):
+        outcomes.decide(report, answers={})
+
+
+def test_decide_raises_a_named_error_when_an_auto_entry_has_no_pattern_key() -> None:
+    """The one malformed-report path that used to crash uninformatively --
+    a bare `KeyError: 'pattern'` -- while every other malformed shape this
+    module tolerates degrades safely: a missing `gates` key puts everything
+    in `not_reached` (see the closed-gate test above), and an `answers`
+    entry naming a pattern its gate does not settle is simply dropped by
+    the `& settled` intersection. This asserts the message names the
+    malformed entry, not just that *something* raised."""
+    outcomes = _load_outcomes()
+    report = {
+        "auto": [{"evidence": "constructed, no pattern key"}],
+        "baseline": [],
+        "gates": {"q1_backend": False, "q2_architecture": False, "q3_test_quality": False},
+    }
+
+    with pytest.raises(ValueError, match="auto.*no 'pattern'"):
+        outcomes.decide(report, answers={})
+
+
+def test_decide_raises_a_named_error_when_a_baseline_entry_has_no_pattern_key() -> None:
+    outcomes = _load_outcomes()
+    report = {
+        "auto": [],
+        "baseline": [{"evidence": "constructed, no pattern key", "surface": False}],
+        "gates": {"q1_backend": False, "q2_architecture": False, "q3_test_quality": False},
+    }
+
+    with pytest.raises(ValueError, match="baseline.*no 'pattern'"):
         outcomes.decide(report, answers={})
 
 
