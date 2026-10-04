@@ -769,6 +769,18 @@ is honest: what opened q2 there really was q1, and the report should say so rath
 `ports/` directory nobody found. Raised by T2.3's implementer as a genuine silence rather than
 quietly resolved, which is the behaviour the task asked for.
 
+**And when both are present, q2 lists both.** This clause covered only the pure-disjunct case when
+it was written, and a review then found the implementation already doing the broader thing: q1's
+evidence is folded in whenever it is non-empty, union'd with whatever content signals fired. That
+is correct and follows from the completeness rule below rather than needing one of its own — both
+really did contribute, so both are cited. Worth stating because the combined case is
+**unreachable through the corpus by construction**: `gates` carries booleans, so no fixture can
+distinguish "q2 opened" from "q2 opened for two reasons", and the exact-key guard forbids any
+`expected.json` from declaring `gate_evidence`. Every corpus case that opens q2 does so for
+exactly one reason. It is pinned instead by a direct test against a constructed tree carrying both
+an `express` dependency and an `event_store/` directory; mutating away either half of the union
+fails exactly that test and nothing else.
+
 **And a `gate_evidence` entry lists EVERY signal that contributed to that gate, not the first
 one found.** This is not a new shape — the example report above already gives `q2_architecture`
 two entries — but it has to be stated, because the `// indirect` discrimination collapses

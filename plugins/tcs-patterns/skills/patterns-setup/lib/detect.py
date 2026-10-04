@@ -751,14 +751,28 @@ def _broker_dependency_evidence(tree: _Tree) -> list[str]:
 
 def _gate_q2_architecture_evidence(tree: _Tree, q1_evidence: list[str]) -> list[str]:
     """Row `q2_architecture`: `q1_backend` opened, **or** any one weak
-    content signal. When it opens solely because `q1_backend` opened, the
-    justification for the one gate *is* the justification for the other, so
-    `q1_evidence` is folded in -- the alternative, an empty `gate_evidence`
-    entry for an open gate, violates the invariant this task is required to
-    hold `[ref: SDD/Interface Specifications, "every gate reported open has
-    a non-empty gate_evidence entry"]`. `trap-03`, `gate-q1-go-direct-require`
-    and `gate-q1-node-runtime-dependency` all open q2 this way, with no
-    content signal of its own present."""
+    content signal.
+
+    `q1_evidence` is folded in whenever it is non-empty -- **not only when q1
+    is the sole reason q2 opened**. Both halves of that follow from written
+    rules, and the docstring said "solely" until 2026-10-04 while the code
+    already did the broader thing, which a review caught:
+
+    - when q1 is the *only* reason, the justification for the one gate *is*
+      the justification for the other, and the alternative -- an empty
+      `gate_evidence` entry for an open gate -- violates the invariant this
+      task must hold `[ref: SDD/Interface Specifications, "every gate
+      reported open has a non-empty gate_evidence entry"]`;
+    - when a content signal is *also* present, both contributed, and an
+      entry lists every signal that contributed rather than one of them
+      `[ref: SDD/Interface Specifications, "lists EVERY signal that
+      contributed"]`.
+
+    `trap-03`, `gate-q1-go-direct-require` and `gate-q1-node-runtime-dependency`
+    cover the q1-only case. The combined case appears in no fixture, because
+    `gates` carries booleans and no `expected.json` may declare
+    `gate_evidence`; it is pinned by
+    `test_q2_evidence_unions_q1_and_a_content_signal` instead."""
     content_evidence = (
         _architecture_triad_evidence(tree)
         + _events_per_module_evidence(tree)

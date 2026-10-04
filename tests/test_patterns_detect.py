@@ -507,10 +507,19 @@ def test_the_gate_evidence_schema_and_repo_assertions_are_wired_into_the_real_te
 def test_q1_backend_gate_evidence_excludes_an_indirect_go_require(tmp_path) -> None:
     """Drives the real detector (not a fake) against a constructed `go.mod`
     with one direct and one indirect server-framework require, and asserts
-    exact equality against the independent computation above -- completeness
-    AND exclusivity in one fixture not drawn from the corpus, so this cannot
-    be satisfied by the corpus's one such case alone
-    `[ref: SDD/Interface Specifications, "gate-q1-go-direct-require"]`."""
+    exact equality against a **hand-typed literal** -- completeness AND
+    exclusivity on a tree not drawn from the corpus, so this cannot be
+    satisfied by the corpus's one such case alone
+    `[ref: SDD/Interface Specifications, "gate-q1-go-direct-require"]`.
+
+    The literal is the point, not an accident of convenience. An earlier
+    version of this test compared against a helper that re-parsed `go.mod`
+    in the test file, which imported nothing from `detect.py` but
+    re-implemented its module regex and its `"// indirect"` substring check
+    -- two copies of one piece of logic agree wherever that logic is wrong,
+    so the comparison proved call-site wiring and nothing about correctness.
+    The helper was removed; this docstring claimed to compare against it
+    until 2026-10-04, after it was gone."""
     (tmp_path / "go.mod").write_text(
         "module example.com/sample\n\ngo 1.22\n\n"
         "require (\n"
@@ -565,3 +574,37 @@ def test_a_current_interpreter_is_not_refused(tmp_path) -> None:
     present), `detect()` must not raise."""
     detect = _load_detect()
     detect.detect(tmp_path)
+
+
+def test_q2_evidence_unions_q1_and_a_content_signal(tmp_path) -> None:
+    """The combined case no fixture can reach: `q1_backend` open AND a weak
+    content signal present at the same time. `q2_architecture`'s evidence must
+    list BOTH, because an entry lists every signal that contributed
+    `[ref: SDD/Interface Specifications, "lists EVERY signal that
+    contributed"]`.
+
+    Unreachable through the corpus by construction, which is why it is here:
+    `gates` carries booleans, so a fixture cannot distinguish "q2 opened" from
+    "q2 opened for both reasons", and the exact-key guard forbids any
+    `expected.json` from declaring `gate_evidence`. Every corpus case that
+    opens q2 does so for exactly one reason.
+
+    Asserted against hand-typed literals rather than anything re-derived from
+    `detect.py`'s own logic.
+    """
+    (tmp_path / "package.json").write_text(
+        '{"name": "s", "version": "1.0.0", "dependencies": {"express": "^4.18.0"}}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "src" / "event_store").mkdir(parents=True)
+    (tmp_path / "src" / "event_store" / "schema.sql").write_text("-- events\n", encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert report["gates"]["q1_backend"] is True
+    assert report["gates"]["q2_architecture"] is True
+    assert report["gate_evidence"]["q2_architecture"] == [
+        "package.json: dependencies.express",
+        "src/event_store/",
+    ]
