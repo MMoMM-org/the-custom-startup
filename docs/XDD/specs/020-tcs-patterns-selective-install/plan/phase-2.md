@@ -334,12 +334,12 @@ written from the specification rather than from the implementation.
 
   1. Prime: Read the companion map contract `[ref: SDD/Interface Specifications/Data model: companion map]`
      and the install unit `[ref: SDD/Runtime View]` — C5 copies one pattern directory, which is the
-     whole reason this exists. Read `tests/test_tcs_patterns_catalogue_links.py`, whose resolution
-     rule this reuses rather than reinvents.
+     whole reason this exists. Read `tests/test_tcs_patterns_catalogue_links.py`, whose **extraction
+     plumbing** this reuses — and whose **resolution rule** it must not.
 
-     **That last sentence is half true, and the half that is false is the "resolution rule" —
-     checked 2026-10-04 before dispatch.** Reuse what is genuinely shared and do not reach for the
-     rest:
+     That sentence read "whose resolution rule this reuses rather than reinvents" until
+     2026-10-04. **Checked before dispatch, and the half about the resolution rule was false.**
+     Reuse what is genuinely shared and do not reach for the rest:
 
      | In `test_tcs_patterns_catalogue_links.py` | For T2.4 |
      |---|---|
@@ -404,8 +404,12 @@ written from the specification rather than from the implementation.
      not a path — so that is what the test asserts; the 9 and the 14 are provenance for how the 7
      was found. An implementer reading the old text could have asserted either count and been
      compliant, and AC-18 carried the same ambiguity.
-  3. Implement: Derive the map by the link test's resolution rule: a code-span path resolving under
-     no pattern root but another's is a companion edge. Expose **two** things for C3 to read:
+  3. Implement: Derive the map by a **new** resolution rule, reusing only the plumbing named in
+     step 1: a code-span path resolving under no pattern root but another's is a companion edge.
+     This sentence read "by the link test's resolution rule" until 2026-10-04 — the substance after
+     the colon was always right, the attribution never was, and leaving it there meant a reader of
+     this step met the false instruction twice before the correction below landed. Expose **two**
+     things for C3 to read:
      the seven-edge map itself, and a closure function that takes a set of selected patterns
      and returns the companions to propose. The closure carries a visited set; it excludes
      the selections themselves from its result, so a caller can present "and these come
