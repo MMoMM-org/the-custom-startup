@@ -116,10 +116,12 @@ fi
 
 [ -z "$VIOLATION" ] && exit 0
 
-# ── Scope gate: is the target inside an Obsidian plugin repo? ──────────────
-# Reached only once a violation is already present above -- the rare path,
-# so the nested manifest walk a few lines down is no longer paid by every
-# edit to every git repo.
+# ── Scope gate: is the target file itself inside an Obsidian plugin? ──────
+# Reached only once a violation is already present above. Detection is a
+# free string grep, so it settles most calls on its own -- the AND is
+# commutative and this is simply the cheaper side to fail on first; it is
+# no longer "keeping an expensive walk off the common path", since the
+# upward walk below costs 0.03ms regardless.
 #
 # Walk up to the nearest existing ancestor — the file itself may not exist yet
 # and its parent directory may be created by the same tool call.

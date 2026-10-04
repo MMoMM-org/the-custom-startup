@@ -94,7 +94,39 @@ def test_corpus_is_not_empty_here_either() -> None:
     )
 
 
-EXCLUDED_SEGMENTS = frozenset({"node_modules", ".venv", "venv", "vendor"})
+# Deliberately duplicated from detect.py's own `SKIP_DIRS`, not imported --
+# the same reasoning `EXPECTED_MANIFEST_NAMES` below gives for its own
+# duplication: if this were `frozenset(detect.SKIP_DIRS)` instead, a future
+# NARROWING of `SKIP_DIRS` (accidentally dropping `.claude`, say) would
+# narrow this check right along with it, so the detector could start citing
+# evidence from inside `.claude` again and this invariant would agree with
+# it by construction. Kept independent, it still catches that.
+#
+# The opposite drift -- `SKIP_DIRS` WIDENED without updating this literal --
+# is exactly what happened here: `.git` and `.claude` were added to
+# `detect.py:83` (spec-020 T2.6 follow-up, 2026-10-04) while this stayed at
+# four, so a proposal citing a path inside either would have gone
+# unasserted. `test_excluded_segments_matches_skip_dirs` below catches that
+# direction instead, asserting equality explicitly rather than by sharing
+# the value -- so the next addition to either side fails loudly here,
+# naming exactly which literal is behind.
+EXCLUDED_SEGMENTS = frozenset({"node_modules", ".venv", "venv", "vendor", ".git", ".claude"})
+
+
+def test_excluded_segments_matches_skip_dirs() -> None:
+    """The two drift risks the comment above describes are different
+    directions of the same mistake; this test is the standing guard against
+    the second one (`SKIP_DIRS` widened, this file not updated to match),
+    which is the one that just happened. It does not protect against the
+    first (a narrowing) -- that is `EXCLUDED_SEGMENTS` staying independent,
+    not this test, and is why this asserts equality rather than replacing
+    the literal with a derived one."""
+    detect = _load_detect()
+    assert EXCLUDED_SEGMENTS == frozenset(detect.SKIP_DIRS), (
+        f"tests/test_patterns_detect.py's EXCLUDED_SEGMENTS {sorted(EXCLUDED_SEGMENTS)} "
+        f"no longer matches detect.py's SKIP_DIRS {sorted(detect.SKIP_DIRS)} -- "
+        "update EXCLUDED_SEGMENTS (and its evidence invariants) to match"
+    )
 
 
 def _evidence_problems(entry: dict, repo_dir) -> list[str]:
