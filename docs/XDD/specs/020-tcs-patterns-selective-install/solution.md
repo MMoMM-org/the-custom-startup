@@ -366,7 +366,11 @@ docs/guides/tcs-patterns.md             MODIFIED  the guide the obsidian pattern
 
 ### Interface Specifications
 
-No database and no HTTP surface. The interfaces are four file formats and three process contracts.
+No database and no HTTP surface. The interfaces are **six data models** and three process
+contracts. Two of the six are not file formats and never reach disk: the **companion map**
+is derived in memory from the catalogue on every `companion_map()` call, and the **outcome
+partition** is a return value. Counted and corrected 2026-10-05 -- the sentence read "four
+file formats" while five data models followed it, and the sixth was missing entirely.
 
 #### Data model: catalogue entry (C1)
 
@@ -573,9 +577,13 @@ Three consequences the fixtures must assert rather than assume:
   fixture: it proposed `obsidian-plugin`, citing a `manifest.json` inside a vendored plugin
   cache at `claude-docker-home/.claude/plugins/cache/.../with-manifest-only/manifest.json`.
   That is trap 5's own family -- an embedded foreign tree read as this repository's signal --
-  with two directories the rule never enumerated. The same omission had made the write-time
-  Obsidian guard and this rule disagree, since the guard excludes `.git` and this walk did
-  not `[ref: SDD/ADR-7]`.
+  with two directories the rule never enumerated. At the time, the same omission also made the write-time
+  Obsidian guard and this rule disagree, because that guard then walked the tree downward
+  and pruned `.git` while this walk did not. **That half is now historical**: since the
+  guard became file-scoped later the same day it walks only upward and carries no exclusion
+  list at all, so there is no bash-side list to keep in sync with `SKIP_DIRS`. Corrected
+  2026-10-05 — as first written the sentence implied one, and a reader adding a seventh
+  segment would have gone looking for it `[ref: SDD/ADR-7, as amended]`.
 - **Residual, accepted rather than closed: tracked test fixtures fire most of the detector.**
   This clause first read "still proposes `obsidian-plugin`", citing one foreign fixture. That
   understated it by most of the report, and was corrected on 2026-10-05 after the Phase 2 drift
@@ -695,6 +703,46 @@ Three distinctions the fixtures must preserve, because the two rules are deliber
   explicitly because the directory-only reading is the tempting one, and a fixture will
   fix whichever reading its author happens to hold.
 
+
+#### Data model: the outcome partition (C2 → C3)
+
+Added 2026-10-05. The partition was specified only as prose arithmetic in
+`[ref: SDD/Runtime View/Complex Logic]` — `installed + declined-by-question +
+excluded-by-stack-fact + not-reached = 21` — which names no module, no function and no
+signature, so the one interface C3 consumes to build its outcome report had no contract while
+every other interface here had one. Found by the Phase 2 alignment check.
+
+```
+decide(report, answers=None) -> Outcomes          # lib/outcomes.py, pure
+
+Outcomes:  frozen, four frozensets, pairwise disjoint, union == the 21 catalogue names
+  installed                # a stack fact fired, OR an open gate's question selected it
+  declined_by_question     # an open gate's question did not select it
+  excluded_by_stack_fact   # a stack fact that did not fire
+  not_reached              # its gate stayed shut, so nobody was asked
+```
+
+- `report` is a detection report `[ref: SDD/Interface Specifications/Data model: detection
+  report]`. `answers` maps an **open** gate's name to the patterns selected for it; each gate is
+  multiSelect, so any subset including the empty one is valid.
+- **A closed gate is never consulted**, even if `answers` carries a key for it: a shut gate
+  produced no question, so there is nothing to have answered.
+- **The function touches no filesystem and re-scans nothing.** It needs the 21 names and the
+  gate-to-pattern mapping, neither of which the report carries, so the module holds that table
+  as a hand-copy of the *Settles* column of the gate table above. A test pins it to a separate
+  hand-typed literal and a second test ties its keys to the ones `detect()` actually emits —
+  the second was added after a reviewer renamed one key and watched six patterns of an **open**
+  gate land silently in `not_reached` while disjointness and the sum both held.
+- **Raises `ValueError`** on a report it cannot partition honestly: when `auto` or `baseline`
+  names a pattern outside the stack-fact set, and when an `auto`/`baseline` entry carries no
+  `pattern` key. The first exists because silently dropping such a name yields four sets that
+  still sum to 21 and look exactly like a clean partition — measured.
+
+**What this interface cannot check, stated because two defects hid there.** Disjointness and
+sum-to-21 see whether every name was assigned once; they see neither **provenance** nor whether
+the assignment was **correct**. A name decided by both a file signal and a question, and a name
+assigned to the wrong set, both leave the arithmetic intact. The two guards above exist for
+exactly those blind spots `[ref: SDD/Acceptance Criteria/AC-6]`.
 
 #### Data model: companion map (C1 → C2 → C3)
 
@@ -887,7 +935,7 @@ it `[ref: PRD/F2 1st]`, and it is T2.2's first success criterion — but `expect
 `evidence` key either, and the detection test does not compare one, so a detector emitting
 `evidence: ""` satisfies all 18 fixtures while failing the criterion outright. Declaring exact
 paths per fixture would be the wrong fix: it adds a key the exact-key guard rejects, and it
-pins 18 fixtures to incidental path strings.
+pins all 26 fixtures to incidental path strings.
 
 Assert it as three universal invariants instead, in the detection test:
 
