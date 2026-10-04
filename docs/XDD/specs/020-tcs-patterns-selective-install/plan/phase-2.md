@@ -532,7 +532,7 @@ written from the specification rather than from the implementation.
            one, because none opens all three gates — so the empty case needs a constructed report
            rather than a fixture `[ref: SDD/Runtime View/Complex Logic]`
 
-- [ ] **T2.6 The Obsidian rule agreement test, and the two divergences it exposed**
+- [x] **T2.6 The Obsidian rule agreement test, and the two divergences it exposed**
   `[activity: testing]` `[parallel: true]`
 
   1. Prime: Read ADR-7 `[ref: SDD/Architecture Decisions/ADR-7]`, the bash gate in
