@@ -17,7 +17,9 @@ phase: 2
 - `[ref: SDD/Interface Specifications/Data model: fixture expectation]` — `expected.json` and why
   `must_not_propose` is deliberately redundant
 - `[ref: SDD/Runtime View/Complex Logic]` — the gating traced step by step against a real stack,
-  ending in the 7 + 8 + 6 = 21 arithmetic
+  ending in the outcome arithmetic. **Four sets, not three** (2026-10-04): the traced stack opens
+  every gate, so its fourth set is empty and it reads `7 + 8 + 6 + 0 = 21`; a pattern behind a
+  *closed* gate belongs to none of the first three
 - `[ref: SDD/Implementation Examples]` — nested manifests and runtime-only dependencies
 - `[ref: SDD/Architecture Decisions/ADR-2]` — why this is Python
 - `[ref: SDD/Architecture Decisions/ADR-5]` — unrecognised stack versus closed gates
@@ -465,17 +467,44 @@ written from the specification rather than from the implementation.
   1. Prime: Read the arithmetic at the end of the walkthrough
      `[ref: SDD/Runtime View/Complex Logic]`. "Each of the 21 is decided exactly once" is F3's
      fourth criterion and is only a claim until something sums it.
-  2. Test: For every fixture, and for every combination of answers to the open gates, the three
-     outcome sets — installed, declined by question, excluded by stack fact — are pairwise disjoint
-     and their union is exactly the 21 pattern names. Generated over the answer space, not written
-     per case.
+  2. Test: For every fixture, and for every combination of answers to the open gates, the **four**
+     outcome sets — installed, declined by question, excluded by stack fact, and **not reached
+     because its gate stayed shut** — are pairwise disjoint and their union is exactly the 21
+     pattern names. Generated over the answer space, not written per case.
+
+     **This step said "three" until 2026-10-04 and no fixture could have satisfied it.** Computed
+     over all 26 before dispatch: a three-set partition covers the 21 in **zero** of them. A
+     pattern settled by a closed gate falls outside all three — nobody was asked, so it is neither
+     installed nor declined, and no stack fact excluded it. Twenty fixtures leave 8 or 13 patterns
+     unaccounted; the best case in the corpus still leaves 2, because no fixture opens all three
+     gates. The SDD's walkthrough satisfies the three-set form only because the stack it traces
+     opens every gate, which is exactly why the gap survived review
+     `[ref: SDD/Runtime View/Complex Logic, "There are four outcomes, not three"]`.
+
+     **The answer space is finite and small enough to enumerate.** Q1 settles 6 patterns, Q2
+     settles 5, Q3 settles 2, each multiSelect, so a fixture with all three gates open has
+     2^6 x 2^5 x 2^2 = 8192 answer combinations and a fixture with none has exactly one. Enumerate
+     rather than sample: the invariant must hold for every combination, and a sampled one that
+     holds says nothing about the rest.
   3. Implement: the partition function in `detect.py` (or a thin module beside it) that returns the
-     three sets, and the parametrized test that asserts the invariant.
+     **four** sets, and the parametrized test that asserts the invariant. A pattern's set must be
+     derivable from the report plus an answer set alone — the function takes the detection report
+     and the answers, and returns the partition; it does not re-scan anything.
   4. Validate: `python3 -m pytest -q`; introduce a deliberate double-assignment locally and confirm
      the test fails — an invariant test that cannot fail is decoration.
   5. Success:
-     - [ ] Disjoint and summing to 21 for every fixture and every answer combination `[ref: PRD/F3 4th; SDD/AC-6]`
+     - [ ] All **four** sets pairwise disjoint and summing to 21 for every fixture and every answer
+           combination `[ref: PRD/F3 4th; SDD/AC-6]`
      - [ ] The test demonstrably fails on a seeded double-assignment `[ref: SDD/Quality Requirements]`
+     - [ ] It also fails on a seeded **omission** — a pattern assigned to no set at all. That is the
+           failure mode the three-set formulation had in every one of the 26 fixtures, and a test
+           that only catches double-assignment would have passed the broken specification
+           `[ref: SDD/AC-6]`
+     - [ ] `not reached` is non-empty for at least one fixture and empty for at least one, so
+           neither state is asserted by accident. Measured 2026-10-04: 20 fixtures have a non-empty
+           fourth set under every answer combination, and **no** fixture in the corpus has an empty
+           one, because none opens all three gates — so the empty case needs a constructed report
+           rather than a fixture `[ref: SDD/Runtime View/Complex Logic]`
 
 - [ ] **T2.6 The Obsidian rule agreement test** `[activity: testing]` `[parallel: true]`
 

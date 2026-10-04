@@ -82,6 +82,13 @@ four passing test suites.
            `[ref: PRD/F3 3rd]`
      - [ ] Frontmatter parses; description is a routing contract `[ref: SDD/Quality Requirements]`
      - [ ] Proposal shows per-entry listing cost; baseline listed separately from recommendations `[ref: PRD/F2 4th, 5th; SDD/AC-16]`
+     - [ ] The outcome report distinguishes **not reached** from **excluded by stack fact**,
+           because they explain differently: "`typescript-strict` does not apply, no
+           `tsconfig.json` anywhere" is about the repository, while "you were not asked about
+           DDD, because nothing indicated a backend service" is about the detection -- and a
+           user who disagrees with the second must be able to see it and say so. Added
+           2026-10-04 with the fourth outcome set `[ref: SDD/AC-6; SDD/Runtime View/Complex
+           Logic, "There are four outcomes, not three"]`
      - [ ] Commit is offered and never performed unasked `[ref: PRD/F4 3rd, 4th; SDD/ADR-8]`
      - [ ] A walkthrough from a clean fixture reaches an installed selection `[ref: SDD/Runtime View/Primary Flow]`
      - [ ] Nothing is installed by the companion map alone: a selection's transitive companions

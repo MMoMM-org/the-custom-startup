@@ -776,7 +776,7 @@ reporting path needs to exist before one appears.
 **Consumed as a proposal, never as a rule.** When the interview settles on a pattern, C3 adds its
 companions to the proposal with the reason stated — "`ddd`'s testing reference lives in
 `hexagonal`" — and the user may still decline. Companions join the proposal **before** the outcome
-partition is computed, so the three sets stay disjoint and still sum to 21; a companion is
+partition is computed, so the four sets stay disjoint and still sum to 21; a companion is
 installed because the user accepted it, not because the map said so.
 
 #### Data model: fixture expectation (test suite)
@@ -1197,7 +1197,8 @@ STEP 4 — selection, and every one of the 21 decided exactly once
            test-design-reviewer                                          = 8
   excluded by stack fact: typescript-strict, go-idiomatic, obsidian-plugin,
            mcp-server, react-testing, frontend-testing                   = 6
-  7 + 8 + 6 = 21  ✓  no pattern decided twice, none left undecided
+  not reached (gate stayed shut):  none here -- all three gates opened   = 0
+  7 + 8 + 6 + 0 = 21  ✓  no pattern decided twice, none left undecided
 
 STEP 5 — names written: tcs-python-project, tcs-testing, tcs-api-design,
          tcs-bff-entry-points, tcs-twelve-factor, tcs-event-driven,
@@ -1206,7 +1207,29 @@ STEP 5 — names written: tcs-python-project, tcs-testing, tcs-api-design,
 ```
 
 The arithmetic in step 4 is not decoration. "Each of the 21 is decided exactly once" is F3's fourth
-acceptance criterion, and summing the three disjoint outcomes to 21 is how a fixture asserts it.
+acceptance criterion, and summing the disjoint outcomes to 21 is how a fixture asserts it.
+
+**There are four outcomes, not three — settled 2026-10-04 (Marcus), and this walkthrough is why
+the fourth was missed.** Every gate opens in the stack traced above, so every one of the thirteen
+gate-settled patterns is either installed or declined and the fourth set is empty. That is not the
+normal case. Computed across all 26 detection fixtures: a three-set partition covers the 21 in
+**zero** of them, because a pattern settled by a gate that stayed **shut** falls outside all
+three — nobody was asked, so it is neither installed nor declined by a question, and no stack fact
+excluded it either. Twenty of the 26 leave 8 or 13 patterns unaccounted for; the best case in the
+corpus still leaves 2, since no fixture opens all three gates.
+
+So the fourth outcome is **not reached: the gate that settles it stayed shut**, and the invariant
+is `installed + declined-by-question + excluded-by-stack-fact + not-reached = 21`.
+
+The distinction is worth a category rather than being folded into the third, because the two
+explain differently to the user. "`typescript-strict` does not apply — no `tsconfig.json` anywhere"
+is a statement about the repository. "You were not asked about DDD, because nothing indicated a
+backend service" is a statement about the **detection**, and a user who disagrees with it should
+be able to see it and say so. Collapsing them would put both under one heading and hide the second.
+
+This does not strain F3's own wording, which reads "decided exactly once — by a file signal or by
+one question, never both": a gate that stayed shut *is* a file signal deciding the matter. The
+four-way split reports which file signal decided, rather than adding a mechanism F3 does not have.
 
 ## Deployment View
 
@@ -1553,7 +1576,7 @@ standing for two or three PRD criteria that assert the same behaviour from diffe
 | AC-3 | For every detection fixture, the normalised report equals `expected.json` exactly | F2, F3 |
 | AC-4 | A fixture with a populated `node_modules` and an empty root `dependencies` still finds the nested signal, and does not report anything from the vendored tree | F2, trap 5 |
 | AC-5 | A fixture with no server framework and no test framework yields all gates closed and no questions | F3 |
-| AC-6 | For every fixture, the three outcome sets — installed, declined by question, excluded by stack fact — are disjoint and sum to 21 | F3 |
+| AC-6 | For every fixture and every combination of answers to the open gates, the **four** outcome sets — installed, declined by question, excluded by stack fact, and **not reached because its gate stayed shut** — are pairwise disjoint and sum to 21. Said "three" until 2026-10-04, which no fixture could satisfy: a three-set partition covers the 21 in **zero** of the 26, because a pattern behind a closed gate falls outside all three `[ref: SDD/Runtime View/Complex Logic, "There are four outcomes, not three"]` | F3 |
 | AC-7 | An install writes exactly the chosen patterns under `tcs-<name>`, each with `name: tcs-<name>` in its frontmatter, and the manifest records version, installed name and hash for each | F4, F6 |
 | AC-8 | A pattern installed into a fixture repository appears in that repository's skill listing in a following session | F4 |
 | AC-9 | The install reports its writes, states that it did not commit, and commits only when the user accepts | F4, ADR-8 |
