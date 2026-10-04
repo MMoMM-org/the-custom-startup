@@ -139,12 +139,20 @@ if [ "$IS_OBSIDIAN" != "1" ] && [ -f "${REPO_DIR}/package.json" ] \
 fi
 
 if [ "$IS_OBSIDIAN" != "1" ]; then
+  # Process substitution here relies on running as this script's own
+  # subprocess, which is how every caller (Claude Code, bats) invokes it; it
+  # would break on /dev/fd/N if this file were ever sourced instead of run.
+  #
+  # .git is pruned alongside node_modules/.venv/venv/vendor -- not because a
+  # plugin's manifest.json could ever live there, but because walking it
+  # costs real time on a repo this size (measured: ~32ms of the walk's
+  # total) for zero possible payoff.
   while IFS= read -r MANIFEST_CANDIDATE; do
     if grep -q "minAppVersion" "$MANIFEST_CANDIDATE" 2>/dev/null; then
       IS_OBSIDIAN=1
       break
     fi
-  done < <(find "$REPO_DIR" \( -name node_modules -o -name .venv -o -name venv -o -name vendor \) \
+  done < <(find "$REPO_DIR" \( -name node_modules -o -name .venv -o -name venv -o -name vendor -o -name .git \) \
     -prune -o -name manifest.json -type f -print 2>/dev/null || true)
 fi
 [ "$IS_OBSIDIAN" = "1" ] || exit 0
