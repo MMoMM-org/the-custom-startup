@@ -178,7 +178,12 @@ written from the specification rather than from the implementation.
      the gates by construction. Do not rework it; confirm it still holds once gates are live,
      since the whole point of ADR-5's clause is that an open gate must not flip the flag.
   4. Validate: all 18 fixtures green — `python3 -m pytest tests/test_patterns_detect.py -q`
-     reports `19 passed`, exit 0, the 18 comparisons plus the standalone corpus guard. Then
+     reports **`26 passed`** plus whatever this task adds, exit 0. The figure was `19` until
+     2026-10-04 and was stale: it counted the 18 comparisons plus the standalone corpus guard,
+     written before T2.1 and T2.2 added the four evidence-invariant tests, the wiring test and
+     the two interpreter tests. Measured at `3fc2b2a`: 26 collected, 6 failed / 20 passed. A
+     target figure nobody re-measures is the same defect class as an unasserted field — count
+     the file, do not inherit the number. Then
      `python3 -m pytest -q`. This task inherits **6 red fixtures** from T2.2 and its job is
      to turn exactly those green: `auto-testing-baseline`,
      `edge-unrecognised-stack-with-tests`, `trap-01` and `trap-02` (q3), `trap-03` (q1+q2),
