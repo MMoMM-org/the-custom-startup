@@ -277,6 +277,16 @@ def write(manifest: Manifest, repo_dir: Path) -> None:
     The temp file is created inside `.claude/skills/` (never `$TMPDIR`) so
     the final `os.replace` is a same-filesystem rename, not a copy -- see the
     module docstring. The directory is created if this is the first write.
+
+    **Raises `ValueError` on a `None` bundle, which `read()` can hand you.**
+    `read()` returns `Manifest(bundle=None, patterns={})` for an absent file,
+    and `_serialize` refuses that -- so `write(read(repo), repo)` on a fresh
+    repository raises. No caller reaches it today: the only `write()` call in
+    this module is inside `upsert()`, which always builds a new `Manifest`
+    through `with_pattern(..., bundle=...)` first. Named here because the type
+    does not encode the constraint, so a future C5 or C7 doing read-then-write
+    without an upsert in between is the one way to hit it. Found by T3.1's
+    spec-compliance review and measured, 2026-10-05.
     """
     content = _serialize(manifest)
     path = _manifest_path(repo_dir)

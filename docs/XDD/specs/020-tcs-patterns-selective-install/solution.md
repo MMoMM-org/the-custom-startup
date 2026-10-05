@@ -408,6 +408,13 @@ installed_as = "tcs-hexagonal"
 sha256 = "41ac…"
 ```
 
+**The inline `#` comments in that example are annotation for the reader of this document, not
+content the written file carries.** The header comment on the first line *is* content and is
+written byte-for-byte; the per-field comments are not, and neither is the `"9f2b…"` ellipsis.
+Stated 2026-10-05 after T3.1's spec-compliance review had to decide which it was and reasoned its
+way to the right answer with nothing to cite — a second implementer could as easily have emitted
+them and been equally defensible.
+
 The hash covers the installed `SKILL.md` only, not the whole subtree. A reference file edited
 locally is a weaker signal of intent than an edited body, and hashing 80 files to catch it is not
 worth the cost. Stated here so the limit is deliberate rather than discovered.
