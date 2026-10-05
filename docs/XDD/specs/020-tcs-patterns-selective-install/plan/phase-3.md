@@ -499,6 +499,14 @@ writing is allowed, and an installer that is honest about what it did.
   load-bearing one — caught by 7 tests including the one built for exactly this), and a
   `frozenset()` default on the parameter.
 
+  **Gate found a fifth, 2026-10-05.** `name.lower() in {o.lower() for o in own_installed}` passed
+  all 53 — a real hazard, not cosmetic: `own_installed` is lowercase by construction
+  (`manifest.py`'s `_INSTALLED_AS_RE`) while a registered name comes from a third party's
+  frontmatter and can be any case, so a case-insensitive match would exempt a genuinely-taken
+  `TCS-OURS` as if it were our own `tcs-ours`. `guard.py`'s exact `in` comparison was already
+  correct; only the test was missing. `f50ca9d` adds it, no production change. Guard suite 54
+  passed (53 + 1); whole suite 1106 passed, 1 skipped, 1 deselected.
+
 - [ ] **T3.3 The installer** `[activity: backend-api]`
 
   1. Prime: Read the rename example and its refusal
