@@ -110,14 +110,18 @@ EXPECTED_STACK_FACT_PATTERNS = frozenset(
 # assert nothing, the same circularity the hand-typed literals above exist
 # to avoid. Measured against the real corpus: `q1_backend` opening always
 # brings `q2_architecture` open with it (the gate table's `or`), so no
-# fixture has q1 open alone, and none of the 26 opens all three at once.
+# fixture has q1 open alone, and none of the 27 opens all three at once.
 #
-#   15 fixtures, no gate open         -> 2**0             = 1  each -> 15
+#   16 fixtures, no gate open         -> 2**0             = 1  each -> 16
 #    4 fixtures, q3 open alone        -> 2**2             = 4  each -> 16
 #    4 fixtures, q2 open alone        -> 2**5             = 32 each -> 128
 #    3 fixtures, q1 and q2 both open  -> 2**6 * 2**5 = 2048    each -> 6144
-#                                                       15+16+128+6144 = 6303
-EXPECTED_ANSWER_COMBINATION_TOTAL = 6303
+#                                                       16+16+128+6144 = 6304
+#
+# 6303 -> 6304 on 2026-10-05: `auto-mcp-server-poetry-dev-group` opens no gate
+# (that is the point of it -- `fastapi` sits in a development group and trap 4
+# keeps q1 shut), so it contributes exactly one combination to the no-gate row.
+EXPECTED_ANSWER_COMBINATION_TOTAL = 6304
 
 
 def test_corpus_is_not_empty_here_either() -> None:

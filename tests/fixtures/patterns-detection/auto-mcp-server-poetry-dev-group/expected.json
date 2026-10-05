@@ -1,0 +1,17 @@
+{
+  "auto": [
+    "python-project",
+    "mcp-server"
+  ],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "api-design"
+  ],
+  "unrecognised_stack": false,
+  "why": "align F4 -- a stack fact reads the development section outside package.json, a gate does not. mcp in [tool.poetry.group.dev.dependencies] is mcp-server evidence, because a repository declaring the MCP SDK as a development dependency is still an MCP server. fastapi sits in the SAME group and must NOT open q1_backend (trap 4): a framework present only to drive tooling does not make this repository run a service, so api-design must not arrive. Both halves live in one tree deliberately -- the readers are shared between the stack facts and the gate, so a fixture asserting only the firing half would pass against a change that widened both"
+}

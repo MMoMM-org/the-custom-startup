@@ -25,10 +25,12 @@ Obsidian plugin), once with clean content (a DENY here would mean the gate
 fired on something other than the violation, which is a bug in the probe or
 the hook, not a disagreement worth reporting as one).
 
-Corpus agreement over the 26 fixtures holds already and is nearly powerless on
-its own: 25 of them are non-Obsidian and only `auto-obsidian-plugin` is. A hook
-that never denies passes 25 of 26; a Python rule that never proposes passes
-25 of 26. The corpus is the floor, not the proof -- which is why the
+Corpus agreement over the 27 fixtures holds already and is nearly powerless on
+its own: 26 of them are non-Obsidian and only `auto-obsidian-plugin` is. A hook
+that never denies passes 26 of 27; a Python rule that never proposes passes
+26 of 27 -- and the ratio gets *worse* with every non-Obsidian fixture added, so
+this paragraph is a standing reason not to read a green corpus as evidence here.
+The corpus is the floor, not the proof -- which is why the
 constructed trees below are the substance of this task. Two are real,
 measured bugs in the hook (closed 2026-10-04), each in the opposite direction,
 neither reachable from any fixture in the corpus:

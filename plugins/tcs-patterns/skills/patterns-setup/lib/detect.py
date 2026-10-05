@@ -265,32 +265,85 @@ def _requirements_txt_deps(path: Path) -> list[str]:
 
 
 _SETUP_PY_INSTALL_REQUIRES_RE = re.compile(r"install_requires\s*=\s*\[(.*?)\]", re.DOTALL)
+_SETUP_PY_EXTRAS_REQUIRE_RE = re.compile(r"extras_require\s*=\s*\{(.*?)\}", re.DOTALL)
+_BRACKETED_LIST_RE = re.compile(r"\[(.*?)\]", re.DOTALL)
 _QUOTED_RE = re.compile(r"""["']([^"']+)["']""")
 
 
-def _setup_py_deps(path: Path) -> list[str]:
-    """Best-effort: `setup.py` is executable Python, not data, so this is a
-    regex scan of `install_requires=[...]` rather than a real parse. A
-    repository with no such literal list yields nothing, never a crash."""
+def _setup_py_deps(path: Path) -> tuple[list[str], list[str]]:
+    """Returns (`install_requires` names, `extras_require` names) --
+    runtime and development-or-optional, kept apart for the same reason
+    `_node_deps` keeps `dependencies` and `devDependencies` apart: a **gate**
+    may read only the first `[ref: SDD/The three gates, trap 4]` while a
+    **stack fact** reads both `[ref: SDD/Which declaration counts as
+    `dependencies` outside `package.json`]`. Returning one merged list would
+    open `q1_backend` on a test-only `gin`, which is trap 4 exactly.
+
+    Best-effort: `setup.py` is executable Python, not data, so this is a regex
+    scan rather than a real parse. A repository with no such literal yields
+    nothing, never a crash.
+
+    `extras_require` is a dict of lists, so its quoted strings include the
+    EXTRA NAMES as well as the requirements. Only the bracketed lists inside
+    the block are scanned -- collecting every quoted string would report the
+    extra `"server"` in `extras_require={"server": ["mcp"]}` as a dependency
+    named `server`."""
     text = _read_text(path)
     if text is None:
-        return []
+        return [], []
+
+    def _names(blob: str) -> list[str]:
+        out = []
+        for quoted in _QUOTED_RE.findall(blob):
+            match = _REQUIREMENT_NAME_RE.match(quoted)
+            if match:
+                out.append(match.group(1).lower())
+        return out
+
+    runtime: list[str] = []
     block = _SETUP_PY_INSTALL_REQUIRES_RE.search(text)
-    if not block:
-        return []
-    names = []
-    for quoted in _QUOTED_RE.findall(block.group(1)):
-        match = _REQUIREMENT_NAME_RE.match(quoted)
-        if match:
-            names.append(match.group(1).lower())
-    return names
+    if block:
+        runtime = _names(block.group(1))
+
+    extras: list[str] = []
+    extras_block = _SETUP_PY_EXTRAS_REQUIRE_RE.search(text)
+    if extras_block:
+        for listed in _BRACKETED_LIST_RE.findall(extras_block.group(1)):
+            extras.extend(_names(listed))
+
+    return runtime, extras
 
 
 _PYTEST_INI_OPTIONS_RE = re.compile(r"^\s*\[tool\.pytest\.ini_options\]", re.MULTILINE)
 
 
-def _pyproject_deps_and_pytest(path: Path) -> tuple[list[str], bool]:
-    """Returns (dependency names, has a `[tool.pytest.ini_options]` table).
+def _pyproject_deps_and_pytest(path: Path) -> tuple[list[str], dict[str, str], bool]:
+    """Returns (runtime dependency names, development dependencies as
+    name -> declaring section, has a `[tool.pytest.ini_options]` table).
+
+    **Runtime and development are returned separately, and only the runtime
+    half may reach a gate** -- the same split `_node_deps` makes, for the same
+    reason: `q1_backend` asks whether this repository *runs a service*, and a
+    framework present only to drive a test harness does not make it one
+    (trap 4). A stack fact reads both halves `[ref: SDD/Which declaration
+    counts as `dependencies` outside `package.json`]`.
+
+    Development means `[tool.poetry.group.*.dependencies]`, the actual
+    `devDependencies` analogue. **`[project.optional-dependencies]` is
+    deliberately excluded** from both halves: an extra describes an optional
+    *feature* of the distribution, not the tooling its authors develop with,
+    so `mcp` behind an extra named `server` says this package can optionally
+    speak MCP, not that this repository is an MCP server. Decided by Marcus on
+    2026-10-05 when the alignment check found that the document promised both
+    sections everywhere and the code read runtime only outside
+    `package.json`.
+
+    The mapping carries the declaring section rather than a bare list so the
+    evidence string can name it -- `tool.poetry.group.dev.dependencies.mcp`,
+    not `dependencies.mcp`. Written this way because the merged runtime label
+    had just been recorded as a reporting defect in the same session
+    `[ref: SDD/The two `pyproject.toml` sources are merged]`, and reproducing
+    it in new code would be a known fault committed on purpose.
     Requires `tomllib` -- `detect()` calls `_require_tomllib()` before this
     function is ever reached, so a pre-3.11 interpreter never gets here.
     There is deliberately no regex fallback any more: the one that used to
@@ -300,19 +353,20 @@ def _pyproject_deps_and_pytest(path: Path) -> tuple[list[str], bool]:
     Decisions/ADR-2, "The 3.11 floor"]`."""
     text = _read_text(path)
     if text is None:
-        return [], False
+        return [], {}, False
 
     has_pytest_table = bool(_PYTEST_INI_OPTIONS_RE.search(text))
 
     try:
         data = tomllib.loads(text)
     except tomllib.TOMLDecodeError:
-        return [], has_pytest_table
+        return [], {}, has_pytest_table
 
     if not isinstance(data, dict):
-        return [], has_pytest_table
+        return [], {}, has_pytest_table
 
     names: list[str] = []
+    dev: dict[str, str] = {}
     project = data.get("project")
     if isinstance(project, dict):
         for dep in project.get("dependencies") or []:
@@ -326,7 +380,20 @@ def _pyproject_deps_and_pytest(path: Path) -> tuple[list[str], bool]:
             poetry_deps = poetry.get("dependencies")
             if isinstance(poetry_deps, dict):
                 names.extend(k.lower() for k in poetry_deps if k != "python")
-    return names, has_pytest_table
+            groups = poetry.get("group")
+            if isinstance(groups, dict):
+                for group_name, group in groups.items():
+                    if not isinstance(group, dict):
+                        continue
+                    group_deps = group.get("dependencies")
+                    if not isinstance(group_deps, dict):
+                        continue
+                    section = f"tool.poetry.group.{group_name}.dependencies"
+                    for key in group_deps:
+                        if key == "python":
+                            continue
+                        dev.setdefault(key.lower(), section)
+    return names, dev, has_pytest_table
 
 
 _GO_REQUIRE_LINE_RE = re.compile(r"^([A-Za-z0-9._\-/]+)\s+v\S+")
@@ -456,13 +523,21 @@ def _rule_mcp_server(tree: _Tree) -> Optional[_Proposal]:
             return _Proposal("mcp-server", f"{tree.rel(req_path)}: requirements.{MCP_PY_DEP}")
 
     for pyproject_path in tree.files_named("pyproject.toml"):
-        deps, _has_pytest = _pyproject_deps_and_pytest(pyproject_path)
+        deps, dev_deps, _has_pytest = _pyproject_deps_and_pytest(pyproject_path)
         if MCP_PY_DEP in deps:
             return _Proposal("mcp-server", _fmt_dep_evidence(tree, pyproject_path, "dependencies", MCP_PY_DEP))
+        if MCP_PY_DEP in dev_deps:
+            return _Proposal(
+                "mcp-server",
+                _fmt_dep_evidence(tree, pyproject_path, dev_deps[MCP_PY_DEP], MCP_PY_DEP),
+            )
 
     for setup_path in tree.files_named("setup.py"):
-        if MCP_PY_DEP in _setup_py_deps(setup_path):
+        install_requires, extras = _setup_py_deps(setup_path)
+        if MCP_PY_DEP in install_requires:
             return _Proposal("mcp-server", f"{tree.rel(setup_path)}: install_requires.{MCP_PY_DEP}")
+        if MCP_PY_DEP in extras:
+            return _Proposal("mcp-server", f"{tree.rel(setup_path)}: extras_require.{MCP_PY_DEP}")
 
     for go_mod_path in tree.files_named("go.mod"):
         if MCP_GO_MODULE in _go_mod_requires(go_mod_path):
@@ -553,7 +628,7 @@ def _python_testing_framework_evidence(tree: _Tree) -> Optional[_Proposal]:
             return _Proposal("testing", tree.rel(found[0]))
 
     for pyproject_path in tree.files_named("pyproject.toml"):
-        _deps, has_pytest_table = _pyproject_deps_and_pytest(pyproject_path)
+        _deps, _dev, has_pytest_table = _pyproject_deps_and_pytest(pyproject_path)
         if has_pytest_table:
             return _Proposal("testing", f"{tree.rel(pyproject_path)}: [tool.pytest.ini_options]")
 
@@ -678,12 +753,17 @@ def _gate_runtime_dependency_evidence(tree: _Tree, node_names: set[str], python_
             if name in python_names:
                 evidence.append(f"{tree.rel(req_path)}: requirements.{name}")
     for pyproject_path in tree.files_named("pyproject.toml"):
-        deps, _has_pytest = _pyproject_deps_and_pytest(pyproject_path)
+        # Runtime only, deliberately: `dev_deps` is discarded here even
+        # though the stack facts above now read it. A gate that read it would
+        # open `q1_backend` on a framework present solely to drive tests,
+        # which is trap 4 `[ref: SDD/The three gates]`.
+        deps, _dev_deps, _has_pytest = _pyproject_deps_and_pytest(pyproject_path)
         for name in deps:
             if name in python_names:
                 evidence.append(_fmt_dep_evidence(tree, pyproject_path, "dependencies", name))
     for setup_path in tree.files_named("setup.py"):
-        for name in _setup_py_deps(setup_path):
+        # `extras_require` discarded for the same trap-4 reason as above.
+        for name in _setup_py_deps(setup_path)[0]:
             if name in python_names:
                 evidence.append(f"{tree.rel(setup_path)}: install_requires.{name}")
     return evidence

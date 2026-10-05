@@ -1,0 +1,11 @@
+[tool.poetry]
+name = "sample-mcp-tooling"
+version = "1.0.0"
+description = "A library whose MCP server support is a development concern"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+[tool.poetry.group.dev.dependencies]
+mcp = "^1.0.0"
+fastapi = "^0.110.0"

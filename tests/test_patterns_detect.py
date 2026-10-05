@@ -966,3 +966,167 @@ def test_a_manifest_in_undecodable_bytes_is_not_fatal(tmp_path) -> None:
     assert report["auto"] == []
     assert report["gates"]["q1_backend"] is False
     assert report["manifests_walked"] == ["package.json"]
+
+
+# ---------------------------------------------------------------------------
+# align F4: a stack fact reads the development section, a gate does not
+# ---------------------------------------------------------------------------
+# `solution.md` rules that a STACK FACT reads both the runtime and the
+# development dependency section while a GATE reads runtime only (trap 4).
+# Measured 2026-10-05, that held for `package.json` alone: outside it the code
+# read runtime declarations only, so `mcp` in a poetry development group did
+# not fire `mcp-server`. Marcus's decision was to widen the code to the TRUE
+# `devDependencies` analogue -- `[tool.poetry.group.*.dependencies]` and
+# `setup.py`'s `extras_require` -- and to keep `[project.optional-dependencies]`
+# out, because an extra describes an optional FEATURE of the distribution
+# rather than the tooling its authors develop with.
+#
+# The risk the widening had to avoid: both readers are shared with
+# `_gate_runtime_dependency_evidence`, so widening them in place would have
+# opened `q1_backend` on a test-only framework and reintroduced trap 4. They
+# return runtime and development separately instead. The fixture
+# `auto-mcp-server-poetry-dev-group` pins the pyproject half and trap 4
+# together in one tree; these cover the setup.py path and the exclusions.
+
+
+def test_a_stack_fact_reads_a_poetry_development_group_and_names_the_section(tmp_path) -> None:
+    """The evidence must name the section that actually declared the
+    dependency, not the merged `dependencies` label. That label was recorded
+    as a reporting defect in the same session (drift F4: a poetry runtime
+    dependency cites `pyproject.toml: dependencies.<name>` and sends a reader
+    to a `[project]` table that may not exist), so reproducing it in the new
+    development path would have been a known fault committed on purpose.
+    """
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.poetry]\nname = "x"\n'
+        '[tool.poetry.group.dev.dependencies]\nmcp = "^1.0.0"\n',
+        encoding="utf-8",
+    )
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    mcp = [e for e in report["auto"] if e["pattern"] == "mcp-server"]
+    assert mcp, "mcp in a poetry development group is mcp-server evidence"
+    assert mcp[0]["evidence"] == "pyproject.toml: tool.poetry.group.dev.dependencies.mcp"
+
+
+def test_the_declaring_group_is_named_even_when_it_is_not_called_dev(tmp_path) -> None:
+    """Poetry group names are arbitrary. Hardcoding `dev` into the label would
+    pass the test above and misreport every other group, which is the same
+    class of defect as the merged runtime label.
+    """
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.poetry]\nname = "x"\n'
+        '[tool.poetry.group.integration.dependencies]\nmcp = "^1.0.0"\n',
+        encoding="utf-8",
+    )
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    mcp = [e for e in report["auto"] if e["pattern"] == "mcp-server"]
+    assert mcp
+    assert mcp[0]["evidence"] == (
+        "pyproject.toml: tool.poetry.group.integration.dependencies.mcp"
+    )
+
+
+def test_a_stack_fact_reads_setup_py_extras_require(tmp_path) -> None:
+    """The `setup.py` half of the same rule. `install_requires` is present and
+    does NOT carry `mcp`, so this cannot pass by the runtime path.
+    """
+    (tmp_path / "setup.py").write_text(
+        'setup(name="x", install_requires=["click"], '
+        'extras_require={"server": ["mcp>=1.0"]})\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    mcp = [e for e in report["auto"] if e["pattern"] == "mcp-server"]
+    assert mcp
+    assert mcp[0]["evidence"] == "setup.py: extras_require.mcp"
+
+
+def test_an_extra_named_after_a_dependency_is_not_itself_a_dependency(tmp_path) -> None:
+    """`extras_require` is a dict of lists, so a naive scan for every quoted
+    string in the block collects the EXTRA NAMES too. Here the extra is
+    literally called `mcp` and requires something else entirely; reading the
+    key as a requirement would fire `mcp-server` on a repository that never
+    mentions the SDK.
+    """
+    (tmp_path / "setup.py").write_text(
+        'setup(name="x", extras_require={"mcp": ["click"]})\n', encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert [e["pattern"] for e in report["auto"]] == ["python-project"]
+
+
+def test_project_optional_dependencies_stays_excluded_from_both_halves(tmp_path) -> None:
+    """The deliberate exclusion, asserted so that a later "consistency" pass
+    cannot quietly add it. An extra named `server` that pulls `mcp` says this
+    package can optionally speak MCP -- not that this repository is an MCP
+    server `[ref: SDD/Which declaration counts as `dependencies` outside
+    `package.json`]`.
+    """
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "x"\nversion = "1.0.0"\n'
+        '[project.optional-dependencies]\nserver = ["mcp>=1.0"]\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert [e["pattern"] for e in report["auto"]] == ["python-project"]
+    assert report["gates"]["q1_backend"] is False
+
+
+def test_a_development_only_framework_still_leaves_q1_shut_in_setup_py(tmp_path) -> None:
+    """Trap 4 on the reader whose SHAPE changed: `_setup_py_deps` now returns
+    a pair, and the gate has to index into it. Indexing the wrong half, or
+    dropping the index and iterating the tuple, would open `q1_backend` on a
+    framework declared only as an extra. The corpus fixture covers the
+    pyproject side of this; nothing covered setup.py.
+    """
+    (tmp_path / "setup.py").write_text(
+        'setup(name="x", extras_require={"web": ["flask"]})\n', encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert report["gates"]["q1_backend"] is False
+    # A closed gate carries no `gate_evidence` key at all -- the invariant
+    # `test_gate_evidence_invariant_catches_a_closed_gate_carrying_evidence`
+    # exists to enforce exactly that, so asserting `== []` here would demand a
+    # shape this suite forbids. (It did, at first; a `-k` filter that happened
+    # not to match this test's name is what let it pass unnoticed.)
+    assert "q1_backend" not in report["gate_evidence"]
+
+
+def test_setup_py_install_requires_still_opens_q1(tmp_path) -> None:
+    """The control for the test above. Asserting only that a development
+    declaration leaves the gate shut would pass against a gate that had
+    stopped reading `setup.py` altogether -- which is exactly the failure mode
+    changing the reader's return shape invites.
+    """
+    (tmp_path / "setup.py").write_text(
+        'setup(name="x", install_requires=["flask"])\n', encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert report["gates"]["q1_backend"] is True
+    assert report["gate_evidence"]["q1_backend"] == ["setup.py: install_requires.flask"]

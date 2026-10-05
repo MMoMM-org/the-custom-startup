@@ -19,11 +19,19 @@ CORPUS_DIR = REPO_ROOT / "tests" / "fixtures" / "patterns-detection"
 CATALOGUE_DIR = REPO_ROOT / "plugins" / "tcs-patterns" / "templates" / "patterns"
 
 # The single source of truth for the corpus size (task text step 2's mandatory
-# guard). Both `test_patterns_detection_corpus.py` and `test_patterns_detect.py`
-# assert against this constant -- each file must stay safe to run alone, so each
-# needs its own standalone, non-parametrized count assertion, but there is still
-# only one number to keep in sync with the fixture directory.
-EXPECTED_CASE_COUNT = 26
+# guard). Four files assert against this constant --
+# `test_patterns_detection_corpus.py`, `test_patterns_detect.py`,
+# `test_patterns_outcomes.py` and `test_obsidian_rule_agreement.py`. Each must
+# stay safe to run alone, so each needs its own standalone, non-parametrized
+# count assertion, but there is still only one number to keep in sync with the
+# fixture directory. (This comment said "Both ... and ..." and named two of the
+# four; corrected 2026-10-05 while raising the count.)
+#
+# 27 since 2026-10-05: `auto-mcp-server-poetry-dev-group` was added with align
+# F4's widening. Two further figures move with this one and are NOT derived from
+# it -- `EXPECTED_ANSWER_COMBINATION_TOTAL` in `test_patterns_outcomes.py` and
+# the verdict-distribution prose in `test_obsidian_rule_agreement.py`.
+EXPECTED_CASE_COUNT = 27
 
 
 @dataclass(frozen=True)

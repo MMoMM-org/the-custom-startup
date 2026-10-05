@@ -550,6 +550,52 @@ consequences worth naming because they are easy to get wrong:
   transitively pulled `mark3labs/mcp-go`, and under this rule it would open `q1_backend` on a
   transitive `gin`. The indirect marker must survive parsing for gate purposes.
 
+**And which declaration counts as the development section outside `package.json` — settled
+2026-10-05.** The table above maps the *gate* rule onto all four manifests. The stack-fact rule
+one paragraph earlier — "a stack fact reads both `dependencies` and `devDependencies`" — was
+never mapped onto anything but `package.json`, and that silence was not harmless: measured on
+2026-10-05, `mcp` declared in `[tool.poetry.group.dev.dependencies]` did **not** fire
+`mcp-server`, so the document promised a behaviour the code did not deliver. Found by the Phase 2
+alignment check. Decided by Marcus the same day: widen the code, because recording a measured
+false negative as intent is worse than leaving it or fixing it — the same reasoning that pulled
+the hook fix into T2.6.
+
+| Manifest | A stack fact additionally reads | Still excluded from both halves |
+|---|---|---|
+| `package.json` | `devDependencies` | — |
+| `pyproject.toml` | `[tool.poetry.group.*.dependencies]`, any group name | `[project.optional-dependencies]` |
+| `setup.py` | `extras_require` | — |
+| `requirements.txt` | — (no development section to read) | — |
+| `go.mod` | — (no development concept; `// indirect` is transitivity, not intent) | a `require` marked `// indirect` |
+
+**Why `[project.optional-dependencies]` stays out while `extras_require` goes in**, given that
+both are "extras" in packaging vocabulary. The question a stack fact asks is *what is this
+repository*, and the two sections answer differently in practice. `[tool.poetry.group.*]` is
+Poetry's actual `devDependencies` analogue — it is where a Poetry project puts the tooling its
+authors develop with, and that is precisely the case the stack-fact rule was written for. PEP 621
+`[project.optional-dependencies]` is the published extras of a *distribution*: `mcp` behind an
+extra named `server` says this package can optionally speak MCP, not that this repository is an
+MCP server. `setup.py`'s `extras_require` is the same field in older vocabulary and the same
+argument would exclude it — it is included only because setuptools projects have no group
+mechanism, so excluding it would leave `setup.py` with no development section at all while every
+other Python manifest has one. That asymmetry is a judgement call, recorded as one.
+
+**The implementation constraint this created, because it is the part most likely to be undone by
+a later tidy-up.** `_pyproject_deps_and_pytest` and `_setup_py_deps` are called by the *gate* path
+as well as the stack facts. Widening them in place would have opened `q1_backend` on a
+development-only framework — trap 4, reintroduced, and invisible to the corpus as it stood,
+because no fixture declared a server framework in a development section. Both readers therefore
+return runtime and development declarations **separately**, mirroring `_node_deps`'s existing
+`(deps, dev_deps)` pair, and the gate reads only the runtime half. `auto-mcp-server-poetry-dev-group`
+carries both halves in one tree — `mcp` and `fastapi` in the *same* development group, so
+`mcp-server` must fire while `q1_backend` must stay shut — and the gate-widening mutation was
+confirmed to fail that fixture.
+
+The development mapping also carries **the declaring section into the evidence string**:
+`pyproject.toml: tool.poetry.group.dev.dependencies.mcp`, not `dependencies.mcp`. That is a direct
+response to the merged runtime label recorded above as a reporting limit; reproducing the same
+shape in new code written the same day would have been a known fault committed on purpose.
+
 Three consequences the fixtures must assert rather than assume:
 
 - **The triad's three directories need no common parent, and none of the four signals is
