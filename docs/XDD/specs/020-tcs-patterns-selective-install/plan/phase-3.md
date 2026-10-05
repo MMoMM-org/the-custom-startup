@@ -899,35 +899,61 @@ writing is allowed, and an installer that is honest about what it did.
     diverged and always asks. `install()` routes every present-but-not-current pattern to `failed`
     naming `update`, so whatever `update()` declined to own would have had no owner at all.
 
-  1. **`update()` has no signature or section anywhere in the SDD.** Identical in kind to C5's
-     `report_only`, which sat in a normative signature with semantics defined nowhere until T3.3's
-     gate refused to pass a plan testing it. Settle the signature and the return shape first
-     `[ref: SDD/Runtime View/Error Handling, the "C5 on `update`, not `install`" row]`.
-
-  2. **Who prompts? Step 3 below says to implement `update` in `lib/install.py`, and step 2 says it
-     "prompts per pattern... defaulting to skip" — but C5's contract says that file has no
-     interactive surface.** "C5 reports; C3 offers" was settled for `install()` because
-     `AskUserQuestion` can only be raised by a skill
-     `[ref: SDD/Interface Specifications/Data model: the install plan and report (C5), decision 4]`,
-     and the identical reasoning applies to `update()`. So the likely resolution is that `update()`
-     **computes** divergence and the `difflib` diff — both pure, no interaction — and **returns**
-     them for C3 to present, with the caller supplying the per-pattern decision. Then "skip is the
-     default" is a property of C3's prompt, not of `update()`, and ADR-4's guarantee that "an
-     unanswered prompt cannot destroy local work" needs an owner that can actually hold it. Decide
-     explicitly; do not let an implementer infer it.
-
-  3. **Step 2 names two different populations as the thing `update` acts on.** "`update` refreshes
-     only patterns whose **version is behind**" and "a pattern whose file no longer matches its
-     recorded **hash** prompts per pattern" are not the same set: a locally edited pattern at the
-     current catalogue version is not behind, yet it is exactly the case ADR-4 exists for. State
-     whether `update()` considers version-stale patterns, hash-diverged patterns, or both — and note
-     that `install()` now routes **every** present-but-not-current pattern to `failed` naming
-     `update` `[ref: SDD/Interface Specifications/.../"install() is purely additive"]`, so whatever
-     `update()` declines to handle has no other owner.
-
   1. Prime: Read ADR-4 `[ref: SDD/Architecture Decisions/ADR-4]` including its stated limit — the
      hash covers `SKILL.md` only, so a locally edited reference file is replaced without a prompt,
      and that is deliberate rather than an oversight to fix here.
+  **T3.4's TDD gate returned BLOCK on 2026-10-05**, with one contract hole and one test that a
+  named mutation survives. Both are closed; four further tightenings are folded in, and all of it
+  is a requirement of this task.
+
+  - **The contract hole: a pattern the catalogue no longer carries.** The three states are defined
+    by two comparisons that *both* presuppose the catalogue still has the pattern, so an upstream
+    removal had no row. Settled as `failed` with nothing touched, following the convention
+    `install()` already uses for an unreadable catalogue `VERSION`
+    `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb), decision 8]`.
+    **Add a test**: seed a manifest entry for a name absent from `catalogue_dir`, assert it lands in
+    `failed` and in none of `refreshed`, `current` or `declined`, and that a digest over its
+    installed directory is unchanged. This is **not** the missing-*installed*-directory case —
+    that is the installed side, this is the catalogue side, and neither covers the other.
+
+  - **The diff assertion as first written survives the mutation it was aimed at.** "The diff
+    contains the user's edit" passes even when the diff is computed against the catalogue's
+    **pre-rename** bytes, because that diff contains the edit *too* — just additionally polluted
+    with a `-name: <bare>` / `+name: tcs-<bare>` hunk. Verified by construction. So it must **also**
+    assert the diff contains **no `name:` hunk** — no line matching `^[-+]name:`. And build the
+    expected catalogue-as-installed bytes as a **hand-written literal** with the `tcs-` prefix
+    already applied, never by calling the same rename helper `update()` uses: a shared bug in that
+    helper would otherwise pass both sides.
+
+  - **"`decide` was not called" must assert an empty call list, not an absent name.** Use a callback
+    that records every invocation and assert the list is `[]`, with **one pattern per call** so there
+    is no ambiguity about which pattern would have triggered it.
+
+  - **F8's third criterion applies to the no-prompt refresh too**: assert `version_after` equals the
+    catalogue `VERSION` on the version-behind-hash-matches path, not only where `decide` returned
+    `True`.
+
+  - **"Unchanged" must be a literal comparison, twice over.** For a declined pattern, digest the
+    **manifest file's bytes** before and after, or deep-compare the `PatternEntry` fields — not an
+    unspecified "entry unchanged". That is what catches a mutation reporting `declined` correctly
+    and writing the manifest anyway. The default-`decide` test must pass **no callback argument at
+    all** rather than an explicit decliner, and carry the same digest.
+
+  - **Recompute the expected hash independently** on the refresh path, mirroring
+    `test_sha256_in_report_matches_independently_computed_hash_of_installed_file`, rather than
+    trusting a value `update()` produced.
+
+  **The byte-identical guarantee and the `reference/` limit are not in conflict, and the test
+  module's docstring must say why.** They are different rows. The byte-identical guarantee is the
+  **hash-differs** row, where `decide` returned `False` and the whole directory is left alone,
+  `reference/` included. "Replaced without a prompt" is the **version-behind, hash-matches** row,
+  where the refresh is unconditional and overwrites the full directory including a locally edited
+  `reference/` file. Both hold because **the hash never covered `reference/`**, so a
+  `reference/`-only edit cannot put the pattern into the hash-differs row at all. That fixture is
+  therefore: version stale, `SKILL.md` hash **matching** the manifest, a `reference/` file
+  hand-edited — then assert the refresh overwrites it. ADR-4's accepted limit made visible rather
+  than discovered `[ref: SDD/Architecture Decisions/ADR-4, "Trade-offs accepted"]`.
+
   2. Test: `update` acts on **every** pattern the manifest records and asks nothing about the
      selection — no scan, no questions (F8's first criterion), and **no `names` argument exists** to
      pass one. Then, per the contract's three-state table: a pattern whose version is behind **and
