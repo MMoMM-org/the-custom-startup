@@ -176,6 +176,7 @@ def test_one_call_partitions_four_names_across_three_namespaces(tmp_path: Path) 
         repo,
         {"taken-in-repo", "taken-in-user", "taken-in-plugin", "totally-free"},
         home_dir=home,
+        own_installed=frozenset(),
     )
 
     after = _digest_pair(repo, home)
@@ -196,7 +197,7 @@ def test_non_colliding_names_still_approved_one_refused(tmp_path: Path) -> None:
     home = tmp_path / "home"
     _skill(repo / ".claude" / "skills", "ddd", name="ddd")
 
-    report = guard.check(repo, {"ddd", "hexagonal", "observability"}, home_dir=home)
+    report = guard.check(repo, {"ddd", "hexagonal", "observability"}, home_dir=home, own_installed=frozenset())
 
     assert report.approved == frozenset({"hexagonal", "observability"})
     assert set(report.refused) == {"ddd"}
@@ -211,7 +212,7 @@ def test_refusal_in_repo_namespace_names_the_colliding_skill_md(tmp_path: Path) 
     home = tmp_path / "home"
     colliding_dir = _skill(repo / ".claude" / "skills", "ddd", name="ddd")
 
-    report = guard.check(repo, {"ddd"}, home_dir=home)
+    report = guard.check(repo, {"ddd"}, home_dir=home, own_installed=frozenset())
 
     namespace, path = report.refused["ddd"]
     assert namespace == "repo"
@@ -224,7 +225,7 @@ def test_refusal_in_user_namespace_names_the_colliding_skill_md(tmp_path: Path) 
     home = tmp_path / "home"
     colliding_dir = _skill(home / ".claude" / "skills", "ddd", name="ddd")
 
-    report = guard.check(repo, {"ddd"}, home_dir=home)
+    report = guard.check(repo, {"ddd"}, home_dir=home, own_installed=frozenset())
 
     namespace, path = report.refused["ddd"]
     assert namespace == "user"
@@ -237,7 +238,7 @@ def test_refusal_in_plugin_cache_names_the_colliding_skill_md(tmp_path: Path) ->
     home = tmp_path / "home"
     colliding_dir = _skill(_cache_root(home, "claude-plugins-official", "tcs-team", "3.4.4"), "ddd", name="ddd")
 
-    report = guard.check(repo, {"ddd"}, home_dir=home)
+    report = guard.check(repo, {"ddd"}, home_dir=home, own_installed=frozenset())
 
     namespace, path = report.refused["ddd"]
     assert namespace == "plugin"
@@ -252,7 +253,7 @@ def test_refusal_in_plugin_marketplace_names_the_colliding_skill_md(tmp_path: Pa
         _marketplace_root(home, "claude-plugins-official", "plugins", "tcs-team"), "ddd", name="ddd"
     )
 
-    report = guard.check(repo, {"ddd"}, home_dir=home)
+    report = guard.check(repo, {"ddd"}, home_dir=home, own_installed=frozenset())
 
     namespace, path = report.refused["ddd"]
     assert namespace == "plugin"
@@ -273,7 +274,7 @@ def test_cache_unions_names_across_plugin_versions(tmp_path: Path) -> None:
     _skill(_cache_root(home, "claude-plugins-official", "tcs-team", "3.4.2"), "testing", name="testing")
     _skill(_cache_root(home, "claude-plugins-official", "tcs-team", "3.4.4"), "test-practices", name="test-practices")
 
-    report = guard.check(repo, {"testing", "test-practices", "free"}, home_dir=home)
+    report = guard.check(repo, {"testing", "test-practices", "free"}, home_dir=home, own_installed=frozenset())
 
     assert set(report.refused) == {"testing", "test-practices"}
     assert report.refused["testing"][0] == "plugin"
@@ -292,7 +293,7 @@ def test_both_marketplace_segment_names_are_refused(tmp_path: Path) -> None:
     _skill(_marketplace_root(home, "claude-plugins-official", "plugins", "hexagonal-plugin"), "hexagonal", name="hexagonal")
     _skill(_marketplace_root(home, "claude-plugins-official", "external_plugins", "access-plugin"), "access", name="access")
 
-    report = guard.check(repo, {"hexagonal", "access", "free"}, home_dir=home)
+    report = guard.check(repo, {"hexagonal", "access", "free"}, home_dir=home, own_installed=frozenset())
 
     assert set(report.refused) == {"hexagonal", "access"}
     assert report.approved == frozenset({"free"})
@@ -311,7 +312,7 @@ def test_both_plugin_roots_exercised_in_one_call(tmp_path: Path) -> None:
     _skill(_cache_root(home, "claude-plugins-official", "tcs-patterns", "1.4.4"), "ddd", name="ddd")
     _skill(_marketplace_root(home, "claude-plugins-official", "plugins", "tcs-patterns"), "hexagonal", name="hexagonal")
 
-    report = guard.check(repo, {"ddd", "hexagonal"}, home_dir=home)
+    report = guard.check(repo, {"ddd", "hexagonal"}, home_dir=home, own_installed=frozenset())
 
     assert set(report.refused) == {"ddd", "hexagonal"}
 
@@ -335,7 +336,7 @@ def test_enabled_plugins_false_still_refused(tmp_path: Path) -> None:
         '{"enabledPlugins": {"plugin-dev@claude-plugins-official": false}}', encoding="utf-8"
     )
 
-    report = guard.check(repo, {"ddd"}, home_dir=home)
+    report = guard.check(repo, {"ddd"}, home_dir=home, own_installed=frozenset())
 
     assert report.refused["ddd"][0] == "plugin"
 
@@ -361,7 +362,7 @@ def test_symlinked_skill_directory_outside_namespace_root_is_found(tmp_path: Pat
     (skills_root / "obsidian-eval").symlink_to(real_dir, target_is_directory=True)
 
     before = _digest_pair(repo, home)
-    report = guard.check(repo, {"obsidian-eval"}, home_dir=home)
+    report = guard.check(repo, {"obsidian-eval"}, home_dir=home, own_installed=frozenset())
     after = _digest_pair(repo, home)
 
     assert before == after, "the guard must write nothing"
@@ -378,7 +379,7 @@ def test_skill_nested_three_levels_deep_is_found(tmp_path: Path) -> None:
     nested = home / ".claude" / "skills" / "synced" / "9d604c14-uuid"
     _skill(nested, "morning", name="morning")
 
-    report = guard.check(repo, {"morning"}, home_dir=home)
+    report = guard.check(repo, {"morning"}, home_dir=home, own_installed=frozenset())
 
     assert report.refused["morning"][0] == "user"
 
@@ -393,7 +394,7 @@ def test_non_skill_directory_does_not_occupy_its_own_name(tmp_path: Path) -> Non
     synced = home / ".claude" / "skills" / "synced"
     _skill(synced / "some-uuid", "morning", name="morning")
 
-    report = guard.check(repo, {"synced"}, home_dir=home)
+    report = guard.check(repo, {"synced"}, home_dir=home, own_installed=frozenset())
 
     assert report.approved == frozenset({"synced"})
     assert "synced" not in report.refused
@@ -413,7 +414,7 @@ def test_registered_name_used_instead_of_directory_name(tmp_path: Path) -> None:
         name="writing-hookify-rules",
     )
 
-    report = guard.check(repo, {"writing-hookify-rules", "writing-rules"}, home_dir=home)
+    report = guard.check(repo, {"writing-hookify-rules", "writing-rules"}, home_dir=home, own_installed=frozenset())
 
     assert report.refused["writing-hookify-rules"][0] == "plugin"
     assert "writing-rules" not in report.refused
@@ -442,7 +443,7 @@ def test_two_symlinks_to_one_malformed_skill_directory_skipped_once(tmp_path: Pa
     (skills_root / "link-b").symlink_to(real_dir, target_is_directory=True)
 
     before = _digest_pair(repo, home)
-    report = guard.check(repo, {"anything"}, home_dir=home)
+    report = guard.check(repo, {"anything"}, home_dir=home, own_installed=frozenset())
     after = _digest_pair(repo, home)
 
     assert before == after, "the guard must write nothing"
@@ -467,7 +468,7 @@ def test_self_referential_symlink_returns_normally_skipped_once(tmp_path: Path) 
     (cyclic / "self-link").symlink_to(cyclic, target_is_directory=True)
 
     before = _digest_pair(repo, home)
-    report = guard.check(repo, {"anything"}, home_dir=home)
+    report = guard.check(repo, {"anything"}, home_dir=home, own_installed=frozenset())
     after = _digest_pair(repo, home)
 
     assert before == after, "the guard must write nothing"
@@ -508,7 +509,7 @@ def test_five_malformed_skill_md_cases_yield_four_distinguishable_reasons(tmp_pa
 
     try:
         before = _digest_pair(repo, home)
-        report = guard.check(repo, {"anything"}, home_dir=home)
+        report = guard.check(repo, {"anything"}, home_dir=home, own_installed=frozenset())
         after = _digest_pair(repo, home)
     finally:
         os.chmod(unreadable_path, 0o644)
@@ -544,7 +545,7 @@ def test_unreadable_intermediate_directory_is_skipped_and_reported(tmp_path: Pat
 
     try:
         before = _digest_pair(repo, home)
-        report = guard.check(repo, {"hidden"}, home_dir=home)
+        report = guard.check(repo, {"hidden"}, home_dir=home, own_installed=frozenset())
         after = _digest_pair(repo, home)
     finally:
         os.chmod(blocked, 0o755)
@@ -572,7 +573,7 @@ def test_unreadable_namespace_root_is_skipped_and_reported(tmp_path: Path) -> No
     os.chmod(skills_root, 0o000)
 
     try:
-        report = guard.check(repo, {"hidden-root"}, home_dir=home)
+        report = guard.check(repo, {"hidden-root"}, home_dir=home, own_installed=frozenset())
     finally:
         os.chmod(skills_root, 0o755)
 
@@ -608,7 +609,7 @@ def test_three_unreadable_directories_across_namespaces_are_all_reported(tmp_pat
     try:
         for blocked in (blocked_user_1, blocked_user_2, blocked_repo):
             os.chmod(blocked, 0o000)
-        report = guard.check(repo, {"anything"}, home_dir=home)
+        report = guard.check(repo, {"anything"}, home_dir=home, own_installed=frozenset())
     finally:
         for blocked in (blocked_user_1, blocked_user_2, blocked_repo):
             os.chmod(blocked, 0o755)
@@ -776,7 +777,7 @@ def test_each_namespace_root_absent_is_empty_not_an_error(tmp_path: Path, missin
         if key != missing_root:
             build()
 
-    report = guard.check(repo, {"totally-free"}, home_dir=home)
+    report = guard.check(repo, {"totally-free"}, home_dir=home, own_installed=frozenset())
 
     assert report.approved == frozenset({"totally-free"})
     assert report.refused == {}
@@ -793,7 +794,7 @@ def test_repo_takes_precedence_over_user(tmp_path: Path) -> None:
     _skill(repo / ".claude" / "skills", "ddd", name="ddd")
     _skill(home / ".claude" / "skills", "ddd", name="ddd")
 
-    report = guard.check(repo, {"ddd"}, home_dir=home)
+    report = guard.check(repo, {"ddd"}, home_dir=home, own_installed=frozenset())
 
     assert report.refused["ddd"][0] == "repo"
 
@@ -805,7 +806,7 @@ def test_user_takes_precedence_over_plugin(tmp_path: Path) -> None:
     _skill(home / ".claude" / "skills", "ddd", name="ddd")
     _skill(_cache_root(home, "claude-plugins-official", "tcs-patterns", "1.4.4"), "ddd", name="ddd")
 
-    report = guard.check(repo, {"ddd"}, home_dir=home)
+    report = guard.check(repo, {"ddd"}, home_dir=home, own_installed=frozenset())
 
     assert report.refused["ddd"][0] == "user"
 
@@ -821,7 +822,7 @@ def test_all_three_colliding_at_once_reports_repo_exactly_once(tmp_path: Path) -
     _skill(home / ".claude" / "skills", "ddd", name="ddd")
     _skill(_cache_root(home, "claude-plugins-official", "tcs-patterns", "1.4.4"), "ddd", name="ddd")
 
-    report = guard.check(repo, {"ddd"}, home_dir=home)
+    report = guard.check(repo, {"ddd"}, home_dir=home, own_installed=frozenset())
 
     assert len(report.refused) == 1
     assert report.refused["ddd"][0] == "repo"
@@ -835,10 +836,159 @@ def test_guard_report_is_frozen_with_named_channels(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     home = tmp_path / "home"
 
-    report = guard.check(repo, {"free"}, home_dir=home)
+    report = guard.check(repo, {"free"}, home_dir=home, own_installed=frozenset())
 
     assert hasattr(report, "approved")
     assert hasattr(report, "refused")
     assert hasattr(report, "skipped")
     with pytest.raises(Exception):
         report.approved = frozenset()  # frozen dataclass: attribute assignment must fail
+
+
+# --- T3.2b: own_installed must not refuse our own earlier work -------------
+#
+# T3.2 shipped and both review gates passed, but the contract asked the
+# wrong question: "is this name taken?" instead of "would installing here
+# create a duplicate nobody can resolve?" `[ref: solution.md, "The root
+# cause is that this section specified the wrong question"]`. An installed
+# pattern registers in the REPOSITORY namespace under exactly the name C3
+# intends to check next time, so without an exemption C4 refuses the very
+# pattern this tool installed on a prior run -- `install()` then never
+# receives an already-installed name, and "a second identical install is a
+# no-op" can never be exercised through C3's flow at all.
+#
+# `test_own_installed_repo_hit_is_approved_not_refused` below is written
+# TWICE across two commits, deliberately. `own_installed` is a *required*
+# keyword-only parameter, so once it exists, every test that calls it --
+# including all 25 pre-existing calls above, mechanically given
+# `own_installed=frozenset()` -- fails with `TypeError` until `check()`
+# grows the parameter. That failure proves only that the parameter is
+# ABSENT, not that the old behaviour was WRONG; those are different claims.
+# Only a test against the CURRENT (pre-fix) signature, asserting the
+# approval the old behaviour fails to give, demonstrates the defect itself
+# `[ref: plan/phase-3.md T3.2b, "The RED phase here cannot prove what a RED
+# phase usually proves"]`. The RED commit therefore carries this test
+# against the OLD signature (fails on the assertion -- the defect); the
+# commit that adds the parameter rewrites it to the NEW signature (the old
+# call becomes illegal once `own_installed` has no default), where it pins
+# the fix instead.
+
+
+def test_own_installed_repo_hit_is_approved_not_refused(tmp_path: Path) -> None:
+    """The measured defect, pinned against the CURRENT (pre-T3.2b)
+    signature -- RED here means an `AssertionError`, not a `TypeError`,
+    which is the whole point: it demonstrates the OLD behaviour is wrong,
+    not merely that a new parameter is missing
+    `[ref: plan/phase-3.md T3.2b, "(a) The defect, asserted against the
+    CURRENT signature"]`. `tcs-ddd` is already installed in the repository
+    namespace; checking it again alongside a genuinely new name must
+    approve BOTH, not refuse the one this tool installed itself
+    `[ref: solution.md, "check(repo, {\"tcs-ddd\", \"tcs-hexagonal\"}, ...)
+    -> approved = ['tcs-hexagonal'], refused = {'tcs-ddd': 'repo'}"]`.
+
+    This test is rewritten to the NEW signature in the commit that adds
+    `own_installed` -- the call below becomes illegal once that parameter
+    is required, so it cannot survive unchanged across both commits."""
+    guard = _load_guard()
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    _skill(repo / ".claude" / "skills", "tcs-ddd", name="tcs-ddd")
+
+    report = guard.check(repo, {"tcs-ddd", "tcs-hexagonal"}, home_dir=home)
+
+    assert report.approved == frozenset({"tcs-ddd", "tcs-hexagonal"})
+    assert "tcs-ddd" not in report.refused
+
+
+def test_own_installed_does_not_suppress_a_user_namespace_hit(tmp_path: Path) -> None:
+    """Boundary 1: `own_installed` only ever exempts the REPOSITORY
+    namespace. A name sitting in the user's global skills is somebody else's
+    even if `own_installed` claims it -- this tool never installs there
+    `[ref: solution.md, "Only the repository namespace"]`."""
+    guard = _load_guard()
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    _skill(home / ".claude" / "skills", "tcs-ours", name="tcs-ours")
+
+    report = guard.check(repo, {"tcs-ours"}, home_dir=home, own_installed=frozenset({"tcs-ours"}))
+
+    assert report.refused["tcs-ours"][0] == "user"
+    assert "tcs-ours" not in report.approved
+
+
+def test_own_installed_does_not_suppress_a_plugin_namespace_hit(tmp_path: Path) -> None:
+    """Boundary 1, plugin side: a plugin skill is always somebody else's,
+    `own_installed` or not `[ref: solution.md, "Only the repository
+    namespace"]`."""
+    guard = _load_guard()
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    _skill(_cache_root(home, "claude-plugins-official", "some-plugin", "1.0.0"), "tcs-ours", name="tcs-ours")
+
+    report = guard.check(repo, {"tcs-ours"}, home_dir=home, own_installed=frozenset({"tcs-ours"}))
+
+    assert report.refused["tcs-ours"][0] == "plugin"
+    assert "tcs-ours" not in report.approved
+
+
+def test_own_installed_name_not_installed_anywhere_is_simply_approved(tmp_path: Path) -> None:
+    """A name `own_installed` claims but that no namespace actually holds is
+    not a collision in the first place -- it is just approved, the same as
+    any other free name."""
+    guard = _load_guard()
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+
+    report = guard.check(repo, {"tcs-ours"}, home_dir=home, own_installed=frozenset({"tcs-ours"}))
+
+    assert report.approved == frozenset({"tcs-ours"})
+    assert report.refused == {}
+
+
+def test_own_installed_omitted_entirely_raises_type_error(tmp_path: Path) -> None:
+    """Boundary 2: required, with no default. A `frozenset()` default would
+    silently restore the exact bug this task fixes the first time a caller
+    forgot to pass it -- forgetting must be the loudest possible failure, a
+    `TypeError` at the call site `[ref: solution.md, "Required, with no
+    default"]`."""
+    guard = _load_guard()
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+
+    with pytest.raises(TypeError):
+        guard.check(repo, {"anything"}, home_dir=home)  # type: ignore[call-arg]
+
+
+def test_empty_own_installed_reproduces_old_refusal_behavior(tmp_path: Path) -> None:
+    """Boundary 3: an empty `own_installed` -- the safe fallback for a
+    caller that could not read the manifest -- must refuse a repo-namespace
+    hit exactly as the pre-T3.2b guard always did
+    `[ref: solution.md, "An unreadable manifest means nothing is ours"]`."""
+    guard = _load_guard()
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    _skill(repo / ".claude" / "skills", "tcs-ours", name="tcs-ours")
+
+    report = guard.check(repo, {"tcs-ours"}, home_dir=home, own_installed=frozenset())
+
+    assert report.refused["tcs-ours"][0] == "repo"
+    assert "tcs-ours" not in report.approved
+
+
+def test_own_installed_suppression_keyed_on_membership_not_namespace_alone(tmp_path: Path) -> None:
+    """The load-bearing boundary test. `own_installed` being non-empty must
+    not make an implementation exempt EVERY repo-namespace hit regardless of
+    which name is actually in it -- only a name that is ITSELF a member of
+    `own_installed` is exempt. `own_installed` here names a different
+    pattern (`tcs-ours`) than the one colliding (`tcs-ddd`), so a mutant that
+    suppresses on `namespace == "repo"` alone (ignoring membership) passes
+    every other test in this file but fails this one."""
+    guard = _load_guard()
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    _skill(repo / ".claude" / "skills", "tcs-ddd", name="tcs-ddd")
+
+    report = guard.check(repo, {"tcs-ddd"}, home_dir=home, own_installed=frozenset({"tcs-ours"}))
+
+    assert report.refused["tcs-ddd"][0] == "repo"
+    assert "tcs-ddd" not in report.approved
