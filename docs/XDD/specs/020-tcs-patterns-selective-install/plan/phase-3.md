@@ -899,9 +899,6 @@ writing is allowed, and an installer that is honest about what it did.
     diverged and always asks. `install()` routes every present-but-not-current pattern to `failed`
     naming `update`, so whatever `update()` declined to own would have had no owner at all.
 
-  1. Prime: Read ADR-4 `[ref: SDD/Architecture Decisions/ADR-4]` including its stated limit — the
-     hash covers `SKILL.md` only, so a locally edited reference file is replaced without a prompt,
-     and that is deliberate rather than an oversight to fix here.
   **T3.4's TDD gate returned BLOCK on 2026-10-05**, with one contract hole and one test that a
   named mutation survives. Both are closed; four further tightenings are folded in, and all of it
   is a requirement of this task.
@@ -910,7 +907,7 @@ writing is allowed, and an installer that is honest about what it did.
     by two comparisons that *both* presuppose the catalogue still has the pattern, so an upstream
     removal had no row. Settled as `failed` with nothing touched, following the convention
     `install()` already uses for an unreadable catalogue `VERSION`
-    `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb), decision 8]`.
+    `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb), decision 7]`.
     **Add a test**: seed a manifest entry for a name absent from `catalogue_dir`, assert it lands in
     `failed` and in none of `refreshed`, `current` or `declined`, and that a digest over its
     installed directory is unchanged. This is **not** the missing-*installed*-directory case —
@@ -924,6 +921,26 @@ writing is allowed, and an installer that is honest about what it did.
     expected catalogue-as-installed bytes as a **hand-written literal** with the `tcs-` prefix
     already applied, never by calling the same rename helper `update()` uses: a shared bug in that
     helper would otherwise pass both sides.
+
+  - **Pin the diff the REPORT carries, not only the one `decide` received.** Found on the gate's
+    second pass and it survives everything else: the diff assertion above checks what is passed
+    **into** `decide(name, diff)`, and nothing checks what lands in `UpdateReport.declined[name]`'s
+    own `unified_diff` field. A mutation that computes the diff correctly for the callback and then
+    stores something else in the report — an empty string, a stale value, the pre-rename diff —
+    passes every test in this plan. That value is what a later advisory shows the user
+    `[ref: SDD/Runtime View/Primary Flow, step 9]`, so a wrong one is an externally visible bug, not
+    an internal detail. Assert `report.declined[name][1]` equals the diff the recording callback
+    actually received, **or** re-derive it the same hand-written-literal way.
+
+  - **The catalogue-removal fixture's installed directory must EXIST, with real content.** Otherwise
+    it collapses into the missing-installed-directory case and reports `failed` for the wrong reason,
+    with no test able to tell the difference — and the "digest over its installed directory is
+    unchanged" assertion is vacuous when there is no directory to digest. The two fixtures are exact
+    inverses and must be built as such: **catalogue-removal** is installed present + catalogue
+    absent; **missing-directory** is installed absent + catalogue present. Never both absent.
+
+  - **The hand-crafted "user's edit" must not itself contain a line starting with `name:`**, or the
+    `^[-+]name:` assertion is checking something other than what it was written for.
 
   - **"`decide` was not called" must assert an empty call list, not an absent name.** Use a callback
     that records every invocation and assert the list is `[]`, with **one pattern per call** so there
@@ -954,6 +971,9 @@ writing is allowed, and an installer that is honest about what it did.
   hand-edited — then assert the refresh overwrites it. ADR-4's accepted limit made visible rather
   than discovered `[ref: SDD/Architecture Decisions/ADR-4, "Trade-offs accepted"]`.
 
+  1. Prime: Read ADR-4 `[ref: SDD/Architecture Decisions/ADR-4]` including its stated limit — the
+     hash covers `SKILL.md` only, so a locally edited reference file is replaced without a prompt,
+     and that is deliberate rather than an oversight to fix here.
   2. Test: `update` acts on **every** pattern the manifest records and asks nothing about the
      selection — no scan, no questions (F8's first criterion), and **no `names` argument exists** to
      pass one. Then, per the contract's three-state table: a pattern whose version is behind **and

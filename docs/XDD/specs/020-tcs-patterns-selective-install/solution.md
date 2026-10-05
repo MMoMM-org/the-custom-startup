@@ -1821,7 +1821,7 @@ is recorded as an accepted trade-off, not an oversight `[ref: SDD/Architecture D
 "Trade-offs accepted"]`; hashing 80 files per pattern to catch a rarer case costs more than it
 returns.
 
-**8. A pattern the catalogue no longer carries is `failed`, and nothing is touched.** Added
+**7. A pattern the catalogue no longer carries is `failed`, and nothing is touched.** Added
 2026-10-05 by T3.4's gate, which was asked to hunt for exactly this and found it: decisions 1-7
 define the three states entirely in terms of **manifest `version` vs catalogue `VERSION`** and
 **installed hash vs manifest `sha256`**, and *both comparisons presuppose the catalogue still has
@@ -1838,11 +1838,11 @@ not stale, and refreshing it from a source that no longer exists is impossible w
 would destroy a working skill the user still has. Removing an installed pattern is a separate verb
 nobody has asked for `[ref: PRD/Out of scope]`.
 
-Note this is **not** the mirror of decision 7 and is not covered by it. Decision 7 is the
+Note this is **not** the mirror of decision 8 below, and is not covered by it. Decision 8 is the
 *installed* side being absent; this is the *catalogue* side. Both report `failed`, for different
 reasons, and each needs its own fixture.
 
-**7. A manifest entry whose directory is missing is `failed`, not refreshed.** The record claims a
+**8. A manifest entry whose directory is missing is `failed`, not refreshed.** The record claims a
 pattern is installed and it is not, which is a different problem from being out of date — and
 `install()` already handles an absent directory by writing it. Reporting it tells the user which
 verb to reach for instead of silently papering over a manifest that lies.
