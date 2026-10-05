@@ -1001,3 +1001,25 @@ def test_own_installed_suppression_keyed_on_membership_not_namespace_alone(tmp_p
 
     assert report.refused["tcs-ddd"][0] == "repo"
     assert "tcs-ddd" not in report.approved
+
+
+def test_own_installed_membership_is_case_sensitive(tmp_path: Path) -> None:
+    """`own_installed` values come from the manifest and are lowercase BY
+    CONSTRUCTION (`manifest.py`'s `_INSTALLED_AS_RE`), while a registered
+    name comes from a third party's frontmatter and can be any case. A
+    repo-namespace skill registered as `TCS-OURS` is a DIFFERENT name from
+    `tcs-ours` as far as the harness is concerned, so it must still be
+    refused even though `own_installed` contains the lowercase variant --
+    a case-insensitive comparison would exempt it and approve a name that
+    is genuinely taken, which is the CON-3 duplicate this guard exists to
+    prevent. Catches `name.lower() in {o.lower() for o in own_installed}`,
+    which passes every other test in this file."""
+    guard = _load_guard()
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    _skill(repo / ".claude" / "skills", "tcs-ours-upper", name="TCS-OURS")
+
+    report = guard.check(repo, {"TCS-OURS"}, home_dir=home, own_installed=frozenset({"tcs-ours"}))
+
+    assert report.refused["TCS-OURS"][0] == "repo"
+    assert "TCS-OURS" not in report.approved
