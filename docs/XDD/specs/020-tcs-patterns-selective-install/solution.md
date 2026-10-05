@@ -1797,9 +1797,19 @@ The implementation that satisfies it, and the one the Error Handling table means
 name and hash": for each requested name, if the manifest already carries an entry whose `version`
 equals the catalogue's `VERSION` **and** whose `sha256` equals the hash of the `SKILL.md` currently
 installed at `tcs-<name>/`, that pattern is **skipped entirely** — no copy, no rename, no manifest
-rewrite — and reported under `unchanged`. Anything else is a write. Comparing the installed file's
-hash rather than the catalogue's is the point: it detects a local edit, which is what makes T3.4's
-divergence path possible `[ref: SDD/Architecture Decisions/ADR-4]`.
+rewrite — and reported under `unchanged`. **A mismatch on either half means the pattern is not
+current, and what happens to it then is decided under "6. `install()` is purely additive" below —
+not here.** This sentence previously read "Anything else is a write", which was true when it was
+written and became false four paragraphs later on the same day, when (6) established that a
+present-but-not-current pattern is reported and left alone rather than replaced. Corrected
+2026-10-05 after T3.3's third gate pass found the two paragraphs contradicting each other; this
+section is the one the task directs implementers to read first, so a reader hitting (2) was being
+told the opposite of (6).
+
+Comparing the **installed** file's hash rather than the catalogue's remains the point, and it is
+unaffected by that correction: it is what distinguishes "never touched" from "deliberately adapted",
+which is what makes T3.4's divergence path possible at all
+`[ref: SDD/Architecture Decisions/ADR-4]`.
 
 **3. Each pattern appears atomically, and the manifest is upserted after the directory, per
 pattern.** Two sub-decisions, both forced by "a write failing mid-selection leaves earlier patterns

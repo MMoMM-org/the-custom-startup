@@ -605,6 +605,32 @@ writing is allowed, and an installer that is honest about what it did.
         `report.committed is False`, identity not falsiness, since the field is typed as always
         `False`.
 
+     i. **The "present, and anything else" row needs two fixtures of its own.** Found by T3.3's
+        third gate pass, and it is the gap that made the contradiction above dangerous rather than
+        merely untidy: **nothing in (a) through (h) puts a pattern through `install()` a second time
+        in a present-but-not-current state.** Every other test is either absent→write or the
+        ordering of a *fresh* write. Two mutations therefore survive the whole list:
+
+        - one that silently overwrites a **version-stale but unedited** pattern — which is the stale
+          "anything else is a write" text implemented literally — because no test bumps only the
+          catalogue's `VERSION` between two runs and re-installs;
+        - one that reports `failed` correctly **and still overwrites the file on disk** before
+          returning, which any report-channel-only assertion passes.
+
+        Two separate fixture states are required, because "not current" has two distinct triggers
+        and a test of one does not cover the other:
+
+        | fixture | version | installed `SKILL.md` hash |
+        |---|---|---|
+        | locally edited | matches the catalogue | **differs** from the manifest |
+        | stale, not edited | **behind** the catalogue | matches the manifest |
+
+        Each asserts three things: **(1)** a digest over that pattern's entire installed subtree is
+        **identical** before and after the call — the invariant, now required rather than offered;
+        **(2)** the name lands in `report.failed` with a reason naming `update`; **(3)** the name is
+        in neither `installed` nor `unchanged`. Assertion (1) is the one that kills the second
+        mutation, and no amount of report-channel checking substitutes for it.
+
      h. **The directory-then-manifest ORDER needs its own test, with a narrow monkeypatch.**
         Found by T3.3's gate on its second pass, and it is a mutation nothing else catches: every
         failure path otherwise tested fails during the **frontmatter rewrite**, which happens
@@ -632,10 +658,14 @@ writing is allowed, and an installer that is honest about what it did.
         absent → write; present and current → `unchanged`; present and anything else → `failed`
         with a reason naming `update`. **None of them deletes.**
 
-        Three consequences for this task's tests. **"`install()` never removes a file" becomes an
-        invariant every test can carry**, proved by a digest over the installed tree before and
-        after — the same shape as C4's write-nothing proof, one step weaker, and far stronger than
-        reasoning that a delete is correct. The `os.rename`-onto-a-non-empty-directory case
+        Three consequences for this task's tests. **"`install()` never removes a file" is a
+        **required** assertion, not an available one** — proved by a digest over the installed tree
+        before and after, the same shape as C4's write-nothing proof and one step weaker. The
+        earlier wording here said "an invariant every test *can* carry", which the third gate pass
+        correctly called out: a safety invariant stated permissively is not an invariant, and a
+        mutation that reports `failed` correctly **while still overwriting the file on disk** passes
+        any test that only checks the report channel. Every test that calls `install()` against a
+        pre-existing installed pattern carries the digest. The `os.rename`-onto-a-non-empty-directory case
         **disappears**, because the only state that reaches the rename has an absent target, so
         there is no removal step to test. And a test asserting that a re-install *replaces* a stale
         directory would now be asserting the opposite of the contract — if you were about to write
