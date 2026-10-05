@@ -14,7 +14,7 @@ happening; the caller (C3, not yet built) runs `check()`, takes
 C4 and C5 *together* and by neither alone.
 
 ```
-install(repo_dir, names, *, catalogue_dir) -> InstallReport
+install(repo_dir, names, *, catalogue_dir, bundle) -> InstallReport
 
 InstallReport (frozen, named channels)
     installed:  name -> (installed_as, version, sha256)   newly written
@@ -82,6 +82,16 @@ subprocess, which is exactly where this module runs
 `[ref: solution.md, point 5]`. It is a parameter for the same reason
 `home_dir` is one on `guard.check()`: a test that cannot point it at a
 fixture cannot test it.
+
+**`bundle` is also a parameter**, added after T3.3's first review round
+found the signature had no legal way to call `manifest.upsert()` (`bundle`
+is required there, with no default). `DEFAULT_BUNDLE_VERSION` -- this
+plugin's own `plugin.json` version, read once at import time -- is kept as
+the default, but a caller may override it `[ref: solution.md, point 7]`:
+it is otherwise the one input to `install()` a test cannot drive, and CI
+bumps `plugin.json` on every merge, which would make any test asserting
+the manifest's `bundle` field against the real file break on a version
+bump rather than on an actual regression.
 
 Stdlib only, Python 3.11 floor `[ref: SDD/Architecture Decisions/ADR-2]`.
 """
@@ -152,7 +162,17 @@ def rename_in_frontmatter(text: str, new_name: str) -> str:
         raise InstallError("no `name:` line in frontmatter; refusing to install unprefixed")
     if value.group(1).strip()[0] in ">|!&*%":
         raise InstallError("`name:` is not a plain scalar; refusing to rewrite it")
-    patched, count = re.subn(r"(?m)^name:.*$", "name: " + new_name, head, count=1)
+    # `.` does not match \n but DOES match \r, so `^name:.*$` spans the
+    # carriage return on a CRLF file and the replacement silently drops it
+    # -- measured, a 5-line CRLF input came out with 4 CRLF lines and 1 bare
+    # LF line. Mixed line endings in a file this tool generates is a
+    # defect, not a contract guarantee. Fourth correction to this sample,
+    # found by this task's own implementer; `[^\r\n]*` excludes both line
+    # terminator characters from the match, so the original line's ending
+    # survives untouched
+    # `[ref: solution.md, "The rewrite preserves every line ending,
+    # including the one it rewrites"]`.
+    patched, count = re.subn(r"(?m)^name:[^\r\n]*", "name: " + new_name, head, count=1)
     if count != 1:  # unreachable given the checks above; kept as a tripwire
         raise InstallError("no `name:` line in frontmatter; refusing to install unprefixed")
     return patched + body
@@ -163,13 +183,16 @@ def _bundle_version() -> str:
     `bundle` field ("the plugin version that produced this selection")
     `[ref: solution.md, Data model: the manifest (C6)]`. Derived from this
     plugin's own `plugin.json`, the same `__file__`-relative pattern
-    `DEFAULT_CATALOGUE_DIR` uses, since no caller-supplied parameter for it
-    exists in C5's contract -- this is an internal fact about which plugin
-    is running, not something a caller would want to override the way
-    `catalogue_dir` and `home_dir` are overridden for testing.
+    `DEFAULT_CATALOGUE_DIR` uses. Computed once, at import time, into
+    `DEFAULT_BUNDLE_VERSION` below -- `install()`'s default for its
+    `bundle` parameter, not the only route to a value
+    `[ref: solution.md, point 7]`.
     """
     data = json.loads(_PLUGIN_JSON.read_text(encoding="utf-8"))
     return str(data["version"])
+
+
+DEFAULT_BUNDLE_VERSION = _bundle_version()
 
 
 def _read_catalogue_version(catalogue_dir: Path, name: str) -> str:
@@ -289,17 +312,29 @@ def _install_one(
     return _Outcome(changed=True, installed_as=installed_as, version=catalogue_version, sha256=sha256)
 
 
-def install(repo_dir: Path, names, *, catalogue_dir: Path = DEFAULT_CATALOGUE_DIR) -> InstallReport:
+def install(
+    repo_dir: Path,
+    names,
+    *,
+    catalogue_dir: Path = DEFAULT_CATALOGUE_DIR,
+    bundle: str = DEFAULT_BUNDLE_VERSION,
+) -> InstallReport:
     """Install `names` (already cleared by `guard.check()`) into
     `<repo_dir>/.claude/skills/`. See the module docstring for the full
     contract. Never rescans the three namespaces; never raises for a fault
-    in a single pattern -- see `failed`."""
+    in a single pattern -- see `failed`.
+
+    `bundle` defaults to this plugin's own `plugin.json` version, but is a
+    parameter -- like `catalogue_dir` -- because it is otherwise the one
+    input a test cannot drive, and because CI bumps `plugin.json` on merge,
+    which would make a test asserting the manifest's `bundle` field against
+    the real file break on every version bump `[ref: solution.md, point 7]`.
+    """
     repo_dir = Path(repo_dir)
     catalogue_dir = Path(catalogue_dir)
     skills_root = repo_dir / ".claude" / "skills"
 
     manifest_before = manifest.read(repo_dir)
-    bundle = _bundle_version()
 
     installed: dict[str, tuple[str, str, str]] = {}
     unchanged: dict[str, tuple[str, str, str]] = {}
