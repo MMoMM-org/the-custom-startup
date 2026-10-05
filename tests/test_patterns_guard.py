@@ -580,6 +580,45 @@ def test_unreadable_namespace_root_is_skipped_and_reported(tmp_path: Path) -> No
     assert report.skipped[0][1].startswith("directory unreadable")
 
 
+def test_three_unreadable_directories_across_namespaces_are_all_reported(tmp_path: Path) -> None:
+    """Completeness of `skipped` is the whole point of the channel -- a
+    caller that sees one unreadable directory when there were three has
+    been told something false. No fixture before this one put more than
+    one unreadable directory under the SAME namespace root, so a guard
+    that kept only the LAST one it saw per `_walk_skills()` call
+    (`unreadable_dirs[-1:]`) -- or only the FIRST
+    (`unreadable_dirs[:1]`) -- passed every other test in this file: with
+    at most one unreadable directory per root, slicing a one-element list
+    either way is a no-op. TWO of the three here sit under the SAME root
+    (`user`), which is what actually exercises that truncation; the third
+    sits under a DIFFERENT namespace (`repo`), which additionally pins
+    that `skipped` accumulates correctly across separate `_walk_skills()`
+    calls rather than resetting."""
+    guard = _load_guard()
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+
+    blocked_user_1 = home / ".claude" / "skills" / "blocked-user-1"
+    blocked_user_2 = home / ".claude" / "skills" / "blocked-user-2"
+    blocked_repo = repo / ".claude" / "skills" / "blocked-repo"
+
+    for blocked in (blocked_user_1, blocked_user_2, blocked_repo):
+        _skill(blocked, "irrelevant", name="irrelevant")
+
+    try:
+        for blocked in (blocked_user_1, blocked_user_2, blocked_repo):
+            os.chmod(blocked, 0o000)
+        report = guard.check(repo, {"anything"}, home_dir=home)
+    finally:
+        for blocked in (blocked_user_1, blocked_user_2, blocked_repo):
+            os.chmod(blocked, 0o755)
+
+    assert len(report.skipped) == 3, f"expected all three unreadable directories, got {report.skipped!r}"
+    reported_paths = {path for path, _reason in report.skipped}
+    assert reported_paths == {str(blocked_user_1), str(blocked_user_2), str(blocked_repo)}
+    assert all(reason.startswith("directory unreadable") for _path, reason in report.skipped)
+
+
 # --- write-nothing digest sees directory shape, not just files (item 3) ----
 
 
