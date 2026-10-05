@@ -81,7 +81,18 @@ written from the specification rather than from the implementation.
 
      So: (1) assert the corpus size in a **standalone, non-parametrized** test —
      `assert len(fixtures) == 18` — never only as a parametrize source, or an empty corpus
-     passes. (The literal `18` is what T2.1 was asked for and delivered; the count now lives in
+     passes. **`tests/visible_dirs.py` belongs to this task's family and is named here
+     deliberately**, because no task named it and a reader meeting it in a Phase 1 test will
+     otherwise read it as drift. Added at `30bcfd8`; imported by
+     `patterns_detection_corpus_lib.py` and `test_patterns_outcomes.py` inside this phase, and
+     by `test_tcs_patterns_catalogue_relocation.py`, `test_tcs_patterns_catalogue_version.py`
+     and `test_dispatch_detection.py` outside it. It exists because a bare `iterdir()` over a
+     directory picks up the `.claude/` that a `cd` into that directory creates, which broke
+     local discovery while CI stayed green `[ref: SDD/Implementation Gotchas]`.
+     `companions.py`'s `_pattern_names` hidden-directory filter and its two tests are the
+     second instance of the same cause. Accepted as unplanned-but-justified by the Phase 2
+     drift check rather than treated as scope creep.
+     (The literal `18` is what T2.1 was asked for and delivered; the count now lives in
      `tests/patterns_detection_corpus_lib.py`'s `EXPECTED_CASE_COUNT`, which T2.3 took to **26**
      when it added eight gate-coverage fixtures. The guard was renamed off its hardcoded count at
      the same time. The requirement here is the *standalone, non-parametrized* shape, not the
@@ -228,7 +239,9 @@ written from the specification rather than from the implementation.
      a genuine silence: `trap-06` places the three as siblings and therefore passes under either
      reading, so no fixture could have settled it.
 
-     `EXPECTED_CASE_COUNT` is 24, and the guard was renamed from
+     `EXPECTED_CASE_COUNT` was 24 when this step was written, 26 by the time T2.3 closed,
+     and is **27** as of 2026-10-05 (`auto-mcp-server-poetry-dev-group`, added with
+     align F4). The guard was renamed from
      `test_corpus_has_exactly_18_cases` to `test_corpus_has_exactly_the_expected_number_of_cases`
      — it encoded the count in its own identifier and was cited by seven other assertion messages,
      so a corpus change left eight places reading `18` and only one of them checked.
@@ -263,8 +276,13 @@ written from the specification rather than from the implementation.
      **already done** — T2.2 computed it from `auto` alone per ADR-5, which is independent of
      the gates by construction. Do not rework it; confirm it still holds once gates are live,
      since the whole point of ADR-5's clause is that an open gate must not flip the flag.
-  4. Validate: all 24 fixtures green — `python3 -m pytest tests/test_patterns_detect.py -q`
-     reports **`32 passed`** plus whatever this task adds, exit 0. The figure was `19` until
+  4. Validate: every fixture green — `python3 -m pytest tests/test_patterns_detect.py -q`,
+     exit 0. **Measure the number, do not read one from this line.** It has been wrong at
+     every point it was written down: `19`, then `32`, then `53`, and **`75` measured
+     2026-10-05** against a 27-fixture corpus. The two figures this step used to assert —
+     "all 24 fixtures" and "`32 passed`" — were both stale while the paragraph below them
+     already said the corpus had grown to 26, which is the whole finding: the rule at the
+     end of this step was written and then not applied to the step carrying it. The figure was `19` until
      2026-10-04 and was stale twice over: it counted 18 comparisons plus the standalone corpus
      guard, written before T2.1 and T2.2 added the four evidence-invariant tests, the wiring test
      and the two interpreter tests, and before the six gate fixtures took the corpus to 24.
@@ -651,11 +669,20 @@ written from the specification rather than from the implementation.
         alongside the script-name one, since both are ordinary things to find in a repository
         that is not an Obsidian plugin.
 
-     c. **Two bats cases** in `block-eslint-disable.bats`, one per divergence, so the hook's own
-        suite covers them independently of the Python comparison.
+     c. **Three bats cases** in `block-eslint-disable.bats` — this asked for two, one per
+        divergence, and three were added. The third, "allows a write OUTSIDE a plugin nested
+        elsewhere in the same repo", is not surplus: it is the asserted divergence the
+        file-scoped ruling *requires*, since the hook answers "is the target file inside a
+        plugin" while `detect()` answers "does this repository contain one", and the two
+        legitimately disagree for a file outside a nested plugin
+        `[ref: SDD/ADR-7, as amended 2026-10-05]`. Corrected here 2026-10-05; `7d7b18a` fixed
+        this task's walk mandate and left its counts behind.
+        The point of all three is that the hook's own suite covers the behaviour
+        independently of the Python comparison.
   4. Validate: `python3 -m pytest tests/test_obsidian_rule_agreement.py -q`;
-     `bats plugins/tcs-patterns/tests/bats/block-eslint-disable.bats` — expect 14 ok, and confirm
-     the 12 pre-existing cases still pass unchanged; then `python3 -m pytest -q` and
+     `bats plugins/tcs-patterns/tests/bats/block-eslint-disable.bats` — **15 ok, 0 not ok**
+     measured 2026-10-05 (this line said 14, matching the two cases asked for rather than the
+     three added), and confirm the 12 pre-existing cases still pass unchanged; then `python3 -m pytest -q` and
      `shellcheck plugins/tcs-patterns/scripts/block-eslint-disable.sh`. Change one rule locally,
      on each side in turn, and confirm the test fails — an agreement test that cannot fail is
      decoration, and over this corpus it very nearly is.
@@ -778,10 +805,12 @@ written from the specification rather than from the implementation.
   **Measured 2026-10-05, both legs reported per leg as the task requires.** Re-measured the
   same day after the drift remainder and align F4 landed (`073a8ec`, `d0a7453`, `1815ec3`);
   the earlier figure of `999 passed` is kept below as history, not as the current state.
-  - **Leg 1, pytest:** `1022 passed, 1 skipped, 1 deselected, 0 failed` -- was `999` when
+  - **Leg 1, pytest:** `1028 passed, 1 skipped, 1 deselected, 0 failed` -- was `999` when
     this task was first measured, then `1011` after the malformed-manifest guards gained
     tests (+8), then `1022` after align F4 (+7 tests, +4 corpus sweeps over the 27th
-    fixture).
+    fixture), then `1028` after the drift check's remainder arrived (+6: five parametrized
+    `mcp-server` reader cases and the indirect-require pin). Five figures in one day, which
+    is the standing argument for measuring rather than citing.
   - **Leg 2, bats:** `1187 ok, 0 not ok` across all four plugin suites -- `tcs-git-helpers` 835,
     `tcs-helper` 330, `tcs-issues` 7, `tcs-patterns` 15. Counted per suite rather than from a run
     verdict, and `plugins/tcs-helper/tests/bats` alone is **not** the bats leg: it is 330 of 1187,

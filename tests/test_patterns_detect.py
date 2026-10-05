@@ -876,6 +876,10 @@ def test_an_unparseable_pyproject_is_not_fatal_but_its_existence_signal_survives
 
     assert [e["pattern"] for e in report["auto"]] == ["python-project"]
     assert report["unrecognised_stack"] is False
+    # Listed despite not parsing. The SDD's Error Handling row makes this
+    # listing the reason the skip is explicable at all -- a reader seeing no
+    # dependency evidence from this file needs to know it was found.
+    assert report["manifests_walked"] == ["pyproject.toml"]
     # But nothing that needed the file's CONTENTS: no gate opened on a
     # dependency the parser never got to read.
     assert report["gates"] == {
@@ -1130,3 +1134,121 @@ def test_setup_py_install_requires_still_opens_q1(tmp_path) -> None:
 
     assert report["gates"]["q1_backend"] is True
     assert report["gate_evidence"]["q1_backend"] == ["setup.py: install_requires.flask"]
+
+
+# ---------------------------------------------------------------------------
+# Every `mcp-server` reader, in tree
+# ---------------------------------------------------------------------------
+# `_rule_mcp_server` reads five declarations across four manifests -- the three
+# ecosystems' SDK names `[ref: SDD/Detection rules: the eight stack facts]`.
+# When the Phase 2 drift check looked, exactly one had in-tree evidence:
+# `auto-mcp-server` declares `@modelcontextprotocol/sdk` in `package.json` and
+# no fixture declared `mcp` in any Python manifest or `mark3labs/mcp-go` at
+# all. T2.7's held-out `setup.py` case covers one more and is held out by
+# design, so it cannot serve as the in-tree evidence.
+#
+# Parametrized over all five rather than only the two that were still bare,
+# because the rule is a first-hit cascade: `package.json`, `requirements.txt`,
+# `pyproject.toml`, `setup.py`, `go.mod`, returning on the first match. A case
+# that passes in isolation does not show that its own branch ran -- an earlier
+# branch firing for the wrong reason would look identical. Asserting the exact
+# evidence string per case is what distinguishes them, so each case declares
+# the SDK in exactly one place.
+
+MCP_READER_CASES = [
+    (
+        "package.json dependencies",
+        {"package.json": '{"name": "s", "version": "1.0.0", '
+                         '"dependencies": {"@modelcontextprotocol/sdk": "^1.0.0"}}\n'},
+        "package.json: dependencies.@modelcontextprotocol/sdk",
+        [],
+    ),
+    (
+        "requirements.txt",
+        {"requirements.txt": "mcp>=1.0\n", "app.py": "x = 1\n"},
+        "requirements.txt: requirements.mcp",
+        ["python-project"],
+    ),
+    (
+        "pyproject [project] dependencies",
+        {"pyproject.toml": '[project]\nname = "s"\nversion = "1.0.0"\n'
+                           'dependencies = ["mcp>=1.0"]\n',
+         "app.py": "x = 1\n"},
+        "pyproject.toml: dependencies.mcp",
+        ["python-project"],
+    ),
+    (
+        "setup.py install_requires",
+        {"setup.py": 'from setuptools import setup\n\n'
+                     'setup(name="s", version="1.0.0", install_requires=["mcp>=1.0"])\n',
+         "app.py": "x = 1\n"},
+        "setup.py: install_requires.mcp",
+        ["python-project"],
+    ),
+    (
+        "go.mod direct require",
+        {"go.mod": "module example.com/s\n\ngo 1.22\n\n"
+                   "require github.com/mark3labs/mcp-go v0.1.0\n"},
+        "go.mod: require.github.com/mark3labs/mcp-go",
+        ["go-idiomatic"],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "case_id,files,expected_evidence,also_expected",
+    MCP_READER_CASES,
+    ids=[c[0] for c in MCP_READER_CASES],
+)
+def test_every_mcp_server_reader_fires_and_cites_its_own_manifest(
+    case_id, files, expected_evidence, also_expected, tmp_path
+) -> None:
+    """One declaration per case, in one manifest, with the exact evidence
+    string asserted. `also_expected` pins the collateral stack facts -- a
+    `requirements.txt` plus a `.py` is a Python project and a `go.mod` is a Go
+    one -- so the assertion is over the whole `auto` set rather than a
+    membership test that would tolerate an extra proposal appearing.
+    """
+    for name, body in files.items():
+        (tmp_path / name).write_text(body, encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    by_pattern = {e["pattern"]: e["evidence"] for e in report["auto"]}
+    assert "mcp-server" in by_pattern, (
+        "%s: mcp-server did not fire; auto was %r" % (case_id, sorted(by_pattern))
+    )
+    assert by_pattern["mcp-server"] == expected_evidence, case_id
+    assert sorted(by_pattern) == sorted(["mcp-server"] + list(also_expected)), case_id
+
+
+def test_an_indirect_mcp_go_require_is_not_mcp_server_evidence(tmp_path) -> None:
+    """The negative the five positives above cannot supply, and the one the
+    SDD already warned about in prose: `_go_mod_requires` strips `//` comments,
+    so an `// indirect` require reads as direct. A CLI tool that transitively
+    pulls `mark3labs/mcp-go` is not an MCP server.
+
+    This is recorded in `solution.md` as a measured hazard -- "it would make
+    `mcp-server` fire on a transitively pulled `mark3labs/mcp-go`" -- and
+    nothing asserted it either way, so this test states the CURRENT behaviour
+    rather than the desired one, and fails loudly if it ever changes.
+    """
+    (tmp_path / "go.mod").write_text(
+        "module example.com/cli\n\ngo 1.22\n\n"
+        "require github.com/mark3labs/mcp-go v0.1.0 // indirect\n",
+        encoding="utf-8",
+    )
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    patterns = sorted(e["pattern"] for e in report["auto"])
+    # Measured 2026-10-05: the comment is stripped, so this DOES fire today.
+    # Pinned as-is. If a later change makes the indirect marker survive for
+    # stack facts as the SDD suggests it should for gates, this assertion is
+    # the one to update, deliberately, with that decision recorded.
+    assert patterns == ["go-idiomatic", "mcp-server"], (
+        "an indirect require's treatment changed; see solution.md's note on "
+        "`_go_mod_requires` stripping comments"
+    )
