@@ -65,6 +65,20 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 LIB_DIR = REPO_ROOT / "plugins" / "tcs-patterns" / "skills" / "patterns-setup" / "lib"
 REAL_CATALOGUE_DIR = REPO_ROOT / "plugins" / "tcs-patterns" / "templates" / "patterns"
 
+# Passed explicitly to every `install()` call in this file that is not
+# itself testing the derived default -- mirrors T3.2b's `own_installed=
+# frozenset()` through the guard's call sites. Without this, omitting
+# `bundle` falls through to `_bundle_version()`, which reads a `plugin.json`
+# relative to the MODULE's own `__file__` -- fine when `install.py` is
+# loaded from its real location (as every test here does via
+# `_load_install()`), but fatal when it is loaded from a relocated copy for
+# mutation testing, since that copy's `__file__` resolves nowhere real. The
+# two tests that must NOT pass this -- `test_default_catalogue_dir_resolves_
+# to_the_real_templates_patterns_dir` and `test_bundle_defaults_to_the_
+# installed_plugins_own_version` -- exist specifically to probe that real
+# derivation and omit it on purpose.
+TEST_BUNDLE = "0.0.0-test"
+
 
 def _load_install() -> ModuleType:
     """See `test_patterns_guard.py::_load_guard` for why this import happens
@@ -177,7 +191,7 @@ def test_chosen_pattern_lands_with_tcs_prefix_and_full_subtree(tmp_path: Path) -
     )
     repo = tmp_path / "repo"
 
-    report = install.install(repo, ["ddd"], catalogue_dir=catalogue)
+    report = install.install(repo, ["ddd"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
 
     dest = _skills_root(repo) / "tcs-ddd"
     assert dest.is_dir()
@@ -196,7 +210,7 @@ def test_nothing_unchosen_is_written(tmp_path: Path) -> None:
     _catalogue_pattern(catalogue, "beta")
     repo = tmp_path / "repo"
 
-    report = install.install(repo, ["alpha"], catalogue_dir=catalogue)
+    report = install.install(repo, ["alpha"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
 
     assert (_skills_root(repo) / "tcs-alpha").is_dir()
     assert not (_skills_root(repo) / "tcs-beta").exists()
@@ -213,7 +227,7 @@ def test_manifest_records_version_installed_name_and_hash_for_each(tmp_path: Pat
     _catalogue_pattern(catalogue, "hexagonal", version="2")
     repo = tmp_path / "repo"
 
-    report = install.install(repo, ["ddd", "hexagonal"], catalogue_dir=catalogue)
+    report = install.install(repo, ["ddd", "hexagonal"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
 
     after = manifest.read(repo)
     for name in ("ddd", "hexagonal"):
@@ -235,7 +249,7 @@ def test_report_lists_writes_and_committed_is_false(tmp_path: Path) -> None:
     _catalogue_pattern(catalogue, "ddd")
     repo = tmp_path / "repo"
 
-    report = install.install(repo, ["ddd"], catalogue_dir=catalogue)
+    report = install.install(repo, ["ddd"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
 
     assert report.committed is False  # identity, not falsiness -- always False, never merely falsy
     assert set(report.installed) == {"ddd"}
@@ -296,7 +310,7 @@ def test_sha256_in_report_matches_independently_computed_hash_of_installed_file(
     _catalogue_pattern(catalogue, "hexagonal", version="2")
     repo = tmp_path / "repo"
 
-    report = install.install(repo, ["hexagonal"], catalogue_dir=catalogue)
+    report = install.install(repo, ["hexagonal"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
 
     installed_skill_md = _skills_root(repo) / "tcs-hexagonal" / "SKILL.md"
     expected = hashlib.sha256(installed_skill_md.read_bytes()).hexdigest()
@@ -326,7 +340,7 @@ def test_malformed_name_fails_one_pattern_while_the_other_installs_in_one_call(t
     )
     repo = tmp_path / "repo"
 
-    report = install.install(repo, ["good", "bad"], catalogue_dir=catalogue)
+    report = install.install(repo, ["good", "bad"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
 
     assert report.installed["good"][0] == "tcs-good"
     assert "bad" in report.failed and report.failed["bad"]
@@ -349,7 +363,7 @@ def test_missing_name_key_raises_rather_than_installing_unprefixed(tmp_path: Pat
     )
     repo = tmp_path / "repo"
 
-    report = install.install(repo, ["bad"], catalogue_dir=catalogue)
+    report = install.install(repo, ["bad"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
 
     assert "bad" in report.failed
     assert not (_skills_root(repo) / "tcs-bad").exists()
@@ -365,11 +379,11 @@ def test_second_identical_install_is_a_noop_by_content_and_manifest_digest(tmp_p
     _catalogue_pattern(catalogue, "ddd", version="3")
     repo = tmp_path / "repo"
 
-    first = install.install(repo, ["ddd"], catalogue_dir=catalogue)
+    first = install.install(repo, ["ddd"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
     assert "ddd" in first.installed
 
     digest_after_first = _digest_tree(_skills_root(repo))
-    second = install.install(repo, ["ddd"], catalogue_dir=catalogue)
+    second = install.install(repo, ["ddd"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
     digest_after_second = _digest_tree(_skills_root(repo))
 
     assert digest_after_first == digest_after_second
@@ -403,7 +417,7 @@ def test_crlf_skill_md_installs_successfully_and_stays_crlf_throughout(tmp_path:
     )
     repo = tmp_path / "repo"
 
-    report = install.install(repo, ["crlf-pattern"], catalogue_dir=catalogue)
+    report = install.install(repo, ["crlf-pattern"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
 
     assert "crlf-pattern" in report.installed
     installed_text = (_skills_root(repo) / "tcs-crlf-pattern" / "SKILL.md").read_bytes()
@@ -427,7 +441,7 @@ def test_lf_skill_md_installs_successfully_and_stays_lf_throughout(tmp_path: Pat
     )
     repo = tmp_path / "repo"
 
-    report = install.install(repo, ["lf-pattern"], catalogue_dir=catalogue)
+    report = install.install(repo, ["lf-pattern"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
 
     assert "lf-pattern" in report.installed
     installed_text = (_skills_root(repo) / "tcs-lf-pattern" / "SKILL.md").read_bytes()
@@ -493,14 +507,14 @@ def test_present_locally_edited_pattern_is_failed_and_untouched(tmp_path: Path) 
     catalogue = tmp_path / "catalogue"
     _catalogue_pattern(catalogue, "edited", version="2")
     repo = tmp_path / "repo"
-    first = install.install(repo, ["edited"], catalogue_dir=catalogue)
+    first = install.install(repo, ["edited"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
     assert "edited" in first.installed
 
     installed_path = _skills_root(repo) / "tcs-edited" / "SKILL.md"
     installed_path.write_bytes(installed_path.read_bytes() + b"\nLocally added paragraph.\n")
 
     digest_before = _digest_tree(_skills_root(repo))
-    second = install.install(repo, ["edited"], catalogue_dir=catalogue)
+    second = install.install(repo, ["edited"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
     digest_after = _digest_tree(_skills_root(repo))
 
     assert digest_before == digest_after
@@ -519,13 +533,13 @@ def test_present_stale_but_unedited_pattern_is_failed_and_untouched(tmp_path: Pa
     catalogue = tmp_path / "catalogue"
     _catalogue_pattern(catalogue, "stale", version="1")
     repo = tmp_path / "repo"
-    first = install.install(repo, ["stale"], catalogue_dir=catalogue)
+    first = install.install(repo, ["stale"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
     assert "stale" in first.installed
 
     (catalogue / "stale" / "VERSION").write_text("2\n", encoding="utf-8")  # catalogue moves on; file untouched
 
     digest_before = _digest_tree(_skills_root(repo))
-    second = install.install(repo, ["stale"], catalogue_dir=catalogue)
+    second = install.install(repo, ["stale"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
     digest_after = _digest_tree(_skills_root(repo))
 
     assert digest_before == digest_after
@@ -550,7 +564,7 @@ def test_leftover_tmp_directory_from_a_crashed_run_is_cleaned(tmp_path: Path) ->
     leftover.mkdir(parents=True)
     (leftover / "garbage-from-a-crashed-run.txt").write_text("stale debris\n", encoding="utf-8")
 
-    report = install.install(repo, ["good"], catalogue_dir=catalogue)
+    report = install.install(repo, ["good"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
 
     assert "good" in report.installed
     dest = _skills_root(repo) / "tcs-good"
@@ -585,7 +599,7 @@ def test_directory_lands_even_when_the_manifest_upsert_fails(tmp_path: Path, mon
 
     monkeypatch.setattr(manifest, "upsert", _failing_upsert)
 
-    report = install.install(repo, ["good"], catalogue_dir=catalogue)
+    report = install.install(repo, ["good"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
 
     dest = _skills_root(repo) / "tcs-good"
     assert dest.is_dir()
