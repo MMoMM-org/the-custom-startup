@@ -47,14 +47,50 @@ below carries a digest proving nothing on disk changed, not only a
 report-channel assertion -- a mutation that reports `failed` correctly while
 still overwriting the file passes any test that checks only the report
 `[ref: solution.md, "install() is purely additive"]`.
+
+---
+
+**T3.4 added `update()`'s suite to this same file** (C5's second verb, below
+the `=== T3.4 ===` banner). Still not `test_patterns_install.py`, which
+remains T3.1's manifest store (C6), and still not `test_patterns_guard.py`,
+which is C4.
+
+**Why ADR-4's byte-identical guarantee and its `reference/` limit are not in
+conflict -- they are different rows of the contract's three-state table**
+`[ref: solution.md, "Data model: the update path (C5's second verb)",
+decision 2; SDD/ADR-4, "Trade-offs accepted"]`. Read together without the
+table they look like a contradiction ("nothing local is ever lost without
+consent" against "a local `reference/` edit is replaced with no prompt"), and
+the two fixtures below sit one in each row:
+
+- The **byte-identical guarantee** is the **hash-differs** row. `decide`
+  returned `False`, so the whole directory is left alone, `reference/`
+  included -- proven by a digest, not by a report channel.
+- **"Replaced without a prompt"** is the **version-behind, hash-matches**
+  row. The refresh there is unconditional, and it overwrites the full
+  directory, a locally edited `reference/` file included.
+
+Both hold because **the hash never covered `reference/`**: a
+`reference/`-only edit cannot put a pattern into the hash-differs row at
+all, so it never reaches the row where consent is asked. The fixture making
+that visible is version stale, `SKILL.md` hash **matching** the manifest, a
+`reference/` file hand-edited -- then the refresh overwrites it.
+
+And the limit on *detection* is not a limit on *replacement*: when `decide`
+returns `True` the **whole subtree** is replaced, so the accept-path fixture
+carries a `reference/` file too and asserts its bytes against the
+catalogue's.
 """
 
 from __future__ import annotations
 
 import hashlib
 import importlib
+import inspect
 import json
 import os
+import re
+import shutil
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -633,3 +669,534 @@ def test_rename_in_frontmatter_leaves_body_byte_identical_including_name_shaped_
     body = text.split("---", 2)[2]
     assert patched.endswith(body)
     assert "name: ddd again here" in patched
+
+
+# =============================================================================
+# T3.4: `update()`, C5's second verb
+# =============================================================================
+#
+# The three states, exactly as the contract's table defines them
+# `[ref: solution.md, "Data model: the update path (C5's second verb)",
+# decision 2]`. Every fixture below is built to sit in exactly one row:
+#
+#   manifest `version` vs catalogue `VERSION` | installed hash vs manifest `sha256`
+#   ---------------------------------------- | -----------------------------------
+#   equal                                    | equal   -> `current`, nothing done
+#   BEHIND                                   | equal   -> refreshed, NO prompt
+#   any                                      | DIFFERS -> decide(name, diff)
+#
+# `update()` takes no `names` argument at all -- the manifest is its only
+# input about what to act on (F8's first criterion: no scan, no questions)
+# `[ref: decision 1]`.
+
+
+_DIVERGED_NAME = "api-design"
+
+# The catalogue's own bytes for the divergence fixtures.
+_DIVERGED_CATALOGUE_SKILL = (
+    "---\n"
+    "name: api-design\n"
+    "description: fixture pattern for T3.4\n"
+    "---\n"
+    "\n"
+    "Upstream body line, unedited.\n"
+)
+
+# The same file as it must appear once INSTALLED -- hand-written, with the
+# `tcs-` prefix already applied, and deliberately NOT produced by calling
+# `rename_in_frontmatter`, the helper `update()` itself uses to build the
+# diff's `to` side. A shared bug in that helper would otherwise appear
+# identically on both sides of the comparison and pass
+# `[ref: phase-3.md#T3.4, "never by calling the same rename helper"]`.
+_DIVERGED_CATALOGUE_AS_INSTALLED = (
+    "---\n"
+    "name: tcs-api-design\n"
+    "description: fixture pattern for T3.4\n"
+    "---\n"
+    "\n"
+    "Upstream body line, unedited.\n"
+)
+
+_UPSTREAM_LINE = "Upstream body line, unedited."
+# The user's hand edit. Must NOT start with `name:`, or the `^[-+]name:`
+# assertion below would be checking something other than what it is written
+# for `[ref: phase-3.md#T3.4]`.
+_USER_EDIT_LINE = "Locally adapted body line, mine."
+
+_DIVERGED_INSTALLED_EDITED = _DIVERGED_CATALOGUE_AS_INSTALLED.replace(_UPSTREAM_LINE, _USER_EDIT_LINE)
+
+
+def _manifest_bytes(repo: Path) -> bytes:
+    """The manifest file's raw bytes, or a sentinel when absent. A literal
+    byte comparison, not an "entry unchanged" paraphrase -- that is what
+    catches a mutation reporting `declined` correctly and writing the
+    manifest anyway `[ref: phase-3.md#T3.4]`."""
+    manifest = _load_manifest()
+    path = Path(repo).joinpath(*manifest.MANIFEST_DIR, manifest.MANIFEST_FILENAME)
+    return path.read_bytes() if path.is_file() else b"ABSENT"
+
+
+def _entry_fields(repo: Path, name: str) -> tuple[str, str, str]:
+    entry = _load_manifest().read(repo).patterns[name]
+    return (entry.version, entry.installed_as, entry.sha256)
+
+
+def _assert_diff_properties(diff: str, *, where: str) -> None:
+    """The four properties the contract pins about the divergence diff, and
+    only those four.
+
+    `n` (the context width) is explicitly NOT pinned and must not be
+    asserted `[ref: solution.md, decision 4, "The context width n is NOT
+    pinned"]`, which is why this asserts properties rather than comparing
+    against a diff literal: measured, populating the labels changes two
+    lines and `n=5` turns an 8-line diff into 10, so an exact-equality test
+    fails against a *conforming* implementation.
+
+    1. The user's edit appears as a DELETION -- sign-aware. A
+       direction-reversed diff contains the edit text as an *addition*, so a
+       sign-blind "the edit is in there somewhere" check passes it.
+    2. The incoming catalogue text appears as an ADDITION -- the mirror of
+       1, which is what makes the pair fail a reversal rather than only one.
+    3. No `^[-+]name:` line -- a diff computed against the catalogue's
+       PRE-rename bytes contains the user's edit too, just additionally
+       polluted with a `name:` hunk, so 1 alone does not catch it.
+    4. Both header labels populated, as decision 4 pins them. `difflib`
+       defaults both to empty, so this fails a plain `unified_diff(a, b)`.
+    """
+    lines = diff.splitlines()
+    assert f"-{_USER_EDIT_LINE}" in lines, f"{where}: the user's edit is not a deletion: {diff!r}"
+    assert f"+{_UPSTREAM_LINE}" in lines, f"{where}: the catalogue text is not an addition: {diff!r}"
+    polluted = [line for line in lines if re.match(r"^[-+]name:", line)]
+    assert polluted == [], f"{where}: diff carries a pre-rename `name:` hunk: {polluted!r}"
+    assert "--- installed" in lines, f"{where}: `fromfile` label not populated: {diff!r}"
+    assert "+++ catalogue" in lines, f"{where}: `tofile` label not populated: {diff!r}"
+
+
+def _diverged_fixture(tmp_path: Path, *, extra_files: dict[str, str] | None = None) -> tuple[Path, Path]:
+    """Install `api-design`, then hand-edit ONE BODY LINE of the installed
+    `SKILL.md` so its hash no longer matches the manifest -- the contract's
+    third row, which always asks.
+
+    The catalogue `VERSION` is left EQUAL to the manifest's on purpose, so
+    the "any" in that row's first column is genuinely exercised rather than
+    co-varying with staleness.
+    """
+    install = _load_install()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(
+        catalogue,
+        _DIVERGED_NAME,
+        version="1",
+        skill_bytes=_DIVERGED_CATALOGUE_SKILL.encode("utf-8"),
+        extra_files=extra_files,
+    )
+    repo = tmp_path / "repo"
+    first = install.install(repo, [_DIVERGED_NAME], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+    assert _DIVERGED_NAME in first.installed
+
+    installed_skill_md = _skills_root(repo) / f"tcs-{_DIVERGED_NAME}" / "SKILL.md"
+    # The hand-written literal must actually be what the installer writes,
+    # or every diff assertion below is pinned against a file shape that
+    # never occurs. Checked once, here, rather than assumed in four tests.
+    assert installed_skill_md.read_bytes() == _DIVERGED_CATALOGUE_AS_INSTALLED.encode("utf-8")
+    installed_skill_md.write_bytes(_DIVERGED_INSTALLED_EDITED.encode("utf-8"))
+    return catalogue, repo
+
+
+# --- decision 1: the manifest is the only selection input -------------------
+
+
+def test_update_acts_on_every_manifest_pattern_and_has_no_names_parameter(tmp_path: Path) -> None:
+    """F8's first criterion, both halves. There is no `names` parameter to
+    pass a selection through (the signature half), and a catalogue pattern
+    the manifest does not record is neither acted on nor written (the
+    behavioural half) `[ref: PRD/F8 1st; solution.md, decision 1]`."""
+    install = _load_install()
+    sig = inspect.signature(install.update)
+    assert "names" not in sig.parameters
+    positional = [p for p in sig.parameters.values() if p.kind is not inspect.Parameter.KEYWORD_ONLY]
+    assert positional == [sig.parameters["repo_dir"]]
+
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "ddd", version="1")
+    _catalogue_pattern(catalogue, "hexagonal", version="1")
+    _catalogue_pattern(catalogue, "unselected", version="1")
+    repo = tmp_path / "repo"
+    first = install.install(repo, ["ddd", "hexagonal"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+    assert sorted(first.installed) == ["ddd", "hexagonal"]
+    (catalogue / "hexagonal" / "VERSION").write_text("2\n", encoding="utf-8")
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    assert "ddd" in report.current
+    assert "hexagonal" in report.refreshed
+    for channel in (report.refreshed, report.declined, report.current, report.failed):
+        assert "unselected" not in channel
+    assert not (_skills_root(repo) / "tcs-unselected").exists()
+
+
+# --- the middle row: behind, hash matches -- refreshes without asking -------
+
+
+def test_version_behind_with_matching_hash_refreshes_without_ever_calling_decide(tmp_path: Path) -> None:
+    """The row worth stating explicitly: nothing local can be lost, so the
+    refresh must not interrupt the user `[ref: solution.md, decision 2]`.
+
+    `decide` RECORDS every invocation and returns `True`, so the only
+    assertion that can fail here is the empty call list itself -- a mutation
+    that asks is caught by `calls == []` rather than by a cascade of
+    downstream failures. One pattern in the manifest, so there is no
+    ambiguity about which pattern would have triggered the call
+    `[ref: phase-3.md#T3.4]`.
+
+    `version_before` is pinned as well as `version_after` -- without it a
+    mutation swapping the two elements, or hardcoding the first, survives.
+    """
+    install = _load_install()
+    manifest = _load_manifest()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "testing", version="1")
+    repo = tmp_path / "repo"
+    assert "testing" in install.install(repo, ["testing"], catalogue_dir=catalogue, bundle=TEST_BUNDLE).installed
+
+    version_before = manifest.read(repo).patterns["testing"].version
+    assert version_before == "1"
+    # Upstream moves on, in VERSION *and* in content. The INSTALLED file is
+    # untouched, so its hash still matches the manifest.
+    (catalogue / "testing" / "VERSION").write_text("2\n", encoding="utf-8")
+    (catalogue / "testing" / "SKILL.md").write_bytes(
+        b"---\nname: testing\ndescription: fixture pattern for T3.4\n---\n\nUpstream v2 body.\n"
+    )
+
+    calls: list[tuple[str, str]] = []
+
+    def decide(name: str, diff: str) -> bool:
+        calls.append((name, diff))
+        return True
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE, decide=decide)
+
+    assert calls == []
+    installed_as, got_before, got_after, sha256 = report.refreshed["testing"]
+    assert installed_as == "tcs-testing"
+    assert got_before == version_before
+    # F8's third criterion applies to the no-prompt refresh too, not only
+    # where `decide` returned True `[ref: PRD/F8 3rd; SDD/AC-17]`.
+    assert got_after == (catalogue / "testing" / "VERSION").read_text(encoding="utf-8").strip()
+    # Recomputed independently from the file on disk, mirroring
+    # `test_sha256_in_report_matches_independently_computed_hash_of_installed_file`
+    # -- never trusting a value `update()` produced.
+    installed_skill_md = _skills_root(repo) / "tcs-testing" / "SKILL.md"
+    assert sha256 == hashlib.sha256(installed_skill_md.read_bytes()).hexdigest()
+    assert b"Upstream v2 body." in installed_skill_md.read_bytes()
+    assert _entry_fields(repo, "testing") == ("2", "tcs-testing", sha256)
+    assert report.committed is False
+
+
+def test_version_behind_hash_matching_overwrites_a_locally_edited_reference_file(tmp_path: Path) -> None:
+    """ADR-4's accepted limit, made visible rather than left to be
+    discovered: the hash covers `SKILL.md` only, so a `reference/`-only edit
+    cannot put a pattern into the hash-differs row at all -- it stays in the
+    middle row, whose refresh is unconditional, and the local edit is
+    replaced with no prompt `[ref: SDD/ADR-4, "Trade-offs accepted";
+    solution.md, decision 6]`. Deliberate, and not a defect to fix here.
+    """
+    install = _load_install()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(
+        catalogue,
+        "observability",
+        version="1",
+        extra_files={"reference/guide.md": "# Upstream guide\n"},
+    )
+    repo = tmp_path / "repo"
+    assert "observability" in install.install(
+        repo, ["observability"], catalogue_dir=catalogue, bundle=TEST_BUNDLE
+    ).installed
+
+    # Catalogue version moves on; the installed SKILL.md is NOT touched, so
+    # its hash still matches the manifest. Only the reference file is edited.
+    (catalogue / "observability" / "VERSION").write_text("2\n", encoding="utf-8")
+    local_ref = _skills_root(repo) / "tcs-observability" / "reference" / "guide.md"
+    local_ref.write_bytes(b"# Local scribble, nothing upstream has.\n")
+
+    calls: list[tuple[str, str]] = []
+
+    def decide(name: str, diff: str) -> bool:
+        calls.append((name, diff))
+        return False
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE, decide=decide)
+
+    assert calls == []
+    assert "observability" in report.refreshed
+    assert local_ref.read_bytes() == (catalogue / "observability" / "reference" / "guide.md").read_bytes()
+
+
+# --- the third row: hash differs -- always asks -----------------------------
+
+
+def test_diverged_pattern_hands_decide_a_signed_and_labelled_diff(tmp_path: Path) -> None:
+    """What `decide` RECEIVES. Asserted by the four properties the contract
+    pins, never by equality against a diff literal -- see
+    `_assert_diff_properties` for why each of the four exists and which
+    mutation it kills."""
+    install = _load_install()
+    catalogue, repo = _diverged_fixture(tmp_path)
+
+    calls: list[tuple[str, str]] = []
+
+    def decide(name: str, diff: str) -> bool:
+        calls.append((name, diff))
+        return False
+
+    install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE, decide=decide)
+
+    assert [name for name, _ in calls] == [_DIVERGED_NAME]
+    _assert_diff_properties(calls[0][1], where="the diff passed into decide()")
+
+
+def test_declined_report_carries_the_diff_with_the_same_four_properties(tmp_path: Path) -> None:
+    """What the REPORT carries, asserted INDEPENDENTLY of what the callback
+    received. `UpdateReport.declined[name][1]` is what a later advisory
+    shows the user `[ref: SDD/Runtime View/Primary Flow, step 9]`, so a
+    mutation computing the diff correctly for the callback and storing an
+    empty string, a stale value or the pre-rename diff in the report is an
+    externally visible bug.
+
+    Deliberately NOT "the report equals what the callback received": that
+    compares two values the code under test produces at two sites, so a
+    compound mutation computing the *wrong* diff identically in both places
+    is self-consistent and passes `[ref: phase-3.md#T3.4]`."""
+    install = _load_install()
+    manifest = _load_manifest()
+    catalogue, repo = _diverged_fixture(tmp_path)
+    version_before = manifest.read(repo).patterns[_DIVERGED_NAME].version
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE, decide=lambda name, diff: False)
+
+    version, diff = report.declined[_DIVERGED_NAME]
+    assert version == version_before
+    _assert_diff_properties(diff, where="the diff stored in report.declined")
+
+
+def test_declining_leaves_the_installed_file_and_the_manifest_byte_identical(tmp_path: Path) -> None:
+    """ADR-4's guarantee on the decline path, proven by literal comparison
+    twice over: a digest over the whole skills tree, and the manifest
+    file's own bytes plus a field-by-field compare of its `PatternEntry`.
+    The mutation this kills reports `declined` correctly and writes anyway
+    `[ref: phase-3.md#T3.4]`."""
+    install = _load_install()
+    catalogue, repo = _diverged_fixture(tmp_path)
+    entry_before = _entry_fields(repo, _DIVERGED_NAME)
+    tree_before = _digest_tree(_skills_root(repo))
+    manifest_before = _manifest_bytes(repo)
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE, decide=lambda name, diff: False)
+
+    assert _digest_tree(_skills_root(repo)) == tree_before
+    assert _manifest_bytes(repo) == manifest_before
+    assert _entry_fields(repo, _DIVERGED_NAME) == entry_before
+    assert _DIVERGED_NAME in report.declined
+    for channel in (report.refreshed, report.current, report.failed):
+        assert _DIVERGED_NAME not in channel
+    assert report.committed is False
+
+
+def test_diverged_and_behind_still_asks_and_declining_writes_nothing(tmp_path: Path) -> None:
+    """The third row's first column is "any", so a pattern that is BOTH
+    behind and diverged still asks -- and declining must leave the manifest
+    at its OLD version.
+
+    This fixture exists because the version-equal decline fixture above
+    cannot catch a mutation that reports `declined` correctly and upserts
+    the manifest anyway: with the manifest `version` and the catalogue
+    `VERSION` already equal, that erroneous write regenerates
+    byte-identical content and every digest assertion passes. Measured
+    against that exact mutant, which survives the two tests either side of
+    this one `[ref: phase-3.md#T3.4, "Unchanged must be a literal
+    comparison, twice over"]`."""
+    install = _load_install()
+    catalogue, repo = _diverged_fixture(tmp_path)
+    (catalogue / _DIVERGED_NAME / "VERSION").write_text("2\n", encoding="utf-8")
+    entry_before = _entry_fields(repo, _DIVERGED_NAME)
+    assert entry_before[0] == "1"
+    tree_before = _digest_tree(_skills_root(repo))
+    manifest_before = _manifest_bytes(repo)
+    calls: list[tuple[str, str]] = []
+
+    def decide(name: str, diff: str) -> bool:
+        calls.append((name, diff))
+        return False
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE, decide=decide)
+
+    assert [name for name, _ in calls] == [_DIVERGED_NAME]
+    version, diff = report.declined[_DIVERGED_NAME]
+    assert version == "1"
+    _assert_diff_properties(diff, where="the diff for a pattern both behind and diverged")
+    assert _digest_tree(_skills_root(repo)) == tree_before
+    assert _manifest_bytes(repo) == manifest_before
+    assert _entry_fields(repo, _DIVERGED_NAME) == entry_before
+
+
+def test_default_decide_declines_so_an_unanswered_prompt_destroys_nothing(tmp_path: Path) -> None:
+    """`update()` called with NO callback argument at all -- not an explicit
+    decliner. That is the only form that exercises the default, which is
+    where "an unanswered prompt cannot destroy local work" lives now that it
+    is held by this module rather than by C3's prose
+    `[ref: SDD/ADR-4; solution.md, decision 3]`."""
+    install = _load_install()
+    catalogue, repo = _diverged_fixture(tmp_path)
+    entry_before = _entry_fields(repo, _DIVERGED_NAME)
+    tree_before = _digest_tree(_skills_root(repo))
+    manifest_before = _manifest_bytes(repo)
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    assert _digest_tree(_skills_root(repo)) == tree_before
+    assert _manifest_bytes(repo) == manifest_before
+    assert _entry_fields(repo, _DIVERGED_NAME) == entry_before
+    assert _DIVERGED_NAME in report.declined
+    assert _DIVERGED_NAME not in report.refreshed
+
+
+def test_accepting_a_diverged_pattern_replaces_the_whole_subtree(tmp_path: Path) -> None:
+    """The accept path replaces the FULL SUBTREE, `reference/` included.
+
+    The limit on *detection* (the hash covers `SKILL.md` only, decision 6)
+    is not a limit on *replacement*: an implementation that rewrites only
+    `SKILL.md` on a hash difference passes every other test in this plan
+    while leaving stale `reference/` content in place after the user
+    accepted the diff. The local scribble below is what makes this
+    assertion non-vacuous -- an uncopied `reference/` file whose bytes were
+    never touched would match the catalogue's by accident
+    `[ref: phase-3.md#T3.4]`. Mirror of
+    `test_chosen_pattern_lands_with_tcs_prefix_and_full_subtree`.
+    """
+    install = _load_install()
+    catalogue, repo = _diverged_fixture(tmp_path, extra_files={"reference/guide.md": "# Upstream guide\n"})
+    dest = _skills_root(repo) / f"tcs-{_DIVERGED_NAME}"
+    local_ref = dest / "reference" / "guide.md"
+    local_ref.write_bytes(b"# Local scribble, nothing upstream has.\n")
+    version_before = _entry_fields(repo, _DIVERGED_NAME)[0]
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE, decide=lambda name, diff: True)
+
+    assert (dest / "SKILL.md").read_bytes() == _DIVERGED_CATALOGUE_AS_INSTALLED.encode("utf-8")
+    assert local_ref.read_bytes() == (catalogue / _DIVERGED_NAME / "reference" / "guide.md").read_bytes()
+    installed_as, got_before, got_after, sha256 = report.refreshed[_DIVERGED_NAME]
+    assert installed_as == f"tcs-{_DIVERGED_NAME}"
+    assert got_before == version_before
+    assert got_after == (catalogue / _DIVERGED_NAME / "VERSION").read_text(encoding="utf-8").strip()
+    assert sha256 == hashlib.sha256((dest / "SKILL.md").read_bytes()).hexdigest()
+    assert _entry_fields(repo, _DIVERGED_NAME) == (got_after, installed_as, sha256)
+    assert _DIVERGED_NAME not in report.declined
+    assert report.committed is False
+
+
+# --- the first row: nothing to do -------------------------------------------
+
+
+def test_up_to_date_pattern_reports_current_and_asks_nothing(tmp_path: Path) -> None:
+    """Version equal and hash equal: nothing is done, nothing is asked, and
+    nothing on disk moves `[ref: solution.md, decision 2, first row]`."""
+    install = _load_install()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "ddd", version="3")
+    repo = tmp_path / "repo"
+    assert "ddd" in install.install(repo, ["ddd"], catalogue_dir=catalogue, bundle=TEST_BUNDLE).installed
+
+    tree_before = _digest_tree(_skills_root(repo))
+    manifest_before = _manifest_bytes(repo)
+    calls: list[tuple[str, str]] = []
+
+    def decide(name: str, diff: str) -> bool:
+        calls.append((name, diff))
+        return True
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE, decide=decide)
+
+    assert calls == []
+    assert _digest_tree(_skills_root(repo)) == tree_before
+    assert _manifest_bytes(repo) == manifest_before
+    installed_as, version, sha256 = report.current["ddd"]
+    assert (installed_as, version) == ("tcs-ddd", "3")
+    assert sha256 == hashlib.sha256((_skills_root(repo) / "tcs-ddd" / "SKILL.md").read_bytes()).hexdigest()
+    for channel in (report.refreshed, report.declined, report.failed):
+        assert "ddd" not in channel
+
+
+# --- the two `failed` rows, which are exact inverses of each other ----------
+
+
+def test_manifest_entry_whose_directory_is_missing_is_failed_not_refreshed(tmp_path: Path) -> None:
+    """Installed side ABSENT, catalogue side PRESENT `[ref: solution.md,
+    decision 8]`. The record claims a pattern is installed and it is not,
+    which is a different problem from being out of date -- reporting it
+    tells the user which verb to reach for instead of papering over a
+    manifest that lies. The exact inverse of the catalogue-removal fixture
+    below; never both absent, or the two collapse into one case."""
+    install = _load_install()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "functional", version="1")
+    repo = tmp_path / "repo"
+    assert "functional" in install.install(repo, ["functional"], catalogue_dir=catalogue, bundle=TEST_BUNDLE).installed
+    shutil.rmtree(_skills_root(repo) / "tcs-functional")
+    manifest_before = _manifest_bytes(repo)
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    # The reason must name THIS cause, not the catalogue-side one -- the two
+    # rows are only distinguishable to a user by what they are told, and a
+    # mutation dropping this check falls through to the SKILL.md read and
+    # reports "no readable SKILL.md", which is a different diagnosis.
+    assert "missing" in report.failed["functional"]
+    assert "catalogue" not in report.failed["functional"]
+    for channel in (report.refreshed, report.declined, report.current):
+        assert "functional" not in channel
+    # Not resurrected: `update()` refreshes, it does not install.
+    assert not (_skills_root(repo) / "tcs-functional").exists()
+    assert _manifest_bytes(repo) == manifest_before
+
+
+def test_pattern_the_catalogue_no_longer_carries_is_failed_and_untouched(tmp_path: Path) -> None:
+    """Installed side PRESENT with real content, catalogue side ABSENT
+    `[ref: solution.md, decision 7]`. Both comparisons that define the three
+    states presuppose the catalogue still has the pattern, so an upstream
+    removal has no row -- it is `failed`, with nothing under `tcs-<name>/`
+    touched: refreshing from a source that no longer exists is impossible,
+    and deleting would destroy a working skill the user still has.
+
+    The installed directory must EXIST with real content, or this collapses
+    into the missing-directory case above and the digest assertion is
+    vacuous `[ref: phase-3.md#T3.4]`."""
+    install = _load_install()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "dropped", version="1", extra_files={"reference/guide.md": "# Upstream guide\n"})
+    repo = tmp_path / "repo"
+    assert "dropped" in install.install(repo, ["dropped"], catalogue_dir=catalogue, bundle=TEST_BUNDLE).installed
+    dest = _skills_root(repo) / "tcs-dropped"
+    assert (dest / "reference" / "guide.md").read_bytes() == b"# Upstream guide\n"
+
+    shutil.rmtree(catalogue / "dropped")  # upstream drops the pattern
+    tree_before = _digest_tree(_skills_root(repo))
+    manifest_before = _manifest_bytes(repo)
+    calls: list[tuple[str, str]] = []
+
+    def decide(name: str, diff: str) -> bool:
+        calls.append((name, diff))
+        return True
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE, decide=decide)
+
+    assert calls == []
+    # Decision 7 pins the reason to name the absent catalogue entry. Without
+    # it, a mutation checking the installed side FIRST reports the other
+    # row's diagnosis and no channel assertion can tell the difference.
+    assert "catalogue" in report.failed["dropped"]
+    for channel in (report.refreshed, report.declined, report.current):
+        assert "dropped" not in channel
+    assert _digest_tree(_skills_root(repo)) == tree_before
+    assert _manifest_bytes(repo) == manifest_before
+    assert (dest / "reference" / "guide.md").read_bytes() == b"# Upstream guide\n"
