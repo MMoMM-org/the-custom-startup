@@ -809,3 +809,160 @@ def test_q1_evidence_lists_every_runtime_framework_not_only_the_first(tmp_path) 
         "package.json: dependencies.express",
         "package.json: dependencies.koa",
     ]
+
+
+# ---------------------------------------------------------------------------
+# An unparseable manifest: never fatal, and NOT simply "skipped"
+# ---------------------------------------------------------------------------
+# `detect.py` guards three parse sites -- `_read_text` (OSError,
+# UnicodeDecodeError), `_read_json` (ValueError, plus a non-dict result) and
+# `_pyproject_deps_and_pytest` (TOMLDecodeError) -- and `solution.md`'s Error
+# Handling table promises "Skipped, not fatal". Nothing asserted any of it:
+# every manifest in all 26 corpus fixtures parses, so no fixture can reach a
+# guard clause, and all three could be deleted with the corpus still green.
+#
+# What the guards actually do, measured 2026-10-05 across twelve shapes, is
+# narrower than "skipped" and that distinction is the point of these tests:
+# the DEPENDENCY READ is skipped, while every rule keying on a manifest's
+# EXISTENCE keeps firing. A `pyproject.toml` holding `[project` still yields
+# `python-project`; a garbage `go.mod` still yields `go-idiomatic`; a
+# `tsconfig.json` holding `{` still yields `typescript-strict`. So the tests
+# below assert the surviving signals as deliberately as the vanishing ones --
+# a future "fix" that made a broken manifest contribute nothing at all would
+# be a behaviour change these tests should catch, not quietly permit.
+
+
+def test_an_unparseable_package_json_drops_its_dependency_signals_as_a_minimal_pair(tmp_path) -> None:
+    """The intact and the broken file differ only in being truncated to one
+    byte, so the signals demonstrably came from the CONTENT rather than from
+    the filename. Asserting the broken half alone would pass against a
+    detector that never read `package.json` at all.
+    """
+    manifest = tmp_path / "package.json"
+    manifest.write_text(
+        '{"name": "s", "version": "1.0.0", '
+        '"dependencies": {"express": "^4.18.0", "@modelcontextprotocol/sdk": "^1.0.0"}}\n',
+        encoding="utf-8",
+    )
+    detect = _load_detect()
+
+    intact = detect.detect(tmp_path)
+    assert [e["pattern"] for e in intact["auto"]] == ["mcp-server"]
+    assert intact["gates"]["q1_backend"] is True
+
+    manifest.write_text("{", encoding="utf-8")
+    broken = detect.detect(tmp_path)
+
+    assert broken["auto"] == []
+    assert broken["gates"]["q1_backend"] is False
+    assert broken["unrecognised_stack"] is True
+    # Still listed: the field exists so that a missing signal is explicable,
+    # which is precisely the case here `[ref: SDD/Error Handling]`.
+    assert broken["manifests_walked"] == ["package.json"]
+
+
+def test_an_unparseable_pyproject_is_not_fatal_but_its_existence_signal_survives(tmp_path) -> None:
+    """The half that "skipped" hides. `python-project` fires on any `.py` plus
+    the mere PRESENCE of one of three manifests, so a `pyproject.toml` that
+    `tomllib` rejects still satisfies it. The SDD's Error Handling row claimed
+    "A broken manifest is not a signal" and that was measurably false; the row
+    is corrected in the same change as this test.
+    """
+    (tmp_path / "pyproject.toml").write_text("[project", encoding="utf-8")
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert [e["pattern"] for e in report["auto"]] == ["python-project"]
+    assert report["unrecognised_stack"] is False
+    # But nothing that needed the file's CONTENTS: no gate opened on a
+    # dependency the parser never got to read.
+    assert report["gates"] == {
+        "q1_backend": False,
+        "q2_architecture": False,
+        "q3_test_quality": False,
+    }
+
+
+def test_an_unparseable_pyproject_still_supplies_its_pytest_table(tmp_path) -> None:
+    """`_pyproject_deps_and_pytest` computes `has_pytest_table` by regex over
+    the raw text BEFORE the `tomllib.loads` try block, and returns it on the
+    decode-error path. So a file TOML has rejected still opens `q3_test_quality`
+    and still contributes `testing` to `baseline`.
+
+    This is deliberate and worth pinning rather than tidying: a repository with
+    a typo in its `pyproject.toml` has not stopped running pytest. Moving the
+    regex below the `try`, or returning a bare `[], False`, is a one-line edit
+    that no other test in this suite would notice -- the dependency assertions
+    above pass either way, because this path returns no dependencies in both
+    cases.
+    """
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n[project\n', encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_app.py").write_text("def test_app(): pass\n", encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert report["gates"]["q3_test_quality"] is True
+    assert report["gate_evidence"]["q3_test_quality"] == [
+        "pyproject.toml: [tool.pytest.ini_options]"
+    ]
+    assert [e["pattern"] for e in report["baseline"]] == ["testing"]
+
+
+def test_one_unparseable_manifest_does_not_poison_its_siblings(tmp_path) -> None:
+    """A guard clause that returned early from the WALK rather than from the
+    single read would lose every manifest after the broken one, and the
+    corpus could not see it: a corpus whose manifests all parse never reaches
+    the clause at all. Two manifests, the first unreadable, the second intact.
+    """
+    (tmp_path / "package.json").write_text("{", encoding="utf-8")
+    (tmp_path / "go.mod").write_text("module example.com/x\n\ngo 1.22\n", encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert [e["pattern"] for e in report["auto"]] == ["go-idiomatic"]
+    assert sorted(report["manifests_walked"]) == ["go.mod", "package.json"]
+
+
+@pytest.mark.parametrize(
+    "body, label",
+    [("[]", "a JSON array"), ('"hi"', "a JSON string"), ("12", "a JSON number")],
+    ids=["array", "string", "number"],
+)
+def test_valid_json_of_the_wrong_shape_degrades_like_unparseable_json(tmp_path, body, label) -> None:
+    """`_read_json` has a second guard after the `ValueError` one -- it returns
+    `None` unless the parsed value `isinstance(data, dict)`. A `package.json`
+    holding a valid JSON array parses cleanly and then has no `.get`, so
+    dropping that guard raises `AttributeError` from inside the rule rather
+    than degrading. Untested, the two halves of `_read_json` looked like one.
+    """
+    (tmp_path / "package.json").write_text(body + "\n", encoding="utf-8")
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert report["auto"] == [], f"{label} should contribute no stack fact"
+    assert report["manifests_walked"] == ["package.json"]
+
+
+def test_a_manifest_in_undecodable_bytes_is_not_fatal(tmp_path) -> None:
+    """The third guard, `_read_text`'s `UnicodeDecodeError` leg, which neither
+    of the parse-error tests above can reach -- they both hand `json` and
+    `tomllib` well-formed UTF-8 that happens to be invalid in their own
+    grammar. Written as bytes deliberately: `write_text` cannot produce this.
+    """
+    (tmp_path / "package.json").write_bytes(b'\xff\xfe{"dependencies": {"express": "^4"}}')
+
+    detect = _load_detect()
+    report = detect.detect(tmp_path)
+
+    assert report["auto"] == []
+    assert report["gates"]["q1_backend"] is False
+    assert report["manifests_walked"] == ["package.json"]
