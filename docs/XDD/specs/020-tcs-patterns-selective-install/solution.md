@@ -1959,6 +1959,25 @@ consumer repository need not share a filesystem (measured: the catalogue is `dev
 target is always on the target's filesystem, so the rename is always atomic. The copy into it may
 cross filesystems freely, because a copy is not a rename.
 
+**4. C5 reports; C3 offers.** `install.py` is a library with no interactive surface, and ADR-8's
+offer needs `AskUserQuestion`, which only a skill can raise. So C5 returns `InstallReport` with
+`committed=False` always, and stating "nothing was committed" plus making the offer is C3's
+rendering of that report `[ref: SDD/Architecture Decisions/ADR-8]`. T3.3's success criterion
+"Report lists writes and states no commit was made" is therefore satisfied by the report *carrying*
+every write and `committed=False`; no test in T3.3 should look for an interactive prompt, and no
+`AskUserQuestion` belongs in `install.py`.
+
+**5. The catalogue root is derived from `__file__`, never from `CLAUDE_PLUGIN_ROOT`.** Measured
+2026-10-05: `CLAUDE_PLUGIN_ROOT` is `None` in a Bash-tool subprocess, and the skill runs this code
+by invoking `python3`, so the variable that exists for harness-spawned plugin code is absent exactly
+where this module runs `[ref: SDD/Constraints]`. From
+`plugins/tcs-patterns/skills/patterns-setup/lib/install.py`, `Path(__file__).resolve().parents[3]`
+is the plugin root and `parents[3] / "templates" / "patterns"` is the catalogue — verified to resolve
+correctly. `catalogue_dir` is nevertheless a **parameter** with that derivation as its default, for
+the same reason `home_dir` is a parameter on C4: a test must be able to point it at a fixture, and
+the two namespaces a test cannot reach are the ones that go unverified
+`[ref: scripts/observability/report.py:686]`.
+
 **6. `install()` is purely additive. It never removes or overwrites anything under
 `tcs-<name>/`.** Settled 2026-10-05, replacing an earlier sentence here which said a stale or
 locally edited directory "is removed before the rename". That would have put a silent `rm -rf` of a
@@ -2000,14 +2019,6 @@ separation — F8 exists precisely because refreshing is a different operation w
 safety question — and C7's advisory already tells the user that `update` is the move
 `[ref: SDD/Runtime View/Primary Flow, step 9]`.
 
-**4. C5 reports; C3 offers.** `install.py` is a library with no interactive surface, and ADR-8's
-offer needs `AskUserQuestion`, which only a skill can raise. So C5 returns `InstallReport` with
-`committed=False` always, and stating "nothing was committed" plus making the offer is C3's
-rendering of that report `[ref: SDD/Architecture Decisions/ADR-8]`. T3.3's success criterion
-"Report lists writes and states no commit was made" is therefore satisfied by the report *carrying*
-every write and `committed=False`; no test in T3.3 should look for an interactive prompt, and no
-`AskUserQuestion` belongs in `install.py`.
-
 **7. `bundle` is a parameter, with the same derived default as `catalogue_dir`.** Added
 2026-10-05 by T3.3's implementer, which found the gap and said so rather than burying it: the
 signature here omitted `bundle` entirely while `manifest.upsert()` requires it with no default
@@ -2029,17 +2040,6 @@ route, for two reasons:
 `update()` needs the same value, so settling it here rather than in T3.4 means that task inherits a
 decided answer instead of repeating the derivation
 `[ref: plan/phase-3.md, T3.4's three pre-dispatch gaps]`.
-
-**5. The catalogue root is derived from `__file__`, never from `CLAUDE_PLUGIN_ROOT`.** Measured
-2026-10-05: `CLAUDE_PLUGIN_ROOT` is `None` in a Bash-tool subprocess, and the skill runs this code
-by invoking `python3`, so the variable that exists for harness-spawned plugin code is absent exactly
-where this module runs `[ref: SDD/Constraints]`. From
-`plugins/tcs-patterns/skills/patterns-setup/lib/install.py`, `Path(__file__).resolve().parents[3]`
-is the plugin root and `parents[3] / "templates" / "patterns"` is the catalogue — verified to resolve
-correctly. `catalogue_dir` is nevertheless a **parameter** with that derivation as its default, for
-the same reason `home_dir` is a parameter on C4: a test must be able to point it at a fixture, and
-the two namespaces a test cannot reach are the ones that go unverified
-`[ref: scripts/observability/report.py:686]`.
 9. **Next session.** The installed patterns appear in the listing and route automatically; C7 finds
    the manifest current and says nothing.
 

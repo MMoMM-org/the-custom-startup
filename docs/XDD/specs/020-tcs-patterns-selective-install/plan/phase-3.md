@@ -949,7 +949,10 @@ writing is allowed, and an installer that is honest about what it did.
     an internal detail.
 
     **Assert both against one independently-derived expected diff** — the same hand-written-literal
-    value the bullet above already uses to check the callback's argument. Do **not** assert
+    value already required by the **"diff assertion as first written"** bullet earlier in this
+    list. (Named rather than pointed at: when that reference read "the bullet above" it was
+    correct, and the gate's third pass inserted two bullets between the two, which made it
+    point at the `version_before` pin instead.) Do **not** assert
     "report equals what the callback received": that compares two values the code under test
     produces at two sites, so a compound mutation computing the *wrong* diff identically in both
     places is self-consistent and passes. Derive the expected diff once from the literals, then
