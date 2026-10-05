@@ -1466,19 +1466,59 @@ facts above are recorded anyway, because the next person to consider filtering b
 needs to find the reason it was rejected rather than rediscover the merge rule.
 
 ```
-check(repo_dir, intended_names, *, home_dir) -> (approved, refused)
+check(repo_dir, intended_names, *, home_dir) -> GuardReport
+
+GuardReport (frozen, named channels -- not a positional tuple)
     approved: the names no namespace already owns
     refused:  name -> (namespace, path of the colliding SKILL.md)
+    skipped:  (path, reason) for every SKILL.md that could not be read
 
 namespace roots, in the order a refusal reports them:
     repo    <repo_dir>/.claude/skills/
     user    <home_dir>/.claude/skills/
     plugin  <home_dir>/.claude/plugins/cache/*/*/*/skills/
-            <home_dir>/.claude/plugins/marketplaces/*/plugins/*/skills/
+            <home_dir>/.claude/plugins/marketplaces/*/*/*/skills/
 
-within every root: recurse to any depth; a directory is a skill iff it
-holds a SKILL.md; the name is that file's frontmatter `name:`
+within every root: recurse to any depth, following symlinks, deduplicating
+visited directories by (st_dev, st_ino); a directory is a skill iff it holds
+a SKILL.md; the name is that file's frontmatter `name:`
 ```
+
+**`skipped` is a third channel, not an afterthought — and it is why this returns a structure
+rather than a tuple.** The rule below says an unreadable `SKILL.md` is skipped **and reported**,
+because a file the guard could not parse is a name it could not check. A two-value return has
+nowhere to put that, which leaves the "reported" half of the rule unfalsifiable: a test could only
+assert that the call does not raise, and a guard that silently discarded every malformed file would
+pass. Found by T3.2's TDD gate on 2026-10-05, against the signature as first written here.
+
+Named channels rather than a 3-tuple for two reasons. `detect.py`'s report is the house precedent
+for a multi-channel return in this design and it is keyed, not positional
+`[ref: SDD/Interface Specifications/Data model: detection report (C2 → C3)]`; and three positional
+values of three different shapes — a set of names, a map keyed by name, a sequence of file
+problems — is a return that gets unpacked wrong once and then stays wrong, since two of the three
+are falsy-when-empty containers. `manifest.py`, the sibling module delivered in this same component
+set, already uses frozen dataclasses for exactly this
+`[ref: plugins/tcs-patterns/skills/patterns-setup/lib/manifest.py]`.
+
+**The marketplace glob is `*/*/*/skills/`, not `*/plugins/*/skills/`.** An earlier revision of this
+section wrote a literal `plugins` segment, and the live installation already violates that layout.
+Measured 2026-10-05: three marketplace roots sit at
+`marketplaces/claude-plugins-official/external_plugins/<plugin>/skills/`, holding the registered
+names `access` and `configure` — two names that the literal-`plugins` glob can see in **neither**
+plugin root, so the guard would approve them while a plugin owns them. Neither collides with any of
+the 21 catalogue names today, bare or `tcs-` prefixed, so nothing is broken right now; the defect is
+the same direction as the symlink one above, and `access` and `configure` are generic enough to be
+a plausible future catalogue name. Widening to three wildcards is a strict superset — it finds 25
+roots where the literal form finds 22 — and over-inclusion is the safe direction by this section's
+own decision.
+
+The asymmetry is worth stating once more as a rule for anyone editing these globs: applying the
+**cache** pattern to the marketplace root over-collects (25 against 22, harmless to a union of
+names), while applying the **marketplace** pattern to the cache root collects **nothing at all** —
+measured, zero roots, because the cache has no literal `plugins` segment. A guard that silently
+enumerated no plugin skills would still pass every test that only checks the repo and user
+namespaces, which is why T3.2 requires the two plugin roots to be exercised separately and at their
+documented depths.
 
 **`home_dir` is a parameter, not `Path.home()`.** Two of the three namespaces live outside the
 repository, so a guard that reads the real `$HOME` internally cannot be driven by a fixture at
@@ -1528,11 +1568,14 @@ links to one real directory from reporting the same skill twice under two paths.
   a repository need not have `.claude/skills/` before its first install.
 - **An unreadable or frontmatter-less `SKILL.md` is skipped, not fatal** — the same stance
   `detect.py` takes for an unparseable manifest, and for the same reason: a third party's broken
-  file must not stop this repository's install. It is reported, because a skipped file is a name
-  the guard could not check. Four distinct inputs land here and each needs its own case: a file
-  that cannot be read, a file with no frontmatter block at all, a frontmatter block with no `name:`
-  key, and a `name:` whose value is empty. None of the four occurs naturally — all 253 real files
-  parse — so every one of them has to be constructed in a fixture.
+  file must not stop this repository's install. It is reported **through `GuardReport.skipped`**,
+  as a `(path, reason)` pair, because a skipped file is a name the guard could not check and a
+  caller that cannot see the omission cannot warn about it. Four distinct inputs land here and each
+  needs its own case and its own distinguishable reason: a file that cannot be read, a file with no
+  frontmatter block at all, a frontmatter block with no `name:` key, and a `name:` whose value is
+  empty. None of the four occurs naturally — all 253 real files parse — so every one of them has to
+  be constructed in a fixture. A test that asserts only "the call did not raise" does not cover
+  this rule; it has to assert the entry lands in `skipped` with the right reason.
 7. **Write.** C5 copies each approved pattern's directory to `<repo>/.claude/skills/tcs-<name>/`,
    rewrites the frontmatter `name:`, computes the hash of the installed `SKILL.md`, and writes the
    manifest atomically (`.tmp` then `mv`, following `install_files.sh`).

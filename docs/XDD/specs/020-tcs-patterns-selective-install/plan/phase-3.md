@@ -174,10 +174,61 @@ writing is allowed, and an installer that is honest about what it did.
        the whole reason enumeration reads files rather than listing directories. The guard must
        refuse against the **registered** name and not against the directory's.
 
-     The signature also changed: `check(repo_dir, intended_names, *, home_dir)`. Two of the three
-     namespaces live outside the repository, so `home_dir` has to be a parameter or the test can
-     only ever drive one of them — this repository's own skill-tree walker settled that convention
-     twice `[ref: scripts/observability/report.py:686; scripts/observability/sources.py:349]`.
+     The signature also changed: `check(repo_dir, intended_names, *, home_dir) -> GuardReport`.
+     Two of the three namespaces live outside the repository, so `home_dir` has to be a parameter
+     or the test can only ever drive one of them — this repository's own skill-tree walker settled
+     that convention twice
+     `[ref: scripts/observability/report.py:686; scripts/observability/sources.py:349]`. There is
+     also a concrete reason beyond purity: the cached `tcs-patterns` is still **1.4.4** and still
+     ships all 21 patterns as skills, so **21 of 21** bare catalogue names collide against the live
+     plugin namespace today and **0 of 21** prefixed ones do — and all 21 stop colliding the moment
+     this spec ships. A test that read the real `$HOME` would assert one thing today and the
+     opposite after release: it would break *because the feature succeeded*.
+
+     **T3.2's TDD gate returned BLOCK on 2026-10-05.** The contract gap it found is fixed in the
+     SDD — `check` now returns a `GuardReport` with a third channel, `skipped`, because the rule
+     "skipped **and reported**" had nowhere to report through and its test could only have asserted
+     "does not raise" `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`.
+     Seven further additions are required before the implementer is dispatched, and they are
+     requirements of this task, not suggestions:
+
+     1. **All three namespaces in ONE `check()` call.** Items testing one namespace at a time, each
+        with one name, are all passed by an implementation that short-circuits after the first
+        namespace yields a collision and never walks the others for the remaining names. Success
+        criterion 1 is a property of a single call across the whole selection. Four names, one
+        colliding in each namespace plus one free, all four outcomes asserted from one call.
+     2. **The two plugin roots at their documented and DIFFERENT depths.** Cache is
+        `cache/<marketplace>/<plugin>/<version>/skills/` and marketplace is
+        `marketplaces/<marketplace>/<segment>/<plugin>/skills/`. Build each fixture at its own
+        depth; built at the same depth, an off-by-one or swapped glob survives. The dangerous
+        direction is measured: the marketplace pattern applied to the cache root finds **zero**
+        roots, so a guard that enumerated no plugin skills at all would pass every repo-and-user
+        test.
+     3. **A plugin skill under `external_plugins/`** rather than `plugins/`, which is a real layout
+        on this machine and the reason the marketplace glob was widened to three wildcards. Its
+        name must still be refused.
+     4. **`enabledPlugins` is ignored entirely.** A plugin skill colliding with an intended name,
+        with `enabledPlugins` carrying `false` for that plugin in the home and/or repository
+        `settings.json`, is still refused. The SDD names this as one of two things an implementer
+        working from the old phrasing would get wrong; the other is the frontmatter-name case, which
+        already has its test.
+     5. **The `(st_dev, st_ino)` dedup.** Two symlinks inside one namespace root pointing at the
+        same real skill directory: the name is refused **once**, not twice and not as an error.
+        Note what this case is *not*: the gate asked for a no-hang test with a timeout, and neither
+        half applies. `timeout` does not exist on macOS, and measured, `os.walk(followlinks=True)`
+        on a self-referential symlink does not hang — macOS stops it with `ELOOP` after 66
+        redundant directory visits, which the dedup set reduces to 3. So the observable is the
+        single refusal and the visit count, not a wall-clock bound.
+     6. **All four namespace roots absent, not just the repository's.** Each goes through a
+        different glob or walk call. Parametrise the four.
+     7. **Precedence across more than one pairing.** "Repo before user before plugin" is a 3-way
+        order; a test of repo-vs-user alone is passed by a mutant that swaps user and plugin. Test
+        at least two pairings, or all three colliding at once with exactly one refusal reported per
+        name.
+
+     The write-nothing digest (step 4) must also run across **more than one scenario** — at
+     minimum the symlink case, a malformed-input case, and the multi-namespace collision case. One
+     nominal call does not support a claim of "under any input".
   3. Implement: `lib/guard.py` — the three namespace checks, returning approved and refused sets
      with the reason and the colliding location for each refusal. **Read the namespace contract
      first** `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`: a
@@ -189,6 +240,16 @@ writing is allowed, and an installer that is honest about what it did.
      temporary directory. A read-only directory catches a write *into that directory* and says
      nothing about a write anywhere else, which is the whole claim being made. The digest form is
      the one T2.7 used to prove `detect()` writes nothing, over 101 catalogue and 84 fixture files.
+     Both figures verified 2026-10-05 after the gate reported it could find no such test on disk:
+     **84 is a walk of the fixture tree** (82 git-tracked files plus the two gitignored `venv/` and
+     `.venv/` artefacts inside `trap-07-venv-and-dot-venv/`), which is the right population for a
+     digest proof since it hashes what is on disk rather than what git tracks, and T2.7's recorded
+     **81** is that same walk when the corpus held 26 fixtures rather than 27. The gate was right
+     about the substance, though: T2.7's proof was an **ad-hoc harness whose result was recorded in
+     the plan** `[ref: plan/phase-2.md, T2.7 "discharged by digest rather than by reading"]`, and
+     no committed test performs it. T3.2's digest check is therefore a committed test, which is an
+     improvement on T2.7 rather than a repeat of it — and it is the reason the claim is worth
+     re-proving here instead of citing.
   5. Success:
      - [ ] All three namespaces checked before any write `[ref: PRD/F5 1st-3rd]`
      - [ ] Non-colliding patterns still install, no rescan `[ref: PRD/F5 4th; SDD/AC-10]`
