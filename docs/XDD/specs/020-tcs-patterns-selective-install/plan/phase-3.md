@@ -507,7 +507,7 @@ writing is allowed, and an installer that is honest about what it did.
   correct; only the test was missing. `f50ca9d` adds it, no production change. Guard suite 54
   passed (53 + 1); whole suite 1106 passed, 1 skipped, 1 deselected.
 
-- [ ] **T3.3 The installer** `[activity: backend-api]`
+- [x] **T3.3 The installer** `[activity: backend-api]`
 
   1. Prime: Read the rename example and its refusal
      `[ref: SDD/Implementation Examples]`, the write-safety patterns
@@ -714,10 +714,85 @@ writing is allowed, and an installer that is honest about what it did.
      inspect the tree and the manifest by hand once — the suite checks the contract, a human
      checks that the result is what a user would want to find.
   5. Success:
-     - [ ] Exactly the chosen patterns, each named `tcs-<name>` in its frontmatter `[ref: PRD/F4 1st; SDD/AC-7]`
-     - [ ] A missing frontmatter `name:` raises rather than installing unprefixed `[ref: SDD/ADR-1; SDD/Error Handling]`
-     - [ ] Report lists writes and states no commit was made `[ref: PRD/F4 3rd]`
-     - [ ] A second identical install is a no-op `[ref: SDD/Quality Requirements]`
+     - [x] Exactly the chosen patterns, each named `tcs-<name>` in its frontmatter `[ref: PRD/F4 1st; SDD/AC-7]`
+     - [x] A missing frontmatter `name:` raises rather than installing unprefixed `[ref: SDD/ADR-1; SDD/Error Handling]`
+     - [x] Report lists writes and states no commit was made `[ref: PRD/F4 3rd]`
+     - [x] A second identical install is a no-op `[ref: SDD/Quality Requirements]`
+
+  **Delivered 2026-10-05.** `b49f463` RED (18 cases in a new file,
+  `tests/test_patterns_installer.py` — deliberately not merged into T3.1's
+  `test_patterns_install.py`), `e19bc5f` the implementation (`lib/install.py`,
+  C5). `installer` suite 18 passed; whole suite 1106 → **1124** passed (1
+  skipped, 1 deselected unchanged). Manual validate step done: a throwaway
+  git repo, `install(repo, ["ddd", "hexagonal"])` against the real catalogue
+  — tree, manifest and frontmatter all inspected by hand, nothing committed
+  (`git log` unchanged, `.claude/` sits untracked).
+
+  **Both review gates found two more defects, 2026-10-05, after the suite
+  was green** — both in `solution.md`'s own contract, not in the
+  implementation, and both surfaced by this task's implementer flagging a
+  gap rather than coding around it:
+
+  1. **`install()`'s signature omitted `bundle`**, while `manifest.upsert()`
+     requires it with no default — there was no legal call from C5 into C6
+     as specified. The implementer derived it internally from this plugin's
+     own `plugin.json`, flagged the gap, and the resolution was kept as the
+     **default** but promoted to a **parameter**: it would otherwise be the
+     one input to `install()` no test could drive (`catalogue_dir`, C4's
+     `home_dir` and `own_installed` are parameters for exactly that reason),
+     and CI bumps `plugin.json` on every merge, which would make a test
+     asserting the manifest's `bundle` field against the real file break on
+     a version bump rather than a regression `[ref: solution.md, point 7]`.
+  2. **The fourth defect in the rename sample `solution.md` corrected and
+     verified against 15 inputs the day before.** `(?m)^name:.*$` — `.`
+     does not match `\n` but DOES match `\r`, so the replacement silently
+     dropped the trailing `\r` of the one line it rewrote on a CRLF file:
+     measured, a 5-line CRLF input came out as 4 CRLF lines and 1 bare LF
+     line. The implementer's own CRLF test caught the discrepancy, but
+     first drew the wrong conclusion — judged the behaviour correct and
+     weakened the assertion to match, rather than fixing the regex.
+     Flagging it is what made it findable; `[^\r\n]*` is the fix, re-verified
+     against all 15 original inputs plus the per-ending counts (5 CRLF in, 5
+     CRLF out).
+
+  `f3b168c` RED for both (two new cases plus a restored strict CRLF
+  assertion and its LF counterpart), `444d21c` the fix. `installer` suite
+  18 → **21** passed; whole suite 1124 → **1127** passed (1 skipped, 1
+  deselected unchanged).
+
+  **Mutations: nine total, all caught, none survived.** The six required,
+  run against the first implementation, each verified individually then
+  reverted (confirmed via `git diff --stat` against HEAD):
+
+  | mutation | caught by |
+  |---|---|
+  | swap the directory-write and manifest-upsert order | `test_directory_lands_even_when_the_manifest_upsert_fails` (asserts the directory exists even when the upsert fails) |
+  | let `InstallError` propagate out of `install()` | 5 tests fail with an uncaught `install.InstallError` |
+  | copy only `SKILL.md`, not the full subtree | `test_chosen_pattern_lands_with_tcs_prefix_and_full_subtree` (`FileNotFoundError` on the `reference/` file) |
+  | hash the catalogue's pre-rename bytes, not the installed file's | `test_sha256_in_report_matches_independently_computed_hash_of_installed_file`, built for exactly this |
+  | treat a version-stale-but-unedited pattern as eligible for a write | `test_present_stale_but_unedited_pattern_is_failed_and_untouched`'s digest |
+  | report `failed` correctly while still overwriting the file on disk | both present-and-anything-else tests' digests, not their report-channel assertions |
+
+  Three more, run after the bundle/CRLF fix round to confirm it holds and
+  introduced no regression — reproducing already-known defects rather than
+  finding new ones, which is the point of re-running them:
+
+  | mutation | caught by |
+  |---|---|
+  | revert the rename regex to `.*$` (reintroduce the \r-eating defect) | the restored strict CRLF assertion |
+  | make `install()` ignore its `bundle` argument, always use the default | `test_explicit_bundle_reaches_the_manifest` |
+  | revert the frontmatter-open check to `startswith("---\n")` | the CRLF test (whole pattern lands in `failed`, not `installed`) |
+
+  **The lesson this task leaves behind, worth carrying into T3.4**: a
+  reviewer's own corrected-and-verified sample can still carry a defect
+  invisible to its own verification method — `yaml.safe_load` tolerates
+  mixed line endings, and a body-byte-identical assertion does not look at
+  the one line being intentionally rewritten. Both checks were real; neither
+  could see this. What found it was an implementer running the real
+  behaviour against a concrete fixture and reporting the discrepancy instead
+  of assuming the spec was right — but the first instinct on finding it was
+  still wrong (weaken the test to match), which is exactly why flagging it
+  rather than silently "fixing" the test mattered.
 
 - [ ] **T3.4 The update path, with divergence handling** `[activity: backend-api]`
 
