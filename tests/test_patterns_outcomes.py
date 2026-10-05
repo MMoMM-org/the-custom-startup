@@ -7,7 +7,7 @@ That is only a claim until something sums it
 
 **Four sets, not three.** A three-set partition (installed,
 declined-by-question, excluded-by-stack-fact) covers the 21 in zero of the
-26 fixtures, because a pattern behind a gate that stayed shut belongs to
+27 fixtures, because a pattern behind a gate that stayed shut belongs to
 none of the three -- nobody was asked, so it is neither installed nor
 declined, and no stack fact excluded it. It is `not_reached`, the fourth
 set `outcomes.decide()` returns
@@ -224,7 +224,7 @@ def test_no_fixtures_auto_or_baseline_names_a_gate_settled_pattern(fixture) -> N
 
     Why this is not already covered by the existing corpus comparisons in
     `test_patterns_detect.py`: those assert each fixture's `auto`/`baseline`
-    against its *own* hand-written `expected.json`, and none of those 26
+    against its *own* hand-written `expected.json`, and none of those 27
     expectations happens to contain a gate-settled name -- so the absence is
     enforced by coincidence of what the fixture authors wrote, not as an
     invariant. A new fixture whose author mistakenly listed `ddd` under
@@ -488,7 +488,7 @@ def test_invariant_fails_on_a_seeded_double_assignment() -> None:
 def test_invariant_fails_on_a_seeded_omission() -> None:
     """A pattern assigned to none of the four sets must fail the shared
     check. This is the failure mode the three-set formulation had in every
-    one of the 26 fixtures -- a check that only catches double-assignment
+    one of the 27 fixtures -- a check that only catches double-assignment
     would have passed the broken specification
     `[ref: SDD/AC-6]`. Built from a real fixture's real partition and then
     corrupted by dropping one member, for the same reason as the

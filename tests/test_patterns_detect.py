@@ -818,7 +818,7 @@ def test_q1_evidence_lists_every_runtime_framework_not_only_the_first(tmp_path) 
 # UnicodeDecodeError), `_read_json` (ValueError, plus a non-dict result) and
 # `_pyproject_deps_and_pytest` (TOMLDecodeError) -- and `solution.md`'s Error
 # Handling table promises "Skipped, not fatal". Nothing asserted any of it:
-# every manifest in all 26 corpus fixtures parses, so no fixture can reach a
+# every manifest in all 27 corpus fixtures parses, so no fixture can reach a
 # guard clause, and all three could be deleted with the corpus still green.
 #
 # What the guards actually do, measured 2026-10-05 across twelve shapes, is

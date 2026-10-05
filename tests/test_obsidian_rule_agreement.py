@@ -10,7 +10,7 @@ Why a fixture copy, never a fixture in place: the hook's scope gate resolves
 the repository with `git -C "$DIR" rev-parse --show-toplevel`. Run against a
 fixture sitting inside this worktree, that resolves to the-custom-startup's own
 root -- which has neither `manifest.json` nor `package.json` -- so every one of
-the 26 fixtures reads `allow`, Obsidian fixture included, and the "agreement"
+the 27 fixtures reads `allow`, Obsidian fixture included, and the "agreement"
 would be measuring the TCS repo, not the fixture. Each fixture is therefore
 copied into its own `tmp_path` and `git init`-ed there
 (`GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` pointed at `os.devnull`, matching
