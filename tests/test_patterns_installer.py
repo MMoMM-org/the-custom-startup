@@ -340,8 +340,14 @@ def test_crlf_skill_md_installs_successfully(tmp_path: Path) -> None:
 
     assert "crlf-pattern" in report.installed
     installed_text = (_skills_root(repo) / "tcs-crlf-pattern" / "SKILL.md").read_bytes()
-    assert b"\r\nname: tcs-crlf-pattern\r\n" in installed_text
-    assert installed_text.endswith(b"Body.\r\n")
+    # The replaced line itself is allowed to lose its trailing \r -- `.` in
+    # the rewrite's regex matches \r, so the line being intentionally
+    # rewritten does not keep its original terminator. What must stay
+    # byte-identical is everything else: the opening delimiter, every other
+    # frontmatter line, and the whole body below the closing delimiter.
+    assert installed_text.startswith(b"---\r\n")
+    assert b"name: tcs-crlf-pattern" in installed_text
+    assert b"description: CRLF fixture\r\n---\r\n\r\nBody.\r\n" in installed_text
 
 
 # --- clarification 6 / f: the default catalogue_dir, against the REAL tree -
