@@ -1344,11 +1344,24 @@ def rename_in_frontmatter(text, new_name):
         raise InstallError("no `name:` line in frontmatter; refusing to install unprefixed")
     if value.group(1).strip()[0] in ">|!&*%":
         raise InstallError("`name:` is not a plain scalar; refusing to rewrite it")
-    patched, count = re.subn(r"(?m)^name:.*$", "name: " + new_name, head, count=1)
+    # `.` does not match \n but DOES match \r, so `^name:.*$` spans the
+    # carriage return on a CRLF file and the replacement silently drops it --
+    # measured, a 5-line CRLF input came out with 4 CRLF lines and 1 bare LF
+    # line. Mixed line endings in a file this tool generates is a defect, not a
+    # contract guarantee. Fourth correction to this sample, 2026-10-05, found by
+    # T3.3's implementer; the 15-input verification missed it because
+    # `yaml.safe_load` tolerates mixed endings and the body-unchanged assertion
+    # does not look at the rewritten line's own ending.
+    patched, count = re.subn(r"(?m)^name:[^\r\n]*", "name: " + new_name, head, count=1)
     if count != 1:                      # unreachable given the checks above; kept as a tripwire
         raise InstallError("no `name:` line in frontmatter; refusing to install unprefixed")
     return patched + body
 ```
+
+**The rewrite preserves every line ending, including the one it rewrites.** A CRLF file installs
+as CRLF throughout; an LF file installs as LF throughout. That is the assertion to write — not the
+weaker "the body after the closing delimiter is byte-identical", which holds even when the rewritten
+line's own ending has been changed.
 
 **A test must pin that all 21 catalogue `name:` values are plain scalars**, because (c) above is
 only harmless while that holds and nothing currently enforces it.
@@ -1747,7 +1760,7 @@ Added 2026-10-05, before T3.3 was dispatched, for the same reason the C4 namespa
 four things an implementer needs were undefined, and each has more than one defensible answer.
 
 ```
-install(repo_dir, names, *, catalogue_dir) -> InstallReport
+install(repo_dir, names, *, catalogue_dir, bundle) -> InstallReport
 
 InstallReport (frozen, named channels)
     installed:  name -> (installed_as, version, sha256)   newly written
@@ -1885,6 +1898,28 @@ rendering of that report `[ref: SDD/Architecture Decisions/ADR-8]`. T3.3's succe
 "Report lists writes and states no commit was made" is therefore satisfied by the report *carrying*
 every write and `committed=False`; no test in T3.3 should look for an interactive prompt, and no
 `AskUserQuestion` belongs in `install.py`.
+
+**7. `bundle` is a parameter, with the same derived default as `catalogue_dir`.** Added
+2026-10-05 by T3.3's implementer, which found the gap and said so rather than burying it: the
+signature here omitted `bundle` entirely while `manifest.upsert()` requires it with no default
+`[ref: SDD/Interface Specifications/Data model: the manifest (C6)]`, so there was no legal way to
+call C6 from C5 as specified. Its own resolution — deriving the value internally from this plugin's
+`.claude-plugin/plugin.json` — was reasonable and is kept **as the default**, but not as the only
+route, for two reasons:
+
+- **It would be the one input to `install()` a test cannot drive.** `catalogue_dir` and C4's
+  `home_dir` and `own_installed` are parameters for precisely that reason, and the argument that a
+  production caller would never want to override `bundle` is equally true of `catalogue_dir` — the
+  parameter exists for the test, not for production.
+- **CI bumps `plugin.json` on merge** `[ref: scripts/ci/bump-and-push.sh]`. A test that asserts the
+  manifest's `bundle` line while the value is read from the real file breaks on every version bump,
+  and the failure would arrive looking like a manifest defect rather than a stale literal. No test
+  asserts it today, which is why this was invisible; the manifest records it, so one eventually
+  will.
+
+`update()` needs the same value, so settling it here rather than in T3.4 means that task inherits a
+decided answer instead of repeating the derivation
+`[ref: plan/phase-3.md, T3.4's three pre-dispatch gaps]`.
 
 **5. The catalogue root is derived from `__file__`, never from `CLAUDE_PLUGIN_ROOT`.** Measured
 2026-10-05: `CLAUDE_PLUGIN_ROOT` is `None` in a Bash-tool subprocess, and the skill runs this code
