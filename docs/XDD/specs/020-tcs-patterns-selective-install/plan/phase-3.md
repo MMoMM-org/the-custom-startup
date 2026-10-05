@@ -605,49 +605,6 @@ writing is allowed, and an installer that is honest about what it did.
         `report.committed is False`, identity not falsiness, since the field is typed as always
         `False`.
 
-     i. **The "present, and anything else" row needs two fixtures of its own.** Found by T3.3's
-        third gate pass, and it is the gap that made the contradiction above dangerous rather than
-        merely untidy: **nothing in (a) through (h) puts a pattern through `install()` a second time
-        in a present-but-not-current state.** Every other test is either absent→write or the
-        ordering of a *fresh* write. Two mutations therefore survive the whole list:
-
-        - one that silently overwrites a **version-stale but unedited** pattern — which is the stale
-          "anything else is a write" text implemented literally — because no test bumps only the
-          catalogue's `VERSION` between two runs and re-installs;
-        - one that reports `failed` correctly **and still overwrites the file on disk** before
-          returning, which any report-channel-only assertion passes.
-
-        Two separate fixture states are required, because "not current" has two distinct triggers
-        and a test of one does not cover the other:
-
-        | fixture | version | installed `SKILL.md` hash |
-        |---|---|---|
-        | locally edited | matches the catalogue | **differs** from the manifest |
-        | stale, not edited | **behind** the catalogue | matches the manifest |
-
-        Each asserts three things: **(1)** a digest over that pattern's entire installed subtree is
-        **identical** before and after the call — the invariant, now required rather than offered;
-        **(2)** the name lands in `report.failed` with a reason naming `update`; **(3)** the name is
-        in neither `installed` nor `unchanged`. Assertion (1) is the one that kills the second
-        mutation, and no amount of report-channel checking substitutes for it.
-
-     h. **The directory-then-manifest ORDER needs its own test, with a narrow monkeypatch.**
-        Found by T3.3's gate on its second pass, and it is a mutation nothing else catches: every
-        failure path otherwise tested fails during the **frontmatter rewrite**, which happens
-        *before* the final `os.rename`, so neither the directory nor the manifest entry is ever
-        written and the order between them is invisible. A mutation calling `manifest.upsert()`
-        *before* renaming the pattern into place would pass every other test in this task —
-        success-path tests cannot see the order because both artefacts end up present either way.
-
-        The test: monkeypatch `manifest.upsert` to raise for one target name, call `install()` for
-        it, then assert **(1)** `tcs-<name>/` exists on disk with its full correct content,
-        **(2)** the name is **not** in the manifest, and **(3)** the name lands in `report.failed`.
-        A monkeypatch is required and is appropriate here — a fixture alone cannot reach the seam
-        between two successful steps, the directory-write path still runs for real, and T3.1 set the
-        precedent for exactly this shape `[ref: tests/test_patterns_install.py,
-        test_write_creates_its_temp_file_beside_the_manifest]`. That is a targeted patch of one
-        collaborator, not the kind of over-mocking that proves nothing.
-
      g. **`install()` is purely additive — it never removes or overwrites anything under
         `tcs-<name>/`.** Settled 2026-10-05 after the gate asked, in effect, when the delete I had
         assumed necessary would hurt. The answer was: whenever the user had edited the pattern. ADR-4
@@ -674,6 +631,49 @@ writing is allowed, and an installer that is honest about what it did.
         The single delete `install()` may perform is of **its own** leftover `.tcs-<name>.tmp/` from
         a crashed run. Test that distinction explicitly: a leftover temp directory is cleaned, a
         user's installed pattern never is.
+
+     h. **The "present, and anything else" row needs two fixtures of its own.** Found by T3.3's
+        third gate pass, and it is the gap that made the contradiction in (g) dangerous rather than
+        merely untidy: **nothing else in this list puts a pattern through `install()` a second time
+        in a present-but-not-current state.** Every other test is either absent→write or, in (i) below, the
+        ordering of a *fresh* write. Two mutations therefore survive the whole list:
+
+        - one that silently overwrites a **version-stale but unedited** pattern — which is the stale
+          "anything else is a write" text implemented literally — because no test bumps only the
+          catalogue's `VERSION` between two runs and re-installs;
+        - one that reports `failed` correctly **and still overwrites the file on disk** before
+          returning, which any report-channel-only assertion passes.
+
+        Two separate fixture states are required, because "not current" has two distinct triggers
+        and a test of one does not cover the other:
+
+        | fixture | version | installed `SKILL.md` hash |
+        |---|---|---|
+        | locally edited | matches the catalogue | **differs** from the manifest |
+        | stale, not edited | **behind** the catalogue | matches the manifest |
+
+        Each asserts three things: **(1)** a digest over that pattern's entire installed subtree is
+        **identical** before and after the call — the invariant, now required rather than offered;
+        **(2)** the name lands in `report.failed` with a reason naming `update`; **(3)** the name is
+        in neither `installed` nor `unchanged`. Assertion (1) is the one that kills the second
+        mutation, and no amount of report-channel checking substitutes for it.
+
+     i. **The directory-then-manifest ORDER needs its own test, with a narrow monkeypatch.**
+        Found by T3.3's gate on its second pass, and it is a mutation nothing else catches: every
+        failure path otherwise tested fails during the **frontmatter rewrite**, which happens
+        *before* the final `os.rename`, so neither the directory nor the manifest entry is ever
+        written and the order between them is invisible. A mutation calling `manifest.upsert()`
+        *before* renaming the pattern into place would pass every other test in this task —
+        success-path tests cannot see the order because both artefacts end up present either way.
+
+        The test: monkeypatch `manifest.upsert` to raise for one target name, call `install()` for
+        it, then assert **(1)** `tcs-<name>/` exists on disk with its full correct content,
+        **(2)** the name is **not** in the manifest, and **(3)** the name lands in `report.failed`.
+        A monkeypatch is required and is appropriate here — a fixture alone cannot reach the seam
+        between two successful steps, the directory-write path still runs for real, and T3.1 set the
+        precedent for exactly this shape `[ref: tests/test_patterns_install.py,
+        test_write_creates_its_temp_file_beside_the_manifest]`. That is a targeted patch of one
+        collaborator, not the kind of over-mocking that proves nothing.
 
      **Why the temp-directory assertion is a mechanism assertion, and why the outcome route was
      rejected.** The requirement is that a rename never crosses filesystems, and `tmp_path` puts the
