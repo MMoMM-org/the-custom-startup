@@ -978,10 +978,53 @@ writing is allowed, and an installer that is honest about what it did.
 
 - [ ] **T3.5 Phase validation** `[activity: validate]`
 
-  Both legs, per leg. Confirm the ordering property explicitly: with a selection containing a
-  collision, assert that **no file was created at all** before the guard completed — the property
-  is "nothing is written before every check has passed", and a test that only checks the end state
-  would pass even if the installer wrote and then rolled back.
+  **Audited 2026-10-05 before dispatch; four corrections.** Three of the five components this task
+  validates were built after it was written, and the design moved under it.
 
-  - Success: install, guard, manifest and update suites green; no-write-before-guard asserted
-    `[ref: SDD/AC-7, AC-9, AC-10, AC-12, AC-17]`
+  1. **Its central property was written against a design that no longer exists.** This task said to
+     assert that "no file was created at all before the guard completed", because "a test that only
+     checks the end state would pass even if the installer wrote and then rolled back". Measured
+     against the delivered C5: `install()` takes **pre-approved names** and so never receives a
+     colliding one; `install.py` **does not import `guard`**, so it cannot perform — or skip — a
+     check it does not have; its only `shutil.rmtree` calls are on **its own** temp directory; and
+     it never writes for a present-but-not-current pattern at all
+     `[ref: SDD/Interface Specifications/.../"install() is purely additive"]`. **There is no
+     rollback path to catch.** The failure mode this property guards against cannot occur.
+
+     What remains, and what to assert instead:
+
+     - **`install()` writes only for names it is given** — already covered by T3.3's
+       `test_nothing_unchosen_is_written`; cite it rather than duplicating it.
+     - **`install.py` does not import `guard`** — a one-line structural assertion, and it is what
+       makes "the installer cannot write before a check" true *by construction* rather than by
+       behaviour. That is a stronger guarantee than the original property and cheaper to hold.
+     - **The sequence itself — `check()` completes before `install()` is called — belongs to C3 and
+       cannot be validated in this phase**, because C3 does not exist until Phase 4. Say so here
+       rather than asserting something weaker and calling the property discharged. Carry it to
+       Phase 4's validation task.
+
+  2. **AC-9 is not wholly a Phase 3 criterion and should not be cited as one.** It reads "the
+     install reports its writes, states that it did not commit, **and commits only when the user
+     accepts**". The first two halves are C5's and are covered. The third is C3's: `install()`
+     reports `committed: False` always, and the offer is a skill's
+     `[ref: SDD/Interface Specifications/Data model: the install plan and report (C5), decision 4]`.
+     Validate the first two halves here and carry the third to Phase 4.
+
+  3. **"install, guard, manifest and update suites" names four things that live in three files**,
+     and the naming is a known trap — T3.3 had to be told explicitly not to put C5's tests in the
+     manifest's file. Name them:
+     - `tests/test_patterns_guard.py` — C4, the collision guard (54 tests)
+     - `tests/test_patterns_install.py` — **C6, the manifest store**, despite the name (24 tests)
+     - `tests/test_patterns_installer.py` — **C5, the installer *and* `update()`** (21 tests before
+       T3.4)
+
+  4. **"Both legs, per leg" means report pytest and bats separately, each with its own figure.** The
+     bats total is **1187 across four suites** — `tcs-git-helpers` 835, `tcs-helper` 330,
+     `tcs-issues` 7, `tcs-patterns` 15 — and `plugins/tcs-helper/tests/bats` alone is **not** the
+     bats leg. State the four numbers, not a sum, so a regression in one suite cannot hide in the
+     total.
+
+  - Success: the three test files above green, reported per leg; `install()` proven to write only
+    for names it is given and `install.py` proven not to import `guard`; the C3-owned sequence and
+    commit-offer properties explicitly deferred to Phase 4 rather than silently dropped
+    `[ref: SDD/AC-7, AC-10, AC-12, AC-17; AC-9 first two halves only]`
