@@ -1382,6 +1382,81 @@ changeset containing only a `VERSION` bump is not treated as a changed source.
    the user adjusts or accepts. Nothing has been written at this point.
 6. **Guard.** C4 checks every intended name `tcs-<pattern>` against the repository's skills, the
    user's global skills, and the reachable plugin skills. A collision stops that pattern only.
+   What those three namespaces *are*, concretely, is specified under
+   `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]` — the phrase
+   "reachable plugin skills" was used three times in this document and defined nowhere until
+   2026-10-05.
+
+#### Data model: the three namespaces (C4)
+
+Added 2026-10-05, before T3.2 was dispatched. Four facts measured on a live installation decide
+how this is implemented, and an implementer working from the phrase alone would get at least two
+of them wrong without any fixture revealing it.
+
+**1. A skill's name is its frontmatter `name:`, never its directory (CON-4), so enumeration must
+read files rather than list directories.** Measured across 131 `SKILL.md` files in the user's
+global skills, this repository, and every marketplace plugin: exactly **one** diverges — the
+`hookify` plugin's `skills/writing-rules/` directory registers as `writing-hookify-rules`. One in
+131 is enough: a guard that collects directory names would look for a collision against a name
+that is not registered, and miss the name that is. The rule is therefore: a directory is a skill
+**iff** it contains a `SKILL.md`, and its name is that file's frontmatter `name:`.
+
+**2. A skills directory can contain things that are not skills.** `~/.claude/skills/` here holds
+seven entries, one of which — `synced/` — has no `SKILL.md` and contains a UUID-named
+subdirectory. A one-level `iterdir()` is therefore wrong in both directions at once: it reports
+`synced` as an occupied name, and it would miss a real skill nested one level deeper. The
+`SKILL.md` test from fact 1 settles both.
+
+**3. The plugin cache holds several versions of the same plugin.** Measured:
+`~/.claude/plugins/cache/the-custom-startup/tcs-git-helpers/` contains both `2.2.21` and `2.2.22`,
+and `tcs-helper/` both `4.3.9` and `4.3.10`. Walking the cache therefore double-counts every
+skill and includes versions that are not reachable at all. The marketplace tree
+(`~/.claude/plugins/marketplaces/<marketplace>/plugins/<plugin>/skills/`) has one directory per
+plugin and needs no version comparison.
+
+**4. Reachability is recorded in `enabledPlugins`, merged across two files — and the guard
+deliberately does not consult it.** The key format is `<plugin>@<marketplace>` with a boolean;
+`~/.claude/settings.json` carries the enables and `<repo>/.claude/settings.json` can carry an
+explicit `false` (measured: `plugin-dev@claude-plugins-official: false` in this repository).
+
+**The decision: enumerate broadly and ignore reachability.** Take the union of every plugin skill
+name found in the cache *and* the marketplace tree, across all versions, enabled or not. The
+asymmetry is what settles it: **over-inclusion is safe and under-inclusion is not.** Refusing a
+pattern because a disabled plugin owns the name costs the user one declined proposal, and the
+report names the colliding location so the refusal is explicable `[ref: PRD/F5 1st-3rd]`. Letting
+a name through because the owning plugin happens to be disabled today writes a manifest entry that
+becomes a live duplicate the moment someone enables that plugin — and the harness will not resolve
+a duplicate `[ref: SDD/Constraints/CON-3]`, so the damage is a wrong skill body silently preloaded,
+discovered later and far from its cause. A disabled plugin is a *future* collision, one settings
+edit away.
+
+That decision also removes `enabledPlugins` from the guard entirely: no two-file merge, no
+`<plugin>@<marketplace>` key parsing, no precedence rule between user and repository settings. The
+facts above are recorded anyway, because the next person to consider filtering by reachability
+needs to find the reason it was rejected rather than rediscover the merge rule.
+
+```
+check(repo_dir, intended_names) -> (approved, refused)
+    approved: the names no namespace already owns
+    refused:  name -> (namespace, path of the colliding SKILL.md)
+
+namespaces, in the order a refusal reports them:
+    repo    <repo>/.claude/skills/**/SKILL.md
+    user    ~/.claude/skills/**/SKILL.md
+    plugin  ~/.claude/plugins/cache/*/*/*/skills/**/SKILL.md
+            ~/.claude/plugins/marketplaces/*/plugins/*/skills/**/SKILL.md
+```
+
+- **The guard writes nothing, under any input**, and runs to completion across the whole selection
+  before C5 writes anything `[ref: SDD/Cross-Cutting Concepts/System-Wide Patterns]`. Prove that
+  with a digest over the tree before and after rather than only a read-only directory: a read-only
+  directory catches a write *into that directory* and says nothing about a write anywhere else.
+- **A missing namespace directory is empty, not an error.** `~/.claude/skills/` need not exist, and
+  a repository need not have `.claude/skills/` before its first install.
+- **An unreadable or frontmatter-less `SKILL.md` is skipped, not fatal** — the same stance
+  `detect.py` takes for an unparseable manifest, and for the same reason: a third party's broken
+  file must not stop this repository's install. It is reported, because a skipped file is a name
+  the guard could not check.
 7. **Write.** C5 copies each approved pattern's directory to `<repo>/.claude/skills/tcs-<name>/`,
    rewrites the frontmatter `name:`, computes the hash of the installed `SKILL.md`, and writes the
    manifest atomically (`.tmp` then `mv`, following `install_files.sh`).

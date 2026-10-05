@@ -140,13 +140,30 @@ writing is allowed, and an installer that is honest about what it did.
      ADR-1's consequence note `[ref: SDD/Architecture Decisions/ADR-1]` — with the prefix the guard
      rarely fires, and it is still the mechanism that keeps a partial install coherent.
   2. Test: A name taken in the repository's own skills is refused with both locations reported; the
-     same for the user's global skill directory; the same for a reachable plugin skill; a selection
-     with one colliding and two free names installs the two and writes nothing for the third, with
-     no rescan (F5's fourth criterion); the guard itself writes nothing under any input.
+     same for the user's global skill directory; the same for a plugin skill; a selection with one
+     colliding and two free names **approves the two and refuses the third** (F5's fourth
+     criterion); the guard itself writes nothing under any input.
+
+     Two corrections to this step, 2026-10-05, before dispatch. It read "installs the two and
+     writes nothing for the third" — but T3.2 builds C4, which installs nothing at all; installing
+     is C5's job in T3.3. The observable here is the **partition** the guard returns, and an
+     implementer reading "installs" could reasonably have gone looking for an installer that does
+     not exist yet. It also read "a reachable plugin skill", and reachability was dropped from the
+     guard deliberately `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`
+     — the guard enumerates every plugin skill it can find, enabled or not, because a disabled
+     plugin is a future collision and over-inclusion costs one declined proposal while
+     under-inclusion writes a duplicate that goes live on a settings edit.
   3. Implement: `lib/guard.py` — the three namespace checks, returning approved and refused sets
-     with the reason and the colliding location for each refusal.
-  4. Validate: `python3 -m pytest tests/test_patterns_guard.py -q`; assert via a read-only
-     temporary directory that the guard performs no write.
+     with the reason and the colliding location for each refusal. **Read the namespace contract
+     first** `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`: a
+     directory is a skill iff it holds a `SKILL.md` and its name is that file's frontmatter
+     `name:`, not the directory's — measured, one of 131 installed skills diverges — and the
+     plugin cache holds several versions of the same plugin while the marketplace tree holds one.
+  4. Validate: `python3 -m pytest tests/test_patterns_guard.py -q`; prove the guard writes nothing
+     with a **sha256 digest over every namespace tree before and after**, not only a read-only
+     temporary directory. A read-only directory catches a write *into that directory* and says
+     nothing about a write anywhere else, which is the whole claim being made. The digest form is
+     the one T2.7 used to prove `detect()` writes nothing, over 101 catalogue and 84 fixture files.
   5. Success:
      - [ ] All three namespaces checked before any write `[ref: PRD/F5 1st-3rd]`
      - [ ] Non-colliding patterns still install, no rescan `[ref: PRD/F5 4th; SDD/AC-10]`
