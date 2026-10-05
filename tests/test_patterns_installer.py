@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import json
 import os
 import sys
 from pathlib import Path
@@ -141,6 +142,23 @@ def _skills_root(repo: Path) -> Path:
     return repo / ".claude" / "skills"
 
 
+def _assert_uniform_line_endings(data: bytes, *, crlf: bool) -> None:
+    """Every line terminator in `data` is `\\r\\n` (`crlf=True`) or a bare
+    `\\n` (`crlf=False`) -- never a mix. Pins the fourth defect in
+    `rename_in_frontmatter`'s corrected sample: `(?m)^name:.*$`'s `.`
+    matches `\\r`, so the ONE line being rewritten silently lost its
+    trailing `\\r` on a CRLF file -- a 5-line CRLF input came out as 4 CRLF
+    lines and 1 bare LF line. `[^\\r\\n]*` fixes it
+    `[ref: solution.md, "The rewrite preserves every line ending, including
+    the one it rewrites"]`. A body-byte-identical assertion alone cannot
+    see this: the rewritten line is in the frontmatter, not the body."""
+    for i, byte in enumerate(data):
+        if byte != 0x0A:  # '\n'
+            continue
+        preceded_by_cr = i > 0 and data[i - 1] == 0x0D
+        assert preceded_by_cr == crlf, f"inconsistent line ending at byte {i} in {data!r}"
+
+
 # --- clarification 1 & the primary write path --------------------------------
 
 
@@ -221,6 +239,47 @@ def test_report_lists_writes_and_committed_is_false(tmp_path: Path) -> None:
 
     assert report.committed is False  # identity, not falsiness -- always False, never merely falsy
     assert set(report.installed) == {"ddd"}
+
+
+# --- clarification 7: bundle is a parameter, with a derived default --------
+
+
+def test_explicit_bundle_reaches_the_manifest(tmp_path: Path) -> None:
+    """`bundle` is a parameter now (added after T3.3's first review round,
+    `solution.md`'s point 7): the one input to `install()` that otherwise
+    could not be driven by a test, since `catalogue_dir` and C4's
+    `home_dir`/`own_installed` exist for exactly that reason. Passing an
+    explicit value must reach the manifest's top-level `bundle` field
+    verbatim -- a plugin.json-reading default a test cannot override would
+    make this assertion impossible to write, and would break on every CI
+    version bump besides."""
+    install = _load_install()
+    manifest = _load_manifest()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "ddd")
+    repo = tmp_path / "repo"
+
+    install.install(repo, ["ddd"], catalogue_dir=catalogue, bundle="9.9.9-test")
+
+    assert manifest.read(repo).bundle == "9.9.9-test"
+
+
+def test_bundle_defaults_to_the_installed_plugins_own_version(tmp_path: Path) -> None:
+    """Omitting `bundle` must still produce a legal manifest -- the derived
+    default (this plugin's own `plugin.json`) is kept as the fallback route,
+    not replaced by the parameter `[ref: solution.md, point 7]`."""
+    install = _load_install()
+    manifest = _load_manifest()
+    expected_bundle = json.loads(
+        (REPO_ROOT / "plugins" / "tcs-patterns" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+    )["version"]
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "ddd")
+    repo = tmp_path / "repo"
+
+    install.install(repo, ["ddd"], catalogue_dir=catalogue)  # bundle omitted entirely
+
+    assert manifest.read(repo).bundle == expected_bundle
 
 
 # --- clarification c: the test computes the hash independently --------------
@@ -322,11 +381,19 @@ def test_second_identical_install_is_a_noop_by_content_and_manifest_digest(tmp_p
 # --- clarification e: the one ACCEPT path the rewrite correction changed ---
 
 
-def test_crlf_skill_md_installs_successfully(tmp_path: Path) -> None:
+def test_crlf_skill_md_installs_successfully_and_stays_crlf_throughout(tmp_path: Path) -> None:
     """The corrected `rename_in_frontmatter` fixed a FALSE rejection: the old
     `startswith("---\\n")` refused a CRLF file. Every other frontmatter test
     in this suite covers a raise path; this is the one accept path the
-    correction changed."""
+    correction changed.
+
+    **The contract is stronger than "the body is byte-identical".** A CRLF
+    file must install as CRLF THROUGHOUT, including the one line that is
+    intentionally rewritten -- `solution.md`'s correction names the weaker
+    body-only assertion as insufficient, because it holds even when the
+    rewritten line's own ending has changed `[ref: solution.md, "The
+    rewrite preserves every line ending, including the one it rewrites"]`.
+    """
     install = _load_install()
     catalogue = tmp_path / "catalogue"
     _catalogue_pattern(
@@ -340,14 +407,32 @@ def test_crlf_skill_md_installs_successfully(tmp_path: Path) -> None:
 
     assert "crlf-pattern" in report.installed
     installed_text = (_skills_root(repo) / "tcs-crlf-pattern" / "SKILL.md").read_bytes()
-    # The replaced line itself is allowed to lose its trailing \r -- `.` in
-    # the rewrite's regex matches \r, so the line being intentionally
-    # rewritten does not keep its original terminator. What must stay
-    # byte-identical is everything else: the opening delimiter, every other
-    # frontmatter line, and the whole body below the closing delimiter.
-    assert installed_text.startswith(b"---\r\n")
-    assert b"name: tcs-crlf-pattern" in installed_text
-    assert b"description: CRLF fixture\r\n---\r\n\r\nBody.\r\n" in installed_text
+    assert installed_text == (
+        b"---\r\nname: tcs-crlf-pattern\r\ndescription: CRLF fixture\r\n---\r\n\r\nBody.\r\n"
+    )
+    _assert_uniform_line_endings(installed_text, crlf=True)
+
+
+def test_lf_skill_md_installs_successfully_and_stays_lf_throughout(tmp_path: Path) -> None:
+    """The other half of the same guarantee: an LF file installs as LF
+    throughout, with no CRLF creeping in anywhere -- the two cases are
+    symmetric, and a mutation that hard-codes `\\r\\n` into the replacement
+    would pass the CRLF test above while failing this one."""
+    install = _load_install()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(
+        catalogue,
+        "lf-pattern",
+        skill_bytes=b"---\nname: lf-pattern\ndescription: LF fixture\n---\n\nBody.\n",
+    )
+    repo = tmp_path / "repo"
+
+    report = install.install(repo, ["lf-pattern"], catalogue_dir=catalogue)
+
+    assert "lf-pattern" in report.installed
+    installed_text = (_skills_root(repo) / "tcs-lf-pattern" / "SKILL.md").read_bytes()
+    assert installed_text == b"---\nname: tcs-lf-pattern\ndescription: LF fixture\n---\n\nBody.\n"
+    _assert_uniform_line_endings(installed_text, crlf=False)
 
 
 # --- clarification 6 / f: the default catalogue_dir, against the REAL tree -
