@@ -1072,6 +1072,33 @@ writing is allowed, and an installer that is honest about what it did.
      bats leg. State the four numbers, not a sum, so a regression in one suite cannot hide in the
      total.
 
+  5. **A bats `ok` tally is neither a pass count nor a count of tests run, so correction 4's four
+     numbers are necessary and not sufficient.** Measured 2026-10-05 against this branch's first
+     Linux CI run (#176, run 37360478496), which is also the first time any of these figures was
+     produced on a platform other than macOS. Two independent ways the tally misleads:
+
+     - **A skip prints as a pass.** TAP marks a skip with a directive on an `ok` line, so
+       `grep -c ' ok '` counts it. The `bats (ubuntu-latest)` leg reported **1187 ok, 0 not ok** —
+       identical to the macOS figure above — while **2 of those were skips** (`chflags` is BSD-only;
+       no `de_DE` locale on the image), so 1185 executed against macOS's 1187. The totals matching
+       was a coincidence of equal sums over different sets, not two platforms agreeing.
+     - **A `setup_file` abort reports nothing for the tests it kills.** The `bats (macos-latest)`
+       leg of the same run declared `1..1187` and emitted **1151 ok + 1 not ok = 1152** results;
+       **35 tests produced no TAP line at all** and the numbering jumped from `173` to `210`. The
+       job went red, so this was not a silent green — but the *count* was silently wrong, and 1187
+       is the number this task is told to quote.
+
+     So report **three numbers per suite — plan, reported, skipped** — and assert that the TAP plan
+     equals the number of reported results. Executed is `reported - skipped`. Derive the expected
+     total from the suite's own `1..N` line, never from the figures written above: an expectation
+     copied from a previous run's tally is the same instrument twice and cannot see either failure
+     `[ref: issue #178]`. The flake that exposed this is #177 and is **not** this spec's work —
+     `fixtures_sanity.bats` is untouched by every commit on this branch — so if it fires during
+     this task's run, record it against #177 and do not treat it as a Phase 3 regression. Verify
+     that rather than taking it on trust, with a check that cannot go stale as commits accumulate:
+     `git log origin/main..HEAD --oneline -- plugins/tcs-git-helpers/tests/bats/fixtures_sanity.bats
+     plugins/tcs-git-helpers/tests/fixtures/repos/build.sh` must print nothing.
+
   - Success: the three test files above green, reported per leg; `install()` proven to write only
     for names it is given and `install.py` proven not to import `guard`; the C3-owned sequence and
     commit-offer properties explicitly deferred to Phase 4 rather than silently dropped
