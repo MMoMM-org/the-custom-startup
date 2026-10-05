@@ -1,12 +1,18 @@
-"""T3.2 (spec-020): the collision guard (component C4).
+"""T3.2/T3.2b (spec-020): the collision guard (component C4).
 
-`check(repo_dir, intended_names, *, home_dir)` partitions a set of intended
-skill names into `approved` / `refused` / `skipped` -- it **installs
-nothing**; writing is C5's job in T3.3 `[ref: docs/XDD/specs/
+`check(repo_dir, intended_names, *, home_dir, own_installed)` partitions a
+set of intended skill names into `approved` / `refused` / `skipped` -- it
+**installs nothing**; writing is C5's job in T3.3 `[ref: docs/XDD/specs/
 020-tcs-patterns-selective-install/plan/phase-3.md#T3.2]`. This file is
 written against `guard.py` before that module exists, so every test below
 fails for want of the module rather than passing by construction -- the RED
 half of T3.2's TDD gate.
+
+`own_installed` (T3.2b, added after T3.2 shipped) is required with no
+default -- every pre-existing call below passes `own_installed=frozenset()`
+to reproduce the behaviour T3.2 originally specified; the dedicated
+`own_installed` section near the end of this file exercises the exemption
+itself `[ref: plan/phase-3.md T3.2b]`.
 
 The import of `guard` happens at RUNTIME, inside each test, not at module
 level, for the same reason `test_patterns_install.py::_load_manifest` and
@@ -875,26 +881,29 @@ def test_guard_report_is_frozen_with_named_channels(tmp_path: Path) -> None:
 
 
 def test_own_installed_repo_hit_is_approved_not_refused(tmp_path: Path) -> None:
-    """The measured defect, pinned against the CURRENT (pre-T3.2b)
-    signature -- RED here means an `AssertionError`, not a `TypeError`,
-    which is the whole point: it demonstrates the OLD behaviour is wrong,
-    not merely that a new parameter is missing
+    """The measured defect, now pinned against the NEW signature. Before
+    T3.2b this test was written against the CURRENT (then pre-fix)
+    signature and failed on `AssertionError` -- the shape that proves the
+    OLD behaviour was wrong, not merely that a parameter was missing
     `[ref: plan/phase-3.md T3.2b, "(a) The defect, asserted against the
-    CURRENT signature"]`. `tcs-ddd` is already installed in the repository
-    namespace; checking it again alongside a genuinely new name must
-    approve BOTH, not refuse the one this tool installed itself
+    CURRENT signature"]`. It is rewritten here because the old call
+    (`home_dir=home` with no `own_installed`) is no longer legal now that
+    `own_installed` is required. `tcs-ddd` is already installed in the
+    repository namespace; checking it again alongside a genuinely new name
+    must approve BOTH, not refuse the one this tool installed itself
     `[ref: solution.md, "check(repo, {\"tcs-ddd\", \"tcs-hexagonal\"}, ...)
-    -> approved = ['tcs-hexagonal'], refused = {'tcs-ddd': 'repo'}"]`.
-
-    This test is rewritten to the NEW signature in the commit that adds
-    `own_installed` -- the call below becomes illegal once that parameter
-    is required, so it cannot survive unchanged across both commits."""
+    -> approved = ['tcs-hexagonal'], refused = {'tcs-ddd': 'repo'}"]`."""
     guard = _load_guard()
     repo = tmp_path / "repo"
     home = tmp_path / "home"
     _skill(repo / ".claude" / "skills", "tcs-ddd", name="tcs-ddd")
 
-    report = guard.check(repo, {"tcs-ddd", "tcs-hexagonal"}, home_dir=home)
+    report = guard.check(
+        repo,
+        {"tcs-ddd", "tcs-hexagonal"},
+        home_dir=home,
+        own_installed=frozenset({"tcs-ddd"}),
+    )
 
     assert report.approved == frozenset({"tcs-ddd", "tcs-hexagonal"})
     assert "tcs-ddd" not in report.refused

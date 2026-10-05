@@ -1,10 +1,28 @@
-"""The tcs-patterns collision guard (spec-020 T3.2, component C4).
+"""The tcs-patterns collision guard (spec-020 T3.2/T3.2b, component C4).
 
-`check(repo_dir, intended_names, *, home_dir)` partitions a set of intended
-skill names into what C5 (T3.3) may safely install, what it must refuse, and
-what this guard could not evaluate at all. **This module installs nothing**
--- writing is C5's job in T3.3; C4 only decides
+`check(repo_dir, intended_names, *, home_dir, own_installed)` partitions a
+set of intended skill names into what C5 (T3.3) may safely install, what it
+must refuse, and what this guard could not evaluate at all. **This module
+installs nothing** -- writing is C5's job in T3.3; C4 only decides
 `[ref: docs/XDD/specs/020-tcs-patterns-selective-install/plan/phase-3.md#T3.2]`.
+
+**`own_installed`, added in T3.2b.** T3.2 shipped checking the wrong
+question -- "is this name taken?" instead of "would installing here create a
+duplicate nobody can resolve?" `[ref: SDD/Constraints/CON-3]` -- which made
+this guard refuse the very pattern this tool had itself installed on a prior
+run, since an installed pattern registers in the REPOSITORY namespace under
+exactly the name C3 checks next time. `own_installed` carries the
+manifest's `installed_as` values for this repository; a repo-namespace hit
+whose name is a member passes through to `approved` instead of being
+refused. Three boundaries, all enforced only on the repo namespace: a user-
+or plugin-namespace hit is always somebody else's regardless of
+`own_installed`; the parameter is required, with no default, so a caller
+that forgets it fails loudly rather than silently reintroducing the bug;
+and an empty set -- the safe fallback when a caller cannot read the
+manifest -- reproduces the pre-T3.2b behaviour exactly
+`[ref: SDD/Interface Specifications/Data model: the three namespaces (C4),
+"own_installed is required, and it exists because this guard otherwise
+refuses our own earlier work"]`.
 
 Four facts, measured on a live installation, decide how this is implemented
 -- an implementer working from the contract's prose alone would get at
@@ -374,7 +392,7 @@ def _plugin_roots(home_dir: Path) -> list[Path]:
     return cache_roots + marketplace_roots
 
 
-def check(repo_dir: Path, intended_names, *, home_dir: Path) -> GuardReport:
+def check(repo_dir: Path, intended_names, *, home_dir: Path, own_installed: frozenset[str]) -> GuardReport:
     """Partition `intended_names` into `approved`/`refused`/`skipped`
     against the three namespaces. Writes nothing, under any input --
     `check()` only reads, `os.stat()`s, and lists directories.
@@ -385,6 +403,13 @@ def check(repo_dir: Path, intended_names, *, home_dir: Path) -> GuardReport:
     missed, and so every malformed file or directory in every namespace is
     reported through `skipped` even when it cannot affect `intended_names`
     at all `[ref: plan/phase-3.md T3.2, requirement 1]`.
+
+    `own_installed` is required, with no default (T3.2b) -- the names the
+    manifest records as installed BY this tool INTO this repository. A hit
+    in the repo namespace whose name is a member is not a collision; a hit
+    in any other namespace always is, `own_installed` or not
+    `[ref: solution.md, "own_installed is required, and it exists because
+    this guard otherwise refuses our own earlier work"]`.
     """
     repo_dir = Path(repo_dir)
     home_dir = Path(home_dir)
@@ -405,8 +430,11 @@ def check(repo_dir: Path, intended_names, *, home_dir: Path) -> GuardReport:
                 if reason is not None:
                     skipped.append((str(skill_md), reason))
                     continue
-                if name in intended and name not in refused:
-                    refused[name] = (namespace, str(skill_md))
+                if name not in intended or name in refused:
+                    continue
+                if namespace == _REPO and name in own_installed:
+                    continue  # ours already -- not a collision, see T3.2b above
+                refused[name] = (namespace, str(skill_md))
 
     approved = frozenset(intended - set(refused))
     return GuardReport(approved=approved, refused=refused, skipped=skipped)
