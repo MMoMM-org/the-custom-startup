@@ -513,6 +513,62 @@ writing is allowed, and an installer that is honest about what it did.
        (refused with a message asserting the opposite of the truth), and a block-scalar, tag or
        anchor `name:` (which used to "succeed" while producing broken YAML in an installed skill).
 
+     **T3.3's TDD gate returned BLOCK on 2026-10-05.** One finding was a contract defect of mine:
+     the signature carried `report_only=False` with semantics defined nowhere, and the gate was
+     right that no test can be written against it. **It is removed**, not defined — nothing in F4
+     asks for a dry run `[ref: SDD/Interface Specifications/Data model: the install plan and report
+     (C5), "No report_only parameter"]`. Six corrections to the test list follow, and they are
+     requirements of this task:
+
+     a. **A per-pattern fault does not escape `install()`.** The rewrite raises `InstallError`;
+        `install()` catches it, records `failed[name]`, and continues. So the malformed-pattern
+        tests call `install(repo, [good, bad], ...)` **once**, assert it **returns normally**, then
+        assert `report.failed[bad]` carries a reason, `report.installed[good]` is populated, and
+        **nothing exists on disk** for `bad`. A test wrapping the call in
+        `pytest.raises(InstallError)` tests the opposite of the contract and cannot observe the
+        other patterns installing — and a mutation letting the exception propagate would still pass
+        a loosely written version.
+     b. **"Full subtree" needs a multi-file fixture and content equality.** The fixture pattern must
+        hold at least one non-`SKILL.md` file (a `reference/*.md`), and the test must assert its
+        **bytes** match the catalogue's. A mutation copying only `SKILL.md` survives any test that
+        merely checks the `tcs-<name>/` directory exists.
+     c. **The expected sha256 is computed by the test, from the installed file.** The test runs
+        `hashlib.sha256(installed_skill_md.read_bytes()).hexdigest()` itself and compares that to
+        the manifest entry — it never calls `install.py`'s hashing. The fixture's catalogue `name:`
+        necessarily differs from the installed `tcs-<name>`, so the two files' bytes differ, and a
+        mutation hashing the catalogue's original bytes is caught **only** if the comparison's
+        byte-source is read independently.
+     d. **Mid-selection failure reuses the malformed fixture, not mocking.** One well-formed pattern
+        and one with a malformed `name:`, requested in **one** call with the good name **first** in
+        `names`, so "earlier patterns stay" is actually exercised by order. A content-driven failure
+        rather than a heavy I/O mock, and it reuses a fixture this task needs anyway.
+     e. **A positive CRLF test.** The corrected rename sample fixed a *false rejection*: the old
+        `startswith("---\n")` refused a CRLF file, and `re.match(r"^---\r?\n", text)` accepts it.
+        Every other frontmatter test covers a *raise* path; this is the one *accept* path the
+        correction changed, and it had no coverage. A fixture whose `SKILL.md` uses CRLF endings
+        must install successfully.
+     f. **The default-`catalogue_dir` test derives its own expected path.** It must build
+        `REPO_ROOT / "plugins" / "tcs-patterns" / "templates" / "patterns"` independently, not read
+        `install.py`'s own `parents[3]` expression back at it — otherwise the assertion is a
+        snapshot of the code under test, which is the failure that got past T3.1's gate. Also assert
+        `report.committed is False`, identity not falsiness, since the field is typed as always
+        `False`.
+
+     **Why the temp-directory assertion is a mechanism assertion, and why the outcome route was
+     rejected.** The requirement is that a rename never crosses filesystems, and `tmp_path` puts the
+     temp directory and the destination on one filesystem by construction — the same situation T3.1
+     settled for `manifest.py`'s atomic write, with the same resolution. The tempting alternative is
+     to make it observable by putting the fixture *repository* inside this worktree (`dev=16777245`)
+     while `$TMPDIR` is `dev=16777234`, so a mutant writing its temp directory to `$TMPDIR` would
+     genuinely raise `Cross-device link`. **Rejected on two grounds**: CI runs on a single-filesystem
+     runner, so such a test would pass there whether or not the code were correct — a test that only
+     works on one developer's machine is worse than a mechanism assertion that works everywhere —
+     and a fixture written inside the worktree inherits this repository's `.gitignore`, which has
+     already broken directory-enumeration tests here. So: assert that `mkstemp`/`mkdtemp` received a
+     `dir=` inside `<repo>/.claude/skills/`, and that `os.rename` is the call that puts the pattern
+     in place, and say in the docstring why — or someone will "simplify" it into a result assertion
+     that cannot fail.
+
   3. Implement: `lib/install.py` — copy, frontmatter rename, hash of the installed `SKILL.md`,
      manifest upsert, report. Temp files in the destination directory.
   4. Validate: `python3 -m pytest -q`; run an install into a throwaway git repository fixture and

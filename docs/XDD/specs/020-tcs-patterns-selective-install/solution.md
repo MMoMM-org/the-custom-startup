@@ -1699,14 +1699,32 @@ Added 2026-10-05, before T3.3 was dispatched, for the same reason the C4 namespa
 four things an implementer needs were undefined, and each has more than one defensible answer.
 
 ```
-install(repo_dir, names, *, catalogue_dir, report_only=False) -> InstallReport
+install(repo_dir, names, *, catalogue_dir) -> InstallReport
 
 InstallReport (frozen, named channels)
     installed:  name -> (installed_as, version, sha256)   newly written
     unchanged:  name -> (installed_as, version, sha256)   already current, not rewritten
-    failed:     name -> reason                            raised and skipped; earlier writes stand
+    failed:     name -> reason                            raised internally, caught, skipped
     committed:  always False
 ```
+
+**No `report_only` parameter.** An earlier revision of this signature carried `report_only=False`
+and defined it nowhere — found by T3.3's TDD gate, which grepped the spec, located the parameter
+exactly once, in this signature, and refused to pass a plan containing a test against undefined
+behaviour. It is removed rather than given semantics: nothing in `[ref: PRD/F4]` asks for a dry run,
+and the proposal a user sees *before* an install is C3's, assembled from `detect()` and `check()`
+rather than rehearsing `install()`. Recorded rather than quietly deleted because the next person to
+want a dry run should find the reason it is absent.
+
+**Who raises, and who catches — a per-pattern fault never escapes `install()`.** `InstallError` is
+raised by the frontmatter rewrite `[ref: SDD/Implementation Examples]` and by the catalogue reads
+around it, and `install()` **catches it per pattern**, records `failed[name] = reason`, and carries
+on to the next name. `install()` itself does not raise for a fault in one pattern — that is what
+makes "a write failing mid-selection leaves earlier patterns in place" observable at all
+`[ref: SDD/Runtime View/Error Handling]`, and what T3.3's success criterion means by "raises rather
+than installing unprefixed": the *rewrite* raises, so nothing is written unprefixed, and the report
+names the casualty. A test wrapping the whole call in `pytest.raises(InstallError)` would therefore
+be testing the opposite of the contract, and could not observe the other patterns installing.
 
 **1. C5 takes names, never a `GuardReport`.** C4 and C5 are deliberately separate so a refusal is
 testable without a write `[ref: SDD/Building Block View, F5 row]`, and that separation is defeated
@@ -1799,7 +1817,7 @@ the two namespaces a test cannot reach are the ones that go unverified
 | A `SKILL.md` **in a scanned namespace** that cannot be read or carries no usable `name:` | C4, step 6 | Skipped, never fatal, and reported through `GuardReport.skipped` as `(path, reason)`. Four inputs reach this and each needs a distinguishable reason: unreadable, no frontmatter block, no `name:` key, empty `name:`. Added 2026-10-05; the row above it is the same condition with the opposite behaviour, and the difference is deliberate rather than an inconsistency. **The file C5 refuses to install is ours; the file C4 skips belongs to a third party.** A broken file in our own catalogue is a defect in this repository and must stop that pattern loudly, because installing it would register the pattern under the unprefixed name and silently defeat ADR-1. A broken file in somebody else's plugin is not ours to fix and must not stop this repository's install — the same stance `detect.py` takes for an unparseable manifest two rows above. It is reported rather than swallowed because a name the guard could not check is a name it cannot vouch for, and a caller that cannot see the omission cannot warn about it. Measured: zero of the 259 real `SKILL.md` files on this machine fail to parse, so every one of the four cases is fixture-only `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`. |
 | Write fails mid-selection | C5 | Patterns already written stay; the manifest records exactly what succeeded. Re-running `install` is idempotent by name and hash. |
 | Manifest present but unparseable | C6 | Treated as `MISSING` for the advisory and reported verbatim by `status`. Never silently overwritten — overwriting it would erase the record of what is installed. |
-| Installed pattern diverges from its hash | C5 on `update` | The user is asked per pattern with a unified diff (ADR-4). Default is to skip, so an unanswered prompt cannot destroy local work. |
+| Installed pattern diverges from its hash | C5 on `update`, **not `install`** | The user is asked per pattern with a unified diff (ADR-4). Default is to skip, so an unanswered prompt cannot destroy local work. **This row is T3.4's, not T3.3's** — noted 2026-10-05 after T3.3's gate flagged that it reads as a third `install()` obligation and would contradict "no `AskUserQuestion` in `install.py`" if anyone tried to satisfy it there. `install()` detects divergence only to the extent of declining to call a locally-edited pattern `unchanged`; prompting about it is `update()`'s. **`update()` has no signature or section anywhere in this document** — that gap is T3.4's to settle before it is dispatched, the same way C5's four were settled before T3.3. |
 | Catalogue `VERSION` missing or non-numeric | C7, C9 | C7 reports the pattern as unknown rather than drifted; C9 fails the gate. A pattern without a version cannot be distributed. |
 | Pattern name given to the catalogue reader is unknown | C8 | Lists the 21 available names. |
 
