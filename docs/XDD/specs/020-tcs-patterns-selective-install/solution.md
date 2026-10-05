@@ -478,7 +478,7 @@ T2.5 rather than a claim here.
 | `go-idiomatic` | a `go.mod` | |
 | `python-project` | any `.py` file **and** one of `pyproject.toml`, `requirements.txt`, `setup.py` | trap 7: both `venv` and `.venv` are recognised wherever a virtual environment is tested for |
 | `react-testing` | a `react` dependency **and** one of `@testing-library/react`, `react-test-renderer`, `enzyme` | `react` alone is not evidence |
-| `frontend-testing` | DOM-render evidence in test files: `render(`, `screen.`, `fireEvent`, `userEvent` | trap 2: never a directory name, never jsdom alone |
+| `frontend-testing` | DOM-render evidence in test files: `render(`, `screen.`, `fireEvent`, `userEvent`. **Test file** means `_is_test_filename`, i.e. `test_*.py`, `*_test.py`, `*_test.go`, `*.bats`, `*.test.{js,jsx,ts,tsx}`, `*.spec.{js,jsx,ts,tsx}` -- the same set the tests shape uses, so the search is **not** limited to JS/TS | trap 2: never a directory name, never jsdom alone. Consequence, measured 2026-10-05: `render(` inside a `test_*.py`, an `*_test.go` or a `*.bats` file fires this rule. Accepted -- the marker set is specific enough that a Go or shell test containing `screen.` or `fireEvent` is far likelier to be exercising a DOM than coincidence, and narrowing the set per ecosystem would make the rule and the tests shape diverge for no measured gain |
 | `testing` | any non-UI test framework together with a tests shape — both defined under *What counts as a test framework* below | trap 1: `baseline` with `surface: false`, never surfaced as a recommendation |
 
 **The three gates.** A gate decides only **whether to ask**. Nothing is installed because a gate
@@ -517,10 +517,22 @@ excludes every declaration that is development-only or transitive.**
 | Manifest | A gate reads | A gate does not read |
 |---|---|---|
 | `package.json` | `dependencies` | `devDependencies` |
-| `pyproject.toml` | `[project] dependencies`, `[tool.poetry] dependencies` | `[project.optional-dependencies]`, `[tool.poetry.group.*.dependencies]` |
+| `pyproject.toml` | `[project] dependencies` and `[tool.poetry] dependencies`, **merged into one list** -- see the note below | `[project.optional-dependencies]`, `[tool.poetry.group.*.dependencies]` |
 | `requirements.txt` | every requirement line | — (the format has no development section) |
 | `setup.py` | `install_requires` | `extras_require` |
 | `go.mod` | a direct `require` | a `require` marked `// indirect` |
+
+**The two `pyproject.toml` sources are merged, and the evidence string does not distinguish
+them.** `_pyproject_deps_and_pytest` returns one flat list of names, and every caller formats
+its evidence with the literal key `dependencies`. Measured 2026-10-05: a `fastapi` declared
+only under `[tool.poetry.dependencies]` opens `q1_backend` citing
+`pyproject.toml: dependencies.fastapi`, byte-identical to what a `[project] dependencies`
+declaration produces. So a reader following that evidence opens the file, looks for a
+`[project] dependencies` array, and finds no such table. The merge is correct -- both are
+runtime declarations and the rule below turns on nothing else -- so this is a reporting
+limit, not a detection defect, and it is recorded rather than fixed because the evidence
+string's job is to name the **file** that justified a signal, which it does. Added by the
+Phase 2 drift check, which read the table above as promising two distinguishable sources.
 
 The principle is the one already written above and is simply applied consistently: `q1_backend`
 asks whether this repository *runs a service*. A development-only declaration does not make it
@@ -627,7 +639,8 @@ Three consequences the fixtures must assert rather than assume:
 - **The walk excludes `node_modules`, `.venv`, `venv`, `vendor`, `.git` and `.claude`** (trap 5),
   and walks nested
   manifests so a workspace root declaring nothing still yields its children's signals. Every
-  manifest actually read is listed in `manifests_walked`, so a missing signal is explicable.
+  manifest the walk *discovers* is listed in `manifests_walked`, so a missing signal is
+  explicable.
   The manifests walked are **`package.json`, `pyproject.toml` and `go.mod`**, at every depth
   outside the excluded directories -- not only at the root. Naming the set matters because the
   only walk shown in this document is `walk_manifests(root, "package.json")`
@@ -635,8 +648,19 @@ Three consequences the fixtures must assert rather than assume:
   nested Python or Go signal at the root and never exercise trap 5 for those ecosystems.
   `manifest.json` is read for `obsidian-plugin` but is not a dependency manifest and does not
   contribute to `manifests_walked`.
-- **`manifests_walked` lists every dependency manifest whose contents were read, not only the
-  three the walk discovers by.** `requirements.txt` and `setup.py` are read where present --
+- **`manifests_walked` lists every discovered instance of the five dependency-manifest
+  filenames, not only the three the walk discovers by -- and `_manifests_walked` opens none
+  of them.** Corrected 2026-10-05 by the Phase 2 drift check: this clause read "every
+  dependency manifest whose contents **were read**", which the function has never done. It
+  lists names by discovery and explains why in its own docstring -- a rule may
+  short-circuit before reaching a later manifest (`_rule_mcp_server` returns on its first
+  hit), so "was read" is not a property the field could report without a second,
+  discarded read whose result nobody checks, which would add the one crash surface the
+  module does not otherwise have. The field's purpose is unaffected: naming every
+  discovered instance is what makes a missing signal explicable. **Worth noting how this
+  defect arose** -- the sentence was itself the 2026-10-03 correction recorded below, and
+  the correction is what went wrong, not the thing it corrected. A claim written beside a
+  correction is the likeliest one in the paragraph to be false. `requirements.txt` and `setup.py` are read where present --
   `python-project` needs one of them, and `mcp-server` looks for `mcp` in them -- so both
   belong in the list. Settled on 2026-10-03 after T2.2 read the earlier wording the other way,
   which was a fair reading of "the manifests walked are" plus the `manifest.json` exception.
@@ -1257,7 +1281,7 @@ changeset containing only a `VERSION` bump is not treated as a changed source.
 | Error | Detected by | Behaviour |
 |---|---|---|
 | Not inside a git repository | C3, step 1 | Abort before any read of the target. Message names the resolution. |
-| An unparseable `package.json` / `pyproject.toml` | C2 | Skipped, not fatal. A broken manifest is not a signal. The file is listed in `manifests_walked` so its absence from evidence is explicable. |
+| An unparseable `package.json` / `pyproject.toml` | C2 | **Never fatal; the dependency *read* is skipped, not the manifest.** Corrected 2026-10-05 -- this row read "A broken manifest is not a signal", which measurement contradicts: a rule keying on a manifest's **existence** keeps firing, so a `pyproject.toml` holding `[project` still yields `python-project`, a garbage `go.mod` still yields `go-idiomatic`, and a `tsconfig.json` holding `{` still yields `typescript-strict`. Only content-derived signals vanish. One further deliberate case: `_pyproject_deps_and_pytest` matches `[tool.pytest.ini_options]` by regex **before** parsing, so a file `tomllib` rejected still opens `q3_test_quality` -- a typo in `pyproject.toml` has not stopped the repository running pytest. A broken manifest never poisons its siblings. The file is listed in `manifests_walked` so its absence from dependency evidence is explicable. All six legs are pinned by tests as of 2026-10-05 and each was mutation-checked against the guard clause it covers `[ref: tests/test_patterns_detect.py, "An unparseable manifest"]`. |
 | Target repository unreadable in part | C2 | Scan continues over what is readable; the report names what it could not read, so a thin proposal is never silently a permissions artefact. |
 | Name collision | C4, step 6 | That pattern is not written; the collision is reported with both locations; the remaining patterns still install (F5's fourth criterion). No rescan. |
 | `SKILL.md` without a frontmatter `name:` line | C5 | `InstallError`, nothing written for that pattern. Prevents installing under the unprefixed name. |
