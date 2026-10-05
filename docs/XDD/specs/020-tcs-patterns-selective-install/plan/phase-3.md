@@ -438,7 +438,7 @@ writing is allowed, and an installer that is honest about what it did.
   that by running my design against the mutant instead of trusting my description, which is exactly
   the right move and is why the committed fixture puts two of them under the *same* root.
 
-- [ ] **T3.2b The guard must not refuse our own install** `[activity: backend-api]`
+- [x] **T3.2b The guard must not refuse our own install** `[activity: backend-api]`
 
   Added 2026-10-05, after T3.2 closed. **T3.2 is not reopened** — it shipped what it was specified
   to do, and the specification was wrong `[ref: SDD/Interface Specifications/Data model: the three
@@ -485,9 +485,19 @@ writing is allowed, and an installer that is honest about what it did.
      the two boundary tests), and giving `own_installed` a `frozenset()` default (must fail the
      `TypeError` test).
   5. Success:
-     - [ ] A pattern this tool installed is not refused on a second run `[ref: SDD/Quality Requirements; PRD/F4]`
-     - [ ] A `tcs-` name owned by another namespace is still refused `[ref: PRD/F5 1st-3rd]`
-     - [ ] `own_installed` cannot be forgotten silently `[ref: SDD/.../"Required, with no default"]`
+     - [x] A pattern this tool installed is not refused on a second run `[ref: SDD/Quality Requirements; PRD/F4]`
+     - [x] A `tcs-` name owned by another namespace is still refused `[ref: PRD/F5 1st-3rd]`
+     - [x] `own_installed` cannot be forgotten silently `[ref: SDD/.../"Required, with no default"]`
+
+  **Delivered 2026-10-05.** `12932f6` RED (two shapes: the pre-fix-signature defect test failing
+  on `AssertionError`, everything else on the new signature's `TypeError`; all 25 pre-existing
+  calls mechanically given `own_installed=frozenset()`), `e51d9d4` the fix (the `own_installed`
+  keyword, repo-namespace-only, and the defect test rewritten to the new signature). Guard suite
+  53 passed (46 + 7); whole suite 1105 passed, 1 skipped, 1 deselected (was 1098/1/1 before this
+  task). Four mutations run, all caught: suppressing user- or plugin-namespace matches too, keying
+  the suppression on the repo namespace label alone rather than `own_installed` membership (the
+  load-bearing one — caught by 7 tests including the one built for exactly this), and a
+  `frozenset()` default on the parameter.
 
 - [ ] **T3.3 The installer** `[activity: backend-api]`
 
