@@ -284,6 +284,72 @@ writing is allowed, and an installer that is honest about what it did.
      The write-nothing digest (step 4) must also run across **more than one scenario** — at
      minimum the symlink case, a malformed-input case, and the multi-namespace collision case. One
      nominal call does not support a claim of "under any input".
+
+     **Fix round, 2026-10-05 — recorded after BOTH review gates returned PASS.** The first
+     implementation passed 4f spec-compliance and 4g code-quality, 25 tests green, and 12
+     independent mutations across namespace order, both plugin roots, the glob forms, precedence,
+     `followlinks`, the skip reasons and the partition were all caught. Everything below was found
+     *after* that, by mutation and probing rather than by reading. Two careful reviewers over the
+     same 862 lines classified two of these as non-blocking observations and did not reach the other
+     two. That is the lesson to carry into T3.3: **a green suite plus two PASS reviews plus a
+     mutation round is still not coverage.**
+
+     1. **[must fix] An unreadable directory makes the guard approve a name it could not check.**
+        `os.walk`'s default `onerror=None` swallows directory-listing failures, so a `chmod 000`
+        directory holding a `SKILL.md` yields no entries and no error — the name is **approved** and
+        `skipped` is **empty**. An unreadable namespace root loses a whole namespace the same way,
+        and `root.is_dir()` returns `True` on such a directory so the missing-root clause does not
+        help. Measured. Pass `onerror=` and route the failure into `skipped`; verified to catch both
+        the intermediate directory and the root. The contract now carries the rule
+        `[ref: SDD/.../"A directory the guard cannot list is skipped and reported too"]`.
+
+     2. **[must fix] The hand-rolled `name:` parser disagrees with YAML on 9 of 14 inputs, and 4 of
+        those make the guard approve a taken name.** A skill registers under what YAML yields, not
+        what a regex captures. `name: ddd # comment` captures `ddd # comment`, so `ddd` is approved
+        while the harness registers `ddd` — a live duplicate, which is the one failure C4 exists to
+        prevent `[ref: SDD/Constraints/CON-3]`. Same for a block scalar (`>-`, `|`), a tag
+        (`!!str`), an anchor (`&a`), and duplicate `name:` keys where YAML takes the last and the
+        regex takes the first. **The parser must recognise a plain scalar, optionally quoted, and
+        skip-and-report anything else** — never return a value it is not confident of, because a
+        garbage name silently frees the real one whereas a skip is reported. Rule and full table:
+        `[ref: SDD/.../"Its frontmatter `name:` means what a YAML parser makes of it"]`.
+
+        Pin it with a **differential test against PyYAML**. `guard.py` stays stdlib-only on the 3.11
+        floor, but the test suite may use PyYAML and already does
+        (`tests/test_tcs_patterns_catalogue_relocation.py`; `requirements-dev.txt:18`), for this
+        exact class of bug. A differential test is also the strongest shape available, because the
+        expectation enters from a source with no shared ancestry with the code under test.
+
+     3. **[must fix] The write-nothing digest cannot see a `mkdir`.** `_digest_tree` hashes
+        `filenames` and never `dirnames`, so a directory created inside an already-existing tree
+        leaves the hash unchanged. Verified: injecting a nested-empty-directory `mkdir` into
+        `check()` **survived all 25 tests**, while injecting a file write was caught. The line that
+        would cause it — `path.parent.mkdir(parents=True, exist_ok=True)` — exists legitimately in
+        `manifest.py`, the sibling module, so it is a plausible paste. Hash the directory shape too;
+        verified to close the gap while leaving the no-change, file-added and symlink-cycle cases
+        behaving identically.
+
+     4. **[must fix] An unterminated frontmatter block is a second, untested path.** A `SKILL.md`
+        opening with `---` and never closing it reaches the same skip as a file with no block at
+        all. Mutating that branch to parse to EOF instead survived all 25 tests. Add the fixture —
+        and note it shares the "no usable frontmatter block" reason with the missing-block case, so
+        the assertion becomes `len(skipped) == 5` with `len(reasons) == 4`, not five distinct
+        reasons.
+
+     5. **[must fix] Delete the two defensive `OSError` guards around the dedup's `stat()`.** Three
+        mutations of them survived all 25 tests, and **no constructible fixture reaches them**:
+        `os.walk` classifies a dangling symlink as a *file*, so the dedup never stats it, and a
+        symlink behind a `chmod 000` intermediate is never discovered because the walk cannot list
+        the intermediate — both verified empirically, both proposed as fixtures and both disproved.
+        What stays reachable is a genuine race, and letting it surface is better than swallowing it:
+        this component's stance is that a name it could not check must be reported, and an exception
+        is the loudest report available. Marcus's call, 2026-10-05.
+
+     6. **[observation, no action]** The `chmod 0o000` fixture does not block reads when the suite
+        runs as root, which would drop `skipped` from 5 to 4 and fail the count. This repository's
+        CI runs on non-root GitHub-hosted runners on both macOS and Linux, so CI is safe; a
+        root-owned local Docker session is the exposure. It fails loudly rather than silently, which
+        is why this is recorded and not fixed.
   3. Implement: `lib/guard.py` — the three namespace checks, returning a **`GuardReport`** with
      three named channels: `approved`, `refused` (name → namespace plus the colliding `SKILL.md`
      path), and `skipped` (`(path, reason)` for every `SKILL.md` that could not be read). The third

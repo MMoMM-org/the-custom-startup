@@ -1585,12 +1585,76 @@ links to one real directory from reporting the same skill twice under two paths.
   `detect.py` takes for an unparseable manifest, and for the same reason: a third party's broken
   file must not stop this repository's install. It is reported **through `GuardReport.skipped`**,
   as a `(path, reason)` pair, because a skipped file is a name the guard could not check and a
-  caller that cannot see the omission cannot warn about it. Four distinct inputs land here and each
-  needs its own case and its own distinguishable reason: a file that cannot be read, a file with no
-  frontmatter block at all, a frontmatter block with no `name:` key, and a `name:` whose value is
-  empty. None of the four occurs naturally — all 259 real files parse — so every one of them has to
-  be constructed in a fixture. A test that asserts only "the call did not raise" does not cover
-  this rule; it has to assert the entry lands in `skipped` with the right reason.
+  caller that cannot see the omission cannot warn about it. Five distinct inputs land here and each
+  needs its own case: a file that cannot be read, a file with no frontmatter block at all, a
+  frontmatter block that opens and never closes, a frontmatter block with no `name:` key, and a
+  `name:` whose value is empty. None of the five occurs naturally — all 259 real files parse — so
+  every one has to be constructed in a fixture. A test that asserts only "the call did not raise"
+  does not cover this rule; it has to assert the entry lands in `skipped` with the right reason.
+  The **reasons** must be distinguishable, but note that five inputs need not yield five strings:
+  an unterminated block and a missing block are both "no usable frontmatter block" and may share
+  one reason, so a test asserting `len(skipped) == 5` alongside `len(reasons) == 4` is correct and
+  a test asserting five distinct reasons is wrong.
+
+- **A directory the guard cannot list is skipped and reported too, not silently treated as empty.**
+  Added 2026-10-05 after T3.2's review round, because the rule above covers only *files* and the
+  gap was the unsafe direction. Measured: `os.walk`'s default `onerror=None` **swallows**
+  directory-listing failures, so an unreadable directory holding a `SKILL.md` makes the guard
+  **approve** that name with nothing in `skipped`, and an unreadable namespace root makes an entire
+  namespace vanish the same way. `root.is_dir()` returns `True` on a `chmod 000` directory, so the
+  existing missing-root guard clause does not help. Pass `onerror=` and route the failure into
+  `skipped` — verified to catch both the unreadable intermediate directory and the unreadable root.
+  The principle is the same one that justifies `skipped` existing at all: a name the guard could not
+  check is a name it cannot vouch for, and the caller must be able to see the omission. An
+  *unreadable* namespace is not a *missing* one, and conflating them is how a taken name gets
+  approved `[ref: SDD/Constraints/CON-3]`.
+
+- **"Its frontmatter `name:`" means what a YAML parser makes of it, because that is what the
+  harness registers.** Settled 2026-10-05; the rule previously said only "that file's frontmatter
+  `name:`", which reads as settled and is not. `guard.py` must be stdlib-only on a 3.11 floor
+  `[ref: SDD/Architecture Decisions/ADR-2]`, so it cannot import a YAML parser — but Claude Code
+  does, and a skill registers under whatever YAML yields. Measured across 14 constructed `name:`
+  lines, a regex that captures to end-of-line disagrees with YAML on **9**, and **4 of those 9
+  make the guard approve a name that is genuinely taken**:
+
+  | `name:` line | regex captures | YAML yields | consequence |
+  |---|---|---|---|
+  | `name: ddd # comment` | `ddd # comment` | `ddd` | `ddd` approved though taken |
+  | `name: >-` / `name: \|` (block scalar) | `>-` / `\|` | `ddd` | same |
+  | `name: !!str ddd` | `!!str ddd` | `ddd` | same |
+  | `name: &anchor ddd` | `&anchor ddd` | `ddd` | same |
+  | two `name:` keys | the first | **the last** | wrong one checked |
+  | `  name: ddd` (indented) | skipped, reported | `ddd` | safe — `skipped` did its job |
+
+  **The rule: the parser recognises a plain scalar, optionally single- or double-quoted, and skips
+  and reports anything else.** It must never return a value it is not confident of — a garbage name
+  is worse than a skip, because a skip is reported and a garbage name silently frees the real one.
+  An unquoted `#` begins a comment and is not part of the value; a leading `>`, `|`, `!`, `&`, `*`
+  or `%` means a construct this parser does not implement and therefore a skip; a duplicate `name:`
+  key is a skip rather than a guess at precedence. Zero of the 259 real files on this machine use
+  any of these, so every case is fixture-only — which is exactly why the parser must be pinned
+  against something other than itself.
+
+  **The test suite may use PyYAML even though `guard.py` may not**, and should: assert the
+  hand-rolled parser and a real YAML parser agree on a corpus of `name:` lines, or that the
+  hand-rolled one skips. This repository already set that precedent for the same class of bug — a
+  frontmatter value ending in `': '` made YAML read it as a key, ten descriptions in this repository
+  stopped parsing, and `claude plugin validate` passed over all ten, which is why the catalogue's
+  frontmatter is parsed with a YAML parser *in the test suite*
+  `[ref: SDD/Risks and Technical Debt/Implementation Gotchas]`. A differential test is also the
+  strongest shape available here, because the expected value enters the test from a source with no
+  shared ancestry with the code under test.
+
+- **No defensive `OSError` guard around the dedup's own `stat()`.** Removed 2026-10-05. Three
+  mutations of those guards — dropping a stat-failing child, removing the child guard, removing the
+  root guard — **survived all 25 tests**, and neither candidate fixture can reach them: `os.walk`
+  classifies a dangling symlink as a *file*, so it lands in `filenames` and the dedup never stats
+  it, and a symlink behind a `chmod 000` intermediate is never discovered because the walk cannot
+  list the intermediate. What remains reachable is a genuine race — a directory removed between the
+  walk's `scandir` and the dedup's `stat` — and letting that surface is the better behaviour, not
+  worse: this section's whole stance is that a name the guard could not check must be reported
+  rather than swallowed, and an exception is the loudest possible report. The silent `continue` was
+  the only branch in this component that failed that stance.
 7. **Write.** C5 copies each approved pattern's directory to `<repo>/.claude/skills/tcs-<name>/`,
    rewrites the frontmatter `name:`, computes the hash of the installed `SKILL.md`, and writes the
    manifest atomically (`.tmp` then `mv`, following `install_files.sh`).
