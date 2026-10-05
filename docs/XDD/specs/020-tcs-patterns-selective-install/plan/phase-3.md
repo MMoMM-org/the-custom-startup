@@ -239,10 +239,21 @@ writing is allowed, and an installer that is honest about what it did.
         so a malformed file reached twice is reported twice. Both fixtures hold a `SKILL.md` with
         no frontmatter, and both counts are measured:
 
-        | fixture | `len(skipped)` with the dedup | without |
+        | fixture | `len(skipped)` with the dedup | without, as measured on macOS |
         |---|---|---|
         | two sibling symlinks to one malformed skill directory | 1 | 2 |
-        | a self-referential symlink inside a malformed skill directory | **1** | **33** |
+        | a self-referential symlink inside a malformed skill directory | **1** | 33 |
+
+        **Assert the left column only.** `len(skipped) == 1` is a property of the dedup and holds on
+        any platform. The right column is what the mutant produced *here* and is not a portable
+        number: measured, macOS raises `ELOOP` at symlink nesting depth **32**, which is what makes
+        the cycle figure 33 rather than anything about this fixture. Linux's `MAXSYMLINKS` is
+        conventionally 40, so the same fixture yields a different count there, and this repository
+        supports both `[ref: SDD/Constraints]`. A mutation check asserts `len(skipped) > 1`, never a
+        specific number. (`os.pathconf("/", "PC_SYMLINK_MAX")` reports 255 here and is a different
+        quantity entirely — do not compute the bound from it, just avoid depending on it.) Noted
+        because the paragraph immediately below forbids exactly this class of assumption for the
+        recorded path, and the first draft of this table introduced one for the count.
 
         The second fixture is also the **cycle** case, which nothing else covers and which is the
         entire justification for not writing a timeout test — so without it that justification
