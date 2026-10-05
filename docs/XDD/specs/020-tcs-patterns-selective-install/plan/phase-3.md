@@ -721,6 +721,37 @@ writing is allowed, and an installer that is honest about what it did.
 
 - [ ] **T3.4 The update path, with divergence handling** `[activity: backend-api]`
 
+  **Three gaps to settle before this task is gated**, found 2026-10-05 by auditing it while T3.3
+  was in flight — the same pre-dispatch audit that saved C5 four gate passes. Enumerated here
+  rather than decided, because T3.3's delivery may inform two of them. **Do not dispatch T3.4's
+  TDD gate until all three are closed in `solution.md`.**
+
+  1. **`update()` has no signature or section anywhere in the SDD.** Identical in kind to C5's
+     `report_only`, which sat in a normative signature with semantics defined nowhere until T3.3's
+     gate refused to pass a plan testing it. Settle the signature and the return shape first
+     `[ref: SDD/Runtime View/Error Handling, the "C5 on `update`, not `install`" row]`.
+
+  2. **Who prompts? Step 3 below says to implement `update` in `lib/install.py`, and step 2 says it
+     "prompts per pattern... defaulting to skip" — but C5's contract says that file has no
+     interactive surface.** "C5 reports; C3 offers" was settled for `install()` because
+     `AskUserQuestion` can only be raised by a skill
+     `[ref: SDD/Interface Specifications/Data model: the install plan and report (C5), decision 4]`,
+     and the identical reasoning applies to `update()`. So the likely resolution is that `update()`
+     **computes** divergence and the `difflib` diff — both pure, no interaction — and **returns**
+     them for C3 to present, with the caller supplying the per-pattern decision. Then "skip is the
+     default" is a property of C3's prompt, not of `update()`, and ADR-4's guarantee that "an
+     unanswered prompt cannot destroy local work" needs an owner that can actually hold it. Decide
+     explicitly; do not let an implementer infer it.
+
+  3. **Step 2 names two different populations as the thing `update` acts on.** "`update` refreshes
+     only patterns whose **version is behind**" and "a pattern whose file no longer matches its
+     recorded **hash** prompts per pattern" are not the same set: a locally edited pattern at the
+     current catalogue version is not behind, yet it is exactly the case ADR-4 exists for. State
+     whether `update()` considers version-stale patterns, hash-diverged patterns, or both — and note
+     that `install()` now routes **every** present-but-not-current pattern to `failed` naming
+     `update` `[ref: SDD/Interface Specifications/.../"install() is purely additive"]`, so whatever
+     `update()` declines to handle has no other owner.
+
   1. Prime: Read ADR-4 `[ref: SDD/Architecture Decisions/ADR-4]` including its stated limit — the
      hash covers `SKILL.md` only, so a locally edited reference file is replaced without a prompt,
      and that is deliberate rather than an oversight to fix here.
@@ -737,7 +768,7 @@ writing is allowed, and an installer that is honest about what it did.
   5. Success:
      - [ ] Only drifted patterns refreshed, selection untouched `[ref: PRD/F8 1st]`
      - [ ] Divergence asks before replacing, skip is the default `[ref: PRD/F8 2nd; SDD/ADR-4]`
-     - [ ] Post-refresh versions match the catalogue `[ref: PRD/F8 3rd; SDD/AC-12]`
+     - [ ] Post-refresh versions match the catalogue `[ref: PRD/F8 3rd; SDD/AC-17]`
 
 - [ ] **T3.5 Phase validation** `[activity: validate]`
 
