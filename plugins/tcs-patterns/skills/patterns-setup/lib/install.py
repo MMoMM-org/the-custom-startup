@@ -85,13 +85,21 @@ fixture cannot test it.
 
 **`bundle` is also a parameter**, added after T3.3's first review round
 found the signature had no legal way to call `manifest.upsert()` (`bundle`
-is required there, with no default). `DEFAULT_BUNDLE_VERSION` -- this
-plugin's own `plugin.json` version, read once at import time -- is kept as
-the default, but a caller may override it `[ref: solution.md, point 7]`:
-it is otherwise the one input to `install()` a test cannot drive, and CI
-bumps `plugin.json` on every merge, which would make any test asserting
-the manifest's `bundle` field against the real file break on a version
-bump rather than on an actual regression.
+is required there, with no default). This plugin's own `plugin.json`
+version is kept as the default, but a caller may override it
+`[ref: solution.md, point 7]`: it is otherwise the one input to `install()`
+a test cannot drive, and CI bumps `plugin.json` on every merge, which would
+make any test asserting the manifest's `bundle` field against the real
+file break on a version bump rather than on an actual regression.
+**Resolved lazily, `if bundle is None`, inside `install()` -- never as a
+module-level constant.** A second review round found that a module-level
+`DEFAULT_BUNDLE_VERSION = _bundle_version()` reads `plugin.json` at IMPORT
+time, which made this module impossible to import from a copy (a mutation
+harness using `importlib.util.spec_from_file_location` against a scratch
+copy, as `manifest.py`, `guard.py` and `detect.py` all already support).
+`DEFAULT_CATALOGUE_DIR` stays a module-level constant because it is a path
+expression with no I/O -- wrong when loaded from a copy, but never fatal;
+only the file read needed to move.
 
 Stdlib only, Python 3.11 floor `[ref: SDD/Architecture Decisions/ADR-2]`.
 """
@@ -183,16 +191,24 @@ def _bundle_version() -> str:
     `bundle` field ("the plugin version that produced this selection")
     `[ref: solution.md, Data model: the manifest (C6)]`. Derived from this
     plugin's own `plugin.json`, the same `__file__`-relative pattern
-    `DEFAULT_CATALOGUE_DIR` uses. Computed once, at import time, into
-    `DEFAULT_BUNDLE_VERSION` below -- `install()`'s default for its
-    `bundle` parameter, not the only route to a value
-    `[ref: solution.md, point 7]`.
+    `DEFAULT_CATALOGUE_DIR` uses -- `install()`'s fallback when `bundle` is
+    omitted, not the only route to a value `[ref: solution.md, point 7]`.
+
+    **Called lazily, from inside `install()`, never at module import.**
+    `DEFAULT_CATALOGUE_DIR` is a path expression with no I/O, so it is safe
+    as a module-level constant even when loaded from a copy whose `parents[3]`
+    resolves to nowhere real -- the value would be wrong there, but nothing
+    raises. A `plugin.json` *read*, unlike a path expression, is fatal: a
+    module-level `DEFAULT_BUNDLE_VERSION = _bundle_version()` made `install.py`
+    impossible to import from anywhere but its installed location, breaking
+    the `importlib.util.spec_from_file_location`-on-a-copy technique
+    `manifest.py`, `guard.py` and `detect.py` all support. `bundle` is one
+    field in one manifest; a missing or malformed `plugin.json` should
+    surface when the value is actually needed, not prevent the module from
+    loading at all.
     """
     data = json.loads(_PLUGIN_JSON.read_text(encoding="utf-8"))
     return str(data["version"])
-
-
-DEFAULT_BUNDLE_VERSION = _bundle_version()
 
 
 def _read_catalogue_version(catalogue_dir: Path, name: str) -> str:
@@ -317,7 +333,7 @@ def install(
     names,
     *,
     catalogue_dir: Path = DEFAULT_CATALOGUE_DIR,
-    bundle: str = DEFAULT_BUNDLE_VERSION,
+    bundle: str | None = None,
 ) -> InstallReport:
     """Install `names` (already cleared by `guard.check()`) into
     `<repo_dir>/.claude/skills/`. See the module docstring for the full
@@ -329,10 +345,16 @@ def install(
     input a test cannot drive, and because CI bumps `plugin.json` on merge,
     which would make a test asserting the manifest's `bundle` field against
     the real file break on every version bump `[ref: solution.md, point 7]`.
+
+    The default is resolved HERE, lazily, with `bundle is None` -- never as
+    a module-level `_bundle_version()` call -- because that read must not
+    happen at import time. See `_bundle_version`'s own docstring for why.
     """
     repo_dir = Path(repo_dir)
     catalogue_dir = Path(catalogue_dir)
     skills_root = repo_dir / ".claude" / "skills"
+    if bundle is None:
+        bundle = _bundle_version()
 
     manifest_before = manifest.read(repo_dir)
 
