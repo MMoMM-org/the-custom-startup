@@ -922,6 +922,12 @@ writing is allowed, and an installer that is honest about what it did.
     already applied, never by calling the same rename helper `update()` uses: a shared bug in that
     helper would otherwise pass both sides.
 
+    **"Contains the user's edit" must be sign-aware here too** — a line equal to `-` followed by
+    the edit text, not the edit text appearing anywhere. Measured 2026-10-05: a direction-reversed
+    diff contains the edit text as an **addition**, so the sign-blind form passes it. See the four
+    properties enumerated in the report-diff bullet below; this bullet and that one assert the same
+    four things about two different values, which is the whole point of having both.
+
   - **The accept path must replace the FULL SUBTREE, not just `SKILL.md`.** Found on the gate's
     third pass and it survives everything else: every `reference/` fixture in this plan is built for
     the **version-behind, hash-matches** row, whose refresh is unconditional. Nothing requires the
@@ -948,17 +954,35 @@ writing is allowed, and an installer that is honest about what it did.
     `[ref: SDD/Runtime View/Primary Flow, step 9]`, so a wrong one is an externally visible bug, not
     an internal detail.
 
-    **Assert both against one independently-derived expected diff** — the same hand-written-literal
-    value already required by the **"diff assertion as first written"** bullet earlier in this
-    list. (Named rather than pointed at: when that reference read "the bullet above" it was
-    correct, and the gate's third pass inserted two bullets between the two, which made it
-    point at the `version_before` pin instead.) Do **not** assert
-    "report equals what the callback received": that compares two values the code under test
-    produces at two sites, so a compound mutation computing the *wrong* diff identically in both
-    places is self-consistent and passes. Derive the expected diff once from the literals, then
-    assert it against the callback's capture **and** against `report.declined[name][1]`. An earlier
-    revision offered those as two equal options joined by "or"; only one of them is safe standalone,
-    and presenting a choice where one branch is unsound is how the unsound branch gets picked.
+    **Assert the same four properties independently against the callback's capture AND against
+    `report.declined[name][1]`.** Do **not** assert "report equals what the callback received":
+    that compares two values the code under test produces at two sites, so a compound mutation
+    computing the *wrong* diff identically in both places is self-consistent and passes. And do
+    **not** assert exact equality against a hand-written diff literal — an earlier revision of this
+    bullet required exactly that, and the gate's fourth pass found it unsound: exact equality
+    silently depends on `difflib`'s `fromfile`, `tofile`, `lineterm` and `n`. Measured 2026-10-05:
+    populating the labels changes two lines and `n=5` changes an 8-line diff to 10, so a
+    *conforming* implementation fails such a test. Two of those four are now pinned in the contract
+    and the other two are not
+    `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb), decision 4]`,
+    so assert the pinned properties and nothing else:
+
+    1. **The user's edit appears as a deletion** — the assertion must be **sign-aware**: a line
+       equal to `-` followed by the edit text. Sign-blindness is the specific hole here. A
+       direction-reversed diff contains the user's edit *as an addition*, so "the body shows the
+       user's edit" — this plan's own earlier wording — passes it, and the reversed diff tells the
+       user their own work is the incoming change `[ref: ... decision 4, direction]`.
+    2. **The incoming catalogue text appears as an addition** — the mirror of 1, which is what
+       makes the pair fail a reversal rather than just one of them.
+    3. **No line matching `^[-+]name:`**, which is the pre-rename mutation from the bullet above.
+    4. **The header labels are populated as the contract pins them** — `--- installed` and
+       `+++ catalogue`. `difflib` defaults both to empty, so this fails a plain
+       `unified_diff(a, b)` with no labels.
+
+    Traced against the four mutations this bullet exists to catch: an **empty string** fails 1; a
+    **stale diff** from a different edit fails 1 on the specific edit text; the **pre-rename diff**
+    fails 3; a **reversed diff** fails 1 and 2. None of the four depends on `n`, so the test does
+    not break when an implementer chooses a different context width.
 
   - **The catalogue-removal fixture's installed directory must EXIST, with real content.** Otherwise
     it collapses into the missing-installed-directory case and reports `failed` for the wrong reason,

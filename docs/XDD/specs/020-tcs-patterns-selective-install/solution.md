@@ -1819,6 +1819,28 @@ that is, after the frontmatter rename, so the `name:` line is not reported as a 
 difference. Three lines of `difflib` given ADR-2's 3.11 floor
 `[ref: SDD/Architecture Decisions/ADR-4]`.
 
+**Two properties of this diff are normative, because the user's accept-or-decline decision
+depends on them, and a third is deliberately left open.** Added 2026-10-05 after a gate pass found
+that a test pinning the diff by exact string implicitly depended on formatting this section never
+settled.
+
+- **Direction is fixed: the installed file is the `from` side, the catalogue is the `to` side.** So
+  the user's own edit appears as a **deletion** (`-`) and the incoming upstream text as an
+  **addition** (`+`). The operand order above already said this; it is restated as a requirement
+  because reversing it produces a diff that is *well-formed, contains the same two lines, and is
+  backwards* — it shows the user their own work as the change being introduced and the upstream
+  text as what they would lose, in the one prompt where that reading decides whether their file
+  survives. Measured: a check that the diff "contains the user's edit" without checking the sign
+  passes both directions.
+- **Both file labels are populated: `fromfile="installed"`, `tofile="catalogue"`.** `difflib`
+  defaults both to the empty string, which renders the header as `---` and `+++` with nothing
+  after them — measured — leaving the user to infer which side is their file from the content
+  alone. These two literals are the contract so a test can assert them without guessing.
+- **The context width `n` is NOT pinned and must not be asserted.** It changes the output length
+  without changing what the diff means (measured: `n=5` takes this example from 8 lines to 10),
+  so it is the implementer's choice. This is the line between the two: direction and labels are
+  what the user reads to decide; context width is presentation.
+
 **5. `update()` is the only component that may replace a user's file, and only with consent.** This
 is the deliberate asymmetry against `install()`, which is purely additive and never removes or
 overwrites anything `[ref: SDD/Interface Specifications/.../"install() is purely additive"]`. Every
@@ -2055,7 +2077,7 @@ decided answer instead of repeating the derivation
 | A `SKILL.md` **in a scanned namespace** that cannot be read or carries no usable `name:` | C4, step 6 | Skipped, never fatal, and reported through `GuardReport.skipped` as `(path, reason)`. Four inputs reach this and each needs a distinguishable reason: unreadable, no frontmatter block, no `name:` key, empty `name:`. Added 2026-10-05; the row above it is the same condition with the opposite behaviour, and the difference is deliberate rather than an inconsistency. **The file C5 refuses to install is ours; the file C4 skips belongs to a third party.** A broken file in our own catalogue is a defect in this repository and must stop that pattern loudly, because installing it would register the pattern under the unprefixed name and silently defeat ADR-1. A broken file in somebody else's plugin is not ours to fix and must not stop this repository's install — the same stance `detect.py` takes for an unparseable manifest two rows above. It is reported rather than swallowed because a name the guard could not check is a name it cannot vouch for, and a caller that cannot see the omission cannot warn about it. Measured: zero of the 259 real `SKILL.md` files on this machine fail to parse, so every one of the four cases is fixture-only `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`. |
 | Write fails mid-selection | C5 | Patterns already written stay; the manifest records exactly what succeeded. Re-running `install` is idempotent by name and hash. |
 | Manifest present but unparseable | C6 | Treated as `MISSING` for the advisory and reported verbatim by `status`. Never silently overwritten — overwriting it would erase the record of what is installed. |
-| Installed pattern diverges from its hash | C5 on `update`, **not `install`** | The user is asked per pattern with a unified diff (ADR-4). Default is to skip, so an unanswered prompt cannot destroy local work. **This row is T3.4's, not T3.3's** — noted 2026-10-05 after T3.3's gate flagged that it reads as a third `install()` obligation and would contradict "no `AskUserQuestion` in `install.py`" if anyone tried to satisfy it there. `install()` detects divergence only to the extent of declining to call a locally-edited pattern `unchanged`; prompting about it is `update()`'s. **`update()` has no signature or section anywhere in this document** — that gap is T3.4's to settle before it is dispatched, the same way C5's four were settled before T3.3. |
+| Installed pattern diverges from its hash | C5 on `update`, **not `install`** | The user is asked per pattern with a unified diff (ADR-4). Default is to skip, so an unanswered prompt cannot destroy local work. **This row is T3.4's, not T3.3's** — noted 2026-10-05 after T3.3's gate flagged that it reads as a third `install()` obligation and would contradict "no `AskUserQuestion` in `install.py`" if anyone tried to satisfy it there. `install()` detects divergence only to the extent of declining to call a locally-edited pattern `unchanged`; prompting about it is `update()`'s. **That gap is now closed** — `update()`'s signature, its three-state table and its eight decisions are at `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb)]`, settled before dispatch the same way C5's four were settled before T3.3. The diff this row refers to has two normative properties as of decision 4: the installed file is the `from` side, so the user's own edit appears as a deletion, and both file labels are populated. |
 | Catalogue `VERSION` missing or non-numeric | C7, C9 | C7 reports the pattern as unknown rather than drifted; C9 fails the gate. A pattern without a version cannot be distributed. |
 | Pattern name given to the catalogue reader is unknown | C8 | Lists the 21 available names. |
 
@@ -2523,7 +2545,7 @@ standing for two or three PRD criteria that assert the same behaviour from diffe
 | AC-9 | The install reports its writes, states that it did not commit, and commits only when the user accepts | F4, ADR-8 |
 | AC-10 | A selection containing one name already present in any of the three namespaces installs the others, writes nothing for the colliding one, and reports both locations | F5 |
 | AC-11 | `patterns_drift.py` prints one `DRIFT:` line per behind pattern, `OK` when all are current, `MISSING` without a manifest; the advisory shows drift and suppresses `MISSING` | F7 |
-| AC-12 | `update` refreshes only drifted patterns, asks nothing about the selection, and prompts per diverged file with skip as the default | F8, ADR-4 |
+| AC-12 | `update` refreshes only drifted patterns, asks nothing about the selection, and prompts per diverged file with skip as the default. The diff it prompts with runs **installed → catalogue**, so the user's own edit reads as a deletion and the incoming text as an addition, and both file labels are populated `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb), decision 4]` | F8, ADR-4 |
 | AC-13 | A change to a pattern file without that pattern's `VERSION` in the same changeset fails the CI gate; with it, the gate passes; a change touching no pattern leaves the gate silent | F9, ADR-9 |
 | AC-14 | The bash Obsidian gate and the Python Obsidian rule return the same verdict for every detection fixture **and for any write inside a nested plugin**; a write **outside** a nested plugin in a repository containing one elsewhere is an intentional, asserted exception, because the gate is file-scoped and the rule is repo-scoped | ADR-7 |
 | AC-15 | The catalogue reader prints a named pattern's body and writes nothing; an unknown name lists the 21 | F10 |
