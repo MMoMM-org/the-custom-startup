@@ -140,6 +140,105 @@ def test_upsert_leaves_other_entries_byte_identical(tmp_path: Path) -> None:
     assert after_entry == before_entry
 
 
+def test_serialized_file_matches_hand_typed_format(tmp_path: Path) -> None:
+    """Independent of `_serialize`/`_serialize_pattern` by construction --
+    the expected text below is typed out literally, not assembled from any
+    helper this module shares with the code under test. A reference built
+    from a shared helper would reproduce the same blindness as
+    `test_upsert_leaves_other_entries_byte_identical`: both the before- and
+    after- side of that test are produced by the SAME serialiser, so a
+    deterministic reformatting (key order inside a table, header spacing)
+    passes it regardless of whether the bytes are what was actually
+    intended. This test pins the intra-table key order, the header comment,
+    and where `bundle` sits, against a literal nothing here can echo back
+    by construction."""
+    manifest = _load_manifest()
+    manifest.upsert(
+        tmp_path, "ddd", version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"), bundle="2.0.0"
+    )
+    manifest.upsert(
+        tmp_path,
+        "hexagonal",
+        version="2",
+        installed_as="tcs-hexagonal",
+        sha256=_sha("hexagonal-2"),
+        bundle="2.0.0",
+    )
+
+    path = _manifest_path(tmp_path, manifest)
+    expected = (
+        "# Written by /tcs-patterns:patterns-setup. Reviewed and committed like any other file.\n"
+        'bundle = "2.0.0"\n'
+        "\n"
+        "[patterns.ddd]\n"
+        'version = "3"\n'
+        'installed_as = "tcs-ddd"\n'
+        f'sha256 = "{_sha("ddd-3")}"\n'
+        "\n"
+        "[patterns.hexagonal]\n"
+        'version = "2"\n'
+        'installed_as = "tcs-hexagonal"\n'
+        f'sha256 = "{_sha("hexagonal-2")}"\n'
+    )
+
+    assert path.read_text(encoding="utf-8") == expected
+
+
+def test_patterns_are_written_in_sorted_order_regardless_of_insert_order(tmp_path: Path) -> None:
+    """Pins `sorted()` in `_serialize` specifically: inserts in reverse-ish
+    (observability, hexagonal, ddd) and asserts the file comes out
+    alphabetical (ddd, hexagonal, observability) against a hand-typed
+    literal -- the same kind of implementation-independent reference as
+    `test_serialized_file_matches_hand_typed_format`, chosen here to make a
+    dropped `sorted()` call fail even though the byte-identical test above
+    cannot see it (a dropped `sorted()` reorders both the before- and
+    after-file identically, by insertion order, so `before_block in
+    after_bytes` still holds)."""
+    manifest = _load_manifest()
+    manifest.upsert(
+        tmp_path,
+        "observability",
+        version="1",
+        installed_as="tcs-observability",
+        sha256=_sha("observability-1"),
+        bundle="2.0.0",
+    )
+    manifest.upsert(
+        tmp_path,
+        "hexagonal",
+        version="2",
+        installed_as="tcs-hexagonal",
+        sha256=_sha("hexagonal-2"),
+        bundle="2.0.0",
+    )
+    manifest.upsert(
+        tmp_path, "ddd", version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"), bundle="2.0.0"
+    )
+
+    path = _manifest_path(tmp_path, manifest)
+    expected = (
+        "# Written by /tcs-patterns:patterns-setup. Reviewed and committed like any other file.\n"
+        'bundle = "2.0.0"\n'
+        "\n"
+        "[patterns.ddd]\n"
+        'version = "3"\n'
+        'installed_as = "tcs-ddd"\n'
+        f'sha256 = "{_sha("ddd-3")}"\n'
+        "\n"
+        "[patterns.hexagonal]\n"
+        'version = "2"\n'
+        'installed_as = "tcs-hexagonal"\n'
+        f'sha256 = "{_sha("hexagonal-2")}"\n'
+        "\n"
+        "[patterns.observability]\n"
+        'version = "1"\n'
+        'installed_as = "tcs-observability"\n'
+        f'sha256 = "{_sha("observability-1")}"\n'
+    )
+
+    assert path.read_text(encoding="utf-8") == expected
+
+
 def test_absent_manifest_reads_as_empty(tmp_path: Path) -> None:
     manifest = _load_manifest()
 
@@ -199,3 +298,50 @@ def test_currency_determinable_without_installed_pattern_files(tmp_path: Path) -
     entry = written.patterns["ddd"]
     assert manifest.is_current(entry, catalogue_version="4") is False
     assert manifest.is_current(entry, catalogue_version="3") is True
+
+
+# A `bundle` value containing a quote and a newline. Representable literally
+# in the hand-written TOML this module produces, `_require_representable`
+# would let it through unescaped and the resulting file would both parse
+# (as a spurious top-level `malicious` key) and later fail `read()`'s
+# unknown-top-level-key check -- "write succeeds, every later read raises"
+# is the hazard this guard exists to prevent (measured against a build with
+# the guard disabled: the write succeeds and the record is effectively
+# lost on the next read).
+_UNSAFE_BUNDLE = '2.0.0"\nmalicious = "yes'
+
+
+def test_unsafe_bundle_value_raises_and_writes_nothing(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    path = _manifest_path(tmp_path, manifest)
+
+    with pytest.raises(ValueError):
+        manifest.upsert(
+            tmp_path, "ddd", version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"), bundle=_UNSAFE_BUNDLE
+        )
+
+    # No manifest existed before this call, and none must exist after it --
+    # a half-written or malformed file left behind would be exactly as bad
+    # as the spurious-key hazard this guard exists to prevent.
+    assert not path.is_file()
+
+
+def test_unsafe_bundle_value_raises_without_overwriting_existing_manifest(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    manifest.upsert(
+        tmp_path, "ddd", version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"), bundle="2.0.0"
+    )
+    path = _manifest_path(tmp_path, manifest)
+    before_bytes = path.read_bytes()
+
+    with pytest.raises(ValueError):
+        manifest.upsert(
+            tmp_path,
+            "hexagonal",
+            version="2",
+            installed_as="tcs-hexagonal",
+            sha256=_sha("hexagonal-2"),
+            bundle=_UNSAFE_BUNDLE,
+        )
+
+    assert path.read_bytes() == before_bytes

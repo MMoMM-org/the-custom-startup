@@ -102,6 +102,21 @@ class ManifestUnparseableError(Exception):
 
 
 def _require_representable(value: str, *, field_name: str) -> str:
+    """Refuse a value that would break this module's hand-written TOML quoting.
+
+    Called from five sites (`version`, `installed_as`, `sha256`, `name`,
+    `bundle`), but reachable from only one. `PatternEntry.__post_init__`
+    rejects anything outside `_VERSION_RE`/`_INSTALLED_AS_RE`/`_SHA256_RE`
+    before its three fields ever reach here, and `Manifest.with_pattern`
+    does the same for `name` via `_NAME_RE` -- none of those four regexes
+    permits a quote, backslash, or newline, so this guard can never actually
+    fire for them. `bundle` has no regex of its own, so it is the only field
+    this function still protects in practice. Kept at all five sites anyway
+    (defence in depth is cheap here), but if `bundle` ever gains a regex too,
+    this function becomes wholly unreachable -- which this comment is here
+    to make legible to whoever notices that, rather than left to be
+    rediscovered by reading all five call sites.
+    """
     if _UNSAFE_CHARS.search(value):
         raise ValueError(
             f"{field_name}={value!r} cannot be represented in this manifest's hand-written "
@@ -162,6 +177,20 @@ def read(repo_dir: Path) -> Manifest:
     parsed into a well-formed `Manifest` raises `ManifestUnparseableError`
     instead of returning anything -- see the module docstring for why an
     absent file and a corrupt one must stay distinguishable here.
+
+    **A forward-compatibility hazard this strictness creates, named here
+    rather than left implicit.** An unknown top-level or per-pattern key
+    also raises `ManifestUnparseableError`, same as a syntax error -- so a
+    manifest written by a NEWER plugin version that added a key reads as
+    unparseable to an OLDER one. Chained through the rest of the system:
+    `ManifestUnparseableError` -> the advisory renders `MISSING` -> a user
+    is told to re-run setup -> that older plugin's `upsert` then calls
+    `write()` with a manifest it rebuilt from an empty read, discarding the
+    newer file's extra key for good. This module does not resolve that --
+    no version negotiation is implemented -- but `bundle` (the plugin
+    version that produced the file) is the field a future reader would need
+    to inspect to tell "newer format, not actually corrupt" apart from
+    "genuinely unparseable" before deciding whether to trust this error.
     """
     path = _manifest_path(repo_dir)
     if not path.is_file():
