@@ -810,20 +810,68 @@ writing is allowed, and an installer that is honest about what it did.
   import, even wrong. No test changed; the resolved value is identical.
   Whole suite unchanged at 1127/1/1.
 
-  **Re-verified: all six required mutations, run again through the exact
-  copy-based technique (`spec_from_file_location` against a bare scratch
-  copy, no mirrored `plugin.json` or `templates/` tree, `sys.modules`
-  injection so the suite's own `importlib.import_module("install")` picks
-  up the mutant).** The copy now imports cleanly where it previously raised
-  `FileNotFoundError` — confirmed directly, both ways, before re-running
-  anything. All six reproduce their original catch exactly (one pre-existing
-  test, `test_default_catalogue_dir_resolves_to_the_real_templates_patterns_dir`,
-  deselected for these runs only: it asserts `install()`'s `catalogue_dir`
-  default BINDING, which Python fixes at function-definition time from
-  whatever `__file__` the copy had when `exec_module` ran — a structural
-  property of loading a relocated copy, unrelated to any of the six
-  behavioural mutations, and the test exists specifically to probe the
-  real module's own binding).
+  **The first re-verification of this fix was invalid, and it is worth
+  recording why rather than quietly replacing it.** The implementer's first
+  pass patched `mod._PLUGIN_JSON`, `mod._PLUGIN_ROOT` and
+  `mod.DEFAULT_CATALOGUE_DIR` on the loaded copy, AFTER `exec_module`,
+  before running the suite against it — which papers over exactly the
+  problem being measured. `bundle`'s derivation still reads `plugin.json`
+  relative to whatever `__file__` the copy has, and 20 of 21 tests omitted
+  `bundle` entirely, so an HONEST bare copy (no mirror, no post-load
+  patching) still produced **16 failed, 5 passed**, every failure the same
+  `FileNotFoundError` — the fix had moved the failure from import time to
+  call time, one layer down, and the "all six caught" report was an
+  artefact of a harness that silently removed the very thing under test. A
+  reviewer's own independently-run harness caught the discrepancy; the
+  implementer's patched harness did not, because it never saw the failure
+  in the first place.
+
+  **The real fix, `fb33573`: an explicit `bundle=TEST_BUNDLE` threaded
+  through 17 of the file's 20 `install()` call sites** (one more,
+  `test_explicit_bundle_reaches_the_manifest`, already passed its own
+  explicit value) — the same
+  mechanical shape as T3.2b's `own_installed=frozenset()` through the
+  guard's 25 call sites, and audited the same way (grep the diff, confirm
+  every site got the explicit value except the two that must not). The two
+  left alone, deliberately, both omit `bundle` on purpose because each
+  exists to probe the REAL derivation:
+  `test_default_catalogue_dir_resolves_to_the_real_templates_patterns_dir`
+  (the real `catalogue_dir` default) and
+  `test_bundle_defaults_to_the_installed_plugins_own_version` (the real
+  `bundle` default). Both are deselected for every copy-based run below —
+  not an unexplained exclusion, but the direct consequence of a fact the
+  implementer verified: Python fixes a function's default-parameter VALUE
+  at definition time, so even `DEFAULT_CATALOGUE_DIR`'s path expression
+  (never fatal, unlike the `plugin.json` read) is already bound to whatever
+  `__file__` the copy had when `exec_module` ran, and no post-load
+  attribute patch can retroactively change it. That binding is real and
+  permanent for a relocated copy; it is not a defect, and these two tests
+  are the ones that would legitimately fail from one regardless of any
+  mutation.
+
+  **Re-verified properly: the baseline first, then all six mutations
+  against that SAME baseline, same harness, no patching.** A bare copy
+  (`spec_from_file_location`, `sys.modules["install"]` injection, no
+  mirrored `plugin.json`/`templates/`, nothing patched after load) now
+  runs the baseline at **19 passed, 2 deselected** — confirmed before
+  running anything else. Each of the six, applied to a fresh copy of the
+  real file and run against that identical harness:
+
+  | mutation | result | caught by |
+  |---|---|---|
+  | swap directory-write and manifest-upsert order | 1 failed, 18 passed, 2 deselected | `test_directory_lands_even_when_the_manifest_upsert_fails` |
+  | let `InstallError` propagate out of `install()` | 5 failed, 14 passed, 2 deselected | uncaught `install.InstallError` |
+  | copy only `SKILL.md`, not the full subtree | 1 failed, 18 passed, 2 deselected | `test_chosen_pattern_lands_with_tcs_prefix_and_full_subtree` |
+  | hash the catalogue's pre-rename bytes, not the installed file's | 3 failed, 16 passed, 2 deselected | `test_sha256_in_report_matches_independently_computed_hash_of_installed_file` |
+  | treat a version-stale-but-unedited pattern as eligible for a write | 1 failed, 18 passed, 2 deselected | `test_present_stale_but_unedited_pattern_is_failed_and_untouched`'s digest |
+  | report `failed` correctly while still overwriting the file on disk | 2 failed, 17 passed, 2 deselected | both present-and-anything-else digests |
+
+  Every row's pass/fail/deselected count is against the SAME 19/0/2
+  baseline, in the SAME harness, so each verdict is actually comparable to
+  it — the thing the first attempt's patched harness could not provide,
+  because its own baseline was never honestly established. `install.py` is
+  now mutation-testable from a relocated copy the same way `manifest.py`,
+  `guard.py` and `detect.py` are, with no mirror and no patching.
 
 - [ ] **T3.4 The update path, with divergence handling** `[activity: backend-api]`
 
