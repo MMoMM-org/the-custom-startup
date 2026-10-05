@@ -197,13 +197,29 @@ writing is allowed, and an installer that is honest about what it did.
         namespace yields a collision and never walks the others for the remaining names. Success
         criterion 1 is a property of a single call across the whole selection. Four names, one
         colliding in each namespace plus one free, all four outcomes asserted from one call.
-     2. **The two plugin roots at their documented and DIFFERENT depths.** Cache is
-        `cache/<marketplace>/<plugin>/<version>/skills/` and marketplace is
-        `marketplaces/<marketplace>/<segment>/<plugin>/skills/`. Build each fixture at its own
-        depth; built at the same depth, an off-by-one or swapped glob survives. The dangerous
-        direction is measured: the marketplace pattern applied to the cache root finds **zero**
-        roots, so a guard that enumerated no plugin skills at all would pass every repo-and-user
-        test.
+     2. **The two plugin roots exercised independently, each with its own per-level semantics.**
+        Both are three wildcards deep — `cache/<marketplace>/<plugin>/<version>/skills/` and
+        `marketplaces/<marketplace>/<segment>/<plugin>/skills/` — so building them at the same
+        depth is correct and unavoidable. (An earlier revision of this requirement said "DIFFERENT
+        depths" and spelled out two patterns that are both three levels; it was written in the same
+        commit that widened the marketplace glob from `*/plugins/*/` to `*/*/*/` and never
+        reconciled with it. Corrected after T3.2's second gate pass caught the contradiction.)
+
+        What differs is what each middle level *means*, and that is what the fixtures must carry:
+
+        - **cache** — the third level is a **version**, and several coexist. Build **two versions of
+          one plugin** with a skill name present in only the older one, and assert that name is
+          still refused. That is the union-across-versions rule, and it has a live instance:
+          `tcs-team` holds `testing` in cached `3.4.2` and `test-practices` in `3.4.4`, and
+          `testing` is one of the 21 catalogue names.
+        - **marketplace** — the second level is a **segment** and the third is the plugin, one per
+          plugin, no versions. Build **both segment names**, `plugins/` and `external_plugins/`,
+          and assert a name under each is refused.
+
+        The dangerous direction is measured: the marketplace pattern applied to the cache root
+        finds **zero** roots, so a guard that enumerated no plugin skills at all would pass every
+        repo-and-user test. That is what makes exercising both roots load-bearing rather than
+        tidy.
      3. **A plugin skill under `external_plugins/`** rather than `plugins/`, which is a real layout
         on this machine and the reason the marketplace glob was widened to three wildcards. Its
         name must still be refused.
@@ -212,13 +228,34 @@ writing is allowed, and an installer that is honest about what it did.
         `settings.json`, is still refused. The SDD names this as one of two things an implementer
         working from the old phrasing would get wrong; the other is the frontmatter-name case, which
         already has its test.
-     5. **The `(st_dev, st_ino)` dedup.** Two symlinks inside one namespace root pointing at the
-        same real skill directory: the name is refused **once**, not twice and not as an error.
-        Note what this case is *not*: the gate asked for a no-hang test with a timeout, and neither
-        half applies. `timeout` does not exist on macOS, and measured, `os.walk(followlinks=True)`
-        on a self-referential symlink does not hang — macOS stops it with `ELOOP` after 66
-        redundant directory visits, which the dedup set reduces to 3. So the observable is the
-        single refusal and the visit count, not a wall-clock bound.
+     5. **The `(st_dev, st_ino)` dedup — asserted through `skipped`, because that is the only
+        channel where it shows.** The obvious form of this test is vacuous and was specified that
+        way first: "two symlinks to one real skill directory, the name refused **once**, not
+        twice" cannot fail, because `refused` is keyed by name and visiting one directory twice
+        writes the same key twice. Caught by T3.2's second gate pass.
+
+        It does **not** follow that the dedup is mechanism-only like T3.1's `os.replace` case.
+        `skipped` is a **sequence** of `(path, reason)`, and two symlinks are two distinct paths,
+        so a malformed file reached twice is reported twice. Both fixtures hold a `SKILL.md` with
+        no frontmatter, and both counts are measured:
+
+        | fixture | `len(skipped)` with the dedup | without |
+        |---|---|---|
+        | two sibling symlinks to one malformed skill directory | 1 | 2 |
+        | a self-referential symlink inside a malformed skill directory | **1** | **33** |
+
+        The second fixture is also the **cycle** case, which nothing else covers and which is the
+        entire justification for not writing a timeout test — so without it that justification
+        guards nothing. It must assert both that `len(skipped) == 1` and that the call returns
+        normally: no unhandled `OSError`, a well-formed `GuardReport`. `timeout` is not the
+        instrument and would not work anyway: it does not exist on macOS, and measured,
+        `os.walk(followlinks=True)` on a cycle does not hang — macOS stops it with `ELOOP` after 66
+        redundant directory visits, which the dedup reduces to 3.
+
+        **Do not assert the recorded path of a deduplicated name.** Which of several symlinks to
+        one directory gets recorded is `os.scandir` order: measured stable across repeated trials
+        on this filesystem (`link-b` with the dedup, `link-a` without) and guaranteed by nothing.
+        Assert the **count**, never which path won.
      6. **All four namespace roots absent, not just the repository's.** Each goes through a
         different glob or walk call. Parametrise the four.
      7. **Precedence across more than one pairing.** "Repo before user before plugin" is a 3-way
@@ -226,15 +263,30 @@ writing is allowed, and an installer that is honest about what it did.
         at least two pairings, or all three colliding at once with exactly one refusal reported per
         name.
 
+     The four malformed-input cases need a **pairwise-distinct** assertion on their reasons —
+     `len({reason for _, reason in report.skipped}) == 4` or equivalent — not four separate checks
+     that each reason is non-empty. The SDD requires "its own distinguishable reason"
+     `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`, and a mutation
+     that collapses two of the four into one generic string survives every isolated non-empty
+     check while failing only a comparison of the reasons against each other.
+
      The write-nothing digest (step 4) must also run across **more than one scenario** — at
      minimum the symlink case, a malformed-input case, and the multi-namespace collision case. One
      nominal call does not support a claim of "under any input".
-  3. Implement: `lib/guard.py` — the three namespace checks, returning approved and refused sets
-     with the reason and the colliding location for each refusal. **Read the namespace contract
-     first** `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`: a
-     directory is a skill iff it holds a `SKILL.md` and its name is that file's frontmatter
-     `name:`, not the directory's — measured, one of 131 installed skills diverges — and the
-     plugin cache holds several versions of the same plugin while the marketplace tree holds one.
+  3. Implement: `lib/guard.py` — the three namespace checks, returning a **`GuardReport`** with
+     three named channels: `approved`, `refused` (name → namespace plus the colliding `SKILL.md`
+     path), and `skipped` (`(path, reason)` for every `SKILL.md` that could not be read). The third
+     channel is not optional: the contract's rule is "skipped **and reported**", and without a
+     channel that half is unfalsifiable. **Read the namespace contract first**
+     `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`: a directory is a
+     skill iff it holds a `SKILL.md` and its name is that file's frontmatter `name:`, not the
+     directory's — measured, **one of 253** installed `SKILL.md` files diverges, carrying 125
+     distinct registered names — enumeration is `os.walk(followlinks=True)` with an
+     `(st_dev, st_ino)` dedup rather than `rglob` or `glob("**")`, which cannot see a symlinked
+     skill directory, and rather than `glob(recurse_symlinks=True)`, which is 3.13+ and below
+     ADR-2's 3.11 floor; and the plugin cache holds several versions of the same plugin, whose
+     names are **unioned** and never compared, while the marketplace tree holds one directory per
+     plugin under either of two segment names.
   4. Validate: `python3 -m pytest tests/test_patterns_guard.py -q`; prove the guard writes nothing
      with a **sha256 digest over every namespace tree before and after**, not only a read-only
      temporary directory. A read-only directory catches a write *into that directory* and says

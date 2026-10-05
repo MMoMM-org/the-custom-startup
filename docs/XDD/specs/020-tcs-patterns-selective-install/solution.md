@@ -280,7 +280,7 @@ that installed a different one.
                                  ▼
                           ┌──────────────┐  refuses on collision
                           │ C4 Collision │◀──reads── repo skills, user skills,
-                          │    guard     │           reachable plugin skills
+                          │    guard     │           ALL plugin skills (enabled or not)
                           └──────┬───────┘
                                  │ approved Selection
                                  ▼
@@ -1071,9 +1071,12 @@ says "must report as baseline with surface:false" in its `why` and had no means 
 `baseline` entry in the report carries `evidence` naming the file or dependency that justified
 it `[ref: PRD/F2 1st]`, and it is T2.2's first success criterion — but `expected.json` has no
 `evidence` key either, and the detection test does not compare one, so a detector emitting
-`evidence: ""` satisfies all 18 fixtures while failing the criterion outright. Declaring exact
-paths per fixture would be the wrong fix: it adds a key the exact-key guard rejects, and it
-pins all 26 fixtures to incidental path strings.
+`evidence: ""` satisfies **every fixture in the corpus** while failing the criterion outright.
+Declaring exact paths per fixture would be the wrong fix: it adds a key the exact-key guard
+rejects, and it pins every fixture to incidental path strings. (This paragraph carried two
+different fixture counts two sentences apart — "all 18" and "all 26" — against a corpus that is
+now 27. The count is incidental to the argument, which is why it went stale twice; it is stated
+generically now rather than given a third number that will also expire.)
 
 Assert it as three universal invariants instead, in the detection test:
 
@@ -1381,11 +1384,13 @@ changeset containing only a `VERSION` bump is not treated as a changed source.
 5. **Confirm.** C3 presents the final selection — auto plus baseline plus question answers — and
    the user adjusts or accepts. Nothing has been written at this point.
 6. **Guard.** C4 checks every intended name `tcs-<pattern>` against the repository's skills, the
-   user's global skills, and the reachable plugin skills. A collision stops that pattern only.
-   What those three namespaces *are*, concretely, is specified under
-   `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]` — the phrase
-   "reachable plugin skills" was used three times in this document and defined nowhere until
-   2026-10-05.
+   user's global skills, and **every plugin skill it can find, enabled or not**. A collision stops
+   that pattern only. What those three namespaces *are*, concretely, is specified under
+   `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`. This step used to
+   read "the reachable plugin skills" — a phrase used three times in this document and defined
+   nowhere until 2026-10-05, and wrong in substance once it was defined: the contract drops
+   reachability deliberately, because a disabled plugin is a future collision one settings edit
+   away.
 
 #### Data model: the three namespaces (C4)
 
