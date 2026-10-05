@@ -412,6 +412,34 @@ The hash covers the installed `SKILL.md` only, not the whole subtree. A referenc
 locally is a weaker signal of intent than an edited body, and hashing 80 files to catch it is not
 worth the cost. Stated here so the limit is deliberate rather than discovered.
 
+**What C6 returns, and what an unparseable manifest does — settled 2026-10-05, before T3.1 was
+dispatched.** The Error Handling table says an unparseable manifest is "treated as `MISSING` for
+the advisory and reported verbatim by `status`", and T3.1's own test step says it "raises". Those
+read as a contradiction and are not one, but the layering that reconciles them was unwritten, and
+an implementer reading either sentence alone would have built the other half wrong:
+
+```
+read(repo_dir)   -> Manifest | raises ManifestUnparseableError
+                    absent file -> an EMPTY manifest, not an error
+write(manifest)  -> atomic: temp file in `.claude/skills/`, then os.replace
+upsert(name, …)  -> returns a new Manifest; prior entries byte-identical
+```
+
+- **A missing manifest and a corrupt one must stay distinguishable at the reader**, because
+  "never silently overwritten" is only enforceable if `write()` can never be handed a value
+  derived from a file nobody could parse. If corrupt also returned empty, the two states would be
+  indistinguishable and the first `install` into a repository with a damaged manifest would
+  replace it with a record of that one install — erasing exactly what the row exists to protect.
+- **`MISSING` is therefore C7's rendering, not C6's return.** The advisory and `status` catch
+  `ManifestUnparseableError` and present it; the store itself refuses. Reading the row as the
+  reader's contract is the mistake this paragraph exists to prevent.
+- **The temp file goes in `.claude/skills/`, never `$TMPDIR`.** Different filesystems here:
+  `os.rename` raises `Cross-device link` and `shutil.move` degrades to copy-then-delete, which is
+  not atomic `[ref: SDD/Risks and Technical Debt/Implementation Gotchas]`.
+- **Currency is determinable from the manifest alone** — `version` per pattern against the
+  catalogue `VERSION`, with no pattern file read `[ref: SDD/Acceptance Criteria/AC-17; PRD/F6
+  3rd]`. That is what makes the `sha256` field's job divergence detection only, and not currency.
+
 #### Data model: detection report (C2 → C3)
 
 `detect.py` returns this and writes nothing. It is the whole contract between scanning and asking,
