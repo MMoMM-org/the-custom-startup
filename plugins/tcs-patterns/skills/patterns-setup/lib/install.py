@@ -48,9 +48,9 @@ sha256(installed SKILL.md)`, nothing is touched and it is reported under
 manifest has no entry for it at all -- **nothing is touched either**; it is
 reported under `failed` with a reason naming `update` as the path forward.
 **`install()` is purely additive. It never removes or overwrites anything
-under `tcs-<name>/`** -- that is `update()`'s job (T3.4, not built yet), and
-every F8 acceptance criterion is phrased in terms of what `update` does, not
-`install`
+under `tcs-<name>/`** -- that is `update()`'s job (see its own section
+below), and every F8 acceptance criterion is phrased in terms of what
+`update` does, not `install`
 `[ref: solution.md, "install() is purely additive. It never removes or
 overwrites anything under tcs-<name>/"]`. The one directory this function
 *may* remove is its own leftover `.tcs-<name>.tmp/` from a crashed earlier
@@ -101,11 +101,86 @@ copy, as `manifest.py`, `guard.py` and `detect.py` all already support).
 expression with no I/O -- wrong when loaded from a copy, but never fatal;
 only the file read needed to move.
 
+---
+
+**`update()` -- C5's second verb (T3.4).** The only component that may
+replace a user's file, and only with consent. The deliberate asymmetry
+against `install()` above.
+
+```
+update(repo_dir, *, catalogue_dir, bundle, decide=_decline) -> UpdateReport
+
+UpdateReport (frozen, named channels)
+    refreshed:  name -> (installed_as, version_before, version_after, sha256)
+    declined:   name -> (version, unified_diff)           diverged, decide() said no
+    current:    name -> (installed_as, version, sha256)   nothing to do
+    failed:     name -> reason                            raised internally, caught, skipped
+    committed:  always False
+
+decide(name, unified_diff) -> bool                        defaults to False
+```
+
+**No `names` parameter.** F8's first criterion is "no scan, no questions"
+`[ref: PRD/F8 1st]`, so `update()` may not re-derive a selection: the
+manifest is its only input about what to act on
+`[ref: solution.md, "Data model: the update path (C5's second verb)",
+decision 1]`. That is the sharpest difference from `install()`, which is
+handed a list someone else chose.
+
+**Three states per installed pattern, and only one of them asks**
+`[ref: decision 2]`:
+
+| manifest `version` vs catalogue `VERSION` | installed hash vs manifest `sha256` | `update()` does |
+|---|---|---|
+| equal | equal | nothing; reports `current` |
+| **behind** | equal | **refreshes without asking** -- nothing local can be lost |
+| any | **differs** | diffs, calls `decide`; `True` refreshes, `False` reports `declined` |
+
+The middle row is the one worth stating, because "ask before replacing" read
+naively would ask there too -- and a prompt that interrupts for a change the
+user cannot have made is how a prompt becomes noise that gets clicked
+through. The hash is what buys the distinction and the whole reason ADR-4
+records one.
+
+**`decide` defaults to declining** (`_decline`), which is where ADR-4's "an
+unanswered prompt cannot destroy local work" actually lives: in this module,
+reachable by a test, rather than in C3's prose `[ref: decision 3]`. No
+`AskUserQuestion` belongs here any more than it does in `install()` -- C3
+supplies a `decide` that prompts.
+
+**The diff's direction and labels are normative; its context width is not**
+`[ref: decision 4]`. See `_divergence_diff`.
+
+**ADR-4's stated limit is accepted here, not worked around.** The hash
+covers `SKILL.md` only, so a locally edited `reference/` file never reaches
+the row where consent is asked -- it stays in the middle row and is replaced
+without a prompt `[ref: decision 6; SDD/ADR-4, "Trade-offs accepted"]`. That
+is a limit on *detection* only: once a refresh happens, by either route, the
+**whole subtree** is replaced `reference/` included, because a half-applied
+update is not an outcome anything asked for.
+
+**Two different `failed` rows, and the reasons are not interchangeable.** A
+pattern the catalogue no longer carries is `failed` with **nothing touched**
+-- it is not stale, refreshing from a source that no longer exists is
+impossible, and deleting would destroy a working skill the user still has
+`[ref: decision 7]`. A manifest entry whose *installed* directory is missing
+is also `failed` -- the record claims a pattern is installed and it is not,
+which is a different problem from being out of date, and naming it tells the
+user to reach for `install` `[ref: decision 8]`. Checked catalogue-side
+first, so each reports its own cause.
+
+Every other write-safety rule carries over unchanged: the refreshed
+directory appears via a temp directory inside `<repo>/.claude/skills/`, the
+manifest is upserted per pattern after that pattern's directory lands, and a
+fault in one pattern is caught into `failed` without escaping `update()`
+`[ref: decision 5]`.
+
 Stdlib only, Python 3.11 floor `[ref: SDD/Architecture Decisions/ADR-2]`.
 """
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
@@ -380,3 +455,304 @@ def install(
         channel[name] = (outcome.installed_as, outcome.version, outcome.sha256)
 
     return InstallReport(installed=installed, unchanged=unchanged, failed=failed)
+
+
+# =============================================================================
+# `update()` -- C5's second verb (T3.4)
+# =============================================================================
+
+
+def _decline(name: str, unified_diff: str) -> bool:
+    """The default `decide`. Declines, always.
+
+    This is where ADR-4's "an unanswered prompt cannot destroy local work"
+    actually lives. Making the default a decliner puts that guarantee in
+    this module, where a mutation test can reach it, instead of in C3's
+    prose where nothing can check it
+    `[ref: solution.md, "Data model: the update path (C5's second verb)",
+    decision 3]`. Both parameters are deliberately unused -- a real `decide`
+    needs them, and the signature is the contract.
+    """
+    return False
+
+
+@dataclass(frozen=True)
+class UpdateReport:
+    """The whole result of one `update()` call. Four named channels, same
+    reason `InstallReport` has three.
+
+    refreshed: name -> (installed_as, version_before, version_after, sha256)
+    declined:  name -> (version, unified_diff), diverged and `decide` said no
+    current:   name -> (installed_as, version, sha256), nothing to do
+    failed:    name -> a human-readable reason, nothing written for it
+    committed: always False -- see "C5 reports; C3 offers" above.
+
+    `declined` carries the diff because that value is what a later advisory
+    shows the user `[ref: SDD/Runtime View/Primary Flow, step 9]`, so it is
+    part of this report's external surface rather than an internal detail
+    of the prompt that already happened.
+    """
+
+    refreshed: dict[str, tuple[str, str, str, str]] = field(default_factory=dict)
+    declined: dict[str, tuple[str, str]] = field(default_factory=dict)
+    current: dict[str, tuple[str, str, str]] = field(default_factory=dict)
+    failed: dict[str, str] = field(default_factory=dict)
+    committed: bool = False
+
+
+def _read_text_or_raise(path: Path, *, what: str) -> str:
+    try:
+        return path.read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise InstallError(f"could not read {what} at {path}: {e}") from e
+
+
+def _catalogue_as_installed(catalogue_dir: Path, name: str, installed_as: str) -> str:
+    """The catalogue's `SKILL.md` as it would appear once installed -- that
+    is, after the frontmatter rename.
+
+    Both the diff's `to` side and the refreshed file's content come from
+    here, so the file the user is shown and the file they would get are the
+    same text by construction. Doing the rename before diffing is also what
+    keeps the `name:` line out of the diff: without it, every diverged
+    pattern reports a spurious `name:` difference the user cannot act on
+    `[ref: solution.md, decision 4]`.
+    """
+    return rename_in_frontmatter(
+        _read_text_or_raise(catalogue_dir / name / "SKILL.md", what=f"catalogue SKILL.md for {name!r}"),
+        installed_as,
+    )
+
+
+def _divergence_diff(installed_text: str, catalogue_text: str) -> str:
+    """The unified diff the user decides on.
+
+    **Direction and labels are the contract; the context width `n` is not**
+    `[ref: solution.md, decision 4]`. The installed file is the `from` side,
+    so the user's own edit appears as a deletion and the incoming upstream
+    text as an addition -- reversing it produces a diff that is well-formed,
+    contains the same two lines, and tells the user their own work is the
+    change being introduced, in the one prompt where that reading decides
+    whether their file survives. The two labels are populated because
+    `difflib` defaults both to the empty string, which renders the header as
+    a bare `---`/`+++` and leaves the user to infer which side is theirs.
+    `n` is left at `difflib`'s default on purpose: it changes the output's
+    length without changing what the diff means, so it is presentation, and
+    no test may assert it.
+    """
+    return "".join(
+        difflib.unified_diff(
+            installed_text.splitlines(keepends=True),
+            catalogue_text.splitlines(keepends=True),
+            fromfile="installed",
+            tofile="catalogue",
+        )
+    )
+
+
+def _replace_subtree(
+    name: str, *, installed_as: str, dest: Path, skills_root: Path, catalogue_dir: Path
+) -> str:
+    """Replace `dest` wholesale with the catalogue's version of `name`.
+    Returns the refreshed `SKILL.md`'s sha256.
+
+    **The WHOLE subtree, `reference/` included.** The hash covering
+    `SKILL.md` only is a limit on *detection*, never on *replacement*: once
+    the refresh is approved (or is unconditional), leaving a stale
+    `reference/` file behind would be a half-applied update
+    `[ref: solution.md, decision 6; SDD/ADR-4]`. Implemented by delegating
+    the copy to `_fresh_install`, which is also why the frontmatter rename,
+    the temp-directory-inside-the-destination rule and the hash are shared
+    with `install()` rather than reimplemented here.
+
+    `_fresh_install` renames its temp directory onto a destination that must
+    not exist, so the current directory is first moved aside to
+    `.<installed_as>.replaced` and only deleted once the new one has landed.
+    If anything fails in between, the user's directory is moved back. Like
+    `.<installed_as>.tmp`, that stash is this installer's own debris and is
+    the only directory removed here `[ref: solution.md, decision 5]`.
+    """
+    stash = skills_root / f".{installed_as}.replaced"
+    if stash.exists():
+        shutil.rmtree(stash)
+    os.rename(str(dest), str(stash))
+    try:
+        sha256 = _fresh_install(
+            name, installed_as=installed_as, dest=dest, skills_root=skills_root, catalogue_dir=catalogue_dir
+        )
+    except BaseException:
+        if not dest.exists():
+            os.rename(str(stash), str(dest))
+        raise
+    shutil.rmtree(stash, ignore_errors=True)
+    return sha256
+
+
+@dataclass(frozen=True)
+class _UpdateOutcome:
+    channel: str  # "refreshed" | "declined" | "current"
+    installed_as: str
+    version_before: str
+    version_after: str
+    sha256: str
+    unified_diff: str
+
+
+def _update_one(
+    name: str,
+    *,
+    repo_dir: Path,
+    skills_root: Path,
+    catalogue_dir: Path,
+    entry: "manifest.PatternEntry",
+    bundle: str,
+    decide,
+) -> _UpdateOutcome:
+    installed_as = entry.installed_as
+    dest = skills_root / installed_as
+
+    # The catalogue side first, because a pattern the catalogue has dropped
+    # must report THAT rather than whatever the installed side happens to
+    # look like -- the two `failed` reasons are not interchangeable
+    # `[ref: solution.md, decision 7]`.
+    if not (catalogue_dir / name).is_dir():
+        raise InstallError(
+            f"the catalogue no longer carries pattern {name!r}; "
+            f"{installed_as!r} was left exactly as it is"
+        )
+    catalogue_version = _read_catalogue_version(catalogue_dir, name)
+
+    if not dest.is_dir():
+        raise InstallError(
+            f"the manifest records {name!r} as installed at {installed_as!r} but that directory "
+            "is missing; run install to write it"
+        )
+    installed_hash = _hash_if_present(dest / "SKILL.md")
+    if installed_hash is None:
+        raise InstallError(f"{installed_as!r} has no readable SKILL.md; run install to rewrite it")
+
+    if installed_hash == entry.sha256:
+        # Not diverged. Either current, or behind with nothing local to
+        # lose -- and the second case refreshes WITHOUT asking, because a
+        # prompt the user cannot have caused is noise that gets clicked
+        # through `[ref: solution.md, decision 2, middle row]`.
+        if manifest.is_current(entry, catalogue_version):
+            return _UpdateOutcome(
+                channel="current",
+                installed_as=installed_as,
+                version_before=entry.version,
+                version_after=entry.version,
+                sha256=entry.sha256,
+                unified_diff="",
+            )
+        diff = ""
+    else:
+        # Diverged. The version comparison does not enter into it: the
+        # third row of the table is "any" version with a differing hash.
+        diff = _divergence_diff(
+            _read_text_or_raise(dest / "SKILL.md", what=f"installed SKILL.md for {installed_as!r}"),
+            _catalogue_as_installed(catalogue_dir, name, installed_as),
+        )
+        if not decide(name, diff):
+            return _UpdateOutcome(
+                channel="declined",
+                installed_as=installed_as,
+                version_before=entry.version,
+                version_after=entry.version,
+                sha256=entry.sha256,
+                unified_diff=diff,
+            )
+
+    sha256 = _replace_subtree(
+        name, installed_as=installed_as, dest=dest, skills_root=skills_root, catalogue_dir=catalogue_dir
+    )
+    # Directory first, then manifest -- the same order and the same
+    # per-pattern wrapping as `_install_one`, for the same reason: a crash
+    # between the two must leave recoverable debris rather than a lie.
+    try:
+        manifest.upsert(
+            repo_dir,
+            name,
+            version=catalogue_version,
+            installed_as=installed_as,
+            sha256=sha256,
+            bundle=bundle,
+        )
+    except Exception as e:
+        raise InstallError(f"{installed_as!r} refreshed but manifest update failed: {e}") from e
+    return _UpdateOutcome(
+        channel="refreshed",
+        installed_as=installed_as,
+        version_before=entry.version,
+        version_after=catalogue_version,
+        sha256=sha256,
+        unified_diff=diff,
+    )
+
+
+def update(
+    repo_dir: Path,
+    *,
+    catalogue_dir: Path = DEFAULT_CATALOGUE_DIR,
+    bundle: str | None = None,
+    decide=_decline,
+) -> UpdateReport:
+    """Refresh every pattern the manifest records. See the module docstring's
+    `update()` section for the full contract.
+
+    **There is no `names` parameter, and that is a requirement rather than
+    an omission.** F8's first criterion is "only those patterns are
+    refreshed and the selection is otherwise unchanged -- no scan, no
+    questions" `[ref: PRD/F8 1st]`, so `update()` is not allowed to
+    re-derive a selection: the manifest is its only input about what to act
+    on `[ref: solution.md, decision 1]`. A catalogue pattern the manifest
+    does not record is not touched and appears in no channel.
+
+    `decide(name, unified_diff) -> bool` is asked once per DIVERGED pattern
+    and nothing else -- never for a pattern that is current, and never for
+    one that is merely behind. It **defaults to declining**; see `_decline`.
+    """
+    repo_dir = Path(repo_dir)
+    catalogue_dir = Path(catalogue_dir)
+    skills_root = repo_dir / ".claude" / "skills"
+    if bundle is None:
+        bundle = _bundle_version()
+
+    # Read once, up front: `version_before` must be the version as recorded
+    # before this call, and `manifest.upsert` rewrites the file per pattern.
+    manifest_before = manifest.read(repo_dir)
+
+    refreshed: dict[str, tuple[str, str, str, str]] = {}
+    declined: dict[str, tuple[str, str]] = {}
+    current: dict[str, tuple[str, str, str]] = {}
+    failed: dict[str, str] = {}
+
+    for name in sorted(manifest_before.patterns):
+        entry = manifest_before.patterns[name]
+        try:
+            outcome = _update_one(
+                name,
+                repo_dir=repo_dir,
+                skills_root=skills_root,
+                catalogue_dir=catalogue_dir,
+                entry=entry,
+                bundle=bundle,
+                decide=decide,
+            )
+        except InstallError as e:
+            failed[name] = str(e)
+            continue
+
+        if outcome.channel == "refreshed":
+            refreshed[name] = (
+                outcome.installed_as,
+                outcome.version_before,
+                outcome.version_after,
+                outcome.sha256,
+            )
+        elif outcome.channel == "declined":
+            declined[name] = (outcome.version_before, outcome.unified_diff)
+        else:
+            current[name] = (outcome.installed_as, outcome.version_before, outcome.sha256)
+
+    return UpdateReport(refreshed=refreshed, declined=declined, current=current, failed=failed)
