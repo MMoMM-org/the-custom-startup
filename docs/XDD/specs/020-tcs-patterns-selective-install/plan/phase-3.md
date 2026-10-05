@@ -922,6 +922,23 @@ writing is allowed, and an installer that is honest about what it did.
     already applied, never by calling the same rename helper `update()` uses: a shared bug in that
     helper would otherwise pass both sides.
 
+  - **The accept path must replace the FULL SUBTREE, not just `SKILL.md`.** Found on the gate's
+    third pass and it survives everything else: every `reference/` fixture in this plan is built for
+    the **version-behind, hash-matches** row, whose refresh is unconditional. Nothing requires the
+    **hash-differs + `decide` returned `True`** fixture to carry a `reference/` file at all. So an
+    implementation that special-cases "the hash only ever covered `SKILL.md`, so on a hash
+    difference only `SKILL.md` needs rewriting" passes every test while leaving **stale `reference/`
+    content in place after the user accepted the diff**. That reading is plausible precisely
+    *because* decision 6 says the hash covers `SKILL.md` only — the limit on *detection* is not a
+    limit on *replacement*. Add a `reference/` file to the hash-differs+accept fixture and assert its
+    bytes match the catalogue's after the refresh. This is the mirror of
+    `test_chosen_pattern_lands_with_tcs_prefix_and_full_subtree`, which exists for `install()`'s
+    fresh-write path for exactly this reason.
+
+  - **Pin `refreshed[name]`'s `version_before` as well as its `version_after`.** Only the latter is
+    currently required, so a mutation swapping the two elements or hardcoding `version_before`
+    survives. One assertion: it equals the manifest's version as read *before* the call.
+
   - **Pin the diff the REPORT carries, not only the one `decide` received.** Found on the gate's
     second pass and it survives everything else: the diff assertion above checks what is passed
     **into** `decide(name, diff)`, and nothing checks what lands in `UpdateReport.declined[name]`'s
@@ -929,8 +946,16 @@ writing is allowed, and an installer that is honest about what it did.
     stores something else in the report — an empty string, a stale value, the pre-rename diff —
     passes every test in this plan. That value is what a later advisory shows the user
     `[ref: SDD/Runtime View/Primary Flow, step 9]`, so a wrong one is an externally visible bug, not
-    an internal detail. Assert `report.declined[name][1]` equals the diff the recording callback
-    actually received, **or** re-derive it the same hand-written-literal way.
+    an internal detail.
+
+    **Assert both against one independently-derived expected diff** — the same hand-written-literal
+    value the bullet above already uses to check the callback's argument. Do **not** assert
+    "report equals what the callback received": that compares two values the code under test
+    produces at two sites, so a compound mutation computing the *wrong* diff identically in both
+    places is self-consistent and passes. Derive the expected diff once from the literals, then
+    assert it against the callback's capture **and** against `report.declined[name][1]`. An earlier
+    revision offered those as two equal options joined by "or"; only one of them is safe standalone,
+    and presenting a choice where one branch is unsound is how the unsound branch gets picked.
 
   - **The catalogue-removal fixture's installed directory must EXIST, with real content.** Otherwise
     it collapses into the missing-installed-directory case and reports `failed` for the wrong reason,

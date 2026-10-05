@@ -1415,6 +1415,18 @@ changeset containing only a `VERSION` bump is not treated as a changed source.
 
 ### Primary Flow
 
+**How to read this section.** Steps 1 to 6 run contiguously below. Steps **7, 8 and 9 are
+interleaved** with the `#### Data model:` sections for the components they invoke, so the nine steps
+span roughly 600 lines rather than a dozen: step 6 is followed by *the three namespaces (C4)*, step 7
+by *the update path (C5's second verb)*, step 8 by *the install plan and report (C5)*, and step 9
+closes the sequence. Each section was placed beside the step that calls it, which is useful when
+reading one component and misleading when reading the flow. **Consequence worth knowing before you
+cite a number:** a numbered item in this region may belong either to the flow or to a data-model
+section's own decision list, and raw line order does not tell you which. Both this document's author
+and a reviewer independently misread `8. **Offer.**` as a data-model decision on 2026-10-05, and the
+proposed renumbering would have collided with step 9. Check which list a number belongs to before
+citing or changing it.
+
 `install` in a repository that has never run the setup:
 
 1. **Resolve.** C3 resolves the repository root via git and refuses outside a repository.
