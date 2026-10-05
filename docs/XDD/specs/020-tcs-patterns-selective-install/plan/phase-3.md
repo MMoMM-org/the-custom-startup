@@ -456,6 +456,28 @@ writing is allowed, and an installer that is honest about what it did.
      installed anywhere is simply approved; omitting `own_installed` entirely raises `TypeError`
      rather than defaulting; and an empty `own_installed` reproduces the old behaviour exactly, which
      is the safe direction when a caller cannot read the manifest.
+     **The RED phase here cannot prove what a RED phase usually proves, and that needs saying.**
+     `own_installed` is a *required* parameter, so every test written against the new signature
+     fails with `TypeError: check() got an unexpected keyword argument 'own_installed'` before the
+     change — measured. That is RED, but it proves the **parameter is absent**, not that the old
+     **behaviour was wrong**. Those are different claims and only the second one is the defect.
+
+     So the RED commit needs two shapes, and only one of them can exist before the signature
+     changes:
+
+     - **(a) The defect, asserted against the CURRENT signature.**
+       `check(repo, {"tcs-ddd"}, home_dir=home)` with `tcs-ddd` installed returns
+       `approved=[]`, `refused={'tcs-ddd': 'repo'}` — measured. A test asserting `tcs-ddd` *is*
+       approved fails **on the assertion**, which is the only form that demonstrates the behaviour
+       is wrong rather than the signature being old.
+     - **(b) The fix, asserted against the NEW signature.** Fails on `TypeError` until the
+       parameter lands, then pins the three boundaries.
+
+     (a) must be **rewritten** to the new signature once the parameter exists, since the old call
+     will no longer be legal — so it is deliberately a two-step test, and the RED commit should say
+     so in its message. Recorded because the cheap path is to write only (b), see a red suite, and
+     believe a `TypeError` validated the behaviour. It did not.
+
   3. Implement: the `own_installed` keyword on `check()`, suppressing a **repo-namespace** match
      only. Nothing else in C4 changes; the enumeration, the dedup and the skip channel are untouched.
   4. Validate: `python3 -m pytest tests/test_patterns_guard.py -q` then the whole suite; report per
