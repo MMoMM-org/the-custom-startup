@@ -440,9 +440,19 @@ upsert(name, …)  -> returns a new Manifest; prior entries byte-identical
 - **`MISSING` is therefore C7's rendering, not C6's return.** The advisory and `status` catch
   `ManifestUnparseableError` and present it; the store itself refuses. Reading the row as the
   reader's contract is the mistake this paragraph exists to prevent.
-- **The temp file goes in `.claude/skills/`, never `$TMPDIR`.** Different filesystems here:
-  `os.rename` raises `Cross-device link` and `shutil.move` degrades to copy-then-delete, which is
-  not atomic `[ref: SDD/Risks and Technical Debt/Implementation Gotchas]`.
+- **The temp file goes in `.claude/skills/`, never `$TMPDIR`.** Different filesystems here —
+  measured `dev=16777245` for the repository and `dev=16777234` for `$TMPDIR` — so `os.rename`
+  across them raises `OSError: [Errno 18] Cross-device link` and `shutil.move` degrades to
+  copy-then-delete, which is not atomic
+  `[ref: SDD/Risks and Technical Debt/Implementation Gotchas]`.
+
+  **And a second reason to insist on `os.replace`, measured 2026-10-05 and sharper than
+  atomicity:** given an existing **directory** at the destination, `os.replace` raises
+  `IsADirectoryError` while `shutil.move` does not raise at all — it moves the temp file
+  *inside* the directory and deletes the source. So a `shutil.move`-based writer would
+  silently relocate the manifest into a directory rather than failing, which is a worse
+  outcome than a non-atomic write. Found as a side effect of T3.1's cleanup test, where the
+  trigger for a mid-write failure is a pre-existing directory at the manifest path.
 - **Currency is determinable from the manifest alone** — `version` per pattern against the
   catalogue `VERSION`, with no pattern file read `[ref: SDD/Acceptance Criteria/AC-17; PRD/F6
   3rd]`. That is what makes the `sha256` field's job divergence detection only, and not currency.

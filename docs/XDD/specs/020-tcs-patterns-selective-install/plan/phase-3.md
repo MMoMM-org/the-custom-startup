@@ -49,7 +49,7 @@ phase: 3
 Delivers the write path: a manifest that records what happened, a guard that decides whether
 writing is allowed, and an installer that is honest about what it did.
 
-- [ ] **T3.1 The manifest store** `[activity: data-architecture]`
+- [x] **T3.1 The manifest store** `[activity: data-architecture]`
 
   1. Prime: Read the manifest format `[ref: SDD/Interface Specifications/Data model: the manifest]`.
      TOML, because `observability-sources.toml` and `startup.toml` already establish it here and the
@@ -94,10 +94,45 @@ writing is allowed, and an installer that is honest about what it did.
      compare. Writing is atomic: temp file in `.claude/skills/`, then `os.replace`.
   4. Validate: `python3 -m pytest tests/test_patterns_install.py -q`; `python3 -m pytest -q`.
   5. Success:
-     - [ ] A single record names every installed pattern with its version `[ref: PRD/F6 1st]`
-     - [ ] A later install leaves prior entries unchanged `[ref: PRD/F6 2nd]`
-     - [ ] Currency determinable without inspecting pattern files `[ref: PRD/F6 3rd; SDD/AC-17]`
-     - [ ] An unparseable manifest is never overwritten `[ref: SDD/Runtime View/Error Handling]`
+     - [x] A single record names every installed pattern with its version `[ref: PRD/F6 1st]`
+     - [x] A later install leaves prior entries unchanged `[ref: PRD/F6 2nd]`
+     - [x] Currency determinable without inspecting pattern files `[ref: PRD/F6 3rd; SDD/AC-17]`
+     - [x] An unparseable manifest is never overwritten `[ref: SDD/Runtime View/Error Handling]`
+
+  **Delivered 2026-10-05.** `e85b339` RED, `363a952` the implementation, `ae2d548` and `9386767`
+  two rounds of test closure, `fb306b4` two spec clarifications. Both review gates PASS. The file
+  carries **24 cases in 17 functions**; the suite went 1022 → 1052.
+
+  **The coverage history is the part worth keeping, because the checkbox hides it.** Fourteen
+  mutations were run against this module across three passes, and all fourteen are now caught —
+  but the sequence matters more than the total:
+
+  | pass | mutants run | survived |
+  |---|---|---|
+  | after the first GREEN | 6 | **3** |
+  | after those three were closed | 8 | **7** |
+  | after those seven were closed | 8 (re-run) | 0 |
+
+  So a suite that was green *and* mutation-verified on six behaviours was still blind to seven
+  more. The three that survived the first pass were all in the serialiser, and the reason they
+  survived is recorded against assertion (b) above: the byte-identical test reads its before-image
+  out of a file the serialiser wrote, so a uniform reformatting applies to both sides of the
+  comparison and is invisible. The seven that survived the second pass were the atomic-write
+  mechanics, `with_pattern`'s two documented-but-unchecked claims, `read()`'s eight hand-rolled
+  schema branches, and the `is_file()` guard.
+
+  **Two of the seven could not have been caught by any `tmp_path` test, and that is a lesson
+  rather than an excuse.** The SDD requires the temp file in `.claude/skills/` and the rename via
+  `os.replace`, because here `/Volumes/Moon` (`dev=16777245`) and `/tmp/claude-501`
+  (`dev=16777234`) are different filesystems and an `os.replace` across them raises
+  `OSError: [Errno 18] Cross-device link` — measured. But pytest's `tmp_path` lives under
+  `$TMPDIR`, so a test there puts the temp file and the destination on ONE filesystem, where both
+  mutants work perfectly. The fix was to assert the **mechanism** — `mkstemp`'s `dir=` argument,
+  and that `os.replace` is the call — rather than the outcome, which is identical wherever a test
+  can reach. Asserting an I/O call is normally the weaker choice and was rejected for AC-17's
+  currency check on the same day; it is the right one here precisely because atomicity is not
+  observable in the result. The tests say so in their docstrings, or someone will "simplify" them
+  into result assertions that cannot fail.
 
 - [ ] **T3.2 The collision guard** `[activity: backend-api]`
 
