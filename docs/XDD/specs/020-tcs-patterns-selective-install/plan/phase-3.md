@@ -827,10 +827,29 @@ writing is allowed, and an installer that is honest about what it did.
 
 - [ ] **T3.4 The update path, with divergence handling** `[activity: backend-api]`
 
-  **Three gaps to settle before this task is gated**, found 2026-10-05 by auditing it while T3.3
-  was in flight — the same pre-dispatch audit that saved C5 four gate passes. Enumerated here
-  rather than decided, because T3.3's delivery may inform two of them. **Do not dispatch T3.4's
-  TDD gate until all three are closed in `solution.md`.**
+  **All three pre-dispatch gaps are CLOSED, 2026-10-05**, in
+  `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb)]` — read that
+  section before the steps below; it is what to brief from. Two were settled by evidence once T3.3
+  landed and one was Marcus's call:
+
+  - **The signature existed nowhere.** Now
+    `update(repo_dir, *, catalogue_dir, bundle, decide=_decline) -> UpdateReport`, with four
+    channels mirroring `InstallReport` — `refreshed`, `declined`, `current`, `failed`. **No `names`
+    parameter**: F8's first criterion forbids re-deriving a selection, so the manifest is the only
+    input about what to act on. `bundle` was promoted to a parameter during T3.3, so this task
+    inherits it rather than repeating the derivation.
+  - **Who prompts: a `decide` callback, defaulting to decline.** `update()` lives in `install.py`,
+    which has no interactive surface, so C3 supplies a callback that prompts and a test supplies a
+    stub. Because the **default declines**, ADR-4's "an unanswered prompt cannot destroy local work"
+    is held by this module and is mutation-testable, rather than living in C3's prose where nothing
+    can check it. A two-phase report-then-apply API was rejected as the shape of the `report_only`
+    parameter deleted from `install()`.
+  - **Which population: both triggers, and only one of them asks.** The contradiction in step 2
+    below is resolved by the three-state table in the contract. Version behind with a **matching**
+    hash refreshes **without asking**, because nothing local can be lost — ADR-4's own rationale is
+    that "overwriting is safe precisely when it is uninteresting". A hash that **differs** is
+    diverged and always asks. `install()` routes every present-but-not-current pattern to `failed`
+    naming `update`, so whatever `update()` declined to own would have had no owner at all.
 
   1. **`update()` has no signature or section anywhere in the SDD.** Identical in kind to C5's
      `report_only`, which sat in a normative signature with semantics defined nowhere until T3.3's
@@ -861,12 +880,19 @@ writing is allowed, and an installer that is honest about what it did.
   1. Prime: Read ADR-4 `[ref: SDD/Architecture Decisions/ADR-4]` including its stated limit — the
      hash covers `SKILL.md` only, so a locally edited reference file is replaced without a prompt,
      and that is deliberate rather than an oversight to fix here.
-  2. Test: `update` refreshes only patterns whose version is behind and asks nothing about the
-     selection — no scan, no questions (F8's first criterion); a pattern whose file no longer
-     matches its recorded hash prompts per pattern with a unified diff available, defaulting to
-     skip; after a refresh, each pattern's manifest version equals its catalogue `VERSION` (F8's
-     third criterion and SDD/AC-17); declining leaves the local file untouched and the manifest
-     entry unchanged, so the advisory keeps reporting it.
+  2. Test: `update` acts on **every** pattern the manifest records and asks nothing about the
+     selection — no scan, no questions (F8's first criterion), and **no `names` argument exists** to
+     pass one. Then, per the contract's three-state table: a pattern whose version is behind **and
+     whose hash still matches** is refreshed **without any call to `decide`** — assert `decide` was
+     not called at all for it, which is the only way to pin that an uninteresting overwrite does not
+     interrupt the user; a pattern whose installed hash **differs** calls `decide(name, diff)` with
+     a unified diff whose body shows the user's edit, and refreshes only on `True`; the **default**
+     `decide` declines, so calling `update()` with no callback refreshes no diverged pattern and
+     leaves every local file byte-identical — prove that with a digest, since this is ADR-4's
+     guarantee and it now lives in the library; after a refresh, each pattern's manifest version
+     equals its catalogue `VERSION` (F8's third criterion and SDD/AC-17); declining leaves the local
+     file untouched **and** the manifest entry unchanged, so C7's advisory keeps reporting it; and a
+     manifest entry whose directory is **missing** lands in `failed`, not `refreshed`.
   3. Implement: the `update` verb in `lib/install.py`, divergence detection against the manifest
      hash, and the `difflib` unified diff.
   4. Validate: `python3 -m pytest -q`; exercise both answers — overwrite and skip — and assert the

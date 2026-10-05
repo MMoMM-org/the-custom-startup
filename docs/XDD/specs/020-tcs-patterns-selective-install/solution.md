@@ -1750,6 +1750,82 @@ links to one real directory from reporting the same skill twice under two paths.
 7. **Write.** C5 copies each approved pattern's directory to `<repo>/.claude/skills/tcs-<name>/`,
    rewrites the frontmatter `name:`, computes the hash of the installed `SKILL.md`, and writes the
    manifest atomically (`.tmp` then `mv`, following `install_files.sh`).
+#### Data model: the update path (C5's second verb)
+
+Added 2026-10-05, before T3.4 was gated. `update()` previously had **no signature and no section
+anywhere in this document** — the same gap `report_only` had, found by T3.3's gate and recorded in
+the Error Handling table so this pass could not miss it.
+
+```
+update(repo_dir, *, catalogue_dir, bundle, decide=_decline) -> UpdateReport
+
+UpdateReport (frozen, named channels)
+    refreshed:  name -> (installed_as, version_before, version_after, sha256)
+    declined:   name -> (version, unified_diff)    diverged, and decide() said no
+    current:    name -> (installed_as, version, sha256)    nothing to do
+    failed:     name -> reason
+    committed:  always False
+
+decide(name, unified_diff) -> bool        defaults to returning False
+```
+
+**1. No `names` parameter — `update()` reads the manifest to learn the selection.** F8's first
+criterion is "only those patterns are refreshed and the selection is otherwise unchanged — **no
+scan, no questions**" `[ref: PRD/F8 1st]`. That is the sharpest difference from `install()`, which
+is handed a list someone else chose: `update()` is not allowed to re-derive a selection, so the
+manifest is its only input about what to act on `[ref: SDD/Interface Specifications/Data model: the
+manifest (C6)]`.
+
+**2. Three states per installed pattern, and only one of them asks.** Settled by ADR-4's own
+rationale — "with the hash, overwriting is safe precisely when it is uninteresting":
+
+| manifest `version` vs catalogue `VERSION` | installed `SKILL.md` hash vs manifest `sha256` | `update()` does |
+|---|---|---|
+| equal | equal | nothing; reports `current` |
+| **behind** | equal | **refreshes without asking** — nothing local can be lost |
+| any | **differs** | computes a unified diff, calls `decide(name, diff)`; `True` refreshes, `False` reports `declined` |
+
+The middle row is the one worth stating explicitly, because "ask before replacing" read naively
+would ask there too, and an advisory that interrupts for a change the user cannot have made is how
+a prompt becomes noise that gets clicked through. The hash is what buys the distinction, and it is
+the whole reason ADR-4 chose to record one.
+
+**3. `decide` is a callback that defaults to declining, so ADR-4's guarantee is structural.**
+`update()` lives in `install.py`, which has no interactive surface — `AskUserQuestion` can only be
+raised by a skill, exactly as settled for `install()`
+`[ref: SDD/Interface Specifications/Data model: the install plan and report (C5), decision 4]`. So
+C3 supplies a `decide` that prompts, and a test supplies a stub. **The default declines**, which
+means "an unanswered prompt cannot destroy local work" `[ref: SDD/Architecture Decisions/ADR-4]` is
+held by this module and can be mutation-tested, rather than living in C3's prose where nothing can
+check it. A two-phase report-then-apply API was considered and rejected: it is the shape of the
+`report_only` parameter deleted from `install()` for being speculative, and it would move the
+safety guarantee back into the caller.
+
+**4. The diff compares what the user has against what they would get.** `difflib.unified_diff`
+between the **installed** `SKILL.md` and the catalogue's version **as it would be installed** —
+that is, after the frontmatter rename, so the `name:` line is not reported as a spurious
+difference. Three lines of `difflib` given ADR-2's 3.11 floor
+`[ref: SDD/Architecture Decisions/ADR-4]`.
+
+**5. `update()` is the only component that may replace a user's file, and only with consent.** This
+is the deliberate asymmetry against `install()`, which is purely additive and never removes or
+overwrites anything `[ref: SDD/Interface Specifications/.../"install() is purely additive"]`. Every
+other write-safety rule carries over unchanged: the refreshed directory appears atomically via a
+temp directory inside `<repo>/.claude/skills/`, the manifest is upserted **per pattern after** that
+pattern's directory lands, and a fault in one pattern is caught and recorded in `failed` without
+escaping `update()`.
+
+**6. ADR-4's stated limit applies here and is not a defect to fix in T3.4.** The hash covers
+`SKILL.md` only, so a locally edited file under `reference/` is replaced **without** a prompt. That
+is recorded as an accepted trade-off, not an oversight `[ref: SDD/Architecture Decisions/ADR-4,
+"Trade-offs accepted"]`; hashing 80 files per pattern to catch a rarer case costs more than it
+returns.
+
+**7. A manifest entry whose directory is missing is `failed`, not refreshed.** The record claims a
+pattern is installed and it is not, which is a different problem from being out of date — and
+`install()` already handles an absent directory by writing it. Reporting it tells the user which
+verb to reach for instead of silently papering over a manifest that lies.
+
 8. **Offer.** C5 prints what it wrote, states that it did not commit, and offers to commit
    (ADR-8). Declining leaves the files in place. The *offer* is C3's, not C5's — see the boundary
    note under `[ref: SDD/Interface Specifications/Data model: the install plan and report (C5)]`.
