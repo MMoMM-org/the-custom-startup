@@ -1399,18 +1399,22 @@ how this is implemented, and an implementer working from the phrase alone would 
 of them wrong without any fixture revealing it.
 
 **1. A skill's name is its frontmatter `name:`, never its directory (CON-4), so enumeration must
-read files rather than list directories.** Re-measured 2026-10-05 over **253 `SKILL.md` files**
+read files rather than list directories.** Re-measured 2026-10-05 over **259 `SKILL.md` files**
 across all four namespace roots — the user's global skills, this repository, the plugin cache and
-the marketplace tree — carrying **125 distinct registered names**: exactly **one** diverges, the
+the marketplace tree — carrying **127 distinct registered names**: exactly **one** diverges, the
 `hookify` plugin's `skills/writing-rules/` directory registering as `writing-hookify-rules`.
-(An earlier revision of this section said "131 files"; that figure was wrong and is corrected
-here. The *conclusion* survived the re-measurement on nearly twice the population.) One in 253 is
+(This figure has been corrected twice and the reason differs each time. An earlier revision said
+"131 files", which was simply wrong. It was then 253, measured correctly but with the narrower
+marketplace glob this section later rejects — widening that glob adds 3 roots and 6 files, hence
+259. Treat it as a snapshot of one machine, not a constant: what it is *for* is the denominator of
+the divergence claim below, which has now survived three independent re-measurements on 131, 253
+and 259 files.) One in 259 is
 enough: a guard that collects directory names would look for a collision against a name that is
 not registered, and miss the name that is. The rule is therefore: a directory is a skill **iff**
 it contains a `SKILL.md`, and its name is that file's frontmatter `name:`.
 
 Also measured, and relevant to the "skipped, not fatal" rule at the end of this section:
-**zero** of the 253 files failed to parse. Every one has frontmatter and a non-empty `name:`. So
+**zero** of the 259 files failed to parse. Every one has frontmatter and a non-empty `name:`. So
 the skip-and-report branch has no naturally occurring instance anywhere on this machine, and its
 test must construct one — an unreadable file, a file with no frontmatter, and a frontmatter block
 with no `name:` key are three distinct inputs and none of them can be found by sampling reality.
@@ -1441,11 +1445,17 @@ has no defined answer here. The guard does not need one — it takes the **union
 every version, so which version is current never arises. Walking the cache does therefore
 double-count skills and does include versions that are not reachable; both are harmless to a union
 of names and neither justifies version arithmetic. The marketplace tree
-(`~/.claude/plugins/marketplaces/<marketplace>/plugins/<plugin>/skills/`) has one directory per
-plugin and needs no version comparison.
+(`~/.claude/plugins/marketplaces/<marketplace>/<segment>/<plugin>/skills/`) has one directory per
+plugin and needs no version comparison. The `<segment>` is deliberately a wildcard and not the
+literal `plugins`: see the interface block below, where the live installation's `external_plugins/`
+roots are the reason. An earlier revision of this paragraph wrote the literal form, which the same
+section goes on to declare wrong — corrected after T3.2's fourth gate pass, which found it in the
+one paragraph two earlier sweeps of this document did not reach, because both swept for the old
+glob and the old signature and neither swept for the *counts* those changed.
 
-Measured counts for scale: 127 `SKILL.md` under the 11 cache roots, 107 under the 22 marketplace
-roots, 19 under the user root, and **0** under this repository's `.claude/skills/`, which does not
+Measured counts for scale, re-walked 2026-10-05 with the corrected glob: 127 `SKILL.md` under the
+11 cache roots, **113 under the 25 marketplace roots** (was 107 under 22 with the literal-`plugins`
+form), 19 under the user root, and **0** under this repository's `.claude/skills/`, which does not
 exist. The absent-namespace rule below is therefore the live case on this machine, not an edge
 case.
 
@@ -1578,7 +1588,7 @@ links to one real directory from reporting the same skill twice under two paths.
   caller that cannot see the omission cannot warn about it. Four distinct inputs land here and each
   needs its own case and its own distinguishable reason: a file that cannot be read, a file with no
   frontmatter block at all, a frontmatter block with no `name:` key, and a `name:` whose value is
-  empty. None of the four occurs naturally — all 253 real files parse — so every one of them has to
+  empty. None of the four occurs naturally — all 259 real files parse — so every one of them has to
   be constructed in a fixture. A test that asserts only "the call did not raise" does not cover
   this rule; it has to assert the entry lands in `skipped` with the right reason.
 7. **Write.** C5 copies each approved pattern's directory to `<repo>/.claude/skills/tcs-<name>/`,
@@ -1598,7 +1608,7 @@ links to one real directory from reporting the same skill twice under two paths.
 | Target repository unreadable in part | C2 | Scan continues over what is readable; the report names what it could not read, so a thin proposal is never silently a permissions artefact. |
 | Name collision | C4, step 6 | That pattern is not written; the collision is reported with both locations; the remaining patterns still install (F5's fourth criterion). No rescan. |
 | `SKILL.md` without a frontmatter `name:` line, **in the catalogue being installed** | C5 | `InstallError`, nothing written for that pattern. Prevents installing under the unprefixed name. |
-| A `SKILL.md` **in a scanned namespace** that cannot be read or carries no usable `name:` | C4, step 6 | Skipped, never fatal, and reported through `GuardReport.skipped` as `(path, reason)`. Four inputs reach this and each needs a distinguishable reason: unreadable, no frontmatter block, no `name:` key, empty `name:`. Added 2026-10-05; the row above it is the same condition with the opposite behaviour, and the difference is deliberate rather than an inconsistency. **The file C5 refuses to install is ours; the file C4 skips belongs to a third party.** A broken file in our own catalogue is a defect in this repository and must stop that pattern loudly, because installing it would register the pattern under the unprefixed name and silently defeat ADR-1. A broken file in somebody else's plugin is not ours to fix and must not stop this repository's install — the same stance `detect.py` takes for an unparseable manifest two rows above. It is reported rather than swallowed because a name the guard could not check is a name it cannot vouch for, and a caller that cannot see the omission cannot warn about it. Measured: zero of the 253 real `SKILL.md` files on this machine fail to parse, so every one of the four cases is fixture-only `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`. |
+| A `SKILL.md` **in a scanned namespace** that cannot be read or carries no usable `name:` | C4, step 6 | Skipped, never fatal, and reported through `GuardReport.skipped` as `(path, reason)`. Four inputs reach this and each needs a distinguishable reason: unreadable, no frontmatter block, no `name:` key, empty `name:`. Added 2026-10-05; the row above it is the same condition with the opposite behaviour, and the difference is deliberate rather than an inconsistency. **The file C5 refuses to install is ours; the file C4 skips belongs to a third party.** A broken file in our own catalogue is a defect in this repository and must stop that pattern loudly, because installing it would register the pattern under the unprefixed name and silently defeat ADR-1. A broken file in somebody else's plugin is not ours to fix and must not stop this repository's install — the same stance `detect.py` takes for an unparseable manifest two rows above. It is reported rather than swallowed because a name the guard could not check is a name it cannot vouch for, and a caller that cannot see the omission cannot warn about it. Measured: zero of the 259 real `SKILL.md` files on this machine fail to parse, so every one of the four cases is fixture-only `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`. |
 | Write fails mid-selection | C5 | Patterns already written stay; the manifest records exactly what succeeded. Re-running `install` is idempotent by name and hash. |
 | Manifest present but unparseable | C6 | Treated as `MISSING` for the advisory and reported verbatim by `status`. Never silently overwritten — overwriting it would erase the record of what is installed. |
 | Installed pattern diverges from its hash | C5 on `update` | The user is asked per pattern with a unified diff (ADR-4). Default is to skip, so an unanswered prompt cannot destroy local work. |

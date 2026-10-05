@@ -170,7 +170,7 @@ writing is allowed, and an installer that is honest about what it did.
      - **A directory under a skills root with no `SKILL.md`.** It is not a skill and must not
        occupy its name — `synced/` itself is the live instance.
      - **A `SKILL.md` whose frontmatter `name:` differs from its directory name.** Exactly one of
-       253 real files does this (`writing-rules` registering as `writing-hookify-rules`), and it is
+       259 real files does this (`writing-rules` registering as `writing-hookify-rules`), and it is
        the whole reason enumeration reads files rather than listing directories. The guard must
        refuse against the **registered** name and not against the directory's.
 
@@ -291,7 +291,7 @@ writing is allowed, and an installer that is honest about what it did.
      channel that half is unfalsifiable. **Read the namespace contract first**
      `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`: a directory is a
      skill iff it holds a `SKILL.md` and its name is that file's frontmatter `name:`, not the
-     directory's — measured, **one of 253** installed `SKILL.md` files diverges, carrying 125
+     directory's — measured, **one of 259** installed `SKILL.md` files diverges, carrying 127
      distinct registered names — enumeration is `os.walk(followlinks=True)` with an
      `(st_dev, st_ino)` dedup rather than `rglob` or `glob("**")`, which cannot see a symlinked
      skill directory, and rather than `glob(recurse_symlinks=True)`, which is 3.13+ and below
