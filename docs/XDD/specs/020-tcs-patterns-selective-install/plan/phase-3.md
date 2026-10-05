@@ -153,6 +153,31 @@ writing is allowed, and an installer that is honest about what it did.
      — the guard enumerates every plugin skill it can find, enabled or not, because a disabled
      plugin is a future collision and over-inclusion costs one declined proposal while
      under-inclusion writes a duplicate that goes live on a settings edit.
+
+     **Four more cases, added the same day after measuring the real namespaces. None of them
+     would be written from the task text above, and each covers a way the guard silently
+     under-reports — which is the unsafe direction, because a name the guard cannot see is a name
+     it approves.**
+
+     - **A skill directory that is a symlink.** Measured: `~/.claude/skills/obsidian-eval` is a
+       link into a shared config checkout, and `rglob`/`glob("**")` find 18 of the 19 skills in
+       that namespace while `os.walk(followlinks=True)` finds all 19. The fixture is a `SKILL.md`
+       in a directory *outside* the namespace root with a symlink to it inside. Without this case,
+       the enumeration the SDD originally specified passes every other test.
+     - **A skill nested deeper than one level.** The user namespace holds 13 real skills at
+       `synced/<uuid>/<name>/SKILL.md`. A bounded `*/SKILL.md` finds 6 of 19. The walk must be
+       unbounded in depth.
+     - **A directory under a skills root with no `SKILL.md`.** It is not a skill and must not
+       occupy its name — `synced/` itself is the live instance.
+     - **A `SKILL.md` whose frontmatter `name:` differs from its directory name.** Exactly one of
+       253 real files does this (`writing-rules` registering as `writing-hookify-rules`), and it is
+       the whole reason enumeration reads files rather than listing directories. The guard must
+       refuse against the **registered** name and not against the directory's.
+
+     The signature also changed: `check(repo_dir, intended_names, *, home_dir)`. Two of the three
+     namespaces live outside the repository, so `home_dir` has to be a parameter or the test can
+     only ever drive one of them — this repository's own skill-tree walker settled that convention
+     twice `[ref: scripts/observability/report.py:686; scripts/observability/sources.py:349]`.
   3. Implement: `lib/guard.py` — the three namespace checks, returning approved and refused sets
      with the reason and the colliding location for each refusal. **Read the namespace contract
      first** `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`: a

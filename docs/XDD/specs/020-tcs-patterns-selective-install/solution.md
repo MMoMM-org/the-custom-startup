@@ -1394,25 +1394,55 @@ how this is implemented, and an implementer working from the phrase alone would 
 of them wrong without any fixture revealing it.
 
 **1. A skill's name is its frontmatter `name:`, never its directory (CON-4), so enumeration must
-read files rather than list directories.** Measured across 131 `SKILL.md` files in the user's
-global skills, this repository, and every marketplace plugin: exactly **one** diverges — the
-`hookify` plugin's `skills/writing-rules/` directory registers as `writing-hookify-rules`. One in
-131 is enough: a guard that collects directory names would look for a collision against a name
-that is not registered, and miss the name that is. The rule is therefore: a directory is a skill
-**iff** it contains a `SKILL.md`, and its name is that file's frontmatter `name:`.
+read files rather than list directories.** Re-measured 2026-10-05 over **253 `SKILL.md` files**
+across all four namespace roots — the user's global skills, this repository, the plugin cache and
+the marketplace tree — carrying **125 distinct registered names**: exactly **one** diverges, the
+`hookify` plugin's `skills/writing-rules/` directory registering as `writing-hookify-rules`.
+(An earlier revision of this section said "131 files"; that figure was wrong and is corrected
+here. The *conclusion* survived the re-measurement on nearly twice the population.) One in 253 is
+enough: a guard that collects directory names would look for a collision against a name that is
+not registered, and miss the name that is. The rule is therefore: a directory is a skill **iff**
+it contains a `SKILL.md`, and its name is that file's frontmatter `name:`.
 
-**2. A skills directory can contain things that are not skills.** `~/.claude/skills/` here holds
-seven entries, one of which — `synced/` — has no `SKILL.md` and contains a UUID-named
-subdirectory. A one-level `iterdir()` is therefore wrong in both directions at once: it reports
-`synced` as an occupied name, and it would miss a real skill nested one level deeper. The
-`SKILL.md` test from fact 1 settles both.
+Also measured, and relevant to the "skipped, not fatal" rule at the end of this section:
+**zero** of the 253 files failed to parse. Every one has frontmatter and a non-empty `name:`. So
+the skip-and-report branch has no naturally occurring instance anywhere on this machine, and its
+test must construct one — an unreadable file, a file with no frontmatter, and a frontmatter block
+with no `name:` key are three distinct inputs and none of them can be found by sampling reality.
 
-**3. The plugin cache holds several versions of the same plugin.** Measured:
-`~/.claude/plugins/cache/the-custom-startup/tcs-git-helpers/` contains both `2.2.21` and `2.2.22`,
-and `tcs-helper/` both `4.3.9` and `4.3.10`. Walking the cache therefore double-counts every
-skill and includes versions that are not reachable at all. The marketplace tree
+**2. A skills directory can contain things that are not skills, and real skills sit at more than
+one depth.** `~/.claude/skills/` here holds seven entries. Six are ordinary skills at
+`<name>/SKILL.md`. The seventh — `synced/` — has no `SKILL.md` of its own and holds **13 real
+skills** two levels further down, at `synced/<uuid>/<name>/SKILL.md`. So the user namespace
+contains **19** skills whose depth below the root is either 1 or 3 directories, and:
+
+| enumeration | finds |
+|---|---|
+| `iterdir()`, one level | 7 entries, 6 of them skills, `synced` wrongly reported as an occupied name |
+| `glob("*/SKILL.md")` | 6 of 19 |
+| `glob("*/*/*/SKILL.md")` | 13 of 19 |
+
+A one-level `iterdir()` is therefore wrong in both directions at once — it reports `synced` as an
+occupied name *and* hides thirteen names that really are taken. The `SKILL.md` test from fact 1
+settles both, but only if the walk is **unbounded in depth**: no fixed number of `*/` segments
+covers this namespace, so the enumeration has to recurse.
+
+**3. The plugin cache holds several versions of the same plugin.** Re-measured 2026-10-05: **four**
+cached plugins carry more than one version — `tcs-git-helpers` (`2.2.21`, `2.2.22`), `tcs-helper`
+(`4.3.9`, `4.3.10`), `tcs-team` (`3.4.2`, `3.4.4`) and `plugin-dev`, whose two version directories
+are **opaque hashes** (`517b2fcd1b60`, `ab024cdcfa7c`) rather than semantic versions. That last one
+matters: any attempt to pick "the newest" cached version by sorting or comparing version strings
+has no defined answer here. The guard does not need one — it takes the **union** of names across
+every version, so which version is current never arises. Walking the cache does therefore
+double-count skills and does include versions that are not reachable; both are harmless to a union
+of names and neither justifies version arithmetic. The marketplace tree
 (`~/.claude/plugins/marketplaces/<marketplace>/plugins/<plugin>/skills/`) has one directory per
 plugin and needs no version comparison.
+
+Measured counts for scale: 127 `SKILL.md` under the 11 cache roots, 107 under the 22 marketplace
+roots, 19 under the user root, and **0** under this repository's `.claude/skills/`, which does not
+exist. The absent-namespace rule below is therefore the live case on this machine, not an edge
+case.
 
 **4. Reachability is recorded in `enabledPlugins`, merged across two files — and the guard
 deliberately does not consult it.** The key format is `<plugin>@<marketplace>` with a boolean;
@@ -1436,16 +1466,59 @@ facts above are recorded anyway, because the next person to consider filtering b
 needs to find the reason it was rejected rather than rediscover the merge rule.
 
 ```
-check(repo_dir, intended_names) -> (approved, refused)
+check(repo_dir, intended_names, *, home_dir) -> (approved, refused)
     approved: the names no namespace already owns
     refused:  name -> (namespace, path of the colliding SKILL.md)
 
-namespaces, in the order a refusal reports them:
-    repo    <repo>/.claude/skills/**/SKILL.md
-    user    ~/.claude/skills/**/SKILL.md
-    plugin  ~/.claude/plugins/cache/*/*/*/skills/**/SKILL.md
-            ~/.claude/plugins/marketplaces/*/plugins/*/skills/**/SKILL.md
+namespace roots, in the order a refusal reports them:
+    repo    <repo_dir>/.claude/skills/
+    user    <home_dir>/.claude/skills/
+    plugin  <home_dir>/.claude/plugins/cache/*/*/*/skills/
+            <home_dir>/.claude/plugins/marketplaces/*/plugins/*/skills/
+
+within every root: recurse to any depth; a directory is a skill iff it
+holds a SKILL.md; the name is that file's frontmatter `name:`
 ```
+
+**`home_dir` is a parameter, not `Path.home()`.** Two of the three namespaces live outside the
+repository, so a guard that reads the real `$HOME` internally cannot be driven by a fixture at
+all — and the two namespaces that would go untested are the two the repository cannot influence.
+This repository already settled the convention twice, in the module that walks this very tree:
+"A CLI entry point passes `Path.home()`; every test passes an explicit `tmp_path` fixture instead"
+`[ref: scripts/observability/report.py:686]`, and "Passed explicitly rather than read from
+`Path.home()` internally, matching `report.py`'s own convention of taking every path as an
+argument so the module stays pure and testable without a real session"
+`[ref: scripts/observability/sources.py:349]`. C4 follows it. `detect.py` and `manifest.py` take
+`repo_dir` for the same reason; `home_dir` is the same decision for the half of the problem that
+lives in the user's home.
+
+**The enumeration is `os.walk(followlinks=True)`, and the obvious alternatives are all wrong
+here.** Measured 2026-10-05 against the live user namespace, which contains one symlinked skill
+directory (`~/.claude/skills/obsidian-eval`, a link into a shared global-config checkout — this
+machine keeps shared Claude configuration as a symlink farm, so a symlinked skill is the house
+convention rather than an oddity):
+
+| enumeration | finds | verdict |
+|---|---|---|
+| `Path.rglob("SKILL.md")` | 18 of 19 | **misses the symlinked skill** |
+| `Path.glob("**/SKILL.md")` | 18 of 19 | same defect, same reason |
+| `Path.glob("**/SKILL.md", recurse_symlinks=True)` | 19 of 19 | correct, but **3.13+** — below ADR-2's 3.11 floor |
+| `os.walk(root, followlinks=True)` | 19 of 19 | correct on 3.11 |
+
+The third row is the trap worth naming, because it is the one that passes on the machine this was
+built on: the interpreter here is 3.14.3, where `recurse_symlinks=` exists and works. ADR-2 sets
+the floor at **3.11** `[ref: SDD/Architecture Decisions/ADR-2]`, and that keyword was only added in
+3.13, so a guard written with it is a `TypeError` on a supported interpreter — and the first two
+rows are a *silent* undercount on every interpreter. An undercount is the unsafe direction: a name
+the guard cannot see is a name it approves, and then a duplicate goes live
+`[ref: SDD/Constraints/CON-3]`.
+
+**Deduplicate directories by `(st_dev, st_ino)` while walking.** `followlinks=True` re-enters a
+directory reachable by more than one path, and the Kouzou-style symlink farm makes that likely
+rather than hypothetical. On a *self-referential* symlink it does not hang — measured, macOS stops
+it with `ELOOP` after 66 redundant directory visits — but 66 walks of one tree is still wrong, and
+the `(st_dev, st_ino)` set reduces the same fixture to **3** visits. Cheap, and it also stops two
+links to one real directory from reporting the same skill twice under two paths.
 
 - **The guard writes nothing, under any input**, and runs to completion across the whole selection
   before C5 writes anything `[ref: SDD/Cross-Cutting Concepts/System-Wide Patterns]`. Prove that
@@ -1456,7 +1529,10 @@ namespaces, in the order a refusal reports them:
 - **An unreadable or frontmatter-less `SKILL.md` is skipped, not fatal** — the same stance
   `detect.py` takes for an unparseable manifest, and for the same reason: a third party's broken
   file must not stop this repository's install. It is reported, because a skipped file is a name
-  the guard could not check.
+  the guard could not check. Four distinct inputs land here and each needs its own case: a file
+  that cannot be read, a file with no frontmatter block at all, a frontmatter block with no `name:`
+  key, and a `name:` whose value is empty. None of the four occurs naturally — all 253 real files
+  parse — so every one of them has to be constructed in a fixture.
 7. **Write.** C5 copies each approved pattern's directory to `<repo>/.claude/skills/tcs-<name>/`,
    rewrites the frontmatter `name:`, computes the hash of the installed `SKILL.md`, and writes the
    manifest atomically (`.tmp` then `mv`, following `install_files.sh`).
