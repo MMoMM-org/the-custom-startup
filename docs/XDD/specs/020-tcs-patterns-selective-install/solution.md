@@ -1779,10 +1779,46 @@ consumer repository need not share a filesystem (measured: the catalogue is `dev
 target is always on the target's filesystem, so the rename is always atomic. The copy into it may
 cross filesystems freely, because a copy is not a rename.
 
-Note the interaction with re-installs: `os.rename` onto an existing non-empty directory fails. A
-pattern that reaches the write path at all is by definition *not* `unchanged` (decision 2), so the
-existing directory is stale or locally edited and is removed before the rename — which is also the
-seam T3.4's divergence prompt plugs into.
+**6. `install()` is purely additive. It never removes or overwrites anything under
+`tcs-<name>/`.** Settled 2026-10-05, replacing an earlier sentence here which said a stale or
+locally edited directory "is removed before the rename". That would have put a silent `rm -rf` of a
+user's directory inside the one component whose other tests all prove it only adds, and it is not
+what the design says. ADR-4 places divergence detection, the diff **and** the asking all "on
+`update`" `[ref: SDD/Architecture Decisions/ADR-4]`, and every acceptance criterion for F8 is
+phrased "When the update runs" or "When the update would overwrite it"
+`[ref: PRD/F8]`. Nothing in either document puts an overwrite in `install`.
+
+So the three cases are closed, and none of them deletes:
+
+| state of `<repo>/.claude/skills/tcs-<name>/` | `install()` does |
+|---|---|
+| absent | writes it, and reports it under `installed` |
+| present, and current — manifest `version` matches the catalogue `VERSION` **and** manifest `sha256` matches the installed `SKILL.md` | nothing at all; reports it under `unchanged` |
+| present, and anything else — stale, locally edited, or both | **nothing at all**; reports it under `failed` with a reason naming `update` as the path |
+
+Three things follow, and all three are improvements:
+
+- **"`install()` never removes a file" is a testable invariant**, provable by a digest over the
+  installed tree before and after, in the same shape as C4's write-nothing proof but one step
+  weaker. Every test in T3.3 can carry it, which is far stronger than reasoning about a delete
+  being correct.
+- **The `os.rename`-onto-a-non-empty-directory problem dissolves.** The rename's target is absent in
+  the only case that reaches it, so the atomic-appearance mechanism needs no special case and no
+  removal step.
+- **T3.4's scope becomes crisp**: `update()` owns *every* present-but-not-current case, which is
+  exactly where the interactive prompt and the diff belong, and where the default-to-skip rule
+  protects local work `[ref: SDD/Runtime View/Error Handling]`.
+
+The one delete `install()` may perform is of **its own** leftover `.tcs-<name>.tmp/` from a crashed
+earlier run. That directory is this installer's, never the user's, and removing it is required for
+the next run to proceed. Worth distinguishing in the tests: a leftover temp directory is cleaned, a
+user's installed pattern never is.
+
+The user-visible consequence, which C3 renders: running `install` after the catalogue has moved on
+reports some patterns as needing `update` rather than silently refreshing them. That is the correct
+separation — F8 exists precisely because refreshing is a different operation with a different
+safety question — and C7's advisory already tells the user that `update` is the move
+`[ref: SDD/Runtime View/Primary Flow, step 9]`.
 
 **4. C5 reports; C3 offers.** `install.py` is a library with no interactive surface, and ADR-8's
 offer needs `AskUserQuestion`, which only a skill can raise. So C5 returns `InstallReport` with

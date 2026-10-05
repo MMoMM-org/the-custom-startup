@@ -554,6 +554,29 @@ writing is allowed, and an installer that is honest about what it did.
         `report.committed is False`, identity not falsiness, since the field is typed as always
         `False`.
 
+     g. **`install()` is purely additive — it never removes or overwrites anything under
+        `tcs-<name>/`.** Settled 2026-10-05 after the gate asked, in effect, when the delete I had
+        assumed necessary would hurt. The answer was: whenever the user had edited the pattern. ADR-4
+        puts divergence detection, the diff **and** the asking all on `update`, and every F8
+        criterion reads "When the update runs" / "When the update would overwrite it" — nothing
+        anywhere puts an overwrite in `install`
+        `[ref: SDD/Interface Specifications/.../"install() is purely additive"]`. The three cases:
+        absent → write; present and current → `unchanged`; present and anything else → `failed`
+        with a reason naming `update`. **None of them deletes.**
+
+        Three consequences for this task's tests. **"`install()` never removes a file" becomes an
+        invariant every test can carry**, proved by a digest over the installed tree before and
+        after — the same shape as C4's write-nothing proof, one step weaker, and far stronger than
+        reasoning that a delete is correct. The `os.rename`-onto-a-non-empty-directory case
+        **disappears**, because the only state that reaches the rename has an absent target, so
+        there is no removal step to test. And a test asserting that a re-install *replaces* a stale
+        directory would now be asserting the opposite of the contract — if you were about to write
+        one, write the refusal instead.
+
+        The single delete `install()` may perform is of **its own** leftover `.tcs-<name>.tmp/` from
+        a crashed run. Test that distinction explicitly: a leftover temp directory is cleaned, a
+        user's installed pattern never is.
+
      **Why the temp-directory assertion is a mechanism assertion, and why the outcome route was
      rejected.** The requirement is that a rename never crosses filesystems, and `tmp_path` puts the
      temp directory and the destination on one filesystem by construction — the same situation T3.1
