@@ -134,7 +134,7 @@ writing is allowed, and an installer that is honest about what it did.
   observable in the result. The tests say so in their docstrings, or someone will "simplify" them
   into result assertions that cannot fail.
 
-- [ ] **T3.2 The collision guard** `[activity: backend-api]`
+- [x] **T3.2 The collision guard** `[activity: backend-api]`
 
   1. Prime: Read the guard's place in the flow `[ref: SDD/Runtime View/Primary Flow]` step 6 and
      ADR-1's consequence note `[ref: SDD/Architecture Decisions/ADR-1]` — with the prefix the guard
@@ -380,8 +380,63 @@ writing is allowed, and an installer that is honest about what it did.
      improvement on T2.7 rather than a repeat of it — and it is the reason the claim is worth
      re-proving here instead of citing.
   5. Success:
-     - [ ] All three namespaces checked before any write `[ref: PRD/F5 1st-3rd]`
-     - [ ] Non-colliding patterns still install, no rescan `[ref: PRD/F5 4th; SDD/AC-10]`
+     - [x] All three namespaces checked before any write `[ref: PRD/F5 1st-3rd]`
+     - [x] Non-colliding patterns still install, no rescan `[ref: PRD/F5 4th; SDD/AC-10]`
+
+  **Delivered 2026-10-05.** `d5868bb` RED (25 cases, no implementation), `c81d3bc` the guard,
+  `a94afc4` the five fix-round items, `05c3736` the truncation test. Both review gates PASS.
+  `tests/test_patterns_guard.py` carries **46 tests**; the suite went 1052 → **1098**, bats
+  unchanged at **1187 ok / 0 not ok** across four legs.
+
+  **The coverage history is the part worth keeping, because the checkbox hides it — and T3.2's
+  history is sharper than T3.1's.** T3.1 at least failed its early mutation rounds. T3.2 *passed
+  everything* and was still wrong:
+
+  | stage | result |
+  |---|---|
+  | TDD gate | **four passes**, 13 specification defects fixed before any code |
+  | first implementation | 25 tests, green |
+  | 4f spec-compliance | **PASS** — all seven requirements verified against the control flow |
+  | 4g code quality | **PASS** — no must-fix correctness bug in `guard.py` |
+  | mutation round 1 (12 mutants) | **12 caught, 0 survived** |
+  | then: probing the instruments | **5 defects found** |
+  | after the fix round | 46 tests; 29 mutants total, 5 genuine survivors, all closed |
+
+  **What the five post-PASS defects were, and why none of the four gates saw them.** Every one was
+  found by *running something*, not by reading:
+
+  1. **`os.walk`'s default `onerror=None` swallows directory-listing failures.** A `chmod 000`
+     directory holding a `SKILL.md` made the guard **approve** that name with `skipped` empty, and
+     an unreadable namespace root lost a whole namespace the same way. This is the one failure C4
+     exists to prevent `[ref: SDD/Constraints/CON-3]`, and it sat behind a green suite and two PASS
+     reviews. `root.is_dir()` returns `True` on such a directory, so the missing-root clause did not
+     catch it either. An unreadable *file* was reported; an unreadable *directory* was invisible —
+     same hazard, opposite handling, and only the tested one was handled.
+  2. **The hand-rolled `name:` parser disagreed with YAML on 9 of 14 inputs**, 4 of which returned a
+     garbage name and thereby *freed the real one*. Now verified over **22 cases**: 11 agree with
+     PyYAML exactly, 11 skip-and-report, **0 return a name YAML disagrees with**.
+  3. **The write-nothing digest could not see a `mkdir`** — it hashed `filenames` and never
+     `dirnames`, so a nested empty directory left the hash unchanged. The line that would cause it
+     exists legitimately in `manifest.py` next door.
+  4. **An unterminated frontmatter block** was a second, untested path to the same skip.
+  5. **Two defensive `OSError` guards were unreachable dead code** — three mutations of them
+     survived all 25 tests.
+
+  **Two lessons about the instruments, not the code.** First, three times in this task a measuring
+  harness of mine was the faulty part: a mutation that injected an unused variable and dutifully
+  reported SURVIVED, and a divergence script whose predicate ("do the outcomes differ?") was wrong
+  for a parser now *specified* to skip rather than agree. Both produced alarming numbers that were
+  artefacts. Verify the instrument before believing the measurement.
+
+  Second, **a fixture that looks like it tests a gap may not reach it.** Two candidate fixtures for
+  the dead branch were proposed, constructed, and both disproved: CPython's `os.walk` wraps its
+  `entry.is_dir()` categorisation in `except OSError: is_dir = False`, so any stat failure
+  reclassifies the entry as a *file* before the dedup ever stats it. And the multi-unreadable-
+  directory fixture **I specified** would not have caught the truncation it was written for, because
+  `unreadable_dirs` is scoped per `_walk_skills()` call — one call per root — so one unreadable
+  directory per root leaves a single-element list where slicing is a no-op. The implementer found
+  that by running my design against the mutant instead of trusting my description, which is exactly
+  the right move and is why the committed fixture puts two of them under the *same* root.
 
 - [ ] **T3.3 The installer** `[activity: backend-api]`
 
