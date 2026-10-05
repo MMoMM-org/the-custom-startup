@@ -1315,15 +1315,46 @@ ADR-1.
 
 ```python
 def rename_in_frontmatter(text, new_name):
-    if not text.startswith("---\n"):
+    # Three corrections, 2026-10-05, each measured against the previous version
+    # of this sample before T3.3 was dispatched.
+    #
+    # (a) `text.index` raised a bare ValueError("substring not found") when the
+    #     frontmatter never closed. The Error Handling table promises
+    #     InstallError for a bad frontmatter block, so the sample contradicted
+    #     it. An unterminated block is its own input class -- C4 carries five
+    #     skip cases for exactly this reason.
+    # (b) `startswith("---\n")` refused a CRLF file with the message
+    #     "does not open with a frontmatter block", which is false: it does.
+    #     The catalogue is LF today and nothing enforces that.
+    # (c) worst: `^name:[ \t]*\S.*$` MATCHES `name: >-` and replaced that line
+    #     while leaving the block scalar's continuation line behind, producing
+    #     broken YAML in an installed skill -- silently, reported as success.
+    #     All 21 catalogue files are plain scalars today and no test pins it.
+    if not re.match(r"^---\r?\n", text):
         raise InstallError("SKILL.md does not open with a frontmatter block")
-    end = text.index("\n---", 4)
+    m = re.search(r"(?m)^---[ \t]*\r?$", text[4:])
+    if m is None:
+        raise InstallError("SKILL.md frontmatter block never closes")
+    end = 4 + m.start()
     head, body = text[:end], text[end:]
-    patched, count = re.subn(r"(?m)^name:[ \t]*\S.*$", "name: " + new_name, head, count=1)
-    if count != 1:
+    # Reject a `name:` this rewriter cannot safely replace, rather than
+    # replacing its first line and orphaning the rest.
+    value = re.search(r"(?m)^name:(.*)$", head)
+    if value is None or not value.group(1).strip():
+        raise InstallError("no `name:` line in frontmatter; refusing to install unprefixed")
+    if value.group(1).strip()[0] in ">|!&*%":
+        raise InstallError("`name:` is not a plain scalar; refusing to rewrite it")
+    patched, count = re.subn(r"(?m)^name:.*$", "name: " + new_name, head, count=1)
+    if count != 1:                      # unreachable given the checks above; kept as a tripwire
         raise InstallError("no `name:` line in frontmatter; refusing to install unprefixed")
     return patched + body
 ```
+
+**A test must pin that all 21 catalogue `name:` values are plain scalars**, because (c) above is
+only harmless while that holds and nothing currently enforces it.
+`test_all_21_frontmatter_blocks_still_parse_as_yaml` proves they *parse*, which a block scalar also
+does `[ref: tests/test_tcs_patterns_catalogue_relocation.py:141]`. The precondition the installer
+depends on is narrower than parseability and needs its own assertion.
 
 **The per-pattern CI rule (ADR-9).** The existing gate asks "did this bundle's marker change". For
 patterns that is too coarse: changing `ddd` while bumping `hexagonal`'s VERSION would pass the gate
@@ -1659,7 +1690,100 @@ links to one real directory from reporting the same skill twice under two paths.
    rewrites the frontmatter `name:`, computes the hash of the installed `SKILL.md`, and writes the
    manifest atomically (`.tmp` then `mv`, following `install_files.sh`).
 8. **Offer.** C5 prints what it wrote, states that it did not commit, and offers to commit
-   (ADR-8). Declining leaves the files in place.
+   (ADR-8). Declining leaves the files in place. The *offer* is C3's, not C5's — see the boundary
+   note under `[ref: SDD/Interface Specifications/Data model: the install plan and report (C5)]`.
+
+#### Data model: the install plan and report (C5)
+
+Added 2026-10-05, before T3.3 was dispatched, for the same reason the C4 namespace contract was:
+four things an implementer needs were undefined, and each has more than one defensible answer.
+
+```
+install(repo_dir, names, *, catalogue_dir, report_only=False) -> InstallReport
+
+InstallReport (frozen, named channels)
+    installed:  name -> (installed_as, version, sha256)   newly written
+    unchanged:  name -> (installed_as, version, sha256)   already current, not rewritten
+    failed:     name -> reason                            raised and skipped; earlier writes stand
+    committed:  always False
+```
+
+**1. C5 takes names, never a `GuardReport`.** C4 and C5 are deliberately separate so a refusal is
+testable without a write `[ref: SDD/Building Block View, F5 row]`, and that separation is defeated
+if C5 imports the guard. The caller (C3) runs `check()`, takes `GuardReport.approved`, and passes
+those names here. So `install()` **assumes every name it is given has already been cleared** and
+does not re-check the namespaces — no rescan, which is the second half of AC-10
+`[ref: SDD/Acceptance Criteria/AC-10]`. The consequence worth stating: AC-10 is satisfied by C4 and
+C5 *together* and by neither alone — C4 produces the partition, C5 installs exactly the approved
+half — so T3.2 owned the partition and T3.3 owns "the others still install".
+
+**2. Idempotency is defined on content, and implemented by a hash comparison.** "A second identical
+install is a no-op" `[ref: SDD/Quality Requirements]` must not be read as "no bytes are written" —
+re-copying an identical file writes bytes and changes an mtime while leaving content identical, and
+a test that asserts on mtimes would fail a correct implementation while a content test passes a
+wrong one. The requirement is therefore: **after a second install, every installed file and the
+manifest are byte-identical to after the first**, proven by a digest over the installed tree *and*
+the manifest, never by mtime. T3.1 already learned this distinction the other way round — an mtime
+check cannot see a rewrite with identical content, which is why its write-nothing proof is a content
+digest `[ref: plan/phase-2.md, T2.7]`.
+
+The implementation that satisfies it, and the one the Error Handling table means by "idempotent by
+name and hash": for each requested name, if the manifest already carries an entry whose `version`
+equals the catalogue's `VERSION` **and** whose `sha256` equals the hash of the `SKILL.md` currently
+installed at `tcs-<name>/`, that pattern is **skipped entirely** — no copy, no rename, no manifest
+rewrite — and reported under `unchanged`. Anything else is a write. Comparing the installed file's
+hash rather than the catalogue's is the point: it detects a local edit, which is what makes T3.4's
+divergence path possible `[ref: SDD/Architecture Decisions/ADR-4]`.
+
+**3. Each pattern appears atomically, and the manifest is upserted after the directory, per
+pattern.** Two sub-decisions, both forced by "a write failing mid-selection leaves earlier patterns
+in place with the manifest recording exactly what succeeded"
+`[ref: SDD/Runtime View/Error Handling]`:
+
+- **Per pattern, not per run.** A single manifest write at the end of the run would record *nothing*
+  when the run fails midway, which is the opposite of the requirement. So C6's `upsert` is called
+  once per successfully written pattern, each call being its own atomic whole-file rewrite
+  `[ref: SDD/Interface Specifications/Data model: the manifest (C6)]`. N patterns means N manifest
+  rewrites; that is the cost of the requirement, not an inefficiency to optimise away.
+- **Directory first, then manifest.** A crash between the two leaves one of two states, and they are
+  not equally bad. Files present with no manifest entry: C7 stays silent about them and a re-install
+  simply writes them again — recoverable and harmless. A manifest entry with no files: C7 reports a
+  pattern as installed that is not there, and the record lies about the tree. So the directory lands
+  first and the manifest records it second.
+
+**The directory itself must appear atomically**, because a half-copied `tcs-<name>/` is a third
+state the requirement does not allow for. Copy the pattern into a temp directory **inside the
+destination** — `<repo>/.claude/skills/.tcs-<name>.tmp/` — rewrite the frontmatter there, then
+`os.rename` it into place. Inside the destination is not a style preference: the catalogue and a
+consumer repository need not share a filesystem (measured: the catalogue is `dev=16777245` here and
+`$TMPDIR` is `dev=16777234`), and a rename across filesystems raises `Cross-device link`
+`[ref: SDD/Risks and Technical Debt/Implementation Gotchas]`. A temp directory beside the final
+target is always on the target's filesystem, so the rename is always atomic. The copy into it may
+cross filesystems freely, because a copy is not a rename.
+
+Note the interaction with re-installs: `os.rename` onto an existing non-empty directory fails. A
+pattern that reaches the write path at all is by definition *not* `unchanged` (decision 2), so the
+existing directory is stale or locally edited and is removed before the rename — which is also the
+seam T3.4's divergence prompt plugs into.
+
+**4. C5 reports; C3 offers.** `install.py` is a library with no interactive surface, and ADR-8's
+offer needs `AskUserQuestion`, which only a skill can raise. So C5 returns `InstallReport` with
+`committed=False` always, and stating "nothing was committed" plus making the offer is C3's
+rendering of that report `[ref: SDD/Architecture Decisions/ADR-8]`. T3.3's success criterion
+"Report lists writes and states no commit was made" is therefore satisfied by the report *carrying*
+every write and `committed=False`; no test in T3.3 should look for an interactive prompt, and no
+`AskUserQuestion` belongs in `install.py`.
+
+**5. The catalogue root is derived from `__file__`, never from `CLAUDE_PLUGIN_ROOT`.** Measured
+2026-10-05: `CLAUDE_PLUGIN_ROOT` is `None` in a Bash-tool subprocess, and the skill runs this code
+by invoking `python3`, so the variable that exists for harness-spawned plugin code is absent exactly
+where this module runs `[ref: SDD/Constraints]`. From
+`plugins/tcs-patterns/skills/patterns-setup/lib/install.py`, `Path(__file__).resolve().parents[3]`
+is the plugin root and `parents[3] / "templates" / "patterns"` is the catalogue — verified to resolve
+correctly. `catalogue_dir` is nevertheless a **parameter** with that derivation as its default, for
+the same reason `home_dir` is a parameter on C4: a test must be able to point it at a fixture, and
+the two namespaces a test cannot reach are the ones that go unverified
+`[ref: scripts/observability/report.py:686]`.
 9. **Next session.** The installed patterns appear in the listing and route automatically; C7 finds
    the manifest current and says nothing.
 

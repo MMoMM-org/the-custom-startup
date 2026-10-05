@@ -454,6 +454,65 @@ writing is allowed, and an installer that is honest about what it did.
      no change (idempotency); a write failing mid-selection leaves earlier patterns in place with
      the manifest recording exactly what succeeded; the final report lists every write and states
      that nothing was committed.
+     **Six clarifications, 2026-10-05, settled before dispatch.** Four interfaces this step
+     depends on were undefined, and the SDD's own rename sample was wrong in three ways. All of it
+     is now in `[ref: SDD/Interface Specifications/Data model: the install plan and report (C5)]`,
+     which is what to brief from — read it before the task text above, because it changes what two
+     of these test clauses mean.
+
+     1. **`install()` takes names, not a `GuardReport`.** C4 and C5 are separate precisely so a
+        refusal is testable without a write, and importing the guard into the installer defeats
+        that. C3 runs `check()` and passes `GuardReport.approved` here, so `install()` assumes its
+        names are already cleared and never rescans — the second half of AC-10. **AC-10 is satisfied
+        by C4 and C5 together and by neither alone**: T3.2 owned the partition, T3.3 owns "the
+        others still install".
+     2. **"A second identical install writes no change" means CONTENT, proven by a digest.** Not
+        mtimes: re-copying an identical file changes an mtime while leaving content identical, so an
+        mtime assertion fails a correct implementation and a content assertion passes a wrong one.
+        Assert that every installed file *and the manifest* are byte-identical after the second run.
+        The implementation that earns it: skip a pattern entirely — no copy, no rename, no manifest
+        rewrite — when the manifest's `version` matches the catalogue `VERSION` **and** its `sha256`
+        matches the hash of the `SKILL.md` currently installed. Hashing the *installed* file, not
+        the catalogue's, is what detects a local edit and is the seam T3.4 plugs into.
+     3. **The manifest is upserted per pattern, after that pattern's directory lands.** Per-run
+        would record nothing when the run fails midway, which is the opposite of the requirement.
+        Directory-then-manifest, not the reverse: files with no manifest entry are recoverable and
+        a re-install just rewrites them, while a manifest entry with no files makes C7 report a
+        pattern that is not there.
+     4. **Each pattern appears atomically**: copy into `<repo>/.claude/skills/.tcs-<name>.tmp/`,
+        rewrite the frontmatter there, then `os.rename` into place. A half-copied `tcs-<name>/` is a
+        state the mid-selection requirement does not allow for. The temp directory must be *inside
+        the destination* because a consumer repository need not share a filesystem with the
+        catalogue — measured, the catalogue is `dev=16777245` here and `$TMPDIR` is `dev=16777234` —
+        and a rename across filesystems raises `Cross-device link`. A copy may cross freely; a
+        rename may not.
+     5. **C5 reports, C3 offers.** `install.py` is a library with no interactive surface; ADR-8's
+        offer needs `AskUserQuestion`, which only a skill can raise. `InstallReport` carries every
+        write plus `committed=False`, and that *is* the success criterion — **no test here should
+        look for a prompt, and no `AskUserQuestion` belongs in `install.py`**.
+     6. **`catalogue_dir` is a parameter defaulting to `Path(__file__).resolve().parents[3] /
+        "templates" / "patterns"`.** Measured: `CLAUDE_PLUGIN_ROOT` is `None` in a Bash-tool
+        subprocess, and the skill runs this module by invoking `python3`, so the variable that
+        exists for harness-spawned plugin code is absent exactly where this runs. It is a parameter
+        for the same reason `home_dir` is one on C4: a test that cannot point it at a fixture cannot
+        test it.
+
+     **Two more tests this task owns, neither obvious from the clauses above.**
+
+     - **All 21 catalogue `name:` values are plain scalars.** The rename refuses a block scalar,
+       tag or anchor rather than rewriting its first line and orphaning the rest — but that refusal
+       is only harmless while the catalogue contains none.
+       `test_all_21_frontmatter_blocks_still_parse_as_yaml` proves they *parse*, which a block
+       scalar also does `[ref: tests/test_tcs_patterns_catalogue_relocation.py:141]`. The
+       precondition the installer depends on is narrower than parseability and needs its own
+       assertion.
+     - **The rename leaves everything below the frontmatter byte-identical**, including a
+       `name:`-shaped line in the body. The SDD's sample was corrected on 2026-10-05 and the
+       corrected version is verified against 15 inputs — the six it previously mishandled now raise
+       `InstallError`: an unterminated block (which used to raise a bare `ValueError`), a CRLF file
+       (refused with a message asserting the opposite of the truth), and a block-scalar, tag or
+       anchor `name:` (which used to "succeed" while producing broken YAML in an installed skill).
+
   3. Implement: `lib/install.py` — copy, frontmatter rename, hash of the installed `SKILL.md`,
      manifest upsert, report. Temp files in the destination directory.
   4. Validate: `python3 -m pytest -q`; run an install into a throwaway git repository fixture and
