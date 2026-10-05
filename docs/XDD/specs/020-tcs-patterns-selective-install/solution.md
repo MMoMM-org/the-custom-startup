@@ -440,6 +440,29 @@ upsert(name, …)  -> returns a new Manifest; prior entries byte-identical
   catalogue `VERSION`, with no pattern file read `[ref: SDD/Acceptance Criteria/AC-17; PRD/F6
   3rd]`. That is what makes the `sha256` field's job divergence detection only, and not currency.
 
+**Writing the TOML is hand-serialised, and that is forced rather than chosen — settled
+2026-10-05.** `tomllib` is a *reader*: it has no `dumps` and no `dump` (measured), and neither
+`tomli_w` nor `toml` is importable here. Nothing in this repository writes TOML today —
+`scripts/observability/sources.py` only reads it — so C6 is the first writer and the question had
+no precedent to inherit.
+
+A third-party serialiser is not available to it. A plugin ships as files into whatever Python the
+user's machine provides, with no install step, so a runtime import that is not stdlib is a
+runtime failure on someone else's computer. Measured across every `.py` under `plugins/`: every
+top-level runtime import is stdlib or a local sibling module, with no third-party package
+anywhere (the two `pydantic` hits are inside `doc-product` **test fixtures** and are never
+executed as plugin code). Vendoring a serialiser would work and is rejected as disproportionate
+to a file with one scalar and three keys per table.
+
+**The hazard this creates, and the guard for it.** Hand-serialising TOML means getting string
+quoting right, and the honest way to bound that is to keep the value space narrow and **refuse**
+what cannot be represented rather than escaping cleverly: pattern names come from the catalogue,
+`installed_as` is a `tcs-`-prefixed pattern name, `version` is a catalogue `VERSION`, `sha256` is
+a hex digest. A value outside those shapes is a bug upstream, not a quoting problem, so the writer
+raises on it. The round-trip assertion T3.1 already requires is the standing guard: write, then
+`tomllib.loads` the bytes back, then compare — which fails on a mis-quoted value without anyone
+having to enumerate the escapes.
+
 #### Data model: detection report (C2 → C3)
 
 `detect.py` returns this and writes nothing. It is the whole contract between scanning and asking,
