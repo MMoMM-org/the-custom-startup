@@ -122,6 +122,17 @@ def _digest_tree(root: Path) -> str:
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         dirnames.sort()
         rel_dir = os.path.relpath(dirpath, root)
+        # The directory's own existence is part of the digest, not only its
+        # files -- `os.walk` yields a tuple for every directory, including
+        # an empty one, so a bare `mkdir()` with nothing inside it still
+        # changes `rel_dir` and therefore the hash. Found missing at T3.2's
+        # fix round: a mutant that only created a new empty directory
+        # survived all 25 tests while a file-write mutant was caught
+        # `[ref: plan/phase-3.md T3.2, "The write-nothing digest cannot see
+        # a mkdir"]`.
+        h.update(b"DIR:")
+        h.update(Path(rel_dir).as_posix().encode())
+        h.update(b"\n")
         for name in sorted(filenames):
             full = Path(dirpath) / name
             rel = (Path(rel_dir) / name).as_posix()
@@ -464,17 +475,23 @@ def test_self_referential_symlink_returns_normally_skipped_once(tmp_path: Path) 
     assert len(report.skipped) == 1
 
 
-# --- the four malformed-input cases, and their pairwise-distinct reasons --
+# --- the five malformed-input cases, and their pairwise-distinct reasons --
 
 
-def test_four_malformed_skill_md_cases_have_distinguishable_reasons(tmp_path: Path) -> None:
-    """None of the four occurs naturally -- all 259 real files parse
-    `[ref: solution.md, fact 1]` -- so every one is constructed here. Asserts
-    a PAIRWISE-DISTINCT set of reasons, not four separate non-empty checks:
-    a mutation that collapses two of the four into one generic string
-    survives every isolated non-empty check while failing only this
-    comparison `[ref: plan/phase-3.md T3.2, "need a pairwise-distinct
-    assertion"]`."""
+def test_five_malformed_skill_md_cases_yield_four_distinguishable_reasons(tmp_path: Path) -> None:
+    """None of the five occurs naturally -- all 259 real files parse
+    `[ref: solution.md, fact 1]` -- so every one is constructed here. Five
+    INPUTS, not five reasons: an unterminated frontmatter block (opens with
+    `---`, never closes) is a second, untested path to the same skip as a
+    file with no frontmatter block at all, so `len(skipped) == 5` alongside
+    `len(reasons) == 4` is the correct assertion -- five distinct reasons
+    would be wrong `[ref: plan/phase-3.md T3.2 fix round, item 4]`.
+
+    The remaining assertion is still PAIRWISE-DISTINCT over those four
+    reasons, not four separate non-empty checks: a mutation that collapses
+    two of the four into one generic string survives every isolated
+    non-empty check while failing only this comparison
+    `[ref: plan/phase-3.md T3.2, "need a pairwise-distinct assertion"]`."""
     guard = _load_guard()
     repo = tmp_path / "repo"
     home = tmp_path / "home"
@@ -485,6 +502,7 @@ def test_four_malformed_skill_md_cases_have_distinguishable_reasons(tmp_path: Pa
     os.chmod(unreadable_path, 0o000)
 
     _malformed(skills_root, "no-frontmatter", "just a body, no frontmatter delimiters\n")
+    _malformed(skills_root, "unterminated-frontmatter", "---\nname: never-closed\ndescription: oops\n")
     _malformed(skills_root, "no-name-key", "---\ndescription: missing the name key\n---\n\nBody.\n")
     _malformed(skills_root, "empty-name", '---\nname: ""\n---\n\nBody.\n')
 
@@ -496,9 +514,191 @@ def test_four_malformed_skill_md_cases_have_distinguishable_reasons(tmp_path: Pa
         os.chmod(unreadable_path, 0o644)
 
     assert before == after, "the guard must write nothing"
-    assert len(report.skipped) == 4
+    assert len(report.skipped) == 5
     reasons = {reason for _path, reason in report.skipped}
-    assert len(reasons) == 4, f"reasons must be pairwise distinct, got {reasons!r}"
+    assert len(reasons) == 4, f"reasons must be pairwise distinct across the 4 cases, got {reasons!r}"
+
+
+# --- an unreadable directory is skipped and reported too (fix round item 1)
+
+
+def test_unreadable_intermediate_directory_is_skipped_and_reported(tmp_path: Path) -> None:
+    """`os.walk`'s default `onerror=None` swallows a directory-listing
+    failure outright: a `chmod 000` directory holding a `SKILL.md` would
+    otherwise yield NO entries and NO error at all -- `skipped` stays
+    empty and the caller has no way to know the namespace was only
+    partly checked. Measured `[ref: plan/phase-3.md T3.2 fix round, item
+    1]`. The guard cannot refuse a name it was never able to read -- a
+    directory it cannot list might hold anything, or nothing -- so the
+    fix is not that `hidden` moves out of `approved` (there is nothing to
+    refuse it WITH); the fix is that the omission becomes VISIBLE through
+    `skipped`, which an `onerror=None` walk cannot produce at all."""
+    guard = _load_guard()
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    skills_root = home / ".claude" / "skills"
+
+    blocked = skills_root / "blocked"
+    hidden_dir = _skill(blocked, "hidden", name="hidden")
+    os.chmod(blocked, 0o000)
+
+    try:
+        before = _digest_pair(repo, home)
+        report = guard.check(repo, {"hidden"}, home_dir=home)
+        after = _digest_pair(repo, home)
+    finally:
+        os.chmod(blocked, 0o755)
+
+    assert before == after, "the guard must write nothing"
+    assert len(report.skipped) == 1, "the unlistable directory must be reported, not silently swallowed"
+    assert report.skipped[0][1].startswith("directory unreadable")
+    # Housekeeping only: confirm the fixture actually built what this test
+    # claims (a real SKILL.md exists, just unreachable while blocked).
+    assert hidden_dir.name == "hidden"
+
+
+def test_unreadable_namespace_root_is_skipped_and_reported(tmp_path: Path) -> None:
+    """The same failure at the ROOT itself: `root.is_dir()` is still `True`
+    on a `chmod 000` directory, so the missing-root clause does not catch
+    it, and under the OLD `onerror=None` default the whole namespace would
+    vanish with no trace at all -- `skipped` staying empty indistinguishable
+    from an empty, healthy namespace `[ref: plan/phase-3.md T3.2 fix round,
+    item 1]`."""
+    guard = _load_guard()
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    skills_root = home / ".claude" / "skills"
+    _skill(skills_root, "hidden-root", name="hidden-root")
+    os.chmod(skills_root, 0o000)
+
+    try:
+        report = guard.check(repo, {"hidden-root"}, home_dir=home)
+    finally:
+        os.chmod(skills_root, 0o755)
+
+    assert len(report.skipped) == 1, "the unlistable root must be reported, not silently treated as empty"
+    assert report.skipped[0][1].startswith("directory unreadable")
+
+
+# --- write-nothing digest sees directory shape, not just files (item 3) ----
+
+
+def test_digest_helper_detects_a_bare_mkdir(tmp_path: Path) -> None:
+    """Regression guard on this file's own `_digest_tree` helper: a mutant
+    that injects an empty `mkdir()` into `check()` survived all 25 tests
+    before this helper hashed directory shape, while a file-write mutant
+    was already caught `[ref: plan/phase-3.md T3.2 fix round, item 3]`.
+    Asserted directly here so a future edit to `_digest_tree` cannot
+    silently regress the property every other write-nothing assertion in
+    this file relies on."""
+    root = tmp_path / "tree"
+    root.mkdir()
+    (root / "existing.txt").write_text("content", encoding="utf-8")
+
+    before = _digest_tree(root)
+    (root / "newly-created-empty-dir").mkdir()
+    after = _digest_tree(root)
+
+    assert before != after, "_digest_tree must see a bare mkdir with no files inside it"
+
+
+# --- "its frontmatter name:" means what YAML makes of it (fix round item 2)
+
+
+def _frontmatter_skill(parent: Path, dirname: str, *, name_line: str, extra: str = "") -> Path:
+    """Build `parent/dirname/SKILL.md` with a raw, literal `name_line` (and
+    optional extra lines) inside the frontmatter block -- unlike `_skill`,
+    which always writes a clean `name: <name>` line, this lets a test
+    construct the exact YAML edge cases the differential test needs."""
+    d = parent / dirname
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "SKILL.md").write_text(f"---\n{name_line}\n{extra}---\n\nBody.\n", encoding="utf-8")
+    return d
+
+
+# Each case is the literal content of the frontmatter block's `name:`
+# line(s) only -- built into a full SKILL.md and run through both
+# `guard._skill_name` and real YAML (`yaml.safe_load`) over the SAME text,
+# so the comparison has no shared ancestry with the code under test
+# `[ref: solution.md, "A differential test is also the strongest shape
+# available"]`. The invariant every case must satisfy: the guard's value
+# either agrees with YAML's exactly, or the guard skipped (never a wrong
+# value) -- plus a few cases are pinned to a specific side to prove the
+# parser isn't trivially skipping everything.
+_YAML_DIFFERENTIAL_CASES = {
+    "plain": "name: ddd",
+    "plain_trailing_comment": "name: ddd # comment",
+    "double_quoted": 'name: "ddd"',
+    "single_quoted": "name: 'ddd'",
+    "single_quoted_escaped_quote": "name: 'd''dd'",
+    "double_quoted_escaped_backslash": 'name: "d\\\\dd"',
+    "empty_double_quoted": 'name: ""',
+    "bare_no_value": "name:",
+    "comment_only_value": "name: # just a comment",
+    "block_scalar_literal": "name: |\n  ddd",
+    "block_scalar_folded_strip": "name: >-\n  ddd",
+    "tag": "name: !!str ddd",
+    "anchor": "name: &anchor ddd",
+    "duplicate_name_key": "name: ddd\nother: 1\nname: eee",
+}
+
+
+@pytest.mark.parametrize("case_name", sorted(_YAML_DIFFERENTIAL_CASES), ids=sorted(_YAML_DIFFERENTIAL_CASES))
+def test_name_parser_agrees_with_yaml_or_skips(tmp_path: Path, case_name: str) -> None:
+    """For every case: the guard's parsed value either equals what a real
+    YAML parser yields for the SAME frontmatter text, or the guard skipped
+    it -- never a value that disagrees with YAML, which is the exact bug
+    class this test exists to close (9 of 14 measured cases disagreed, 4
+    of those approving a name that was genuinely taken)
+    `[ref: plan/phase-3.md T3.2 fix round, item 2]`."""
+    yaml = pytest.importorskip("yaml")
+    guard = _load_guard()
+    name_block = _YAML_DIFFERENTIAL_CASES[case_name]
+
+    skill_md = (_frontmatter_skill(tmp_path, f"case-{case_name}", name_line=name_block)) / "SKILL.md"
+
+    frontmatter_text = skill_md.read_text(encoding="utf-8")
+    end = frontmatter_text.index("\n---", 4)
+    parsed = yaml.safe_load(frontmatter_text[4:end]) or {}
+    true_name = parsed.get("name") if isinstance(parsed, dict) else None
+    if not isinstance(true_name, str) or not true_name:
+        true_name = None  # not a usable name either way -- null, non-string, or empty
+
+    value, reason = guard._skill_name(skill_md)
+
+    assert (value == true_name) or (value is None and reason is not None), (
+        f"case {case_name!r}: guard returned {value!r} (reason={reason!r}), "
+        f"YAML would register {true_name!r} -- must match exactly or skip"
+    )
+
+
+def test_plain_scalar_name_is_not_skipped() -> None:
+    """Closes the trivial "always skip" implementation that would vacuously
+    satisfy `test_name_parser_agrees_with_yaml_or_skips` above: a plain,
+    unquoted `name:` line must actually produce a value, not a skip."""
+    guard = _load_guard()
+    value, ok = guard._parse_name_scalar("ddd")
+    assert value == "ddd"
+    assert ok is True
+
+
+def test_trailing_comment_is_stripped_from_plain_scalar() -> None:
+    """The single most concrete regression from the fix round: the old
+    regex captured `ddd # comment` as the name; YAML -- and now this
+    parser -- yield `ddd`."""
+    guard = _load_guard()
+    value, ok = guard._parse_name_scalar("ddd # comment")
+    assert ok is True
+    assert value == "ddd"
+
+
+def test_duplicate_name_key_is_skipped_not_guessed(tmp_path: Path) -> None:
+    guard = _load_guard()
+    skill_md = (
+        _frontmatter_skill(tmp_path, "dup", name_line="name: ddd", extra="other: 1\nname: eee\n") / "SKILL.md"
+    )
+    _name, reason = guard._skill_name(skill_md)
+    assert reason == "duplicate name: key"
 
 
 # --- all four namespace roots absent, parametrised --------------------------
