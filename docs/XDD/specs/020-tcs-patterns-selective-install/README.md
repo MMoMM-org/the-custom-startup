@@ -15,7 +15,7 @@
 |----------|--------|-------|
 | requirements.md | completed | 36 acceptance criteria across 10 Must features, 0 clarification markers |
 | solution.md | completed | 10 ADRs confirmed, 18 acceptance criteria, 0 markers |
-| plan/ | completed | 5 phases, 25 tasks, 139 spec references, all resolvable |
+| plan/ | completed | 5 phases, **26** tasks, 139 spec references, all resolvable (T3.2b added 2026-10-05: C4 refused the patterns this tool had itself installed, so install()'s `unchanged` path was unreachable) |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 

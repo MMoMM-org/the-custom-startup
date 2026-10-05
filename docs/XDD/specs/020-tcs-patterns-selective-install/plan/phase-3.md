@@ -438,6 +438,35 @@ writing is allowed, and an installer that is honest about what it did.
   that by running my design against the mutant instead of trusting my description, which is exactly
   the right move and is why the committed fixture puts two of them under the *same* root.
 
+- [ ] **T3.2b The guard must not refuse our own install** `[activity: backend-api]`
+
+  Added 2026-10-05, after T3.2 closed. **T3.2 is not reopened** — it shipped what it was specified
+  to do, and the specification was wrong `[ref: SDD/Interface Specifications/Data model: the three
+  namespaces (C4), "own_installed is required"]`. Marcus's call on both the fix and the bookkeeping.
+
+  1. Prime: Read the `own_installed` rule in the C4 contract and the three boundaries on it — repo
+     namespace only, required with no default, empty set when the manifest cannot be read. Read
+     `lib/manifest.py`'s `Manifest` to see where `installed_as` comes from, and
+     `tests/test_patterns_guard.py` for the conventions to extend.
+  2. Test: With a pattern installed as `tcs-ddd` in the repository namespace and the manifest
+     recording it, `check(..., own_installed={"tcs-ddd"})` **approves** `tcs-ddd` rather than
+     refusing it — the test that would have caught the defect, and it must fail before the change.
+     Then: the same name found in the **user** namespace is still refused even when it is in
+     `own_installed`; the same for a **plugin** namespace hit; a name in `own_installed` that is not
+     installed anywhere is simply approved; omitting `own_installed` entirely raises `TypeError`
+     rather than defaulting; and an empty `own_installed` reproduces the old behaviour exactly, which
+     is the safe direction when a caller cannot read the manifest.
+  3. Implement: the `own_installed` keyword on `check()`, suppressing a **repo-namespace** match
+     only. Nothing else in C4 changes; the enumeration, the dedup and the skip channel are untouched.
+  4. Validate: `python3 -m pytest tests/test_patterns_guard.py -q` then the whole suite; report per
+     leg. Mutate at minimum: suppressing user-namespace or plugin-namespace matches too (must fail
+     the two boundary tests), and giving `own_installed` a `frozenset()` default (must fail the
+     `TypeError` test).
+  5. Success:
+     - [ ] A pattern this tool installed is not refused on a second run `[ref: SDD/Quality Requirements; PRD/F4]`
+     - [ ] A `tcs-` name owned by another namespace is still refused `[ref: PRD/F5 1st-3rd]`
+     - [ ] `own_installed` cannot be forgotten silently `[ref: SDD/.../"Required, with no default"]`
+
 - [ ] **T3.3 The installer** `[activity: backend-api]`
 
   1. Prime: Read the rename example and its refusal
@@ -553,6 +582,23 @@ writing is allowed, and an installer that is honest about what it did.
         snapshot of the code under test, which is the failure that got past T3.1's gate. Also assert
         `report.committed is False`, identity not falsiness, since the field is typed as always
         `False`.
+
+     h. **The directory-then-manifest ORDER needs its own test, with a narrow monkeypatch.**
+        Found by T3.3's gate on its second pass, and it is a mutation nothing else catches: every
+        failure path otherwise tested fails during the **frontmatter rewrite**, which happens
+        *before* the final `os.rename`, so neither the directory nor the manifest entry is ever
+        written and the order between them is invisible. A mutation calling `manifest.upsert()`
+        *before* renaming the pattern into place would pass every other test in this task —
+        success-path tests cannot see the order because both artefacts end up present either way.
+
+        The test: monkeypatch `manifest.upsert` to raise for one target name, call `install()` for
+        it, then assert **(1)** `tcs-<name>/` exists on disk with its full correct content,
+        **(2)** the name is **not** in the manifest, and **(3)** the name lands in `report.failed`.
+        A monkeypatch is required and is appropriate here — a fixture alone cannot reach the seam
+        between two successful steps, the directory-write path still runs for real, and T3.1 set the
+        precedent for exactly this shape `[ref: tests/test_patterns_install.py,
+        test_write_creates_its_temp_file_beside_the_manifest]`. That is a targeted patch of one
+        collaborator, not the kind of over-mocking that proves nothing.
 
      g. **`install()` is purely additive — it never removes or overwrites anything under
         `tcs-<name>/`.** Settled 2026-10-05 after the gate asked, in effect, when the delete I had

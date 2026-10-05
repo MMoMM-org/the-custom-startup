@@ -1512,7 +1512,7 @@ facts above are recorded anyway, because the next person to consider filtering b
 needs to find the reason it was rejected rather than rediscover the merge rule.
 
 ```
-check(repo_dir, intended_names, *, home_dir) -> GuardReport
+check(repo_dir, intended_names, *, home_dir, own_installed) -> GuardReport
 
 GuardReport (frozen, named channels -- not a positional tuple)
     approved: the names no namespace already owns
@@ -1565,6 +1565,54 @@ measured, zero roots, because the cache has no literal `plugins` segment. A guar
 enumerated no plugin skills would still pass every test that only checks the repo and user
 namespaces, which is why T3.2 requires the two plugin roots to be exercised separately and at their
 documented depths.
+
+**`own_installed` is required, and it exists because this guard otherwise refuses our own
+earlier work.** Found 2026-10-05, after T3.2 shipped, while settling C5's contract. Step 6 of the
+Primary Flow says C4 checks every intended name **`tcs-<pattern>`** — and an installed pattern
+registers in the repository namespace under exactly that name. Measured against the built C4, with
+one pattern already installed as `tcs-ddd`:
+
+```
+check(repo, {"tcs-ddd", "tcs-hexagonal"}, ...)
+  -> approved = ['tcs-hexagonal']
+     refused  = {'tcs-ddd': 'repo'}
+```
+
+The guard refuses the pattern *this tool installed on the previous run*. The consequences compound:
+`install()` never receives an already-installed name, so C5's `unchanged` channel is unreachable
+through C3's flow, and **"a second identical install is a no-op" — a T3.3 success criterion and a
+Quality Requirement both — cannot happen.** The obvious escape is worse: pass bare catalogue names
+instead and nothing ever collides, which means ADR-1's prefix is never checked against anything and
+the guard stops doing the one job it exists for.
+
+The root cause is that this section specified the wrong question. "Is this name taken?" is not what
+C4 needs to answer; **"would installing here create a duplicate nobody can resolve?"** is
+`[ref: SDD/Constraints/CON-3]`. Re-installing a name we already own creates no duplicate — it
+replaces or updates one entry — so it is not a collision, and the manifest is precisely the record
+that tells the two apart.
+
+**The rule.** `own_installed` carries the `installed_as` values the manifest records for this
+repository `[ref: SDD/Interface Specifications/Data model: the manifest (C6)]`. A hit in the
+**repository** namespace whose registered name is in `own_installed` is **not** a refusal: it is
+reported neither in `refused` nor as an obstacle, and passes through to `approved`, where C5 decides
+between `unchanged` and `failed` on version and hash. Three boundaries on that:
+
+- **Only the repository namespace.** A `tcs-<name>` found in the user's global skills or in any
+  plugin is genuinely somebody else's and is always a collision, `own_installed` or not. We only
+  ever install into the repository, so a match anywhere else cannot be ours.
+- **Required, with no default.** A default of `frozenset()` would silently restore exactly the bug
+  above the first time a caller forgot to pass it. Required means forgetting is a `TypeError` at
+  the call site, which is the loudest possible failure and the cheapest to fix. Same reasoning as
+  `home_dir` being a parameter rather than an ambient read.
+- **An unreadable manifest means nothing is ours.** The caller that cannot parse the manifest passes
+  an empty set, so every installed pattern is refused. That is the over-inclusive direction and
+  therefore the safe one by this section's own decision — a declined proposal costs one message, a
+  duplicate costs a silently wrong skill body.
+
+Note the benign case this also handles: if the manifest claims we installed `tcs-ddd` but the skill
+now sitting there is somebody's replacement, C4 lets it through and C5 finds the hash does not match
+and reports `failed`. The user is told, and nothing is overwritten
+`[ref: SDD/Interface Specifications/.../"install() is purely additive"]`.
 
 **`home_dir` is a parameter, not `Path.home()`.** Two of the three namespaces live outside the
 repository, so a guard that reads the real `$HOME` internally cannot be driven by a fixture at
