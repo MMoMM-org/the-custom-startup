@@ -48,11 +48,19 @@ version: "1.0"
 
 | Phase | Name | Status | Tasks | File |
 |-------|------|--------|-------|------|
-| 1 | The catalogue and its maintainer contract | IN_PROGRESS | 5 | [phase-1.md](phase-1.md) |
-| 2 | Detection, fixtures before rules | IN_PROGRESS | 6 | [phase-2.md](phase-2.md) |
-| 3 | The install path | IN_PROGRESS | 5 | [phase-3.md](phase-3.md) |
-| 4 | Drift and the advisory | IN_PROGRESS | 4 | [phase-4.md](phase-4.md) |
-| 5 | The skills, the docs, end to end | IN_PROGRESS | 5 | [phase-5.md](phase-5.md) |
+| 1 | The catalogue and its maintainer contract | COMPLETED | 5 (5 done) | [phase-1.md](phase-1.md) |
+| 2 | Detection, fixtures before rules | COMPLETED | 7 (7 done) | [phase-2.md](phase-2.md) |
+| 3 | The install path | PENDING | 5 | [phase-3.md](phase-3.md) |
+| 4 | Drift and the advisory | PENDING | 4 | [phase-4.md](phase-4.md) |
+| 5 | The skills, the docs, end to end | PENDING | 5 | [phase-5.md](phase-5.md) |
+
+Every row of this table read `IN_PROGRESS` until 2026-10-05, including Phase 1, which had been
+`completed` in its own frontmatter since the day it shipped. The Tasks column was wrong too --
+Phase 2 was listed at 6 and has 7. So the table was a template artefact that had never been
+maintained, and a table whose every row is wrong is worse than no table: it reads as a status
+surface. It is now filled from each phase file's own `status:` frontmatter and its own task
+checkboxes, which are the authority. Re-derive it from those two sources rather than editing a
+row by hand.
 
 ---
 
@@ -150,7 +158,7 @@ context), **Test** (red), **Implement** (green), **Validate** (refactor + verify
 > the method, not separate tracked items.
 
 - [x] [Phase 1: The catalogue and its maintainer contract](phase-1.md)
-- [ ] [Phase 2: Detection, fixtures before rules](phase-2.md)
+- [x] [Phase 2: Detection, fixtures before rules](phase-2.md)
 - [ ] [Phase 3: The install path](phase-3.md)
 - [ ] [Phase 4: Drift and the advisory](phase-4.md)
 - [ ] [Phase 5: The skills, the docs, end to end](phase-5.md)

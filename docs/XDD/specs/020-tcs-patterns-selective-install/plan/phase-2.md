@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Detection, fixtures before rules"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -675,7 +675,7 @@ written from the specification rather than from the implementation.
            `[ref: SDD/Runtime View/Error Handling]`
      - [ ] The hook depends on nothing outside itself `[ref: SDD/ADR-7]`
 
-- [ ] **T2.7 Phase validation** `[activity: validate]`
+- [x] **T2.7 Phase validation** `[activity: validate]`
 
   Both legs, reported per leg. Confirm the detector is callable against a fixture directory with no
   interactive setup and no catalogue writes — the property the PRD's top-risk mitigation depends on.
@@ -683,14 +683,21 @@ written from the specification rather than from the implementation.
   a fixture whose purpose is unclear will be deleted by someone later.
 
   **Held-out validation, mandatory and specified here because the corpus cannot provide it.**
-  The 26 fixtures are the detector's own test data, so a detector that fits them passes them.
+  The 27 fixtures are the detector's own test data, so a detector that fits them passes them.
   The PRD's top risk is not answered by green fixtures; it is answered by rules holding on a
   tree the implementer never saw. Four such cases were built on 2026-10-03 **before** T2.2's
   implementer began, with every expectation derived from `[ref: SDD/Interface Specifications/
   Detection rules: the eight stack facts and the three gates]` and cited clause by clause.
   Rebuild and run them; they are deliberately **not** fixtures, because the corpus count is
-  asserted at exactly **26** (`EXPECTED_CASE_COUNT`, `tests/patterns_detection_corpus_lib.py:26`,
-  enforced in two test files) and these must never become data the implementation is tuned to.
+  asserted at exactly **27** (`EXPECTED_CASE_COUNT`, `tests/patterns_detection_corpus_lib.py:34`,
+  enforced in **four** test files -- `test_patterns_detection_corpus.py`,
+  `test_patterns_detect.py`, `test_patterns_outcomes.py` and
+  `test_obsidian_rule_agreement.py`) and these must never become data the implementation is
+  tuned to. Three figures were stale here and all three were corrected on 2026-10-05: the
+  count (26 -> 27, `auto-mcp-server-poetry-dev-group` added with align F4), the file count
+  ("two" named two of the four, and the constant's own comment made the same mistake), and
+  the line number -- which had been **26 while the value was also 26**, so the citation read
+  as one number twice and a reader could not tell which was which. It is now `:34` and 27.
   This sentence read "exactly 18" until 2026-10-04 -- the same stale figure the success criterion
   below already warns about, left standing in the paragraph that explains why the cases are held
   out:
@@ -742,6 +749,23 @@ written from the specification rather than from the implementation.
   four-manifest table working at depth, which no fixture reaches; and q2's `gate_evidence` is
   q1's folded in, the 2026-10-04 pure-disjunct ruling holding outside the corpus.
 
+  **Re-run after align F4's widening (`1815ec3`): zero divergence on all four.** Required
+  rather than optional, because that change altered the return shape of *both* Python dependency
+  readers -- `_pyproject_deps_and_pytest` and `_setup_py_deps` -- and the fourth held-out case
+  exercises `setup.py`, which no fixture reaches. It still yields
+  `setup.py: install_requires.mcp`, so the reader's new `(runtime, extras)` pair did not cost the
+  runtime path. Checked on every tree: `auto`, `baseline`, `gates`, `gate_evidence`,
+  `unrecognised_stack`, `schema`, `manifests_walked`, `must_not_propose`, both evidence
+  invariants, and the partition's sizes, disjointness and sum.
+
+  **The partition sizes were derived by hand before the run and matched the previous run's
+  recorded figures exactly** -- `3 + 13 + 5 + 0`, `2 + 2 + 6 + 11`, `0 + 0 + 8 + 13`,
+  `2 + 0 + 6 + 13`. That agreement is the check that these four trees were *reconstructed*
+  correctly rather than approximately, which is the one weakness of holding them out of the
+  tree: nothing else verifies that this session rebuilt the same cases the last one ran. Worth
+  keeping as the standing method -- derive the expected sizes from the rule tables first, then
+  compare them to what the plan recorded, and only then run the detector.
+
   **Do not promote these four into tracked tests, tempting though the rebuild cost makes it.**
   Three sessions have now rebuilt them, and the tax is the price of the property: a tracked test
   is visible to the next implementer and can be fitted exactly as a fixture can. Held-out means
@@ -751,8 +775,13 @@ written from the specification rather than from the implementation.
   **The rule that makes this worth anything:** a divergence is resolved against the SDD, never
   against the fixtures, and never by editing an expectation to match the output.
 
-  **Measured 2026-10-05, both legs reported per leg as the task requires.**
-  - **Leg 1, pytest:** `999 passed, 1 skipped, 1 deselected, 0 failed`.
+  **Measured 2026-10-05, both legs reported per leg as the task requires.** Re-measured the
+  same day after the drift remainder and align F4 landed (`073a8ec`, `d0a7453`, `1815ec3`);
+  the earlier figure of `999 passed` is kept below as history, not as the current state.
+  - **Leg 1, pytest:** `1022 passed, 1 skipped, 1 deselected, 0 failed` -- was `999` when
+    this task was first measured, then `1011` after the malformed-manifest guards gained
+    tests (+8), then `1022` after align F4 (+7 tests, +4 corpus sweeps over the 27th
+    fixture).
   - **Leg 2, bats:** `1187 ok, 0 not ok` across all four plugin suites -- `tcs-git-helpers` 835,
     `tcs-helper` 330, `tcs-issues` 7, `tcs-patterns` 15. Counted per suite rather than from a run
     verdict, and `plugins/tcs-helper/tests/bats` alone is **not** the bats leg: it is 330 of 1187,
