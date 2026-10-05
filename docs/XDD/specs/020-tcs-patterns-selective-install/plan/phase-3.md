@@ -794,6 +794,37 @@ writing is allowed, and an installer that is honest about what it did.
   still wrong (weaken the test to match), which is exactly why flagging it
   rather than silently "fixing" the test mattered.
 
+  **A third round, 2026-10-05, found by a reviewer's mutation harness
+  rather than by any test here.** `11e0adf` fixes it: a module-level
+  `DEFAULT_BUNDLE_VERSION = _bundle_version()` read `plugin.json` at IMPORT
+  time, which made `install.py` the first module in this component set
+  that could not be loaded from a copy via
+  `importlib.util.spec_from_file_location` — `manifest.py`, `guard.py` and
+  `detect.py` all support it, and T3.1/T3.2 found genuine survivors that
+  way. No test in this file caught it, because every test here imports the
+  REAL module from its REAL location; the defect is invisible from inside
+  this repository and only surfaces to a harness that relocates the file.
+  `bundle`'s default is now resolved lazily, `if bundle is None`, inside
+  `install()` itself — `DEFAULT_CATALOGUE_DIR` stays a module-level
+  constant because a path expression has no I/O and is never fatal to
+  import, even wrong. No test changed; the resolved value is identical.
+  Whole suite unchanged at 1127/1/1.
+
+  **Re-verified: all six required mutations, run again through the exact
+  copy-based technique (`spec_from_file_location` against a bare scratch
+  copy, no mirrored `plugin.json` or `templates/` tree, `sys.modules`
+  injection so the suite's own `importlib.import_module("install")` picks
+  up the mutant).** The copy now imports cleanly where it previously raised
+  `FileNotFoundError` — confirmed directly, both ways, before re-running
+  anything. All six reproduce their original catch exactly (one pre-existing
+  test, `test_default_catalogue_dir_resolves_to_the_real_templates_patterns_dir`,
+  deselected for these runs only: it asserts `install()`'s `catalogue_dir`
+  default BINDING, which Python fixes at function-definition time from
+  whatever `__file__` the copy had when `exec_module` ran — a structural
+  property of loading a relocated copy, unrelated to any of the six
+  behavioural mutations, and the test exists specifically to probe the
+  real module's own binding).
+
 - [ ] **T3.4 The update path, with divergence handling** `[activity: backend-api]`
 
   **Three gaps to settle before this task is gated**, found 2026-10-05 by auditing it while T3.3
