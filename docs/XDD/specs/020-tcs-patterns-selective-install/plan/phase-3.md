@@ -974,7 +974,10 @@ writing is allowed, and an installer that is honest about what it did.
        user their own work is the incoming change `[ref: ... decision 4, direction]`.
     2. **The incoming catalogue text appears as an addition** — the mirror of 1, which is what
        makes the pair fail a reversal rather than just one of them.
-    3. **No line matching `^[-+]name:`**, which is the pre-rename mutation from the bullet above.
+    3. **No line matching `^[-+]name:`**, which is the pre-rename mutation named in the
+       **"diff assertion as first written"** bullet — not the bullet immediately above this
+       one. This is the SECOND positional reference in this bullet to go stale by insertion;
+       the first was fixed earlier the same day and this one was missed in that pass.
     4. **The header labels are populated as the contract pins them** — `--- installed` and
        `+++ catalogue`. `difflib` defaults both to empty, so this fails a plain
        `unified_diff(a, b)` with no labels.
@@ -1022,7 +1025,7 @@ writing is allowed, and an installer that is honest about what it did.
     So: when `dest` is absent **and** the stash exists, the reason names the stash and must **not**
     tell the user to run install
     `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb), decision 8,
-    "Unless a .replaced stash"]`. `update()` still does not move it back — an unrequested restore is
+    "Unless a `.<installed_as>.replaced` stash is sitting beside it"]`. `update()` still does not move it back — an unrequested restore is
     what ADR-4 forbids this verb from doing. **Test both branches**, because one fixture cannot
     distinguish them: stash absent → the existing message, and `"run install"` present; stash
     present → the path named, and `"run install"` **absent**. Assert on the reason's content in both,
@@ -1038,7 +1041,7 @@ writing is allowed, and an installer that is honest about what it did.
     only copy of the content anywhere goes unmentioned. It is the most severe of the three stash
     states because the catalogue cannot recreate the pattern either, so `install` has no source
     `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb), decision 7,
-    "And when a .replaced stash is ALSO present"]`.
+    "And when a `.<installed_as>.replaced` stash is ALSO present"]`.
 
     No guard is reordered and the precedence is unchanged — the catalogue cause stays the headline.
     **Three assertions, and the third is the one a careless fix would miss:** the reason names the
