@@ -402,3 +402,378 @@ def test_status_module_imports_and_uses_only_the_read_only_allowlist():
         "import manifest\nwriter = manifest\n",
     ):
         assert _allowlist_violations(bad, siblings), bad
+
+
+# =============================================================================
+# remove(): the six rules, one test per rule
+# =============================================================================
+
+
+def _remove(repo: Path, names, force=frozenset()):
+    return _load_lib("install").remove(repo, names, bundle=BUNDLE, force=frozenset(force))
+
+
+def _assert_refused_and_untouched(repo: Path, report, name: str, before_skills: str, before_manifest: bytes):
+    assert name in report.refused, report
+    assert name not in report.removed
+    assert name not in report.failed
+    assert _digest(_skills(repo)) == before_skills
+    assert _manifest_bytes(repo) == before_manifest
+
+
+def test_remove_rule1_never_deletes_a_tcs_directory_the_manifest_does_not_list(tmp_path):
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    mine = _skills(repo) / "tcs-foo"
+    (mine / "reference").mkdir(parents=True)
+    (mine / "SKILL.md").write_text("---\nname: tcs-foo\n---\nmine\n", encoding="utf-8")
+    (mine / "reference" / "x.md").write_text("x\n", encoding="utf-8")
+    before_skills, before_manifest = _digest(_skills(repo)), _manifest_bytes(repo)
+
+    report = _remove(repo, ["foo"])
+
+    _assert_refused_and_untouched(repo, report, "foo", before_skills, before_manifest)
+    assert "not recorded in the manifest" in report.refused["foo"]
+    assert report.committed is False
+
+
+def test_remove_rule2_refuses_an_entry_whose_installed_as_names_another_pattern(tmp_path):
+    repo, _cat = _setup(tmp_path, ["ddd", "hexagonal"])
+    manifest = _load_lib("manifest")
+    m = manifest.read(repo)
+    hexagonal = m.patterns["hexagonal"]
+    pointed = manifest.PatternEntry(version="1", installed_as="tcs-hexagonal", sha256=hexagonal.sha256)
+    manifest.write(m.with_pattern("ddd", pointed, bundle=BUNDLE), repo)
+    before_skills, before_manifest = _digest(_skills(repo)), _manifest_bytes(repo)
+
+    report = _remove(repo, ["ddd"])
+
+    _assert_refused_and_untouched(repo, report, "ddd", before_skills, before_manifest)
+    assert "tcs-hexagonal" in report.refused["ddd"]
+
+
+def test_remove_rule3_refuses_when_a_stash_is_the_only_copy_and_names_it(tmp_path):
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    stash = _skills(repo) / ".tcs-ddd.replaced"
+    os.rename(_skills(repo) / "tcs-ddd", stash)
+    before_skills, before_manifest = _digest(_skills(repo)), _manifest_bytes(repo)
+
+    report = _remove(repo, ["ddd"])
+
+    _assert_refused_and_untouched(repo, report, "ddd", before_skills, before_manifest)
+    assert str(stash) in report.refused["ddd"]
+
+
+def test_remove_deletes_a_stash_beside_a_present_directory_with_it(tmp_path):
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    stash = _skills(repo) / ".tcs-ddd.replaced"
+    shutil.copytree(_skills(repo) / "tcs-ddd", stash)
+
+    report = _remove(repo, ["ddd"])
+
+    assert report.removed == {"ddd": ("tcs-ddd", "1", True)}
+    assert not stash.exists()
+    assert not (_skills(repo) / "tcs-ddd").exists()
+
+
+
+def test_remove_step1_clears_a_stale_removing_beside_a_present_directory(tmp_path):
+    """Step 1 deletes this verb's own debris from an earlier run first; without
+    it, the move-aside would rename onto an existing directory and fail."""
+    repo, cat = _setup(tmp_path, ["ddd"])
+    stale = _skills(repo) / ".tcs-ddd.removing"
+    (stale / "reference").mkdir(parents=True)
+    (stale / "reference" / "old.md").write_text("old\n", encoding="utf-8")
+
+    report = _remove(repo, ["ddd"])
+
+    assert report.removed == {"ddd": ("tcs-ddd", "1", True)}
+    assert not stale.exists()
+    assert _load_lib("status").status(repo, catalogue_dir=cat).debris == ()
+
+
+@pytest.mark.parametrize("shape", ["symlink", "file"])
+def test_remove_rule4_refuses_a_symlink_or_a_file_where_the_directory_should_be(tmp_path, shape):
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    dest = _skills(repo) / "tcs-ddd"
+    elsewhere = tmp_path / "elsewhere"
+    shutil.move(str(dest), str(elsewhere))
+    if shape == "symlink":
+        dest.symlink_to(elsewhere, target_is_directory=True)
+    else:
+        dest.write_text("not a directory\n", encoding="utf-8")
+    before_skills, before_manifest = _digest(_skills(repo)), _manifest_bytes(repo)
+    before_elsewhere = _digest(elsewhere)
+
+    report = _remove(repo, ["ddd"])
+
+    _assert_refused_and_untouched(repo, report, "ddd", before_skills, before_manifest)
+    assert _digest(elsewhere) == before_elsewhere
+
+
+def test_remove_rule5_refuses_an_edited_skill_md_without_force_and_removes_it_with(tmp_path):
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    (_skills(repo) / "tcs-ddd" / "SKILL.md").write_text("my edits\n", encoding="utf-8")
+    before_skills, before_manifest = _digest(_skills(repo)), _manifest_bytes(repo)
+
+    refused = _remove(repo, ["ddd"])
+    _assert_refused_and_untouched(repo, refused, "ddd", before_skills, before_manifest)
+    assert "--force ddd" in refused.refused["ddd"]
+
+    forced = _remove(repo, ["ddd"], force={"ddd"})
+    assert forced.removed == {"ddd": ("tcs-ddd", "1", True)}
+    assert not (_skills(repo) / "tcs-ddd").exists()
+    assert _load_lib("manifest").read(repo).patterns == {}
+
+
+def test_remove_rule5_counts_an_absent_skill_md_as_diverged(tmp_path):
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    (_skills(repo) / "tcs-ddd" / "SKILL.md").unlink()
+    before_skills, before_manifest = _digest(_skills(repo)), _manifest_bytes(repo)
+    _assert_refused_and_untouched(repo, _remove(repo, ["ddd"]), "ddd", before_skills, before_manifest)
+
+
+def test_remove_rule5_hashes_only_skill_md_so_a_reference_edit_is_removed_unasked(tmp_path):
+    """ADR-4's stated limit, pinned so nobody "fixes" it by accident."""
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    (_skills(repo) / "tcs-ddd" / "reference" / "notes.md").write_text("my edits\n", encoding="utf-8")
+    report = _remove(repo, ["ddd"])
+    assert report.removed == {"ddd": ("tcs-ddd", "1", True)}
+    assert not (_skills(repo) / "tcs-ddd").exists()
+
+
+def test_remove_rule6_removes_directory_and_entry_and_leaves_no_debris(tmp_path):
+    repo, cat = _setup(tmp_path, ["ddd", "hexagonal"])
+    report = _remove(repo, ["ddd"])
+    assert report.removed == {"ddd": ("tcs-ddd", "1", True)}
+    assert report.refused == {} and report.failed == {}
+    assert report.committed is False
+    assert not (_skills(repo) / "tcs-ddd").exists()
+    assert sorted(_load_lib("manifest").read(repo).patterns) == ["hexagonal"]
+    status = _load_lib("status").status(repo, catalogue_dir=cat)
+    assert status.debris == ()
+    assert status.unlisted == ()
+
+
+def test_remove_forces_only_the_pattern_named_in_force(tmp_path):
+    """Kills a blanket-flag `force`: two diverged, one named."""
+    repo, _cat = _setup(tmp_path, ["ddd", "hexagonal"])
+    for name in ("ddd", "hexagonal"):
+        (_skills(repo) / f"tcs-{name}" / "SKILL.md").write_text("edited\n", encoding="utf-8")
+    hexagonal_before = _digest(_skills(repo) / "tcs-hexagonal")
+
+    report = _remove(repo, ["ddd", "hexagonal"], force={"ddd"})
+
+    assert sorted(report.removed) == ["ddd"]
+    assert sorted(report.refused) == ["hexagonal"]
+    assert _digest(_skills(repo) / "tcs-hexagonal") == hexagonal_before
+    assert sorted(_load_lib("manifest").read(repo).patterns) == ["hexagonal"]
+
+
+def test_remove_leaves_another_patterns_manifest_block_byte_identical(tmp_path):
+    repo, _cat = _setup(tmp_path, ["ddd", "hexagonal"])
+    block = _load_lib("manifest")._serialize_pattern(
+        "hexagonal", _load_lib("manifest").read(repo).patterns["hexagonal"]
+    ).encode()
+    assert block in _manifest_bytes(repo)
+    _remove(repo, ["ddd"])
+    assert block in _manifest_bytes(repo)
+    assert b"[patterns.ddd]" not in _manifest_bytes(repo)
+
+
+def test_removing_the_last_pattern_leaves_a_zero_pattern_manifest_the_reporter_calls_ok(tmp_path):
+    repo, cat = _setup(tmp_path, ["ddd"])
+    report = _remove(repo, ["ddd"])
+    assert sorted(report.removed) == ["ddd"]
+    m = _load_lib("manifest").read(repo)
+    assert m.patterns == {}
+    assert m.bundle == BUNDLE
+    assert _reporter_stdout(repo, cat) == "OK\n"
+
+
+def test_remove_propagates_an_unparseable_manifest_before_touching_anything(tmp_path):
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    manifest = _load_lib("manifest")
+    manifest._manifest_path(repo).write_text("broken = = [", encoding="utf-8")
+    before = _digest(_skills(repo))
+    with pytest.raises(manifest.ManifestUnparseableError):
+        _remove(repo, ["ddd"])
+    assert _digest(_skills(repo)) == before
+
+
+# =============================================================================
+# remove(): faults, and the order of the five steps
+# =============================================================================
+
+
+def test_a_step2_oserror_after_a_partial_stash_delete_fails_and_goes_no_further(tmp_path, monkeypatch):
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    stash = _skills(repo) / ".tcs-ddd.replaced"
+    shutil.copytree(_skills(repo) / "tcs-ddd", stash)
+    before_dir, before_manifest = _digest(_skills(repo) / "tcs-ddd"), _manifest_bytes(repo)
+    real_rmtree = shutil.rmtree
+
+    def partial_rmtree(path, *args, **kwargs):
+        if Path(path) == stash:
+            (stash / "SKILL.md").unlink()  # part of the stash is gone...
+            raise OSError("injected: stash delete failed part-way")  # ...then it fails
+        return real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", partial_rmtree)
+    report = _remove(repo, ["ddd"])
+    monkeypatch.undo()
+
+    assert "injected: stash delete failed part-way" in report.failed["ddd"]
+    assert report.removed == {}
+    assert _digest(_skills(repo) / "tcs-ddd") == before_dir
+    assert _manifest_bytes(repo) == before_manifest
+    assert not (_skills(repo) / ".tcs-ddd.removing").exists()  # step 3 never ran
+
+
+class _Killed(BaseException):
+    """A hard stop: not an `Exception`, so nothing in `remove()` handles it."""
+
+
+def test_interrupted_right_after_the_move_aside_leaves_no_replaced_debris(tmp_path, monkeypatch):
+    """A stash is present at the start. Step 2 must have deleted it before the
+    move-aside, so a kill right after step 3 leaves nothing status calls
+    `replaced` -- which, with the directory absent, would read as "your copy"."""
+    repo, cat = _setup(tmp_path, ["ddd"])
+    shutil.copytree(_skills(repo) / "tcs-ddd", _skills(repo) / ".tcs-ddd.replaced")
+    real_rename = os.rename
+
+    def rename_then_die(src, dst, *args, **kwargs):
+        real_rename(src, dst, *args, **kwargs)
+        raise _Killed
+
+    monkeypatch.setattr(os, "rename", rename_then_die)
+    with pytest.raises(_Killed):
+        _remove(repo, ["ddd"])
+    monkeypatch.undo()
+
+    debris = _load_lib("status").status(repo, catalogue_dir=cat).debris
+    assert [d.kind for d in debris if d.kind == "replaced"] == []
+    assert [(d.name, d.kind) for d in debris] == [(".tcs-ddd.removing", "removing")]
+
+
+def test_a_manifest_drop_fault_puts_the_directory_back_byte_identical(tmp_path, monkeypatch):
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    before_skills, before_manifest = _digest(_skills(repo)), _manifest_bytes(repo)
+
+    def boom(*_a, **_k):
+        raise OSError("injected: manifest write failed")
+
+    monkeypatch.setattr(_load_lib("manifest"), "drop", boom)
+    report = _remove(repo, ["ddd"])
+    monkeypatch.undo()
+
+    assert "injected: manifest write failed" in report.failed["ddd"]
+    assert report.removed == {}
+    assert _digest(_skills(repo)) == before_skills
+    assert _manifest_bytes(repo) == before_manifest
+
+
+def test_a_move_aside_rename_fault_leaves_the_manifest_and_directory_intact(tmp_path, monkeypatch):
+    """Only this test can see a manifest written BEFORE the rename."""
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    before_skills, before_manifest = _digest(_skills(repo)), _manifest_bytes(repo)
+
+    def refuse(*_a, **_k):
+        raise OSError("injected: rename refused")
+
+    monkeypatch.setattr(os, "rename", refuse)
+    report = _remove(repo, ["ddd"])
+    monkeypatch.undo()
+
+    assert "injected: rename refused" in report.failed["ddd"]
+    assert _manifest_bytes(repo) == before_manifest
+    assert _digest(_skills(repo)) == before_skills
+
+
+def test_on_the_resume_path_a_manifest_drop_fault_renames_nothing_back(tmp_path, monkeypatch):
+    """Entry listed, directory absent, `.removing` present. Spies on os.rename
+    AND os.replace see zero calls after the fault, so a rename-back hidden
+    inside an OSError handler is still caught."""
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    os.rename(_skills(repo) / "tcs-ddd", _skills(repo) / ".tcs-ddd.removing")
+    before_manifest = _manifest_bytes(repo)
+
+    faulted = False
+    calls_after_fault: list[tuple[str, tuple]] = []
+    real_rename, real_replace = os.rename, os.replace
+
+    def spy_rename(*args, **kwargs):
+        if faulted:
+            calls_after_fault.append(("rename", args))
+        return real_rename(*args, **kwargs)
+
+    def spy_replace(*args, **kwargs):
+        if faulted:
+            calls_after_fault.append(("replace", args))
+        return real_replace(*args, **kwargs)
+
+    def boom(*_a, **_k):
+        nonlocal faulted
+        faulted = True
+        raise OSError("injected: drop failed on resume")
+
+    monkeypatch.setattr(os, "rename", spy_rename)
+    monkeypatch.setattr(os, "replace", spy_replace)
+    monkeypatch.setattr(_load_lib("manifest"), "drop", boom)
+    report = _remove(repo, ["ddd"])
+    monkeypatch.undo()
+
+    assert faulted
+    assert calls_after_fault == []
+    assert "injected: drop failed on resume" in report.failed["ddd"]
+    assert _manifest_bytes(repo) == before_manifest
+    assert not (_skills(repo) / "tcs-ddd").exists()
+
+
+# =============================================================================
+# remove(): interrupted states, built by hand
+# =============================================================================
+
+
+def test_state_a_listed_entry_absent_directory_and_removing_is_finished_by_a_rerun(tmp_path):
+    repo, cat = _setup(tmp_path, ["ddd"])
+    os.rename(_skills(repo) / "tcs-ddd", _skills(repo) / ".tcs-ddd.removing")
+
+    report = _remove(repo, ["ddd"])
+
+    assert report.removed == {"ddd": ("tcs-ddd", "1", False)}
+    assert _load_lib("manifest").read(repo).patterns == {}
+    assert not (_skills(repo) / ".tcs-ddd.removing").exists()
+    assert _load_lib("status").status(repo, catalogue_dir=cat).debris == ()
+
+
+def _after_step4(repo: Path) -> None:
+    """The state an interruption between steps 4 and 5 leaves."""
+    os.rename(_skills(repo) / "tcs-ddd", _skills(repo) / ".tcs-ddd.removing")
+    _load_lib("manifest").drop(repo, "ddd", bundle=BUNDLE)
+
+
+def test_state_b_removing_alone_is_refused_by_rule1_and_reported_as_safe_debris(tmp_path):
+    repo, cat = _setup(tmp_path, ["ddd"])
+    _after_step4(repo)
+    before_skills, before_manifest = _digest(_skills(repo)), _manifest_bytes(repo)
+
+    report = _remove(repo, ["ddd"])
+
+    _assert_refused_and_untouched(repo, report, "ddd", before_skills, before_manifest)
+    assert "not recorded in the manifest" in report.refused["ddd"]
+    debris = _load_lib("status").status(repo, catalogue_dir=cat).debris
+    assert [(d.name, d.kind, d.resolution) for d in debris] == [
+        (".tcs-ddd.removing", "removing", "safe to delete")
+    ]
+
+
+def test_state_c_removing_left_behind_then_install_is_safe_debris_not_a_remove(tmp_path):
+    repo, cat = _setup(tmp_path, ["ddd"])
+    _after_step4(repo)
+    assert not _load_lib("install").install(repo, ["ddd"], catalogue_dir=cat, bundle=BUNDLE).failed
+
+    report = _load_lib("status").status(repo, catalogue_dir=cat)
+    assert report.patterns["ddd"].directory_present is True
+    [debris] = report.debris
+    assert (debris.name, debris.kind, debris.resolution) == (".tcs-ddd.removing", "removing", "safe to delete")
+    assert "remove" not in debris.resolution

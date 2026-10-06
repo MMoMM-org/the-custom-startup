@@ -832,3 +832,172 @@ def update(
             current[name] = (outcome.installed_as, outcome.version_before, outcome.sha256)
 
     return UpdateReport(refreshed=refreshed, declined=declined, current=current, failed=failed)
+
+
+# =============================================================================
+# `remove()` -- C5's third verb (T5.1a)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class RemoveReport:
+    """The whole result of one `remove()` call. Named channels, as above.
+
+    removed:   name -> (installed_as, version, directory_existed)
+    refused:   name -> reason, a rule said no; nothing touched
+    failed:    name -> reason, an OSError (or a failed manifest write); rolled
+               back where possible
+    committed: always False -- see "C5 reports; C3 offers" above.
+    """
+
+    removed: dict[str, tuple[str, str, bool]] = field(default_factory=dict)
+    refused: dict[str, str] = field(default_factory=dict)
+    failed: dict[str, str] = field(default_factory=dict)
+    committed: bool = False
+
+
+def _removing_path(skills_root: Path, installed_as: str) -> Path:
+    """Where `remove()` moves a pattern aside before deleting it."""
+    return skills_root / f".{installed_as}{paths.REMOVING_SUFFIX}"
+
+
+def _refusal(
+    name: str,
+    entry: "manifest.PatternEntry | None",
+    *,
+    skills_root: Path,
+    force: frozenset,
+) -> str | None:
+    """Rules 1-5 of the SDD's table; the first that applies decides. `None`
+    means rule 6: remove it `[ref: SDD/Process contract: the CLI the skill
+    drives, remove]`."""
+    # Rule 1. `remove` never deletes a directory the manifest does not own --
+    # a hand-made `tcs-foo/` is someone's skill, not ours.
+    if entry is None:
+        return "not recorded in the manifest; remove deletes only what the manifest records"
+    # Rule 2. A hand-edited manifest pointing `ddd` at `tcs-hexagonal` would
+    # otherwise delete the wrong pattern.
+    expected = f"tcs-{name}"
+    if entry.installed_as != expected:
+        return (
+            f"the manifest records {name!r} as installed at {entry.installed_as!r}, not {expected!r}; "
+            "refusing to delete a directory under another name"
+        )
+    dest = skills_root / entry.installed_as
+    stash = _stash_path(skills_root, entry.installed_as)
+    # Rule 3. With the directory ABSENT the stash is the user's only copy
+    # (update path, decision 8). A stash beside a PRESENT directory is debris,
+    # deleted in step 2 -- not this rule's case.
+    if os.path.lexists(stash) and not os.path.lexists(dest):
+        return (
+            f"an interrupted refresh left your copy at {stash}; move it back to {entry.installed_as}/ "
+            "and run remove again, or delete it yourself if you do not want it"
+        )
+    # Rule 4. `install()` never creates either, so it is not ours as written.
+    if os.path.lexists(dest) and (dest.is_symlink() or not dest.is_dir()):
+        return f"{dest} is a symlink or not a directory; install never writes either, so remove leaves it alone"
+    # Rule 5. Only SKILL.md is hashed: an edit confined to `reference/` is
+    # deleted without asking -- ADR-4's accepted limit. Per name, never a
+    # blanket flag.
+    if dest.is_dir() and paths.sha256_or_none(dest / "SKILL.md") != entry.sha256 and name not in force:
+        return f"diverged from what was installed; local edits would be lost -- re-run with --force {name}"
+    return None
+
+
+def _remove_one(
+    name: str, entry: "manifest.PatternEntry", *, repo_dir: Path, skills_root: Path, bundle: str
+) -> bool:
+    """Rule 6's five steps. Returns `directory_existed`; raises `InstallError`
+    with the failing step's exception text.
+
+    **Order: clear the stash, move aside, then the manifest, then delete**, so
+    every interrupted state is one `status` can name -- finished by a re-run,
+    or debris it calls safe to delete. No step before step 3 uses
+    `ignore_errors`, and a failure in step 1 or 2 goes no further."""
+    installed_as = entry.installed_as
+    dest = skills_root / installed_as
+    removing = _removing_path(skills_root, installed_as)
+    stash = _stash_path(skills_root, installed_as)
+    directory_existed = dest.is_dir()
+
+    try:
+        # Step 1: this verb's own debris from an earlier interrupted run.
+        if os.path.lexists(removing):
+            shutil.rmtree(removing)
+        # Step 2: a stash beside a present directory, BEFORE anything else
+        # moves, so no interrupted remove leaves an old stash that `status`
+        # would call "your copy".
+        if directory_existed and os.path.lexists(stash):
+            shutil.rmtree(stash)
+        # Step 3: out of the skill listing in one atomic, same-directory rename.
+        if directory_existed:
+            os.rename(str(dest), str(removing))
+    except OSError as e:
+        raise InstallError(str(e)) from e
+
+    # Step 4: the manifest, without the entry.
+    try:
+        manifest.drop(repo_dir, name, bundle=bundle)
+    except Exception as e:
+        reason = str(e)
+        # Only if step 3 renamed a directory. On the resume path there is
+        # nothing to put back: a `.removing` found there was deleted in step 1.
+        if directory_existed:
+            try:
+                os.rename(str(removing), str(dest))
+            except OSError as back:
+                reason += f"; and moving {removing} back to {dest} failed: {back}"
+        raise InstallError(reason) from e
+
+    # Step 5: a leftover is reported by `status` as debris.
+    shutil.rmtree(removing, ignore_errors=True)
+    return directory_existed
+
+
+def remove(
+    repo_dir: Path,
+    names,
+    *,
+    bundle: str | None = None,
+    force: frozenset = frozenset(),
+) -> RemoveReport:
+    """Delete each named pattern and its manifest entry -- only what the
+    manifest records, never a diverged pattern unless its name is in `force`.
+
+    Reads the manifest once, up front; `ManifestUnparseableError` and
+    `OSError` propagate before anything is touched. Then, per pattern in
+    sorted order, the first rule that applies decides (see `_refusal`), and
+    rule 6 runs `_remove_one`'s five steps. One pattern's refusal or failure
+    never stops the others.
+
+    The manifest's `bundle` becomes the removing plugin's version (decision 9
+    of the update path). Removing the last pattern leaves a manifest with zero
+    patterns, not no manifest `[ref: SDD/Process contract: the CLI the skill
+    drives, remove]`.
+    """
+    repo_dir = Path(repo_dir)
+    skills_root = repo_dir / ".claude" / "skills"
+    if bundle is None:
+        bundle = _bundle_version()
+    force = frozenset(force)
+
+    manifest_before = manifest.read(repo_dir)
+
+    removed: dict[str, tuple[str, str, bool]] = {}
+    refused: dict[str, str] = {}
+    failed: dict[str, str] = {}
+
+    for name in sorted(set(names)):
+        entry = manifest_before.patterns.get(name)
+        reason = _refusal(name, entry, skills_root=skills_root, force=force)
+        if reason is not None:
+            refused[name] = reason
+            continue
+        try:
+            directory_existed = _remove_one(name, entry, repo_dir=repo_dir, skills_root=skills_root, bundle=bundle)
+        except InstallError as e:
+            failed[name] = str(e)
+            continue
+        removed[name] = (entry.installed_as, entry.version, directory_existed)
+
+    return RemoveReport(removed=removed, refused=refused, failed=failed)
