@@ -6,9 +6,12 @@
 # Emits — only when there is something actionable — a JSON SessionStart hook
 # response that surfaces a user-visible notice AND/OR Claude-only context.
 # When nothing needs attention the script exits 0 silently (no stdout, no
-# stderr). Pure bash 3.2. NO jq. NO gh. Reads only local git + TSV cache.
-# python3 is used opportunistically for JSON encoding; a sed-based fallback
-# covers environments without it.
+# stderr). Pure bash 3.2. NO jq. NO gh. Reads local git + TSV cache, and tests
+# for the patterns manifest (<repo>/.claude/skills/.tcs-patterns-manifest).
+# python3 is used opportunistically for JSON encoding (a sed-based fallback
+# covers environments without it) and, only when that manifest exists, to run
+# tcs-patterns' patterns_drift.py reporter (section 8c); without python3 the
+# patterns segment is silent.
 #
 # Actionable triggers (any one → emit):
 #   - drift_seg   : installed hook banner version != plugin.json version
@@ -34,7 +37,10 @@
 #
 # Constraints:
 #   CON-1/ADR-2: bash 3.2 compat — no declare -A, no mapfile, no \s/\b PCRE
-#   CON-2: p99 < 300ms; hot path: 3 git calls + 1 TSV read + format
+#   CON-2: p99 < 300ms; hot path: 3 git calls + 1 TSV read + format. Section 8c
+#          adds one file test; only a repo holding a patterns manifest also pays
+#          for a python3 start (151-286ms first exec on macOS), so the manifest
+#          test comes first
 #   CON-4: fail-open — never block session; exit 0 always
 #   ADR-4: TSV parsed via grep/wc/head (no jq)
 #   AC4: NO gh invocations
