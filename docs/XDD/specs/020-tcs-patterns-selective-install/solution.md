@@ -134,9 +134,11 @@ design copies rather than invents.
 
 - file: plugins/tcs-git-helpers/scripts/lib/drift_check.sh
   relevance: HIGH
-  why: "drift_check_hook_bundle <repo> <expected> [marker-filename] already takes an arbitrary
-        marker name and returns OK / MISSING / DRIFT:<installed>. The directory is hardcoded to
-        .githooks/ and is the only thing that needs generalizing"
+  why: "Before T4.1, drift_check_hook_bundle <repo> <expected> [marker-filename] took an arbitrary
+        marker name and returned OK / MISSING / DRIFT:<installed>, with the directory hardcoded to
+        .githooks/ -- the only thing that needed generalizing. Corrected 2026-10-06: T4.1 did it;
+        the function is now drift_check_bundle <repo> <ver> [<version_filename>] [<marker_dir>],
+        and drift_check_hook_bundle is a wrapper pinning marker_dir to .githooks"
 
 - file: plugins/tcs-git-helpers/scripts/ci/check-hook-bundle-version.sh
   relevance: HIGH
@@ -145,8 +147,10 @@ design copies rather than invents.
 
 - file: plugins/tcs-git-helpers/scripts/session-start-brief.sh
   relevance: HIGH
-  why: "Lines 145-185 build the drift segment and compose the advisory. The patterns advisory is a
-        sibling segment in the same composition, not a second mechanism"
+  why: "Section 8b (the hooks drift segment), 8c (the patterns segment) and 9 (composition) build
+        the advisory. The patterns advisory is a sibling segment in the same composition, not a
+        second mechanism. Sections are named, not numbered by line: line ranges went stale as 8c
+        grew"
 
 - file: plugins/tcs-helper/skills/observability-setup/SKILL.md
   relevance: MEDIUM
@@ -337,14 +341,17 @@ plugins/tcs-patterns/
 │       └── SKILL.md                    NEW       argument-hint: <pattern-name>
 ├── scripts/
 │   ├── block-eslint-disable.sh         UNCHANGED stays in the plugin (ADR-7)
-│   └── patterns_drift.py               NEW       C7 — manifest vs catalogue, OK/MISSING/DRIFT
+│   └── patterns_drift.py               NEW       C7 — manifest vs catalogue, OK/MISSING/DRIFT/UNKNOWN
 └── README.md, CHANGELOG.md             MODIFIED  layout, the 2.0.0 entry, the kept promise
 
 plugins/tcs-git-helpers/
 ├── scripts/lib/drift_check.sh          MODIFIED  directory becomes a parameter
 ├── scripts/lib/drift_check.py          MODIFIED  same change, same contract
 ├── scripts/session-start-brief.sh      MODIFIED  one new advisory segment (C7)
-└── scripts/ci/check-hook-bundle-version.sh  MODIFIED  per-pattern rule (C9, ADR-9)
+├── scripts/ci/check-hook-bundle-version.sh  MODIFIED  per-pattern rule (C9, ADR-9)
+├── tests/bats/session-start-brief.bats MODIFIED  the advisory: drift, unknown, silence, layouts
+├── tests/bats/drift-check-sh.bats      MODIFIED  marker_dir parameter and the wrapper's pin
+└── tests/python/test_drift_check.py    MODIFIED  same parameter, parity with the bash twin
 
 tests/
 ├── test_patterns_detect.py             NEW       parametrized over every fixture
@@ -437,8 +444,10 @@ upsert(name, …)  -> returns a new Manifest; prior entries byte-identical
   derived from a file nobody could parse. If corrupt also returned empty, the two states would be
   indistinguishable and the first `install` into a repository with a damaged manifest would
   replace it with a record of that one install — erasing exactly what the row exists to protect.
-- **`MISSING` is therefore C7's rendering, not C6's return.** The advisory and `status` catch
-  `ManifestUnparseableError` and present it; the store itself refuses. Reading the row as the
+- **`MISSING` is therefore C7's rendering, not C6's return.** The reporter (`patterns_drift.py`) and `status` catch
+  `ManifestUnparseableError` and present it; the store itself refuses. Corrected 2026-10-06: this
+  said "the advisory" catches it, but the bash advisory never sees the exception. The reporter
+  catches it and prints `MISSING`, which the advisory then suppresses. Reading the row as the
   reader's contract is the mistake this paragraph exists to prevent.
 - **The temp file goes in `.claude/skills/`, never `$TMPDIR`.** Different filesystems here —
   measured `dev=16777245` for the repository and `dev=16777234` for `$TMPDIR` — so `os.rename`
@@ -1231,8 +1240,8 @@ Requirements. Use those numbers; do not renumber them.
 
 #### Process contract: drift reporter (C7)
 
-`patterns_drift.py <repo>` prints zero or more lines and exits 0 regardless — the caller decides
-what to do, exactly as `drift_check_hook_bundle` does today.
+`patterns_drift.py <repo> [--catalogue <dir>]` prints zero or more lines and exits 0 regardless —
+the caller decides what to do, exactly as `drift_check_hook_bundle` does today.
 
 ```
 OK                              # manifest present, every installed pattern current
@@ -1258,6 +1267,26 @@ contract had no line for it. `OK` means every installed pattern is current, so a
 `DRIFT` line suppresses it. Drift is computed from each pattern's own manifest `version`, never from
 the manifest's top-level `bundle` (decision 9 of the update path).
 
+**Behaviour the code has that this contract did not say, added 2026-10-06 at the Phase 4 drift
+check.**
+
+- **`--catalogue <dir>` is a test seam.** It substitutes the catalogue directory; the default
+  resolves from the script's own location (`<plugin>/templates/patterns`), so any cwd works.
+- **Lines are sorted by pattern name.** `OK` is printed only when no `DRIFT` or `UNKNOWN` line was.
+- **A repository path that does not exist prints `MISSING`**, because `MISSING` keys on the
+  manifest file's absence.
+- **A manifest that exists but cannot be read (`OSError`, for example permissions) is not
+  `MISSING`.** `manifest.read` lets the `OSError` through, the reporter catches only
+  `ManifestUnparseableError`, and `main()`'s catch-all prints `patterns_drift: <error>` to stderr,
+  writes nothing to stdout and exits 0. Measured 2026-10-06 with a mode-000 manifest. The advisory
+  therefore shows nothing, which is the fail-open outcome, though `status` is the verb that names
+  the problem.
+- **The advisory composes the reporter's lines in a fixed order.** The drift segment comes first,
+  `patterns <p> v<i> → v<c>, …; run /tcs-patterns:patterns-setup update`, then the unknown
+  segment, `patterns <p> v<i>, … not in the catalogue; run /tcs-patterns:patterns-setup status`.
+  `MISSING` and `OK` are silent. A line that does not match its shape exactly is dropped, and
+  lines are parsed under `LC_ALL=C` in a subshell.
+
 **Revised 2026-10-06 by Marcus, at the Phase 4 drift check.** Two corrections, both found by the
 validation that closes the phase.
 
@@ -1277,17 +1306,22 @@ validation that closes the phase.
 
 #### Process contract: the generalized drift check
 
-`drift_check.sh` and `drift_check.py` gain a directory parameter, keeping the existing contract:
+`drift_check.sh` and `drift_check.py` gain a directory parameter, keeping the existing contract.
+The Python twins are `check_bundle` (generalized) and `check_hook_bundle` (the wrapper).
 
 ```
-drift_check_bundle <repo_path> <expected_version> [<marker_filename>] [<marker_dir>]
-  marker_filename  default: tcs-git-helpers-version
+drift_check_bundle <repo_path> <expected_version> [<version_filename>] [<marker_dir>]
+  version_filename default: tcs-git-helpers-version
   marker_dir       default: .githooks        <-- new, was hardcoded
   stdout           OK | MISSING | DRIFT:<installed>
   exit             always 0
 ```
 
 The existing name `drift_check_hook_bundle` stays as a thin wrapper so no current caller changes.
+
+Corrected 2026-10-06: this contract named the third parameter `marker_filename`; the code calls it
+`version_filename`, kept deliberately because it is `check_hook_bundle`'s pre-existing keyword and
+renaming it would change a current caller's call site.
 
 #### Process contract: the skills
 
@@ -1415,7 +1449,7 @@ changed_patterns="$(printf '%s\n' "$changed_paths" \
   | sed -n 's|^plugins/tcs-patterns/templates/patterns/\([^/]*\)/.*|\1|p' \
   | sort -u)"
 
-# Then reuse check_bundle rather than reimplementing the failure path. It takes
+# Then reuse the CI gate's check_bundle (not drift_check.py's, which is unrelated) rather than reimplementing the failure path. It takes
 # ONE marker per call, so per-pattern invocation is exactly the semantics the
 # rule needs -- bumping a different pattern's VERSION cannot satisfy this call.
 # It already owns the FAIL banner, the offending-file list and the "Fix: bump
@@ -1427,7 +1461,7 @@ for p in $changed_patterns; do
 done
 ```
 
-Three properties of `check_bundle` make this work, each verified by reading it rather than assumed:
+Three properties of the CI gate's `check_bundle` make this work, each verified by reading it rather than assumed:
 
 - **It takes one marker per call.** The bundle table's single-marker-per-row shape is what ADR-9
   rejects; the *function* is fine, and per-pattern invocation gives each pattern its own marker, so
@@ -2232,6 +2266,7 @@ decided answer instead of repeating the derivation
 | A `SKILL.md` **in a scanned namespace** that cannot be read or carries no usable `name:` | C4, step 6 | Skipped, never fatal, and reported through `GuardReport.skipped` as `(path, reason)`. Four inputs reach this and each needs a distinguishable reason: unreadable, no frontmatter block, no `name:` key, empty `name:`. Added 2026-10-05; the row above it is the same condition with the opposite behaviour, and the difference is deliberate rather than an inconsistency. **The file C5 refuses to install is ours; the file C4 skips belongs to a third party.** A broken file in our own catalogue is a defect in this repository and must stop that pattern loudly, because installing it would register the pattern under the unprefixed name and silently defeat ADR-1. A broken file in somebody else's plugin is not ours to fix and must not stop this repository's install — the same stance `detect.py` takes for an unparseable manifest two rows above. It is reported rather than swallowed because a name the guard could not check is a name it cannot vouch for, and a caller that cannot see the omission cannot warn about it. Measured: zero of the 259 real `SKILL.md` files on this machine fail to parse, so every one of the four cases is fixture-only `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`. |
 | Write fails mid-selection | C5 | Patterns already written stay; the manifest records exactly what succeeded. Re-running `install` is idempotent by name and hash. |
 | Manifest present but unparseable | C6 | Treated as `MISSING` for the advisory and reported verbatim by `status`. Never silently overwritten — overwriting it would erase the record of what is installed. |
+| Manifest present but unreadable (`OSError`, for example permissions) | C7 | Not `MISSING`: `manifest.read` lets the `OSError` through, the reporter catches only `ManifestUnparseableError`, and `main()`'s catch-all prints `patterns_drift: <error>` to stderr, nothing to stdout, exit 0. The advisory shows nothing (fail-open). Measured 2026-10-06 with a mode-000 manifest. |
 | Installed pattern diverges from its hash | C5 on `update`, **not `install`** | The user is asked per pattern with a unified diff (ADR-4). Default is to skip, so an unanswered prompt cannot destroy local work. **This row is T3.4's, not T3.3's** — noted 2026-10-05 after T3.3's gate flagged that it reads as a third `install()` obligation and would contradict "no `AskUserQuestion` in `install.py`" if anyone tried to satisfy it there. `install()` detects divergence only to the extent of declining to call a locally-edited pattern `unchanged`; prompting about it is `update()`'s. **That gap is now closed** — `update()`'s signature, its three-state table and its eight decisions are at `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb)]`, settled before dispatch the same way C5's four were settled before T3.3. The diff this row refers to has two normative properties as of decision 4: the installed file is the `from` side, so the user's own edit appears as a deletion, and both file labels are populated. |
 | Catalogue `VERSION` missing or non-numeric | C7, C9 | C7 reports the pattern as unknown rather than drifted; C9 fails the gate. A pattern without a version cannot be distributed. |
 | Pattern name given to the catalogue reader is unknown | C8 | Lists the 21 available names. |
@@ -2367,9 +2402,10 @@ When several cached versions carry the script, the highest numeric version wins,
 field by field because BSD `sort` has no `-V`. A `1.x` copy has no script, so it is not a
 candidate. The accepted risk is that a stale newer copy left in the cache wins over the active
 install. The segment also runs nothing at all unless `<repo>/.claude/skills/.tcs-patterns-manifest`
-exists. That is the cheap test that keeps a repository without patterns off the Python path:
-CON-4 is fail-open, and the hook's p99 budget is 300 ms against a first-exec cost on macOS of
-151-286 ms.
+exists. That is the cheap test that keeps a repository without patterns off the Python path. It matters
+because of two constraints in the hook's own header: "CON-4: fail-open" (not this SDD's CON-4, which
+is the frontmatter-name constraint) and a p99 budget of 300 ms, against a first-exec cost on macOS
+of 151-286 ms.
 
 ## Cross-Cutting Concepts
 
@@ -2834,6 +2870,15 @@ The three corrections, in the order they matter:
   7-of-8 rate is further evidence that bare code-span paths cannot be classified mechanically.
   Left for Phase 5's documentation task rather than widening T1.3, whose scope named four sites.
 
+- **Accepted edge cases of the Phase 4 advisory, recorded 2026-10-06.** The session-start hook
+  exits before section 8c on a detached HEAD, so no patterns advisory appears there (pre-existing
+  hook behaviour). Cache directories with a prerelease suffix (for example `2.0.0-rc1`) are skipped
+  by the version filter, so a prerelease `tcs-patterns` gives silence. The shell resolves
+  `_SCRIPT_DIR` with logical `pwd` while the reporter uses `Path(__file__).resolve()`, so symlinked
+  plugin directories could see different parent trees. `drift_check_bundle` and `check_bundle`
+  have no production caller yet: they are the generalisation T4.1 required, and patterns drift goes
+  through `patterns_drift.py` instead.
+
 ### Technical Debt
 
 - **Rolling the plugin back to `1.x` with patterns installed** leaves an installed `tcs-ddd` and a
@@ -2848,8 +2893,10 @@ The three corrections, in the order they matter:
   2026-10-06). A reporter that hangs would stall session start for as long as the hook's own
   limit allows. `timeout` is absent on macOS, so closing this needs a forking perl fallback. It is
   accepted for now: the reporter only reads two small files, and the segment runs only in a
-  repository that holds a manifest. Measured with one: a 169 ms median, against a 300 ms p99
-  budget.
+  repository that holds a manifest. Medians measured 2026-10-06, 10 runs each: 89.5 ms in a repository
+  without a manifest and 169 ms with one. The p99 with a manifest present is **not measured**
+  against the 300 ms budget, and the existing perf test runs without a manifest, so it never times
+  the Python path.
 
 ### Implementation Gotchas
 
@@ -2910,5 +2957,5 @@ Each of these has cost time in this repository before:
 |------|------------|---------|
 | DetectionReport | The JSON `detect.py` returns: auto set, baseline, gates, evidence, flags | The entire scanning-to-asking contract; makes the scanner testable alone |
 | Manifest | `.claude/skills/.tcs-patterns-manifest`, TOML, one section per installed pattern | Components C6; read by C5 and C7 |
-| `OK` / `MISSING` / `DRIFT:<p>:<installed>:<catalogue>` | The drift reporter's stdout contract | Mirrors `drift_check_hook_bundle`'s existing contract |
+| `OK` / `MISSING` / `DRIFT:<p>:<installed>:<catalogue>` / `UNKNOWN:<p>:<installed>` | The drift reporter's stdout contract | Mirrors `drift_check_hook_bundle`'s exit-0, caller-decides semantics; the line shapes differ (`DRIFT:<installed>` there, `DRIFT:<p>:<i>:<c>` here) |
 | `expected.json` | A fixture's declared verdict, including `must_not_propose` | How a trap names what it defends |

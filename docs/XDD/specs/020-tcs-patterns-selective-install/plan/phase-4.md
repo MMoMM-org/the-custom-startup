@@ -98,8 +98,9 @@ only where it exists.
 - [x] **T4.3 The session-start advisory segment** `[activity: platform-operations]`
 
   1. Prime: Read how segments are composed —
-     `plugins/tcs-git-helpers/scripts/session-start-brief.sh` lines 145-185, where `drift_seg` is
-     built and then joined with the others — and the coordination requirement
+     `plugins/tcs-git-helpers/scripts/session-start-brief.sh` sections 8b (the hooks drift segment),
+     8c (the patterns segment) and 9 (composition), where `drift_seg` is built and then joined with the
+     others — and the coordination requirement
      `[ref: SDD/Deployment View/Multi-Component Coordination]`.
   2. Test: A drifted pattern produces a segment naming the pattern, both versions and the command;
      all current produces **no** segment at all; no manifest produces no segment (F7's fourth
