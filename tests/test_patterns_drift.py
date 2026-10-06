@@ -288,3 +288,43 @@ def test_cli_catalogue_flag_without_value_exits_zero_silently_with_usage_on_stde
     assert bad.returncode == 0
     assert bad.stdout == ""
     assert bad.stderr.strip() != ""
+
+
+def test_cli_exits_zero_silently_naming_status_when_the_lib_has_no_status_py(tmp_path):
+    """T5.1a: the reporter imports `drift_verdict`/`catalogue_version` from
+    `lib/status.py` lazily, inside `drift_lines`, so a partial lib -- `manifest.py`
+    present, `status.py` absent, the new way the refactor creates to have one --
+    still exits 0 with empty stdout and names the missing module on stderr.
+
+    The repository's manifest must list a pattern: with none, `drift_lines`
+    could answer `MISSING` before ever reaching the lazy import, and this test
+    would pass without exercising it."""
+    plugin = tmp_path / "plugin"
+    scripts = plugin / "scripts"
+    scripts.mkdir(parents=True)
+    copy = scripts / "patterns_drift.py"
+    shutil.copy2(SCRIPT, copy)
+    lib = plugin / "skills" / "patterns-setup" / "lib"
+    lib.mkdir(parents=True)
+    for source in LIB_DIR.glob("*.py"):
+        if source.name != "status.py":
+            shutil.copy2(source, lib / source.name)
+    assert (lib / "manifest.py").is_file()
+    assert not (lib / "status.py").exists()
+
+    repo, cat = _setup(tmp_path, ["ddd"])
+    assert _load_lib("manifest").read(repo).patterns, "the fixture must list at least one pattern"
+
+    r = subprocess.run(
+        [sys.executable, str(copy), str(repo), "--catalogue", str(cat)],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+    )
+    assert r.returncode == 0
+    assert r.stdout.strip() != "MISSING"
+    assert r.stdout == ""
+    err_lines = [line for line in r.stderr.splitlines() if line.strip()]
+    assert len(err_lines) == 1, r.stderr
+    assert err_lines[0].startswith("patterns_drift:")
+    assert "status" in err_lines[0]

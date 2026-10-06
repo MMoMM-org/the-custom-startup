@@ -15,8 +15,10 @@ decides what to do, exactly as `drift_check_hook_bundle` does
                               directory is gone (deleted upstream), or the
                               installed version is AHEAD of it (a rollback)
 
-Versions compare as integers, so `01` against `1` is current. The comparison
-lives here, not in `manifest.is_current`, which `update()` also calls.
+Versions compare as integers, so `01` against `1` is current. The rule is
+`status.drift_verdict`, and the catalogue read `status.catalogue_version`, both
+in `lib/status.py` so that the `status` verb reuses them rather than restating
+them (T5.1a); neither is `manifest.is_current`, which `update()` also calls.
 
 Drift is computed from each pattern's own manifest `version`, never from the
 manifest's top-level `bundle`: `bundle` records the plugin version that last
@@ -30,7 +32,6 @@ resolve from this file's own location, so any cwd works.
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
@@ -40,17 +41,6 @@ DEFAULT_CATALOGUE_DIR = _PLUGIN_ROOT / "templates" / "patterns"
 
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
-
-_NUMERIC = re.compile(r"^[0-9]+$")
-
-
-def _catalogue_version(catalogue_dir: Path, name: str) -> str | None:
-    """The pattern's catalogue VERSION, or None if absent, unreadable or non-numeric."""
-    try:
-        text = (catalogue_dir / name / "VERSION").read_text(encoding="utf-8").strip()
-    except (OSError, UnicodeDecodeError):
-        return None
-    return text if _NUMERIC.match(text) else None
 
 
 def drift_lines(repo_dir: Path, *, catalogue_dir: Path = DEFAULT_CATALOGUE_DIR) -> list[str]:
@@ -71,14 +61,19 @@ def drift_lines(repo_dir: Path, *, catalogue_dir: Path = DEFAULT_CATALOGUE_DIR) 
     except manifest_lib.ManifestUnparseableError:
         return ["MISSING"]
 
+    # Lazy for the same reason as `manifest` above: a lib that has
+    # `manifest.py` but not `status.py` must still exit 0 with empty stdout.
+    from status import catalogue_version, drift_verdict
+
     lines: list[str] = []
     for name in sorted(current.patterns):
         entry = current.patterns[name]
-        catalogue_version = _catalogue_version(catalogue_dir, name)
-        if catalogue_version is None or int(entry.version) > int(catalogue_version):
+        catalogue = catalogue_version(catalogue_dir, name)
+        verdict = drift_verdict(entry.version, catalogue)
+        if verdict == "UNKNOWN":
             lines.append(f"UNKNOWN:{name}:{entry.version}")
-        elif int(entry.version) < int(catalogue_version):
-            lines.append(f"DRIFT:{name}:{entry.version}:{catalogue_version}")
+        elif verdict == "DRIFT":
+            lines.append(f"DRIFT:{name}:{entry.version}:{catalogue}")
     return lines or ["OK"]
 
 
