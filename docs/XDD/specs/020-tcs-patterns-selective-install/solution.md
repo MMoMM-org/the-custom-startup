@@ -1944,11 +1944,33 @@ touched.
 *after* the new directory lands but *before* the stash is removed leaves `dest` present **and** a
 stash beside it. `update()` then reports that pattern `current` or `refreshed` normally, says nothing
 about the stash, and leaves it — but `_replace_subtree` deletes a pre-existing stash before
-refreshing, so the debris has a known expiry: the next refresh of that pattern. Nothing is lost
-either, because `dest` holds a working pattern. The directory-absent case is the one that cannot
-heal, precisely because the cleanup site is unreachable once the missing-directory guard fires first.
-One state is debris with an expiry; the other is the user's only copy with no expiry, and only the
+refreshing, so the debris expires at the next refresh of that pattern. Nothing is lost either,
+because `dest` holds a working pattern. The directory-absent case is the one that cannot heal,
+precisely because the cleanup site is unreachable once the missing-directory guard fires first. One
+state is debris with an expiry; the other is the user's only copy with no expiry, and only the
 second earns a clause.
+
+**That expiry is conditional, and an earlier revision of this paragraph claimed it
+unconditionally.** Corrected 2026-10-06 after the implementer read the argument back against the
+catalogue-removal row — the second time it caught this document overstating a guarantee. The expiry
+depends on the refresh path being reachable, and if the catalogue has **dropped** the pattern it
+never is: `update()` raises on the catalogue guard before `_replace_subtree`, and `install()` fails
+on the absent `VERSION`. Measured over repeated calls to both verbs, the stash was never cleared;
+restoring the pattern to the catalogue cleared it on the next refresh. So in the
+catalogue-dropped + `dest`-present state the stash is **permanent** debris.
+
+It still gets no message, and the reason is the half of the argument that does survive: `dest` holds
+a working pattern, so nothing is at risk and an alarm would be noise about a directory the user can
+delete at leisure. What does not survive is calling it temporary. The distinction matters because
+the three states now differ along **two** axes rather than one — whether anything is at risk, and
+whether the debris expires — and only "at risk" earns a message:
+
+| catalogue | `dest` | at risk? | expires? | message |
+|---|---|---|---|---|
+| present | present | no | yes | none |
+| present | absent | **yes** — only copy, recreatable | no | names the stash (decision 8) |
+| dropped | absent | **yes** — only copy, NOT recreatable | no | names the stash (decision 7) |
+| dropped | present | no | **no** — permanent | none |
 
 **A directory that exists but has no readable `SKILL.md` is `failed` too, and that message may name
 `install`.** This extends decision 8 rather than adding a state: the record claims an installed
