@@ -716,3 +716,78 @@ _run_fx_hook() {
   [ -z "$stderr" ]
   [ "$(_ssb_sysmsg)" = "[tcs-git-helpers] patterns ddd v${low} → v${cat_v}; run /tcs-patterns:patterns-setup update" ]
 }
+
+# spec-020 T4.4 — the two-way property that makes the grain worth its cost.
+# One pattern's catalogue change advises in a repository that installed it AND
+# stays silent in one that did not. Both halves in ONE run: "advises" alone is
+# satisfied by a reporter that lists the whole catalogue, "silent" alone by one
+# that never reports. Real hook, real reporter, real installer; only the
+# catalogue is a fixture (two patterns).
+_fx_install_patterns() {
+  # args: repo catalogue pattern...
+  local repo="$1" cat="$2"
+  shift 2
+  python3 -I -c '
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import install
+install.install(Path(sys.argv[2]), sys.argv[4:], catalogue_dir=Path(sys.argv[3]), bundle="2.0.0")
+' "$PLUGIN_ROOT/../tcs-patterns/skills/patterns-setup/lib" "$repo" "$cat" "$@"
+}
+
+@test "patterns advisory two-way: one pattern change advises where installed and only there" {
+  _install_githooks_current
+
+  # Real tcs-patterns reporter + lib next to the real hook (repo layout), with
+  # a two-pattern fixture catalogue where the reporter's default points.
+  local fx="$BATS_TEST_TMPDIR/fx" src="$PLUGIN_ROOT/../tcs-patterns"
+  _fx_git_helpers_at "$fx/plugins/tcs-git-helpers"
+  mkdir -p "$fx/plugins/tcs-patterns/scripts" "$fx/plugins/tcs-patterns/skills/patterns-setup"
+  cp "$src/scripts/patterns_drift.py" "$fx/plugins/tcs-patterns/scripts/"
+  cp -R "$src/skills/patterns-setup/lib" "$fx/plugins/tcs-patterns/skills/patterns-setup/lib"
+  rm -rf "$fx/plugins/tcs-patterns/skills/patterns-setup/lib/__pycache__"
+  local catalogue="$fx/plugins/tcs-patterns/templates/patterns" p
+  for p in ddd hexagonal; do
+    mkdir -p "$catalogue/$p"
+    printf '1\n' > "$catalogue/$p/VERSION"
+    printf -- '---\nname: %s\ndescription: "fixture"\n---\n\nbody\n' "$p" > "$catalogue/$p/SKILL.md"
+  done
+
+  # A installs ddd only; B (a copy of the same fixture repo) installs hexagonal only.
+  local repo_a="$TEST_REPO" repo_b="$BATS_TEST_TMPDIR/repo-b"
+  cp -R "$repo_a" "$repo_b"
+  _fx_install_patterns "$repo_a" "$catalogue" ddd
+  _fx_install_patterns "$repo_b" "$catalogue" hexagonal
+
+  # Both start current: silent.
+  _run_fx_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  TEST_REPO="$repo_b"
+  _run_fx_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+
+  # One change: ddd's catalogue VERSION only.
+  printf '2\n' > "$catalogue/ddd/VERSION"
+
+  # Half 1: A, which installed ddd, is advised.
+  TEST_REPO="$repo_a"
+  _run_fx_hook
+  [ "$status" -eq 0 ]
+  local msg_a
+  msg_a="$(_ssb_sysmsg)"
+  _ssb_has "$msg_a" "patterns ddd v1 → v2"
+  _ssb_has "$msg_a" "run /tcs-patterns:patterns-setup update"
+
+  # Half 2 (same run): B, which never installed ddd, hears nothing about patterns.
+  TEST_REPO="$repo_b"
+  _run_fx_hook
+  [ "$status" -eq 0 ]
+  local msg_b
+  msg_b="$(_ssb_sysmsg)"
+  _ssb_lacks "$msg_b" "patterns"
+  _ssb_lacks "$msg_b" "ddd"
+  [ -z "$output" ]
+}
