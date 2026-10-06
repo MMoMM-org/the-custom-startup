@@ -873,7 +873,47 @@ writing is allowed, and an installer that is honest about what it did.
   now mutation-testable from a relocated copy the same way `manifest.py`,
   `guard.py` and `detect.py` are, with no mirror and no patching.
 
-- [ ] **T3.4 The update path, with divergence handling** `[activity: backend-api]`
+- [x] **T3.4 The update path, with divergence handling** `[activity: backend-api]`
+
+  **DELIVERED 2026-10-06.** `update()` in `lib/install.py` —
+  `update(repo_dir, *, catalogue_dir, bundle, decide=_decline) -> UpdateReport`, four channels,
+  the three-state table, atomic whole-subtree replacement, and the decline-by-default guarantee.
+  **17 tests added** to `tests/test_patterns_installer.py` (21 → 38). Suite **1144 passed, 1
+  skipped, 1 deselected**, and verified on **Python 3.11** — ADR-2's floor, which this machine's
+  3.14 cannot speak to — green on both ubuntu and macOS in CI.
+
+  Seven commits, RED/GREEN split on each pair after the first:
+  `5627a95` `f979127` `47a4071` `a110a95` `cdba82c` `8d11433` `82f1a8a`.
+
+  **Gates: four TDD-gate passes on the plan, three spec-compliance passes, one code-quality pass.**
+  Every one found something real, and the record of what each category caught is the useful part:
+
+  - The **gate** found the contract hole (an upstream-removed pattern had no row), a diff assertion
+    that survived its own target mutation, the full-subtree requirement, and — on its fourth pass,
+    asked to treat its own prior output as suspect — a flaw in the remedy *it* had prescribed:
+    exact-string diff equality silently depends on `difflib` arguments the contract never pinned.
+  - **Mutation** found what no document review could. 14 mutants of mine against an empty baseline
+    with two controls, plus the implementer's three batteries. Two genuine gaps: a guard reordering
+    nothing could see, and the restore-on-failure path with **zero** coverage — removing it or
+    inverting its guard left all 37 tests green.
+  - **Spec compliance** found the decision 7/8 intersection, where the message was not merely
+    incomplete but **false** — it claimed the directory "was left exactly as it is" when the
+    directory did not exist.
+  - **Code quality** found the restore-path coverage gap by running a repro rather than reading,
+    and named it as the thing most likely to break in six months. It was right.
+
+  **Five implementer pushbacks, each correct and each changing the work:** `bundle`'s meaning was
+  unspecified; a hard kill orphaned the user's only copy where nothing named it; my `python -B`
+  prescription did not protect a run at all; the self-healing argument I wrote was conditional and
+  I had stated it unconditionally; and the dest-gate on its own change was an unmeasured judgment
+  call, so it added a fixture for it unasked — dropping that gate is killed only by that fixture.
+
+  **Two refactors deferred** with a reopening condition, recorded in the bullets above.
+
+  Contract additions this task forced: decisions 7, 8 and 9, the four-row stash-state table, and
+  the normative pinning of the divergence diff's direction and labels — the last after measuring
+  that `difflib` defaults both file labels to empty, so the user would have been shown a diff with
+  no indication which side was their own file, in the one prompt that decides whether it survives.
 
   **All three pre-dispatch gaps are CLOSED, 2026-10-05**, in
   `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb)]` — read that
