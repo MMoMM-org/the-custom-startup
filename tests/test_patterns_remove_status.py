@@ -198,6 +198,21 @@ def test_status_absent_manifest_lists_every_tcs_directory_as_unlisted(tmp_path):
     assert report.unlisted == ("tcs-mine",)
 
 
+def test_status_reports_a_directory_at_the_manifest_path_as_unparseable(tmp_path):
+    repo, cat = _setup(tmp_path, ["ddd"])
+    manifest = _load_lib("manifest")
+    path = manifest._manifest_path(repo)
+    path.unlink()
+    path.mkdir()
+
+    report = _load_lib("status").status(repo, catalogue_dir=cat)
+    assert report.manifest_state == "unparseable"
+    assert str(path) in report.manifest_error
+    assert "not a regular file" in report.manifest_error
+    assert report.patterns == {}
+    assert report.unlisted == ("tcs-ddd",)
+
+
 def test_status_reports_an_unparseable_manifest_verbatim(tmp_path):
     repo, cat = _setup(tmp_path, ["ddd"])
     manifest = _load_lib("manifest")

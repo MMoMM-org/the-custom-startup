@@ -106,6 +106,16 @@ def test_unparseable_manifest_prints_missing(tmp_path):
     assert _lines(repo, cat) == ["MISSING"]
 
 
+def test_directory_at_the_manifest_path_prints_missing_and_exits_zero(tmp_path):
+    repo, cat = _setup(tmp_path, ["ddd"])
+    path = _load_lib("manifest")._manifest_path(repo)
+    path.unlink()
+    path.mkdir()
+    assert _lines(repo, cat) == ["MISSING"]
+    r = _run(repo, cat, tmp_path)
+    assert (r.returncode, r.stdout) == (0, "MISSING\n")
+
+
 def test_schema_invalid_manifest_prints_missing(tmp_path):
     repo, cat = _setup(tmp_path, ["ddd"])
     lib = _load_lib("manifest")

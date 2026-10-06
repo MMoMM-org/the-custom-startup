@@ -44,7 +44,7 @@ regardless of which call the implementation makes. The other five
 `test_write_cleans_up_its_temp_file_when_the_replace_fails`,
 `test_with_pattern_does_not_mutate_the_original_manifest`,
 `test_with_pattern_rejects_an_invalid_pattern_name`,
-`test_read_treats_a_directory_at_the_manifest_path_as_absent`) are ordinary
+`test_directory_at_the_manifest_path_raises_unparseable_not_absent`) are ordinary
 outcome assertions that simply had no test yet.
 """
 
@@ -274,6 +274,28 @@ def test_unparseable_manifest_raises(tmp_path: Path) -> None:
 
     with pytest.raises(manifest.ManifestUnparseableError):
         manifest.read(tmp_path)
+
+
+def test_directory_at_the_manifest_path_raises_unparseable_not_absent(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    path = _manifest_path(tmp_path, manifest)
+    path.mkdir(parents=True)
+
+    with pytest.raises(manifest.ManifestUnparseableError) as raised:
+        manifest.read(tmp_path)
+    assert str(path) in str(raised.value)
+    assert "not a regular file" in str(raised.value)
+
+
+def test_dangling_symlink_at_the_manifest_path_raises_unparseable_not_absent(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    path = _manifest_path(tmp_path, manifest)
+    path.parent.mkdir(parents=True)
+    path.symlink_to(tmp_path / "nowhere")
+
+    with pytest.raises(manifest.ManifestUnparseableError) as raised:
+        manifest.read(tmp_path)
+    assert "not a regular file" in str(raised.value)
 
 
 def test_non_utf8_manifest_raises_unparseable(tmp_path: Path) -> None:
@@ -528,12 +550,11 @@ def test_read_rejects_every_malformed_manifest_shape(tmp_path: Path, toml_text: 
 
 def test_write_cleans_up_its_temp_file_when_the_replace_fails(tmp_path: Path) -> None:
     """Makes the manifest's own path a pre-existing DIRECTORY, so `os.replace`
-    fails with `IsADirectoryError` (measured) rather than succeeding --
-    `read()` treats a directory there as absent (see
-    `test_read_treats_a_directory_at_the_manifest_path_as_absent`), so
-    `upsert` proceeds all the way to `write()`'s `os.replace` call before
-    hitting the failure. Asserts both that the exception propagates AND that
-    no `.{MANIFEST_FILENAME}.*.tmp` file is left behind in `.claude/skills/`
+    fails with `IsADirectoryError` (measured) rather than succeeding.
+    `read()` now refuses a directory there (see
+    `test_directory_at_the_manifest_path_raises_unparseable_not_absent`), so
+    this calls `write()` directly to reach its `os.replace`. Asserts both
+    that the exception propagates AND that no `.{MANIFEST_FILENAME}.*.tmp` file is left behind in `.claude/skills/`
     -- deleting `write()`'s `except BaseException: os.unlink(...); raise`
     block leaves the exception propagating correctly while silently
     littering a temp file, which only the second assertion catches."""
@@ -543,9 +564,7 @@ def test_write_cleans_up_its_temp_file_when_the_replace_fails(tmp_path: Path) ->
     path.mkdir()  # the manifest "file" is actually a directory
 
     with pytest.raises(OSError):
-        manifest.upsert(
-            tmp_path, "ddd", version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"), bundle="2.0.0"
-        )
+        manifest.write(manifest.Manifest(bundle="2.0.0", patterns={}), tmp_path)
 
     leftover = list(path.parent.glob(f".{manifest.MANIFEST_FILENAME}.*.tmp"))
     assert leftover == [], f"temp file(s) left behind: {leftover}"
@@ -602,22 +621,6 @@ def test_with_pattern_rejects_a_name_with_a_trailing_newline() -> None:
 
     with pytest.raises(ValueError):
         original.with_pattern("ddd\n", entry, bundle="2.0.0")
-
-
-def test_read_treats_a_directory_at_the_manifest_path_as_absent(tmp_path: Path) -> None:
-    """Pins `path.is_file()` specifically over `path.exists()`: the latter
-    is also `True` for a directory, which would then reach `read_text()`
-    and raise `IsADirectoryError` -- a third outcome this module's two-state
-    contract (absent vs. unparseable) has no room for."""
-    manifest = _load_manifest()
-    path = _manifest_path(tmp_path, manifest)
-    path.parent.mkdir(parents=True)
-    path.mkdir()  # a directory, not a file, at the manifest's own path
-
-    result = manifest.read(tmp_path)
-
-    assert result.bundle is None
-    assert result.patterns == {}
 
 
 # --- T5.1a: drop() and without_pattern(), the mirror of upsert/with_pattern ---

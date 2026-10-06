@@ -194,12 +194,15 @@ def _manifest_path(repo_dir: Path) -> Path:
 def read(repo_dir: Path) -> Manifest:
     """Read the manifest at `repo_dir`.
 
-    An absent file reads as an EMPTY manifest (`bundle=None, patterns={}`),
+    "Absent" means NOTHING at the manifest path (`os.path.lexists` is
+    false): that reads as an EMPTY manifest (`bundle=None, patterns={}`),
     never an error -- the first `install` into a repository has nothing to
-    read yet, and that is not a failure. A file that exists but cannot be
-    parsed into a well-formed `Manifest` raises `ManifestUnparseableError`
-    instead of returning anything -- see the module docstring for why an
-    absent file and a corrupt one must stay distinguishable here.
+    read yet, and that is not a failure. Anything else that is not a regular
+    file (a directory, a dangling symlink) raises `ManifestUnparseableError`
+    naming the path; so does a file that cannot be parsed into a well-formed
+    `Manifest`. See the module docstring for why an absent file and a corrupt
+    one must stay distinguishable here. `lexists`, not `exists`, so a
+    dangling symlink is "something there", not absent.
 
     **A forward-compatibility hazard this strictness creates, named here
     rather than left implicit.** An unknown top-level or per-pattern key
@@ -216,8 +219,10 @@ def read(repo_dir: Path) -> Manifest:
     "genuinely unparseable" before deciding whether to trust this error.
     """
     path = _manifest_path(repo_dir)
-    if not path.is_file():
+    if not os.path.lexists(path):
         return Manifest(bundle=None, patterns={})
+    if not path.is_file():
+        raise ManifestUnparseableError(f"{path}: not a regular file")
 
     try:
         doc = tomllib.loads(path.read_text(encoding="utf-8"))

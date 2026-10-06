@@ -182,7 +182,7 @@ def status(repo_dir: Path, *, catalogue_dir: Path = paths.DEFAULT_CATALOGUE_DIR)
 
     manifest_error: str | None = None
     current: manifest.Manifest | None = None
-    if not manifest_path.is_file():
+    if not os.path.lexists(manifest_path):
         manifest_state = "absent"
     else:
         try:

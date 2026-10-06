@@ -505,8 +505,8 @@ def test_an_unparseable_manifest_exits_3_on_every_writing_verb(world: World, arg
 )
 def test_an_unreadable_manifest_exits_3_on_every_writing_verb(world: World, argv: list[str]) -> None:
     """A PermissionError is an OSError, not a ManifestUnparseableError: the
-    other half of the up-front read's refusal. (A manifest path that is a
-    directory would not do: `manifest.read` treats a non-file as absent.)"""
+    other half of the up-front read's refusal. (A directory at the manifest
+    path is the unparseable half: see the next test.)"""
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         pytest.skip("root ignores file permissions")
     _library_install(world, ["hexagonal"])
@@ -519,6 +519,27 @@ def test_an_unreadable_manifest_exits_3_on_every_writing_verb(world: World, argv
         path.chmod(0o644)
     _refused(r, 3)
     assert b"status" in r.stderr
+    assert _digest(world.repo) == before
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["install", "{repo}", "ddd"], ["update", "{repo}"], ["remove", "{repo}", "hexagonal"]],
+    ids=["install", "update", "remove"],
+)
+def test_a_directory_at_the_manifest_path_exits_3_on_every_writing_verb(world: World, argv: list[str]) -> None:
+    """Something that is not a regular file at the manifest path is
+    unparseable, not absent: install must not copy a pattern it cannot record."""
+    _library_install(world, ["hexagonal"])
+    path = _manifest_path(world.repo)
+    path.unlink()
+    path.mkdir()
+    before = _digest(world.repo)
+    r = _run(world, *[a.replace("{repo}", str(world.repo)) for a in argv])
+    _refused(r, 3)
+    assert b".tcs-patterns-manifest" in r.stderr
+    assert b"not a regular file" in r.stderr
+    assert not (_skills(world.repo) / "tcs-ddd").exists()
     assert _digest(world.repo) == before
 
 
