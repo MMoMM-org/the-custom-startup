@@ -1508,7 +1508,7 @@ def test_paths_imports_from_a_copy_whose_root_resolves_nowhere(tmp_path: Path) -
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    assert module.PLUGIN_ROOT == copy.resolve().parents[3]
+    assert module.PLUGIN_ROOT == (tmp_path / "a").resolve()
     assert not module.PLUGIN_JSON.exists()
 
 

@@ -12,8 +12,9 @@ companion before the user finishes deciding
 `companion_map()` and `expand_companions()` are the two things C3 reads: the
 direct edges, and the transitive closure a selection pulls in.
 `companion_citations()` (T5.1a) returns the citations behind each edge, so a
-proposed companion can arrive with the citation that justified it named. Both take the
-catalogue root as a parameter, defaulting to the real one -- the same shape
+proposed companion can arrive with the citation that justified it named. All
+three, like `ambiguous_citations()`, take the catalogue root as a parameter,
+defaulting to the real one (`paths.DEFAULT_CATALOGUE_DIR`) -- the same shape
 `detect(repo_dir)` takes the repository root -- so a test can derive against
 a throwaway `tmp_path` catalogue and never write into
 `plugins/tcs-patterns/templates/patterns/` itself
@@ -66,9 +67,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-# The real catalogue (`paths.DEFAULT_CATALOGUE_DIR`), parameterised out of
-# every function below so a test can substitute a `tmp_path` tree instead --
-# see the module docstring.
 import paths
 
 # Copied from `tests/test_tcs_patterns_catalogue_links.py` (plumbing only, see

@@ -456,3 +456,21 @@ def test_companion_citations_names_the_citing_file_and_line(tmp_path: Path) -> N
     }
     with pytest.raises(dataclasses.FrozenInstanceError):
         Citation(source_file="a", line=1, target="b").line = 2
+
+
+def test_an_own_directory_citation_and_an_ambiguous_one_yield_no_citations(tmp_path: Path) -> None:
+    """Hand-typed: `alpha` cites a file in its own directory (internal, never
+    a companion) and one resolving under both `beta` and `gamma` (ambiguous,
+    no edge). Neither may reach `companion_citations()`."""
+    companions = _load_companions()
+    _write_pattern_file(
+        tmp_path,
+        "alpha",
+        "SKILL.md",
+        "Own: `reference/own.md`. Ambiguous: `reference/shared.md`.\n",
+    )
+    _write_pattern_file(tmp_path, "alpha", "reference/own.md", "alpha's own file\n")
+    _write_pattern_file(tmp_path, "beta", "reference/shared.md", "beta's copy\n")
+    _write_pattern_file(tmp_path, "gamma", "reference/shared.md", "gamma's copy\n")
+
+    assert companions.companion_citations(tmp_path) == {}
