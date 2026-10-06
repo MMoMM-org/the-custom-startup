@@ -1375,7 +1375,8 @@ python3 <abs path>/skills/patterns-setup/lib/cli.py [--catalogue <dir>] <verb> <
   scan    <repo> [--answers <json>]                 reads    detect -> outcomes -> companions, + listing cost
   install <repo> <pattern>...                       WRITES   guard -> install
   update  <repo> [--accept <pattern>]...            WRITES   update, declining every diverged pattern not named
-  remove  <repo> <pattern>... [--force <pattern>]...WRITES   remove
+  remove  <repo> <pattern>... [--discard-edits <pattern>]...
+                                                    WRITES   remove (reads the catalogue only to diff a refusal)
   status  <repo>                                    reads    status
 ```
 
@@ -1384,8 +1385,9 @@ python3 <abs path>/skills/patterns-setup/lib/cli.py [--catalogue <dir>] <verb> <
 works; it never reads `CLAUDE_PLUGIN_ROOT`, which is absent in the Bash-tool subprocess this runs in
 (decision 5 of the install plan). The catalogue defaults to `paths.DEFAULT_CATALOGUE_DIR` (below,
 under `status`), one derivation rather than another copy of the `parents[3]` arithmetic. `--catalogue <dir>` is a test
-seam, as it is on the drift reporter: one global option, placed before the verb, which `remove`
-ignores because it never reads the catalogue. `home_dir` for the guard is `Path.home()`, the
+seam, as it is on the drift reporter: one global option, placed before the verb, which every verb
+honours — `remove` included since 2026-10-06, when its rule-5 refusal began carrying a diff against
+the catalogue (below). `home_dir` for the guard is `Path.home()`, the
 CLI-entry-point half of the convention under *the three namespaces (C4)*; `Path.home()` honours `$HOME`, so a test sets `HOME` and the CLI
 needs no `--home` flag (decided here: one seam is enough when the platform already provides it).
 `bundle` is never passed, so `install()`/`update()`/`remove()` read it from `plugin.json` lazily.
@@ -1573,20 +1575,52 @@ leaves the repository untouched.
 | `failed` | object | pattern → reason string |
 | `committed` | boolean | always `false` |
 
-##### `remove <repo> <pattern>... [--force <pattern>]...` — writes
+##### `remove <repo> <pattern>... [--discard-edits <pattern>]...` — writes
 
-Calls `install.remove(toplevel, patterns, force=frozenset(forced))`; each `--force` must also be
-one of the positional patterns (exit 2 otherwise). The library function, new in `install.py`:
+Calls `install.remove(toplevel, patterns, catalogue_dir=catalogue,
+discard_edits=frozenset(named))`; each `--discard-edits` must also be one of the positional patterns
+(exit 2 otherwise). The library function, new in `install.py`:
 
 ```
-remove(repo_dir, names, *, bundle=None, force=frozenset()) -> RemoveReport
+remove(repo_dir, names, *, catalogue_dir=DEFAULT_CATALOGUE_DIR, bundle=None,
+       discard_edits=frozenset()) -> RemoveReport
 
 RemoveReport (frozen, named channels)
     removed:   name -> (installed_as, version, directory_existed)
-    refused:   name -> reason          a rule said no; nothing touched
+    refused:   name -> (reason, unified_diff | None)
+                                       a rule said no; nothing touched. The diff is a str for
+                                       rule 5 and None for every other rule
     failed:    name -> reason          an OSError; rolled back where possible
     committed: always False
 ```
+
+**The override is `--discard-edits`, renamed from `--force` on 2026-10-06 (Marcus, from T5.1's
+walkthrough).** `--force` collides with a common class of safety hook — this repository's
+maintainer's included — so the remove-an-edited-pattern path could not run from Claude; the new
+name also says what the flag does. The library keyword was renamed with it (`force` →
+`discard_edits`); behaviour is otherwise unchanged.
+
+**A rule-5 refusal carries the diff it would discard — decided 2026-10-06 (Marcus), so consent is
+given to a loss the user can see (ADR-4).** `update` already shows a diverged pattern's diff before
+asking; `remove` refused with a bare reason, and the skill could only point the user at `git diff`,
+which shows nothing for an install that was never committed. The diff is **the same one `update`
+produces** — `_divergence_diff(installed, catalogue)`, from-label `installed`, to-label
+`catalogue`, the catalogue side renamed as installed (`_catalogue_as_installed`) — so the user's
+own edit appears as a `-` line, as in `update`'s `declined`. Read that way, the `-` lines are what
+no reinstall can bring back and the `+` lines are what a reinstall would. Its two inputs never turn
+the refusal into a failure:
+- the installed `SKILL.md` is read as UTF-8 with replacement characters for undecodable bytes;
+  absent or unreadable (rule 5 already counts both as differing) it is the empty file;
+- **the catalogue side is the empty file when the catalogue no longer carries the pattern** — or
+  its `SKILL.md` cannot be read or renamed. Decided here: an empty `to` side makes every installed
+  line a `-` line, which is exactly the loss — with no catalogue copy, nothing of the pattern can be
+  reinstalled, so all of it is the user's to lose. The alternatives are worse: `null` asks for
+  consent to an unseen loss in precisely the case where the loss is largest, and a diff against
+  the version originally installed is impossible, because the manifest records only its hash.
+
+The diff is computed only for a rule-5 refusal, and never when the name is in `discard_edits`;
+every other rule's refusal carries `None`. `remove` therefore reads the catalogue, and the CLI
+passes `--catalogue` to it like every other verb.
 
 **`install.py` and not a new module, decided here:** `remove()` is C5's third write verb, and it
 needs `_bundle_version` and `_stash_path`, which are private to that module. Splitting would export
@@ -1603,7 +1637,7 @@ in sorted order, **the first rule that applies decides**:
 | 2 | the entry's `installed_as` is not `"tcs-" + name` | `refused`. ADR-1 makes this always true for what `install()` writes; a hand-edited manifest pointing `ddd` at `tcs-hexagonal` would otherwise delete the wrong pattern |
 | 3 | `.<installed_as>.replaced` exists **and `<installed_as>/` does not** | `refused`, naming it, with the resolution: "an interrupted refresh left your copy at `<stash>`; move it back to `<installed_as>/` and run remove again, or delete it yourself if you do not want it". With the directory absent the stash is the user's only copy (update path, decision 8), and dropping the manifest entry would orphan the only reference to it. **A stash beside a present directory is not this rule's case**: decision 8 calls that state debris that puts nothing at risk, since `<installed_as>/` holds the working copy, and the refresh that might clear it never comes for a pattern the catalogue has dropped (decision 8, "That expiry is conditional"), nor after a remove. So `remove` deletes it — **first, in step 2, before anything else moves**, while the user's copy is still in `<installed_as>/`. Corrected 2026-10-06, twice: this rule first refused whenever a stash existed, which made a current pattern with old debris unremovable by any verb; then it deleted the stash last, after the manifest write, which let an interrupted remove leave an old stash looking like the user's only copy |
 | 4 | `<installed_as>` exists but is a symlink, or is not a directory | `refused`: `install()` never creates either, so it is not ours as written |
-| 5 | the directory exists and the hash of its `SKILL.md` differs from the manifest `sha256` — an unreadable or absent `SKILL.md` counts as differing — and the name is not in `force` | `refused`: "diverged from what was installed; local edits would be lost — re-run with --force <name>". Decided here: refuse, mirroring ADR-4's stance that nothing destroys local work without consent. As with `update`, only `SKILL.md` is hashed, so an edit confined to `reference/` is deleted without asking — ADR-4's accepted limit, not a new one |
+| 5 | the directory exists and the hash of its `SKILL.md` differs from the manifest `sha256` — an unreadable or absent `SKILL.md` counts as differing — and the name is not in `discard_edits` | `refused`: "diverged from what was installed; local edits would be lost — re-run with --discard-edits <name>", **with the unified diff above** (the flag was `--force` until 2026-10-06; the diff added the same day). Decided here: refuse, mirroring ADR-4's stance that nothing destroys local work without consent. As with `update`, only `SKILL.md` is hashed, so an edit confined to `reference/` is deleted without asking — ADR-4's accepted limit, not a new one |
 | 6 | otherwise | removed, in the five steps below |
 
 **Order: clear the stash, move aside, then the manifest, then delete.** Decided here, because every
@@ -1655,7 +1689,7 @@ write with its own interruption states, and it would erase the record that setup
 |---|---|---|
 | `repo` | string | the git toplevel |
 | `removed` | object | pattern → `{installed_as, version, directory_existed}` |
-| `refused` | object | pattern → reason string |
+| `refused` | object | pattern → `{reason, diff}` — `diff` the unified diff (string) for a rule-5 refusal, `null` for every other rule. Changed 2026-10-06 from a bare reason string |
 | `failed` | object | pattern → reason string |
 | `committed` | boolean | always `false` |
 
@@ -2705,11 +2739,11 @@ decided answer instead of repeating the derivation
 | Installed pattern diverges from its hash | C5 on `update`, **not `install`** | The user is asked per pattern with a unified diff (ADR-4). Default is to skip, so an unanswered prompt cannot destroy local work. **This row is T3.4's, not T3.3's** — noted 2026-10-05 after T3.3's gate flagged that it reads as a third `install()` obligation and would contradict "no `AskUserQuestion` in `install.py`" if anyone tried to satisfy it there. `install()` detects divergence only to the extent of declining to call a locally-edited pattern `unchanged`; prompting about it is `update()`'s. **That gap is now closed** — `update()`'s signature, its three-state table and its eight decisions are at `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb)]`, settled before dispatch the same way C5's four were settled before T3.3. The diff this row refers to has two normative properties as of decision 4: the installed file is the `from` side, so the user's own edit appears as a deletion, and both file labels are populated. |
 | Catalogue `VERSION` missing or non-numeric | C7, C9 | C7 reports the pattern as unknown rather than drifted; C9 fails the gate. A pattern without a version cannot be distributed. |
 | Pattern name given to the catalogue reader is unknown | C8 | Lists the 21 available names. |
-| Invalid CLI arguments: an `install` pattern name not in the catalogue (`remove` takes any name, since a pattern deleted upstream is exactly what `status` sends a user to remove), `--answers` naming a closed gate or a pattern its gate does not settle, `--force` naming a pattern not being removed | C3's CLI | Exit 2, stdout empty, nothing written. Added 2026-10-06 `[ref: SDD/Interface Specifications/Process contract: the CLI the skill drives]`. |
+| Invalid CLI arguments: an `install` pattern name not in the catalogue (`remove` takes any name, since a pattern deleted upstream is exactly what `status` sends a user to remove), `--answers` naming a closed gate or a pattern its gate does not settle, `--discard-edits` (`--force` until 2026-10-06) naming a pattern not being removed | C3's CLI | Exit 2, stdout empty, nothing written. Added 2026-10-06 `[ref: SDD/Interface Specifications/Process contract: the CLI the skill drives]`. |
 | Manifest unparseable or unreadable when `install`, `update` or `remove` runs through the CLI | C3's CLI | Exit 3 before the guard or any write, stderr naming the file and pointing to `status`. `status` itself still exits 0 and reports the manifest's state and error verbatim. Added 2026-10-06. |
 | `update --accept` names a pattern the manifest does not list | C3's CLI | Exit 3 before `update()` is called. A misspelt name would otherwise silently decline the pattern the user had just approved. Added 2026-10-06. |
 | `remove` names a pattern the manifest does not list | C5 `remove()` | `refused`, and nothing is deleted. `remove` deletes only what the manifest records. Added 2026-10-06. |
-| `remove` names a pattern whose installed `SKILL.md` no longer matches the manifest hash | C5 `remove()` | `refused` unless named by `--force`, the same consent ADR-4 requires before `update` replaces an edit. Added 2026-10-06. |
+| `remove` names a pattern whose installed `SKILL.md` no longer matches the manifest hash | C5 `remove()` | `refused` unless named by `--discard-edits`, the same consent ADR-4 requires before `update` replaces an edit, and the refusal carries the unified diff (`installed` → `catalogue`; against an empty file when the catalogue no longer carries the pattern) so that consent is to a loss the user can see. Added 2026-10-06; the flag was `--force` and the refusal carried no diff until a later 2026-10-06 decision (Marcus). |
 | `remove` finds a `.<installed_as>.replaced` stash with the pattern directory absent, or a symlink or file where the pattern directory should be | C5 `remove()` | `refused`, naming the path and the resolution. That stash is the user's only copy, and a link or file is not something `install()` wrote. A stash beside a **present** directory is debris; `remove` deletes it before any other change, so an interrupted remove never leaves one behind. Added 2026-10-06. |
 | `remove` interrupted between its steps | C5 `remove()` | Mid or after step 1: an ordinary pattern, possibly with a partial `.removing` (safe). Mid or after step 2: an ordinary pattern, possibly with a partial stash (safe). After step 3: the manifest lists the pattern, its directory is absent and `.removing` is present; a re-run finishes. Mid step 4: `manifest-tmp` debris (safe) plus the after-step-3 state. After step 4: `.removing` debris (safe); a re-run is refused by rule 1. Mid step 5: debris (safe). `status` shows every one of these. Added 2026-10-06. |
 | A catalogue `SKILL.md` whose `description:` cannot be parsed | C3's CLI, `scan` | That pattern's `listing_cost` is `null`, and the skill shows "unknown", never 0. Added 2026-10-06. |
@@ -2868,12 +2902,18 @@ advisory in every repository for a change to one pattern, which F7's second crit
 
 ### User Interface & UX
 
-The interaction is three screens at most: a proposal with evidence, up to three multiSelect
+The interaction is three screens at most: a proposal with evidence, up to three multi-answer
 questions, a confirmation. The bar set by the PRD is `claude init`, not an interview, and the gates
 are what enforce it — a repository with no server framework and no tests sees one screen.
 
 Costs are shown per entry at the moment of choosing, in characters of listing, because that is the
 scarce resource (CON-1) and the user cannot otherwise see it.
+
+**The questions are asked in plain chat, not with `AskUserQuestion` — decided 2026-10-06 by Marcus,
+from T5.1's walkthrough.** All open questions go in one message, each a numbered list of options
+that takes any number of answers, including none. `AskUserQuestion` caps a question at four
+options, and q1 has six; splitting q1 across two questions would break the three-question bound,
+and dropping options would hide patterns the gate opened.
 
 ### System-Wide Patterns
 
@@ -3028,6 +3068,13 @@ real case. With the clause above, such a user may also see `baseline: [testing]`
 alongside `unrecognised_stack: true`; those two are consistent, not contradictory, and C3 words
 the message from the flag.
 
+**An unrecognised stack with every gate shut still gets the outcome report — decided 2026-10-06 by
+Marcus, from T5.1's walkthrough.** "Nothing proposed" is not "nothing shown": the confirmation
+screen still lists `not_reached`, grouped one line per shut gate, naming the patterns the user was
+not asked about and the signal the scan did not find, so a user who disagrees with the detection
+can see it and add a pattern by name. With an empty selection nothing is written, and the skill
+says so.
+
 ### ADR-6: Manifest at `.claude/skills/.tcs-patterns-manifest` — CONFIRMED
 
 **Decision.** The manifest lives beside the installed skills, as decided before this SDD began.
@@ -3098,6 +3145,13 @@ unasked is a different class of action from writing files.
 **Trade-offs accepted.** An uncommitted install is per-developer, so the inheriting teammate
 persona gets nothing until someone commits — and the drift advisory will then differ between
 developers in the same repository. The `status` verb is what makes that visible.
+
+**What the commit contains — decided 2026-10-06 by Marcus, from T5.1's walkthrough.** On a yes,
+the skill stages and commits **only the paths the operation changed** — the manifest and each
+`<installed_as>` the verb wrote, refreshed or removed, kept only where `git status --porcelain --
+<path>` lists them — and never the user's other staged work (`git commit -- <path>...`, not a bare
+`git commit`). A commit hook's refusal is relayed verbatim and never retried with `--no-verify`:
+the hook is the user's policy, and the offer is not a reason to bypass it.
 
 ### ADR-9: The existing multi-bundle CI gate gains a per-pattern rule — CONFIRMED
 

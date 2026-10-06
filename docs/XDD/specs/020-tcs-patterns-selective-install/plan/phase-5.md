@@ -83,11 +83,17 @@ four passing test suites.
        one test per rule, each asserting a digest of `.claude/skills/` **and** the manifest bytes
        are unchanged for a refused pattern. Three tests the rest depend on: a hand-made
        `tcs-foo/` the manifest does not list survives `remove(…, ["foo"])` byte-for-byte; a
-       pattern whose installed `SKILL.md` was edited is refused without `force`, removed with it;
-       an edit confined to `reference/` is removed without `force` (ADR-4's stated limit, pinned
-       so nobody "fixes" it by accident). **Two** diverged patterns with only one named in
-       `force`: that one is removed and the other refused, which is what kills a blanket-flag
-       `force`. A `.replaced` stash beside a present directory is deleted with it; with the
+       pattern whose installed `SKILL.md` was edited is refused without `discard_edits`, removed
+       with it; an edit confined to `reference/` is removed without `discard_edits` (ADR-4's
+       stated limit, pinned so nobody "fixes" it by accident). **Two** diverged patterns with only
+       one named in `discard_edits`: that one is removed and the other refused, which is what kills
+       a blanket flag. (The keyword and the CLI flag were `force`/`--force` until 2026-10-06,
+       renamed by Marcus because `--force` trips a common class of safety hook and so could not
+       run from Claude.) **Amended 2026-10-06:** a rule-5 refusal carries the unified diff
+       (`installed` → `catalogue`, the same helper `update` uses), every other rule's refusal
+       carries `None`, and a pattern the catalogue no longer carries is diffed against the empty
+       file; tests use hand-typed expectations (`--- installed` header, the user's edit as a `-`
+       line, the CLI's `refused[p] == {"reason": …, "diff": …}` exactly). A `.replaced` stash beside a present directory is deleted with it; with the
        directory absent it is refused and the reason names the stash. An `OSError` injected
        in step 2 after a partial delete of the stash reports `failed`, leaves `tcs-<p>/` present
        and the manifest bytes unchanged, and never reaches step 3 (no `.removing`). A fault
@@ -200,7 +206,12 @@ four passing test suites.
      before each mutation run. At minimum, mutate:
      - drop rule 1, so a pattern the manifest does not list is deleted (must fail the unowned
        test);
-     - make `force` a blanket flag rather than per-name (must fail the two-diverged test);
+     - make `discard_edits` (was `force`) a blanket flag rather than per-name (must fail the
+       two-diverged test);
+     - drop the diff from a rule-5 refusal (must fail the diverged-refusal diff test; added
+       2026-10-06);
+     - diff in the wrong direction, catalogue → installed (must fail the same test, which needs
+       the user's edit as a `-` line under `--- installed`; added 2026-10-06);
      - swap `remove()`'s rename and manifest steps (must fail the rename-fault test);
      - make the rename-back on a `manifest.drop` failure unconditional (must fail the resume-path test);
      - refuse on any `.replaced` stash, present directory or not (must fail the "stash beside a
@@ -222,7 +233,7 @@ four passing test suites.
      walkthrough T5.1 depends on.
   5. Success:
      - [x] `remove` never deletes a directory the manifest does not own `[ref: SDD/Process contract: the CLI the skill drives, remove rule 1]`
-     - [x] `remove` refuses a diverged pattern unless forced by name `[ref: SDD/ADR-4; SDD/Error Handling]`
+     - [x] `remove` refuses a diverged pattern unless named by `--discard-edits` (was `--force`), and the refusal shows the diff it would discard (added 2026-10-06) `[ref: SDD/ADR-4; SDD/Error Handling]`
      - [x] Interrupted after the move-aside (entry listed, directory absent), a re-run of `remove` completes; interrupted after the manifest write (`.removing` alone), a re-run is refused and `status` reports the leftover as safe-to-delete debris `[ref: SDD/Process contract: the CLI the skill drives, "Order"]`
      - [x] `status` agrees with `patterns_drift.py` on every row of a hand-typed verdict table `[ref: SDD/AC-11]`
      - [x] `status` reports an unparseable manifest verbatim, exit 0 `[ref: SDD/Error Handling, "Manifest present but unparseable"]`
@@ -261,7 +272,9 @@ four passing test suites.
        with its citation, then `install` with the confirmed names.
      - `update`: `update`, show each `declined` diff, ask, then `update --accept` for each one
        approved.
-     - `remove`: `remove`. On a `refused` divergence, ask, then `remove --force`.
+     - `remove`: `remove`. On a `refused` divergence, show the refusal's `diff`, ask, then
+       `remove --discard-edits` (amended 2026-10-06: was `--force`, which a safety hook blocked
+       from Claude, and the refusal carried no diff, so the skill pointed at `git diff`).
      - `status`: `status`.
 
      `[path]` defaults to the session's working directory, and the skill passes it as `<repo>`.
