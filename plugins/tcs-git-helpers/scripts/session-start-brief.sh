@@ -12,7 +12,8 @@
 #
 # Actionable triggers (any one → emit):
 #   - drift_seg   : installed hook banner version != plugin.json version
-#   - patterns_seg: tcs-patterns reporter prints DRIFT for an installed pattern
+#   - patterns_seg: tcs-patterns reporter prints DRIFT (installed pattern
+#                   behind) or UNKNOWN (catalogue cannot account for it)
 #   - cleanup_seg : stale-merged branch count > 0
 #   - setup_seg   : repo missing .githooks/
 #
@@ -176,9 +177,13 @@ fi
 # reports drift against the catalogue. This segment only reads that
 # reporter's stdout — a one-way dependency through a documented contract.
 # Silent unless the reporter prints at least one well-formed
-# DRIFT:<pattern>:<installed>:<catalogue> line; OK, MISSING and UNKNOWN are
-# suppressed. Fail-open: no manifest, no python3, no reporter (tcs-patterns
-# absent or at 1.x), a non-zero exit, or a malformed line → silence.
+# DRIFT:<pattern>:<installed>:<catalogue> line (→ "update") or
+# UNKNOWN:<pattern>:<installed> line (→ "not in the catalogue", "status");
+# the drift clause comes first. OK and MISSING are suppressed (F7: a repo
+# without patterns is not nagged). Fail-open: no manifest, no python3, no
+# reporter (tcs-patterns absent or at 1.x), a non-zero exit, or a malformed
+# line → silence. Lines are parsed under LC_ALL=C, in a subshell: under a
+# UTF-8 locale bash 3.2's [!a-z0-9-] admits uppercase.
 # The manifest test comes first so a repo without patterns never pays for
 # a Python start.
 # ----------------------------------------------------------------------
@@ -228,23 +233,40 @@ _find_patterns_drift() {
   return 0
 }
 
+# Print the advisory segment(s) for reporter output $1; nothing if no line
+# is well-formed. Run it in a subshell: it sets LC_ALL=C for the bracket
+# ranges and must not change the caller's locale.
+_patterns_segs() {
+  local _line _kind _pat _inst _cat _rest _drift_list="" _unknown_list=""
+  LC_ALL=C
+  while IFS= read -r _line; do
+    IFS=: read -r _kind _pat _inst _cat _rest <<< "$_line"
+    case "$_pat" in ''|*[!a-z0-9-]*) continue ;; esac
+    case "$_inst" in ''|*[!0-9]*) continue ;; esac
+    # Comparing against the rebuilt line rejects extra or trailing-colon fields.
+    if [ "$_line" = "DRIFT:${_pat}:${_inst}:${_cat}" ]; then
+      case "$_cat" in ''|*[!0-9]*) continue ;; esac
+      _drift_list="${_drift_list:+${_drift_list}, }${_pat} v${_inst} → v${_cat}"
+    elif [ "$_line" = "UNKNOWN:${_pat}:${_inst}" ]; then
+      _unknown_list="${_unknown_list:+${_unknown_list}, }${_pat} v${_inst}"
+    fi
+  done <<< "$1"
+  if [ -n "$_drift_list" ]; then
+    printf '%s' " • patterns ${_drift_list}; run /tcs-patterns:patterns-setup update"
+  fi
+  if [ -n "$_unknown_list" ]; then
+    printf '%s' " • patterns ${_unknown_list} not in the catalogue; run /tcs-patterns:patterns-setup status"
+  fi
+  return 0
+}
+
 patterns_seg=""
 if [ -n "$repo_top" ] && [ -f "$repo_top/.claude/skills/.tcs-patterns-manifest" ] \
    && command -v python3 >/dev/null 2>&1; then
   _drift_py="$(_find_patterns_drift 2>/dev/null)" || _drift_py=""
   if [ -n "$_drift_py" ]; then
     _drift_out="$(python3 "$_drift_py" "$repo_top" 2>/dev/null)" || _drift_out=""
-    _drift_list=""
-    while IFS=: read -r _kind _pat _inst _cat _rest; do
-      [ "$_kind" = "DRIFT" ] && [ -z "$_rest" ] || continue
-      case "$_pat" in ''|*[!a-z0-9-]*) continue ;; esac
-      case "$_inst" in ''|*[!0-9]*) continue ;; esac
-      case "$_cat" in ''|*[!0-9]*) continue ;; esac
-      _drift_list="${_drift_list:+${_drift_list}, }${_pat} v${_inst} → v${_cat}"
-    done <<< "$_drift_out"
-    if [ -n "$_drift_list" ]; then
-      patterns_seg=" • patterns ${_drift_list}; run /tcs-patterns:patterns-setup update"
-    fi
+    patterns_seg="$(_patterns_segs "$_drift_out" 2>/dev/null)" || patterns_seg=""
   fi
 fi
 

@@ -554,17 +554,52 @@ _run_fx_hook() {
   [ -z "$stderr" ]
 }
 
-@test "patterns advisory: UNKNOWN alone is suppressed" {
+@test "patterns advisory: UNKNOWN alone names the pattern and the status command" {
   _install_githooks_current
   _fx_manifest
-  _fx_repo_layout "UNKNOWN:x:1"
+  _fx_repo_layout "UNKNOWN:ddd:3" "UNKNOWN:hexagonal:1"
 
   _run_fx_hook
 
   [ "$status" -eq 0 ]
-  [ -f "$FX_PATTERNS/scripts/ran" ]
-  [ -z "$output" ]
   [ -z "$stderr" ]
+  local msg
+  msg="$(_ssb_sysmsg)"
+  [ "$msg" = "[tcs-git-helpers] patterns ddd v3, hexagonal v1 not in the catalogue; run /tcs-patterns:patterns-setup status" ]
+}
+
+@test "patterns advisory: DRIFT and UNKNOWN share one systemMessage, drift first" {
+  _install_githooks_current
+  _fx_manifest
+  # The reporter sorts by pattern name, so UNKNOWN can precede DRIFT in its output.
+  _fx_repo_layout "UNKNOWN:hexagonal:3" "DRIFT:ddd:1:2"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  local msg
+  msg="$(_ssb_sysmsg)"
+  [ "$msg" = "[tcs-git-helpers] patterns ddd v1 → v2; run /tcs-patterns:patterns-setup update • patterns hexagonal v3 not in the catalogue; run /tcs-patterns:patterns-setup status" ]
+}
+
+@test "patterns advisory: malformed lines are dropped under a UTF-8 locale; only the valid one surfaces" {
+  _install_githooks_current
+  _fx_manifest
+  # Under a UTF-8 locale bash 3.2's [!a-z0-9-] admits uppercase, so Ddd
+  # passes unless the parser pins LC_ALL=C.
+  _fx_repo_layout "DRIFT:Ddd:1:2" "DRIFT:ddd:x:2" "DRIFT:ddd:1:2:extra" \
+    "UNKNOWN:ddd" "UNKNOWN:ddd:1:2" "UNKNOWN:Ddd:1" "UNKNOWN:ddd:1:" "DRIFT:ddd:1:2:" \
+    "MISSING" "OK" "" \
+    "DRIFT:hexagonal:1:2"
+
+  run --separate-stderr env LC_ALL=en_US.UTF-8 bash -c 'cd "$1" && exec "$2"' _ "$TEST_REPO" "$FX_HOOK"
+
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  local msg
+  msg="$(_ssb_sysmsg)"
+  [ "$msg" = "[tcs-git-helpers] patterns hexagonal v1 → v2; run /tcs-patterns:patterns-setup update" ]
 }
 
 @test "patterns advisory: tcs-patterns absent → no segment, no error" {
