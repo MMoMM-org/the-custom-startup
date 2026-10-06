@@ -1016,9 +1016,35 @@ writing is allowed, and an installer that is honest about what it did.
 
   - **"Unchanged" must be a literal comparison, twice over.** For a declined pattern, digest the
     **manifest file's bytes** before and after, or deep-compare the `PatternEntry` fields — not an
-    unspecified "entry unchanged". That is what catches a mutation reporting `declined` correctly
-    and writing the manifest anyway. The default-`decide` test must pass **no callback argument at
+    unspecified "entry unchanged". The default-`decide` test must pass **no callback argument at
     all** rather than an explicit decliner, and carry the same digest.
+
+  - **But the digest alone does NOT catch "declined correctly, manifest written anyway" — the
+    fixture does, and only one fixture can.** Corrected 2026-10-05; an earlier revision of the
+    bullet above named the digest as the check that catches exactly that mutation, and measured, it
+    cannot. Found by the implementer's own mutation round and independently re-measured here, which
+    matters because this is a defect in the *plan*, not in anyone's code, and four gate passes over
+    this document did not reach it.
+
+    The mechanism: if a fixture's manifest `version` already equals the catalogue `VERSION`, then a
+    mutant that reports `declined` and upserts anyway calls `manifest.upsert` with the version,
+    `installed_as` and `sha256` the entry already holds. `_serialize` regenerates deterministically,
+    so the file comes back **byte-identical** — and *all three* forms of "unchanged" this plan
+    offers pass: the manifest-bytes digest, a tree digest (the manifest lives inside
+    `.claude/skills/`, so it is inside that digest too), and the `PatternEntry` deep-compare. The
+    mutation is invisible to the check written to catch it.
+
+    So the **version-behind AND diverged** fixture is load-bearing and must exist for this reason,
+    not only to cover the three-state table's "any version" row. There, `catalogue_version`
+    differs from `entry.version`, the erroneous upsert changes the bytes, and the digest fires.
+    Measured against the faithful mutant — one that writes `version=catalogue_version`, so the
+    manifest claims a refresh that never happened — **exactly one test in the suite dies**, and it
+    is that one.
+
+    A caution for anyone re-running this, because the first attempt here got it wrong: a mutant that
+    upserts `entry.version` *back* is byte-identical by construction and is a genuine **equivalent
+    mutant** that no test should catch. Reading its survival as a coverage gap is a false finding.
+    The mutation worth running is the one that writes the refreshed values.
 
   - **Recompute the expected hash independently** on the refresh path, mirroring
     `test_sha256_in_report_matches_independently_computed_hash_of_installed_file`, rather than
@@ -1134,6 +1160,28 @@ writing is allowed, and an installer that is honest about what it did.
      that rather than taking it on trust, with a check that cannot go stale as commits accumulate:
      `git log origin/main..HEAD --oneline -- plugins/tcs-git-helpers/tests/bats/fixtures_sanity.bats
      plugins/tcs-git-helpers/tests/fixtures/repos/build.sh` must print nothing.
+
+  6. **If you run a mutation round, run it under `python -B` and clear `__pycache__` afterwards.**
+     Measured 2026-10-05 during T3.4, where it cost an hour and very nearly got a correct test
+     blamed. Python decides a `.pyc` is current from the source's **mtime and size only**, never its
+     content. A harness that writes a mutant, runs the suite and restores the original leaves
+     bytecode for the *mutant* in place whenever the mutant has the **same byte size** — which is
+     true of the most valuable mutations: reordering two guards, swapping two assignments, flipping
+     a comparison — and the restore lands in the same mtime second, which at harness speed it
+     always does.
+
+     While poisoned, `git diff` is clean, the file's digest matches pristine, and
+     `inspect.getsource` shows the **correct** source; only behaviour is wrong. Note what does
+     *not* help: `pytest -p no:cacheprovider` disables pytest's own cache, a different mechanism
+     entirely. And the damage outlives the process — it sits in the working tree and corrupts the
+     next person's run, so a phase-validation figure measured against a poisoned tree is wrong with
+     no visible cause.
+
+     So: `PYTHONDONTWRITEBYTECODE=1`, a `shutil.rmtree(..., ignore_errors=True)` of the module's
+     `__pycache__` in the harness's `finally`, and **re-establish the baseline at the END of the
+     round as well as the start**. The opening baseline protects that run; the closing one protects
+     everyone after it, and here the opening check of the *following* harness is the only thing that
+     caught it.
 
   - Success: the three test files above green, reported per leg; `install()` proven to write only
     for names it is given and `install.py` proven not to import `guard`; the C3-owned sequence and
