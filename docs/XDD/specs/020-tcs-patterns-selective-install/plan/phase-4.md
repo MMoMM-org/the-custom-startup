@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Drift and the advisory"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 4
 ---

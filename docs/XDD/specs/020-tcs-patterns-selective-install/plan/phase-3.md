@@ -1193,9 +1193,9 @@ writing is allowed, and an installer that is honest about what it did.
   4. Validate: `python3 -m pytest -q`; exercise both answers — overwrite and skip — and assert the
      resulting manifest in each case.
   5. Success:
-     - [ ] Only drifted patterns refreshed, selection untouched `[ref: PRD/F8 1st]`
-     - [ ] Divergence asks before replacing, skip is the default `[ref: PRD/F8 2nd; SDD/ADR-4]`
-     - [ ] Post-refresh versions match the catalogue `[ref: PRD/F8 3rd; SDD/AC-17]`
+     - [x] Only drifted patterns refreshed, selection untouched `[ref: PRD/F8 1st]`
+     - [x] Divergence asks before replacing, skip is the default `[ref: PRD/F8 2nd; SDD/ADR-4]`
+     - [x] Post-refresh versions match the catalogue `[ref: PRD/F8 3rd; SDD/AC-17]`
 
 - [x] **T3.5 Phase validation** `[activity: validate]`
 
