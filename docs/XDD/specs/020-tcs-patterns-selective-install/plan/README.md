@@ -51,7 +51,7 @@ version: "1.0"
 | 1 | The catalogue and its maintainer contract | COMPLETED | 5 (5 done) | [phase-1.md](phase-1.md) |
 | 2 | Detection, fixtures before rules | COMPLETED | 7 (7 done) | [phase-2.md](phase-2.md) |
 | 3 | The install path | COMPLETED | 6 (6 done) | [phase-3.md](phase-3.md) |
-| 4 | Drift and the advisory | IN_PROGRESS | 4 (3 done) | [phase-4.md](phase-4.md) |
+| 4 | Drift and the advisory | COMPLETED | 4 (4 done) | [phase-4.md](phase-4.md) |
 | 5 | The skills, the docs, end to end | PENDING | 5 | [phase-5.md](phase-5.md) |
 
 Every row of this table read `IN_PROGRESS` until 2026-10-05, including Phase 1, which had been
@@ -160,7 +160,7 @@ context), **Test** (red), **Implement** (green), **Validate** (refactor + verify
 - [x] [Phase 1: The catalogue and its maintainer contract](phase-1.md)
 - [x] [Phase 2: Detection, fixtures before rules](phase-2.md)
 - [x] [Phase 3: The install path](phase-3.md)
-- [ ] [Phase 4: Drift and the advisory](phase-4.md)
+- [x] [Phase 4: Drift and the advisory](phase-4.md)
 - [ ] [Phase 5: The skills, the docs, end to end](phase-5.md)
 
 ### Why this order

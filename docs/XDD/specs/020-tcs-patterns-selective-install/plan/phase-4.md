@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Drift and the advisory"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 4
 ---
@@ -129,7 +129,7 @@ only where it exists.
   `systemMessage` assertion (a non-final `!` that bats ignored; the three remaining sites are
   recorded on #173), and 41425e1 (repo layout wins over a cached copy).
 
-- [ ] **T4.4 Phase validation** `[activity: validate]`
+- [x] **T4.4 Phase validation** `[activity: validate]`
 
   Both legs, per leg. Confirm the two-way property that makes the grain worth its cost: a change to
   one pattern raises an advisory in a repository that installed it **and** stays silent in one that
@@ -138,3 +138,36 @@ only where it exists.
 
   - Success: drift suites green; the two-way property asserted; the advisory degrades silently when
     the plugin is absent `[ref: SDD/AC-11; PRD/F7]`
+
+  **Validated 2026-10-06, measured rather than asserted.**
+
+  | Leg | Result |
+  |---|---|
+  | pytest, whole repository | 1205 passed, 1 skipped, 1 deselected (the perf mark) |
+  | bats, tcs-git-helpers | 1..860, 860 ok, 0 not ok, 0 skip |
+  | bats, tcs-helper | 1..330, 330 ok, 0 not ok, 0 skip |
+  | bats, tcs-issues | 1..7, 7 ok |
+  | bats, tcs-patterns | 1..15, 15 ok |
+  | shellcheck, the two changed scripts | clean |
+  | hook-bundle gate, changelog/version sync | exit 0 |
+  | docs-sync | exit 1 on `CHANGELOG.md` only; T5.4 owns both changelogs |
+
+  The two-way property is `session-start-brief.bats` "patterns advisory two-way". It uses the real
+  hook, the real reporter and the real installer, with two repositories in one test (bb3e6fb).
+  Mutating the reporter to walk the catalogue fails the silent half. Mutating it to always print
+  `OK` fails the advising half. Silence without the plugin is pinned by the "tcs-patterns absent"
+  and "tcs-patterns at 1.x" cases.
+
+  The phase-boundary drift check, with two validators, found no contradiction of the design. It did
+  find two places where C7 disagreed with F7, both reproduced. String equality advised a downgrade
+  for an installed version ahead of the catalogue. A pattern deleted upstream was hidden, because
+  C9 does not catch deletions. Marcus decided both (acff09e): drift means behind, and ahead or
+  deleted-upstream is `UNKNOWN`, which the advisory now names (6ccbf97, 842607b). The same check
+  produced four defect fixes:
+
+  - manifest fields matched up to a trailing newline (2c44066)
+  - Python's drift check diverged from bash on directories, Unicode space and bad bytes (5902863)
+  - bash's own classification depended on the locale (6b68b5d)
+  - a no-op test line (6ccbf97)
+
+  The SDD text was brought up to date with the code in 8a6bd12 and bb956c6.
