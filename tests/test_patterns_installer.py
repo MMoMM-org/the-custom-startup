@@ -1252,6 +1252,13 @@ def test_pattern_the_catalogue_no_longer_carries_is_failed_and_untouched(tmp_pat
     # it, a mutation checking the installed side FIRST reports the other
     # row's diagnosis and no channel assertion can tell the difference.
     assert "catalogue" in report.failed["dropped"]
+    # The baseline half of the suppression pair below: with no stash and the
+    # directory present, this clause is TRUE and must still be here.
+    # Without this assertion nothing distinguishes "suppressed correctly in
+    # the stash state" from "deleted everywhere"
+    # `[ref: solution.md, decision 7, "And when a .replaced stash is ALSO
+    # present"]`.
+    assert "left exactly as it is" in report.failed["dropped"]
     for channel in (report.refreshed, report.declined, report.current):
         assert "dropped" not in channel
     assert _digest_tree(_skills_root(repo)) == tree_before
@@ -1303,3 +1310,91 @@ def test_both_sides_absent_reports_the_catalogue_reason_not_the_directory_one(tm
         assert "ddd" not in channel
     assert not (_skills_root(repo) / "tcs-ddd").exists()
     assert _manifest_bytes(repo) == manifest_before
+
+
+def test_catalogue_absent_with_a_stash_names_it_and_drops_the_untouched_claim(tmp_path: Path) -> None:
+    """The intersection of decisions 7 and 8, and the most severe of the
+    three stash states. THREE independent failures co-occur: upstream
+    dropped the pattern, a prior refresh was hard-killed, and the manifest
+    still records it.
+
+    Measured before this clause existed, the reason read "the catalogue no
+    longer carries pattern 'ddd'; 'tcs-ddd' was left exactly as it is" --
+    and **both halves are wrong**. `tcs-ddd` was not left as it is, it does
+    not exist; and the stash goes unmentioned while holding the **only copy
+    of the content anywhere** -- the user's edits AND the pattern itself,
+    which the catalogue no longer has, so unlike decision 8's case
+    `install` has no source to recreate it from.
+
+    The precedence does not change and no guard is reordered: the catalogue
+    cause stays the headline, because "the pattern is gone upstream, drop
+    the manifest entry" remains the actionable fact. What changes is that
+    the stash is named and the untouched claim is suppressed, because in
+    this state it is false `[ref: solution.md, "Data model: the update path
+    (C5's second verb)", decision 7, "And when a .replaced stash is ALSO
+    present"]`.
+    """
+    install = _load_install()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "ddd", version="1")
+    repo = tmp_path / "repo"
+    assert "ddd" in install.install(repo, ["ddd"], catalogue_dir=catalogue, bundle=TEST_BUNDLE).installed
+
+    dest = _skills_root(repo) / "tcs-ddd"
+    edited = dest / "SKILL.md"
+    edited.write_bytes(edited.read_bytes() + b"\nThe user's own paragraph.\n")
+    user_bytes = edited.read_bytes()
+    stash = _skills_root(repo) / ".tcs-ddd.replaced"
+    dest.rename(stash)  # a refresh hard-killed between its two renames
+    shutil.rmtree(catalogue / "ddd")  # and upstream dropped the pattern
+    manifest_before = _manifest_bytes(repo)
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    reason = report.failed["ddd"]
+    assert "catalogue" in reason, reason
+    assert str(stash) in reason, reason
+    # The third assertion, and the one a careless fix misses: the claim is
+    # false here, so it must be gone.
+    assert "left exactly as it is" not in reason, reason
+    for channel in (report.refreshed, report.declined, report.current):
+        assert "ddd" not in channel
+    # Still the only copy, still untouched, still not moved back.
+    assert (stash / "SKILL.md").read_bytes() == user_bytes
+    assert not dest.exists()
+    assert _manifest_bytes(repo) == manifest_before
+
+
+def test_catalogue_absent_with_the_directory_PRESENT_keeps_the_untouched_claim(tmp_path: Path) -> None:
+    """The fourth state, which pins the CONDITION rather than the message:
+    catalogue absent, a stash present, but the installed directory still
+    there. Not required by the task text -- added because gating the new
+    clause on the directory being absent is the one judgment call in this
+    change, and without this fixture a mutation dropping that gate survives.
+
+    Here "left exactly as it is" is **true** -- `dest` exists and nothing
+    touched it -- so suppressing it would make the message worse, and
+    naming the stash would raise an alarm about debris that costs the user
+    nothing: `dest` holds a working pattern `[ref: solution.md, decision 8,
+    "Only the directory-ABSENT state needs this, because the other stash
+    state heals itself"]`. The asymmetry is deliberate.
+    """
+    install = _load_install()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "ddd", version="1")
+    repo = tmp_path / "repo"
+    assert "ddd" in install.install(repo, ["ddd"], catalogue_dir=catalogue, bundle=TEST_BUNDLE).installed
+
+    dest = _skills_root(repo) / "tcs-ddd"
+    stash = _skills_root(repo) / ".tcs-ddd.replaced"
+    shutil.copytree(dest, stash)  # killed AFTER the new directory landed
+    shutil.rmtree(catalogue / "ddd")
+    tree_before = _digest_tree(_skills_root(repo))
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    reason = report.failed["ddd"]
+    assert "catalogue" in reason, reason
+    assert "left exactly as it is" in reason, reason
+    assert str(stash) not in reason, reason
+    assert _digest_tree(_skills_root(repo)) == tree_before
