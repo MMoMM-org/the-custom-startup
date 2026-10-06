@@ -173,17 +173,17 @@ Optional: `setup --with-branch-protection` (GitHub single-coder branch protectio
 
 ### Patterns Plugin (`tcs-patterns`) — Domain Pattern Skills *(optional)*
 
-**21 pattern skills** covering architecture, security, testing, languages, and platform. Install only what you need — they activate on trigger terms. Agents from `tcs-team` automatically use relevant pattern skills when delegating specialist work.
+A catalogue of **21 patterns** covering architecture, security, testing, languages, and platform, and an installer that copies only the ones your repository needs into it. Run `/tcs-patterns:patterns-setup install` in a repository; installed patterns activate on trigger terms. `/tcs-patterns:pattern <name>` shows a pattern without installing it. From 2.0.0 none is active until installed, and an installed pattern is `/tcs-<name>`.
 
-| Category | Skills |
-|----------|--------|
-| **Architecture** | `/ddd` · `/hexagonal` · `/functional` · `/event-driven` · `/event-sourcing` |
-| **Security** | `/secure-oauth-oidc` · `/bff-entry-points` |
-| **API & Types** | `/api-design` · `/typescript-strict` |
-| **Testing** | `/testing` · `/mutation-testing` · `/frontend-testing` · `/react-testing` · `/test-design-reviewer` |
-| **Platforms** | `/node-service` · `/python-project` · `/go-idiomatic` |
-| **DevOps** | `/twelve-factor` · `/observability` |
-| **Integrations** | `/mcp-server` · `/obsidian-plugin` |
+| Category | Patterns |
+|----------|----------|
+| **Architecture** | `ddd` · `hexagonal` · `functional` · `event-driven` · `event-sourcing` |
+| **Security** | `secure-oauth-oidc` · `bff-entry-points` |
+| **API & Types** | `api-design` · `typescript-strict` |
+| **Testing** | `testing` · `mutation-testing` · `frontend-testing` · `react-testing` · `test-design-reviewer` |
+| **Platforms** | `node-service` · `python-project` · `go-idiomatic` |
+| **DevOps** | `twelve-factor` · `observability` |
+| **Integrations** | `mcp-server` · `obsidian-plugin` |
 
 Plus one write-time guard: a `PreToolUse` hook blocks `eslint-disable` from being written into Obsidian plugin repos, because the community-plugin reviewer rejects any submission that contains a disabled rule. See [Hooks](docs/guides/tcs-patterns.md#hooks).
 
