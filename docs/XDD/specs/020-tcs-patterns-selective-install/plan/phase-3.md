@@ -1029,6 +1029,24 @@ writing is allowed, and an installer that is honest about what it did.
     for the same reason the catalogue-removal pair does: every ordering and every variant still puts
     the name in `failed`, so a channel assertion can see none of this.
 
+  - **The CATALOGUE-absent reason must name a stash too, and must not claim the directory was left
+    alone when it is gone.** Added 2026-10-06 (Marcus), from a spec-compliance review of the stash
+    delta plus a measurement that made it worse than reported. Build all three failures at once:
+    catalogue entry absent, installed directory absent, stash present. Measured, the reason was
+    "the catalogue no longer carries pattern 'ddd'; 'tcs-ddd' was left exactly as it is" — and in
+    that state `tcs-ddd` does **not** exist, so the message is false, while the stash holding the
+    only copy of the content anywhere goes unmentioned. It is the most severe of the three stash
+    states because the catalogue cannot recreate the pattern either, so `install` has no source
+    `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb), decision 7,
+    "And when a .replaced stash is ALSO present"]`.
+
+    No guard is reordered and the precedence is unchanged — the catalogue cause stays the headline.
+    **Three assertions, and the third is the one a careless fix would miss:** the reason names the
+    catalogue; the reason names the stash path; the reason does **not** contain "left exactly as it
+    is". And keep a stash-free catalogue-absent fixture asserting that clause IS present, or nothing
+    distinguishes "suppressed correctly" from "deleted everywhere" — the same baseline trick the
+    `"run install"` pair uses.
+
   - **F8's third criterion applies to the no-prompt refresh too**: assert `version_after` equals the
     catalogue `VERSION` on the version-behind-hash-matches path, not only where `decide` returned
     `True`.

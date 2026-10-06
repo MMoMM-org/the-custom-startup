@@ -1892,13 +1892,39 @@ So the catalogue check runs **first**, and that ordering is a requirement rather
 Decision 8's message is only correct when the catalogue still has the pattern, which is precisely
 what makes it the second test and not the first.
 
+**And when a `.<installed_as>.replaced` stash is ALSO present, this reason names it and must not
+claim the directory was left alone.** Added 2026-10-06 (Marcus) after a spec-compliance review
+surfaced the intersection and measuring it showed it was worse than reported. Three independent
+failures co-occur: upstream dropped the pattern, a prior refresh was hard-killed, and the manifest
+still records it. Measured, the reason read:
+
+> the catalogue no longer carries pattern `'ddd'`; `'tcs-ddd'` was left exactly as it is
+
+Both halves are wrong in this state. `tcs-ddd` was **not** left as it is — it does not exist — and
+the stash is never named. That stash is the **only copy of the content anywhere**: the user's edits
+*and* the pattern itself, which the catalogue no longer has, so unlike decision 8's case `install`
+cannot recreate it from any source. A message asserting the directory is untouched while the only
+copy sits unmentioned in a dotted directory is the worst of the three stash states, and it was
+reachable without anything exotic.
+
+**The precedence does not change.** The catalogue cause stays the headline because it remains the
+actionable fact — the pattern is gone upstream, so the manifest entry should be dropped — and no
+guard is reordered. What changes is that the reason names the stash path when one exists, and the
+"left exactly as it is" clause is suppressed in that case because it is untrue. Where no stash
+exists, the message is exactly as before.
+
 **8. A manifest entry whose directory is missing is `failed`, not refreshed.** The record claims a
 pattern is installed and it is not, which is a different problem from being out of date — and
 `install()` already handles an absent directory by writing it. Reporting it tells the user which
 verb to reach for instead of silently papering over a manifest that lies.
 
 **Unless a `.<installed_as>.replaced` stash is sitting beside it, in which case the reason names
-the stash and does not mention `install`.** Added 2026-10-06, measured. `update()` replaces a
+the stash and does not recommend running `install`.** Added 2026-10-06, measured. The
+requirement is that the *recommendation* is absent, not the substring: both branches share the
+prefix "the manifest records `<name>` as **installed** at `<installed_as>`", which describes the
+manifest's claim rather than suggesting a verb, so "zero occurrences of the string `install`" is
+neither achievable nor intended — flagged by the spec-compliance review so the looser wording could
+not later be read that way. `update()` replaces a
 subtree by moving the current directory aside to that stash and only deleting it once the new one
 has landed; an exception puts it back, so the stash survives a crash only on a **hard kill** between
 the two. In that state the user's own copy — including whatever they had edited — is the *only*
