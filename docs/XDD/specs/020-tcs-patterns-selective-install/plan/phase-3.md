@@ -1167,8 +1167,9 @@ writing is allowed, and an installer that is honest about what it did.
      checks the end state would pass even if the installer wrote and then rolled back". Measured
      against the delivered C5: `install()` takes **pre-approved names** and so never receives a
      colliding one; `install.py` **does not import `guard`**, so it cannot perform — or skip — a
-     check it does not have; its only `shutil.rmtree` calls are on **its own** temp directory; and
-     it never writes for a present-but-not-current pattern at all
+     check it does not have; **every one of its `shutil.rmtree` targets is a path this module
+     itself created** — `.<installed_as>.tmp` and, since T3.4, `.<installed_as>.replaced` — never a
+     `tcs-<name>` directory; and it never writes for a present-but-not-current pattern at all
      `[ref: SDD/Interface Specifications/.../"install() is purely additive"]`. **There is no
      rollback path to catch.** The failure mode this property guards against cannot occur.
 
@@ -1179,6 +1180,17 @@ writing is allowed, and an installer that is honest about what it did.
      - **`install.py` does not import `guard`** — a one-line structural assertion, and it is what
        makes "the installer cannot write before a check" true *by construction* rather than by
        behaviour. That is a stronger guarantee than the original property and cheaper to hold.
+
+       **Assert the IMPORT, not the string.** Measured 2026-10-06: the word `guard` appears **8
+       times** in `install.py`, all in docstrings and comments describing *its own* guards — "the
+       catalogue guard", "the missing-directory guard". So `assert "guard" not in source` fails
+       against correct code. Parse the imports (`ast.parse` plus a walk over `Import`/`ImportFrom`,
+       or match `^\s*(from \S+ )?import\b`) and assert `guard` is not among the imported module
+       names. The current set is `__future__, dataclasses, difflib, hashlib, json, manifest, os,
+       pathlib, re, shutil`.
+
+       Same trap applies to the `rmtree` claim above: assert the **targets**, not the absence of
+       the call. There are four call sites and all four are this module's own debris.
      - **The sequence itself — `check()` completes before `install()` is called — belongs to C3 and
        cannot be validated in this phase**, because C3 does not exist until Phase 4. Say so here
        rather than asserting something weaker and calling the property discharged. Carry it to
@@ -1196,8 +1208,9 @@ writing is allowed, and an installer that is honest about what it did.
      manifest's file. Name them:
      - `tests/test_patterns_guard.py` — C4, the collision guard (54 tests)
      - `tests/test_patterns_install.py` — **C6, the manifest store**, despite the name (24 tests)
-     - `tests/test_patterns_installer.py` — **C5, the installer *and* `update()`** (21 tests before
-       T3.4)
+     - `tests/test_patterns_installer.py` — **C5, the installer *and* `update()`** (**37 tests**
+       as of T3.4's close; it was 21 before, and a figure written mid-task goes stale by the end of
+       it — recount rather than quoting this one)
 
   4. **"Both legs, per leg" means report pytest and bats separately, each with its own figure.** The
      bats total is **1187 across four suites** — `tcs-git-helpers` 835, `tcs-helper` 330,
