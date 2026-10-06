@@ -201,7 +201,7 @@ _run_hook() {
   [ "$status" -eq 0 ]
   [ -n "$output" ]
   # No systemMessage field present → user sees nothing.
-  ! printf '%s' "$output" | grep -q '"systemMessage"'
+  _ssb_lacks "$output" '"systemMessage"'
   # additionalContext present and contains the protected-branch nudge.
   printf '%s' "$output" | grep -q '"additionalContext"'
   printf '%s' "$output" | grep -q "protected branch"
@@ -416,8 +416,8 @@ STUB
 #   repo:  <fx>/plugins/{tcs-git-helpers,tcs-patterns}/scripts/
 #   cache: <fx>/cache/mkt/tcs-git-helpers/2.2.22/scripts/
 #          <fx>/cache/mkt/tcs-patterns/<v>/scripts/
-# Substring asserts go through _ssb_has/_ssb_lacks (grep -qF), never a bare
-# non-final [[ ]] (which bats does not fail on).
+# Substring asserts go through _ssb_has/_ssb_lacks (grep -qF; args: haystack,
+# needle), never a bare non-final [[ ]] or `! cmd` (which bats does not fail on).
 # ======================================================================
 
 _ssb_has() {
