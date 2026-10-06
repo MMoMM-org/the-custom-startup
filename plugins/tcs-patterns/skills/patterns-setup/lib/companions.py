@@ -10,7 +10,9 @@ companion before the user finishes deciding
 `[ref: SDD/Interface Specifications/Data model: companion map; ADR-10]`.
 
 `companion_map()` and `expand_companions()` are the two things C3 reads: the
-direct edges, and the transitive closure a selection pulls in. Both take the
+direct edges, and the transitive closure a selection pulls in.
+`companion_citations()` (T5.1a) returns the citations behind each edge, so a
+proposed companion can arrive with the citation that justified it named. Both take the
 catalogue root as a parameter, defaulting to the real one -- the same shape
 `detect(repo_dir)` takes the repository root -- so a test can derive against
 a throwaway `tmp_path` catalogue and never write into
@@ -168,9 +170,23 @@ class AmbiguousCitation:
 
 
 @dataclass(frozen=True)
+class Citation:
+    """One citation that produced a companion edge -- shaped like
+    `AmbiguousCitation` without `candidate_patterns`. `source_file` is
+    relative to the catalogue root, `line` is 1-based, and `target` is the
+    path as written in the citing file `[ref: SDD/Process contract: the CLI
+    the skill drives, scan, "companion_citations() is new"]`."""
+
+    source_file: str
+    line: int
+    target: str
+
+
+@dataclass(frozen=True)
 class _Derivation:
     edges: dict[str, frozenset[str]]
     ambiguous: tuple[AmbiguousCitation, ...]
+    citations: dict[str, dict[str, tuple[Citation, ...]]]
 
 
 def _derive(catalogue_root: Path) -> _Derivation:
@@ -179,9 +195,11 @@ def _derive(catalogue_root: Path) -> _Derivation:
 
     edges: dict[str, set[str]] = {}
     ambiguous: list[AmbiguousCitation] = []
+    citations: dict[str, dict[str, list[Citation]]] = {}
 
     for path in sorted(catalogue_root.rglob("*.md")):
         own = _pattern_root(path, catalogue_root).name
+        source_file = str(path.relative_to(catalogue_root))
         text = path.read_text(encoding="utf-8")
         for line_no, target in _candidate_targets(text):
             matches = sorted(name for name, root in pattern_roots.items() if _resolves_under(root, target))
@@ -197,7 +215,7 @@ def _derive(catalogue_root: Path) -> _Derivation:
             if len(matches) > 1:
                 ambiguous.append(
                     AmbiguousCitation(
-                        source_file=str(path.relative_to(catalogue_root)),
+                        source_file=source_file,
                         line=line_no,
                         target=target,
                         candidate_patterns=tuple(matches),
@@ -205,10 +223,17 @@ def _derive(catalogue_root: Path) -> _Derivation:
                 )
                 continue
             edges.setdefault(own, set()).add(matches[0])
+            citations.setdefault(own, {}).setdefault(matches[0], []).append(
+                Citation(source_file=source_file, line=line_no, target=target)
+            )
 
     return _Derivation(
         edges={source: frozenset(targets) for source, targets in edges.items()},
         ambiguous=tuple(ambiguous),
+        citations={
+            source: {companion: tuple(cited) for companion, cited in by_companion.items()}
+            for source, by_companion in citations.items()
+        },
     )
 
 
@@ -219,6 +244,18 @@ def companion_map(catalogue_root: Path = paths.DEFAULT_CATALOGUE_DIR) -> dict[st
     A pattern with no outgoing edge is simply absent as a key, never present
     with an empty set."""
     return _derive(catalogue_root).edges
+
+
+def companion_citations(
+    catalogue_root: Path = paths.DEFAULT_CATALOGUE_DIR,
+) -> dict[str, dict[str, tuple[Citation, ...]]]:
+    """source -> companion -> the citations that produced that edge, in
+    file-then-line order. Filled in the same `_derive` pass as
+    `companion_map()`, so its two outer key levels equal that map's edges by
+    construction; `source_file` is catalogue-relative, as `_derive` writes it
+    for `AmbiguousCitation` `[ref: SDD/Process contract: the CLI the skill
+    drives, scan, "companion_citations() is new"]`."""
+    return _derive(catalogue_root).citations
 
 
 def ambiguous_citations(catalogue_root: Path = paths.DEFAULT_CATALOGUE_DIR) -> tuple[AmbiguousCitation, ...]:

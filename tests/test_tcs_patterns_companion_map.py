@@ -25,6 +25,7 @@ the rest of the suite's collection besides.
 
 from __future__ import annotations
 
+import dataclasses
 import importlib
 import signal
 import sys
@@ -401,3 +402,57 @@ def test_a_hidden_directory_cannot_supply_a_companion_edge(tmp_path: Path) -> No
     companions = _load_companions()
     assert companions.companion_map(tmp_path) == {}
     assert companions.ambiguous_citations(tmp_path) == ()
+
+
+# --- T5.1a: companion_citations(), the citation behind each edge -------------
+
+
+def test_companion_citations_outer_keys_equal_the_companion_map_edges() -> None:
+    """Filled in the same `_derive` pass, so its two outer key levels equal
+    `companion_map()`'s edges by construction -- asserted rather than
+    trusted `[ref: SDD/Process contract: the CLI the skill drives, scan,
+    "companion_citations() is new"]`. Every edge carries at least one
+    citation, and each `source_file` is catalogue-relative: joined to the
+    catalogue it names a file inside the citing pattern."""
+    companions = _load_companions()
+    citations = companions.companion_citations(REAL_CATALOGUE_DIR)
+
+    assert {source: frozenset(targets) for source, targets in citations.items()} == companions.companion_map(
+        REAL_CATALOGUE_DIR
+    )
+    for source, targets in citations.items():
+        for target, cited in targets.items():
+            assert cited, f"{source} -> {target} has no citation"
+            for citation in cited:
+                assert not Path(citation.source_file).is_absolute(), citation
+                assert (REAL_CATALOGUE_DIR / citation.source_file).is_file(), citation
+                assert Path(citation.source_file).parts[0] == source, citation
+                assert citation.line >= 1, citation
+
+
+def test_companion_citations_names_the_citing_file_and_line(tmp_path: Path) -> None:
+    """Hand-typed expectation on a two-pattern catalogue: the citing file
+    (catalogue-relative), the 1-based line, and the target as written."""
+    companions = _load_companions()
+    _write_pattern_file(tmp_path, "alpha", "SKILL.md", "citing pattern\n")
+    _write_pattern_file(
+        tmp_path,
+        "alpha",
+        "reference/notes.md",
+        "# Notes\n\nSee `tcs-patterns:beta` `reference/shared.md` for the rest.\n\n"
+        "And again: [shared](reference/shared.md).\n",
+    )
+    _write_pattern_file(tmp_path, "beta", "SKILL.md", "target pattern\n")
+    _write_pattern_file(tmp_path, "beta", "reference/shared.md", "the file alpha's citation reaches\n")
+
+    Citation = companions.Citation
+    assert companions.companion_citations(tmp_path) == {
+        "alpha": {
+            "beta": (
+                Citation(source_file="alpha/reference/notes.md", line=3, target="reference/shared.md"),
+                Citation(source_file="alpha/reference/notes.md", line=5, target="reference/shared.md"),
+            )
+        }
+    }
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        Citation(source_file="a", line=1, target="b").line = 2
