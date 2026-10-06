@@ -12,6 +12,7 @@
 #
 # Actionable triggers (any one → emit):
 #   - drift_seg   : installed hook banner version != plugin.json version
+#   - patterns_seg: tcs-patterns reporter prints DRIFT for an installed pattern
 #   - cleanup_seg : stale-merged branch count > 0
 #   - setup_seg   : repo missing .githooks/
 #
@@ -170,14 +171,92 @@ if [ -n "$repo_top" ] && [ -d "$repo_top/.githooks" ]; then
 fi
 
 # ----------------------------------------------------------------------
+# 8c. Pattern drift hint (spec-020 T4.3). tcs-patterns writes
+# <repo>/.claude/skills/.tcs-patterns-manifest; its patterns_drift.py
+# reports drift against the catalogue. This segment only reads that
+# reporter's stdout — a one-way dependency through a documented contract.
+# Silent unless the reporter prints at least one well-formed
+# DRIFT:<pattern>:<installed>:<catalogue> line; OK, MISSING and UNKNOWN are
+# suppressed. Fail-open: no manifest, no python3, no reporter (tcs-patterns
+# absent or at 1.x), a non-zero exit, or a malformed line → silence.
+# The manifest test comes first so a repo without patterns never pays for
+# a Python start.
+# ----------------------------------------------------------------------
+
+# True when dotted numeric version $1 > $2, compared field by field (BSD
+# sort has no -V). A missing or non-numeric field compares as 0.
+_version_gt() {
+  local a="$1" b="$2" fa fb
+  while [ -n "$a" ] || [ -n "$b" ]; do
+    fa="${a%%.*}"
+    fb="${b%%.*}"
+    case "$a" in *.*) a="${a#*.}" ;; *) a="" ;; esac
+    case "$b" in *.*) b="${b#*.}" ;; *) b="" ;; esac
+    case "$fa" in ''|*[!0-9]*) fa=0 ;; esac
+    case "$fb" in ''|*[!0-9]*) fb=0 ;; esac
+    if [ "$((10#$fa))" -gt "$((10#$fb))" ]; then return 0; fi
+    if [ "$((10#$fa))" -lt "$((10#$fb))" ]; then return 1; fi
+  done
+  return 1
+}
+
+# Print the path of tcs-patterns' patterns_drift.py, resolved from this
+# script's own location only (not installed_plugins.json, not
+# CLAUDE_PLUGIN_ROOT). Repository/marketplace layout first, then the plugin
+# cache layout, where the highest numeric version carrying the script wins.
+# Prints nothing when no candidate exists.
+_find_patterns_drift() {
+  local cand ver best="" best_ver=""
+  cand="$_SCRIPT_DIR/../../tcs-patterns/scripts/patterns_drift.py"
+  if [ -f "$cand" ]; then
+    printf '%s' "$cand"
+    return 0
+  fi
+  for cand in "$_SCRIPT_DIR"/../../../tcs-patterns/*/scripts/patterns_drift.py; do
+    [ -f "$cand" ] || continue
+    ver="${cand%/scripts/patterns_drift.py}"
+    ver="${ver##*/}"
+    case "$ver" in ''|*[!0-9.]*) continue ;; esac
+    if [ -z "$best" ] || _version_gt "$ver" "$best_ver"; then
+      best="$cand"
+      best_ver="$ver"
+    fi
+  done
+  if [ -n "$best" ]; then
+    printf '%s' "$best"
+  fi
+  return 0
+}
+
+patterns_seg=""
+if [ -n "$repo_top" ] && [ -f "$repo_top/.claude/skills/.tcs-patterns-manifest" ] \
+   && command -v python3 >/dev/null 2>&1; then
+  _drift_py="$(_find_patterns_drift 2>/dev/null)" || _drift_py=""
+  if [ -n "$_drift_py" ]; then
+    _drift_out="$(python3 "$_drift_py" "$repo_top" 2>/dev/null)" || _drift_out=""
+    _drift_list=""
+    while IFS=: read -r _kind _pat _inst _cat _rest; do
+      [ "$_kind" = "DRIFT" ] && [ -z "$_rest" ] || continue
+      case "$_pat" in ''|*[!a-z0-9-]*) continue ;; esac
+      case "$_inst" in ''|*[!0-9]*) continue ;; esac
+      case "$_cat" in ''|*[!0-9]*) continue ;; esac
+      _drift_list="${_drift_list:+${_drift_list}, }${_pat} v${_inst} → v${_cat}"
+    done <<< "$_drift_out"
+    if [ -n "$_drift_list" ]; then
+      patterns_seg=" • patterns ${_drift_list}; run /tcs-patterns:patterns-setup update"
+    fi
+  fi
+fi
+
+# ----------------------------------------------------------------------
 # 9. Compose user_msg (systemMessage) and ctx_msg (additionalContext)
 # Silent exit when neither is needed.
 # ----------------------------------------------------------------------
 
-# 9a. User-actionable bits = drift / cleanup / setup.
+# 9a. User-actionable bits = cleanup / hook drift / pattern drift / setup.
 # Each segment already starts with " • "; strip the leading " • " of the
 # first one and the rest read naturally.
-actionable_segs="${cleanup_seg}${drift_seg}${setup_seg}"
+actionable_segs="${cleanup_seg}${drift_seg}${patterns_seg}${setup_seg}"
 user_msg=""
 if [ -n "$actionable_segs" ]; then
   # ${var# • } strips a single leading " • "; bash 3.2 compatible.

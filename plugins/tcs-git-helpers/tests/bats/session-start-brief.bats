@@ -405,3 +405,295 @@ STUB
     return 1
   fi
 }
+
+# ======================================================================
+# spec-020 T4.3 — the tcs-patterns drift advisory segment (section 8c).
+#
+# Each test builds a fixture plugin tree under $BATS_TEST_TMPDIR holding a
+# COPY of the real session-start-brief.sh (plus lib/ and ../.claude-plugin/,
+# which it reads relative to its own directory) and a STUB patterns_drift.py
+# that prints canned lines and records that it ran. Two layouts:
+#   repo:  <fx>/plugins/{tcs-git-helpers,tcs-patterns}/scripts/
+#   cache: <fx>/cache/mkt/tcs-git-helpers/2.2.22/scripts/
+#          <fx>/cache/mkt/tcs-patterns/<v>/scripts/
+# Substring asserts go through _ssb_has/_ssb_lacks (grep -qF), never a bare
+# non-final [[ ]] (which bats does not fail on).
+# ======================================================================
+
+_ssb_has() {
+  printf '%s' "$1" | grep -qF -- "$2" \
+    || { printf 'expected [%s] in [%s]\n' "$2" "$1" >&2; return 1; }
+}
+
+_ssb_lacks() {
+  if printf '%s' "$1" | grep -qF -- "$2"; then
+    printf 'did not expect [%s] in [%s]\n' "$2" "$1" >&2
+    return 1
+  fi
+}
+
+# The systemMessage of the hook's JSON output, decoded (empty when absent).
+_ssb_sysmsg() {
+  printf '%s' "$output" | python3 -c \
+    'import json,sys;t=sys.stdin.read().strip();sys.stdout.write(json.loads(t).get("systemMessage","") if t else "")'
+}
+
+# Copy the real hook into a tcs-git-helpers plugin root at $1; sets FX_HOOK.
+_fx_git_helpers_at() {
+  local root="$1"
+  mkdir -p "$root/scripts" "$root/.claude-plugin"
+  cp "$PLUGIN_ROOT/scripts/session-start-brief.sh" "$root/scripts/"
+  cp -R "$PLUGIN_ROOT/scripts/lib" "$root/scripts/lib"
+  cp "$PLUGIN_ROOT/.claude-plugin/plugin.json" "$root/.claude-plugin/"
+  FX_HOOK="$root/scripts/session-start-brief.sh"
+}
+
+# Write a stub reporter into tcs-patterns plugin root $1 that prints the
+# remaining args as lines. It writes its argv to scripts/ran when executed,
+# and exits with the code in scripts/exit_code if that file exists.
+_fx_patterns_stub_at() {
+  local root="$1"
+  shift
+  mkdir -p "$root/scripts"
+  cat > "$root/scripts/patterns_drift.py" << 'PY'
+import pathlib, sys
+here = pathlib.Path(__file__).resolve().parent
+(here / "ran").write_text(" ".join(sys.argv[1:]))
+canned = here / "canned.txt"
+if canned.exists():
+    sys.stdout.write(canned.read_text())
+code = here / "exit_code"
+sys.exit(int(code.read_text()) if code.exists() else 0)
+PY
+  : > "$root/scripts/canned.txt"
+  local line
+  for line in "$@"; do
+    printf '%s\n' "$line" >> "$root/scripts/canned.txt"
+  done
+}
+
+# Repo layout: hook at <fx>/plugins/tcs-git-helpers, stub at
+# <fx>/plugins/tcs-patterns printing "$@". Sets FX_HOOK and FX_PATTERNS.
+_fx_repo_layout() {
+  local fx="$BATS_TEST_TMPDIR/fx"
+  _fx_git_helpers_at "$fx/plugins/tcs-git-helpers"
+  FX_PATTERNS="$fx/plugins/tcs-patterns"
+  _fx_patterns_stub_at "$FX_PATTERNS" "$@"
+}
+
+# Cache layout: hook at <fx>/cache/mkt/tcs-git-helpers/2.2.22. Sets FX_HOOK
+# and FX_CACHE_PATTERNS (the tcs-patterns/ directory holding version dirs).
+_fx_cache_layout() {
+  local fx="$BATS_TEST_TMPDIR/fx"
+  _fx_git_helpers_at "$fx/cache/mkt/tcs-git-helpers/2.2.22"
+  FX_CACHE_PATTERNS="$fx/cache/mkt/tcs-patterns"
+  mkdir -p "$FX_CACHE_PATTERNS"
+}
+
+# Any manifest file: the stub ignores its content.
+_fx_manifest() {
+  mkdir -p "$TEST_REPO/.claude/skills"
+  printf 'bundle = "2.0.0"\n' > "$TEST_REPO/.claude/skills/.tcs-patterns-manifest"
+}
+
+_run_fx_hook() {
+  run --separate-stderr bash -c 'cd "$1" && exec "$2"' _ "$TEST_REPO" "$FX_HOOK"
+}
+
+@test "patterns advisory: drifted patterns named with both versions and the update command" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_repo_layout "DRIFT:ddd:3:4" "DRIFT:hexagonal:2:5"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  local msg
+  msg="$(_ssb_sysmsg)"
+  [ "$msg" = "[tcs-git-helpers] patterns ddd v3 → v4, hexagonal v2 → v5; run /tcs-patterns:patterns-setup update" ]
+  # The reporter is handed the repository's top level.
+  [ "$(cat "$FX_PATTERNS/scripts/ran")" = "$(git -C "$TEST_REPO" rev-parse --show-toplevel)" ]
+}
+
+@test "patterns advisory: reporter says OK → no segment, silent overall" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_repo_layout "OK"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -f "$FX_PATTERNS/scripts/ran" ]
+  [ -z "$output" ]
+  [ -z "$stderr" ]
+}
+
+@test "patterns advisory: no manifest → reporter never runs, no segment" {
+  _install_githooks_current
+  _fx_repo_layout "DRIFT:ddd:3:4"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ ! -e "$FX_PATTERNS/scripts/ran" ]
+  [ -z "$output" ]
+  [ -z "$stderr" ]
+}
+
+@test "patterns advisory: MISSING alone is suppressed" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_repo_layout "MISSING"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -f "$FX_PATTERNS/scripts/ran" ]
+  [ -z "$output" ]
+  [ -z "$stderr" ]
+}
+
+@test "patterns advisory: UNKNOWN alone is suppressed" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_repo_layout "UNKNOWN:x:1"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -f "$FX_PATTERNS/scripts/ran" ]
+  [ -z "$output" ]
+  [ -z "$stderr" ]
+}
+
+@test "patterns advisory: tcs-patterns absent → no segment, no error" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_git_helpers_at "$BATS_TEST_TMPDIR/fx/plugins/tcs-git-helpers"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ -z "$stderr" ]
+}
+
+@test "patterns advisory: tcs-patterns at 1.x in the cache (no reporter) → no segment, no error" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_cache_layout
+  mkdir -p "$FX_CACHE_PATTERNS/1.4.4/scripts" "$FX_CACHE_PATTERNS/1.4.4/skills"
+  printf '#!/bin/bash\n' > "$FX_CACHE_PATTERNS/1.4.4/scripts/block-eslint-disable.sh"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ -z "$stderr" ]
+}
+
+@test "patterns advisory: cache layout, 2.10.0 beats 2.0.0" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_cache_layout
+  _fx_patterns_stub_at "$FX_CACHE_PATTERNS/2.0.0" "DRIFT:ddd:1:2"
+  _fx_patterns_stub_at "$FX_CACHE_PATTERNS/2.10.0" "DRIFT:ddd:1:10"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  [ "$(_ssb_sysmsg)" = "[tcs-git-helpers] patterns ddd v1 → v10; run /tcs-patterns:patterns-setup update" ]
+}
+
+@test "patterns advisory: cache layout, 2.10.0 beats 2.9.0 (numeric, not lexical)" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_cache_layout
+  _fx_patterns_stub_at "$FX_CACHE_PATTERNS/2.9.0" "DRIFT:ddd:1:9"
+  _fx_patterns_stub_at "$FX_CACHE_PATTERNS/2.10.0" "DRIFT:ddd:1:10"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  [ "$(_ssb_sysmsg)" = "[tcs-git-helpers] patterns ddd v1 → v10; run /tcs-patterns:patterns-setup update" ]
+  [ ! -e "$FX_CACHE_PATTERNS/2.9.0/scripts/ran" ]
+}
+
+@test "patterns advisory: hooks drift and patterns drift share one systemMessage" {
+  _install_githooks_at "2.0.0"
+  _fx_manifest
+  _fx_repo_layout "DRIFT:ddd:3:4"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  local msg
+  msg="$(_ssb_sysmsg)"
+  _ssb_has "$msg" "hooks v2.0.0 → v"
+  _ssb_has "$msg" "run /tcs-git-helpers:git-setup --update"
+  _ssb_has "$msg" "patterns ddd v3 → v4; run /tcs-patterns:patterns-setup update"
+}
+
+@test "patterns advisory: reporter exits non-zero → no segment" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_repo_layout "DRIFT:ddd:3:4"
+  printf '3' > "$FX_PATTERNS/scripts/exit_code"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -f "$FX_PATTERNS/scripts/ran" ]
+  [ -z "$output" ]
+  [ -z "$stderr" ]
+}
+
+@test "patterns advisory: python3 absent from PATH → no segment, no error" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_repo_layout "DRIFT:ddd:3:4"
+
+  # A PATH holding everything in /usr/bin and /bin except python3*, plus git.
+  local nopy="$BATS_TEST_TMPDIR/nopy" f
+  mkdir -p "$nopy"
+  for f in /usr/bin/* /bin/*; do
+    case "${f##*/}" in python3*) continue ;; esac
+    [ -e "$nopy/${f##*/}" ] || ln -s "$f" "$nopy/${f##*/}"
+  done
+  [ -e "$nopy/git" ] || ln -s "$(command -v git)" "$nopy/git"
+  run env PATH="$nopy" /bin/bash -c 'command -v python3'
+  [ "$status" -ne 0 ]
+
+  run --separate-stderr env PATH="$nopy" /bin/bash -c 'cd "$1" && exec "$2"' _ "$TEST_REPO" "$FX_HOOK"
+
+  [ "$status" -eq 0 ]
+  [ ! -e "$FX_PATTERNS/scripts/ran" ]
+  [ -z "$output" ]
+  [ -z "$stderr" ]
+}
+
+@test "patterns advisory end-to-end: the real reporter names a lowered pattern version" {
+  _install_githooks_current
+  local cat_v
+  cat_v="$(cat "$PLUGIN_ROOT/../tcs-patterns/templates/patterns/ddd/VERSION")"
+  local low=$((cat_v - 1))
+  mkdir -p "$TEST_REPO/.claude/skills"
+  {
+    printf '# Written by /tcs-patterns:patterns-setup. Reviewed and committed like any other file.\n'
+    printf 'bundle = "2.0.0"\n'
+    printf '\n[patterns.ddd]\n'
+    printf 'version = "%s"\n' "$low"
+    printf 'installed_as = "tcs-ddd"\n'
+    printf 'sha256 = "%s"\n' "0000000000000000000000000000000000000000000000000000000000000000"
+  } > "$TEST_REPO/.claude/skills/.tcs-patterns-manifest"
+
+  _run_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  [ "$(_ssb_sysmsg)" = "[tcs-git-helpers] patterns ddd v${low} → v${cat_v}; run /tcs-patterns:patterns-setup update" ]
+}
