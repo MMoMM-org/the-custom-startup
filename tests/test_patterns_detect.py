@@ -47,6 +47,7 @@ fixture would duplicate a constant and widen the exact-key shape guard in
 from __future__ import annotations
 
 import importlib
+import os
 import pathlib
 import sys
 from types import ModuleType
@@ -291,6 +292,11 @@ def test_detector_matches_expected(fixture) -> None:
     assert report["schema"] == 1, fixture.name
     assert report["repo"] == str(fixture.repo_dir), fixture.name
 
+    # T5.1a: every corpus fixture is wholly readable, so `unreadable` is
+    # always present and empty here; the non-empty case is
+    # `test_unreadable_names_what_the_scan_could_not_list_or_open`.
+    assert report["unreadable"] == [], fixture.name
+
 
 class _FakeDetectModule(ModuleType):
     """A stand-in for the real `detect` module that returns one fixed report
@@ -463,6 +469,7 @@ def test_the_evidence_and_surface_assertions_are_wired_into_the_real_test(monkey
             # control to that too -- reusing the same independent
             # computation the invariant itself checks against.
             "manifests_walked": _expected_manifests_walked(fixture.repo_dir),
+            "unreadable": [],
         }
 
     honest = "requirements.txt"
@@ -515,6 +522,7 @@ def test_the_gate_evidence_schema_and_repo_assertions_are_wired_into_the_real_te
             "gate_evidence": {name: [dep_evidence] for name, is_open in expected["gates"].items() if is_open},
             "unrecognised_stack": expected["unrecognised_stack"],
             "manifests_walked": _expected_manifests_walked(fixture.repo_dir),
+            "unreadable": [],
         }
         report.update(overrides)
         return report
@@ -1252,3 +1260,41 @@ def test_an_indirect_mcp_go_require_is_not_mcp_server_evidence(tmp_path) -> None
         "an indirect require's treatment changed; see solution.md's note on "
         "`_go_mod_requires` stripping comments"
     )
+
+
+# --- T5.1a: `unreadable`, what the scan could not list or open -----------------
+
+
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="running as root: mode 000 does not stop root from reading, so nothing is unreadable",
+)
+def test_unreadable_names_what_the_scan_could_not_list_or_open(tmp_path) -> None:
+    """A mode-000 directory (`os.walk` cannot list it) and a mode-000
+    `package.json` (a rule opens it and the read raises `OSError`) both
+    appear, root-relative and sorted, the directory with a trailing `/`. A
+    non-UTF-8 manifest is content, not access, and does not appear
+    `[ref: SDD/Process contract: the CLI the skill drives, scan, "A partially
+    unreadable target"; SDD/Error Handling, "Target repository unreadable in
+    part"]`. The expected list is hand-typed, not derived."""
+    locked_dir = tmp_path / "src" / "locked"
+    locked_dir.mkdir(parents=True)
+    (locked_dir / "tsconfig.json").write_text("{}", encoding="utf-8")
+    locked_pkg = tmp_path / "app" / "package.json"
+    locked_pkg.parent.mkdir()
+    locked_pkg.write_text('{"dependencies": {"express": "4"}}', encoding="utf-8")
+    (tmp_path / "requirements.txt").write_bytes(b"\xff\xfe not utf-8 \xc3\x28\n")
+
+    locked_dir.chmod(0)
+    locked_pkg.chmod(0)
+    try:
+        detect = _load_detect()
+        report = detect.detect(tmp_path)
+    finally:
+        locked_dir.chmod(0o755)
+        locked_pkg.chmod(0o644)
+
+    assert report["unreadable"] == ["app/package.json", "src/locked/"]
+    assert report["schema"] == 1
+    # The locked directory's tsconfig.json was never seen, so it proposes nothing.
+    assert "typescript-strict" not in {e["pattern"] for e in report["auto"]}

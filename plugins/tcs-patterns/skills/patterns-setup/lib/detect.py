@@ -13,7 +13,10 @@ three gates (`q1_backend`, `q2_architecture`, `q3_test_quality`) and
 `gate_evidence` (T2.3, see `_evaluate_gates` and the functions above it)
 `[ref: docs/XDD/specs/020-tcs-patterns-selective-install/plan/phase-2.md#T2.3]`.
 A gate decides only whether to ask; no pattern is ever installed because a
-gate opened.
+gate opened. `unreadable` (T5.1a) names what the scan could not list or open,
+so a thin proposal is never silently a permissions artefact
+`[ref: SDD/Process contract: the CLI the skill drives, scan, "A partially
+unreadable target"]`.
 
 Every rule implemented below is cited to its clause in
 `[ref: SDD/Interface Specifications/Detection rules: the eight stack facts and
@@ -37,6 +40,7 @@ import json
 import os
 import re
 import sys
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
 
@@ -188,7 +192,11 @@ class _Tree:
         # tree `[ref: SDD/Detection rules, "The triad's three directories
         # need no common parent"]`.
         self.dir_paths: list[Path] = []
-        for dirpath, dirnames, filenames in os.walk(root):
+        # Directories `os.walk` could not list. Without `onerror` it skips
+        # them silently, and a repository whose `src/` is unreadable would
+        # read as one with no stack at all.
+        self.unlistable_dirs: list[Path] = []
+        for dirpath, dirnames, filenames in os.walk(root, onerror=self._record_unlistable):
             dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
             self.dir_names.update(dirnames)
             for d in dirnames:
@@ -197,6 +205,9 @@ class _Tree:
                 self.files.append(Path(dirpath) / name)
         self.files.sort()
         self.dir_paths.sort()
+
+    def _record_unlistable(self, error: OSError) -> None:
+        self.unlistable_dirs.append(Path(error.filename))
 
     def rel(self, path: Path) -> str:
         return path.relative_to(self.root).as_posix()
@@ -214,11 +225,36 @@ class _Tree:
         return [p for p in self.dir_paths if p.name in names]
 
 
+# Files a rule opened whose read raised `OSError`, collected for the one
+# `detect()` call in progress. A context variable rather than a parameter
+# because `_read_text` sits under a dozen readers (`_node_deps(path)`,
+# `_setup_py_deps(path)`, ...) that take a path and no tree; threading a sink
+# through every one of them would change each signature for a single side
+# channel. `None` outside `detect()`, where a failed read is just `None`.
+_READ_FAILURES: ContextVar[Optional[set]] = ContextVar("detect_read_failures", default=None)
+
+
 def _read_text(path: Path) -> Optional[str]:
+    """The file's text, or `None` when it cannot be read or decoded. Only the
+    `OSError` is recorded for `unreadable`: a `UnicodeDecodeError` is content,
+    not access `[ref: SDD/Process contract: the CLI the skill drives, scan]`."""
     try:
         return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    except OSError:
+        failures = _READ_FAILURES.get()
+        if failures is not None:
+            failures.add(path)
         return None
+    except UnicodeDecodeError:
+        return None
+
+
+def _unreadable(tree: "_Tree", read_failures: set) -> list[str]:
+    """Root-relative and sorted; a directory carries a trailing `/`, the way
+    `gate_evidence` writes directories."""
+    entries = {tree.rel(d) + "/" for d in tree.unlistable_dirs}
+    entries.update(tree.rel(f) for f in read_failures)
+    return sorted(entries)
 
 
 def _read_json(path: Path) -> Optional[dict]:
@@ -952,23 +988,28 @@ def detect(repo_dir) -> dict:
     _require_tomllib()
 
     root = Path(repo_dir)
-    tree = _Tree(root)
+    read_failures: set = set()
+    token = _READ_FAILURES.set(read_failures)
+    try:
+        tree = _Tree(root)
 
-    auto: list[_Proposal] = []
-    for rule in _AUTO_RULES:
-        proposal = rule(tree)
-        if proposal is not None:
-            auto.append(proposal)
+        auto: list[_Proposal] = []
+        for rule in _AUTO_RULES:
+            proposal = rule(tree)
+            if proposal is not None:
+                auto.append(proposal)
 
-    baseline: list[dict] = []
-    testing_proposal = _rule_testing(tree)
-    if testing_proposal is not None:
-        entry = testing_proposal.as_dict()
-        entry["surface"] = False
-        baseline.append(entry)
+        baseline: list[dict] = []
+        testing_proposal = _rule_testing(tree)
+        if testing_proposal is not None:
+            entry = testing_proposal.as_dict()
+            entry["surface"] = False
+            baseline.append(entry)
 
-    manifests_walked = _manifests_walked(tree)
-    gates, gate_evidence = _evaluate_gates(tree)
+        manifests_walked = _manifests_walked(tree)
+        gates, gate_evidence = _evaluate_gates(tree)
+    finally:
+        _READ_FAILURES.reset(token)
 
     return {
         "schema": 1,
@@ -979,4 +1020,7 @@ def detect(repo_dir) -> dict:
         "gate_evidence": gate_evidence,
         "manifests_walked": manifests_walked,
         "unrecognised_stack": len(auto) == 0,
+        # Additive, so `schema` stays 1: nothing outside this plugin consumes
+        # the report `[ref: SDD/Data model: detection report, "A ninth key"]`.
+        "unreadable": _unreadable(tree, read_failures),
     }
