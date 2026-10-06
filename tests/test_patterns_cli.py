@@ -3,10 +3,10 @@
 Contract `[ref: SDD/Interface Specifications/Process contract: the CLI the
 skill drives (C3's seam)]` and `plan/phase-5.md` T5.1a, "The CLI".
 
-Every verb runs as a **subprocess** of `python3 <abs path>/lib/cli.py` from a
+Almost every verb runs as a **subprocess** of `python3 <abs path>/lib/cli.py` from a
 cwd that is not the repository, with `HOME` at a `tmp_path` (so the guard's
 user namespace is a fixture) and `--catalogue` at a fixture catalogue, unless
-a test says otherwise. Fixture repositories are made with `git -C <dir> init`
+a test says otherwise (the in-process ones say so in their own docstrings). Fixture repositories are made with `git -C <dir> init`
 and `GIT_CONFIG_GLOBAL=/dev/null`, so nothing depends on the cwd or on the
 user's git config.
 
@@ -465,6 +465,19 @@ def test_install_checks_catalogue_names_before_the_guard(
 
 
 # =============================================================================
+# --help: stdout carries one JSON document or nothing, so help goes to stderr
+# =============================================================================
+
+
+@pytest.mark.parametrize("argv", [["--help"], ["scan", "-h"]], ids=["top-level", "scan"])
+def test_help_goes_to_stderr_and_leaves_stdout_empty(world: World, argv: list[str]) -> None:
+    r = _run(world, *argv)
+    assert r.returncode == 0, r.stderr.decode("utf-8", "replace")
+    assert r.stdout == b""
+    assert b"usage" in r.stderr.lower()
+
+
+# =============================================================================
 # Exit 3: the manifest cannot be read, and --accept naming an unlisted pattern
 # =============================================================================
 
@@ -481,6 +494,30 @@ def test_an_unparseable_manifest_exits_3_on_every_writing_verb(world: World, arg
     r = _run(world, *[a.replace("{repo}", str(world.repo)) for a in argv])
     _refused(r, 3)
     assert b".tcs-patterns-manifest" in r.stderr
+    assert b"status" in r.stderr
+    assert _digest(world.repo) == before
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["install", "{repo}", "ddd"], ["update", "{repo}"], ["remove", "{repo}", "hexagonal"]],
+    ids=["install", "update", "remove"],
+)
+def test_an_unreadable_manifest_exits_3_on_every_writing_verb(world: World, argv: list[str]) -> None:
+    """A PermissionError is an OSError, not a ManifestUnparseableError: the
+    other half of the up-front read's refusal. (A manifest path that is a
+    directory would not do: `manifest.read` treats a non-file as absent.)"""
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root ignores file permissions")
+    _library_install(world, ["hexagonal"])
+    path = _manifest_path(world.repo)
+    before = _digest(world.repo)
+    path.chmod(0)
+    try:
+        r = _run(world, *[a.replace("{repo}", str(world.repo)) for a in argv])
+    finally:
+        path.chmod(0o644)
+    _refused(r, 3)
     assert b"status" in r.stderr
     assert _digest(world.repo) == before
 
@@ -647,6 +684,16 @@ def test_install_a_user_namespace_collision_is_refused_with_both_locations(world
     assert (_skills(world.repo) / "tcs-hexagonal" / "SKILL.md").is_file()
     manifest = _manifest_path(world.repo).read_text(encoding="utf-8")
     assert "hexagonal" in manifest and "[patterns.ddd]" not in manifest
+
+
+def test_install_with_every_name_refused_installs_nothing_and_writes_no_manifest(world: World) -> None:
+    taken = world.home / ".claude" / "skills" / "tcs-ddd"
+    taken.mkdir(parents=True)
+    (taken / "SKILL.md").write_text("---\nname: tcs-ddd\ndescription: mine\n---\n", encoding="utf-8")
+    doc = _doc(_run(world, "install", str(world.repo), "ddd"))
+    assert doc["installed"] == {}
+    assert list(doc["refused"]) == ["ddd"]
+    assert not _manifest_path(world.repo).exists()
 
 
 def test_install_reports_what_the_guard_skipped(world: World) -> None:
@@ -852,7 +899,7 @@ def test_a_non_ascii_repository_path_round_trips(tmp_path: Path) -> None:
     _git("-C", str(repo), "init", "-q")
     home = tmp_path / "home"
     home.mkdir()
-    env = {**os.environ, "HOME": str(home), "PYTHONIOENCODING": "ascii", "GIT_CONFIG_GLOBAL": "/dev/null"}
+    env = {**os.environ, "HOME": str(home), "PYTHONIOENCODING": "ascii", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
     r = subprocess.run([sys.executable, str(CLI), "status", str(repo)], capture_output=True, cwd=tmp_path, env=env)
     assert r.returncode == 0, r.stderr.decode("utf-8", "replace")
     text = r.stdout.decode("utf-8")
