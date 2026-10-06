@@ -2824,6 +2824,12 @@ The three corrections, in the order they matter:
 - **The Obsidian rule exists twice** (ADR-7), kept honest by a test rather than by construction.
 - **`VERSION` integers are maintainer-set**, so a forgotten bump is caught by CI only for changed
   files, not for a change that should have happened and did not.
+- **The advisory runs `patterns_drift.py` without a timeout** (found in T4.3's code review,
+  2026-10-06). A reporter that hangs would stall session start for as long as the hook's own
+  limit allows. `timeout` is absent on macOS, so closing this needs a forking perl fallback. It is
+  accepted for now: the reporter only reads two small files, and the segment runs only in a
+  repository that holds a manifest. Measured with one: a 169 ms median, against a 300 ms p99
+  budget.
 
 ### Implementation Gotchas
 

@@ -95,7 +95,7 @@ only where it exists.
      - [x] Silence about patterns this repository did not install `[ref: PRD/F7 2nd]`
      - [x] `OK` when all current, `MISSING` without a manifest `[ref: SDD/AC-11]`
 
-- [ ] **T4.3 The session-start advisory segment** `[activity: platform-operations]`
+- [x] **T4.3 The session-start advisory segment** `[activity: platform-operations]`
 
   1. Prime: Read how segments are composed —
      `plugins/tcs-git-helpers/scripts/session-start-brief.sh` lines 145-185, where `drift_seg` is
@@ -113,9 +113,20 @@ only where it exists.
      and remember the plugin cache is stale inside the session that updated it, so a live check
      needs a new session.
   5. Success:
-     - [ ] Drift named with both versions and the command `[ref: PRD/F7 1st]`
-     - [ ] Silent when current, silent without a manifest `[ref: PRD/F7 3rd, 4th]`
-     - [ ] Silent and error-free when `tcs-patterns` is absent `[ref: SDD/Deployment View]`
+     - [x] Drift named with both versions and the command `[ref: PRD/F7 1st]`
+     - [x] Silent when current, silent without a manifest `[ref: PRD/F7 3rd, 4th]`
+     - [x] Silent and error-free when `tcs-patterns` is absent `[ref: SDD/Deployment View]`
+
+  **Validate step 4's live-session read is still pending, and carried to T5.5.** As of
+  2026-10-06 the installed cache holds only `tcs-patterns` 1.4.4, which has no
+  `patterns_drift.py`, so a new session today correctly shows nothing and proves nothing about
+  drift. The stand-in is bats test 13, which runs the real hook against the real reporter in the
+  repository layout. The live read needs a `tcs-patterns` 2.x build installed and a fresh session,
+  because the cache is stale in the session that updated it. It also needs T5.1: the advisory
+  names `/tcs-patterns:patterns-setup update`, which does not exist until that skill ships.
+  Landed as 9edcc66. The review follow-ups are ce88cb5, which enforces line 204's
+  `systemMessage` assertion (a non-final `!` that bats ignored; the three remaining sites are
+  recorded on #173), and 41425e1 (repo layout wins over a cached copy).
 
 - [ ] **T4.4 Phase validation** `[activity: validate]`
 
