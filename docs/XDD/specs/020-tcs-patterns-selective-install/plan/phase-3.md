@@ -1161,27 +1161,44 @@ writing is allowed, and an installer that is honest about what it did.
      `git log origin/main..HEAD --oneline -- plugins/tcs-git-helpers/tests/bats/fixtures_sanity.bats
      plugins/tcs-git-helpers/tests/fixtures/repos/build.sh` must print nothing.
 
-  6. **If you run a mutation round, run it under `python -B` and clear `__pycache__` afterwards.**
-     Measured 2026-10-05 during T3.4, where it cost an hour and very nearly got a correct test
-     blamed. Python decides a `.pyc` is current from the source's **mtime and size only**, never its
-     content. A harness that writes a mutant, runs the suite and restores the original leaves
-     bytecode for the *mutant* in place whenever the mutant has the **same byte size** — which is
-     true of the most valuable mutations: reordering two guards, swapping two assignments, flipping
-     a comparison — and the restore lands in the same mtime second, which at harness speed it
-     always does.
+  6. **If you run a mutation round, delete `__pycache__` BEFORE each run.** Measured 2026-10-05
+     during T3.4, where it cost an hour and very nearly got a correct test blamed. Python decides a
+     `.pyc` is current from the source's **mtime and size only**, never its content. A harness that
+     writes a mutant, runs the suite and restores the original leaves bytecode for the *mutant* in
+     place whenever the mutant has the **same byte size**, and the restore lands in the same mtime
+     second, which at harness speed it always does.
 
      While poisoned, `git diff` is clean, the file's digest matches pristine, and
-     `inspect.getsource` shows the **correct** source; only behaviour is wrong. Note what does
-     *not* help: `pytest -p no:cacheprovider` disables pytest's own cache, a different mechanism
-     entirely. And the damage outlives the process — it sits in the working tree and corrupts the
-     next person's run, so a phase-validation figure measured against a poisoned tree is wrong with
-     no visible cause.
+     `inspect.getsource` shows the **correct** source; only behaviour is wrong. The damage outlives
+     the process — it sits in the working tree and corrupts the next person's run, so a
+     phase-validation figure measured against a poisoned tree is wrong with no visible cause, which
+     is squarely this task's problem.
 
-     So: `PYTHONDONTWRITEBYTECODE=1`, a `shutil.rmtree(..., ignore_errors=True)` of the module's
-     `__pycache__` in the harness's `finally`, and **re-establish the baseline at the END of the
-     round as well as the start**. The opening baseline protects that run; the closing one protects
-     everyone after it, and here the opening check of the *following* harness is the only thing that
-     caught it.
+     **Two things that look like protection and are not.** `pytest -p no:cacheprovider` disables
+     pytest's own `.pytest_cache`, a different mechanism entirely. And `python -B` /
+     `PYTHONDONTWRITEBYTECODE=1` governs **writing** a `.pyc`, not **reading** a stale one — an
+     earlier revision of this item prescribed `-B` as the fix, and an implementer pushed back and
+     was right. Re-measured: with a stale `.pyc` in place, a child run under `-B` still executes the
+     stale bytecode. `-B` stops your harness *creating* the poison and does nothing about poison
+     that already exists, which was exactly the state in question. "I ran it under `-B`" reads as
+     immunity and is not.
+
+     So, in order: **delete the module's `__pycache__` before every run** (a `finally` delete is
+     hygiene for the next person, not protection for the verdict you are about to trust); prefer
+     `python3 -m compileall --invalidation-mode checked-hash <dir>`, which makes the tree's `.pyc`s
+     validate on a content hash (PEP 552, header `flags` `0` → `3`) and removes the hazard without
+     depending on anyone remembering; and **re-establish the baseline at the END of the round as
+     well as the start** — the opening baseline protects that run, the closing one protects everyone
+     after it, and here the opening check of the *following* harness is the only thing that caught
+     it.
+
+     Worth knowing why one mutation was uniquely dangerous: **any size change is caught even within
+     the same second.** This hazard is near-invisible for most mutants and near-certain for a pure
+     line reordering, which is the rare mutation that preserves size exactly — and size-preserving
+     mutations (swap two statements, exchange two assignments, reorder two guards) are also the
+     subtle ones whose verdict you most need to trust. Also not covered by clearing one module's
+     cache: `tests/__pycache__`, and a mutation landing in a different module than the one you
+     cleared.
 
   - Success: the three test files above green, reported per leg; `install()` proven to write only
     for names it is given and `install.py` proven not to import `guard`; the C3-owned sequence and
