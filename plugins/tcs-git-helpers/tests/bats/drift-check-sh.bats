@@ -125,3 +125,51 @@ teardown() {
   [ "$status" -eq 0 ]
   [ "$output" = "OK" ]
 }
+
+# ---------- Spec 020 T4.1: drift_check_bundle takes a marker directory ----------
+
+@test "bundle: MISSING in a custom marker dir" {
+  run drift_check_bundle "$REPO_TMP" "1.0" "tcs-patterns-version" ".tcs-patterns"
+  [ "$status" -eq 0 ]
+  [ "$output" = "MISSING" ]
+}
+
+@test "bundle: OK in a custom marker dir" {
+  mkdir -p "$REPO_TMP/.tcs-patterns"
+  echo "1.0" > "$REPO_TMP/.tcs-patterns/tcs-patterns-version"
+  run drift_check_bundle "$REPO_TMP" "1.0" "tcs-patterns-version" ".tcs-patterns"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "bundle: DRIFT:<installed> in a custom marker dir" {
+  mkdir -p "$REPO_TMP/.tcs-patterns"
+  echo "0.9" > "$REPO_TMP/.tcs-patterns/tcs-patterns-version"
+  run drift_check_bundle "$REPO_TMP" "1.0" "tcs-patterns-version" ".tcs-patterns"
+  [ "$status" -eq 0 ]
+  [ "$output" = "DRIFT:0.9" ]
+}
+
+@test "bundle: a marker in .githooks is not read when marker_dir points elsewhere" {
+  echo "h7" > "$GITHOOKS_DIR/tcs-git-helpers-version"
+  run drift_check_bundle "$REPO_TMP" "h7" "tcs-git-helpers-version" ".tcs-patterns"
+  [ "$status" -eq 0 ]
+  [ "$output" = "MISSING" ]
+}
+
+@test "bundle: a marker in the custom dir is not read by the default dir" {
+  mkdir -p "$REPO_TMP/.tcs-patterns"
+  echo "h7" > "$REPO_TMP/.tcs-patterns/tcs-git-helpers-version"
+  run drift_check_bundle "$REPO_TMP" "h7"
+  [ "$status" -eq 0 ]
+  [ "$output" = "MISSING" ]
+}
+
+@test "bundle: default marker_dir equals the hook-bundle wrapper's output" {
+  echo "h1" > "$GITHOOKS_DIR/tcs-git-helpers-version"
+  run drift_check_bundle "$REPO_TMP" "h7"
+  [ "$status" -eq 0 ]
+  [ "$output" = "DRIFT:h1" ]
+  run drift_check_hook_bundle "$REPO_TMP" "h7"
+  [ "$output" = "DRIFT:h1" ]
+}

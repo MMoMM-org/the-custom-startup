@@ -13,11 +13,21 @@ Three-state result (mirrors the bash helper drift_check.sh):
   DRIFT   — installed version differs from expected
 
 Public API:
+  check_bundle(
+      repo_path: Path,
+      expected_version: str,
+      version_filename: str = "tcs-git-helpers-version",
+      marker_dir: str = ".githooks",
+  ) -> DriftResult
+
   check_hook_bundle(
       repo_path: Path,
       expected_version: str,
       version_filename: str = "tcs-git-helpers-version",
   ) -> DriftResult
+
+check_hook_bundle is a thin wrapper over check_bundle with marker_dir pinned
+to ".githooks" (spec 020 T4.1 added marker_dir).
 
 The default value of version_filename preserves backward compatibility
 with all existing callers. Pass a different filename to check any other
@@ -81,28 +91,26 @@ class DriftResult:
     installed_version: Optional[str]
 
 
-def check_hook_bundle(
+def check_bundle(
     repo_path: Path,
     expected_version: str,
     version_filename: str = "tcs-git-helpers-version",
+    marker_dir: str = ".githooks",
 ) -> DriftResult:
-    """Return the drift classification for the repo's installed hook bundle.
+    """Return the drift classification for an installed bundle marker.
 
     Args:
         repo_path: Absolute path to the repository root.
         expected_version: The version string the skill requires (e.g. "h7").
-        version_filename: Name of the single-line marker file under
-            .githooks/ that contains the installed bundle version.
-            Defaults to "tcs-git-helpers-version" for backward
-            compatibility with all existing callers.  Pass a different
-            value (e.g. "tcs-helper-rule-enforcer-version") to check
-            any other bundle marker file.
+        version_filename: Name of the single-line marker file under marker_dir.
+        marker_dir: Directory, relative to repo_path, holding the marker.
+            Defaults to ".githooks".
 
     Returns:
         DriftResult with status OK / MISSING / DRIFT and the installed
         version string (None when MISSING).
     """
-    version_file = repo_path / ".githooks" / version_filename
+    version_file = repo_path / marker_dir / version_filename
 
     if not version_file.exists():
         return DriftResult(status=DriftStatus.MISSING, installed_version=None)
@@ -114,3 +122,15 @@ def check_hook_bundle(
         return DriftResult(status=DriftStatus.OK, installed_version=installed)
 
     return DriftResult(status=DriftStatus.DRIFT, installed_version=installed)
+
+
+def check_hook_bundle(
+    repo_path: Path,
+    expected_version: str,
+    version_filename: str = "tcs-git-helpers-version",
+) -> DriftResult:
+    """Drift classification for the hook bundle under .githooks/.
+
+    Thin wrapper over check_bundle; signature and defaults are unchanged.
+    """
+    return check_bundle(repo_path, expected_version, version_filename, ".githooks")

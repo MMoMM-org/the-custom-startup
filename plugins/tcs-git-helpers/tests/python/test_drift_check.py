@@ -355,6 +355,90 @@ class TestCustomFilename:
 
 
 # ---------------------------------------------------------------------------
+# Spec 020 T4.1 — check_bundle takes a marker directory
+# ---------------------------------------------------------------------------
+
+_PATTERNS_FILENAME = "tcs-patterns-version"
+
+
+def _write_marker(repo_path: Path, marker_dir: str, filename: str, content: str) -> None:
+    d = repo_path / marker_dir
+    d.mkdir(parents=True, exist_ok=True)
+    (d / filename).write_text(content)
+
+
+def _call_bash_bundle(
+    repo_path: Path, expected: str, filename: str, marker_dir: str
+) -> str:
+    script = (
+        f"source {shlex.quote(str(_BASH_HELPER))}; "
+        f"drift_check_bundle {shlex.quote(str(repo_path))} {shlex.quote(expected)} "
+        f"{shlex.quote(filename)} {shlex.quote(marker_dir)}"
+    )
+    result = subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True, timeout=10
+    )
+    result.check_returncode()
+    return result.stdout.strip()
+
+
+class TestCheckBundleMarkerDir:
+    def test_missing_in_custom_dir(self, dc, tmp_path: Path) -> None:
+        r = dc.check_bundle(tmp_path, "1.0", _PATTERNS_FILENAME, ".tcs-patterns")
+        assert r.status == dc.DriftStatus.MISSING
+        assert r.installed_version is None
+
+    def test_ok_in_custom_dir(self, dc, tmp_path: Path) -> None:
+        _write_marker(tmp_path, ".tcs-patterns", _PATTERNS_FILENAME, "1.0\n")
+        r = dc.check_bundle(tmp_path, "1.0", _PATTERNS_FILENAME, ".tcs-patterns")
+        assert r.status == dc.DriftStatus.OK
+        assert r.installed_version == "1.0"
+
+    def test_drift_in_custom_dir(self, dc, tmp_path: Path) -> None:
+        _write_marker(tmp_path, ".tcs-patterns", _PATTERNS_FILENAME, "0.9\n")
+        r = dc.check_bundle(tmp_path, "1.0", _PATTERNS_FILENAME, ".tcs-patterns")
+        assert r.status == dc.DriftStatus.DRIFT
+        assert r.installed_version == "0.9"
+
+    def test_githooks_marker_not_read_when_dir_differs(self, dc, tmp_path: Path) -> None:
+        _write_version_file(tmp_path, "h7\n")
+        r = dc.check_bundle(
+            tmp_path, "h7", "tcs-git-helpers-version", ".tcs-patterns"
+        )
+        assert r.status == dc.DriftStatus.MISSING
+
+    def test_custom_dir_marker_not_read_by_default_dir(self, dc, tmp_path: Path) -> None:
+        _write_marker(tmp_path, ".tcs-patterns", "tcs-git-helpers-version", "h7\n")
+        r = dc.check_bundle(tmp_path, "h7")
+        assert r.status == dc.DriftStatus.MISSING
+
+    def test_default_dir_equals_hook_bundle_wrapper(self, dc, tmp_path: Path) -> None:
+        _write_version_file(tmp_path, "h1\n")
+        assert dc.check_bundle(tmp_path, "h7") == dc.check_hook_bundle(tmp_path, "h7")
+
+
+_BUNDLE_DIRS = [".githooks", ".tcs-patterns", "nested/dir"]
+_BUNDLE_CONTENTS = [None, "h7\n", "  h 7  \r\n", "h1\n", "   \n"]
+
+
+@pytest.mark.parametrize("marker_dir", _BUNDLE_DIRS)
+@pytest.mark.parametrize("content", _BUNDLE_CONTENTS, ids=repr)
+def test_bundle_parity_python_matches_bash(
+    dc, tmp_path: Path, marker_dir: str, content: Optional[str]
+) -> None:
+    """check_bundle and drift_check_bundle agree across marker dirs x verdicts."""
+    if content is not None:
+        _write_marker(tmp_path, marker_dir, _PATTERNS_FILENAME, content)
+    py_wire = _status_to_bash_wire(
+        dc, dc.check_bundle(tmp_path, "h7", _PATTERNS_FILENAME, marker_dir)
+    )
+    bash_wire = _call_bash_bundle(tmp_path, "h7", _PATTERNS_FILENAME, marker_dir)
+    assert py_wire == bash_wire
+    if content is None:
+        assert bash_wire == "MISSING"
+
+
+# ---------------------------------------------------------------------------
 # T2.3 — CON-2 parity rows: scan_tool_input_for_override (bash ↔ Python)
 #
 # Each row mirrors a BATS scenario from lib_override.bats §_scan_tool_input.
