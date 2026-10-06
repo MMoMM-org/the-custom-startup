@@ -365,7 +365,7 @@ tests/
 ├── patterns_detection_corpus_lib.py    NEW       shared fixture loading for the two above
 ├── test_patterns_install.py            NEW       rename, hash, manifest, idempotency
 ├── test_patterns_guard.py              NEW       three namespaces, the refusal partition, skips
-├── test_patterns_drift.py              NEW       per-pattern drift, silence when current; unchanged by T5.1a
+├── test_patterns_drift.py              NEW       per-pattern drift, silence when current; T5.1a: existing tests unmodified, one test added
 ├── test_patterns_remove_status.py      NEW       remove()'s six rules and its order; status() vs the reporter (T5.1a)
 ├── test_patterns_cli.py                NEW       every verb as a subprocess: keys, exit codes, refusal order (T5.1a)
 ├── test_obsidian_rule_agreement.py     NEW       ADR-7's consistency test
@@ -1406,7 +1406,7 @@ messages, warnings and usage go to stderr only.
 |---|---|
 | every verb's `repo`; `install`'s `refused.*.path` and `refused.*.intended_path`; `install`'s `skipped[].path` | absolute (the toplevel, `Path.home()` and every root the guard walks are absolute) |
 | `scan`'s `report` | verbatim from `detect()`: `report.repo` is the absolute toplevel the CLI passed in; `evidence`, `gate_evidence`, `manifests_walked` and `unreadable` are relative to it, as `detect.py` writes them (`tree.rel`) |
-| `scan`'s `companions.*[].source_file` and `companions.ambiguous[].source_file` | relative to the catalogue root, as `companions._derive` writes them |
+| `scan`'s `companions.proposed.*[].source_file` and `companions.ambiguous[].source_file` | relative to the catalogue root, as `companions._derive` writes them |
 | `status`'s `unlisted[]` and `debris[].name` | a bare entry name inside `<repo>/.claude/skills/` |
 | reason strings | free text; any path inside one is whatever the library interpolated |
 
@@ -1601,31 +1601,38 @@ in sorted order, **the first rule that applies decides**:
 |---|---|---|
 | 1 | the manifest does not list the pattern | `refused`: "not recorded in the manifest; remove deletes only what the manifest records". **`remove` never deletes a directory the manifest does not own** — a hand-made `tcs-foo/` is someone's skill, not ours |
 | 2 | the entry's `installed_as` is not `"tcs-" + name` | `refused`. ADR-1 makes this always true for what `install()` writes; a hand-edited manifest pointing `ddd` at `tcs-hexagonal` would otherwise delete the wrong pattern |
-| 3 | `.<installed_as>.replaced` exists **and `<installed_as>/` does not** | `refused`, naming it, with the resolution: "an interrupted refresh left your copy at `<stash>`; move it back to `<installed_as>/` and run remove again, or delete it yourself if you do not want it". With the directory absent the stash is the user's only copy (update path, decision 8), and dropping the manifest entry would orphan the only reference to it. **A stash beside a present directory is not this rule's case**: decision 8 calls that state debris that costs nothing, because the next refresh deletes it — and once the pattern is removed no refresh will come, so `remove` deletes it with the directory (step 4). Corrected 2026-10-06; this rule refused whenever a stash existed, which made a current pattern with old debris unremovable by any verb |
+| 3 | `.<installed_as>.replaced` exists **and `<installed_as>/` does not** | `refused`, naming it, with the resolution: "an interrupted refresh left your copy at `<stash>`; move it back to `<installed_as>/` and run remove again, or delete it yourself if you do not want it". With the directory absent the stash is the user's only copy (update path, decision 8), and dropping the manifest entry would orphan the only reference to it. **A stash beside a present directory is not this rule's case**: decision 8 calls that state debris that puts nothing at risk, since `<installed_as>/` holds the working copy, and the refresh that might clear it never comes for a pattern the catalogue has dropped (decision 8, "That expiry is conditional"), nor after a remove. So `remove` deletes it — **first, in step 2, before anything else moves**, while the user's copy is still in `<installed_as>/`. Corrected 2026-10-06, twice: this rule first refused whenever a stash existed, which made a current pattern with old debris unremovable by any verb; then it deleted the stash last, after the manifest write, which let an interrupted remove leave an old stash looking like the user's only copy |
 | 4 | `<installed_as>` exists but is a symlink, or is not a directory | `refused`: `install()` never creates either, so it is not ours as written |
 | 5 | the directory exists and the hash of its `SKILL.md` differs from the manifest `sha256` — an unreadable or absent `SKILL.md` counts as differing — and the name is not in `force` | `refused`: "diverged from what was installed; local edits would be lost — re-run with --force <name>". Decided here: refuse, mirroring ADR-4's stance that nothing destroys local work without consent. As with `update`, only `SKILL.md` is hashed, so an edit confined to `reference/` is deleted without asking — ADR-4's accepted limit, not a new one |
-| 6 | otherwise | removed, in the four steps below |
+| 6 | otherwise | removed, in the five steps below |
 
-**Order: move aside, then the manifest, then delete.** Decided here, because each interrupted state
-is one `status` can name and one re-running `remove` completes:
+**Order: clear the stash, move aside, then the manifest, then delete.** Decided here, because every
+interrupted state is one `status` can name, and each is either finished by re-running `remove` or
+is debris `status` calls safe to delete (the one state of the second kind is below the steps):
 
 1. If `.<installed_as>.removing` exists, `shutil.rmtree` it — this verb's own debris from an
    earlier interrupted run, exactly as `install()` removes its own `.tmp`.
-2. If `<installed_as>/` exists, `os.rename` it to `.<installed_as>.removing` (same directory, so
+2. If `<installed_as>/` exists and `.<installed_as>.replaced` exists beside it, `shutil.rmtree` the
+   stash. It comes before every other mutation so that no interrupted remove can leave a
+   `.replaced` beside a `.removing`, or a `.replaced` after the manifest write: in both states
+   `status` would call an old stash "your copy", and restoring it would bring back an older
+   version or a pattern the user had just removed. Interrupted here, the state is an ordinary
+   installed pattern, with the stash gone or partly gone, and a re-run completes.
+3. If `<installed_as>/` exists, `os.rename` it to `.<installed_as>.removing` (same directory, so
    atomic). The pattern leaves the skill listing in one step, never half-deleted.
-3. Write the manifest without the entry: new `manifest.drop(repo_dir, name, *, bundle) -> Manifest`,
+4. Write the manifest without the entry: new `manifest.drop(repo_dir, name, *, bundle) -> Manifest`,
    the mirror of `upsert` (read, `Manifest.without_pattern(name, bundle=...)`, atomic `write()`;
    prior entries byte-identical, since `_serialize_pattern` depends only on its own entry). If it
-   raises, report `failed` — and **only if step 2 renamed a directory**, rename `.removing` back to
-   `<installed_as>/` first. On the resume path (`directory_existed: false`) there is nothing to
-   rename back, and a `.removing` found there was already deleted in step 1.
-4. `shutil.rmtree(.<installed_as>.removing, ignore_errors=True)`, and the same for a
-   `.<installed_as>.replaced` stash if one sat beside the directory (rule 3's second half). A
-   leftover is reported by `status` as debris.
+   raises, report `failed` with that exception's text — and **only if step 3 renamed a
+   directory**, rename `.removing` back to `<installed_as>/` first. On the resume path
+   (`directory_existed: false`) no rename is attempted, and a `.removing` found there was already
+   deleted in step 1.
+5. `shutil.rmtree(.<installed_as>.removing, ignore_errors=True)`. A leftover is reported by
+   `status` as debris.
 
-Interrupted after step 2: the manifest lists the pattern, its directory is absent, and
+Interrupted after step 3: the manifest lists the pattern, its directory is absent, and
 `.<installed_as>.removing` is present — `status` shows all three, and re-running `remove` reaches
-rule 6 with `directory_existed: false` and finishes. Interrupted after step 3: debris only, no
+rule 6 with `directory_existed: false` and finishes. Interrupted after step 4: debris only, no
 record — a re-run is refused by rule 1, because the manifest no longer lists the pattern, and
 `status` reports the `.removing` entry as debris that is safe to delete. That is the one state a
 re-run does not finish, and it needs nothing finished: the pattern is already out of the listing
@@ -1668,16 +1675,24 @@ sha256_or_none(path) -> str | None                  install._hash_if_present, mo
 
 `install.py` and `companions.py` import the root and the catalogue default from it, which
 collapses two of the three `parents[...]` derivations (`install.py`'s `_PLUGIN_ROOT`,
-`companions.py`'s `_DEFAULT_CATALOGUE_DIR`); `install.DEFAULT_CATALOGUE_DIR` stays as a re-export,
-because it is a public name. `install.py` uses the three suffixes for `.tmp` and `.replaced`, and
-`remove()` uses `.removing`. **`patterns_drift.py` keeps its own derivation**, because it must find
+`companions.py`'s `_DEFAULT_CATALOGUE_DIR`). `install.DEFAULT_CATALOGUE_DIR` is **dropped**, decided
+here: nothing outside `install.py` imports it (searched 2026-10-06), and a re-export kept for no
+importer is a second name for one value. `install()` and `update()` default to
+`paths.DEFAULT_CATALOGUE_DIR`. `install.py` uses the suffixes for `.tmp` and `.replaced`, `remove()`
+uses `.removing`, and `manifest.write` uses `TMP_SUFFIX` for its temp file in place of its literal
+`".tmp"` (decided here: one line in a module T5.1a already edits, so the `manifest-tmp` match below
+reads the writer's own constant). **`patterns_drift.py` keeps its own derivation**, because it must find
 `lib/` before it can import anything from it, and its "missing lib → exit 0, silent stdout"
 contract forbids any lib import at module level, which a `paths`-derived default argument would
 need. `paths.py` stays importable from a copy, as the others are: no I/O at import.
 
-The property, stated so a test can check it: among this plugin's modules, `status.py` imports only
-`manifest` and `paths`, and calls only `manifest.read` and `manifest._manifest_path` — never
-`write`, `upsert` or `drop`. A test parses `status.py` with `ast` and asserts both.
+The property, stated so a test can check it, as an **allowlist**: among this plugin's modules,
+`status.py` imports only `manifest` and `paths`, each as a plain `import <name>` — no `as` alias and
+no `from manifest import …`, so every use is spelled `manifest.<attr>` and is visible to the check —
+and the only `manifest.<attr>` names it references are `read`, `_manifest_path`,
+`ManifestUnparseableError` and `MANIFEST_FILENAME`. A test parses `status.py` with `ast` and fails on
+any other sibling import, any alias, and any other `manifest` attribute, so a later `write` is
+caught without anyone having listed it.
 
 ```
 status(repo_dir, *, catalogue_dir=paths.DEFAULT_CATALOGUE_DIR) -> StatusReport
@@ -1731,12 +1746,12 @@ constants, and two states needed telling apart: one is the user's only copy, and
 delete. That first version also missed the manifest's own temp file, which `manifest.write` names
 `.` + `.tcs-patterns-manifest` + `.<random>.tmp` (two leading dots, so a `.tcs-*` glob misses it).
 An entry is debris when its name starts with `.tcs-` and is not the manifest itself, or starts
-with `.` + `manifest.MANIFEST_FILENAME` + `.`:
+with `.` + `manifest.MANIFEST_FILENAME` + `.` and ends with `paths.TMP_SUFFIX`:
 
 | `kind` | Name | `resolution` |
 |---|---|---|
 | `install-tmp` | `.tcs-<p>` + `TMP_SUFFIX` | safe to delete; the next `install` of `<p>` deletes it itself |
-| `replaced` | `.tcs-<p>` + `REPLACED_SUFFIX` | with `tcs-<p>/` present: safe to delete, and the next refresh or `remove` deletes it. With `tcs-<p>/` absent: **this is your copy of `<p>`**; move it back to `tcs-<p>/` |
+| `replaced` | `.tcs-<p>` + `REPLACED_SUFFIX` | with `tcs-<p>/` present: safe to delete, and `remove <p>` deletes it. With `tcs-<p>/` absent: **this is your copy of `<p>`**; move it back to `tcs-<p>/`. Only an interrupted refresh leaves this state: `remove` clears a stash before it moves anything (rule 3, step 2), so no interrupted remove can |
 | `removing` | `.tcs-<p>` + `REMOVING_SUFFIX` | with the manifest still listing `<p>`: run `remove <p>` to finish. Otherwise: safe to delete; the removal had finished except for this |
 | `manifest-tmp` | `.` + `MANIFEST_FILENAME` + `.*` + `.tmp` | safe to delete; a manifest write was interrupted before its rename, and the manifest itself is intact |
 | `unknown` | any other match | not a name this tool writes; left alone |
@@ -2687,7 +2702,7 @@ decided answer instead of repeating the derivation
 | `update --accept` names a pattern the manifest does not list | C3's CLI | Exit 3 before `update()` is called. A misspelt name would otherwise silently decline the pattern the user had just approved. Added 2026-10-06. |
 | `remove` names a pattern the manifest does not list | C5 `remove()` | `refused`, and nothing is deleted. `remove` deletes only what the manifest records. Added 2026-10-06. |
 | `remove` names a pattern whose installed `SKILL.md` no longer matches the manifest hash | C5 `remove()` | `refused` unless named by `--force`, the same consent ADR-4 requires before `update` replaces an edit. Added 2026-10-06. |
-| `remove` finds a `.<installed_as>.replaced` stash with the pattern directory absent, or a symlink or file where the pattern directory should be | C5 `remove()` | `refused`, naming the path and the resolution. That stash is the user's only copy, and a link or file is not something `install()` wrote. A stash beside a **present** directory is debris and is deleted with it. Added 2026-10-06. |
+| `remove` finds a `.<installed_as>.replaced` stash with the pattern directory absent, or a symlink or file where the pattern directory should be | C5 `remove()` | `refused`, naming the path and the resolution. That stash is the user's only copy, and a link or file is not something `install()` wrote. A stash beside a **present** directory is debris; `remove` deletes it before any other change, so an interrupted remove never leaves one behind. Added 2026-10-06. |
 | `remove` interrupted between its steps | C5 `remove()` | Either the directory is absent while the manifest still lists it and `.<installed_as>.removing` is present, or only the `.removing` debris is left. `status` shows both states. Re-running `remove` completes the first; in the second the manifest no longer lists the pattern, so a re-run is refused by rule 1, and `status` reports the `.removing` entry as debris that is safe to delete. Added 2026-10-06. |
 | A catalogue `SKILL.md` whose `description:` cannot be parsed | C3's CLI, `scan` | That pattern's `listing_cost` is `null`, and the skill shows "unknown", never 0. Added 2026-10-06. |
 

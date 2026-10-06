@@ -72,8 +72,8 @@ four passing test suites.
      `lib/install.py` (`_stash_path`, `_replace_subtree` — the move-aside-and-roll-back shape
      `remove()` mirrors), `lib/manifest.py` (`upsert`, `with_pattern` — the shape `drop` and
      `without_pattern` mirror), `lib/companions.py` (`_derive`), and `scripts/patterns_drift.py`
-     with `tests/test_patterns_drift.py`, the suite that must stay green **unchanged** through the
-     refactor. `tests/test_patterns_installer.py` shows this repository's loader conventions:
+     with `tests/test_patterns_drift.py`, whose existing tests must stay green **unmodified**
+     through the refactor; T5.1a adds one test to it and changes none. `tests/test_patterns_installer.py` shows this repository's loader conventions:
      import inside each test, never at module level.
   2. Test: Written first, failing for want of the code, and the RED commit says which tests fail
      on `ImportError`/`AttributeError` (the module or function is absent) and which on an
@@ -88,12 +88,19 @@ four passing test suites.
        so nobody "fixes" it by accident). **Two** diverged patterns with only one named in
        `force`: that one is removed and the other refused, which is what kills a blanket-flag
        `force`. A `.replaced` stash beside a present directory is deleted with it; with the
-       directory absent it is refused and the reason names the stash. Order, from both sides:
+       directory absent it is refused and the reason names the stash. A fault injected right
+       after the stash deletion (step 2) leaves an ordinary installed pattern — entry listed,
+       `tcs-<p>/` byte-identical, no `.replaced`, no `.removing` — and a re-run completes. A fault
+       injected right after the move-aside (step 3), with a stash present at the start, leaves no
+       entry `status` classifies as `replaced`. Order, from both sides:
        a fault injected into `manifest.drop` leaves `<installed_as>/` back in place,
        byte-identical, and reports `failed`; a fault injected into the move-aside rename
        (`os.rename`) leaves the manifest bytes unchanged and the directory intact, and reports
        `failed` — only this second test can see the manifest written before the rename. On the
-       resume path, a fault in `manifest.drop` renames nothing back. Interrupted states, built by
+       resume path, a fault in `manifest.drop` renames nothing back: a spy on `os.rename` records
+       **zero** calls after the fault, and the `failed` reason contains the injected exception's
+       text. The spy is what kills the mutant even if the rename-back sits inside an `OSError`
+       handler, which "rolled back where possible" invites. Interrupted states, built by
        hand: (a) entry listed, directory absent, `.removing` present — a re-run removes the entry
        and the debris, `directory_existed: false`; (b) `.removing` alone, entry gone — a re-run is
        **refused** by rule 1 and deletes nothing, and `status` reports the entry as `removing`
@@ -113,13 +120,18 @@ four passing test suites.
        `.tcs-ddd.removing`, `.tcs-ddd.replaced` (once with `tcs-ddd/` present, once absent — two
        different resolutions) and a `..tcs-patterns-manifest.x.tmp` file, and does **not** list
        `.tcs-patterns-manifest`; `diverged` is `None`, not `False`, when `SKILL.md` is absent.
-       `status()` writes nothing: digest before and after, and an `ast` check that `status.py`
-       imports no sibling but `manifest` and `paths` and references no `manifest.write`,
-       `upsert` or `drop`.
+       `status()` writes nothing: digest before and after, and the SDD's `ast` **allowlist** —
+       sibling imports only `import manifest` and `import paths`, no alias and no `from` form,
+       and `manifest.<attr>` only for `read`, `_manifest_path`, `ManifestUnparseableError` and
+       `MANIFEST_FILENAME`. The test fails on anything else rather than looking for named
+       writers.
      - **The reporter's lazy import**, in `tests/test_patterns_drift.py` as a **new** test (the
        existing ones stay unmodified): a copy of the plugin with `lib/manifest.py` present and
        `lib/status.py` absent — the partial lib the refactor creates a new way to have — exits 0
-       with empty stdout and one `patterns_drift:` line on stderr.
+       with empty stdout and one `patterns_drift:` line on stderr. The repository fixture **must
+       hold a manifest listing at least one pattern**: without one, `drift_lines` returns
+       `MISSING` before it reaches the lazy `import status`, and the test passes without
+       exercising the import it exists for. It also asserts stdout is not `MISSING`.
      - **The CLI**, `tests/test_patterns_cli.py`, every verb run as a **subprocess** of
        `python3 <abs path>/lib/cli.py` from a cwd that is not the repository, with `HOME`
        pointed at a `tmp_path` and `--catalogue` at a fixture catalogue unless a bullet says
@@ -188,7 +200,10 @@ four passing test suites.
      - make `force` a blanket flag rather than per-name (must fail the two-diverged test);
      - swap `remove()`'s rename and manifest steps (must fail the rename-fault test);
      - make the rename-back on a `manifest.drop` failure unconditional (must fail the resume-path test);
-     - refuse on any `.replaced` stash, present directory or not;
+     - refuse on any `.replaced` stash, present directory or not (must fail the "stash beside a
+       present directory is deleted with it" test);
+     - delete the stash after the manifest write instead of first (must fail the fault-after-step-3
+       test, which finds an entry `status` classifies as `replaced`);
      - write to `sys.stdout` instead of `sys.stdout.buffer` (must fail the `PYTHONIOENCODING=ascii` test);
      - delete the manifest on the last remove;
      - make `drift_verdict` compare strings (must fail both the `status` and the reporter rows);
@@ -208,7 +223,7 @@ four passing test suites.
      - [ ] Every verb's JSON parses and has exactly the specified keys `[ref: SDD/Process contract: the CLI the skill drives]`
      - [ ] Outside a git repository every verb exits 3 before reading anything `[ref: SDD/Runtime View/Primary Flow, step 1; SDD/Error Handling]`
      - [ ] `scan` reports per-entry listing cost and what it could not read `[ref: PRD/F2 4th; SDD/AC-16; SDD/Error Handling, "Target repository unreadable in part"]`
-     - [ ] `tests/test_patterns_drift.py` passes unmodified `[ref: SDD/AC-11]`
+     - [ ] `tests/test_patterns_drift.py`: existing tests unmodified and passing; one test added `[ref: SDD/AC-11]`
 
 - [ ] **T5.1 The patterns-setup skill** `[activity: frontend-ui]`
 
