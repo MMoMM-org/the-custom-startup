@@ -172,14 +172,33 @@ catalogue reason wins, because "run install" is advice that cannot succeed
 against a catalogue with nothing to copy `[ref: decision 7, "When both sides
 are absent"]`.
 
-**And when the absent directory has a `.<installed_as>.replaced` stash
-beside it, the reason names the stash instead of `install`.** That stash is
+**Either `failed` reason names a `.<installed_as>.replaced` stash when the
+directory is absent and one is sitting there.** On the catalogue-absent path
+that stash holds the only copy of the content *anywhere* -- the user's edits
+and the pattern itself, which the catalogue no longer has -- so the reason
+names it and drops the "left exactly as it is" clause, which is false once
+the directory is gone `[ref: decision 7, "And when a .replaced stash is ALSO
+present"]`. The precedence is unchanged: the catalogue cause stays the
+headline, because "the pattern is gone upstream" is still the actionable
+fact.
+
+**On the missing-directory path the reason names the stash instead of
+`install`.** That stash is
 how `_replace_subtree` holds the user's copy while the replacement lands, so
 one sitting there means a refresh was killed between its two renames and the
 user's own edits are in it, unreferenced by anything. `update()` does not
 move it back -- an unrequested restore is exactly what ADR-4 forbids this
 verb from doing -- but it says where the copy is, which turns a silent trap
 into a decision `[ref: decision 8, "Unless a .replaced stash"]`.
+
+Both clauses are gated on the directory being **absent**, and the asymmetry
+is deliberate rather than an oversight. A kill *after* the new directory
+lands leaves `dest` present with a stash beside it; `_replace_subtree`
+deletes a pre-existing stash before refreshing, so that debris has a known
+expiry and nothing is at risk either way. The directory-absent state is the
+one that cannot heal, precisely because the cleanup site is unreachable once
+these guards fire `[ref: decision 8, "Only the directory-ABSENT state needs
+this, because the other stash state heals itself"]`.
 
 Every other write-safety rule carries over unchanged: the refreshed
 directory appears via a temp directory inside `<repo>/.claude/skills/`, the
@@ -642,6 +661,27 @@ def _update_one(
     # look like -- the two `failed` reasons are not interchangeable
     # `[ref: solution.md, decision 7]`.
     if not (catalogue_dir / name).is_dir():
+        # Three independent failures can co-occur here: upstream dropped
+        # the pattern, a prior refresh was hard-killed, and the manifest
+        # still records it. Then the stash holds the ONLY copy of the
+        # content anywhere -- the user's edits and the pattern itself,
+        # which the catalogue no longer has, so unlike decision 8's case
+        # `install` has no source to recreate it from. Naming it is not
+        # optional, and the "left as it is" clause has to go: the directory
+        # it describes does not exist `[ref: solution.md, decision 7, "And
+        # when a .replaced stash is ALSO present"]`.
+        #
+        # Gated on `dest` being ABSENT. With the directory present the
+        # clause is TRUE, and a stash there is debris that costs the user
+        # nothing, so naming it would raise an alarm about a state where
+        # `dest` holds a working pattern `[ref: decision 8, "Only the
+        # directory-ABSENT state needs this"]`.
+        stash = _stash_path(skills_root, installed_as)
+        if not dest.is_dir() and stash.is_dir():
+            raise InstallError(
+                f"the catalogue no longer carries pattern {name!r}, and an interrupted refresh "
+                f"left the only copy of it at {stash} -- the catalogue cannot recreate it"
+            )
         raise InstallError(
             f"the catalogue no longer carries pattern {name!r}; "
             f"{installed_as!r} was left exactly as it is"
