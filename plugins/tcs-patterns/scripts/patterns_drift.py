@@ -35,8 +35,6 @@ DEFAULT_CATALOGUE_DIR = _PLUGIN_ROOT / "templates" / "patterns"
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
-import manifest as manifest_lib  # noqa: E402
-
 _NUMERIC = re.compile(r"^[0-9]+$")
 
 
@@ -51,6 +49,10 @@ def _catalogue_version(catalogue_dir: Path, name: str) -> str | None:
 
 def drift_lines(repo_dir: Path, *, catalogue_dir: Path = DEFAULT_CATALOGUE_DIR) -> list[str]:
     """The reporter's stdout lines, sorted by pattern name."""
+    # Imported here, not at module level: a missing or broken lib must fail
+    # inside main()'s guard (exit 0, empty stdout), never as an import traceback.
+    import manifest as manifest_lib
+
     repo_dir = Path(repo_dir)
     catalogue_dir = Path(catalogue_dir)
 

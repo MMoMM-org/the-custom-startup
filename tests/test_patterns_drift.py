@@ -225,3 +225,41 @@ def test_cli_defaults_to_the_real_catalogue(tmp_path):
     _load_lib("install").install(repo, ["ddd"], catalogue_dir=real, bundle=BUNDLE)
     r = _run(repo, None, tmp_path)
     assert (r.returncode, r.stdout) == (0, "OK\n")
+
+
+def test_non_utf8_manifest_prints_missing(tmp_path):
+    repo, cat = _setup(tmp_path, ["ddd"])
+    _load_lib("manifest")._manifest_path(repo).write_bytes(b"\xff\xfe\x00")
+    assert _lines(repo, cat) == ["MISSING"]
+
+
+def test_present_manifest_naming_no_patterns_prints_ok(tmp_path):
+    repo, cat = _setup(tmp_path, ["ddd"])
+    _load_lib("manifest")._manifest_path(repo).write_text('bundle = "1.0.0"\n', encoding="utf-8")
+    assert _lines(repo, cat) == ["OK"]
+
+
+def test_main_swallows_any_exception_from_drift_lines(tmp_path, monkeypatch, capsys):
+    mod = _load_drift()
+
+    def boom(*_a, **_k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(mod, "drift_lines", boom)
+    assert mod.main(["patterns_drift.py", str(tmp_path)]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "boom" in captured.err
+
+
+def test_cli_exits_zero_and_stays_silent_when_the_lib_is_unreachable(tmp_path):
+    """A partial plugin copy (script without skills/patterns-setup/lib) must not traceback."""
+    scripts = tmp_path / "plugin" / "scripts"
+    scripts.mkdir(parents=True)
+    copy = scripts / "patterns_drift.py"
+    copy.write_text(SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    r = subprocess.run([sys.executable, str(copy), str(repo)], capture_output=True, text=True, cwd=tmp_path)
+    assert (r.returncode, r.stdout) == (0, "")
+    assert r.stderr.strip() != ""

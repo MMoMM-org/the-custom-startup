@@ -276,6 +276,16 @@ def test_unparseable_manifest_raises(tmp_path: Path) -> None:
         manifest.read(tmp_path)
 
 
+def test_non_utf8_manifest_raises_unparseable(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    path = _manifest_path(tmp_path, manifest)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"\xff\xfe\x00")
+
+    with pytest.raises(manifest.ManifestUnparseableError):
+        manifest.read(tmp_path)
+
+
 def test_unparseable_manifest_is_never_overwritten(tmp_path: Path) -> None:
     manifest = _load_manifest()
     path = _manifest_path(tmp_path, manifest)

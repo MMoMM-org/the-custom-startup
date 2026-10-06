@@ -200,6 +200,8 @@ def read(repo_dir: Path) -> Manifest:
         doc = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as e:
         raise ManifestUnparseableError(f"{path}: TOML syntax error: {e}") from e
+    except UnicodeDecodeError as e:
+        raise ManifestUnparseableError(f"{path}: not valid UTF-8: {e}") from e
 
     unknown_top = set(doc) - {"bundle", "patterns"}
     if unknown_top:
