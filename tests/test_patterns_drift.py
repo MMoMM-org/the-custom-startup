@@ -7,15 +7,17 @@ zero or more stdout lines, exit 0 always --
 
 Drift is computed from each pattern's own manifest `version`, never from the
 manifest's top-level `bundle` (decision 9) -- `test_refreshing_one_pattern_...`
-pins that. Written before the script exists: every test fails for want of it.
+pins that.
 """
 
 from __future__ import annotations
 
 import importlib
 import importlib.util
+import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
 
@@ -55,7 +57,7 @@ def _set_version(root: Path, name: str, version: str) -> None:
     (root / name / "VERSION").write_text(f"{version}\n", encoding="utf-8")
 
 
-def _setup(tmp_path: Path, names: list[str], extra_catalogue: list[str] = ()) -> tuple[Path, Path]:
+def _setup(tmp_path: Path, names: list[str], extra_catalogue: Sequence[str] = ()) -> tuple[Path, Path]:
     """A catalogue holding `names` + `extra_catalogue`, and a repo that installed `names`."""
     cat = tmp_path / "catalogue"
     for n in [*names, *extra_catalogue]:
@@ -143,8 +145,6 @@ def test_empty_catalogue_version_is_unknown(tmp_path):
 
 
 def test_pattern_directory_gone_from_catalogue_is_unknown(tmp_path):
-    import shutil
-
     repo, cat = _setup(tmp_path, ["ddd", "hexagonal"])
     shutil.rmtree(cat / "hexagonal")
     assert _lines(repo, cat) == ["UNKNOWN:hexagonal:1"]
@@ -206,7 +206,8 @@ def test_cli_exit_zero_for_ok_missing_unknown_and_nonexistent_repo(tmp_path):
 
     empty = tmp_path / "empty"
     empty.mkdir()
-    assert (_run(empty, cat, tmp_path).returncode, _run(empty, cat, tmp_path).stdout) == (0, "MISSING\n")
+    miss = _run(empty, cat, tmp_path)
+    assert (miss.returncode, miss.stdout) == (0, "MISSING\n")
 
     gone = _run(tmp_path / "nowhere", cat, tmp_path)
     assert (gone.returncode, gone.stdout) == (0, "MISSING\n")
@@ -263,3 +264,15 @@ def test_cli_exits_zero_and_stays_silent_when_the_lib_is_unreachable(tmp_path):
     r = subprocess.run([sys.executable, str(copy), str(repo)], capture_output=True, text=True, cwd=tmp_path)
     assert (r.returncode, r.stdout) == (0, "")
     assert r.stderr.strip() != ""
+
+
+def test_cli_catalogue_flag_without_value_fails(tmp_path):
+    repo, cat = _setup(tmp_path, ["ddd"])
+    r = _run(repo, None, tmp_path)
+    r.returncode == 0
+    # Run with --catalogue flag but no value should fail
+    cmd = [sys.executable, str(SCRIPT), str(repo), "--catalogue"]
+    bad = subprocess.run(cmd, capture_output=True, text=True, cwd=tmp_path)
+    assert bad.returncode == 0
+    assert bad.stdout == ""
+    assert bad.stderr.strip() != ""
