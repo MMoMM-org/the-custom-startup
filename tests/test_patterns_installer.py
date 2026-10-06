@@ -1398,3 +1398,67 @@ def test_catalogue_absent_with_the_directory_PRESENT_keeps_the_untouched_claim(t
     assert "left exactly as it is" in reason, reason
     assert str(stash) not in reason, reason
     assert _digest_tree(_skills_root(repo)) == tree_before
+
+
+def test_a_refresh_dying_mid_copy_puts_the_users_directory_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_replace_subtree`'s restore-on-failure path, which nothing in this
+    file reached before.
+
+    Measured by the code-quality gate: **removing the restore entirely, or
+    inverting its guard so it never fires, left all 37 tests green.** The
+    path was correct, so a reader found nothing wrong -- what was missing
+    was the tripwire. It is the path that puts the user's own directory back
+    when a refresh dies mid-copy, which is the same work the stash clauses
+    in decisions 7 and 8 exist to protect, so leaving it unheld is the
+    defect class this spec documents: a promise held by nothing. If
+    `_fresh_install`'s failure contract ever changes, the restore stops
+    working and a green suite says nothing.
+
+    Mirror of `test_directory_lands_even_when_the_manifest_upsert_fails`,
+    which does the equivalent for `install()` -- and is exactly why that
+    path had a tripwire and this one did not.
+
+    `_fresh_install` raises `InstallError` specifically, not any exception:
+    `_replace_subtree` restores and re-raises whatever it gets, but only
+    `InstallError` is caught per pattern by `update()`, so anything else
+    would escape rather than land in `failed`. That is also the real shape
+    of this failure -- an unreadable catalogue pattern or a frontmatter the
+    rewriter refuses.
+
+    The third assertion is the point: a half-finished restore that copies
+    the directory back and leaves the stash behind satisfies the first two
+    and leaves the user with two copies and no way to tell which is live.
+    """
+    install = _load_install()
+    catalogue, repo = _diverged_fixture(tmp_path, extra_files={"reference/guide.md": "# Upstream guide\n"})
+    dest = _skills_root(repo) / f"tcs-{_DIVERGED_NAME}"
+    stash = _skills_root(repo) / f".tcs-{_DIVERGED_NAME}.replaced"
+
+    # The user's own state, captured before the attempt. The subtree digest
+    # (not just SKILL.md) is what catches a restore that puts part of the
+    # directory back.
+    user_bytes = (dest / "SKILL.md").read_bytes()
+    tree_before = _digest_tree(_skills_root(repo))
+    manifest_before = _manifest_bytes(repo)
+
+    def _dying_fresh_install(name, *, installed_as, dest, skills_root, catalogue_dir):
+        raise install.InstallError("simulated mid-copy failure")
+
+    monkeypatch.setattr(install, "_fresh_install", _dying_fresh_install)
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE, decide=lambda n, d: True)
+
+    assert _DIVERGED_NAME in report.failed
+    for channel in (report.refreshed, report.declined, report.current):
+        assert _DIVERGED_NAME not in channel
+    # 2: the directory is back, with the user's bytes untouched.
+    assert dest.is_dir()
+    assert (dest / "SKILL.md").read_bytes() == user_bytes
+    # 3: MOVED back, not copied -- the stash is gone, so there is exactly
+    # one copy and no ambiguity about which is live.
+    assert not stash.exists()
+    # and nothing else moved either, including `reference/`.
+    assert _digest_tree(_skills_root(repo)) == tree_before
+    assert _manifest_bytes(repo) == manifest_before
