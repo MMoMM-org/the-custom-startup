@@ -490,6 +490,23 @@ _MALFORMED_MANIFESTS = {
         'installed_as = "tcs-ddd"\n'
         f'sha256 = "{_sha("ddd-3")}"\n'
     ),
+    # `$` matches before a trailing newline; a TOML `\n` escape smuggles one in.
+    "pattern_name_with_trailing_newline": (
+        'bundle = "2.0.0"\n'
+        "\n"
+        '[patterns."ddd\\n"]\n'
+        'version = "3"\n'
+        'installed_as = "tcs-ddd"\n'
+        f'sha256 = "{_sha("ddd-3")}"\n'
+    ),
+    "version_with_trailing_newline": (
+        'bundle = "2.0.0"\n'
+        "\n"
+        "[patterns.ddd]\n"
+        'version = "1\\n"\n'
+        'installed_as = "tcs-ddd"\n'
+        f'sha256 = "{_sha("ddd-3")}"\n'
+    ),
 }
 
 
@@ -560,6 +577,31 @@ def test_with_pattern_rejects_an_invalid_pattern_name() -> None:
 
     with pytest.raises(ValueError):
         original.with_pattern("Not A Valid Name!", entry, bundle="2.0.0")
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"version": "1\n", "installed_as": "tcs-ddd", "sha256": _sha("x")},
+        {"version": "1", "installed_as": "tcs-ddd\n", "sha256": _sha("x")},
+        {"version": "1", "installed_as": "tcs-ddd", "sha256": _sha("x") + "\n"},
+    ],
+    ids=["version", "installed_as", "sha256"],
+)
+def test_pattern_entry_rejects_a_trailing_newline_in_any_field(fields: dict[str, str]) -> None:
+    manifest = _load_manifest()
+
+    with pytest.raises(ValueError):
+        manifest.PatternEntry(**fields)
+
+
+def test_with_pattern_rejects_a_name_with_a_trailing_newline() -> None:
+    manifest = _load_manifest()
+    original = manifest.Manifest(bundle="2.0.0", patterns={})
+    entry = manifest.PatternEntry(version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"))
+
+    with pytest.raises(ValueError):
+        original.with_pattern("ddd\n", entry, bundle="2.0.0")
 
 
 def test_read_treats_a_directory_at_the_manifest_path_as_absent(tmp_path: Path) -> None:

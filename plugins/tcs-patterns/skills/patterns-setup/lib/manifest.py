@@ -82,6 +82,7 @@ MANIFEST_FILENAME = ".tcs-patterns-manifest"  # ADR-6
 # outside these shapes is a bug upstream (something handed this module data
 # it was never meant to carry), not a quoting problem, so it is refused
 # rather than escaped.
+# Apply every one of these four with `fullmatch`: `$` alone admits a trailing newline.
 _NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")  # catalogue pattern names
 _INSTALLED_AS_RE = re.compile(r"^tcs-[a-z0-9]+(-[a-z0-9]+)*$")  # ADR-1
 _VERSION_RE = re.compile(r"^[0-9]+$")  # catalogue VERSION, ADR-3
@@ -109,8 +110,9 @@ def _require_representable(value: str, *, field_name: str) -> str:
     rejects anything outside `_VERSION_RE`/`_INSTALLED_AS_RE`/`_SHA256_RE`
     before its three fields ever reach here, and `Manifest.with_pattern`
     does the same for `name` via `_NAME_RE` -- none of those four regexes
-    permits a quote, backslash, or newline, so this guard can never actually
-    fire for them. `bundle` has no regex of its own, so it is the only field
+    permits a quote, backslash, or newline -- provided they are applied with
+    `fullmatch`, never `match`, because a trailing `$` also matches before a
+    final newline -- so this guard can never actually fire for them. `bundle` has no regex of its own, so it is the only field
     this function still protects in practice. Kept at all five sites anyway
     (defence in depth is cheap here), but if `bundle` ever gains a regex too,
     this function becomes wholly unreachable -- which this comment is here
@@ -136,11 +138,11 @@ class PatternEntry:
     sha256: str
 
     def __post_init__(self) -> None:
-        if not _VERSION_RE.match(self.version):
+        if not _VERSION_RE.fullmatch(self.version):
             raise ValueError(f"version {self.version!r} is not a catalogue VERSION (digits only)")
-        if not _INSTALLED_AS_RE.match(self.installed_as):
+        if not _INSTALLED_AS_RE.fullmatch(self.installed_as):
             raise ValueError(f"installed_as {self.installed_as!r} is not a tcs-prefixed pattern name")
-        if not _SHA256_RE.match(self.sha256):
+        if not _SHA256_RE.fullmatch(self.sha256):
             raise ValueError(f"sha256 {self.sha256!r} is not a 64-character lowercase hex digest")
 
 
@@ -157,7 +159,7 @@ class Manifest:
     def with_pattern(self, name: str, entry: PatternEntry, *, bundle: str) -> "Manifest":
         """A new `Manifest` with `name` added or replaced. Never mutates `self` --
         `upsert` relies on the old value staying intact for its own return."""
-        if not _NAME_RE.match(name):
+        if not _NAME_RE.fullmatch(name):
             raise ValueError(f"pattern name {name!r} is not a catalogue pattern name")
         new_patterns = dict(self.patterns)
         new_patterns[name] = entry
@@ -217,7 +219,7 @@ def read(repo_dir: Path) -> Manifest:
 
     patterns: dict[str, PatternEntry] = {}
     for name, table in raw_patterns.items():
-        if not _NAME_RE.match(name):
+        if not _NAME_RE.fullmatch(name):
             raise ManifestUnparseableError(f"{path}: 'patterns.{name}' is not a catalogue pattern name")
         if not isinstance(table, dict):
             raise ManifestUnparseableError(f"{path}: 'patterns.{name}' must be a table")
