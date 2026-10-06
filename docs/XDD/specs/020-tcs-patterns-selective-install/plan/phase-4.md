@@ -76,6 +76,16 @@ only where it exists.
      does not list → **nothing** said about it (F7's second criterion); a pattern whose catalogue
      `VERSION` is absent or non-numeric → reported as unknown rather than drifted; exit 0 in every
      case.
+  2b. **Compute drift from the per-pattern `version` lines only — never from the manifest's
+     top-level `bundle`.** Carried from Phase 3, measured 2026-10-06:
+     `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb),
+     decision 9]` settles that `bundle` records the plugin version that last **wrote** to the
+     manifest, not the version every pattern came from. Refreshing one pattern advances it while
+     other patterns keep older content — measured as `bundle = "2.0.0"` with a second pattern still
+     at its version `1`. So a reporter keying on `bundle` would answer `OK` for a repository that is
+     a version behind on a pattern it installed, which is the exact failure F7 exists to prevent.
+     **Add a test for it**: two patterns installed, only one refreshed, then assert the reporter
+     emits a `DRIFT:` line for the stale one rather than `OK`.
   3. Implement: `plugins/tcs-patterns/scripts/patterns_drift.py`, reading the manifest and the
      catalogue `VERSION` files.
   4. Validate: `python3 -m pytest tests/test_patterns_drift.py -q`; run it against a fixture

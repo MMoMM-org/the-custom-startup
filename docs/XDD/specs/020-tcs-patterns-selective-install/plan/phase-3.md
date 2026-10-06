@@ -1010,6 +1010,25 @@ writing is allowed, and an installer that is honest about what it did.
     that records every invocation and assert the list is `[]`, with **one pattern per call** so there
     is no ambiguity about which pattern would have triggered it.
 
+  - **The missing-directory reason must name a `.<installed_as>.replaced` stash when one exists.**
+    Added 2026-10-06 (Marcus) after the implementer flagged it and it was measured. `_replace_subtree`
+    moves the current directory aside to that stash and deletes it only once the new one has landed,
+    restoring it on any exception — so it survives only a **hard kill** between the two. In that
+    state the user's only copy of their own edits sits in a dotted directory, and the measured
+    behaviour was: `failed` reason "that directory is missing; run install to write it", no mention
+    of the stash, stash left in place. Following that advice writes a fresh copy and orphans the
+    user's work permanently.
+
+    So: when `dest` is absent **and** the stash exists, the reason names the stash and must **not**
+    tell the user to run install
+    `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb), decision 8,
+    "Unless a .replaced stash"]`. `update()` still does not move it back — an unrequested restore is
+    what ADR-4 forbids this verb from doing. **Test both branches**, because one fixture cannot
+    distinguish them: stash absent → the existing message, and `"run install"` present; stash
+    present → the path named, and `"run install"` **absent**. Assert on the reason's content in both,
+    for the same reason the catalogue-removal pair does: every ordering and every variant still puts
+    the name in `failed`, so a channel assertion can see none of this.
+
   - **F8's third criterion applies to the no-prompt refresh too**: assert `version_after` equals the
     catalogue `VERSION` on the version-behind-hash-matches path, not only where `decide` returned
     `True`.

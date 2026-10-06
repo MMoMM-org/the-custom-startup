@@ -1897,6 +1897,40 @@ pattern is installed and it is not, which is a different problem from being out 
 `install()` already handles an absent directory by writing it. Reporting it tells the user which
 verb to reach for instead of silently papering over a manifest that lies.
 
+**Unless a `.<installed_as>.replaced` stash is sitting beside it, in which case the reason names
+the stash and does not mention `install`.** Added 2026-10-06, measured. `update()` replaces a
+subtree by moving the current directory aside to that stash and only deleting it once the new one
+has landed; an exception puts it back, so the stash survives a crash only on a **hard kill** between
+the two. In that state the user's own copy — including whatever they had edited — is the *only*
+copy, and it sits in a dotted directory nothing names. Measured: `update()` reported "that directory
+is missing; run install to write it", said nothing about the stash, and left it in place; following
+that advice writes a fresh copy and orphans the user's work for good.
+
+So when `dest` is absent and the stash exists, the reason says where their copy is. `update()` still
+**does not move it back** — restoring a file the user has not asked about is precisely what ADR-4
+forbids this verb from doing without consent, and the whole point of the stash mechanism is that
+nothing overwrites local work silently. Naming it converts a silent trap into a decision the user
+can make. Nothing else changes: the channel is still `failed`, and nothing under `tcs-<name>/` is
+touched.
+
+**9. `bundle` records the plugin version that last WROTE to this manifest, not the version every
+pattern came from.** Added 2026-10-06 after the implementer flagged it as unspecified and it was
+measured: installing `aaa` and `bbb` at bundle `1.0.0` and then refreshing **only** `aaa` at
+`2.0.0` leaves `bundle = "2.0.0"` with `bbb` still at its version `1` content. A *declined* update
+does not touch the field at all, because it writes nothing.
+
+That is the honest meaning of a single field at the top of a per-pattern manifest, and the
+alternative — advancing it only once every pattern is current — was rejected: it would stall
+indefinitely on one permanently declined diverged pattern, which is a state ADR-4 deliberately
+makes comfortable to stay in.
+
+**The consequence is a constraint on C7, and it is where the real risk sits.** The drift advisory
+must compute drift from the **per-pattern** `version` lines against the catalogue's per-pattern
+`VERSION` files, and must never read `bundle` as evidence that the installed set is current — here
+it would have said so while `bbb` was a version behind. That is also what F7 asks for directly: one
+line per drifted pattern, so a change to one pattern only flags the repositories that installed it
+`[ref: PRD/F7 1st and 2nd; plan/phase-4.md, T4.2]`.
+
 8. **Offer.** C5 prints what it wrote, states that it did not commit, and offers to commit
    (ADR-8). Declining leaves the files in place. The *offer* is C3's, not C5's — see the boundary
    note under `[ref: SDD/Interface Specifications/Data model: the install plan and report (C5)]`.
