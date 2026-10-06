@@ -54,7 +54,7 @@ phase: 5
 Delivers the user-facing surface and the proof that the nine steps work as one flow rather than as
 four passing test suites.
 
-- [ ] **T5.1a The CLI the skill drives, with remove and status** `[activity: backend-api]`
+- [x] **T5.1a The CLI the skill drives, with remove and status** `[activity: backend-api]`
 
   Added 2026-10-06 by Marcus, before T5.1 was dispatched. The skill contract has four verbs, but
   the library had code for two of them, and a Markdown skill had no way to call a Python module.
@@ -221,16 +221,16 @@ four passing test suites.
      repository and read each JSON document. Green tests over this boundary are not the
      walkthrough T5.1 depends on.
   5. Success:
-     - [ ] `remove` never deletes a directory the manifest does not own `[ref: SDD/Process contract: the CLI the skill drives, remove rule 1]`
-     - [ ] `remove` refuses a diverged pattern unless forced by name `[ref: SDD/ADR-4; SDD/Error Handling]`
-     - [ ] Interrupted after the move-aside (entry listed, directory absent), a re-run of `remove` completes; interrupted after the manifest write (`.removing` alone), a re-run is refused and `status` reports the leftover as safe-to-delete debris `[ref: SDD/Process contract: the CLI the skill drives, "Order"]`
-     - [ ] `status` agrees with `patterns_drift.py` on every row of a hand-typed verdict table `[ref: SDD/AC-11]`
-     - [ ] `status` reports an unparseable manifest verbatim, exit 0 `[ref: SDD/Error Handling, "Manifest present but unparseable"]`
-     - [ ] `update` without `--accept` leaves every diverged file byte-identical `[ref: PRD/F8; SDD/AC-12; ADR-4]`
-     - [ ] Every verb's JSON parses and has exactly the specified keys `[ref: SDD/Process contract: the CLI the skill drives]`
-     - [ ] Outside a git repository every verb exits 3 before reading anything `[ref: SDD/Runtime View/Primary Flow, step 1; SDD/Error Handling]`
-     - [ ] `scan` reports per-entry listing cost and what it could not read `[ref: PRD/F2 4th; SDD/AC-16; SDD/Error Handling, "Target repository unreadable in part"]`
-     - [ ] `tests/test_patterns_drift.py`: existing tests unmodified and passing; one test added `[ref: SDD/AC-11]`
+     - [x] `remove` never deletes a directory the manifest does not own `[ref: SDD/Process contract: the CLI the skill drives, remove rule 1]`
+     - [x] `remove` refuses a diverged pattern unless forced by name `[ref: SDD/ADR-4; SDD/Error Handling]`
+     - [x] Interrupted after the move-aside (entry listed, directory absent), a re-run of `remove` completes; interrupted after the manifest write (`.removing` alone), a re-run is refused and `status` reports the leftover as safe-to-delete debris `[ref: SDD/Process contract: the CLI the skill drives, "Order"]`
+     - [x] `status` agrees with `patterns_drift.py` on every row of a hand-typed verdict table `[ref: SDD/AC-11]`
+     - [x] `status` reports an unparseable manifest verbatim, exit 0 `[ref: SDD/Error Handling, "Manifest present but unparseable"]`
+     - [x] `update` without `--accept` leaves every diverged file byte-identical `[ref: PRD/F8; SDD/AC-12; ADR-4]`
+     - [x] Every verb's JSON parses and has exactly the specified keys `[ref: SDD/Process contract: the CLI the skill drives]`
+     - [x] Outside a git repository every verb exits 3 before reading anything `[ref: SDD/Runtime View/Primary Flow, step 1; SDD/Error Handling]`
+     - [x] `scan` reports per-entry listing cost and what it could not read `[ref: PRD/F2 4th; SDD/AC-16; SDD/Error Handling, "Target repository unreadable in part"]`
+     - [x] `tests/test_patterns_drift.py`: existing tests unmodified and passing; one test added `[ref: SDD/AC-11]`
 
 - [ ] **T5.1 The patterns-setup skill** `[activity: frontend-ui]`
 
