@@ -622,6 +622,25 @@ _run_fx_hook() {
   [ ! -e "$FX_CACHE_PATTERNS/2.9.0/scripts/ran" ]
 }
 
+@test "patterns advisory: repo layout wins over a cached tcs-patterns when both exist" {
+  _install_githooks_current
+  _fx_manifest
+  # One tree satisfies both lookups relative to the hook at
+  # <fx>/plugins/tcs-git-helpers/scripts: ../../tcs-patterns (repo) and
+  # ../../../tcs-patterns/<ver> (cache).
+  _fx_repo_layout "DRIFT:ddd:1:2"
+  local cache_stub="$BATS_TEST_TMPDIR/fx/tcs-patterns/9.9.9"
+  _fx_patterns_stub_at "$cache_stub" "DRIFT:hexagonal:7:8"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  [ "$(_ssb_sysmsg)" = "[tcs-git-helpers] patterns ddd v1 → v2; run /tcs-patterns:patterns-setup update" ]
+  [ -e "$FX_PATTERNS/scripts/ran" ]
+  [ ! -e "$cache_stub/scripts/ran" ]
+}
+
 @test "patterns advisory: hooks drift and patterns drift share one systemMessage" {
   _install_githooks_at "2.0.0"
   _fx_manifest
