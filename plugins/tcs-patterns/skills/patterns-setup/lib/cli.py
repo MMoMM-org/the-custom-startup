@@ -317,7 +317,7 @@ def _update(toplevel: Path, catalogue: Path, accept: list[str]) -> dict:
     }
 
 
-def _remove(toplevel: Path, names: list[str], discard_edits: list[str]) -> dict:
+def _remove(toplevel: Path, catalogue: Path, names: list[str], discard_edits: list[str]) -> dict:
     import install
 
     stray = sorted(set(discard_edits) - set(names))
@@ -325,14 +325,14 @@ def _remove(toplevel: Path, names: list[str], discard_edits: list[str]) -> dict:
         raise _Usage(f"--discard-edits names patterns not being removed: {', '.join(stray)}")
     _read_manifest_or_refuse(toplevel)
 
-    report = install.remove(toplevel, names, discard_edits=frozenset(discard_edits))
+    report = install.remove(toplevel, names, catalogue_dir=catalogue, discard_edits=frozenset(discard_edits))
     return {
         "repo": str(toplevel),
         "removed": {
             n: {"installed_as": a, "version": v, "directory_existed": existed}
             for n, (a, v, existed) in report.removed.items()
         },
-        "refused": dict(report.refused),
+        "refused": {n: {"reason": reason, "diff": diff} for n, (reason, diff) in report.refused.items()},
         "failed": dict(report.failed),
         "committed": report.committed,
     }
@@ -395,7 +395,7 @@ def main(argv=None) -> int:
         elif args.verb == "update":
             doc = _update(toplevel, catalogue, args.accept)
         elif args.verb == "remove":
-            doc = _remove(toplevel, args.patterns, args.discard_edits)
+            doc = _remove(toplevel, catalogue, args.patterns, args.discard_edits)
         else:
             doc = _status(toplevel, catalogue)
     except _Usage as e:

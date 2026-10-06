@@ -809,8 +809,18 @@ def test_remove_passes_through_removed_refused_and_discard_edits(world: World) -
     doc = _doc(_run(world, "remove", str(world.repo), "ddd", "hexagonal", "never-installed"))
     assert doc["removed"] == {"ddd": {"installed_as": "tcs-ddd", "version": "1", "directory_existed": True}}
     assert set(doc["refused"]) == {"hexagonal", "never-installed"}
-    assert "--discard-edits hexagonal" in doc["refused"]["hexagonal"]
-    assert "not recorded in the manifest" in doc["refused"]["never-installed"]
+    assert doc["refused"]["never-installed"] == {
+        "reason": "not recorded in the manifest; remove deletes only what the manifest records",
+        "diff": None,
+    }
+    hexagonal = doc["refused"]["hexagonal"]
+    assert set(hexagonal) == {"reason", "diff"}
+    assert "--discard-edits hexagonal" in hexagonal["reason"]
+    assert hexagonal["diff"].startswith("--- installed\n+++ catalogue\n")
+    assert "-Edit.\n" in hexagonal["diff"].splitlines(keepends=True)
+    # Diffed against --catalogue, not the real catalogue: the fixture copy is
+    # the installed text minus the edit, so the diff adds nothing.
+    assert [l for l in hexagonal["diff"].splitlines()[2:] if l.startswith("+")] == []
     assert doc["failed"] == {}
     assert edited.is_file()
 

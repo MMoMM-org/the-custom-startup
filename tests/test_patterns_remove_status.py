@@ -425,8 +425,10 @@ def test_status_module_imports_and_uses_only_the_read_only_allowlist():
 
 
 def _remove(repo: Path, names, discard_edits=frozenset()):
+    """`_setup` puts the catalogue beside the repo; passing it keeps a rule-5
+    diff from ever reading the real catalogue."""
     return _load_lib("install").remove(
-        repo, names, bundle=BUNDLE, discard_edits=frozenset(discard_edits)
+        repo, names, catalogue_dir=repo.parent / "catalogue", bundle=BUNDLE, discard_edits=frozenset(discard_edits)
     )
 
 
@@ -449,7 +451,10 @@ def test_remove_rule1_never_deletes_a_tcs_directory_the_manifest_does_not_list(t
     report = _remove(repo, ["foo"])
 
     _assert_refused_and_untouched(repo, report, "foo", before_skills, before_manifest)
-    assert "not recorded in the manifest" in report.refused["foo"]
+    assert report.refused["foo"] == (
+        "not recorded in the manifest; remove deletes only what the manifest records",
+        None,
+    )
     assert report.committed is False
 
 
@@ -465,7 +470,9 @@ def test_remove_rule2_refuses_an_entry_whose_installed_as_names_another_pattern(
     report = _remove(repo, ["ddd"])
 
     _assert_refused_and_untouched(repo, report, "ddd", before_skills, before_manifest)
-    assert "tcs-hexagonal" in report.refused["ddd"]
+    reason, diff = report.refused["ddd"]
+    assert "tcs-hexagonal" in reason
+    assert diff is None
 
 
 def test_remove_rule3_refuses_when_a_stash_is_the_only_copy_and_names_it(tmp_path):
@@ -477,7 +484,9 @@ def test_remove_rule3_refuses_when_a_stash_is_the_only_copy_and_names_it(tmp_pat
     report = _remove(repo, ["ddd"])
 
     _assert_refused_and_untouched(repo, report, "ddd", before_skills, before_manifest)
-    assert str(stash) in report.refused["ddd"]
+    reason, diff = report.refused["ddd"]
+    assert str(stash) in reason
+    assert diff is None
 
 
 def test_remove_deletes_a_stash_beside_a_present_directory_with_it(tmp_path):
@@ -523,6 +532,7 @@ def test_remove_rule4_refuses_a_symlink_or_a_file_where_the_directory_should_be(
     report = _remove(repo, ["ddd"])
 
     _assert_refused_and_untouched(repo, report, "ddd", before_skills, before_manifest)
+    assert report.refused["ddd"][1] is None
     assert _digest(elsewhere) == before_elsewhere
 
 
@@ -533,12 +543,93 @@ def test_remove_rule5_refuses_an_edited_skill_md_without_discard_edits_and_remov
 
     refused = _remove(repo, ["ddd"])
     _assert_refused_and_untouched(repo, refused, "ddd", before_skills, before_manifest)
-    assert "--discard-edits ddd" in refused.refused["ddd"]
+    assert "--discard-edits ddd" in refused.refused["ddd"][0]
 
     discarded = _remove(repo, ["ddd"], discard_edits={"ddd"})
     assert discarded.removed == {"ddd": ("tcs-ddd", "1", True)}
     assert not (_skills(repo) / "tcs-ddd").exists()
     assert _load_lib("manifest").read(repo).patterns == {}
+
+
+# The installed copy `_setup` writes for ddd: the catalogue's SKILL.md with
+# the frontmatter `name:` renamed. Typed by hand, not read back.
+_INSTALLED_DDD = "---\nname: tcs-ddd\ndescription: fixture\n---\n\nBody for ddd.\n"
+
+
+def _diff_lines(diff: str) -> list[str]:
+    """The diff's content lines: everything but the two file headers and the
+    `@@` hunk headers, whose width depends on difflib's context `n`, which is
+    presentation and not asserted `[ref: SDD/update path, decision 4]`."""
+    lines = diff.splitlines(keepends=True)
+    assert lines[:2] == ["--- installed\n", "+++ catalogue\n"], lines[:2]
+    return [l for l in lines[2:] if not l.startswith("@@")]
+
+
+def test_remove_rule5_refusal_shows_the_users_edit_as_a_deletion_from_installed(tmp_path):
+    """The refusal carries update's diff, installed -> catalogue: the user's
+    own edit is a `-` line under `--- installed`. Kills a dropped diff and a
+    reversed one."""
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    skill = _skills(repo) / "tcs-ddd" / "SKILL.md"
+    assert skill.read_text(encoding="utf-8") == _INSTALLED_DDD
+    skill.write_text(_INSTALLED_DDD + "My own edit.\n", encoding="utf-8")
+
+    reason, diff = _remove(repo, ["ddd"]).refused["ddd"]
+
+    assert "diverged" in reason and "--discard-edits ddd" in reason
+    assert isinstance(diff, str)
+    content = _diff_lines(diff)
+    assert "-My own edit.\n" in content
+    assert [l for l in content if l[:1] in "+-"] == ["-My own edit.\n"]
+
+
+@pytest.mark.parametrize("gone", ["pattern-directory", "skill-md"])
+def test_remove_rule5_refusal_diffs_against_an_empty_file_when_the_catalogue_lost_it(tmp_path, gone):
+    """Deleted upstream: nothing of the pattern can be reinstalled, so every
+    installed line is a loss and the diff shows each one as `-`
+    `[ref: SDD/Process contract: the CLI the skill drives, remove]`."""
+    repo, cat = _setup(tmp_path, ["ddd"])
+    edited = _INSTALLED_DDD + "My own edit.\n"
+    (_skills(repo) / "tcs-ddd" / "SKILL.md").write_text(edited, encoding="utf-8")
+    if gone == "pattern-directory":
+        shutil.rmtree(cat / "ddd")
+    else:
+        (cat / "ddd" / "SKILL.md").unlink()
+    before_skills, before_manifest = _digest(_skills(repo)), _manifest_bytes(repo)
+
+    report = _remove(repo, ["ddd"])
+
+    _assert_refused_and_untouched(repo, report, "ddd", before_skills, before_manifest)
+    _reason, diff = report.refused["ddd"]
+    assert _diff_lines(diff) == [
+        "----\n",
+        "-name: tcs-ddd\n",
+        "-description: fixture\n",
+        "----\n",
+        "-\n",
+        "-Body for ddd.\n",
+        "-My own edit.\n",
+    ]
+
+
+def test_remove_rule5_refusal_with_skill_md_absent_diffs_from_an_empty_file(tmp_path):
+    """An absent installed SKILL.md counts as diverged; its side of the diff
+    is the empty file, so the refusal still carries a diff and never fails."""
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    (_skills(repo) / "tcs-ddd" / "SKILL.md").unlink()
+
+    report = _remove(repo, ["ddd"])
+
+    assert report.failed == {}
+    _reason, diff = report.refused["ddd"]
+    assert _diff_lines(diff) == [
+        "+---\n",
+        "+name: tcs-ddd\n",
+        "+description: fixture\n",
+        "+---\n",
+        "+\n",
+        "+Body for ddd.\n",
+    ]
 
 
 def test_remove_rule5_counts_an_absent_skill_md_as_diverged(tmp_path):
@@ -853,7 +944,7 @@ def test_state_b_removing_alone_is_refused_by_rule1_and_reported_as_safe_debris(
     report = _remove(repo, ["ddd"])
 
     _assert_refused_and_untouched(repo, report, "ddd", before_skills, before_manifest)
-    assert "not recorded in the manifest" in report.refused["ddd"]
+    assert "not recorded in the manifest" in report.refused["ddd"][0]
     debris = _load_lib("status").status(repo, catalogue_dir=cat).debris
     assert [(d.name, d.kind, d.resolution) for d in debris] == [
         (".tcs-ddd.removing", "removing", "safe to delete")

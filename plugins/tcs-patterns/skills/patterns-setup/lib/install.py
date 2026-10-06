@@ -844,14 +844,16 @@ class RemoveReport:
     """The whole result of one `remove()` call. Named channels, as above.
 
     removed:   name -> (installed_as, version, directory_existed)
-    refused:   name -> reason, a rule said no; nothing touched
+    refused:   name -> (reason, unified_diff | None), a rule said no; nothing
+               touched. The diff is a str for rule 5 (diverged) and None for
+               every other rule
     failed:    name -> reason, an OSError (or a failed manifest write); rolled
                back where possible
     committed: always False -- see "C5 reports; C3 offers" above.
     """
 
     removed: dict[str, tuple[str, str, bool]] = field(default_factory=dict)
-    refused: dict[str, str] = field(default_factory=dict)
+    refused: dict[str, tuple[str, str | None]] = field(default_factory=dict)
     failed: dict[str, str] = field(default_factory=dict)
     committed: bool = False
 
@@ -861,20 +863,44 @@ def _removing_path(skills_root: Path, installed_as: str) -> Path:
     return skills_root / f".{installed_as}{paths.REMOVING_SUFFIX}"
 
 
+def _discard_diff(dest: Path, name: str, installed_as: str, catalogue_dir: Path) -> str:
+    """The diff a rule-5 refusal carries: `update`'s own, installed ->
+    catalogue, so the user's edit reads as a deletion `[ref: SDD/Process
+    contract: the CLI the skill drives, remove]`.
+
+    Neither side may turn the refusal into a failure. An absent or unreadable
+    installed `SKILL.md` is the empty file (rule 5 already counts both as
+    diverged); undecodable bytes are shown with replacement characters. A
+    catalogue that no longer carries the pattern -- or whose `SKILL.md`
+    cannot be read or renamed -- is the empty file too: then nothing can be
+    reinstalled, every installed line is the user's to lose, and the diff
+    shows each one as `-`."""
+    try:
+        installed_text = (dest / "SKILL.md").read_bytes().decode("utf-8", errors="replace")
+    except OSError:
+        installed_text = ""
+    try:
+        catalogue_text = _catalogue_as_installed(catalogue_dir, name, installed_as)
+    except InstallError:
+        catalogue_text = ""
+    return _divergence_diff(installed_text, catalogue_text)
+
+
 def _refusal(
     name: str,
     entry: "manifest.PatternEntry | None",
     *,
     skills_root: Path,
+    catalogue_dir: Path,
     discard_edits: frozenset,
-) -> str | None:
-    """Rules 1-5 of the SDD's table; the first that applies decides. `None`
-    means rule 6: remove it `[ref: SDD/Process contract: the CLI the skill
-    drives, remove]`."""
+) -> tuple[str, str | None] | None:
+    """Rules 1-5 of the SDD's table; the first that applies decides, as
+    `(reason, diff)` -- the diff only for rule 5. `None` means rule 6: remove
+    it `[ref: SDD/Process contract: the CLI the skill drives, remove]`."""
     # Rule 1. `remove` never deletes a directory the manifest does not own --
     # a hand-made `tcs-foo/` is someone's skill, not ours.
     if entry is None:
-        return "not recorded in the manifest; remove deletes only what the manifest records"
+        return "not recorded in the manifest; remove deletes only what the manifest records", None
     # Rule 2. A hand-edited manifest pointing `ddd` at `tcs-hexagonal` would
     # otherwise delete the wrong pattern.
     expected = f"tcs-{name}"
@@ -882,7 +908,7 @@ def _refusal(
         return (
             f"the manifest records {name!r} as installed at {entry.installed_as!r}, not {expected!r}; "
             "refusing to delete a directory under another name"
-        )
+        ), None
     dest = skills_root / entry.installed_as
     stash = _stash_path(skills_root, entry.installed_as)
     # Rule 3. With the directory ABSENT the stash is the user's only copy
@@ -892,15 +918,19 @@ def _refusal(
         return (
             f"an interrupted refresh left your copy at {stash}; move it back to {entry.installed_as}/ "
             "and run remove again, or delete it yourself if you do not want it"
-        )
+        ), None
     # Rule 4. `install()` never creates either, so it is not ours as written.
     if os.path.lexists(dest) and (dest.is_symlink() or not dest.is_dir()):
-        return f"{dest} is a symlink or not a directory; install never writes either, so remove leaves it alone"
+        return f"{dest} is a symlink or not a directory; install never writes either, so remove leaves it alone", None
     # Rule 5. Only SKILL.md is hashed: an edit confined to `reference/` is
     # deleted without asking -- ADR-4's accepted limit. Per name, never a
-    # blanket flag.
+    # blanket flag. The refusal carries the diff, so consent is given to a
+    # loss the user can see (ADR-4).
     if dest.is_dir() and paths.sha256_or_none(dest / "SKILL.md") != entry.sha256 and name not in discard_edits:
-        return f"diverged from what was installed; local edits would be lost -- re-run with --discard-edits {name}"
+        return (
+            f"diverged from what was installed; local edits would be lost -- re-run with --discard-edits {name}",
+            _discard_diff(dest, name, entry.installed_as, catalogue_dir),
+        )
     return None
 
 
@@ -958,6 +988,7 @@ def remove(
     repo_dir: Path,
     names,
     *,
+    catalogue_dir: Path = paths.DEFAULT_CATALOGUE_DIR,
     bundle: str | None = None,
     discard_edits: frozenset = frozenset(),
 ) -> RemoveReport:
@@ -968,7 +999,8 @@ def remove(
     `OSError` propagate before anything is touched. Then, per pattern in
     sorted order, the first rule that applies decides (see `_refusal`), and
     rule 6 runs `_remove_one`'s five steps. One pattern's refusal or failure
-    never stops the others.
+    never stops the others. The catalogue is read only to diff a rule-5
+    refusal (see `_discard_diff`).
 
     The manifest's `bundle` becomes the removing plugin's version (decision 9
     of the update path). Removing the last pattern leaves a manifest with zero
@@ -980,18 +1012,21 @@ def remove(
     if bundle is None:
         bundle = _bundle_version()
     discard_edits = frozenset(discard_edits)
+    catalogue_dir = Path(catalogue_dir)
 
     manifest_before = manifest.read(repo_dir)
 
     removed: dict[str, tuple[str, str, bool]] = {}
-    refused: dict[str, str] = {}
+    refused: dict[str, tuple[str, str | None]] = {}
     failed: dict[str, str] = {}
 
     for name in sorted(set(names)):
         entry = manifest_before.patterns.get(name)
-        reason = _refusal(name, entry, skills_root=skills_root, discard_edits=discard_edits)
-        if reason is not None:
-            refused[name] = reason
+        refusal = _refusal(
+            name, entry, skills_root=skills_root, catalogue_dir=catalogue_dir, discard_edits=discard_edits
+        )
+        if refusal is not None:
+            refused[name] = refusal
             continue
         try:
             directory_existed = _remove_one(name, entry, repo_dir=repo_dir, skills_root=skills_root, bundle=bundle)
