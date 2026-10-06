@@ -989,7 +989,19 @@ writing is allowed, and an installer that is honest about what it did.
     with no test able to tell the difference — and the "digest over its installed directory is
     unchanged" assertion is vacuous when there is no directory to digest. The two fixtures are exact
     inverses and must be built as such: **catalogue-removal** is installed present + catalogue
-    absent; **missing-directory** is installed absent + catalogue present. Never both absent.
+    absent; **missing-directory** is installed absent + catalogue present. Neither of those two may
+    have both sides absent, or each collapses into the other.
+
+  - **A THIRD fixture has both sides absent, and pins which reason wins.** Added 2026-10-05: a
+    mutation round found that **reordering `update()`'s two early guards survives all 33 tests**,
+    precisely because the inverse pair above never constructs the overlap. The orderings are not
+    equivalent — measured, not reasoned: catalogue-first reports "the catalogue no longer carries
+    `<name>`", and installed-first reports "that directory is missing; **run install to write it**",
+    which is advice that cannot succeed because the catalogue has nothing to copy. So build
+    installed **absent** + catalogue **absent** and assert the `failed` reason names the **catalogue**
+    `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb), decision 7,
+    "When both sides are absent"]`. Assert on the reason's content, not merely that the name is in
+    `failed` — both orderings put it in `failed`, which is why every existing assertion passes.
 
   - **The hand-crafted "user's edit" must not itself contain a line starting with `name:`**, or the
     `^[-+]name:` assertion is checking something other than what it was written for.

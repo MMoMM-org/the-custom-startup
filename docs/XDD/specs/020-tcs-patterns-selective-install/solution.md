@@ -1876,6 +1876,22 @@ Note this is **not** the mirror of decision 8 below, and is not covered by it. D
 *installed* side being absent; this is the *catalogue* side. Both report `failed`, for different
 reasons, and each needs its own fixture.
 
+**When both sides are absent, THIS reason wins.** Added 2026-10-05 after a mutation round found
+that reordering the two guards survives every test in T3.4's suite, because the two fixtures above
+are exact inverses and neither constructs the overlap. The state is reachable without anything
+exotic: a user deletes `tcs-<name>/` by hand and a plugin update drops the pattern from the
+catalogue, while the manifest still records it. Measured under both orderings, the messages differ
+in what they tell the user to do:
+
+| guard order | message | is the advice actionable? |
+|---|---|---|
+| catalogue first | the catalogue no longer carries `<name>` | **yes** — the pattern is gone upstream, so drop the manifest entry |
+| installed first | that directory is missing; **run install to write it** | **no** — `install()` would fail, because the catalogue has nothing to copy |
+
+So the catalogue check runs **first**, and that ordering is a requirement rather than an accident.
+Decision 8's message is only correct when the catalogue still has the pattern, which is precisely
+what makes it the second test and not the first.
+
 **8. A manifest entry whose directory is missing is `failed`, not refreshed.** The record claims a
 pattern is installed and it is not, which is a different problem from being out of date — and
 `install()` already handles an absent directory by writing it. Reporting it tells the user which
