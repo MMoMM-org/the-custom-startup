@@ -167,7 +167,19 @@ impossible, and deleting would destroy a working skill the user still has
 is also `failed` -- the record claims a pattern is installed and it is not,
 which is a different problem from being out of date, and naming it tells the
 user to reach for `install` `[ref: decision 8]`. Checked catalogue-side
-first, so each reports its own cause.
+first, so each reports its own cause: when **both** sides are absent the
+catalogue reason wins, because "run install" is advice that cannot succeed
+against a catalogue with nothing to copy `[ref: decision 7, "When both sides
+are absent"]`.
+
+**And when the absent directory has a `.<installed_as>.replaced` stash
+beside it, the reason names the stash instead of `install`.** That stash is
+how `_replace_subtree` holds the user's copy while the replacement lands, so
+one sitting there means a refresh was killed between its two renames and the
+user's own edits are in it, unreferenced by anything. `update()` does not
+move it back -- an unrequested restore is exactly what ADR-4 forbids this
+verb from doing -- but it says where the copy is, which turns a silent trap
+into a decision `[ref: decision 8, "Unless a .replaced stash"]`.
 
 Every other write-safety rule carries over unchanged: the refreshed
 directory appears via a temp directory inside `<repo>/.claude/skills/`, the
@@ -550,6 +562,20 @@ def _divergence_diff(installed_text: str, catalogue_text: str) -> str:
     )
 
 
+def _stash_path(skills_root: Path, installed_as: str) -> Path:
+    """Where `_replace_subtree` moves a pattern's current directory while
+    the replacement lands.
+
+    One function rather than the expression written twice, because the
+    second reader of it is `_update_one`'s missing-directory branch, which
+    has to recognise a stash left by a hard kill in order to name it
+    `[ref: solution.md, decision 8, "Unless a .replaced stash"]`. Two
+    copies of the name would let that branch drift into looking for a
+    directory nothing creates.
+    """
+    return skills_root / f".{installed_as}.replaced"
+
+
 def _replace_subtree(
     name: str, *, installed_as: str, dest: Path, skills_root: Path, catalogue_dir: Path
 ) -> str:
@@ -572,7 +598,7 @@ def _replace_subtree(
     `.<installed_as>.tmp`, that stash is this installer's own debris and is
     the only directory removed here `[ref: solution.md, decision 5]`.
     """
-    stash = skills_root / f".{installed_as}.replaced"
+    stash = _stash_path(skills_root, installed_as)
     if stash.exists():
         shutil.rmtree(stash)
     os.rename(str(dest), str(stash))
@@ -623,6 +649,22 @@ def _update_one(
     catalogue_version = _read_catalogue_version(catalogue_dir, name)
 
     if not dest.is_dir():
+        # A stash beside the absent directory means a refresh was killed
+        # between its two renames, so the user's own copy -- edits included
+        # -- is the ONLY copy and sits somewhere nothing names. Say where it
+        # is, and do NOT name `install`: following that advice writes a
+        # fresh copy and orphans their work for good. Nothing is moved back
+        # -- an unrequested restore is what ADR-4 forbids this verb from
+        # doing, and naming the stash turns a silent trap into a decision
+        # the user can make `[ref: solution.md, decision 8, "Unless a
+        # .replaced stash"]`.
+        stash = _stash_path(skills_root, installed_as)
+        if stash.is_dir():
+            raise InstallError(
+                f"the manifest records {name!r} as installed at {installed_as!r} but that "
+                f"directory is missing; an interrupted refresh left your copy at {stash}, "
+                "which has been left exactly as it is"
+            )
         raise InstallError(
             f"the manifest records {name!r} as installed at {installed_as!r} but that directory "
             "is missing; run install to write it"

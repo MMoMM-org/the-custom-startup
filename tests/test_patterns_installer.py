@@ -1153,10 +1153,67 @@ def test_manifest_entry_whose_directory_is_missing_is_failed_not_refreshed(tmp_p
     # reports "no readable SKILL.md", which is a different diagnosis.
     assert "missing" in report.failed["functional"]
     assert "catalogue" not in report.failed["functional"]
+    # Branch 1 of 2: with NO stash beside it, `install` is the right verb to
+    # name, and the message says so. The stash branch below asserts the
+    # inverse, because one fixture cannot distinguish them
+    # `[ref: solution.md, decision 8, "Unless a .replaced stash"]`.
+    assert "run install" in report.failed["functional"]
     for channel in (report.refreshed, report.declined, report.current):
         assert "functional" not in channel
     # Not resurrected: `update()` refreshes, it does not install.
     assert not (_skills_root(repo) / "tcs-functional").exists()
+    assert _manifest_bytes(repo) == manifest_before
+
+
+def test_missing_directory_beside_an_interrupted_refresh_stash_names_the_stash(tmp_path: Path) -> None:
+    """Branch 2 of 2. When `dest` is absent AND
+    `.<installed_as>.replaced` exists, the reason names the stash and must
+    **not** tell the user to run install
+    `[ref: solution.md, "Data model: the update path (C5's second verb)",
+    decision 8, "Unless a .replaced stash"]`.
+
+    `_replace_subtree` moves the current directory aside to that stash and
+    deletes it only once the new one has landed, restoring it on any
+    exception -- so the stash survives only a **hard kill** between the two
+    renames. In that state the user's own copy, edits included, is the
+    ONLY copy, and it sits in a dotted directory nothing names. Measured
+    before this clause existed: `update()` said "run install to write it",
+    said nothing about the stash, and left it in place -- and following that
+    advice writes a fresh copy and orphans the user's work for good.
+
+    `update()` still does not move it back: restoring a file the user has
+    not asked about is what ADR-4 forbids this verb from doing, and the
+    whole point of the stash mechanism is that nothing overwrites local
+    work silently. Naming it turns a silent trap into a decision.
+
+    The stash state is built by renaming `dest` aside rather than by
+    simulating a kill -- the state is what matters, and a real SIGKILL
+    between two renames is not something a test can place reliably.
+    """
+    install = _load_install()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "functional", version="1")
+    repo = tmp_path / "repo"
+    assert "functional" in install.install(repo, ["functional"], catalogue_dir=catalogue, bundle=TEST_BUNDLE).installed
+
+    dest = _skills_root(repo) / "tcs-functional"
+    edited = dest / "SKILL.md"
+    edited.write_bytes(edited.read_bytes() + b"\nThe user's own paragraph.\n")
+    user_bytes = edited.read_bytes()
+    stash = _skills_root(repo) / ".tcs-functional.replaced"
+    dest.rename(stash)  # what a hard kill between the two renames leaves behind
+    manifest_before = _manifest_bytes(repo)
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    reason = report.failed["functional"]
+    assert str(stash) in reason, reason
+    assert "run install" not in reason, reason
+    for channel in (report.refreshed, report.declined, report.current):
+        assert "functional" not in channel
+    # Not moved back, not deleted, and the user's edit still in it.
+    assert (stash / "SKILL.md").read_bytes() == user_bytes
+    assert not dest.exists()
     assert _manifest_bytes(repo) == manifest_before
 
 
