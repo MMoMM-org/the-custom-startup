@@ -1086,6 +1086,37 @@ writing is allowed, and an installer that is honest about what it did.
     mutant** that no test should catch. Reading its survival as a coverage gap is a false finding.
     The mutation worth running is the one that writes the refreshed values.
 
+  - **Test `_replace_subtree`'s restore-on-failure path.** Added 2026-10-06 (Marcus) from the
+    code-quality gate's one concrete finding, confirmed here by mutation: **removing the restore
+    entirely, or inverting its guard so it never fires, leaves all 37 tests green.** The path is
+    correct today — the gate verified it behaviourally with a standalone repro, and so a reader
+    would find nothing wrong — but nothing in the suite protects it. It is the path that puts the
+    user's own directory back when a refresh dies mid-copy, which is the same work the stash clauses
+    in decisions 7 and 8 exist to protect, so leaving it untested is the defect class this whole
+    spec documents: a promise held by nothing.
+
+    Monkeypatch `_fresh_install` to raise, call `update()` with an accepting `decide`, and assert
+    three things: the name lands in `failed`; `dest` still exists with the user's bytes
+    **byte-identical** to before the attempt; and the stash directory is **gone**, so the restore
+    moved it rather than copying it. The third is what distinguishes a real restore from a
+    half-finished one that leaves both. Mirror
+    `test_directory_lands_even_when_the_manifest_upsert_fails`, which does the equivalent for
+    `install()` and is why that path has a tripwire and this one does not.
+
+  - **Two refactors from the same gate are DEFERRED, deliberately** (Marcus, 2026-10-06), recorded
+    here rather than dropped so nobody re-derives them as new findings:
+    - *Extract the duplicated `manifest.upsert` try/except* shared by `_install_one` and
+      `_update_one`, identical but for one word in the message. Real duplication, no behavioural
+      gain, and it would reopen `install()` — delivered and twice-reviewed — for a cosmetic win.
+    - *Decompose `_update_one`'s two guard blocks into named message-builders.* The gate traced that
+      this preserves both the guard order (decision 7) and the `dest`/stash gating (decisions 7 and
+      8), but did not implement or run it. Restructuring control flow that the contract makes
+      normative, on an unverified remedy, at the point where the task is otherwise finished, is the
+      shape of change that has gone wrong four times in this session.
+
+    **Reopen either if** `_update_one` gains a fifth guard, or if a third verb needs the same upsert
+    wrapper — at which point the duplication stops being cosmetic.
+
   - **Recompute the expected hash independently** on the refresh path, mirroring
     `test_sha256_in_report_matches_independently_computed_hash_of_installed_file`, rather than
     trusting a value `update()` produced.
