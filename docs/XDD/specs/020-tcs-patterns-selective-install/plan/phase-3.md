@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: The install path"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -1197,7 +1197,50 @@ writing is allowed, and an installer that is honest about what it did.
      - [ ] Divergence asks before replacing, skip is the default `[ref: PRD/F8 2nd; SDD/ADR-4]`
      - [ ] Post-refresh versions match the catalogue `[ref: PRD/F8 3rd; SDD/AC-17]`
 
-- [ ] **T3.5 Phase validation** `[activity: validate]`
+- [x] **T3.5 Phase validation** `[activity: validate]`
+
+  **VALIDATED 2026-10-06, every criterion measured rather than asserted.** Executed directly rather
+  than delegated: every requirement in this task is a measurement, and a read-only reviewer cannot
+  make one. `__pycache__` cleared repo-wide before each run, per correction 6 — a poisoned tree
+  makes every figure here wrong with no visible cause.
+
+  | criterion | measured |
+  |---|---|
+  | `tests/test_patterns_guard.py` — C4 | **54 passed** |
+  | `tests/test_patterns_install.py` — C6, the manifest store | **24 passed** |
+  | `tests/test_patterns_installer.py` — C5 **and** `update()` | **38 passed** |
+  | pytest leg, whole repo | **1144 passed, 1 skipped, 1 deselected** |
+  | `install()` writes only for names given | `test_nothing_unchosen_is_written` passes — cited, not duplicated |
+  | `install.py` does not **import** `guard` | parsed via `ast`; imports are `__future__, dataclasses, difflib, hashlib, json, manifest, os, pathlib, re, shutil` |
+  | every `shutil.rmtree` **target** | 4 call sites, all `tmp_dir` or `stash`, never a `tcs-<name>` directory |
+
+  **The bats leg, three numbers per suite** per correction 5, because an `ok` tally is neither a
+  pass count nor a count of tests run:
+
+  | suite | plan | reported | skipped | not ok | executed |
+  |---|---|---|---|---|---|
+  | `tcs-git-helpers` | 835 | 835 | 0 | 0 | 835 |
+  | `tcs-helper` | 330 | 330 | 0 | 0 | 330 |
+  | `tcs-issues` | 7 | 7 | 0 | 0 | 7 |
+  | `tcs-patterns` | 15 | 15 | 0 | 0 | 15 |
+  | **total** (a sum, reported after the four) | 1187 | 1187 | 0 | 0 | 1187 |
+
+  Plan equals reported in every suite, which is the check correction 5 exists for: a `setup_file`
+  abort would show here as a shortfall and in an `ok` tally as nothing at all.
+
+  **Two properties explicitly DEFERRED to Phase 4, not silently discharged:**
+  - AC-9's third half — the commit **offer** — is C3's. `install()` reports `committed: False`
+    always; the offer belongs to a skill `[ref: SDD/.../the install plan and report (C5), decision 4]`.
+  - The `check()` → `install()` **sequence** is C3's and cannot be validated before C3 exists.
+    Correction 1 replaced the original "no file created before the guard completed" property with
+    this deferral plus the structural `guard`-import assertion, because the delivered C5 has no
+    rollback path for the original property to catch.
+
+  **One finding worth recording: this task is NOT structurally defective for lacking
+  Prime/Test/Implement/Validate.** Checked before "fixing" it — T1.5, T2.7 and T4.4 have no
+  numbered steps either, so prose-plus-Success is the convention for every phase-validation task in
+  this plan, and two of those have already shipped. Restructuring T3.5 would have made it the only
+  inconsistent one. A sound-looking finding whose remedy would have introduced the defect.
 
   **Audited 2026-10-05 before dispatch; four corrections.** Three of the five components this task
   validates were built after it was written, and the design moved under it.
@@ -1248,9 +1291,10 @@ writing is allowed, and an installer that is honest about what it did.
      manifest's file. Name them:
      - `tests/test_patterns_guard.py` — C4, the collision guard (54 tests)
      - `tests/test_patterns_install.py` — **C6, the manifest store**, despite the name (24 tests)
-     - `tests/test_patterns_installer.py` — **C5, the installer *and* `update()`** (**37 tests**
-       as of T3.4's close; it was 21 before, and a figure written mid-task goes stale by the end of
-       it — recount rather than quoting this one)
+     - `tests/test_patterns_installer.py` — **C5, the installer *and* `update()`** (**38 tests**
+       as of Phase 3's close; it was 21 before T3.4, and this figure was written as **37** two hours
+       earlier and was wrong by the time it was committed, because the restore tripwire landed in
+       between — recount rather than quoting this one, which is why that instruction is here)
 
   4. **"Both legs, per leg" means report pytest and bats separately, each with its own figure.** The
      bats total is **1187 across four suites** — `tcs-git-helpers` 835, `tcs-helper` 330,

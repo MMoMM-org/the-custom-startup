@@ -159,7 +159,7 @@ context), **Test** (red), **Implement** (green), **Validate** (refactor + verify
 
 - [x] [Phase 1: The catalogue and its maintainer contract](phase-1.md)
 - [x] [Phase 2: Detection, fixtures before rules](phase-2.md)
-- [ ] [Phase 3: The install path](phase-3.md)
+- [x] [Phase 3: The install path](phase-3.md)
 - [ ] [Phase 4: Drift and the advisory](phase-4.md)
 - [ ] [Phase 5: The skills, the docs, end to end](phase-5.md)
 
