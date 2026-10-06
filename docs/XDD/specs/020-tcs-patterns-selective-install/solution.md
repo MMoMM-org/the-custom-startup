@@ -2332,6 +2332,25 @@ the advisory. The dependency is one-way and through a documented file format, no
 `tcs-git-helpers` must tolerate `tcs-patterns` being absent or at `1.x` — the advisory segment
 stays silent when `patterns_drift.py` cannot be found.
 
+**How the segment finds `patterns_drift.py` — decided 2026-10-06 by Marcus, before T4.3 was
+dispatched.** This section said what happens when the script cannot be found, but not how it is
+looked for. The segment resolves it from its own location and nothing else: no
+`installed_plugins.json`, which is an undocumented Claude Code file, and no `CLAUDE_PLUGIN_ROOT`,
+which does not reach every context. It tries two layouts:
+
+```
+$_SCRIPT_DIR/../../tcs-patterns/scripts/patterns_drift.py         # repository and marketplace layout
+$_SCRIPT_DIR/../../../tcs-patterns/<version>/scripts/patterns_drift.py  # plugin cache layout
+```
+
+When several cached versions carry the script, the highest numeric version wins, compared
+field by field because BSD `sort` has no `-V`. A `1.x` copy has no script, so it is not a
+candidate. The accepted risk is that a stale newer copy left in the cache wins over the active
+install. The segment also runs nothing at all unless `<repo>/.claude/skills/.tcs-patterns-manifest`
+exists. That is the cheap test that keeps a repository without patterns off the Python path:
+CON-4 is fail-open, and the hook's p99 budget is 300 ms against a first-exec cost on macOS of
+151-286 ms.
+
 ## Cross-Cutting Concepts
 
 ### Pattern Documentation

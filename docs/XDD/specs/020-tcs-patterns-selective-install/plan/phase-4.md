@@ -66,7 +66,7 @@ only where it exists.
      - [x] Existing callers unchanged in behaviour `[ref: SDD/Interface Specifications]`
      - [x] Both implementations return the same verdicts for the same inputs `[ref: SDD/Interface Specifications]`
 
-- [ ] **T4.2 The patterns drift reporter** `[activity: backend-api]`
+- [x] **T4.2 The patterns drift reporter** `[activity: backend-api]`
 
   1. Prime: Read the stdout contract
      `[ref: SDD/Interface Specifications/Process contract: drift reporter]`. One line per drifted
@@ -91,9 +91,9 @@ only where it exists.
   4. Validate: `python3 -m pytest tests/test_patterns_drift.py -q`; run it against a fixture
      repository holding a deliberate subset.
   5. Success:
-     - [ ] One `DRIFT:` line per behind pattern, with both versions `[ref: PRD/F7 1st; SDD/AC-11]`
-     - [ ] Silence about patterns this repository did not install `[ref: PRD/F7 2nd]`
-     - [ ] `OK` when all current, `MISSING` without a manifest `[ref: SDD/AC-11]`
+     - [x] One `DRIFT:` line per behind pattern, with both versions `[ref: PRD/F7 1st; SDD/AC-11]`
+     - [x] Silence about patterns this repository did not install `[ref: PRD/F7 2nd]`
+     - [x] `OK` when all current, `MISSING` without a manifest `[ref: SDD/AC-11]`
 
 - [ ] **T4.3 The session-start advisory segment** `[activity: platform-operations]`
 
