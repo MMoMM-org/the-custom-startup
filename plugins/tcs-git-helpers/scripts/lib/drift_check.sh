@@ -21,7 +21,7 @@
 #
 #   Outputs (via stdout):
 #     "OK"                 # versions match
-#     "MISSING"            # <marker_dir>/<version_filename> does not exist
+#     "MISSING"            # <marker_dir>/<version_filename> is not a regular file
 #     "DRIFT:<installed>"  # installed != expected
 #
 #   Exit code: 0 (always; caller decides action)

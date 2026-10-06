@@ -24,6 +24,7 @@ T3.2a extension — optional version_filename parameter:
 from __future__ import annotations
 
 import importlib.util
+import os
 import shlex
 import subprocess
 from pathlib import Path
@@ -436,6 +437,52 @@ def test_bundle_parity_python_matches_bash(
     assert py_wire == bash_wire
     if content is None:
         assert bash_wire == "MISSING"
+
+
+# Marker shapes the text-only grid above cannot express: a directory at the
+# marker path, a non-breaking space, and bytes that are not valid UTF-8.
+# Bash runs under LC_ALL=C because BSD `tr -d '[:space:]'` is locale-dependent:
+# in a UTF-8 locale it strips U+00A0 and aborts on an invalid byte, while the
+# helper's contract is ASCII whitespace only on whatever bytes the file holds.
+_BYTES_PARITY_CASES: list[tuple[str, Optional[bytes]]] = [
+    ("directory-at-marker-path", None),
+    ("nbsp-is-not-whitespace", b"h\xc2\xa07\n"),
+    ("invalid-utf8-byte", b"h\xff7\n"),
+    ("invalid-utf8-only-after-first-line", b"h7\n\xff\xfe\n"),
+]
+
+
+@pytest.mark.parametrize(
+    "content", [c for _, c in _BYTES_PARITY_CASES], ids=[i for i, _ in _BYTES_PARITY_CASES]
+)
+def test_bundle_parity_on_non_text_markers(
+    dc, tmp_path: Path, content: Optional[bytes]
+) -> None:
+    """Python agrees with bash when the marker is a directory or holds odd bytes."""
+    marker = tmp_path / ".tcs-patterns" / _PATTERNS_FILENAME
+    marker.parent.mkdir(parents=True)
+    if content is None:
+        marker.mkdir()
+    else:
+        marker.write_bytes(content)
+
+    py_wire = _status_to_bash_wire(
+        dc, dc.check_bundle(tmp_path, "h7", _PATTERNS_FILENAME, ".tcs-patterns")
+    )
+    script = (
+        f"source {shlex.quote(str(_BASH_HELPER))}; "
+        f"drift_check_bundle {shlex.quote(str(tmp_path))} h7 "
+        f"{shlex.quote(_PATTERNS_FILENAME)} .tcs-patterns"
+    )
+    result = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        timeout=10,
+        env={**os.environ, "LC_ALL": "C"},
+    )
+    result.check_returncode()
+    bash_wire = result.stdout.decode("utf-8", errors="replace").strip()
+    assert py_wire == bash_wire
 
 
 # ---------------------------------------------------------------------------

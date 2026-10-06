@@ -9,8 +9,9 @@ and compares it against an expected version string.
 
 Three-state result (mirrors the bash helper drift_check.sh):
   OK      — installed version matches expected
-  MISSING — version file does not exist (hooks not installed, or
-            installed before bundle versioning — ADR-8)
+  MISSING — marker is not a regular file (absent, or a directory; for the hook
+            bundle: hooks not installed, or installed before bundle
+            versioning — ADR-8)
   DRIFT   — installed version differs from expected
 
 Public API:
@@ -37,7 +38,8 @@ single-line bundle marker file (e.g., "tcs-helper-rule-enforcer-version").
 Side effects: none (read-only).
 Python 3.9+ compatible.
 
-Spec: SDD/Internal API Changes / function: check_hook_bundle
+Spec: SDD/Internal API Changes / function: check_hook_bundle (check_bundle
+is the generalised form; spec 020 T4.1)
 T3.2a: extended with optional version_filename param (Option A).
 """
 from __future__ import annotations
@@ -113,11 +115,16 @@ def check_bundle(
     """
     version_file = repo_path / marker_dir / version_filename
 
-    if not version_file.exists():
+    # bash `[ -f ]`: a directory (or anything not a regular file) is MISSING.
+    if not version_file.is_file():
         return DriftResult(status=DriftStatus.MISSING, installed_version=None)
 
-    # Match bash `tr -d '[:space:]'` — remove ALL whitespace including internal
-    installed = re.sub(r'\s+', '', version_file.read_text().split("\n")[0])
+    # Match bash `head -n 1 | tr -d '[:space:]'`: first line only, then remove
+    # ALL ASCII whitespace including internal (re.ASCII — a Unicode space such
+    # as U+00A0 is not [:space:] to bash). Read bytes and decode leniently so a
+    # marker with invalid UTF-8 classifies instead of raising, as bash does.
+    first_line = version_file.read_bytes().split(b"\n", 1)[0]
+    installed = re.sub(r"\s+", "", first_line.decode("utf-8", errors="replace"), flags=re.ASCII)
 
     if installed == expected_version:
         return DriftResult(status=DriftStatus.OK, installed_version=installed)
