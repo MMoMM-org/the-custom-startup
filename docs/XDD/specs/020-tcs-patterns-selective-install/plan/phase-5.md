@@ -243,7 +243,7 @@ four passing test suites.
      - [x] `scan` reports per-entry listing cost and what it could not read `[ref: PRD/F2 4th; SDD/AC-16; SDD/Error Handling, "Target repository unreadable in part"]`
      - [x] `tests/test_patterns_drift.py`: existing tests unmodified and passing; one test added `[ref: SDD/AC-11]`
 
-- [ ] **T5.1 The patterns-setup skill** `[activity: frontend-ui]`
+- [x] **T5.1 The patterns-setup skill** `[activity: frontend-ui]`
 
   1. Prime: Read the skill contract
      `[ref: SDD/Interface Specifications/Process contract: the skills]`, **the CLI it drives**
@@ -283,32 +283,32 @@ four passing test suites.
      test; walk the skill by hand against a fixture repository — green tests over skill Markdown
      have missed defects here before that a walkthrough found at step one.
   5. Success:
-     - [ ] No more than three questions in total, each allowing multiple answers — moved here
+     - [x] No more than three questions in total, each allowing multiple answers — moved here
            from T2.3 on 2026-10-04, where it had been transcribed as "never more than three
            gates open" and could not fail: there are exactly three gate keys and the corpus
            guard enforces them. The falsifiable form is about questions, which only this task
            asks `[ref: PRD/F3 2nd]`
-     - [ ] A question whose gate is closed is skipped entirely, never asked and answered
+     - [x] A question whose gate is closed is skipped entirely, never asked and answered
            "none" — also moved from T2.3, which builds gates in `detect.py` and asks nothing
            `[ref: PRD/F3 3rd]`
-     - [ ] Frontmatter parses; description is a routing contract `[ref: SDD/Quality Requirements]`
-     - [ ] Proposal shows per-entry listing cost; baseline listed separately from recommendations `[ref: PRD/F2 4th, 5th; SDD/AC-16]`
-     - [ ] The outcome report distinguishes **not reached** from **excluded by stack fact**,
+     - [x] Frontmatter parses; description is a routing contract `[ref: SDD/Quality Requirements]`
+     - [x] Proposal shows per-entry listing cost; baseline listed separately from recommendations `[ref: PRD/F2 4th, 5th; SDD/AC-16]`
+     - [x] The outcome report distinguishes **not reached** from **excluded by stack fact**,
            because they explain differently: "`typescript-strict` does not apply, no
            `tsconfig.json` anywhere" is about the repository, while "you were not asked about
            DDD, because nothing indicated a backend service" is about the detection -- and a
            user who disagrees with the second must be able to see it and say so. Added
            2026-10-04 with the fourth outcome set `[ref: SDD/AC-6; SDD/Runtime View/Complex
            Logic, "There are four outcomes, not three"]`
-     - [ ] Commit is offered and never performed unasked `[ref: PRD/F4 3rd, 4th; SDD/ADR-8]`
-     - [ ] A walkthrough from a clean fixture reaches an installed selection `[ref: SDD/Runtime View/Primary Flow]`
-     - [ ] Nothing is installed by the companion map alone: a selection's transitive companions
+     - [x] Commit is offered and never performed unasked `[ref: PRD/F4 3rd, 4th; SDD/ADR-8]`
+     - [x] A walkthrough from a clean fixture reaches an installed selection `[ref: SDD/Runtime View/Primary Flow]`
+     - [x] Nothing is installed by the companion map alone: a selection's transitive companions
            join the **proposal**, each with the citation that justified it named, and every one is
            individually declinable. Moved here from T2.4 on 2026-10-04 — that task derives the map
            and runs no installer, so nothing in its output could observe this, the same reason the
            two criteria above moved from T2.3 `[ref: ADR-8; SDD/Interface Specifications/Data
            model: companion map]`
-     - [ ] A declined intermediate companion is handled honestly: accepting `hexagonal` for
+     - [x] A declined intermediate companion is handled honestly: accepting `hexagonal` for
            `observability` while declining `ddd` still ships a dangling citation, and the closure
            informs rather than guarantees. The proposal must not claim every citation will resolve
            `[ref: SDD/Interface Specifications/Data model: companion map, "Expansion is the
