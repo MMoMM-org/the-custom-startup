@@ -17,6 +17,7 @@ returns..."]`:
                         absent file -> an EMPTY manifest, not an error
     write(manifest, repo_dir) -> atomic: temp file in `.claude/skills/`, then os.replace
     upsert(repo_dir, name, ...) -> a new Manifest; prior entries byte-identical
+    drop(repo_dir, name, *, bundle) -> the mirror of upsert (T5.1a); unlisted -> KeyError
 
 A missing manifest and a corrupt one must stay distinguishable right here, at
 the reader -- "never silently overwritten" (see the Error Handling table row
@@ -165,6 +166,24 @@ class Manifest:
             raise ValueError(f"pattern name {name!r} is not a catalogue pattern name")
         new_patterns = dict(self.patterns)
         new_patterns[name] = entry
+        return Manifest(bundle=bundle, patterns=new_patterns)
+
+    def without_pattern(self, name: str, *, bundle: str) -> "Manifest":
+        """A new `Manifest` with `name`'s entry removed and `bundle` set to
+        the plugin version doing the removing. Never mutates `self`, the
+        mirror of `with_pattern`.
+
+        **Raises `KeyError` for a name `self` does not list** -- decided in
+        T5.1a, where the SDD was silent. `remove()` drops only a name its
+        rule 1 found listed, so an unlisted one here is a caller bug; raising
+        keeps `drop()` from writing (or creating) a manifest for a pattern it
+        never recorded. Removing the last entry yields a manifest with zero
+        patterns, which `write()` serialises like any other
+        `[ref: SDD/remove, "Removing the last pattern leaves a manifest with
+        zero patterns, not no manifest"]`."""
+        if name not in self.patterns:
+            raise KeyError(name)
+        new_patterns = {k: v for k, v in self.patterns.items() if k != name}
         return Manifest(bundle=bundle, patterns=new_patterns)
 
 
@@ -332,6 +351,23 @@ def upsert(
     current = read(repo_dir)
     entry = PatternEntry(version=version, installed_as=installed_as, sha256=sha256)
     updated = current.with_pattern(name, entry, bundle=bundle)
+    write(updated, repo_dir)
+    return updated
+
+
+def drop(repo_dir: Path, name: str, *, bundle: str) -> Manifest:
+    """Remove `name`'s entry and write the result -- the mirror of `upsert`
+    that `install.remove()` calls in its step 4
+    `[ref: SDD/Process contract: the CLI the skill drives, remove, step 4]`.
+
+    Same shape and the same guarantees: the read is outside any `try`, so a
+    `ManifestUnparseableError` propagates before `write()` is reached; every
+    other entry's block stays byte-identical because `_serialize_pattern`
+    depends only on its own entry. An unlisted `name` raises `KeyError`
+    from `without_pattern` before anything is written (see there).
+    """
+    current = read(repo_dir)
+    updated = current.without_pattern(name, bundle=bundle)
     write(updated, repo_dir)
     return updated
 

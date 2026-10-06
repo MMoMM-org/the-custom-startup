@@ -618,3 +618,110 @@ def test_read_treats_a_directory_at_the_manifest_path_as_absent(tmp_path: Path) 
 
     assert result.bundle is None
     assert result.patterns == {}
+
+
+# --- T5.1a: drop() and without_pattern(), the mirror of upsert/with_pattern ---
+
+
+def _three_pattern_manifest(repo_dir: Path, manifest: ModuleType) -> None:
+    for name, version in (("ddd", "3"), ("hexagonal", "2"), ("observability", "1")):
+        manifest.upsert(
+            repo_dir,
+            name,
+            version=version,
+            installed_as=f"tcs-{name}",
+            sha256=_sha(f"{name}-{version}"),
+            bundle="2.0.0",
+        )
+
+
+def test_without_pattern_does_not_mutate_the_original_manifest() -> None:
+    """`drop` relies on this exactly as `upsert` relies on `with_pattern`'s:
+    the value it read stays intact `[ref: SDD/remove, step 4, "the mirror of
+    upsert"]`."""
+    manifest = _load_manifest()
+    ddd = manifest.PatternEntry(version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"))
+    hexagonal = manifest.PatternEntry(version="2", installed_as="tcs-hexagonal", sha256=_sha("hexagonal-2"))
+    original = manifest.Manifest(bundle="2.0.0", patterns={"ddd": ddd, "hexagonal": hexagonal})
+
+    updated = original.without_pattern("ddd", bundle="2.1.0")
+
+    assert original.patterns == {"ddd": ddd, "hexagonal": hexagonal}
+    assert original.bundle == "2.0.0"
+    assert updated.patterns == {"hexagonal": hexagonal}
+    assert updated.bundle == "2.1.0"
+
+
+def test_without_pattern_of_an_unlisted_name_raises_key_error() -> None:
+    """Not specified by the SDD; decided in T5.1a. `remove` only drops a name
+    its rule 1 found listed, so an unlisted name here is a caller bug, and
+    refusing keeps `drop` from writing a manifest (or creating one) for a
+    pattern it never recorded."""
+    manifest = _load_manifest()
+    original = manifest.Manifest(bundle="2.0.0", patterns={})
+    with pytest.raises(KeyError):
+        original.without_pattern("ddd", bundle="2.0.0")
+
+
+def test_drop_leaves_other_entries_byte_identical(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    _three_pattern_manifest(tmp_path, manifest)
+    path = _manifest_path(tmp_path, manifest)
+    blocks_before = {name: _entry_block(path, name) for name in ("ddd", "observability")}
+    entries_before = manifest.read(tmp_path).patterns
+
+    returned = manifest.drop(tmp_path, "hexagonal", bundle="2.1.0")
+
+    after_text = path.read_text(encoding="utf-8")
+    for name, block in blocks_before.items():
+        assert block in after_text, name
+    assert "[patterns.hexagonal]" not in after_text
+    reread = manifest.read(tmp_path)
+    assert reread == returned
+    assert reread.bundle == "2.1.0"
+    assert reread.patterns == {name: entries_before[name] for name in ("ddd", "observability")}
+
+
+def test_drop_of_the_last_pattern_leaves_a_manifest_with_zero_patterns(tmp_path: Path) -> None:
+    """A manifest with zero patterns, not no manifest `[ref: SDD/remove,
+    "Removing the last pattern leaves a manifest with zero patterns"]`."""
+    manifest = _load_manifest()
+    manifest.upsert(tmp_path, "ddd", version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"), bundle="2.0.0")
+
+    manifest.drop(tmp_path, "ddd", bundle="2.1.0")
+
+    path = _manifest_path(tmp_path, manifest)
+    assert path.is_file()
+    reread = manifest.read(tmp_path)
+    assert reread.patterns == {}
+    assert reread.bundle == "2.1.0"
+    assert list(path.parent.glob(f".{manifest.MANIFEST_FILENAME}.*")) == []
+
+
+def test_drop_of_an_unlisted_name_writes_nothing(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    absent_repo = tmp_path / "absent"
+    with pytest.raises(KeyError):
+        manifest.drop(absent_repo, "ddd", bundle="2.0.0")
+    assert not _manifest_path(absent_repo, manifest).exists()
+
+    present_repo = tmp_path / "present"
+    _three_pattern_manifest(present_repo, manifest)
+    path = _manifest_path(present_repo, manifest)
+    before = path.read_bytes()
+    with pytest.raises(KeyError):
+        manifest.drop(present_repo, "go-idiomatic", bundle="2.1.0")
+    assert path.read_bytes() == before
+
+
+def test_drop_never_overwrites_an_unparseable_manifest(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    path = _manifest_path(tmp_path, manifest)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"this is not valid toml [[[\n= nope\n")
+    before = path.read_bytes()
+
+    with pytest.raises(manifest.ManifestUnparseableError):
+        manifest.drop(tmp_path, "ddd", bundle="2.0.0")
+
+    assert path.read_bytes() == before
