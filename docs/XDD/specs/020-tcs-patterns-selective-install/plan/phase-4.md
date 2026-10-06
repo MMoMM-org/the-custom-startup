@@ -43,7 +43,7 @@ phase: 4
 Delivers the property that makes distributed copies acceptable: a stale copy is detectable, and
 only where it exists.
 
-- [ ] **T4.1 The generalized drift check** `[activity: refactor]`
+- [x] **T4.1 The generalized drift check** `[activity: refactor]`
 
   1. Prime: Read both existing implementations — `plugins/tcs-git-helpers/scripts/lib/drift_check.sh`
      and its `.py` sibling — and the new contract
@@ -63,8 +63,8 @@ only where it exists.
      markers exist, but the rule-enforcer bundle is ungated (#174), so there is no third row
      to leave alone.
   5. Success:
-     - [ ] Existing callers unchanged in behaviour `[ref: SDD/Interface Specifications]`
-     - [ ] Both implementations return the same verdicts for the same inputs `[ref: SDD/Interface Specifications]`
+     - [x] Existing callers unchanged in behaviour `[ref: SDD/Interface Specifications]`
+     - [x] Both implementations return the same verdicts for the same inputs `[ref: SDD/Interface Specifications]`
 
 - [ ] **T4.2 The patterns drift reporter** `[activity: backend-api]`
 
