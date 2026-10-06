@@ -97,9 +97,12 @@ module-level constant.** A second review round found that a module-level
 time, which made this module impossible to import from a copy (a mutation
 harness using `importlib.util.spec_from_file_location` against a scratch
 copy, as `manifest.py`, `guard.py` and `detect.py` all already support).
-`DEFAULT_CATALOGUE_DIR` stays a module-level constant because it is a path
-expression with no I/O -- wrong when loaded from a copy, but never fatal;
-only the file read needed to move.
+The catalogue default, `paths.DEFAULT_CATALOGUE_DIR`, stays a module-level
+constant because it is a path expression with no I/O -- wrong when loaded
+from a copy, but never fatal; only the file read needed to move. It lives in
+`paths.py` with the plugin root and the debris suffixes, the leaf this module
+and the read-only `status.py` share (T5.1a); this module no longer re-exports
+it under a name of its own.
 
 ---
 
@@ -221,10 +224,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import manifest
-
-_PLUGIN_ROOT = Path(__file__).resolve().parents[3]
-_PLUGIN_JSON = _PLUGIN_ROOT / ".claude-plugin" / "plugin.json"
-DEFAULT_CATALOGUE_DIR = _PLUGIN_ROOT / "templates" / "patterns"
+import paths
 
 
 class InstallError(Exception):
@@ -296,12 +296,13 @@ def _bundle_version() -> str:
     """The installed plugin's own version, for the manifest's top-level
     `bundle` field ("the plugin version that produced this selection")
     `[ref: solution.md, Data model: the manifest (C6)]`. Derived from this
-    plugin's own `plugin.json`, the same `__file__`-relative pattern
-    `DEFAULT_CATALOGUE_DIR` uses -- `install()`'s fallback when `bundle` is
+    plugin's own `plugin.json` (`paths.PLUGIN_JSON`), the same
+    `__file__`-relative derivation `paths.DEFAULT_CATALOGUE_DIR` uses --
+    `install()`'s fallback when `bundle` is
     omitted, not the only route to a value `[ref: solution.md, point 7]`.
 
     **Called lazily, from inside `install()`, never at module import.**
-    `DEFAULT_CATALOGUE_DIR` is a path expression with no I/O, so it is safe
+    `paths.DEFAULT_CATALOGUE_DIR` is a path expression with no I/O, so it is safe
     as a module-level constant even when loaded from a copy whose `parents[3]`
     resolves to nowhere real -- the value would be wrong there, but nothing
     raises. A `plugin.json` *read*, unlike a path expression, is fatal: a
@@ -313,7 +314,7 @@ def _bundle_version() -> str:
     surface when the value is actually needed, not prevent the module from
     loading at all.
     """
-    data = json.loads(_PLUGIN_JSON.read_text(encoding="utf-8"))
+    data = json.loads(paths.PLUGIN_JSON.read_text(encoding="utf-8"))
     return str(data["version"])
 
 
@@ -322,13 +323,6 @@ def _read_catalogue_version(catalogue_dir: Path, name: str) -> str:
         return (catalogue_dir / name / "VERSION").read_text(encoding="utf-8").strip()
     except OSError as e:
         raise InstallError(f"could not read VERSION for catalogue pattern {name!r}: {e}") from e
-
-
-def _hash_if_present(path: Path) -> str | None:
-    try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
-        return None
 
 
 def _fresh_install(name: str, *, installed_as: str, dest: Path, skills_root: Path, catalogue_dir: Path) -> str:
@@ -344,7 +338,7 @@ def _fresh_install(name: str, *, installed_as: str, dest: Path, skills_root: Pat
     user's installed pattern `[ref: solution.md, point 6]`.
     """
     source = catalogue_dir / name
-    tmp_dir = skills_root / f".{installed_as}.tmp"
+    tmp_dir = skills_root / f".{installed_as}{paths.TMP_SUFFIX}"
 
     skills_root.mkdir(parents=True, exist_ok=True)
     if tmp_dir.exists():
@@ -396,7 +390,7 @@ def _install_one(
 
     if dest.is_dir():
         entry = manifest_before.patterns.get(name)
-        installed_hash = _hash_if_present(dest / "SKILL.md")
+        installed_hash = paths.sha256_or_none(dest / "SKILL.md")
         if (
             entry is not None
             and manifest.is_current(entry, catalogue_version)
@@ -438,7 +432,7 @@ def install(
     repo_dir: Path,
     names,
     *,
-    catalogue_dir: Path = DEFAULT_CATALOGUE_DIR,
+    catalogue_dir: Path = paths.DEFAULT_CATALOGUE_DIR,
     bundle: str | None = None,
 ) -> InstallReport:
     """Install `names` (already cleared by `guard.check()`) into
@@ -592,7 +586,7 @@ def _stash_path(skills_root: Path, installed_as: str) -> Path:
     copies of the name would let that branch drift into looking for a
     directory nothing creates.
     """
-    return skills_root / f".{installed_as}.replaced"
+    return skills_root / f".{installed_as}{paths.REPLACED_SUFFIX}"
 
 
 def _replace_subtree(
@@ -709,7 +703,7 @@ def _update_one(
             f"the manifest records {name!r} as installed at {installed_as!r} but that directory "
             "is missing; run install to write it"
         )
-    installed_hash = _hash_if_present(dest / "SKILL.md")
+    installed_hash = paths.sha256_or_none(dest / "SKILL.md")
     if installed_hash is None:
         raise InstallError(f"{installed_as!r} has no readable SKILL.md; run install to rewrite it")
 
@@ -775,7 +769,7 @@ def _update_one(
 def update(
     repo_dir: Path,
     *,
-    catalogue_dir: Path = DEFAULT_CATALOGUE_DIR,
+    catalogue_dir: Path = paths.DEFAULT_CATALOGUE_DIR,
     bundle: str | None = None,
     decide=_decline,
 ) -> UpdateReport:

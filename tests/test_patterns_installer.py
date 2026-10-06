@@ -1462,3 +1462,79 @@ def test_a_refresh_dying_mid_copy_puts_the_users_directory_back(
     # and nothing else moved either, including `reference/`.
     assert _digest_tree(_skills_root(repo)) == tree_before
     assert _manifest_bytes(repo) == manifest_before
+
+
+# --- T5.1a: lib/paths.py, the leaf both the writer and the reader import -----
+
+
+def _load_paths() -> ModuleType:
+    if str(LIB_DIR) not in sys.path:
+        sys.path.insert(0, str(LIB_DIR))
+    return importlib.import_module("paths")
+
+
+def test_paths_derives_the_plugin_root_catalogue_and_plugin_json() -> None:
+    """Expected values built from `REPO_ROOT`, not read back from the
+    module's own `parents[3]` -- a snapshot of the code under test could not
+    fail `[ref: SDD/Process contract: the CLI the skill drives, status,
+    "A leaf module, lib/paths.py"]`."""
+    paths = _load_paths()
+    plugin_root = REPO_ROOT / "plugins" / "tcs-patterns"
+    assert paths.PLUGIN_ROOT == plugin_root
+    assert paths.PLUGIN_JSON == plugin_root / ".claude-plugin" / "plugin.json"
+    assert paths.DEFAULT_CATALOGUE_DIR == plugin_root / "templates" / "patterns"
+    assert paths.PLUGIN_JSON.is_file()
+    assert paths.DEFAULT_CATALOGUE_DIR.is_dir()
+
+
+def test_paths_holds_the_three_debris_suffixes() -> None:
+    paths = _load_paths()
+    assert (paths.TMP_SUFFIX, paths.REPLACED_SUFFIX, paths.REMOVING_SUFFIX) == (".tmp", ".replaced", ".removing")
+
+
+def test_paths_imports_from_a_copy_whose_root_resolves_nowhere(tmp_path: Path) -> None:
+    """No I/O at import: a copy of `paths.py` placed where `parents[3]` holds
+    no `plugin.json` and no catalogue must still load. A module-level read of
+    `PLUGIN_JSON` (or of the catalogue) raises here; a path expression does
+    not `[ref: SDD/"paths.py stays importable from a copy ... no I/O at
+    import"]`."""
+    import importlib.util
+
+    copy_dir = tmp_path / "a" / "b" / "c" / "lib"
+    copy_dir.mkdir(parents=True)
+    copy = copy_dir / "paths.py"
+    copy.write_bytes((LIB_DIR / "paths.py").read_bytes())
+    spec = importlib.util.spec_from_file_location("paths_copy_under_test", copy)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.PLUGIN_ROOT == copy.resolve().parents[3]
+    assert not module.PLUGIN_JSON.exists()
+
+
+def test_sha256_or_none_hashes_bytes_and_returns_none_on_os_error(tmp_path: Path) -> None:
+    paths = _load_paths()
+    data = b"---\nname: tcs-ddd\n---\n\xe2\x80\x94 body\n"
+    present = tmp_path / "SKILL.md"
+    present.write_bytes(data)
+    assert paths.sha256_or_none(present) == hashlib.sha256(data).hexdigest()
+    assert paths.sha256_or_none(tmp_path / "absent.md") is None
+    # A directory raises IsADirectoryError, an OSError -- unreadable, without
+    # relying on permissions that root ignores.
+    assert paths.sha256_or_none(tmp_path) is None
+
+
+def test_install_and_companions_default_to_paths_catalogue_and_drop_their_own() -> None:
+    """One derivation: `install()`/`update()` and the three companion
+    functions default to `paths.DEFAULT_CATALOGUE_DIR`, and
+    `install.DEFAULT_CATALOGUE_DIR` is dropped -- no second name for one value
+    `[ref: SDD/"install.DEFAULT_CATALOGUE_DIR is dropped"]`."""
+    paths = _load_paths()
+    install = _load_install()
+    companions = importlib.import_module("companions")
+    assert not hasattr(install, "DEFAULT_CATALOGUE_DIR")
+    assert not hasattr(companions, "_DEFAULT_CATALOGUE_DIR")
+    for fn in (install.install, install.update):
+        assert inspect.signature(fn).parameters["catalogue_dir"].default is paths.DEFAULT_CATALOGUE_DIR
+    for fn in (companions.companion_map, companions.ambiguous_citations, companions.expand_companions):
+        assert inspect.signature(fn).parameters["catalogue_root"].default is paths.DEFAULT_CATALOGUE_DIR

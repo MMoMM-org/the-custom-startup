@@ -64,9 +64,10 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-# The real catalogue, parameterised out of every function below so a test can
-# substitute a `tmp_path` tree instead -- see the module docstring.
-_DEFAULT_CATALOGUE_DIR = Path(__file__).resolve().parents[3] / "templates" / "patterns"
+# The real catalogue (`paths.DEFAULT_CATALOGUE_DIR`), parameterised out of
+# every function below so a test can substitute a `tmp_path` tree instead --
+# see the module docstring.
+import paths
 
 # Copied from `tests/test_tcs_patterns_catalogue_links.py` (plumbing only, see
 # module docstring) rather than imported: a test module is not a dependency
@@ -211,7 +212,7 @@ def _derive(catalogue_root: Path) -> _Derivation:
     )
 
 
-def companion_map(catalogue_root: Path = _DEFAULT_CATALOGUE_DIR) -> dict[str, frozenset[str]]:
+def companion_map(catalogue_root: Path = paths.DEFAULT_CATALOGUE_DIR) -> dict[str, frozenset[str]]:
     """The direct companion edges, derived from `catalogue_root` -- the real
     catalogue equals the seven measured pattern-to-pattern edges
     `[ref: SDD/Interface Specifications/Data model: companion map; ADR-10]`.
@@ -220,7 +221,7 @@ def companion_map(catalogue_root: Path = _DEFAULT_CATALOGUE_DIR) -> dict[str, fr
     return _derive(catalogue_root).edges
 
 
-def ambiguous_citations(catalogue_root: Path = _DEFAULT_CATALOGUE_DIR) -> tuple[AmbiguousCitation, ...]:
+def ambiguous_citations(catalogue_root: Path = paths.DEFAULT_CATALOGUE_DIR) -> tuple[AmbiguousCitation, ...]:
     """Candidates excluded from `companion_map()` because they resolved under
     more than one other pattern's root. Empty against the real catalogue
     today; exists so the day one appears, the suite says so rather than
@@ -229,7 +230,7 @@ def ambiguous_citations(catalogue_root: Path = _DEFAULT_CATALOGUE_DIR) -> tuple[
     return _derive(catalogue_root).ambiguous
 
 
-def expand_companions(selected, catalogue_root: Path = _DEFAULT_CATALOGUE_DIR) -> frozenset[str]:
+def expand_companions(selected, catalogue_root: Path = paths.DEFAULT_CATALOGUE_DIR) -> frozenset[str]:
     """The transitive closure of `selected`'s companions, excluding the
     selections themselves -- so a caller can present "and these come with
     it" without filtering `[ref: SDD/Interface Specifications/Data model:

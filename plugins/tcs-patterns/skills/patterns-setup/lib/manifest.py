@@ -74,6 +74,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import paths
+
 MANIFEST_DIR = (".claude", "skills")
 MANIFEST_FILENAME = ".tcs-patterns-manifest"  # ADR-6
 
@@ -296,7 +298,7 @@ def write(manifest: Manifest, repo_dir: Path) -> None:
     path = _manifest_path(repo_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{MANIFEST_FILENAME}.", suffix=".tmp")
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{MANIFEST_FILENAME}.", suffix=paths.TMP_SUFFIX)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
