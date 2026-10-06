@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: The skills, the docs, end to end"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 5
 ---
@@ -14,6 +14,8 @@ phase: 5
 **Specification References**:
 - `[ref: SDD/Interface Specifications/Process contract: the skills]` — the four verbs and the
   catalogue reader's argument
+- `[ref: SDD/Interface Specifications/Process contract: the CLI the skill drives]` — the one
+  entry point the skill runs, with `remove` and `status`; T5.1a builds it (added 2026-10-06)
 - `[ref: SDD/Runtime View/Primary Flow]` — all nine steps, which this phase finally joins up
 - `[ref: SDD/Cross-Cutting Concepts/User Interface & UX]` — three screens at most, costs shown per
   entry at the moment of choosing
@@ -23,6 +25,9 @@ phase: 5
 - `[ref: SDD/Risks and Technical Debt/Known Technical Issues]` — the `principles.md:167` correction
 
 **Key Decisions**:
+- **The skill owns the interview; the CLI owns every library call** (2026-10-06). A `SKILL.md`
+  cannot import Python, so without `lib/cli.py` its only route to the library would be untested
+  inline code.
 - **The interview asks only what the gates opened** and presents costs per entry. The UX bar is
   `claude init`, not an interview; the gates are what enforce it.
 - **The catalogue reader is one skill serving 21 bodies.** It is justified against the granularity
@@ -49,14 +54,137 @@ phase: 5
 Delivers the user-facing surface and the proof that the nine steps work as one flow rather than as
 four passing test suites.
 
+- [ ] **T5.1a The CLI the skill drives, with remove and status** `[activity: backend-api]`
+
+  Added 2026-10-06 by Marcus, before T5.1 was dispatched. The skill contract has four verbs, but
+  the library had code for two of them, and a Markdown skill had no way to call a Python module.
+  T5.1 as written would have had to put `remove` and `status` into Markdown prose, or into inline
+  `python3 -c` calls with nothing testing them. Everything this task builds is specified in
+  `[ref: SDD/Interface Specifications/Process contract: the CLI the skill drives]`. Read it
+  before anything else: every point it settles that neither the code nor the earlier spec did is
+  marked "decided here", with its reason.
+
+  1. Prime: Read the CLI contract in full, the Error Handling rows dated 2026-10-06
+     `[ref: SDD/Runtime View/Error Handling]`, the install plan's decisions 3 and 6 and the update
+     path's decisions 2, 3 and 8 `[ref: SDD/Interface Specifications/Data model: the install plan
+     and report (C5); Data model: the update path (C5's second verb)]`, and the drift reporter's
+     contract `[ref: SDD/Interface Specifications/Process contract: drift reporter (C7)]`. Read
+     `lib/install.py` (`_stash_path`, `_replace_subtree` — the move-aside-and-roll-back shape
+     `remove()` mirrors), `lib/manifest.py` (`upsert`, `with_pattern` — the shape `drop` and
+     `without_pattern` mirror), `lib/companions.py` (`_derive`), and `scripts/patterns_drift.py`
+     with `tests/test_patterns_drift.py`, the suite that must stay green **unchanged** through the
+     refactor. `tests/test_patterns_installer.py` shows this repository's loader conventions:
+     import inside each test, never at module level.
+  2. Test: Written first, failing for want of the code, and the RED commit says which tests fail
+     on `ImportError`/`AttributeError` (the module or function is absent) and which on an
+     assertion (the behaviour is wrong). Only the second kind proves a defect, the same lesson
+     T3.2b recorded.
+     - **`remove()`**, `tests/test_patterns_remove_status.py`: each of the six rules in its table,
+       one test per rule, each asserting a digest of `.claude/skills/` **and** the manifest bytes
+       are unchanged for a refused pattern. Three tests the rest depend on: a hand-made
+       `tcs-foo/` the manifest does not list survives `remove(…, ["foo"])` byte-for-byte; a
+       pattern whose installed `SKILL.md` was edited is refused without `force`, removed with it;
+       an edit confined to `reference/` is removed without `force` (ADR-4's stated limit, pinned
+       so nobody "fixes" it by accident). Order: a fault injected into `manifest.drop` leaves
+       `<installed_as>/` back in place, byte-identical, and reports `failed`. The two interrupted
+       states, built by hand (`.removing` present with the directory absent and the entry listed;
+       `.removing` alone), each finish on a re-run. Removing the last pattern leaves a manifest
+       that `manifest.read` returns with `patterns == {}` and for which `patterns_drift.py` prints
+       `OK`. A second pattern's manifest block is byte-identical before and after removing the
+       first.
+     - **`status()`**, same file: a **hand-typed** table of (installed version, catalogue state)
+       → expected verdict, covering behind, equal, ahead, `01` against `1`, `VERSION` absent,
+       non-numeric, empty, and the pattern directory deleted. Each row is asserted against
+       **both** `status()`'s `state` and `patterns_drift.py`'s stdout line for the same fixture.
+       The expected column comes from neither implementation, so the test is not one that shares
+       the logic it checks, even though the two now share `drift_verdict`. Also: `unparseable`
+       and `unreadable` manifests report `manifest_state` and the exception text verbatim (the
+       mode-000 case skips when `os.geteuid() == 0`, where permissions do not bite); `unlisted`
+       names a `tcs-*` directory the manifest does not; `debris` names `.tcs-ddd.tmp` and
+       `.tcs-ddd.removing` and does **not** name `.tcs-patterns-manifest`; `diverged` is `None`,
+       not `False`, when `SKILL.md` is absent. `status()` writes nothing: digest before and after.
+     - **The CLI**, `tests/test_patterns_cli.py`, every verb run as a **subprocess** of
+       `python3 <abs path>/lib/cli.py` from a cwd that is not the repository, with `HOME`
+       pointed at a `tmp_path` and `--catalogue` at a fixture catalogue. Fixture repos are
+       `git init`ed with `git -C <tmp>` and `GIT_CONFIG_GLOBAL=/dev/null`, never a bare `git
+       init` that can fall back to a parent repository. Asserted:
+       - Every verb's stdout on exit 0 parses as **one** JSON document whose top-level key set
+         **equals** the contract's table for that verb — `==`, not `>=`, so an extra key fails
+         too — and every nested channel has its named fields.
+       - Outside a git repository, with `GIT_CEILING_DIRECTORIES` set so the test cannot pass by
+         accident inside one, every verb exits **3** with empty stdout. An in-process run of
+         `cli.main()` with `detect.detect`, `manifest.read`, `status.status`, `install.install`,
+         `install.update` and `install.remove` monkeypatched to raise proves none of them was
+         reached.
+       - `update` with no `--accept` on a diverged pattern exits 0, lists it under `declined`
+         with a diff whose `---` label is `installed`, and leaves its `SKILL.md` **byte-identical**.
+         The same run refreshes a merely-behind pattern. A second run with `--accept <it>`
+         refreshes it. `--accept` naming an unlisted pattern exits 3 and writes nothing.
+       - `install` installs only what the guard cleared. A name colliding in the user namespace
+         under `HOME` appears under `refused` with both `path` and `intended_path`, and its
+         sibling still installs (F5). Companions are not added: installing `ddd` alone does not
+         write `tcs-hexagonal`. An unparseable manifest exits 3 and its bytes are unchanged.
+       - `scan` without `--answers` has `outcomes: null`. With `--answers`, the four sets are
+         disjoint and sum to 21. An answer naming a closed gate, or a pattern its gate does not
+         settle, exits 2. `listing_cost` has 21 keys, and against the real catalogue its values
+         sum to **5990**, the figure measured on 2026-10-06. Each companion under `proposed`
+         carries at least one citation whose `source_file` exists in the catalogue.
+       - A non-ASCII value round-trips: stdout decodes as UTF-8 and contains the character itself,
+         not a `\u` escape, under `LC_ALL=C`.
+     - **`detect.py`'s `unreadable`**, in `tests/test_patterns_detect.py`: a mode-000
+       subdirectory and a mode-000 `package.json` both appear, root-relative and sorted, the
+       directory with a trailing `/`. A non-UTF-8 manifest does **not** appear. Every corpus
+       fixture reports `[]`. Skipped under `geteuid() == 0`, like the `status` permissions test.
+     - **`companion_citations()`**, in `tests/test_tcs_patterns_companion_map.py`: its outer two
+       key levels equal `companion_map()`'s edges on the real catalogue, and on a two-pattern
+       `tmp_path` catalogue it names the citing file and line.
+  3. Implement: `lib/cli.py` (NEW); `lib/status.py` (NEW: `status()`, `StatusReport`,
+     `PatternStatus`, `drift_verdict()`, `catalogue_version()`); `remove()` and `RemoveReport` in
+     `lib/install.py`; `drop()` and `Manifest.without_pattern()` in `lib/manifest.py`;
+     `unreadable` in `lib/detect.py`; `companion_citations()` and `Citation` in
+     `lib/companions.py`; `scripts/patterns_drift.py` imports `drift_verdict` and
+     `catalogue_version` from `lib/status.py`, lazily inside `drift_lines`, and loses its own
+     copies. No other behaviour of the reporter changes.
+  4. Validate: `python3 -m pytest tests/test_patterns_remove_status.py tests/test_patterns_cli.py
+     tests/test_patterns_drift.py -q`, then the whole suite. Report each leg separately, and
+     compare against a same-harness baseline taken before the change. Delete `__pycache__`
+     before each mutation run. At minimum, mutate:
+     - drop rule 1, so a pattern the manifest does not list is deleted (must fail the unowned
+       test);
+     - make `force` a blanket flag rather than per-name;
+     - swap `remove()`'s rename and manifest steps;
+     - delete the manifest on the last remove;
+     - make `drift_verdict` compare strings (must fail both the `status` and the reporter rows);
+     - make the CLI's `decide` accept everything;
+     - resolve the repository after calling `detect`;
+     - drop `ensure_ascii=False`.
+     Then walk `scan`, `install`, `status`, `update` and `remove` by hand against a fixture
+     repository and read each JSON document. Green tests over this boundary are not the
+     walkthrough T5.1 depends on.
+  5. Success:
+     - [ ] `remove` never deletes a directory the manifest does not own `[ref: SDD/Process contract: the CLI the skill drives, remove rule 1]`
+     - [ ] `remove` refuses a diverged pattern unless forced by name `[ref: SDD/ADR-4; SDD/Error Handling]`
+     - [ ] An interrupted `remove` leaves a state `status` names and a re-run completes `[ref: SDD/Process contract: the CLI the skill drives, "Order"]`
+     - [ ] `status` agrees with `patterns_drift.py` on every row of a hand-typed verdict table `[ref: SDD/AC-11]`
+     - [ ] `status` reports an unparseable manifest verbatim, exit 0 `[ref: SDD/Error Handling, "Manifest present but unparseable"]`
+     - [ ] `update` without `--accept` leaves every diverged file byte-identical `[ref: PRD/F8; SDD/AC-12; ADR-4]`
+     - [ ] Every verb's JSON parses and has exactly the specified keys `[ref: SDD/Process contract: the CLI the skill drives]`
+     - [ ] Outside a git repository every verb exits 3 before reading anything `[ref: SDD/Runtime View/Primary Flow, step 1; SDD/Error Handling]`
+     - [ ] `scan` reports per-entry listing cost and what it could not read `[ref: PRD/F2 4th; SDD/AC-16; SDD/Error Handling, "Target repository unreadable in part"]`
+     - [ ] `tests/test_patterns_drift.py` passes unmodified `[ref: SDD/AC-11]`
+
 - [ ] **T5.1 The patterns-setup skill** `[activity: frontend-ui]`
 
   1. Prime: Read the skill contract
-     `[ref: SDD/Interface Specifications/Process contract: the skills]`, the full flow
+     `[ref: SDD/Interface Specifications/Process contract: the skills]`, **the CLI it drives**
+     `[ref: SDD/Interface Specifications/Process contract: the CLI the skill drives]`, the full flow
      `[ref: SDD/Runtime View/Primary Flow]`, and the UX section
      `[ref: SDD/Cross-Cutting Concepts/User Interface & UX]`. Read
      `plugins/tcs-helper/skills/observability-setup/SKILL.md` for the verb-and-abort shape; note
-     that its stance on committability is the opposite of ours and why.
+     that its stance on committability is the opposite of ours and why. **Amended 2026-10-06 with
+     T5.1a:** the skill owns the interview and nothing else. Every read and write of the target
+     goes through `lib/cli.py`. The skill branches on its exit code (0 render, 2 or 3 show stderr
+     and stop, 1 report a bug), and it never imports, inlines or re-derives library logic.
   2. Test: The frontmatter parses with a YAML parser — a clause ending in `: ` inside a value makes
      YAML read it as a key, which broke ten descriptions in this repository while
      `claude plugin validate` passed over all ten; the description names the situation the skill is
@@ -67,7 +195,17 @@ four passing test suites.
   3. Implement: `plugins/tcs-patterns/skills/patterns-setup/SKILL.md` — persona, interface, the
      four verbs, the gated questions with their exact option lists, the proposal format including
      per-entry listing cost, and the commit offer. `user-invocable: true`,
-     `argument-hint: "<install|update|remove|status> [path]"`.
+     `argument-hint: "<install|update|remove|status> [path]"`. Each verb is a sequence of CLI calls
+     (amended 2026-10-06):
+     - `install`: `scan`, ask the open gates, `scan --answers`, confirm, offering each companion
+       with its citation, then `install` with the confirmed names.
+     - `update`: `update`, show each `declined` diff, ask, then `update --accept` for each one
+       approved.
+     - `remove`: `remove`. On a `refused` divergence, ask, then `remove --force`.
+     - `status`: `status`.
+
+     `[path]` defaults to the session's working directory, and the skill passes it as `<repo>`.
+     The CLI resolves the toplevel.
   4. Validate: `python3 -m pytest -q`; `claude plugin validate plugins/tcs-patterns` as a smoke
      test; walk the skill by hand against a fixture repository — green tests over skill Markdown
      have missed defects here before that a walkthrough found at step one.
