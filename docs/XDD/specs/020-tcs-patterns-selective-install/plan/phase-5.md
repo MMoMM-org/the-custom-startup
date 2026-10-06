@@ -88,23 +88,25 @@ four passing test suites.
        so nobody "fixes" it by accident). **Two** diverged patterns with only one named in
        `force`: that one is removed and the other refused, which is what kills a blanket-flag
        `force`. A `.replaced` stash beside a present directory is deleted with it; with the
-       directory absent it is refused and the reason names the stash. A fault injected right
-       after the stash deletion (step 2) leaves an ordinary installed pattern — entry listed,
-       `tcs-<p>/` byte-identical, no `.replaced`, no `.removing` — and a re-run completes. A fault
+       directory absent it is refused and the reason names the stash. An `OSError` injected
+       in step 2 after a partial delete of the stash reports `failed`, leaves `tcs-<p>/` present
+       and the manifest bytes unchanged, and never reaches step 3 (no `.removing`). A fault
        injected right after the move-aside (step 3), with a stash present at the start, leaves no
        entry `status` classifies as `replaced`. Order, from both sides:
        a fault injected into `manifest.drop` leaves `<installed_as>/` back in place,
        byte-identical, and reports `failed`; a fault injected into the move-aside rename
        (`os.rename`) leaves the manifest bytes unchanged and the directory intact, and reports
        `failed` — only this second test can see the manifest written before the rename. On the
-       resume path, a fault in `manifest.drop` renames nothing back: a spy on `os.rename` records
-       **zero** calls after the fault, and the `failed` reason contains the injected exception's
+       resume path, a fault in `manifest.drop` renames nothing back: spies on `os.rename` and
+       `os.replace` record **zero** calls, on either, after the fault, and the `failed` reason contains the injected exception's
        text. The spy is what kills the mutant even if the rename-back sits inside an `OSError`
        handler, which "rolled back where possible" invites. Interrupted states, built by
        hand: (a) entry listed, directory absent, `.removing` present — a re-run removes the entry
        and the debris, `directory_existed: false`; (b) `.removing` alone, entry gone — a re-run is
        **refused** by rule 1 and deletes nothing, and `status` reports the entry as `removing`
-       debris whose resolution says it is safe to delete. Removing the last pattern leaves a manifest
+       debris whose resolution says it is safe to delete; (c) interrupted after step 4, then
+       `install p` — `status` classifies the `.removing` as safe to delete and does not advise
+       `remove`. Removing the last pattern leaves a manifest
        that `manifest.read` returns with `patterns == {}` and for which `patterns_drift.py` prints
        `OK`. A second pattern's manifest block is byte-identical before and after removing the
        first.
@@ -122,13 +124,14 @@ four passing test suites.
        `.tcs-patterns-manifest`; `diverged` is `None`, not `False`, when `SKILL.md` is absent.
        `status()` writes nothing: digest before and after, and the SDD's `ast` **allowlist** —
        sibling imports only `import manifest` and `import paths`, no alias and no `from` form,
-       and `manifest.<attr>` only for `read`, `_manifest_path`, `ManifestUnparseableError` and
-       `MANIFEST_FILENAME`. The test fails on anything else rather than looking for named
-       writers.
+       and `manifest.<attr>` only for `read`, `_manifest_path`, `ManifestUnparseableError`,
+       `MANIFEST_FILENAME`, `Manifest` and `PatternEntry`. The test fails on anything else rather
+       than looking for named writers; `getattr`/`importlib` bypasses are out of scope.
      - **The reporter's lazy import**, in `tests/test_patterns_drift.py` as a **new** test (the
        existing ones stay unmodified): a copy of the plugin with `lib/manifest.py` present and
-       `lib/status.py` absent — the partial lib the refactor creates a new way to have — exits 0
-       with empty stdout and one `patterns_drift:` line on stderr. The repository fixture **must
+       `lib/status.py` absent — the partial lib the refactor creates a new way to have — run as a
+       subprocess, exits 0 with empty stdout and one `patterns_drift:` line on stderr that names
+       `status`. The repository fixture **must
        hold a manifest listing at least one pattern**: without one, `drift_lines` returns
        `MISSING` before it reaches the lazy `import status`, and the test passes without
        exercising the import it exists for. It also asserts stdout is not `MISSING`.
@@ -204,6 +207,10 @@ four passing test suites.
        present directory is deleted with it" test);
      - delete the stash after the manifest write instead of first (must fail the fault-after-step-3
        test, which finds an entry `status` classifies as `replaced`);
+     - continue after a step-2 failure (must fail the step-2 `OSError` test);
+     - make `status.py` reference `manifest.write` (must fail the `ast` allowlist test);
+     - hoist `import status` to module level in `patterns_drift.py` (must fail the partial-lib
+       test);
      - write to `sys.stdout` instead of `sys.stdout.buffer` (must fail the `PYTHONIOENCODING=ascii` test);
      - delete the manifest on the last remove;
      - make `drift_verdict` compare strings (must fail both the `status` and the reporter rows);

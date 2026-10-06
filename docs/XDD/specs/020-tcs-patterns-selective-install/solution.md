@@ -1630,6 +1630,9 @@ is debris `status` calls safe to delete (the one state of the second kind is bel
 5. `shutil.rmtree(.<installed_as>.removing, ignore_errors=True)`. A leftover is reported by
    `status` as debris.
 
+A failure in step 1 or step 2 reports that pattern `failed` with the exception's text and goes no
+further; no step before step 3 uses `ignore_errors`.
+
 Interrupted after step 3: the manifest lists the pattern, its directory is absent, and
 `.<installed_as>.removing` is present — `status` shows all three, and re-running `remove` reaches
 rule 6 with `directory_existed: false` and finishes. Interrupted after step 4: debris only, no
@@ -1681,7 +1684,9 @@ importer is a second name for one value. `install()` and `update()` default to
 `paths.DEFAULT_CATALOGUE_DIR`. `install.py` uses the suffixes for `.tmp` and `.replaced`, `remove()`
 uses `.removing`, and `manifest.write` uses `TMP_SUFFIX` for its temp file in place of its literal
 `".tmp"` (decided here: one line in a module T5.1a already edits, so the `manifest-tmp` match below
-reads the writer's own constant). **`patterns_drift.py` keeps its own derivation**, because it must find
+reads the writer's own constant). `manifest.py` therefore imports `paths`, so loading a copy of it
+needs `LIB_DIR` on `sys.path`; all current test loaders do this, and a mutation harness that
+relocates `manifest.py` must as well. **`patterns_drift.py` keeps its own derivation**, because it must find
 `lib/` before it can import anything from it, and its "missing lib → exit 0, silent stdout"
 contract forbids any lib import at module level, which a `paths`-derived default argument would
 need. `paths.py` stays importable from a copy, as the others are: no I/O at import.
@@ -1690,9 +1695,11 @@ The property, stated so a test can check it, as an **allowlist**: among this plu
 `status.py` imports only `manifest` and `paths`, each as a plain `import <name>` — no `as` alias and
 no `from manifest import …`, so every use is spelled `manifest.<attr>` and is visible to the check —
 and the only `manifest.<attr>` names it references are `read`, `_manifest_path`,
-`ManifestUnparseableError` and `MANIFEST_FILENAME`. A test parses `status.py` with `ast` and fails on
+`ManifestUnparseableError`, `MANIFEST_FILENAME`, `Manifest` and `PatternEntry` (the last two are
+pure types). A test parses `status.py` with `ast` and fails on
 any other sibling import, any alias, and any other `manifest` attribute, so a later `write` is
-caught without anyone having listed it.
+caught without anyone having listed it. Bypasses through `getattr` or `importlib` are out of scope
+for this check.
 
 ```
 status(repo_dir, *, catalogue_dir=paths.DEFAULT_CATALOGUE_DIR) -> StatusReport
@@ -1751,8 +1758,8 @@ with `.` + `manifest.MANIFEST_FILENAME` + `.` and ends with `paths.TMP_SUFFIX`:
 | `kind` | Name | `resolution` |
 |---|---|---|
 | `install-tmp` | `.tcs-<p>` + `TMP_SUFFIX` | safe to delete; the next `install` of `<p>` deletes it itself |
-| `replaced` | `.tcs-<p>` + `REPLACED_SUFFIX` | with `tcs-<p>/` present: safe to delete, and `remove <p>` deletes it. With `tcs-<p>/` absent: **this is your copy of `<p>`**; move it back to `tcs-<p>/`. Only an interrupted refresh leaves this state: `remove` clears a stash before it moves anything (rule 3, step 2), so no interrupted remove can |
-| `removing` | `.tcs-<p>` + `REMOVING_SUFFIX` | with the manifest still listing `<p>`: run `remove <p>` to finish. Otherwise: safe to delete; the removal had finished except for this |
+| `replaced` | `.tcs-<p>` + `REPLACED_SUFFIX` | with `tcs-<p>/` present: safe to delete; a refresh or a successful `remove <p>` also deletes it. With `tcs-<p>/` absent: **this is your copy of `<p>`**; move it back to `tcs-<p>/`. Only an interrupted refresh leaves this state: `remove` clears a stash before it moves anything (rule 3, step 2), so no interrupted remove can |
+| `removing` | `.tcs-<p>` + `REMOVING_SUFFIX` | manifest lists `<p>` and `tcs-<p>/` is absent: run `remove <p>` to finish. Otherwise (unlisted, or `tcs-<p>/` present): safe to delete |
 | `manifest-tmp` | `.` + `MANIFEST_FILENAME` + `.*` + `.tmp` | safe to delete; a manifest write was interrupted before its rename, and the manifest itself is intact |
 | `unknown` | any other match | not a name this tool writes; left alone |
 
@@ -2703,7 +2710,7 @@ decided answer instead of repeating the derivation
 | `remove` names a pattern the manifest does not list | C5 `remove()` | `refused`, and nothing is deleted. `remove` deletes only what the manifest records. Added 2026-10-06. |
 | `remove` names a pattern whose installed `SKILL.md` no longer matches the manifest hash | C5 `remove()` | `refused` unless named by `--force`, the same consent ADR-4 requires before `update` replaces an edit. Added 2026-10-06. |
 | `remove` finds a `.<installed_as>.replaced` stash with the pattern directory absent, or a symlink or file where the pattern directory should be | C5 `remove()` | `refused`, naming the path and the resolution. That stash is the user's only copy, and a link or file is not something `install()` wrote. A stash beside a **present** directory is debris; `remove` deletes it before any other change, so an interrupted remove never leaves one behind. Added 2026-10-06. |
-| `remove` interrupted between its steps | C5 `remove()` | Either the directory is absent while the manifest still lists it and `.<installed_as>.removing` is present, or only the `.removing` debris is left. `status` shows both states. Re-running `remove` completes the first; in the second the manifest no longer lists the pattern, so a re-run is refused by rule 1, and `status` reports the `.removing` entry as debris that is safe to delete. Added 2026-10-06. |
+| `remove` interrupted between its steps | C5 `remove()` | Mid or after step 1: an ordinary pattern, possibly with a partial `.removing` (safe). Mid or after step 2: an ordinary pattern, possibly with a partial stash (safe). After step 3: the manifest lists the pattern, its directory is absent and `.removing` is present; a re-run finishes. Mid step 4: `manifest-tmp` debris (safe) plus the after-step-3 state. After step 4: `.removing` debris (safe); a re-run is refused by rule 1. Mid step 5: debris (safe). `status` shows every one of these. Added 2026-10-06. |
 | A catalogue `SKILL.md` whose `description:` cannot be parsed | C3's CLI, `scan` | That pattern's `listing_cost` is `null`, and the skill shows "unknown", never 0. Added 2026-10-06. |
 
 ### Complex Logic
