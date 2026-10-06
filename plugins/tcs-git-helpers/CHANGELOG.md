@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.2.23] - 2026-10-06
+
+### Added
+
+- **The session brief names installed `tcs-patterns` that need attention (spec 020).** When a
+  repository holds `.claude/skills/.tcs-patterns-manifest`, the brief adds one segment per case:
+  `patterns ddd v1 → v2; run /tcs-patterns:patterns-setup update` for a pattern behind the
+  catalogue, and `patterns foo v1 not in the catalogue; run /tcs-patterns:patterns-setup status`
+  for one the catalogue cannot account for. The segment is silent when there is no manifest,
+  no `python3`, no `tcs-patterns` at 2.x, or the reporter's output is malformed, and a
+  repository without patterns does not pay for a Python start. It finds the reporter from the
+  brief's own location, not through `CLAUDE_PLUGIN_ROOT`.
+- **`drift_check_bundle <repo> <expected> [<file>] [<marker_dir>]`** generalises the hook-bundle
+  drift check to any marker directory; `drift_check_hook_bundle` stays as a thin wrapper pinned
+  to `.githooks`. `drift_check.py` gained the same parameter. The bundle-version gate in
+  `check-hook-bundle-version.sh` now requires a pattern's own `VERSION` bump when that pattern's
+  files change.
+
+### Fixed
+
+- **Marker classification no longer depends on the caller's locale.** BSD `tr -d '[:space:]'`
+  stripped U+00A0 under a UTF-8 locale and aborted on an invalid byte ("Illegal byte sequence").
+  Both `drift_check` implementations now classify ASCII whitespace only, under `LC_ALL=C`.
+
 ## [2.2.21] - 2026-09-05
 
 ### Fixed

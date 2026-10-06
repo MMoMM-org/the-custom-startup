@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — tcs-patterns selective install
+
+### Changed
+
+- **BREAKING: `tcs-patterns` 2.0.0 no longer registers its 21 pattern skills; a repository
+  installs the ones it wants.** After updating, `/tcs-patterns:ddd`, `/tcs-patterns:hexagonal`
+  and the rest are gone. **What to do:** in each repository that used them, run
+  `/tcs-patterns:patterns-setup install`. It scans the repo, proposes a selection and asks at
+  most three questions. Installed patterns are files in `<repo>/.claude/skills/tcs-<pattern>/`,
+  prefixed `tcs-` (`ddd` becomes `tcs-ddd`), reviewed and committed like any other file. To
+  read one without installing it, run `/tcs-patterns:pattern ddd`.
+
+  **Why.** The skill listing is budgeted, and `tcs-patterns` spent 5918 of the 21128 characters
+  the six TCS plugins put into it on 21 descriptions most repositories never use. Removing them
+  saves little in tokens (about 220, measured) because the listing was already clipped; the cost
+  is that every other skill's description is shortened to make room, including the routing
+  contracts that stop the model picking the wrong skill. The plugin description has always said
+  "Install only the patterns relevant to your stack"; now that is true.
+
+### Added
+
+- **`/tcs-patterns:patterns-setup <install|update|remove|status>`** to install, refresh, remove
+  and inspect patterns. `update` shows a diff for a pattern you edited locally instead of
+  overwriting it; `remove` of an edited pattern needs `--discard-edits` and shows the diff first.
+- **`/tcs-patterns:pattern <name>`** to read a pattern without installing it.
+- **A session-start advisory in `tcs-git-helpers`** that names installed patterns the catalogue
+  has moved past, and patterns it can no longer account for, and points at
+  `/tcs-patterns:patterns-setup update` or `status`.
+
 ## [Unreleased] — observability
 
 ### Added
