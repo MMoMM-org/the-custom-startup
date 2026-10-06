@@ -101,7 +101,8 @@ Exit code 3 here ("not inside a git repository") means stop before asking or pro
 
 From `report`:
 - If `unrecognised_stack` is true, say plainly that nothing in this repository matches any
-  pattern's stack, and recommend nothing. Do not offer a default selection.
+  pattern's stack, and recommend nothing. Do not offer a default selection. Every gate is shut, so the confirmation
+  still reports `not_reached` and the user can add patterns by name.
 - List each `auto` entry as a recommendation: pattern, its `evidence`, and its cost from
   `listing_cost` as "+N characters of skill listing in this repository" ("unknown" when it is null).
 - List `baseline` entries under a separate heading, not as a recommendation: they fit nearly every
@@ -135,7 +136,8 @@ python3 "<cli>" scan "<repo>" --answers '{"q1_backend": ["api-design"], "q2_arch
 
 Show one screen; omit any group that is empty:
 1. **Will install** — `outcomes.installed`, each with its cost, and the total.
-2. **Companions** — each key of `companions.proposed`, offered individually. Name every citation
+2. **Companions** — each key of `companions.proposed`, offered individually, each with its cost from the scan's `listing_cost` ("unknown" when it is
+   null). Name every citation
    that justified it from its `from`, `target`, `source_file` and `line` fields: "`<from>` cites
    `<target>` at `<source_file>`:`<line>`". If the companion is
    in `declined_by_question`, say "you declined `<companion>`; `<from>` cites it" rather than
@@ -176,8 +178,10 @@ or edited alone:
 
 ```bash
 git -C "<repo>" add -A -- <path> ...
-git -C "<repo>" commit -m "chore: install tcs patterns <names>" -- <path> ...
+git -C "<repo>" commit -m "chore: <verb> tcs patterns <names>" -- <path> ...
 ```
+
+`<verb>` is the verb that ran: `install` here.
 
 If git refuses (a hook, an ignore rule), relay its output; never retry with `--no-verify`. On a no,
 say the files stay in place, uncommitted, and that teammates get them only once committed.
@@ -201,8 +205,7 @@ replace it. If none is approved, stop here. Otherwise, once, for the approved on
 python3 "<cli>" update "<repo>" --accept <pattern> --accept <pattern>
 ```
 
-Patterns not approved stay byte-identical; say so. If anything was refreshed, offer to commit as
-in 3g, with the manifest and each refreshed `installed_as`.
+Patterns not approved stay byte-identical; say so. If anything was refreshed, offer to commit as in 3g, where `<verb>` is `update`, with the manifest and each refreshed `installed_as`.
 
 ### 5. remove
 
@@ -221,12 +224,13 @@ installed copy, so the user's edits appear as `-` lines that removing would dele
 for the approved ones:
 
 ```bash
-python3 "<cli>" remove "<repo>" <pattern> --discard-edits <pattern>
+python3 "<cli>" remove "<repo>" <p1> <p2> --discard-edits <p1> --discard-edits <p2>
 ```
 
+The positionals are the approved patterns only, and every `--discard-edits` name must also be positional (the CLI exits 2 otherwise).
+
 Refusals with a null `diff` name their own resolution; never delete a directory or stash by hand to
-get past one. If anything was removed, say the removal is not committed and offer to commit as in
-3g, with the manifest and each removed `installed_as`.
+get past one. If anything was removed, say the removal is not committed and offer to commit as in 3g, where `<verb>` is `remove`, with the manifest and each removed `installed_as`.
 
 ### 6. status
 

@@ -175,7 +175,7 @@ def test_update_runs_update_then_accepts_each_approved_diff() -> None:
 
 def test_remove_asks_before_discarding_edits_on_a_divergence() -> None:
     section = _verb_section("remove")
-    _require_in_order(section, 'remove "<repo>"', "diverged", "ask", 'remove "<repo>" <pattern> --discard-edits')
+    _require_in_order(section, 'remove "<repo>"', "diverged", "ask", 'remove "<repo>" <p1> <p2> --discard-edits')
 
 
 def test_remove_shows_the_refusals_diff_before_asking() -> None:
@@ -201,7 +201,8 @@ def test_the_commit_offer_commits_only_the_paths_the_verb_changed() -> None:
     the user's other staged work, and never retry a hook refusal."""
     section = _verb_section("install")
     assert "status --porcelain" in section
-    assert 'commit -m "chore: install tcs patterns <names>" -- <path>' in section
+    assert 'commit -m "chore: <verb> tcs patterns <names>" -- <path>' in section
+    assert "<verb>` is the verb that ran" in section
     assert "--no-verify" in section and "never retry" in section
 
 
@@ -248,10 +249,12 @@ def test_question_option_lists_equal_the_gate_table() -> None:
 
 
 def test_at_most_three_questions_closed_gates_skipped_multiple_answers() -> None:
+    never = _constraint_list("Never").lower()
+    assert "ask a question whose gate is closed" in never
+    assert "more than the three gated questions" in never
     section = _verb_section("install").lower()
-    assert "three" in section
-    assert "closed" in section and "never ask" in section
-    assert "any number" in section or "multiple" in section
+    assert "never ask a closed one" in section
+    assert "any number of answers" in section
 
 
 def test_proposal_shows_per_entry_listing_cost_and_baseline_separately() -> None:
@@ -263,7 +266,16 @@ def test_proposal_shows_per_entry_listing_cost_and_baseline_separately() -> None
 
 
 def test_unrecognised_stack_is_said_plainly() -> None:
-    assert "`unrecognised_stack`" in _verb_section("install")
+    section = _verb_section("install")
+    m = re.search(r"- If `unrecognised_stack` is true[^\n]*(?:\n  [^\n]*)*", section)
+    assert m, "no unrecognised_stack bullet"
+    bullet = m.group(0).lower()
+    assert "recommend nothing" in bullet
+    assert "do not offer a default selection" in bullet
+    assert "`not_reached`" in bullet and "confirmation" in bullet, (
+        "every gate is shut here; the not-reached report must still be shown"
+    )
+    assert "sees the proposal and the confirmation only" in section
 
 
 def test_outcome_report_distinguishes_not_reached_from_excluded_by_stack_fact() -> None:
@@ -278,6 +290,30 @@ def test_companions_offered_individually_with_their_citation() -> None:
     assert "`companions.proposed`" in section
     assert "`source_file`" in section and "`line`" in section
     assert "individually" in section.lower()
+
+
+def test_companions_are_priced_from_the_scan() -> None:
+    section = _verb_section("install")
+    m = re.search(r"\*\*Companions\*\*.*?(?=\n\d\. \*\*)", section, re.S)
+    assert m, "no Companions item"
+    item = m.group(0)
+    assert "`listing_cost`" in item and "unknown" in item
+
+
+def test_remove_discards_several_approved_patterns_in_one_call() -> None:
+    section = _verb_section("remove")
+    assert 'remove "<repo>" <p1> <p2> --discard-edits <p1> --discard-edits <p2>' in section
+    lowered = section.lower()
+    assert "approved patterns only" in lowered
+    assert "every `--discard-edits` name must also be positional" in lowered
+    assert "exits 2" in lowered
+
+
+def test_commit_message_verb_follows_the_verb_that_ran() -> None:
+    assert "chore: install tcs patterns" not in _text()
+    for verb in ("update", "remove"):
+        section = _verb_section(verb)
+        assert "as in 3g" in section and f"`<verb>` is `{verb}`" in section
 
 
 def test_declined_question_pattern_proposed_as_companion_is_named_as_such() -> None:
