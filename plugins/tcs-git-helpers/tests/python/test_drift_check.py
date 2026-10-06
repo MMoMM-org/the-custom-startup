@@ -441,9 +441,10 @@ def test_bundle_parity_python_matches_bash(
 
 # Marker shapes the text-only grid above cannot express: a directory at the
 # marker path, a non-breaking space, and bytes that are not valid UTF-8.
-# Bash runs under LC_ALL=C because BSD `tr -d '[:space:]'` is locale-dependent:
-# in a UTF-8 locale it strips U+00A0 and aborts on an invalid byte, while the
-# helper's contract is ASCII whitespace only on whatever bytes the file holds.
+# BSD `tr -d '[:space:]'` is locale-dependent: in a UTF-8 locale it strips
+# U+00A0 and aborts on an invalid byte, while the helper's contract is ASCII
+# whitespace only on whatever bytes the file holds. Bash therefore runs under
+# both a C and a UTF-8 caller locale; the helper must pin its own.
 _BYTES_PARITY_CASES: list[tuple[str, Optional[bytes]]] = [
     ("directory-at-marker-path", None),
     ("nbsp-is-not-whitespace", b"h\xc2\xa07\n"),
@@ -452,11 +453,12 @@ _BYTES_PARITY_CASES: list[tuple[str, Optional[bytes]]] = [
 ]
 
 
+@pytest.mark.parametrize("locale", ["C", "en_US.UTF-8"])
 @pytest.mark.parametrize(
     "content", [c for _, c in _BYTES_PARITY_CASES], ids=[i for i, _ in _BYTES_PARITY_CASES]
 )
 def test_bundle_parity_on_non_text_markers(
-    dc, tmp_path: Path, content: Optional[bytes]
+    dc, tmp_path: Path, content: Optional[bytes], locale: str
 ) -> None:
     """Python agrees with bash when the marker is a directory or holds odd bytes."""
     marker = tmp_path / ".tcs-patterns" / _PATTERNS_FILENAME
@@ -478,7 +480,7 @@ def test_bundle_parity_on_non_text_markers(
         ["bash", "-c", script],
         capture_output=True,
         timeout=10,
-        env={**os.environ, "LC_ALL": "C"},
+        env={**os.environ, "LC_ALL": locale},
     )
     result.check_returncode()
     bash_wire = result.stdout.decode("utf-8", errors="replace").strip()

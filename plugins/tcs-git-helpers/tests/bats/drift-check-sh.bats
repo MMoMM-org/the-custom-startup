@@ -174,3 +174,20 @@ teardown() {
   [ "$status" -eq 0 ]
   [ "$output" = "DRIFT:h1" ]
 }
+
+# ---------- locale: classification is ASCII-whitespace-only in any caller locale ----------
+
+@test "bundle: under a UTF-8 locale a non-breaking space is kept, not stripped" {
+  printf 'h7\xc2\xa0\n' > "$GITHOOKS_DIR/tcs-git-helpers-version"
+  LC_ALL=en_US.UTF-8 run drift_check_bundle "$REPO_TMP" "h7"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'DRIFT:h7\xc2\xa0')" ]
+}
+
+@test "bundle: under a UTF-8 locale an invalid byte gives DRIFT, exit 0, no stderr" {
+  printf 'h\xff7\n' > "$GITHOOKS_DIR/tcs-git-helpers-version"
+  LC_ALL=en_US.UTF-8 run --separate-stderr drift_check_bundle "$REPO_TMP" "h7"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'DRIFT:h\xff7')" ]
+  [ -z "$stderr" ]
+}

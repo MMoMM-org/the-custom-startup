@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # scripts/lib/drift_check.sh — drift detection for an installed bundle marker
-# Spec: SDD §Internal API Changes / function: drift_check_bundle (drift_check_hook_bundle wrapper)
+# Spec: 012 (origin: drift_check_hook_bundle); spec 020 T4.1 generalised it to
+#   drift_check_bundle with the marker_dir argument.
+# Locale: the marker is classified under LC_ALL=C, scoped to that one pipeline
+#   (not exported). BSD `tr -d '[:space:]'` is locale-dependent: a UTF-8 caller
+#   would have U+00A0 stripped and an invalid byte abort it ("Illegal byte
+#   sequence"). The contract is ASCII whitespace only, bytes passed through,
+#   matching the Python twin drift_check.py (re.ASCII, lenient decode).
 #
 # drift_check_bundle <repo_path> <expected_version> [<version_filename>] [<marker_dir>]
 #   Checks whether an installed bundle matches the expected version.
@@ -40,7 +46,7 @@ drift_check_bundle() {
     return 0
   fi
   local installed
-  installed="$(head -n 1 "$version_file" | tr -d '[:space:]')"
+  installed="$(head -n 1 "$version_file" | LC_ALL=C tr -d '[:space:]')"
   if [ "$installed" = "$expected_version" ]; then
     printf 'OK\n'
   else
