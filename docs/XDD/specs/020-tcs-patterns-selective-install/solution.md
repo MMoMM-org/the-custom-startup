@@ -1237,10 +1237,15 @@ what to do, exactly as `drift_check_hook_bundle` does today.
 ```
 OK                              # manifest present, every installed pattern current
 MISSING                         # no manifest — the repository never ran the setup
-DRIFT:ddd:3:4                   # installed pattern, installed version, catalogue version
+DRIFT:ddd:3:4                   # installed pattern BEHIND: installed version, catalogue version
 DRIFT:hexagonal:2:5             # one line per drifted pattern
-UNKNOWN:obsidian-plugin:2       # installed pattern, installed version; catalogue VERSION absent or non-numeric
+UNKNOWN:obsidian-plugin:2       # installed pattern, installed version; the catalogue cannot account for it
 ```
+
+`UNKNOWN` covers three cases, which share one property: the catalogue cannot account for what is
+installed. The catalogue `VERSION` is absent or non-numeric; the pattern's catalogue directory is
+gone, because it was deleted upstream; or the installed version is **ahead** of the catalogue's, as
+after a plugin rollback. Versions are compared as integers, so `01` against `1` is current.
 
 `MISSING` is reported, not acted on: F7's fourth criterion requires that a repository without
 patterns is *not* nagged, so the advisory suppresses `MISSING` entirely and only the `status` verb
@@ -1250,10 +1255,25 @@ but unparseable"); telling the two apart is `status`'s job, not this contract's.
 `UNKNOWN` added 2026-10-06 by Marcus, during T4.2. The Error Handling table already required C7
 to report a pattern with no usable catalogue `VERSION` "as unknown rather than drifted", but this
 contract had no line for it. `OK` means every installed pattern is current, so any `UNKNOWN` or
-`DRIFT` line suppresses it. The advisory stays silent on `UNKNOWN`: the CI gate (C9) already fails
-a pattern without a `VERSION`, which makes it a maintainer defect rather than something the user
-can act on. Drift is computed from each pattern's own manifest `version`, never from the
-manifest's top-level `bundle` (decision 9 of the update path).
+`DRIFT` line suppresses it. Drift is computed from each pattern's own manifest `version`, never from
+the manifest's top-level `bundle` (decision 9 of the update path).
+
+**Revised 2026-10-06 by Marcus, at the Phase 4 drift check.** Two corrections, both found by the
+validation that closes the phase.
+
+- **"Drifted" now means behind, not different.** The reporter compared versions for string
+  equality, so an installed version newer than the catalogue printed `DRIFT:ddd:3:2`, and the
+  advisory turned that into "ddd v3 → v2; run … update", which is advice to downgrade. F7 and
+  AC-11 both say *behind*. Ahead is now `UNKNOWN`. The comparison lives in the reporter;
+  `manifest.is_current` stays string equality, because `update()` also calls it, and how
+  `update()` treats a rollback belongs to F8, not this contract.
+- **The advisory surfaces `UNKNOWN`.** It used to stay silent, on the grounds that C9 fails a
+  pattern without a `VERSION`. C9 catches a missing `VERSION`, but not a deleted pattern ("a
+  deleted one raises nothing"), so a user who kept a pattern removed upstream was never told.
+  Because C9 stops `VERSION` defects from shipping, an `UNKNOWN` seen in a consumer repository
+  almost always means deleted upstream or ahead, which are both things the user should hear about.
+  The advisory names the pattern and the read-only verb:
+  `patterns ddd v3 not in the catalogue; run /tcs-patterns:patterns-setup status`.
 
 #### Process contract: the generalized drift check
 
@@ -2698,7 +2718,7 @@ standing for two or three PRD criteria that assert the same behaviour from diffe
 | AC-8 | A pattern installed into a fixture repository appears in that repository's skill listing in a following session | F4 |
 | AC-9 | The install reports its writes, states that it did not commit, and commits only when the user accepts | F4, ADR-8 |
 | AC-10 | A selection containing one name already present in any of the three namespaces installs the others, writes nothing for the colliding one, and reports both locations | F5 |
-| AC-11 | `patterns_drift.py` prints one `DRIFT:` line per behind pattern, `OK` when all are current, `MISSING` without a manifest, `UNKNOWN:` for a pattern without a usable catalogue `VERSION`; the advisory shows drift and suppresses `MISSING` | F7 |
+| AC-11 | `patterns_drift.py` prints one `DRIFT:` line per behind pattern, `OK` when all are current, `MISSING` without a manifest, `UNKNOWN:` for a pattern the catalogue cannot account for (no usable `VERSION`, deleted upstream, or installed version ahead); the advisory shows drift and unknown, and suppresses `MISSING` | F7 |
 | AC-12 | `update` refreshes only drifted patterns, asks nothing about the selection, and prompts per diverged file with skip as the default. The diff it prompts with runs **installed → catalogue**, so the user's own edit reads as a deletion and the incoming text as an addition, and both file labels are populated `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb), decision 4]` | F8, ADR-4 |
 | AC-13 | A change to a pattern file without that pattern's `VERSION` in the same changeset fails the CI gate; with it, the gate passes; a change touching no pattern leaves the gate silent | F9, ADR-9 |
 | AC-14 | The bash Obsidian gate and the Python Obsidian rule return the same verdict for every detection fixture **and for any write inside a nested plugin**; a write **outside** a nested plugin in a repository containing one elsewhere is an intentional, asserted exception, because the gate is file-scoped and the rule is repo-scoped | ADR-7 |
