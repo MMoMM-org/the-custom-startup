@@ -171,5 +171,6 @@ teardown() {
   [ "$status" -eq 0 ]
   [ "$output" = "DRIFT:h1" ]
   run drift_check_hook_bundle "$REPO_TMP" "h7"
+  [ "$status" -eq 0 ]
   [ "$output" = "DRIFT:h1" ]
 }

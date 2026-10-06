@@ -1,8 +1,9 @@
 """
 drift_check.py — skill-side drift check helper for tcs-git-helpers.
 
-Reads the installed hook bundle version from
-  <repo_path>/.githooks/<version_filename>
+Reads the installed bundle version from
+  <repo_path>/<marker_dir>/<version_filename>
+(marker_dir defaults to .githooks)
 
 and compares it against an expected version string.
 
@@ -76,7 +77,7 @@ _VERSION_FILENAME = "tcs-git-helpers-version"
 
 
 class DriftStatus(enum.Enum):
-    """Classification of installed hook bundle version against expected."""
+    """Classification of installed bundle version against expected."""
 
     OK = "OK"
     MISSING = "MISSING"
@@ -85,7 +86,7 @@ class DriftStatus(enum.Enum):
 
 @dataclass(frozen=True)
 class DriftResult:
-    """Immutable result returned by check_hook_bundle."""
+    """Immutable result returned by check_bundle and check_hook_bundle."""
 
     status: DriftStatus
     installed_version: Optional[str]

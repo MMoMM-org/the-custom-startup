@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# scripts/lib/drift_check.sh — drift detection for installed hook bundle
-# Spec: SDD §Internal API Changes / function: drift_check_hook_bundle
+# scripts/lib/drift_check.sh — drift detection for an installed bundle marker
+# Spec: SDD §Internal API Changes / function: drift_check_bundle (drift_check_hook_bundle wrapper)
 #
 # drift_check_bundle <repo_path> <expected_version> [<version_filename>] [<marker_dir>]
 #   Checks whether an installed bundle matches the expected version.
