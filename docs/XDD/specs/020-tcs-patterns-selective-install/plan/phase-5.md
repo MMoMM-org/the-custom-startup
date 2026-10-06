@@ -85,10 +85,19 @@ four passing test suites.
        `tcs-foo/` the manifest does not list survives `remove(…, ["foo"])` byte-for-byte; a
        pattern whose installed `SKILL.md` was edited is refused without `force`, removed with it;
        an edit confined to `reference/` is removed without `force` (ADR-4's stated limit, pinned
-       so nobody "fixes" it by accident). Order: a fault injected into `manifest.drop` leaves
-       `<installed_as>/` back in place, byte-identical, and reports `failed`. The two interrupted
-       states, built by hand (`.removing` present with the directory absent and the entry listed;
-       `.removing` alone), each finish on a re-run. Removing the last pattern leaves a manifest
+       so nobody "fixes" it by accident). **Two** diverged patterns with only one named in
+       `force`: that one is removed and the other refused, which is what kills a blanket-flag
+       `force`. A `.replaced` stash beside a present directory is deleted with it; with the
+       directory absent it is refused and the reason names the stash. Order, from both sides:
+       a fault injected into `manifest.drop` leaves `<installed_as>/` back in place,
+       byte-identical, and reports `failed`; a fault injected into the move-aside rename
+       (`os.rename`) leaves the manifest bytes unchanged and the directory intact, and reports
+       `failed` — only this second test can see the manifest written before the rename. On the
+       resume path, a fault in `manifest.drop` renames nothing back. Interrupted states, built by
+       hand: (a) entry listed, directory absent, `.removing` present — a re-run removes the entry
+       and the debris, `directory_existed: false`; (b) `.removing` alone, entry gone — a re-run is
+       **refused** by rule 1 and deletes nothing, and `status` reports the entry as `removing`
+       debris whose resolution says it is safe to delete. Removing the last pattern leaves a manifest
        that `manifest.read` returns with `patterns == {}` and for which `patterns_drift.py` prints
        `OK`. A second pattern's manifest block is byte-identical before and after removing the
        first.
@@ -100,14 +109,23 @@ four passing test suites.
        the logic it checks, even though the two now share `drift_verdict`. Also: `unparseable`
        and `unreadable` manifests report `manifest_state` and the exception text verbatim (the
        mode-000 case skips when `os.geteuid() == 0`, where permissions do not bite); `unlisted`
-       names a `tcs-*` directory the manifest does not; `debris` names `.tcs-ddd.tmp` and
-       `.tcs-ddd.removing` and does **not** name `.tcs-patterns-manifest`; `diverged` is `None`,
-       not `False`, when `SKILL.md` is absent. `status()` writes nothing: digest before and after.
+       names a `tcs-*` directory the manifest does not; `debris` classifies `.tcs-ddd.tmp`,
+       `.tcs-ddd.removing`, `.tcs-ddd.replaced` (once with `tcs-ddd/` present, once absent — two
+       different resolutions) and a `..tcs-patterns-manifest.x.tmp` file, and does **not** list
+       `.tcs-patterns-manifest`; `diverged` is `None`, not `False`, when `SKILL.md` is absent.
+       `status()` writes nothing: digest before and after, and an `ast` check that `status.py`
+       imports no sibling but `manifest` and `paths` and references no `manifest.write`,
+       `upsert` or `drop`.
+     - **The reporter's lazy import**, in `tests/test_patterns_drift.py` as a **new** test (the
+       existing ones stay unmodified): a copy of the plugin with `lib/manifest.py` present and
+       `lib/status.py` absent — the partial lib the refactor creates a new way to have — exits 0
+       with empty stdout and one `patterns_drift:` line on stderr.
      - **The CLI**, `tests/test_patterns_cli.py`, every verb run as a **subprocess** of
        `python3 <abs path>/lib/cli.py` from a cwd that is not the repository, with `HOME`
-       pointed at a `tmp_path` and `--catalogue` at a fixture catalogue. Fixture repos are
-       `git init`ed with `git -C <tmp>` and `GIT_CONFIG_GLOBAL=/dev/null`, never a bare `git
-       init` that can fall back to a parent repository. Asserted:
+       pointed at a `tmp_path` and `--catalogue` at a fixture catalogue unless a bullet says
+       otherwise. Fixture repos are created with `git -C <tmpdir> init` and
+       `GIT_CONFIG_GLOBAL=/dev/null`: the hazard is initialising in the wrong working directory,
+       and `-C` removes the dependence on cwd. Asserted:
        - Every verb's stdout on exit 0 parses as **one** JSON document whose top-level key set
          **equals** the contract's table for that verb — `==`, not `>=`, so an extra key fails
          too — and every nested channel has its named fields.
@@ -126,33 +144,52 @@ four passing test suites.
          write `tcs-hexagonal`. An unparseable manifest exits 3 and its bytes are unchanged.
        - `scan` without `--answers` has `outcomes: null`. With `--answers`, the four sets are
          disjoint and sum to 21. An answer naming a closed gate, or a pattern its gate does not
-         settle, exits 2. `listing_cost` has 21 keys, and against the real catalogue its values
-         sum to **5990**, the figure measured on 2026-10-06. Each companion under `proposed`
-         carries at least one citation whose `source_file` exists in the catalogue.
-       - A non-ASCII value round-trips: stdout decodes as UTF-8 and contains the character itself,
-         not a `\u` escape, under `LC_ALL=C`.
+         settle, exits 2. Against the fixture catalogue, `listing_cost`'s keys equal that
+         catalogue's pattern directories, and one hand-computed entry matches. Each companion
+         under `proposed` carries at least one citation for which `<catalogue>/<source_file>` is
+         a file — `source_file` is catalogue-relative.
+       - **One real-catalogue test, named as such:** `scan --catalogue` omitted, `listing_cost`
+         has 21 keys and sums to **5990**, measured 2026-10-06. Its docstring says it is expected
+         to change whenever a pattern description changes, and the figure is updated in the same
+         commit. Kept out of every fixture test.
+       - A non-ASCII value round-trips under `PYTHONIOENCODING=ascii`: exit 0, and stdout's bytes
+         decode as UTF-8 and contain the character itself, not a `\u` escape. `LC_ALL=C` cannot
+         show this — on Python 3.7+ it switches to UTF-8 mode (PEP 538/540; measured on 3.14:
+         `sys.stdout.encoding` is `utf-8`), while `PYTHONIOENCODING=ascii` makes a text-stream
+         write raise. This test kills the mutant that writes to `sys.stdout` instead of
+         `sys.stdout.buffer`; the `\u` check kills the one that drops `ensure_ascii=False`.
      - **`detect.py`'s `unreadable`**, in `tests/test_patterns_detect.py`: a mode-000
        subdirectory and a mode-000 `package.json` both appear, root-relative and sorted, the
        directory with a trailing `/`. A non-UTF-8 manifest does **not** appear. Every corpus
        fixture reports `[]`. Skipped under `geteuid() == 0`, like the `status` permissions test.
+       The hand-built control reports in that file (`report_with` and `base_report`, near lines
+       447 and 509) gain `"unreadable": []`, so the controls keep describing a whole report.
      - **`companion_citations()`**, in `tests/test_tcs_patterns_companion_map.py`: its outer two
        key levels equal `companion_map()`'s edges on the real catalogue, and on a two-pattern
        `tmp_path` catalogue it names the citing file and line.
-  3. Implement: `lib/cli.py` (NEW); `lib/status.py` (NEW: `status()`, `StatusReport`,
-     `PatternStatus`, `drift_verdict()`, `catalogue_version()`); `remove()` and `RemoveReport` in
-     `lib/install.py`; `drop()` and `Manifest.without_pattern()` in `lib/manifest.py`;
-     `unreadable` in `lib/detect.py`; `companion_citations()` and `Citation` in
-     `lib/companions.py`; `scripts/patterns_drift.py` imports `drift_verdict` and
-     `catalogue_version` from `lib/status.py`, lazily inside `drift_lines`, and loses its own
-     copies. No other behaviour of the reporter changes.
+  3. Implement: `lib/cli.py` (NEW); `lib/paths.py` (NEW leaf: plugin root, catalogue default,
+     the three debris suffixes, `sha256_or_none` moved from `install._hash_if_present`);
+     `lib/status.py` (NEW: `status()`, `StatusReport`, `PatternStatus`, `Debris`,
+     `drift_verdict()`, `catalogue_version()`); `remove()` and `RemoveReport` in
+     `lib/install.py`, which also takes its root and suffixes from `paths`; `companions.py`
+     takes its catalogue default from `paths`; `drop()` and `Manifest.without_pattern()` in
+     `lib/manifest.py`; `unreadable` in `lib/detect.py`; `companion_citations()` and `Citation`
+     in `lib/companions.py`. In `scripts/patterns_drift.py`, **extract** the rule: today it has
+     `_catalogue_version` and an integer comparison inline in `drift_lines`, not a function.
+     Move the first to `status.catalogue_version` unchanged and the second into
+     `status.drift_verdict`, then import both lazily inside `drift_lines`. No other behaviour of
+     the reporter changes, and it keeps its own `parents[1]` derivation.
   4. Validate: `python3 -m pytest tests/test_patterns_remove_status.py tests/test_patterns_cli.py
      tests/test_patterns_drift.py -q`, then the whole suite. Report each leg separately, and
      compare against a same-harness baseline taken before the change. Delete `__pycache__`
      before each mutation run. At minimum, mutate:
      - drop rule 1, so a pattern the manifest does not list is deleted (must fail the unowned
        test);
-     - make `force` a blanket flag rather than per-name;
-     - swap `remove()`'s rename and manifest steps;
+     - make `force` a blanket flag rather than per-name (must fail the two-diverged test);
+     - swap `remove()`'s rename and manifest steps (must fail the rename-fault test);
+     - make the rename-back on a `manifest.drop` failure unconditional (must fail the resume-path test);
+     - refuse on any `.replaced` stash, present directory or not;
+     - write to `sys.stdout` instead of `sys.stdout.buffer` (must fail the `PYTHONIOENCODING=ascii` test);
      - delete the manifest on the last remove;
      - make `drift_verdict` compare strings (must fail both the `status` and the reporter rows);
      - make the CLI's `decide` accept everything;
@@ -164,7 +201,7 @@ four passing test suites.
   5. Success:
      - [ ] `remove` never deletes a directory the manifest does not own `[ref: SDD/Process contract: the CLI the skill drives, remove rule 1]`
      - [ ] `remove` refuses a diverged pattern unless forced by name `[ref: SDD/ADR-4; SDD/Error Handling]`
-     - [ ] An interrupted `remove` leaves a state `status` names and a re-run completes `[ref: SDD/Process contract: the CLI the skill drives, "Order"]`
+     - [ ] Interrupted after the move-aside (entry listed, directory absent), a re-run of `remove` completes; interrupted after the manifest write (`.removing` alone), a re-run is refused and `status` reports the leftover as safe-to-delete debris `[ref: SDD/Process contract: the CLI the skill drives, "Order"]`
      - [ ] `status` agrees with `patterns_drift.py` on every row of a hand-typed verdict table `[ref: SDD/AC-11]`
      - [ ] `status` reports an unparseable manifest verbatim, exit 0 `[ref: SDD/Error Handling, "Manifest present but unparseable"]`
      - [ ] `update` without `--accept` leaves every diverged file byte-identical `[ref: PRD/F8; SDD/AC-12; ADR-4]`
@@ -183,8 +220,9 @@ four passing test suites.
      `plugins/tcs-helper/skills/observability-setup/SKILL.md` for the verb-and-abort shape; note
      that its stance on committability is the opposite of ours and why. **Amended 2026-10-06 with
      T5.1a:** the skill owns the interview and nothing else. Every read and write of the target
-     goes through `lib/cli.py`. The skill branches on its exit code (0 render, 2 or 3 show stderr
-     and stop, 1 report a bug), and it never imports, inlines or re-derives library logic.
+     goes through `lib/cli.py`. The skill treats each exit code exactly as the SDD's exit-code
+     table says (the one authority; not restated here), and it never imports, inlines or
+     re-derives library logic.
   2. Test: The frontmatter parses with a YAML parser — a clause ending in `: ` inside a value makes
      YAML read it as a key, which broke ten descriptions in this repository while
      `claude plugin validate` passed over all ten; the description names the situation the skill is

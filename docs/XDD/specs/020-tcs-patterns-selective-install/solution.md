@@ -340,13 +340,14 @@ plugins/tcs-patterns/
 │   │       ├── install.py              NEW       C5 — copy, rename, hash, manifest; + remove() (T5.1a)
 │   │       ├── manifest.py             NEW       C6 — read/write/compare; + drop(), without_pattern() (T5.1a)
 │   │       ├── outcomes.py             NEW       the four-way outcome partition
-│   │       └── status.py               NEW       read-only status(); drift_verdict() the reporter imports (T5.1a)
+│   │       ├── paths.py                NEW       leaf: plugin root, catalogue default, debris suffixes, SKILL.md hash (T5.1a)
+│   │       └── status.py               NEW       read-only status(); drift_verdict(), catalogue_version() the reporter imports (T5.1a)
 │   └── pattern/                        NEW       C8 — the catalogue reader
 │       └── SKILL.md                    NEW       argument-hint: <pattern-name>
 ├── scripts/
 │   ├── block-eslint-disable.sh         UNCHANGED stays in the plugin (ADR-7)
 │   └── patterns_drift.py               NEW       C7 — manifest vs catalogue, OK/MISSING/DRIFT/UNKNOWN;
-│                                                 imports drift_verdict from lib/status.py (T5.1a)
+│                                                 imports drift_verdict, catalogue_version from lib/status.py (T5.1a)
 └── README.md, CHANGELOG.md             MODIFIED  layout, the 2.0.0 entry, the kept promise
 
 plugins/tcs-git-helpers/
@@ -359,7 +360,7 @@ plugins/tcs-git-helpers/
 └── tests/python/test_drift_check.py    MODIFIED  same parameter, parity with the bash twin
 
 tests/
-├── test_patterns_detect.py             NEW       parametrized over every fixture
+├── test_patterns_detect.py             NEW       parametrized over every fixture; MODIFIED by T5.1a for `unreadable`
 ├── test_patterns_detection_corpus.py   NEW       corpus integrity; green without a detector
 ├── patterns_detection_corpus_lib.py    NEW       shared fixture loading for the two above
 ├── test_patterns_install.py            NEW       rename, hash, manifest, idempotency
@@ -368,6 +369,7 @@ tests/
 ├── test_patterns_remove_status.py      NEW       remove()'s six rules and its order; status() vs the reporter (T5.1a)
 ├── test_patterns_cli.py                NEW       every verb as a subprocess: keys, exit codes, refusal order (T5.1a)
 ├── test_obsidian_rule_agreement.py     NEW       ADR-7's consistency test
+├── test_tcs_patterns_companion_map.py  NEW       AC-18's seven edges; MODIFIED by T5.1a for companion_citations()
 └── fixtures/patterns-detection/        NEW       synthetic repos, one per rule and trap
     └── <case>/
         ├── repo/                       NEW       the synthetic tree
@@ -538,10 +540,11 @@ Three fields carry design decisions rather than data:
   fact with near-zero discriminating power and must not flip the headline state (ADR-5, *Which
   set the flag reads*).
 
-**A ninth key, `unreadable`, added 2026-10-06 by T5.1a.** The Error Handling row "Target repository
-unreadable in part" required this report to name what the scan could not read, and the report
-above had no field for it, so `detect.py` silently skipped what it could not list or open. The key
-is a sorted array of root-relative paths and is always present. Its definition, and why `schema`
+**A ninth key, `unreadable`, specified 2026-10-06; T5.1a builds it.** The example above shows
+the target state: until T5.1a lands, `detect.py` returns eight keys. The Error Handling row "Target
+repository unreadable in part" required this report to name what the scan could not read, and the
+report had no field for it, so `detect.py` silently skips what it cannot list or open. The key
+will be a sorted array of root-relative paths, always present. Its definition, and why `schema`
 stays `1`, are under *Process contract: the CLI the skill drives*, `scan`.
 
 #### Detection rules: the eight stack facts and the three gates (C2)
@@ -1311,10 +1314,11 @@ validation that closes the phase.
   advisory turned that into "ddd v3 → v2; run … update", which is advice to downgrade. F7 and
   AC-11 both say *behind*. Ahead is now `UNKNOWN`. The comparison lives in the reporter;
   `manifest.is_current` stays string equality, because `update()` also calls it, and how
-  `update()` treats a rollback belongs to F8, not this contract. **Moved 2026-10-06 by T5.1a**
-  into `lib/status.py` (`drift_verdict`, `catalogue_version`), which the reporter imports, so that
-  `status` reuses the rule rather than restating it. The reporter's stdout is unchanged, and
-  `is_current` is still untouched.
+  `update()` treats a rollback belongs to F8, not this contract. **To be moved by T5.1a**
+  (specified 2026-10-06; not built yet) into `lib/status.py` as `drift_verdict` and
+  `catalogue_version`, which the reporter will import, so that `status` reuses the rule rather
+  than restating it. Today the reporter still holds `_catalogue_version` and an inline comparison
+  in `drift_lines`. Its stdout must not change, and `is_current` stays untouched.
 - **The advisory surfaces `UNKNOWN`.** It used to stay silent, on the grounds that C9 fails a
   pattern without a `VERSION`. C9 catches a missing `VERSION`, but not a deleted pattern ("a
   deleted one raises nothing"), so a user who kept a pattern removed upstream was never told.
@@ -1378,8 +1382,8 @@ python3 <abs path>/skills/patterns-setup/lib/cli.py [--catalogue <dir>] <verb> <
 **Runtime.** Python 3.11+, standard library only (ADR-2). `cli.py` puts its own directory
 (`Path(__file__).resolve().parent`) on `sys.path` and imports its siblings from there, so any cwd
 works; it never reads `CLAUDE_PLUGIN_ROOT`, which is absent in the Bash-tool subprocess this runs in
-(decision 5 of the install plan). The catalogue defaults to `install.DEFAULT_CATALOGUE_DIR`, one
-derivation rather than a second copy of the `parents[3]` arithmetic. `--catalogue <dir>` is a test
+(decision 5 of the install plan). The catalogue defaults to `paths.DEFAULT_CATALOGUE_DIR` (below,
+under `status`), one derivation rather than another copy of the `parents[3]` arithmetic. `--catalogue <dir>` is a test
 seam, as it is on the drift reporter: one global option, placed before the verb, which `remove`
 ignores because it never reads the catalogue. `home_dir` for the guard is `Path.home()`, the
 CLI-entry-point half of the convention under *the three namespaces (C4)*; `Path.home()` honours `$HOME`, so a test sets `HOME` and the CLI
@@ -1392,17 +1396,31 @@ ensure_ascii=False, sort_keys=True)` plus a newline, encoded as UTF-8 and writte
 `UnicodeEncodeError` under a non-UTF-8 locale, and a crash there would arrive after the writes it
 was meant to report. The library's named channels become JSON **objects with named fields**, never
 arrays: a positional tuple in JSON is the unpacked-wrong hazard the dataclasses were named to avoid
-(`GuardReport`, "Named channels rather than a 3-tuple"). Sets become sorted arrays. Paths are
-absolute POSIX strings. Human-readable messages, warnings and usage go to stderr only.
+(`GuardReport`, "Named channels rather than a 3-tuple"). Sets become sorted arrays. Human-readable
+messages, warnings and usage go to stderr only.
+
+**Paths are not one kind, and each field says which it is** (corrected 2026-10-06; this said
+"absolute POSIX strings" for all of them, which `report` and the citations contradict):
+
+| Field | Form |
+|---|---|
+| every verb's `repo`; `install`'s `refused.*.path` and `refused.*.intended_path`; `install`'s `skipped[].path` | absolute (the toplevel, `Path.home()` and every root the guard walks are absolute) |
+| `scan`'s `report` | verbatim from `detect()`: `report.repo` is the absolute toplevel the CLI passed in; `evidence`, `gate_evidence`, `manifests_walked` and `unreadable` are relative to it, as `detect.py` writes them (`tree.rel`) |
+| `scan`'s `companions.*[].source_file` and `companions.ambiguous[].source_file` | relative to the catalogue root, as `companions._derive` writes them |
+| `status`'s `unlisted[]` and `debris[].name` | a bare entry name inside `<repo>/.claude/skills/` |
+| reason strings | free text; any path inside one is whatever the library interpolated |
 
 **Exit codes — four, and each one tells the skill what to do next.** Decided here.
 
 | Exit | Meaning | stdout | The skill |
 |---|---|---|---|
 | 0 | The verb ran. Per-pattern refusals and failures are **in the JSON channels**, not in the exit code | one JSON document | renders it |
-| 1 | An unexpected exception — a bug. Python's own exit code for an uncaught exception, deliberately left as is, so a crash can never be mistaken for a refusal | empty | shows stderr and stops |
-| 2 | Usage: the arguments are invalid. `argparse`'s own code, so no custom handling is needed for the shape errors it already catches; the CLI also uses it for names and answers it rejects after parsing (below) | empty | its own bug; shows stderr |
+| 1 | An unexpected exception — a bug. Python's own exit code for an uncaught exception, deliberately left as is, so a crash can never be mistaken for a refusal | empty | shows stderr, says it is a defect in the CLI, and stops |
+| 2 | Usage: the arguments are invalid. `argparse`'s own code, so no custom handling is needed for the shape errors it already catches; the CLI also uses it for names and answers it rejects after parsing (below) | empty | shows stderr, says it is a defect in the skill (the skill built the arguments), and stops |
 | 3 | Refused: a precondition for the whole call failed — interpreter older than 3.11, `<repo>` not inside a git work tree, a manifest that cannot be read or parsed on a verb that writes, an `--accept` naming a pattern the manifest does not list. Nothing written | empty | shows stderr, which names the resolution, and stops |
+
+This table is the one authority for how the skill treats an exit code; T5.1 cites it rather than
+restating it.
 
 A per-pattern problem is exit 0 because the library already decided that one pattern's fault never
 stops the others (install plan, "Who raises, and who catches") — an exit code cannot carry "three
@@ -1446,7 +1464,7 @@ from `--answers` means "asked, none chosen" — the same as an empty array.
 | `report` | object | `detect()`'s report verbatim, including `unreadable` (below) |
 | `outcomes` | object or `null` | `null` without `--answers`; else `{installed, declined_by_question, excluded_by_stack_fact, not_reached}`, each a sorted array, the four summing to 21 |
 | `companions` | object | `{proposed, ambiguous}`. `proposed`: companion → array of `{from, source_file, line, target}`, one per citation on an edge into that companion from the selection or from another proposed companion. Its keys are exactly `expand_companions(selection)`. `ambiguous`: array of `{source_file, line, target, candidate_patterns}` from `ambiguous_citations()` |
-| `listing_cost` | object | catalogue pattern → integer or `null`, all 21, defined below |
+| `listing_cost` | object | catalogue pattern → integer or `null`, one key per pattern directory in the catalogue in use (21 in the real one), defined below |
 
 The **selection** companions are computed for is `outcomes.installed` when answers were given, and
 otherwise the `auto` plus `baseline` pattern names — what the proposal starts from. A pattern the
@@ -1540,8 +1558,11 @@ risk: a file edited again between the two calls is refreshed against a diff the 
 The window is one skill turn, and binding consent to a hash would add an argument format for a
 case nobody has hit.
 
-A manifest that cannot be read or parsed is exit 3 — `update()` would raise
-`ManifestUnparseableError` from its first line, before writing anything.
+A manifest that cannot be read or parsed is exit 3, decided by the CLI's own `manifest.read` before
+`update()` is called. Inside `update()` the manifest read is not the first thing that can fail:
+with `bundle=None`, `_bundle_version()` reads `plugin.json` first (`install.py`, the `if bundle is
+None` lines of both `install()` and `update()`). Both reads precede every write, so either failure
+leaves the repository untouched.
 
 | Key | Type | Content |
 |---|---|---|
@@ -1568,8 +1589,9 @@ RemoveReport (frozen, named channels)
 ```
 
 **`install.py` and not a new module, decided here:** `remove()` is C5's third write verb, and it
-needs `_bundle_version`, `_hash_if_present` and `_stash_path`, which are private to that module.
-Splitting would export three private helpers to save one file from growing.
+needs `_bundle_version` and `_stash_path`, which are private to that module. Splitting would export
+private helpers to save one file from growing. The `SKILL.md` hash it compares comes from
+`paths.sha256_or_none`, the same function `install.py` itself moves to (see `status` below).
 
 Reads the manifest once up front; `ManifestUnparseableError` and `OSError` propagate before
 anything is touched (exit 3 in the CLI), the same as `install()` and `update()`. Then, per pattern,
@@ -1579,10 +1601,10 @@ in sorted order, **the first rule that applies decides**:
 |---|---|---|
 | 1 | the manifest does not list the pattern | `refused`: "not recorded in the manifest; remove deletes only what the manifest records". **`remove` never deletes a directory the manifest does not own** — a hand-made `tcs-foo/` is someone's skill, not ours |
 | 2 | the entry's `installed_as` is not `"tcs-" + name` | `refused`. ADR-1 makes this always true for what `install()` writes; a hand-edited manifest pointing `ddd` at `tcs-hexagonal` would otherwise delete the wrong pattern |
-| 3 | `.<installed_as>.replaced` exists | `refused`, naming it: an interrupted refresh left the user's copy there (update path, decision 8), and dropping the manifest entry would orphan the only reference to it |
+| 3 | `.<installed_as>.replaced` exists **and `<installed_as>/` does not** | `refused`, naming it, with the resolution: "an interrupted refresh left your copy at `<stash>`; move it back to `<installed_as>/` and run remove again, or delete it yourself if you do not want it". With the directory absent the stash is the user's only copy (update path, decision 8), and dropping the manifest entry would orphan the only reference to it. **A stash beside a present directory is not this rule's case**: decision 8 calls that state debris that costs nothing, because the next refresh deletes it — and once the pattern is removed no refresh will come, so `remove` deletes it with the directory (step 4). Corrected 2026-10-06; this rule refused whenever a stash existed, which made a current pattern with old debris unremovable by any verb |
 | 4 | `<installed_as>` exists but is a symlink, or is not a directory | `refused`: `install()` never creates either, so it is not ours as written |
 | 5 | the directory exists and the hash of its `SKILL.md` differs from the manifest `sha256` — an unreadable or absent `SKILL.md` counts as differing — and the name is not in `force` | `refused`: "diverged from what was installed; local edits would be lost — re-run with --force <name>". Decided here: refuse, mirroring ADR-4's stance that nothing destroys local work without consent. As with `update`, only `SKILL.md` is hashed, so an edit confined to `reference/` is deleted without asking — ADR-4's accepted limit, not a new one |
-| 6 | otherwise | removed, in three steps below |
+| 6 | otherwise | removed, in the four steps below |
 
 **Order: move aside, then the manifest, then delete.** Decided here, because each interrupted state
 is one `status` can name and one re-running `remove` completes:
@@ -1594,14 +1616,20 @@ is one `status` can name and one re-running `remove` completes:
 3. Write the manifest without the entry: new `manifest.drop(repo_dir, name, *, bundle) -> Manifest`,
    the mirror of `upsert` (read, `Manifest.without_pattern(name, bundle=...)`, atomic `write()`;
    prior entries byte-identical, since `_serialize_pattern` depends only on its own entry). If it
-   raises, rename `.removing` back to `<installed_as>/` and report `failed`.
-4. `shutil.rmtree(.<installed_as>.removing, ignore_errors=True)`. A leftover is reported by `status`
-   as debris.
+   raises, report `failed` — and **only if step 2 renamed a directory**, rename `.removing` back to
+   `<installed_as>/` first. On the resume path (`directory_existed: false`) there is nothing to
+   rename back, and a `.removing` found there was already deleted in step 1.
+4. `shutil.rmtree(.<installed_as>.removing, ignore_errors=True)`, and the same for a
+   `.<installed_as>.replaced` stash if one sat beside the directory (rule 3's second half). A
+   leftover is reported by `status` as debris.
 
 Interrupted after step 2: the manifest lists the pattern, its directory is absent, and
 `.<installed_as>.removing` is present — `status` shows all three, and re-running `remove` reaches
 rule 6 with `directory_existed: false` and finishes. Interrupted after step 3: debris only, no
-record. The alternative orders are worse. Manifest first leaves an unrecorded `tcs-<name>/`, which
+record — a re-run is refused by rule 1, because the manifest no longer lists the pattern, and
+`status` reports the `.removing` entry as debris that is safe to delete. That is the one state a
+re-run does not finish, and it needs nothing finished: the pattern is already out of the listing
+and out of the record. The alternative orders are worse. Manifest first leaves an unrecorded `tcs-<name>/`, which
 rule 1 then forbids `remove` from deleting, so the user must delete it by hand. Delete first leaves
 a half-deleted directory the harness still lists.
 
@@ -1624,11 +1652,35 @@ write with its own interruption states, and it would erase the record that setup
 ##### `status <repo>` — reads only
 
 The verb the advisory's `UNKNOWN` segment points users to. Calls `status.status(toplevel,
-catalogue_dir=...)`, in a new read-only module `lib/status.py` — decided here, because a module that
-never imports `install` makes "status writes nothing" checkable by reading its imports:
+catalogue_dir=...)`, in a new read-only module `lib/status.py` — decided here, so that "status
+writes nothing" is checkable from the module's source rather than argued.
+
+**A leaf module, `lib/paths.py`, decided here** — corrected 2026-10-06. This section first said
+`status.py` "never imports `install`", while it needs `install.DEFAULT_CATALOGUE_DIR` and the
+`SKILL.md` hash, which is `install._hash_if_present`, a private function. `paths.py` holds what
+both the writer and the reader need, and nothing that writes:
 
 ```
-status(repo_dir, *, catalogue_dir=DEFAULT_CATALOGUE_DIR) -> StatusReport
+PLUGIN_ROOT, PLUGIN_JSON, DEFAULT_CATALOGUE_DIR     path expressions, no I/O at import
+TMP_SUFFIX = ".tmp"; REPLACED_SUFFIX = ".replaced"; REMOVING_SUFFIX = ".removing"
+sha256_or_none(path) -> str | None                  install._hash_if_present, moved
+```
+
+`install.py` and `companions.py` import the root and the catalogue default from it, which
+collapses two of the three `parents[...]` derivations (`install.py`'s `_PLUGIN_ROOT`,
+`companions.py`'s `_DEFAULT_CATALOGUE_DIR`); `install.DEFAULT_CATALOGUE_DIR` stays as a re-export,
+because it is a public name. `install.py` uses the three suffixes for `.tmp` and `.replaced`, and
+`remove()` uses `.removing`. **`patterns_drift.py` keeps its own derivation**, because it must find
+`lib/` before it can import anything from it, and its "missing lib → exit 0, silent stdout"
+contract forbids any lib import at module level, which a `paths`-derived default argument would
+need. `paths.py` stays importable from a copy, as the others are: no I/O at import.
+
+The property, stated so a test can check it: among this plugin's modules, `status.py` imports only
+`manifest` and `paths`, and calls only `manifest.read` and `manifest._manifest_path` — never
+`write`, `upsert` or `drop`. A test parses `status.py` with `ast` and asserts both.
+
+```
+status(repo_dir, *, catalogue_dir=paths.DEFAULT_CATALOGUE_DIR) -> StatusReport
 
 StatusReport (frozen)
     manifest_state: "present" | "absent" | "unparseable" | "unreadable"
@@ -1636,7 +1688,12 @@ StatusReport (frozen)
     bundle:         str | None
     patterns:       name -> PatternStatus
     unlisted:       tuple[str, ...]   tcs-* directories no manifest entry names, sorted
-    debris:         tuple[str, ...]   .tcs-* entries under .claude/skills/, sorted
+    debris:         tuple[Debris, ...] sorted by name
+
+Debris (frozen)
+    name:       str                   entry name inside .claude/skills/
+    kind:       "install-tmp" | "replaced" | "removing" | "manifest-tmp" | "unknown"
+    resolution: str                   what the user should do, from the table below
 
 PatternStatus (frozen)
     installed_as, installed_version: str
@@ -1663,12 +1720,26 @@ supply the expected value, so a wrong rule fails both rows instead of agreeing w
 `status` reports a manifest that cannot be parsed
 **verbatim, with exit 0**: that is the Error Handling row "Manifest present but unparseable",
 "reported verbatim by `status`", and it is the one verb that must still work when the manifest is
-broken. An `OSError` on the manifest is `unreadable`, where the reporter fails open silently. When
-the manifest is not `present`, `patterns` is empty and every `tcs-*` directory is `unlisted`.
-`debris` lists every dot-prefixed `.tcs-*` entry **except the manifest itself**
-(`.tcs-patterns-manifest` matches the same prefix) without classifying its suffix (`.tmp`,
-`.replaced`, `.removing`): the names are the writer's, and restating them here would be a second
-copy to drift.
+broken. An `OSError` on the manifest is `unreadable`; there the reporter writes empty stdout, exits
+0, and puts one line on stderr, `patterns_drift: <error>`, which the advisory never shows. When the
+manifest is not `present`, `patterns` is empty and every `tcs-*` directory is `unlisted`.
+
+**`debris` is classified, with the resolution text the skill renders** — corrected 2026-10-06. It
+first listed `.tcs-*` names unclassified, on the grounds that restating the writer's suffixes would
+be a second copy. `paths.py` now holds the suffixes, so classifying them reads the writer's own
+constants, and two states needed telling apart: one is the user's only copy, and one is safe to
+delete. That first version also missed the manifest's own temp file, which `manifest.write` names
+`.` + `.tcs-patterns-manifest` + `.<random>.tmp` (two leading dots, so a `.tcs-*` glob misses it).
+An entry is debris when its name starts with `.tcs-` and is not the manifest itself, or starts
+with `.` + `manifest.MANIFEST_FILENAME` + `.`:
+
+| `kind` | Name | `resolution` |
+|---|---|---|
+| `install-tmp` | `.tcs-<p>` + `TMP_SUFFIX` | safe to delete; the next `install` of `<p>` deletes it itself |
+| `replaced` | `.tcs-<p>` + `REPLACED_SUFFIX` | with `tcs-<p>/` present: safe to delete, and the next refresh or `remove` deletes it. With `tcs-<p>/` absent: **this is your copy of `<p>`**; move it back to `tcs-<p>/` |
+| `removing` | `.tcs-<p>` + `REMOVING_SUFFIX` | with the manifest still listing `<p>`: run `remove <p>` to finish. Otherwise: safe to delete; the removal had finished except for this |
+| `manifest-tmp` | `.` + `MANIFEST_FILENAME` + `.*` + `.tmp` | safe to delete; a manifest write was interrupted before its rename, and the manifest itself is intact |
+| `unknown` | any other match | not a name this tool writes; left alone |
 
 | Key | Type | Content |
 |---|---|---|
@@ -1676,7 +1747,7 @@ copy to drift.
 | `manifest` | object | `{state, error, bundle}` |
 | `patterns` | object | pattern → `{installed_as, installed_version, catalogue_version, state, directory_present, diverged}` |
 | `unlisted` | array | directory names |
-| `debris` | array | entry names |
+| `debris` | array | `{name, kind, resolution}` |
 
 ### Implementation Examples
 
@@ -2601,7 +2672,7 @@ decided answer instead of repeating the derivation
 |---|---|---|
 | Not inside a git repository | C3, step 1 | Abort before any read of the target. Message names the resolution. |
 | An unparseable `package.json` / `pyproject.toml` | C2 | **Never fatal; the dependency *read* is skipped, not the manifest.** Corrected 2026-10-05 -- this row read "A broken manifest is not a signal", which measurement contradicts: a rule keying on a manifest's **existence** keeps firing, so a `pyproject.toml` holding `[project` still yields `python-project`, a garbage `go.mod` still yields `go-idiomatic`, and a `tsconfig.json` holding `{` still yields `typescript-strict`. Only content-derived signals vanish. One further deliberate case: `_pyproject_deps_and_pytest` matches `[tool.pytest.ini_options]` by regex **before** parsing, so a file `tomllib` rejected still opens `q3_test_quality` -- a typo in `pyproject.toml` has not stopped the repository running pytest. A broken manifest never poisons its siblings. The file is listed in `manifests_walked` so its absence from dependency evidence is explicable. All six legs are pinned by tests as of 2026-10-05 and each was mutation-checked against the guard clause it covers `[ref: tests/test_patterns_detect.py, "An unparseable manifest"]`. |
-| Target repository unreadable in part | C2 | Scan continues over what is readable; the report names what it could not read, so a thin proposal is never silently a permissions artefact. Unimplemented until T5.1a: `detect.py` skipped unreadable paths silently. The report's `unreadable` key now carries them (2026-10-06). |
+| Target repository unreadable in part | C2 | Scan continues over what is readable; the report names what it could not read, so a thin proposal is never silently a permissions artefact. Unimplemented: `detect.py` skips unreadable paths silently. T5.1a's `unreadable` key is specified to carry them (2026-10-06). |
 | Name collision | C4, step 6 | That pattern is not written; the collision is reported with both locations; the remaining patterns still install (F5's fourth criterion). No rescan. |
 | `SKILL.md` without a frontmatter `name:` line, **in the catalogue being installed** | C5 | `InstallError`, nothing written for that pattern. Prevents installing under the unprefixed name. |
 | A `SKILL.md` **in a scanned namespace** that cannot be read or carries no usable `name:` | C4, step 6 | Skipped, never fatal, and reported through `GuardReport.skipped` as `(path, reason)`. Four inputs reach this and each needs a distinguishable reason: unreadable, no frontmatter block, no `name:` key, empty `name:`. Added 2026-10-05; the row above it is the same condition with the opposite behaviour, and the difference is deliberate rather than an inconsistency. **The file C5 refuses to install is ours; the file C4 skips belongs to a third party.** A broken file in our own catalogue is a defect in this repository and must stop that pattern loudly, because installing it would register the pattern under the unprefixed name and silently defeat ADR-1. A broken file in somebody else's plugin is not ours to fix and must not stop this repository's install — the same stance `detect.py` takes for an unparseable manifest two rows above. It is reported rather than swallowed because a name the guard could not check is a name it cannot vouch for, and a caller that cannot see the omission cannot warn about it. Measured: zero of the 259 real `SKILL.md` files on this machine fail to parse, so every one of the four cases is fixture-only `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`. |
@@ -2611,13 +2682,13 @@ decided answer instead of repeating the derivation
 | Installed pattern diverges from its hash | C5 on `update`, **not `install`** | The user is asked per pattern with a unified diff (ADR-4). Default is to skip, so an unanswered prompt cannot destroy local work. **This row is T3.4's, not T3.3's** — noted 2026-10-05 after T3.3's gate flagged that it reads as a third `install()` obligation and would contradict "no `AskUserQuestion` in `install.py`" if anyone tried to satisfy it there. `install()` detects divergence only to the extent of declining to call a locally-edited pattern `unchanged`; prompting about it is `update()`'s. **That gap is now closed** — `update()`'s signature, its three-state table and its eight decisions are at `[ref: SDD/Interface Specifications/Data model: the update path (C5's second verb)]`, settled before dispatch the same way C5's four were settled before T3.3. The diff this row refers to has two normative properties as of decision 4: the installed file is the `from` side, so the user's own edit appears as a deletion, and both file labels are populated. |
 | Catalogue `VERSION` missing or non-numeric | C7, C9 | C7 reports the pattern as unknown rather than drifted; C9 fails the gate. A pattern without a version cannot be distributed. |
 | Pattern name given to the catalogue reader is unknown | C8 | Lists the 21 available names. |
-| Invalid CLI arguments: a pattern name not in the catalogue, `--answers` naming a closed gate or a pattern its gate does not settle, `--force` naming a pattern not being removed | C3's CLI | Exit 2, stdout empty, nothing written. Added 2026-10-06 `[ref: SDD/Interface Specifications/Process contract: the CLI the skill drives]`. |
+| Invalid CLI arguments: an `install` pattern name not in the catalogue (`remove` takes any name, since a pattern deleted upstream is exactly what `status` sends a user to remove), `--answers` naming a closed gate or a pattern its gate does not settle, `--force` naming a pattern not being removed | C3's CLI | Exit 2, stdout empty, nothing written. Added 2026-10-06 `[ref: SDD/Interface Specifications/Process contract: the CLI the skill drives]`. |
 | Manifest unparseable or unreadable when `install`, `update` or `remove` runs through the CLI | C3's CLI | Exit 3 before the guard or any write, stderr naming the file and pointing to `status`. `status` itself still exits 0 and reports the manifest's state and error verbatim. Added 2026-10-06. |
 | `update --accept` names a pattern the manifest does not list | C3's CLI | Exit 3 before `update()` is called. A misspelt name would otherwise silently decline the pattern the user had just approved. Added 2026-10-06. |
 | `remove` names a pattern the manifest does not list | C5 `remove()` | `refused`, and nothing is deleted. `remove` deletes only what the manifest records. Added 2026-10-06. |
 | `remove` names a pattern whose installed `SKILL.md` no longer matches the manifest hash | C5 `remove()` | `refused` unless named by `--force`, the same consent ADR-4 requires before `update` replaces an edit. Added 2026-10-06. |
-| `remove` finds a `.<installed_as>.replaced` stash, or a symlink or file where the pattern directory should be | C5 `remove()` | `refused`, naming the path. The stash may hold the user's only copy, and a link or file is not something `install()` wrote. Added 2026-10-06. |
-| `remove` interrupted between its steps | C5 `remove()` | Either the directory is absent while the manifest still lists it and `.<installed_as>.removing` is present, or only the `.removing` debris is left. `status` shows both states, and re-running `remove` completes the first. Added 2026-10-06. |
+| `remove` finds a `.<installed_as>.replaced` stash with the pattern directory absent, or a symlink or file where the pattern directory should be | C5 `remove()` | `refused`, naming the path and the resolution. That stash is the user's only copy, and a link or file is not something `install()` wrote. A stash beside a **present** directory is debris and is deleted with it. Added 2026-10-06. |
+| `remove` interrupted between its steps | C5 `remove()` | Either the directory is absent while the manifest still lists it and `.<installed_as>.removing` is present, or only the `.removing` debris is left. `status` shows both states. Re-running `remove` completes the first; in the second the manifest no longer lists the pattern, so a re-run is refused by rule 1, and `status` reports the `.removing` entry as debris that is safe to delete. Added 2026-10-06. |
 | A catalogue `SKILL.md` whose `description:` cannot be parsed | C3's CLI, `scan` | That pattern's `listing_cost` is `null`, and the skill shows "unknown", never 0. Added 2026-10-06. |
 
 ### Complex Logic
