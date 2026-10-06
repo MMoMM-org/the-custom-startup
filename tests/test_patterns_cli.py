@@ -421,7 +421,8 @@ def test_an_interpreter_older_than_3_11_exits_3(
         ["scan", "{repo}", "--answers", '["q1_backend"]'],
         ["scan", "{repo}", "--answers", "{not json"],
         ["scan", "{repo}", "--answers", '{"q1_backend": "api-design"}'],
-        ["remove", "{repo}", "hexagonal", "--force", "ddd"],
+        ["remove", "{repo}", "hexagonal", "--discard-edits", "ddd"],
+        ["remove", "{repo}", "hexagonal", "--force", "hexagonal"],
     ],
     ids=[
         "unknown-verb",
@@ -434,7 +435,8 @@ def test_an_interpreter_older_than_3_11_exits_3(
         "answers-not-an-object",
         "answers-not-json",
         "answers-value-not-an-array",
-        "force-names-a-pattern-not-being-removed",
+        "discard-edits-names-a-pattern-not-being-removed",
+        "the-old-override-flag-is-gone",
     ],
 )
 def test_usage_errors_exit_2_and_write_nothing(world: World, argv: list[str]) -> None:
@@ -800,33 +802,33 @@ def test_update_accept_on_one_of_two_diverged_leaves_the_other(world: World) -> 
 # =============================================================================
 
 
-def test_remove_passes_through_removed_refused_and_force(world: World) -> None:
+def test_remove_passes_through_removed_refused_and_discard_edits(world: World) -> None:
     _library_install(world, ["ddd", "hexagonal"])
     edited = _skills(world.repo) / "tcs-hexagonal" / "SKILL.md"
     edited.write_text(edited.read_text(encoding="utf-8") + "Edit.\n", encoding="utf-8")
     doc = _doc(_run(world, "remove", str(world.repo), "ddd", "hexagonal", "never-installed"))
     assert doc["removed"] == {"ddd": {"installed_as": "tcs-ddd", "version": "1", "directory_existed": True}}
     assert set(doc["refused"]) == {"hexagonal", "never-installed"}
-    assert "--force hexagonal" in doc["refused"]["hexagonal"]
+    assert "--discard-edits hexagonal" in doc["refused"]["hexagonal"]
     assert "not recorded in the manifest" in doc["refused"]["never-installed"]
     assert doc["failed"] == {}
     assert edited.is_file()
 
-    forced = _doc(_run(world, "remove", str(world.repo), "hexagonal", "--force", "hexagonal"))
-    assert forced["removed"] == {
+    discarded = _doc(_run(world, "remove", str(world.repo), "hexagonal", "--discard-edits", "hexagonal"))
+    assert discarded["removed"] == {
         "hexagonal": {"installed_as": "tcs-hexagonal", "version": "1", "directory_existed": True}
     }
     assert not edited.exists()
 
 
-def test_remove_force_is_per_name(world: World) -> None:
-    """Two diverged patterns, one named by --force: that one goes, the other
+def test_remove_discard_edits_is_per_name(world: World) -> None:
+    """Two diverged patterns, one named by --discard-edits: that one goes, the other
     is refused and left in place."""
     _library_install(world, ["ddd", "hexagonal"])
     for name in ("ddd", "hexagonal"):
         skill = _skills(world.repo) / f"tcs-{name}" / "SKILL.md"
         skill.write_text(skill.read_text(encoding="utf-8") + "Edit.\n", encoding="utf-8")
-    doc = _doc(_run(world, "remove", str(world.repo), "ddd", "hexagonal", "--force", "ddd"))
+    doc = _doc(_run(world, "remove", str(world.repo), "ddd", "hexagonal", "--discard-edits", "ddd"))
     assert set(doc["removed"]) == {"ddd"}
     assert set(doc["refused"]) == {"hexagonal"}
     assert (_skills(world.repo) / "tcs-hexagonal" / "SKILL.md").is_file()

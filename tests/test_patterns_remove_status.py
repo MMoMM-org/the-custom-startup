@@ -424,8 +424,10 @@ def test_status_module_imports_and_uses_only_the_read_only_allowlist():
 # =============================================================================
 
 
-def _remove(repo: Path, names, force=frozenset()):
-    return _load_lib("install").remove(repo, names, bundle=BUNDLE, force=frozenset(force))
+def _remove(repo: Path, names, discard_edits=frozenset()):
+    return _load_lib("install").remove(
+        repo, names, bundle=BUNDLE, discard_edits=frozenset(discard_edits)
+    )
 
 
 def _assert_refused_and_untouched(repo: Path, report, name: str, before_skills: str, before_manifest: bytes):
@@ -524,17 +526,17 @@ def test_remove_rule4_refuses_a_symlink_or_a_file_where_the_directory_should_be(
     assert _digest(elsewhere) == before_elsewhere
 
 
-def test_remove_rule5_refuses_an_edited_skill_md_without_force_and_removes_it_with(tmp_path):
+def test_remove_rule5_refuses_an_edited_skill_md_without_discard_edits_and_removes_it_with(tmp_path):
     repo, _cat = _setup(tmp_path, ["ddd"])
     (_skills(repo) / "tcs-ddd" / "SKILL.md").write_text("my edits\n", encoding="utf-8")
     before_skills, before_manifest = _digest(_skills(repo)), _manifest_bytes(repo)
 
     refused = _remove(repo, ["ddd"])
     _assert_refused_and_untouched(repo, refused, "ddd", before_skills, before_manifest)
-    assert "--force ddd" in refused.refused["ddd"]
+    assert "--discard-edits ddd" in refused.refused["ddd"]
 
-    forced = _remove(repo, ["ddd"], force={"ddd"})
-    assert forced.removed == {"ddd": ("tcs-ddd", "1", True)}
+    discarded = _remove(repo, ["ddd"], discard_edits={"ddd"})
+    assert discarded.removed == {"ddd": ("tcs-ddd", "1", True)}
     assert not (_skills(repo) / "tcs-ddd").exists()
     assert _load_lib("manifest").read(repo).patterns == {}
 
@@ -568,14 +570,14 @@ def test_remove_rule6_removes_directory_and_entry_and_leaves_no_debris(tmp_path)
     assert status.unlisted == ()
 
 
-def test_remove_forces_only_the_pattern_named_in_force(tmp_path):
-    """Kills a blanket-flag `force`: two diverged, one named."""
+def test_remove_discards_edits_only_for_the_pattern_named(tmp_path):
+    """Kills a blanket-flag `discard_edits`: two diverged, one named."""
     repo, _cat = _setup(tmp_path, ["ddd", "hexagonal"])
     for name in ("ddd", "hexagonal"):
         (_skills(repo) / f"tcs-{name}" / "SKILL.md").write_text("edited\n", encoding="utf-8")
     hexagonal_before = _digest(_skills(repo) / "tcs-hexagonal")
 
-    report = _remove(repo, ["ddd", "hexagonal"], force={"ddd"})
+    report = _remove(repo, ["ddd", "hexagonal"], discard_edits={"ddd"})
 
     assert sorted(report.removed) == ["ddd"]
     assert sorted(report.refused) == ["hexagonal"]

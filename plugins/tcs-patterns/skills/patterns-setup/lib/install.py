@@ -866,7 +866,7 @@ def _refusal(
     entry: "manifest.PatternEntry | None",
     *,
     skills_root: Path,
-    force: frozenset,
+    discard_edits: frozenset,
 ) -> str | None:
     """Rules 1-5 of the SDD's table; the first that applies decides. `None`
     means rule 6: remove it `[ref: SDD/Process contract: the CLI the skill
@@ -899,8 +899,8 @@ def _refusal(
     # Rule 5. Only SKILL.md is hashed: an edit confined to `reference/` is
     # deleted without asking -- ADR-4's accepted limit. Per name, never a
     # blanket flag.
-    if dest.is_dir() and paths.sha256_or_none(dest / "SKILL.md") != entry.sha256 and name not in force:
-        return f"diverged from what was installed; local edits would be lost -- re-run with --force {name}"
+    if dest.is_dir() and paths.sha256_or_none(dest / "SKILL.md") != entry.sha256 and name not in discard_edits:
+        return f"diverged from what was installed; local edits would be lost -- re-run with --discard-edits {name}"
     return None
 
 
@@ -959,10 +959,10 @@ def remove(
     names,
     *,
     bundle: str | None = None,
-    force: frozenset = frozenset(),
+    discard_edits: frozenset = frozenset(),
 ) -> RemoveReport:
     """Delete each named pattern and its manifest entry -- only what the
-    manifest records, never a diverged pattern unless its name is in `force`.
+    manifest records, never a diverged pattern unless its name is in `discard_edits`.
 
     Reads the manifest once, up front; `ManifestUnparseableError` and
     `OSError` propagate before anything is touched. Then, per pattern in
@@ -979,7 +979,7 @@ def remove(
     skills_root = repo_dir / ".claude" / "skills"
     if bundle is None:
         bundle = _bundle_version()
-    force = frozenset(force)
+    discard_edits = frozenset(discard_edits)
 
     manifest_before = manifest.read(repo_dir)
 
@@ -989,7 +989,7 @@ def remove(
 
     for name in sorted(set(names)):
         entry = manifest_before.patterns.get(name)
-        reason = _refusal(name, entry, skills_root=skills_root, force=force)
+        reason = _refusal(name, entry, skills_root=skills_root, discard_edits=discard_edits)
         if reason is not None:
             refused[name] = reason
             continue

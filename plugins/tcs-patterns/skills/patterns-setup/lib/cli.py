@@ -5,7 +5,7 @@
       scan    <repo> [--answers <json>]                  reads
       install <repo> <pattern>...                        WRITES
       update  <repo> [--accept <pattern>]...             WRITES
-      remove  <repo> <pattern>... [--force <pattern>]... WRITES
+      remove  <repo> <pattern>... [--discard-edits <pattern>]... WRITES
       status  <repo>                                     reads
 
 A `SKILL.md` can run a command but cannot import a module, so the skill owns
@@ -91,7 +91,7 @@ def _parser() -> argparse.ArgumentParser:
     remove = sub.add_parser("remove", help="remove what the manifest records")
     remove.add_argument("repo")
     remove.add_argument("patterns", nargs="+")
-    remove.add_argument("--force", action="append", default=[], metavar="PATTERN")
+    remove.add_argument("--discard-edits", action="append", default=[], metavar="PATTERN")
 
     status = sub.add_parser("status", help="what is installed and what has drifted (reads only)")
     status.add_argument("repo")
@@ -317,15 +317,15 @@ def _update(toplevel: Path, catalogue: Path, accept: list[str]) -> dict:
     }
 
 
-def _remove(toplevel: Path, names: list[str], forced: list[str]) -> dict:
+def _remove(toplevel: Path, names: list[str], discard_edits: list[str]) -> dict:
     import install
 
-    stray = sorted(set(forced) - set(names))
+    stray = sorted(set(discard_edits) - set(names))
     if stray:
-        raise _Usage(f"--force names patterns not being removed: {', '.join(stray)}")
+        raise _Usage(f"--discard-edits names patterns not being removed: {', '.join(stray)}")
     _read_manifest_or_refuse(toplevel)
 
-    report = install.remove(toplevel, names, force=frozenset(forced))
+    report = install.remove(toplevel, names, discard_edits=frozenset(discard_edits))
     return {
         "repo": str(toplevel),
         "removed": {
@@ -395,7 +395,7 @@ def main(argv=None) -> int:
         elif args.verb == "update":
             doc = _update(toplevel, catalogue, args.accept)
         elif args.verb == "remove":
-            doc = _remove(toplevel, args.patterns, args.force)
+            doc = _remove(toplevel, args.patterns, args.discard_edits)
         else:
             doc = _status(toplevel, catalogue)
     except _Usage as e:
