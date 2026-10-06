@@ -9,8 +9,14 @@ decides what to do, exactly as `drift_check_hook_bundle` does
 
     OK                        manifest present, every installed pattern current
     MISSING                   no manifest, or one that cannot be parsed
-    DRIFT:<p>:<inst>:<cat>    installed pattern behind the catalogue
-    UNKNOWN:<p>:<inst>        catalogue VERSION absent or non-numeric
+    DRIFT:<p>:<inst>:<cat>    installed pattern BEHIND the catalogue
+    UNKNOWN:<p>:<inst>        the catalogue cannot account for what is installed:
+                              its VERSION is absent or non-numeric, its pattern
+                              directory is gone (deleted upstream), or the
+                              installed version is AHEAD of it (a rollback)
+
+Versions compare as integers, so `01` against `1` is current. The comparison
+lives here, not in `manifest.is_current`, which `update()` also calls.
 
 Drift is computed from each pattern's own manifest `version`, never from the
 manifest's top-level `bundle`: `bundle` records the plugin version that last
@@ -69,9 +75,9 @@ def drift_lines(repo_dir: Path, *, catalogue_dir: Path = DEFAULT_CATALOGUE_DIR) 
     for name in sorted(current.patterns):
         entry = current.patterns[name]
         catalogue_version = _catalogue_version(catalogue_dir, name)
-        if catalogue_version is None:
+        if catalogue_version is None or int(entry.version) > int(catalogue_version):
             lines.append(f"UNKNOWN:{name}:{entry.version}")
-        elif not manifest_lib.is_current(entry, catalogue_version):
+        elif int(entry.version) < int(catalogue_version):
             lines.append(f"DRIFT:{name}:{entry.version}:{catalogue_version}")
     return lines or ["OK"]
 

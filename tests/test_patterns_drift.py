@@ -158,6 +158,21 @@ def test_unknown_and_drift_coexist_sorted_by_pattern_name(tmp_path):
     assert _lines(repo, cat) == ["DRIFT:ddd:1:2", "UNKNOWN:functional:1", "DRIFT:hexagonal:1:3"]
 
 
+def test_installed_ahead_of_catalogue_is_unknown_not_drift_and_suppresses_ok(tmp_path):
+    """A plugin rollback leaves the installed version AHEAD; DRIFT would advise a downgrade."""
+    repo, cat = _setup(tmp_path, ["ddd"])
+    _set_version(cat, "ddd", "3")
+    assert not _load_lib("install").update(repo, catalogue_dir=cat, bundle="2.0.0").failed
+    _set_version(cat, "ddd", "2")  # the catalogue rolls back below what is installed
+    assert _lines(repo, cat) == ["UNKNOWN:ddd:3"]
+
+
+def test_versions_compare_as_integers_so_a_leading_zero_is_current(tmp_path):
+    repo, cat = _setup(tmp_path, ["ddd"])
+    _set_version(cat, "ddd", "01")  # installed "1"
+    assert _lines(repo, cat) == ["OK"]
+
+
 def test_refreshing_one_pattern_advances_bundle_but_the_stale_one_still_drifts(tmp_path):
     """Decision 9: `bundle` records who last WROTE the manifest, not what every
     pattern came from. A reporter keyed on `bundle` answers OK here."""
@@ -266,11 +281,8 @@ def test_cli_exits_zero_and_stays_silent_when_the_lib_is_unreachable(tmp_path):
     assert r.stderr.strip() != ""
 
 
-def test_cli_catalogue_flag_without_value_fails(tmp_path):
-    repo, cat = _setup(tmp_path, ["ddd"])
-    r = _run(repo, None, tmp_path)
-    r.returncode == 0
-    # Run with --catalogue flag but no value should fail
+def test_cli_catalogue_flag_without_value_exits_zero_silently_with_usage_on_stderr(tmp_path):
+    repo, _cat = _setup(tmp_path, ["ddd"])
     cmd = [sys.executable, str(SCRIPT), str(repo), "--catalogue"]
     bad = subprocess.run(cmd, capture_output=True, text=True, cwd=tmp_path)
     assert bad.returncode == 0
