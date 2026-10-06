@@ -1200,3 +1200,49 @@ def test_pattern_the_catalogue_no_longer_carries_is_failed_and_untouched(tmp_pat
     assert _digest_tree(_skills_root(repo)) == tree_before
     assert _manifest_bytes(repo) == manifest_before
     assert (dest / "reference" / "guide.md").read_bytes() == b"# Upstream guide\n"
+
+
+def test_both_sides_absent_reports_the_catalogue_reason_not_the_directory_one(tmp_path: Path) -> None:
+    """A THIRD fixture, distinct from the inverse pair above: installed side
+    absent AND catalogue side absent, with the manifest still recording the
+    pattern. Reachable without anything exotic -- a user deletes
+    `tcs-<name>/` by hand and a plugin update drops the pattern upstream.
+
+    This is the one state where the ORDER of `_update_one`'s two early
+    guards is observable, and the inverse pair never constructs it: each of
+    those breaks exactly one side, so an installed-first implementation
+    still reports the catalogue cause for the catalogue fixture. Measured --
+    reordering the guards survives all 33 tests without this one.
+
+    Both messages are true; only one is actionable. Catalogue-first says the
+    pattern is gone upstream, so the manifest entry should be dropped.
+    Installed-first says "run install to write it", which **cannot succeed**
+    -- `install()` would fail on the same absent catalogue entry. So the
+    catalogue check runs first, and that is a requirement rather than an
+    accident `[ref: solution.md, "Data model: the update path (C5's second
+    verb)", decision 7, "When both sides are absent"]`.
+
+    Asserted on the reason's CONTENT. Both orderings put the name in
+    `failed`, which is exactly why every channel assertion in this file
+    passes under the reorder.
+    """
+    install = _load_install()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "ddd", version="1")
+    repo = tmp_path / "repo"
+    assert "ddd" in install.install(repo, ["ddd"], catalogue_dir=catalogue, bundle=TEST_BUNDLE).installed
+    shutil.rmtree(_skills_root(repo) / "tcs-ddd")  # the user deletes it by hand
+    shutil.rmtree(catalogue / "ddd")  # and upstream drops the pattern
+    manifest_before = _manifest_bytes(repo)
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    reason = report.failed["ddd"]
+    assert "catalogue" in reason, reason
+    # The non-actionable advice decision 7's table rules out, named
+    # literally: a reorder produces "run install to write it" here.
+    assert "run install" not in reason, reason
+    for channel in (report.refreshed, report.declined, report.current):
+        assert "ddd" not in channel
+    assert not (_skills_root(repo) / "tcs-ddd").exists()
+    assert _manifest_bytes(repo) == manifest_before
