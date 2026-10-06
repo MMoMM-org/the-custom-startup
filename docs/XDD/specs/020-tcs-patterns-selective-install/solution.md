@@ -1913,6 +1913,33 @@ nothing overwrites local work silently. Naming it converts a silent trap into a 
 can make. Nothing else changes: the channel is still `failed`, and nothing under `tcs-<name>/` is
 touched.
 
+**Only the directory-ABSENT state needs this, because the other stash state heals itself.** Measured
+2026-10-06, and recorded because the asymmetry looks like an oversight and is not. A hard kill
+*after* the new directory lands but *before* the stash is removed leaves `dest` present **and** a
+stash beside it. `update()` then reports that pattern `current` or `refreshed` normally, says nothing
+about the stash, and leaves it — but `_replace_subtree` deletes a pre-existing stash before
+refreshing, so the debris has a known expiry: the next refresh of that pattern. Nothing is lost
+either, because `dest` holds a working pattern. The directory-absent case is the one that cannot
+heal, precisely because the cleanup site is unreachable once the missing-directory guard fires first.
+One state is debris with an expiry; the other is the user's only copy with no expiry, and only the
+second earns a clause.
+
+**A directory that exists but has no readable `SKILL.md` is `failed` too, and that message may name
+`install`.** This extends decision 8 rather than adding a state: the record claims an installed
+pattern and what is there cannot be read, so neither comparison can run. `install()` is the right
+verb — it rewrites the directory from the catalogue — and unlike the case above nothing is at risk,
+because a stash in this state is covered by the self-healing paragraph and `dest` is present either
+way. Noted 2026-10-06 after the implementer flagged the message as its own extension with no home
+in this document.
+
+**An exception raised by `decide` propagates out of `update()`; it is not caught into `failed`.**
+Only `InstallError` is caught per pattern, which is the rule `install()` already follows. Deliberate:
+`decide` is C3's prompt, so an exception from it is a defect in the caller rather than a condition of
+one pattern, and burying it in a per-pattern `failed` row would report "this pattern could not be
+updated" for what is actually a broken interview. The patterns processed before it keep their
+already-written state, which is the same guarantee every other partial failure gives
+`[ref: SDD/Interface Specifications/Data model: the install plan and report (C5), decision 3]`.
+
 **9. `bundle` records the plugin version that last WROTE to this manifest, not the version every
 pattern came from.** Added 2026-10-06 after the implementer flagged it as unspecified and it was
 measured: installing `aaa` and `bbb` at bundle `1.0.0` and then refreshing **only** `aaa` at
