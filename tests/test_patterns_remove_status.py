@@ -475,7 +475,6 @@ def test_remove_deletes_a_stash_beside_a_present_directory_with_it(tmp_path):
     assert not (_skills(repo) / "tcs-ddd").exists()
 
 
-
 def test_remove_step1_clears_a_stale_removing_beside_a_present_directory(tmp_path):
     """Step 1 deletes this verb's own debris from an earlier run first; without
     it, the move-aside would rename onto an existing directory and fail."""
@@ -670,6 +669,83 @@ def test_a_manifest_drop_fault_puts_the_directory_back_byte_identical(tmp_path, 
     assert report.removed == {}
     assert _digest(_skills(repo)) == before_skills
     assert _manifest_bytes(repo) == before_manifest
+
+
+def test_a_failed_rename_back_after_a_drop_fault_is_reported_and_leaves_the_removing_directory(
+    tmp_path, monkeypatch
+):
+    """Step 4 fails AND the directory cannot be put back: both errors reach the
+    report, and `.removing` -- the user's only copy -- is left for `status`."""
+    repo, cat = _setup(tmp_path, ["ddd"])
+    skills = _skills(repo)
+    dest, removing = skills / "tcs-ddd", skills / ".tcs-ddd.removing"
+    before_dir, before_manifest = _digest(dest), _manifest_bytes(repo)
+    real_rename = os.rename
+    fired: list[str] = []
+
+    def drop_boom(*_a, **_k):
+        fired.append("drop")
+        raise OSError("drop-boom")
+
+    def rename_unless_back_to_dest(src, dst, *args, **kwargs):
+        if Path(dst) == dest:
+            fired.append("back")
+            raise OSError("back-boom")
+        return real_rename(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(_load_lib("manifest"), "drop", drop_boom)
+    monkeypatch.setattr(os, "rename", rename_unless_back_to_dest)
+    report = _remove(repo, ["ddd"])
+    monkeypatch.undo()
+
+    assert fired == ["drop", "back"]
+    assert "drop-boom" in report.failed["ddd"]
+    assert "back to" in report.failed["ddd"]
+    assert "back-boom" in report.failed["ddd"]
+    assert report.removed == {}
+    assert _digest(removing) == before_dir
+    assert not dest.exists()
+    assert _manifest_bytes(repo) == before_manifest
+    debris = _debris(_load_lib("status").status(repo, catalogue_dir=cat))
+    assert debris == {".tcs-ddd.removing": ("removing", "run `remove ddd` to finish")}
+
+
+def test_a_step1_failure_on_a_stale_removing_fails_and_goes_no_further(tmp_path, monkeypatch):
+    repo, _cat = _setup(tmp_path, ["ddd"])
+    skills = _skills(repo)
+    dest, stale = skills / "tcs-ddd", skills / ".tcs-ddd.removing"
+    (stale / "reference").mkdir(parents=True)
+    (stale / "reference" / "old.md").write_text("old\n", encoding="utf-8")
+    before_dir, before_stale = _digest(dest), _digest(stale)
+    before_manifest = _manifest_bytes(repo)
+    real_rmtree, real_rename = shutil.rmtree, os.rename
+    fired: list[str] = []
+    renames: list[tuple] = []
+
+    def rmtree_unless_stale(path, *args, **kwargs):
+        if Path(path) == stale:
+            fired.append("rmtree")
+            if kwargs.get("ignore_errors"):  # as the real rmtree: the error is swallowed
+                return None
+            raise OSError("step1-boom")
+        return real_rmtree(path, *args, **kwargs)
+
+    def spy_rename(*args, **kwargs):
+        renames.append(args)
+        return real_rename(*args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", rmtree_unless_stale)
+    monkeypatch.setattr(os, "rename", spy_rename)
+    report = _remove(repo, ["ddd"])
+    monkeypatch.undo()
+
+    assert fired == ["rmtree"]
+    assert "step1-boom" in report.failed["ddd"]
+    assert report.removed == {}
+    assert _digest(dest) == before_dir
+    assert _digest(stale) == before_stale
+    assert _manifest_bytes(repo) == before_manifest
+    assert renames == []
 
 
 def test_a_move_aside_rename_fault_leaves_the_manifest_and_directory_intact(tmp_path, monkeypatch):
