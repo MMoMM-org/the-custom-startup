@@ -52,7 +52,7 @@ deleting debris, committing without a yes.
 - Ask a question whose gate is closed, or ask more than the three gated questions.
 - Install a companion the user did not accept by name.
 - Claim that every citation in the installed set will resolve.
-- Pass `--accept` or `--force` for a pattern the user did not approve after seeing why.
+- Pass `--accept` or `--discard-edits` for a pattern the user did not approve after seeing its diff.
 - Commit, stage or push unless the user says yes to the commit offer.
 
 ## Workflow
@@ -213,19 +213,20 @@ python3 "<cli>" remove "<repo>" <pattern> ...
 ```
 
 Report `removed` (`directory_existed: false` means an interrupted remove was finished). Relay each
-`refused` reason verbatim. When a reason says the pattern diverged, its local edits would be lost:
-ask the user, per pattern, before forcing; the CLI shows no diff here, so point the user to
-`git -C "<repo>" diff -- .claude/skills/<installed_as>` if they want to see the edit first. For the
-approved ones, one call:
+`refused` entry's `reason` verbatim.
+
+An entry whose `diff` is not null diverged: its installed `SKILL.md` was edited, and removing it
+would lose those edits. For each one, show its `diff` in a `diff` block — the `---` side is the
+installed copy, so the user's edits appear as `-` lines that removing would delete. Then ask, per pattern, whether to delete it anyway. If none is approved, stop here. Otherwise, once,
+for the approved ones:
 
 ```bash
-python3 "<cli>" remove "<repo>" <pattern> --force <pattern>
+python3 "<cli>" remove "<repo>" <pattern> --discard-edits <pattern>
 ```
 
-If a hook blocks the call because of the `--force` flag, do not rephrase the command to slip past
-it; show the user the exact command to run themselves. Other refusals name their own resolution;
-never delete a directory or stash by hand to get past one. If anything was removed, say the removal
-is not committed and offer to commit as in 3g, with the manifest and each removed `installed_as`.
+Refusals with a null `diff` name their own resolution; never delete a directory or stash by hand to
+get past one. If anything was removed, say the removal is not committed and offer to commit as in
+3g, with the manifest and each removed `installed_as`.
 
 ### 6. status
 

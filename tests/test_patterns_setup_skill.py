@@ -173,9 +173,36 @@ def test_update_runs_update_then_accepts_each_approved_diff() -> None:
     _require_in_order(section, 'update "<repo>"', "declined", "diff", 'update "<repo>" --accept')
 
 
-def test_remove_asks_before_force_on_a_divergence() -> None:
+def test_remove_asks_before_discarding_edits_on_a_divergence() -> None:
     section = _verb_section("remove")
-    _require_in_order(section, 'remove "<repo>"', "diverged", "ask", "--force")
+    _require_in_order(section, 'remove "<repo>"', "diverged", "ask", 'remove "<repo>" <pattern> --discard-edits')
+
+
+def test_remove_shows_the_refusals_diff_before_asking() -> None:
+    """Consent is to a loss the user can see (SDD/ADR-4, 2026-10-06): the
+    refusal's own `diff` is shown, read as installed -> catalogue, before the
+    question. `git diff` shows nothing for an install never committed, so the
+    skill must not send the user there instead."""
+    section = _verb_section("remove")
+    _require_in_order(section, "`refused`", "`diff`", "`diff` block", "`-` lines", "ask")
+    assert "git diff" not in section and 'git -C "<repo>" diff' not in section
+
+
+def test_the_old_override_flag_and_its_hook_workaround_are_gone() -> None:
+    """The flag was renamed so the path runs from Claude; a leftover mention
+    would send the model back to the name a safety hook blocks."""
+    text = _text()
+    assert "--" + "force" not in text
+    assert "hook blocks" not in _verb_section("remove")
+
+
+def test_the_commit_offer_commits_only_the_paths_the_verb_changed() -> None:
+    """SDD/ADR-8, 2026-10-06: stage and commit only the changed paths, never
+    the user's other staged work, and never retry a hook refusal."""
+    section = _verb_section("install")
+    assert "status --porcelain" in section
+    assert 'commit -m "chore: install tcs patterns <names>" -- <path>' in section
+    assert "--no-verify" in section and "never retry" in section
 
 
 def test_status_relays_unknown_and_debris_resolutions() -> None:
