@@ -14,8 +14,8 @@ Act as the interviewer for a per-repository pattern selection: propose what the 
 justify, ask only the questions its gates opened, and install, refresh, remove or report exactly
 what the user confirmed.
 
-Every read and write of the target goes through `lib/cli.py`; the only other commands run against
-it are the git commands of the commit offer, after a yes. This skill owns the questions, the
+Every read and write of the target goes through `lib/cli.py`. No command other than step 1's lookup
+(which locates the CLI) and step 3g's git commands, after a yes, is ever run. This skill owns the questions, the
 confirmations and the narration; the CLI owns every decision about files.
 
 ## Interface
@@ -86,7 +86,7 @@ the first call, use the `repo` field the CLI returned (the git toplevel) for eve
 
 ### 3. install
 
-At most three screens: proposal, questions, confirmation. A repository whose gates are all closed
+Three screens before anything is written: proposal, questions, confirmation. A repository whose gates are all closed
 sees the proposal and the confirmation only.
 
 #### 3a. Scan
@@ -153,32 +153,34 @@ Show one screen; omit any group that is empty:
      found no <the gate's "Opens when" text from 3c>" — and say the user can add any of them by
      name if the detection missed something.
 
-Take the user's adjustments. The selection is the confirmed names; any name must be a key of
+Take the user's adjustments. The selection passed to `install` is the "Will install" names, plus
+the companions the user accepted, plus any names the user added by hand; each must be a key of
 `listing_cost`. If the selection is empty, say nothing was written and stop.
 
 #### 3f. Install
 
 ```bash
-python3 "<cli>" install "<repo>" <pattern> <pattern> ...
+python3 "<cli>" install "<repo>" "<pattern>" "<pattern>" ...
 ```
 
 Report `installed` and `unchanged` (already present, identical). For each `refused` entry give
 both locations: the existing skill at `path` (in `namespace`) and the `intended_path` this install
 would have written; the rest still installed, so after the user resolves a collision rerun 3f for
-that name alone, without a new scan. Relay each `failed` reason and each `skipped` entry (a skill
+that name alone, without a new scan; 3g is offered once, after the last 3f. Relay each `failed` reason and each `skipped` entry (a skill
 the guard could not check).
 
 #### 3g. Offer to commit
 
 Skip this when nothing was written. Otherwise say the files are written and not committed:
 `.claude/skills/.tcs-patterns-manifest` and `.claude/skills/<installed_as>` for each pattern this
-verb wrote. Offer to commit them. Only on a yes, keep the paths `git -C "<repo>" status --porcelain
--- <path>` prints a line for, then commit exactly those, leaving anything else the user has staged
-or edited alone:
+verb wrote. Offer to commit them. Only on a yes, run `git -C "<repo>" status --porcelain -- "<path>" "<path>" ...` once, over all of
+the verb's paths, and keep the paths it prints a line for. If none survives, skip the commit and say
+there is nothing to commit. Otherwise commit exactly those, leaving anything else the user has
+staged or edited alone:
 
 ```bash
-git -C "<repo>" add -A -- <path> ...
-git -C "<repo>" commit -m "chore: <verb> tcs patterns <names>" -- <path> ...
+git -C "<repo>" add -A -- "<path>" ...
+git -C "<repo>" commit -m "chore: <verb> tcs patterns <names>" -- "<path>" ...
 ```
 
 `<verb>` is the verb that ran: `install` here.
@@ -192,7 +194,7 @@ say the files stay in place, uncommitted, and that teammates get them only once 
 python3 "<cli>" update "<repo>"
 ```
 
-Report `refreshed` (version_before → version_after; equal versions mean a local edit was
+Report `refreshed` (`version_before` → `version_after`; equal versions mean a local edit was
 replaced), `current` and `failed`. If every channel is empty, nothing is installed here; suggest
 `install`.
 
@@ -202,7 +204,7 @@ the user's edits appear as `-` lines that the refresh would delete. Ask per patt
 replace it. If none is approved, stop here. Otherwise, once, for the approved ones:
 
 ```bash
-python3 "<cli>" update "<repo>" --accept <pattern> --accept <pattern>
+python3 "<cli>" update "<repo>" --accept "<pattern>" --accept "<pattern>"
 ```
 
 Patterns not approved stay byte-identical; say so. If anything was refreshed, offer to commit as in 3g, where `<verb>` is `update`, with the manifest and each refreshed `installed_as`.
@@ -211,8 +213,11 @@ Patterns not approved stay byte-identical; say so. If anything was refreshed, of
 
 Take the names from the user; if none were given, run step 6 and ask which to remove.
 
+Check every name before it reaches a shell command. A name is passed only if it is a key of `patterns` in step 6's `status`
+result, or it matches `^[a-z0-9-]+$`. Anything else: ask again and never pass it, quoted or not.
+
 ```bash
-python3 "<cli>" remove "<repo>" <pattern> ...
+python3 "<cli>" remove "<repo>" "<pattern>" ...
 ```
 
 Report `removed` (`directory_existed: false` means an interrupted remove was finished). Relay each
@@ -224,7 +229,7 @@ installed copy, so the user's edits appear as `-` lines that removing would dele
 for the approved ones:
 
 ```bash
-python3 "<cli>" remove "<repo>" <p1> <p2> --discard-edits <p1> --discard-edits <p2>
+python3 "<cli>" remove "<repo>" "<p1>" "<p2>" --discard-edits "<p1>" --discard-edits "<p2>"
 ```
 
 The positionals are the approved patterns only, and every `--discard-edits` name must also be positional (the CLI exits 2 otherwise).
