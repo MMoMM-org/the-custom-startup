@@ -1023,3 +1023,34 @@ def test_own_installed_membership_is_case_sensitive(tmp_path: Path) -> None:
 
     assert report.refused["TCS-OURS"][0] == "repo"
     assert "TCS-OURS" not in report.approved
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("", None),
+        ("no frontmatter\nname: x\n", None),
+        ("---\nname: x\n", None),
+        ("---\n---\n", []),
+        ("---\nname: x\ndescription: y\n---\nbody\n---\n", ["name: x", "description: y"]),
+        ("\n---\nname: x\n---\n", None),
+        ("  ---  \nname: x\n  ---\t\nbody\n", ["name: x"]),
+        ("---\r\nname: x\r\n---\r\n", ["name: x"]),
+        ("---\nname: x\n----\n---\n", ["name: x", "----"]),
+    ],
+    ids=[
+        "empty-text",
+        "no-frontmatter",
+        "unterminated",
+        "empty-block",
+        "normal-stops-at-first-close",
+        "leading-blank-line",
+        "delimiters-are-stripped",
+        "crlf",
+        "four-dashes-is-not-a-delimiter",
+    ],
+)
+def test_frontmatter_lines_pins_the_block_extent(text: str, expected: list[str] | None) -> None:
+    """Hand-typed: the lines strictly between the first two `---` lines, or None."""
+    guard = _load_guard()
+    assert guard.frontmatter_lines(text) == expected

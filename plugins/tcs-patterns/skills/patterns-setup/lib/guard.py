@@ -279,6 +279,21 @@ def _parse_single_quoted(text: str) -> tuple[str | None, bool]:
     return None, False  # never closed
 
 
+def frontmatter_lines(text: str) -> list[str] | None:
+    """The lines strictly between the first two `---` delimiter lines, or
+    None when there is no well-formed block: the first line (after
+    stripping) is not `---`, or no later line closes it. The one reader of
+    the block's extent, shared by `_skill_name` and the CLI's description
+    reader."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != _FRONTMATTER_DELIM:
+        return None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == _FRONTMATTER_DELIM:
+            return lines[1:i]
+    return None
+
+
 def _skill_name(skill_md: Path) -> tuple[str | None, str | None]:
     """Return `(name, None)` on success or `(None, reason)` on any of the
     five skip cases. Reads only between the first two `---` delimiter
@@ -288,22 +303,14 @@ def _skill_name(skill_md: Path) -> tuple[str | None, str | None]:
     except (OSError, UnicodeDecodeError) as e:
         return None, f"unreadable: {e}"
 
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != _FRONTMATTER_DELIM:
+    block = frontmatter_lines(text)
+    if block is None:
+        # No block, or one opened with '---' and never closed -- the same
+        # fact, from this parser's point of view; shares one reason rather
+        # than inventing a sixth string for it.
         return None, "no usable frontmatter block"
 
-    end = None
-    for i in range(1, len(lines)):
-        if lines[i].strip() == _FRONTMATTER_DELIM:
-            end = i
-            break
-    if end is None:
-        # Opened with '---' and never closed -- the same fact, from this
-        # parser's point of view, as no block at all; shares the reason
-        # above rather than inventing a sixth string for it.
-        return None, "no usable frontmatter block"
-
-    matches = [m for m in (_NAME_LINE_RE.match(line) for line in lines[1:end]) if m is not None]
+    matches = [m for m in (_NAME_LINE_RE.match(line) for line in block) if m is not None]
     if not matches:
         return None, "no name: key"
     if len(matches) > 1:

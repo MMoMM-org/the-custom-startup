@@ -53,7 +53,6 @@ EXIT_REFUSED = 3
 
 PREFIX = "tcs-"  # ADR-1
 MAX_DESCRIPTION_CHARS = 1536  # skillListingMaxDescChars, CON-1
-_FRONTMATTER_DELIM = "---"
 _DESCRIPTION_KEY = "description:"
 
 
@@ -168,15 +167,13 @@ def _description(skill_md: Path) -> str | None:
     import guard
 
     try:
-        lines = skill_md.read_text(encoding="utf-8").splitlines()
+        text = skill_md.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
-    if not lines or lines[0].strip() != _FRONTMATTER_DELIM:
+    block = guard.frontmatter_lines(text)
+    if block is None:
         return None
-    end = next((i for i in range(1, len(lines)) if lines[i].strip() == _FRONTMATTER_DELIM), None)
-    if end is None:
-        return None
-    found = [line[len(_DESCRIPTION_KEY):] for line in lines[1:end] if line.startswith(_DESCRIPTION_KEY)]
+    found = [line[len(_DESCRIPTION_KEY):] for line in block if line.startswith(_DESCRIPTION_KEY)]
     if len(found) != 1:
         return None
     value, ok = guard._parse_name_scalar(found[0])
