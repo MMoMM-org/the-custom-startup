@@ -501,6 +501,24 @@ raises on it. The round-trip assertion T3.1 already requires is the standing gua
 `tomllib.loads` the bytes back, then compare — which fails on a mis-quoted value without anyone
 having to enumerate the escapes.
 
+**Amended 2026-10-07 (Marcus, PR #176 review): the manifest carries a format version and binds
+`installed_as` to the name.**
+
+- **`schema = 1`** is written as a top-level key. A manifest without it reads as schema 1, so
+  every manifest written before the amendment stays valid. A `schema` greater than the reader
+  supports is a manifest written by a newer tcs-patterns. It stays readable for reporting: the
+  reporter and `status` work, and only in that case are unknown keys tolerated. Every writer
+  (`write`, `upsert`, `drop`) refuses it, the CLI maps the refusal to exit 3 with "update the
+  plugin", and the file is never rewritten. Without this, an older plugin would read a newer
+  manifest as unparseable, and a re-install would drop the newer keys. A `schema` below 1, or one
+  that is not an integer, is unparseable.
+- **`installed_as` must equal `tcs-<name>`**, enforced in `read()` and on write. Until now only
+  `remove` checked it (its rule 2). `update` trusted it, so a hand-edited entry pointing `ddd` at
+  `tcs-mine` replaced an unrelated directory.
+- **`version` is 1-9 digits.** Python's `int()` refuses strings over 4300 digits, so an
+  unbounded version crashed `status` and silenced the reporter. **`bundle` is matched against a
+  strict pattern**, because a control character in it wrote fine and then failed every read.
+
 #### Data model: detection report (C2 → C3)
 
 `detect.py` returns this and writes nothing. It is the whole contract between scanning and asking,
@@ -1338,6 +1356,23 @@ validation that closes the phase.
   almost always means deleted upstream or ahead, which are both things the user should hear about.
   The advisory names the pattern and the read-only verb:
   `patterns ddd v3 not in the catalogue; run /tcs-patterns:patterns-setup status`.
+
+**Amended 2026-10-07 (Marcus, PR #176 review): the patterns segment reaches the user, not the
+model.** The pattern name in a `DRIFT` or `UNKNOWN` line comes from the repository's manifest. For
+`UNKNOWN` the catalogue cannot vouch for it, because a name deleted upstream looks exactly like an
+invented one. Before the amendment, the advisory copied that name into the session's
+`additionalContext`, so any repository's text could reach the model at session start. Now:
+
+- **Routing.** The patterns segment goes into the user-visible `systemMessage` only. Every other
+  segment keeps its routing.
+- **Length.** Names longer than 64 characters are dropped by both the reporter and the advisory's
+  line parser.
+- **Python version.** On Python below 3.11 the reporter prints `UNSUPPORTED:python` before
+  importing anything. The advisory turns that line into a one-line hint instead of paying for an
+  import that fails silently.
+- **Isolation.** The reporter runs as `python3 -I`.
+
+AC-11 checks the `systemMessage`, so its expectation is unchanged.
 
 #### Process contract: the generalized drift check
 
