@@ -52,7 +52,9 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -186,6 +188,7 @@ def test_serialized_file_matches_hand_typed_format(tmp_path: Path) -> None:
     path = _manifest_path(tmp_path, manifest)
     expected = (
         "# Written by /tcs-patterns:patterns-setup. Reviewed and committed like any other file.\n"
+        "schema = 1\n"
         'bundle = "2.0.0"\n'
         "\n"
         "[patterns.ddd]\n"
@@ -236,6 +239,7 @@ def test_patterns_are_written_in_sorted_order_regardless_of_insert_order(tmp_pat
     path = _manifest_path(tmp_path, manifest)
     expected = (
         "# Written by /tcs-patterns:patterns-setup. Reviewed and committed like any other file.\n"
+        "schema = 1\n"
         'bundle = "2.0.0"\n'
         "\n"
         "[patterns.ddd]\n"
@@ -350,9 +354,9 @@ def test_currency_determinable_without_installed_pattern_files(tmp_path: Path) -
     assert manifest.is_current(entry, catalogue_version="3") is True
 
 
-# A `bundle` value containing a quote and a newline. Representable literally
-# in the hand-written TOML this module produces, `_require_representable`
-# would let it through unescaped and the resulting file would both parse
+# A `bundle` value containing a quote and a newline. Written literally into
+# the hand-written TOML this module produces, without `_require_bundle`
+# refusing it first, the resulting file would both parse
 # (as a spurious top-level `malicious` key) and later fail `read()`'s
 # unknown-top-level-key check -- "write succeeds, every later read raises"
 # is the hazard this guard exists to prevent (measured against a build with
@@ -411,15 +415,17 @@ def test_write_creates_its_temp_file_beside_the_manifest(tmp_path: Path, monkeyp
     "simplify" this into an outcome assertion -- there is no outcome here
     that distinguishes right from wrong.
     """
+    import tempfile  # `write()` imports it lazily, so patch the module itself
+
     manifest = _load_manifest()
     calls: list[dict] = []
-    real_mkstemp = manifest.tempfile.mkstemp
+    real_mkstemp = tempfile.mkstemp
 
     def recording_mkstemp(*args, **kwargs):
         calls.append(kwargs)
         return real_mkstemp(*args, **kwargs)
 
-    monkeypatch.setattr(manifest.tempfile, "mkstemp", recording_mkstemp)
+    monkeypatch.setattr(tempfile, "mkstemp", recording_mkstemp)
 
     manifest.upsert(
         tmp_path, "ddd", version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"), bundle="2.0.0"
@@ -728,3 +734,258 @@ def test_drop_never_overwrites_an_unparseable_manifest(tmp_path: Path) -> None:
         manifest.drop(tmp_path, "ddd", bundle="2.0.0")
 
     assert path.read_bytes() == before
+
+
+# --- PR #176 review fixes: H1, L1, L3a, L3b, M4, M7 ---
+
+
+def _write_raw(repo_dir: Path, manifest: ModuleType, text: str) -> Path:
+    path = _manifest_path(repo_dir, manifest)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _ddd_block(installed_as: str = "tcs-ddd", version: str = "3") -> str:
+    return (
+        "[patterns.ddd]\n"
+        f'version = "{version}"\n'
+        f'installed_as = "{installed_as}"\n'
+        f'sha256 = "{_sha("ddd-3")}"\n'
+    )
+
+
+# H1: `installed_as` is bound to its pattern name (ADR-1). `update` trusts the
+# entry's `installed_as`, so an entry pointing `ddd` at `tcs-mine` would let it
+# overwrite a directory that is not the pattern's.
+
+
+def test_read_refuses_an_installed_as_not_bound_to_its_pattern_name(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    _write_raw(tmp_path, manifest, 'bundle = "2.0.0"\n\n' + _ddd_block(installed_as="tcs-mine"))
+
+    with pytest.raises(manifest.ManifestUnparseableError) as e:
+        manifest.read(tmp_path)
+
+    assert "patterns.ddd" in str(e.value)
+    assert "tcs-mine" in str(e.value)
+
+
+def test_with_pattern_refuses_an_installed_as_naming_another_pattern() -> None:
+    manifest = _load_manifest()
+    entry = manifest.PatternEntry(version="3", installed_as="tcs-hexagonal", sha256=_sha("ddd-3"))
+
+    with pytest.raises(ValueError):
+        manifest.Manifest(bundle="2.0.0", patterns={}).with_pattern("ddd", entry, bundle="2.0.0")
+
+
+def test_upsert_refuses_a_mismatched_pair_and_writes_nothing(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+
+    with pytest.raises(ValueError):
+        manifest.upsert(
+            tmp_path, "ddd", version="3", installed_as="tcs-mine", sha256=_sha("ddd-3"), bundle="2.0.0"
+        )
+
+    assert not _manifest_path(tmp_path, manifest).exists()
+
+
+def test_write_refuses_a_hand_built_manifest_with_a_mismatched_pair(tmp_path: Path) -> None:
+    """`Manifest(...)` itself does not check the pair, so `write()` must: it is
+    the one gate every writer passes through."""
+    manifest = _load_manifest()
+    entry = manifest.PatternEntry(version="3", installed_as="tcs-mine", sha256=_sha("ddd-3"))
+
+    with pytest.raises(ValueError):
+        manifest.write(manifest.Manifest(bundle="2.0.0", patterns={"ddd": entry}), tmp_path)
+
+    assert not _manifest_path(tmp_path, manifest).exists()
+
+
+# L1: `version` is 1-9 digits. `int()` refuses a string past 4300 digits, which
+# crashed `status` and silenced the drift reporter.
+
+
+def test_pattern_entry_accepts_a_nine_digit_version_and_refuses_ten() -> None:
+    manifest = _load_manifest()
+    assert manifest.PatternEntry(version="123456789", installed_as="tcs-ddd", sha256=_sha("x")).version == "123456789"
+    with pytest.raises(ValueError):
+        manifest.PatternEntry(version="1234567890", installed_as="tcs-ddd", sha256=_sha("x"))
+
+
+def test_read_refuses_a_version_too_long_for_int(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    _write_raw(tmp_path, manifest, 'bundle = "2.0.0"\n\n' + _ddd_block(version="9" * 5000))
+
+    with pytest.raises(manifest.ManifestUnparseableError):
+        manifest.read(tmp_path)
+
+
+# L3a: `bundle` has a shape of its own. A carriage return used to pass the
+# quote/backslash/newline check, get written, and then fail `tomllib` on every
+# later read -- bricking every writing verb.
+
+
+@pytest.mark.parametrize("bad", ["1.0.0\r", "1.0.0 ", "1.0.0\t", "", "1" * 65, "2.0.0\n"], ids=repr)
+def test_upsert_refuses_an_unshaped_bundle_and_writes_nothing(tmp_path: Path, bad: str) -> None:
+    manifest = _load_manifest()
+
+    with pytest.raises(ValueError):
+        manifest.upsert(tmp_path, "ddd", version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"), bundle=bad)
+
+    assert not _manifest_path(tmp_path, manifest).exists()
+
+
+@pytest.mark.parametrize("good", ["2.0.0", "2.0.0-rc.1+build.7", "1" * 64], ids=["plain", "semver-full", "64-chars"])
+def test_upsert_accepts_a_shaped_bundle(tmp_path: Path, good: str) -> None:
+    manifest = _load_manifest()
+    manifest.upsert(tmp_path, "ddd", version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"), bundle=good)
+    assert manifest.read(tmp_path).bundle == good
+
+
+@pytest.mark.parametrize("escaped", ["1.0.0\\r", "1.0.0 x", "1.0.0\\u0007"], ids=["cr", "space", "bel"])
+def test_read_refuses_an_unshaped_bundle(tmp_path: Path, escaped: str) -> None:
+    manifest = _load_manifest()
+    _write_raw(tmp_path, manifest, f'bundle = "{escaped}"\n')
+
+    with pytest.raises(manifest.ManifestUnparseableError) as e:
+        manifest.read(tmp_path)
+
+    assert "bundle" in str(e.value)
+
+
+# L3b: the temp file is fsync'd, with its full content, before the rename.
+
+
+def test_write_fsyncs_the_complete_temp_file_before_replacing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mechanism, like the two tests above: a lost-power reordering cannot be
+    produced in a test. What is asserted is that `fsync` ran on a descriptor
+    whose file already held every byte, and that it ran before `os.replace`."""
+    manifest = _load_manifest()
+    events: list[tuple[str, int]] = []
+    real_fsync, real_replace = manifest.os.fsync, manifest.os.replace
+
+    def recording_fsync(fd):
+        events.append(("fsync", os.fstat(fd).st_size))
+        return real_fsync(fd)
+
+    def recording_replace(src, dst):
+        events.append(("replace", os.stat(src).st_size))
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(manifest.os, "fsync", recording_fsync)
+    monkeypatch.setattr(manifest.os, "replace", recording_replace)
+
+    manifest.upsert(tmp_path, "ddd", version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"), bundle="2.0.0")
+
+    final_size = _manifest_path(tmp_path, manifest).stat().st_size
+    assert [kind for kind, _ in events] == ["fsync", "replace"]
+    assert events[0][1] == final_size
+
+
+# M4: `tempfile` costs ~33ms to import, and the read-only drift reporter
+# imports this module at every session start.
+
+
+def test_importing_manifest_does_not_import_tempfile() -> None:
+    code = (
+        "import sys\n"
+        f"sys.path.insert(0, {str(LIB_DIR)!r})\n"
+        "import manifest\n"
+        "print('tempfile' in sys.modules)\n"
+    )
+    r = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == "False\n"
+
+
+# M7: a format version. `schema = 1` is written; a missing one reads as 1; a
+# newer one is readable for reporting but never rewritten.
+
+
+def test_a_manifest_without_schema_reads_as_schema_1_and_is_rewritten_with_it(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    path = _write_raw(tmp_path, manifest, 'bundle = "2.0.0"\n\n' + _ddd_block())
+
+    assert manifest.read(tmp_path).schema == 1
+
+    manifest.upsert(tmp_path, "ddd", version="4", installed_as="tcs-ddd", sha256=_sha("ddd-3"), bundle="2.1.0")
+    assert "\nschema = 1\n" in path.read_text(encoding="utf-8")
+
+
+_NEWER = (
+    "schema = 2\n"
+    'bundle = "9.0.0"\n'
+    'future_top = "kept"\n'
+    "\n"
+    "[patterns.ddd]\n"
+    'version = "3"\n'
+    'installed_as = "tcs-ddd"\n'
+    f'sha256 = "{_sha("ddd-3")}"\n'
+    'future_field = ["kept"]\n'
+)
+
+
+def test_a_newer_schema_is_readable_and_tolerates_unknown_keys(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    _write_raw(tmp_path, manifest, _NEWER)
+
+    m = manifest.read(tmp_path)
+
+    assert m.schema == 2
+    assert m.bundle == "9.0.0"
+    assert m.patterns == {"ddd": manifest.PatternEntry(version="3", installed_as="tcs-ddd", sha256=_sha("ddd-3"))}
+
+
+def test_a_newer_schema_still_validates_known_fields(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    _write_raw(tmp_path, manifest, _NEWER.replace('installed_as = "tcs-ddd"', 'installed_as = "tcs-mine"'))
+
+    with pytest.raises(manifest.ManifestUnparseableError):
+        manifest.read(tmp_path)
+
+
+def test_schema_1_with_an_explicit_key_still_refuses_unknown_keys(tmp_path: Path) -> None:
+    manifest = _load_manifest()
+    _write_raw(tmp_path, manifest, _NEWER.replace("schema = 2", "schema = 1"))
+
+    with pytest.raises(manifest.ManifestUnparseableError):
+        manifest.read(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda m, repo: m.upsert(repo, "hexagonal", version="1", installed_as="tcs-hexagonal", sha256=_sha("h"), bundle="2.0.0"),
+        lambda m, repo: m.upsert(repo, "ddd", version="4", installed_as="tcs-ddd", sha256=_sha("d"), bundle="2.0.0"),
+        lambda m, repo: m.drop(repo, "ddd", bundle="2.0.0"),
+        lambda m, repo: m.write(m.read(repo), repo),
+        lambda m, repo: m.write(m.read(repo).without_pattern("ddd", bundle="2.0.0"), repo),
+    ],
+    ids=["upsert-new", "upsert-existing", "drop", "write-as-read", "write-derived"],
+)
+def test_every_writer_refuses_a_newer_schema_and_leaves_the_file_alone(tmp_path: Path, call) -> None:
+    manifest = _load_manifest()
+    path = _write_raw(tmp_path, manifest, _NEWER)
+    before = path.read_bytes()
+
+    with pytest.raises(manifest.ManifestNewerSchemaError) as e:
+        call(manifest, tmp_path)
+
+    assert "newer" in str(e.value)
+    assert "update" in str(e.value)
+    assert path.read_bytes() == before
+    assert list(path.parent.glob(f".{manifest.MANIFEST_FILENAME}.*")) == []
+
+
+@pytest.mark.parametrize(
+    "value", ["0", "-1", '"1"', "1.0", "true", "2.5"], ids=["zero", "negative", "string", "float", "bool", "float2"]
+)
+def test_an_unusable_schema_is_unparseable(tmp_path: Path, value: str) -> None:
+    manifest = _load_manifest()
+    _write_raw(tmp_path, manifest, f'schema = {value}\nbundle = "2.0.0"\n')
+
+    with pytest.raises(manifest.ManifestUnparseableError) as e:
+        manifest.read(tmp_path)
+
+    assert "schema" in str(e.value)

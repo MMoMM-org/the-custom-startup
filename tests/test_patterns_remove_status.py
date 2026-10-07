@@ -228,6 +228,51 @@ def test_status_reports_an_unparseable_manifest_verbatim(tmp_path):
     assert report.unlisted == ("tcs-ddd",)
 
 
+def test_status_and_the_reporter_keep_working_on_a_newer_schema_manifest(tmp_path):
+    """A manifest a newer tcs-patterns wrote is read-only here, not broken:
+    both read paths report it (PR #176 M7)."""
+    repo, cat = _setup(tmp_path, ["ddd"])
+    (cat / "ddd" / "VERSION").write_text("2\n", encoding="utf-8")
+    path = _load_lib("manifest")._manifest_path(repo)
+    text = path.read_text(encoding="utf-8").replace("schema = 1\n", "schema = 7\nfuture = true\n", 1)
+    assert "schema = 7" in text
+    path.write_text(text.replace('installed_as = "tcs-ddd"\n', 'installed_as = "tcs-ddd"\nextra = 1\n'), encoding="utf-8")
+
+    report = _load_lib("status").status(repo, catalogue_dir=cat)
+    assert report.manifest_state == "present"
+    assert report.patterns["ddd"].state == "DRIFT"
+    assert _reporter_stdout(repo, cat) == "DRIFT:ddd:1:2\n"
+
+
+def test_status_and_the_reporter_survive_a_version_too_long_for_int(tmp_path):
+    """`int()` refuses past 4300 digits; `read()` must refuse first (PR #176 L1)."""
+    repo, cat = _setup(tmp_path, ["ddd"])
+    path = _load_lib("manifest")._manifest_path(repo)
+    path.write_text(path.read_text(encoding="utf-8").replace('version = "1"', 'version = "' + "9" * 5000 + '"'), encoding="utf-8")
+
+    report = _load_lib("status").status(repo, catalogue_dir=cat)
+    assert report.manifest_state == "unparseable"
+    assert _reporter_stdout(repo, cat) == "MISSING\n"
+
+
+def test_update_never_touches_a_directory_an_unbound_installed_as_names(tmp_path):
+    """The PR #176 H1 repro: `installed_as = "tcs-mine"` with a matching sha
+    let `update` replace the user's own `tcs-mine/`."""
+    repo, cat = _setup(tmp_path, ["ddd"])
+    _catalogue_pattern(cat, "ddd", version="2")
+    skills = _skills(repo)
+    shutil.copytree(skills / "tcs-ddd", skills / "tcs-mine")
+    manifest = _load_lib("manifest")
+    path = manifest._manifest_path(repo)
+    path.write_text(path.read_text(encoding="utf-8").replace('"tcs-ddd"', '"tcs-mine"'), encoding="utf-8")
+    before = _digest(skills)
+
+    with pytest.raises(manifest.ManifestUnparseableError):
+        _load_lib("install").update(repo, catalogue_dir=cat, bundle=BUNDLE)
+
+    assert _digest(skills) == before
+
+
 @_ROOT_IGNORES_PERMISSIONS
 def test_status_reports_an_unreadable_manifest_verbatim(tmp_path):
     repo, cat = _setup(tmp_path, ["ddd"])
@@ -458,13 +503,17 @@ def test_remove_rule1_never_deletes_a_tcs_directory_the_manifest_does_not_list(t
     assert report.committed is False
 
 
-def test_remove_rule2_refuses_an_entry_whose_installed_as_names_another_pattern(tmp_path):
+def test_remove_rule2_refuses_an_entry_whose_installed_as_names_another_pattern(tmp_path, monkeypatch):
+    """`manifest.read()` now refuses such an entry itself (PR #176 H1), and
+    no writer can produce one, so rule 2 is defence in depth: reached here by
+    handing `remove()` an in-memory `Manifest` the reader would never return."""
     repo, _cat = _setup(tmp_path, ["ddd", "hexagonal"])
     manifest = _load_lib("manifest")
     m = manifest.read(repo)
     hexagonal = m.patterns["hexagonal"]
     pointed = manifest.PatternEntry(version="1", installed_as="tcs-hexagonal", sha256=hexagonal.sha256)
-    manifest.write(m.with_pattern("ddd", pointed, bundle=BUNDLE), repo)
+    hand_built = manifest.Manifest(bundle=BUNDLE, patterns={**m.patterns, "ddd": pointed})
+    monkeypatch.setattr(manifest, "read", lambda _repo_dir: hand_built)
     before_skills, before_manifest = _digest(_skills(repo)), _manifest_bytes(repo)
 
     report = _remove(repo, ["ddd"])

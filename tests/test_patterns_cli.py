@@ -545,6 +545,46 @@ def test_a_directory_at_the_manifest_path_exits_3_on_every_writing_verb(world: W
     assert _digest(world.repo) == before
 
 
+def _make_manifest_newer(repo: Path) -> None:
+    """Rewrite the manifest `_library_install` left as a schema-2 one carrying
+    keys this version does not know -- what a newer tcs-patterns would write."""
+    path = _manifest_path(repo)
+    text = path.read_text(encoding="utf-8")
+    text = text.replace("schema = 1\n", "schema = 2\nfuture_top = 1\n", 1)
+    assert "schema = 2" in text
+    path.write_text(text, encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["install", "{repo}", "ddd"], ["update", "{repo}"], ["remove", "{repo}", "hexagonal"]],
+    ids=["install", "update", "remove"],
+)
+def test_a_newer_schema_manifest_exits_3_on_every_writing_verb(world: World, argv: list[str]) -> None:
+    """Refused up front, before the guard or any copy: `install` must not land
+    a directory it then cannot record."""
+    _library_install(world, ["hexagonal"])
+    _write_pattern(world.cat, "hexagonal", version="2", body="Body v2.\n")  # so update has work
+    _make_manifest_newer(world.repo)
+    before = _digest(world.repo)
+    r = _run(world, *[a.replace("{repo}", str(world.repo)) for a in argv])
+    _refused(r, 3)
+    assert b"newer" in r.stderr
+    assert b"update" in r.stderr
+    assert not (_skills(world.repo) / "tcs-ddd").exists()
+    assert _digest(world.repo) == before
+
+
+def test_status_reports_a_newer_schema_manifest_with_exit_0(world: World) -> None:
+    _library_install(world, ["hexagonal"])
+    _make_manifest_newer(world.repo)
+    doc = _doc(_run(world, "status", str(world.repo)))
+    assert doc["manifest"]["state"] == "present"
+    assert doc["manifest"]["bundle"] == BUNDLE
+    assert set(doc["patterns"]) == {"hexagonal"}
+    assert doc["unlisted"] == []
+
+
 def test_update_accept_naming_an_unlisted_pattern_exits_3(world: World) -> None:
     _library_install(world, ["hexagonal"])
     _write_pattern(world.cat, "hexagonal", version="2", body="Body v2.\n")

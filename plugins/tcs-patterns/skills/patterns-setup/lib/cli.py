@@ -118,16 +118,22 @@ def _emit(doc: dict) -> None:
 
 def _read_manifest_or_refuse(toplevel: Path):
     """The writing verbs' up-front manifest read: unparseable or unreadable is
-    exit 3, before the guard or any write."""
+    exit 3, before the guard or any write. So is a manifest a newer
+    tcs-patterns wrote: readable, but never rewritten by this one."""
     import manifest
 
     try:
-        return manifest.read(toplevel)
+        current = manifest.read(toplevel)
     except (manifest.ManifestUnparseableError, OSError) as e:
         raise _Refused(
             f"the manifest cannot be read, so nothing was changed: {e}\n"
             "run `status` to see its state; fix or move the file aside, then run this again"
         ) from e
+    try:
+        manifest.refuse_newer_schema(current)
+    except manifest.ManifestNewerSchemaError as e:
+        raise _Refused(f"nothing was changed: {e}") from e
+    return current
 
 
 # =============================================================================
