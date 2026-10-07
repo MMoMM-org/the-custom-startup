@@ -72,33 +72,61 @@ def test_catalogue_located_from_base_directory_with_fallbacks():
     assert "not installed" in body
 
 
-def test_name_validated_before_any_path_is_built():
+def _section(heading: str) -> str:
+    """The workflow step whose `### N. <heading>` title matches, up to the next heading."""
     body = _body()
-    assert "^[a-z0-9-]+$" in body
-    assert body.index("^[a-z0-9-]+$") < body.index("<name>/SKILL.md")
+    workflow = body[body.index("## Workflow") :]
+    match = re.search(rf"^### \d+\. {re.escape(heading)}\n", workflow, re.M)
+    assert match, f"no workflow step titled {heading!r}"
+    rest = workflow[match.end() :]
+    nxt = re.search(r"^##+ ", rest, re.M)
+    return rest[: nxt.start()] if nxt else rest
+
+
+def _never_block() -> str:
+    body = _body()
+    start = body.index("**Never:**")
+    end = body.index("\n## ", start)
+    return body[start:end]
+
+
+def test_name_validated_before_any_path_is_built():
+    validate = _section("Validate the name")
+    read = _section("Show a known name")
+    assert "^[a-z0-9-]+$" in validate
+    assert "No path has been built" in validate
+    assert "<catalogue>/<name>/SKILL.md" not in validate
+    assert "<catalogue>/<name>/SKILL.md" in read
+    body = _body()
+    assert body.index("### 3. Validate the name") < body.index("### 4. Show a known name")
 
 
 def test_known_name_shows_full_body_and_lists_companion_files():
-    body = _body()
-    assert "<name>/SKILL.md" in body
-    assert re.search(r"\bfull\b|\bentire\b|\bcomplete\b", body)
-    assert "reference/" in body and "examples/" in body
-    assert re.search(r"names? of|list", body)
+    known = _section("Show a known name")
+    assert "show the whole file" in known
+    assert "list the names of the" in known
+    assert "`reference/`" in known and "`examples/`" in known
+    assert "Show the pattern's body verbatim and in full." in _body()
 
 
 def test_unknown_or_invalid_name_lists_available_never_empty():
     body = _body()
-    assert re.search(r"unknown", body, re.I)
-    assert re.search(r"invalid|rejected", body, re.I)
-    assert re.search(r"available (pattern )?names", body, re.I)
-    assert re.search(r"never (an )?empty|not empty|never .*empty", body, re.I)
+    assert "unknown   // name is well formed but not in the catalogue: available names listed" in body
+    assert "invalid   // name fails the check: available names listed" in body
+    listing = _section("List the available names")
+    assert "every available name" in listing
+    assert (
+        "- Answer an unknown or invalid name with an empty result or silence (never empty)."
+        in _never_block()
+    )
+    assert "- Answer an unknown or invalid name with the available names, whatever their count." in body
 
 
 def test_never_rule_writes_nothing():
-    body = _body()
-    never = body[body.index("**Never:**") :]
-    assert re.search(r"write|create|install", never, re.I)
-    assert "nothing" in body.lower()
+    never = _never_block()
+    assert "- Write, create, edit, install or delete anything." in never
+    assert "- Build a path from a name that has not passed the check." in never
+    assert "- Summarise or trim a pattern body." in never
 
 
 def test_catalogue_has_exactly_21_directories():
