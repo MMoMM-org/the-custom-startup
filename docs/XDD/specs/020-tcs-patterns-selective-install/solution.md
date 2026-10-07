@@ -1591,7 +1591,10 @@ runs; decided here): a typo is a usage error, not a pattern that "failed". Calls
 | `failed` | object | pattern → reason string |
 | `refused` | object | pattern → `{installed_as, namespace, path, intended_path}`: the guard's `(namespace, path)` and the directory this install would have written, so the collision is reported **with both locations** (F5) |
 | `skipped` | array | `{path, reason}` per `GuardReport.skipped` entry |
-| `committed` | boolean | always `false` (ADR-8) |
+
+**Amended 2026-10-07 (PR #176 review): no `committed` key, here or in `update`/`remove`.** It was
+always `false` and nothing read it. ADR-8 is unchanged: install still never commits, and the skill
+still says so and offers (C3); the CLI result simply does not carry a field for it.
 
 ##### `update <repo> [--accept <pattern>]...` — writes
 
@@ -1621,7 +1624,6 @@ leaves the repository untouched.
 | `declined` | object | pattern → `{version, diff}` — diverged and not accepted |
 | `current` | object | pattern → `{installed_as, version, sha256}` |
 | `failed` | object | pattern → reason string |
-| `committed` | boolean | always `false` |
 
 ##### `remove <repo> <pattern>... [--discard-edits <pattern>]...` — writes
 
@@ -1639,7 +1641,6 @@ RemoveReport (frozen, named channels)
                                        a rule said no; nothing touched. The diff is a str for
                                        rule 5 and None for every other rule
     failed:    name -> reason          an OSError; rolled back where possible
-    committed: always False
 ```
 
 **The override is `--discard-edits`, renamed from `--force` on 2026-10-06 (Marcus, from T5.1's
@@ -1739,7 +1740,6 @@ write with its own interruption states, and it would erase the record that setup
 | `removed` | object | pattern → `{installed_as, version, directory_existed}` |
 | `refused` | object | pattern → `{reason, diff}` — `diff` the unified diff (string) for a rule-5 refusal, `null` for every other rule. Changed 2026-10-06 from a bare reason string |
 | `failed` | object | pattern → reason string |
-| `committed` | boolean | always `false` |
 
 ##### `status <repo>` — reads only
 
@@ -1793,6 +1793,8 @@ StatusReport (frozen)
     patterns:       name -> PatternStatus
     unlisted:       tuple[str, ...]   tcs-* directories no manifest entry names, sorted
     debris:         tuple[Debris, ...] sorted by name
+    skills_error:   str | None        str(exception), verbatim, when .claude/skills exists but
+                                      cannot be listed; None otherwise (absent directory included)
 
 Debris (frozen)
     name:       str                   entry name inside .claude/skills/
@@ -1828,6 +1830,14 @@ broken. An `OSError` on the manifest is `unreadable`; there the reporter writes 
 0, and puts one line on stderr, `patterns_drift: <error>`, which the advisory never shows. When the
 manifest is not `present`, `patterns` is empty and every `tcs-*` directory is `unlisted`.
 
+**Amended 2026-10-07 (PR #176 review): a `.claude/skills` that cannot be listed is reported, not
+raised.** `status` used to crash with exit 1 when the skills directory existed but could not be
+listed (for example permission denied). It now returns the exception's text verbatim in
+`skills_error` (`null` when the directory lists or is absent), leaves `unlisted` and `debris` empty
+because nothing in it could be looked at, and exits 0. The manifest state is `unreadable`, not
+`absent`, when the skills directory cannot be listed: "absent" would claim setup never ran here, and
+nothing was established about that.
+
 **`debris` is classified, with the resolution text the skill renders** — corrected 2026-10-06. It
 first listed `.tcs-*` names unclassified, on the grounds that restating the writer's suffixes would
 be a second copy. `paths.py` now holds the suffixes, so classifying them reads the writer's own
@@ -1852,6 +1862,7 @@ with `.` + `manifest.MANIFEST_FILENAME` + `.` and ends with `paths.TMP_SUFFIX`:
 | `patterns` | object | pattern → `{installed_as, installed_version, catalogue_version, state, directory_present, diverged}` |
 | `unlisted` | array | directory names |
 | `debris` | array | `{name, kind, resolution}` |
+| `skills_error` | string \| null | `null` when `.claude/skills` lists (or is absent); otherwise the `OSError` text, verbatim. Added 2026-10-07 (PR #176 review) |
 
 ### Implementation Examples
 
@@ -2356,7 +2367,6 @@ UpdateReport (frozen, named channels)
     declined:   name -> (version, unified_diff)    diverged, and decide() said no
     current:    name -> (installed_as, version, sha256)    nothing to do
     failed:     name -> reason
-    committed:  always False
 
 decide(name, unified_diff) -> bool        defaults to returning False
 ```
@@ -2602,7 +2612,6 @@ InstallReport (frozen, named channels)
     installed:  name -> (installed_as, version, sha256)   newly written
     unchanged:  name -> (installed_as, version, sha256)   already current, not rewritten
     failed:     name -> reason                            raised internally, caught, skipped
-    committed:  always False
 ```
 
 **No `report_only` parameter.** An earlier revision of this signature carried `report_only=False`
@@ -2687,12 +2696,16 @@ target is always on the target's filesystem, so the rename is always atomic. The
 cross filesystems freely, because a copy is not a rename.
 
 **4. C5 reports; C3 offers.** `install.py` is a library with no interactive surface, and ADR-8's
-offer needs `AskUserQuestion`, which only a skill can raise. So C5 returns `InstallReport` with
-`committed=False` always, and stating "nothing was committed" plus making the offer is C3's
+offer needs `AskUserQuestion`, which only a skill can raise. So C5 returns `InstallReport` and never
+commits, and stating "nothing was committed" plus making the offer is C3's
 rendering of that report `[ref: SDD/Architecture Decisions/ADR-8]`. T3.3's success criterion
 "Report lists writes and states no commit was made" is therefore satisfied by the report *carrying*
-every write and `committed=False`; no test in T3.3 should look for an interactive prompt, and no
-`AskUserQuestion` belongs in `install.py`.
+every write, with no commit step anywhere in `install.py`; no test in T3.3 should look for an
+interactive prompt, and no `AskUserQuestion` belongs in `install.py`.
+
+**Amended 2026-10-07 (PR #176 review): `InstallReport`, `UpdateReport` and `RemoveReport` carry no
+`committed` field.** It was always `False` and nothing read it; the "never commits" point above
+stands without it.
 
 **5. The catalogue root is derived from `__file__`, never from `CLAUDE_PLUGIN_ROOT`.** Measured
 2026-10-05: `CLAUDE_PLUGIN_ROOT` is `None` in a Bash-tool subprocess, and the skill runs this code
