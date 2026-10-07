@@ -61,4 +61,4 @@ Load this when checking the rationale or primary source behind a piece of the ev
 
 ## Provenance
 
-Ported from `citypaul/.dotfiles` (`claude/.claude/skills/event-sourcing`) and restructured into PICS. See `docs/about/sources.md` for the upstream revision and what was changed in the port.
+Ported from `citypaul/.dotfiles` (`claude/.claude/skills/event-sourcing`) and restructured into PICS. The upstream revision and what was changed in the port are recorded in the-custom-startup repository's docs/about/sources.md (https://github.com/MMoMM-org/the-custom-startup/blob/main/docs/about/sources.md).
