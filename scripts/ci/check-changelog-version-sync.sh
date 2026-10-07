@@ -33,9 +33,9 @@
 # the check that would have caught a version gap had nothing to compare against
 # for exactly the plugin that had one.
 #
-# A CHANGELOG whose first heading is not a version (e.g. "## [Unreleased]") is
-# skipped for the comparison — the file exists, it just has nothing to compare
-# yet.
+# A CHANGELOG whose first heading is not a release (e.g. "## [Unreleased]",
+# "## [2.0.0-rc1]", or a non-canonical "## [2.00.0]") is skipped for the
+# comparison — the file exists, it just has nothing to compare yet.
 #
 # Usage:
 #   check-changelog-version-sync.sh [--allow-ahead N] [<plugin-dir> ...]
@@ -65,7 +65,8 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     -h|--help)
-      sed -n '3,39p' "$0"
+      # The whole header comment, however long it grows.
+      awk 'NR > 2 { if ($0 !~ /^#/) exit; print }' "$0"
       exit 0
       ;;
     -*)
@@ -84,11 +85,19 @@ if [ -z "${plugin_dirs// /}" ]; then
 fi
 
 # Print the version a CHANGELOG's first "## " heading names, or nothing when
-# the first heading is not a plain semver (Unreleased sections, prose headings).
+# the first heading is not a release (Unreleased sections, prose headings,
+# pre-releases).
+# A release is a canonical X.Y.Z (no leading zeros) opened by "[", whitespace
+# or line start and closed by "]", whitespace or end of line — so a
+# pre-release ("2.0.0-rc1"), build metadata ("2.0.0+7") or "2.00.0" names no
+# release at all. auto-bump-versions.sh and check-changelog-version-sync.sh
+# must apply this same rule, or the PR-side check accepts what the merge
+# will not produce.
 _changelog_version() {
   grep -m1 '^## ' "$1" 2>/dev/null \
-    | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' \
-    | head -1
+    | grep -oE '(^|[[:space:]]|\[)(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\]|[[:space:]]|$)' \
+    | head -1 \
+    | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'
 }
 
 _manifest_version() {

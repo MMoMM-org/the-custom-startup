@@ -67,6 +67,10 @@ def _version(path, *keys):
 @pytest.fixture
 def repo(tmp_path):
     """A repository at base: demo 1.4.4 with a CHANGELOG topped by 1.4.4."""
+    return _make_repo(tmp_path, "1.4.4")
+
+
+def _make_repo(tmp_path, base_version):
     env = _env(tmp_path)
     work = tmp_path / "work"
     work.mkdir()
@@ -78,10 +82,10 @@ def repo(tmp_path):
     )
     _manifest_path(work).parent.mkdir(parents=True)
     _manifest_path(work).write_text(
-        json.dumps({"name": "demo", "version": "1.4.4"}, indent=2) + "\n"
+        json.dumps({"name": "demo", "version": base_version}, indent=2) + "\n"
     )
     (work / "plugins" / "demo" / "CHANGELOG.md").write_text(
-        "# Changelog\n\n## [1.4.4] - 2026-09-04\n\n### Fixed\n\n- an older entry\n"
+        f"# Changelog\n\n## [{base_version}] - 2026-09-04\n\n### Fixed\n\n- an older entry\n"
     )
     _git(work, env, "add", "-A")
     _git(work, env, "commit", "--quiet", "-m", "base")
@@ -89,12 +93,14 @@ def repo(tmp_path):
     return {"work": work, "env": env, "base": base}
 
 
-def _commit_change(repo, heading=None, manifest_version=None):
-    """Touch the plugin; optionally rewrite the CHANGELOG top and the manifest."""
+def _commit_change(repo, heading=None, manifest_version=None, changelog_bytes=None):
+    """Touch the plugin; optionally rewrite the CHANGELOG and the manifest."""
     work, env = repo["work"], repo["env"]
     (work / "plugins" / "demo" / "notes.md").write_text("a change\n")
     if heading is not None:
         (work / "plugins" / "demo" / "CHANGELOG.md").write_text(_changelog(heading))
+    if changelog_bytes is not None:
+        (work / "plugins" / "demo" / "CHANGELOG.md").write_bytes(changelog_bytes)
     if manifest_version is not None:
         _manifest_path(work).write_text(
             json.dumps({"name": "demo", "version": manifest_version}, indent=2) + "\n"
@@ -111,8 +117,9 @@ def _run_bump(repo, head):
     )
 
 
-def _bumped_to(repo, heading=None, manifest_version=None):
-    head = _commit_change(repo, heading=heading, manifest_version=manifest_version)
+def _bumped_to(repo, heading=None, manifest_version=None, changelog_bytes=None):
+    head = _commit_change(repo, heading=heading, manifest_version=manifest_version,
+                          changelog_bytes=changelog_bytes)
     r = _run_bump(repo, head)
     assert r.returncode == 0, r.stdout + r.stderr
     return _version(_manifest_path(repo["work"]), "version")
@@ -199,3 +206,53 @@ def test_a_manifest_version_changed_in_the_diff_is_left_untouched(repo):
     """The author's own version wins, even against a next-major heading."""
     assert _bumped_to(repo, heading="## [2.0.0] - 2026-10-06",
                       manifest_version="1.4.9") == "1.4.9"
+
+
+# ---------------------------------------------------------------------------
+# What counts as a release request: a canonical X.Y.Z closed by "]",
+# whitespace or end of line — the same rule check-changelog-version-sync.sh
+# applies, so the PR-side check and the merge never disagree.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("heading", [
+    "## [2.0.0-rc1] - 2026-10-06",
+    "## [1.5.0-beta.2] - 2026-10-06",
+    "## [2.0.0+build.7] - 2026-10-06",
+])
+def test_a_pre_release_heading_requests_nothing(repo, heading):
+    """2.0.0-rc1 must not ship as the final 2.0.0."""
+    assert _bumped_to(repo, heading=heading) == "1.4.5"
+
+
+@pytest.mark.parametrize("heading", [
+    "## [2.00.0] - 2026-10-06",
+    "## [01.5.0] - 2026-10-06",
+    "## [1.05.0] - 2026-10-06",
+])
+def test_a_non_canonical_version_requests_nothing(repo, heading):
+    assert _bumped_to(repo, heading=heading) == "1.4.5"
+
+
+@pytest.mark.parametrize("raw", [
+    b"# Changelog\r\n\r\n## [2.0.0] - 2026-10-06\r\n\r\n- breaking\r\n",
+    b"# Changelog\r\n\r\n## 2.0.0\r\n\r\n- breaking\r\n",
+])
+def test_a_crlf_heading_is_read(repo, raw):
+    assert _bumped_to(repo, changelog_bytes=raw) == "2.0.0"
+
+
+def test_unreleased_above_a_next_major_heading_is_a_patch_bump(repo):
+    """Only the top heading requests a release; Unreleased requests nothing."""
+    raw = (b"# Changelog\n\n## [Unreleased]\n\n- pending\n\n"
+           b"## [2.0.0] - 2026-10-06\n\n- breaking\n")
+    assert _bumped_to(repo, changelog_bytes=raw) == "1.4.5"
+
+
+@pytest.mark.parametrize("base, heading, expected", [
+    ("1.9.3", "## [1.10.0] - 2026-10-06", "1.10.0"),   # minor past 9
+    ("0.4.2", "## [1.0.0] - 2026-10-06", "1.0.0"),     # 0.x to the first major
+    ("0.4.2", "## [0.5.0] - 2026-10-06", "0.5.0"),     # 0.x next minor
+])
+def test_next_release_from_other_bases(tmp_path, base, heading, expected):
+    assert _bumped_to(_make_repo(tmp_path, base), heading=heading) == expected

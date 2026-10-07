@@ -156,12 +156,19 @@ to_bump="$(printf '%s\n' "$to_bump" | sort -u | grep -v '^$' || true)"
 # ---------------------------------------------------------------------------
 
 # Print the version a CHANGELOG's first "## " heading names, or nothing when
-# the file is missing or the first heading is not a version (Unreleased,
-# prose). Same parse as check-changelog-version-sync.sh.
+# the file is missing or the first heading is not a release (Unreleased,
+# prose, a pre-release).
+# A release is a canonical X.Y.Z (no leading zeros) opened by "[", whitespace
+# or line start and closed by "]", whitespace or end of line — so a
+# pre-release ("2.0.0-rc1"), build metadata ("2.0.0+7") or "2.00.0" names no
+# release at all. auto-bump-versions.sh and check-changelog-version-sync.sh
+# must apply this same rule, or the PR-side check accepts what the merge
+# will not produce.
 changelog_version() {
   grep -m1 '^## ' "$1" 2>/dev/null \
-    | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' \
-    | head -1
+    | grep -oE '(^|[[:space:]]|\[)(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\]|[[:space:]]|$)' \
+    | head -1 \
+    | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'
 }
 
 # bump_version <manifest> <json-key-path> [<requested-version>]
