@@ -1,6 +1,6 @@
 {
   "name": "tcs-patterns",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Domain pattern skills for TCS projects. Install only the patterns relevant to your stack.",
   "author": {
     "name": "Marcus Breiden"
