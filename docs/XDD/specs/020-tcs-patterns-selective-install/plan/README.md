@@ -52,7 +52,7 @@ version: "1.0"
 | 2 | Detection, fixtures before rules | COMPLETED | 7 (7 done) | [phase-2.md](phase-2.md) |
 | 3 | The install path | COMPLETED | 6 (6 done) | [phase-3.md](phase-3.md) |
 | 4 | Drift and the advisory | COMPLETED | 4 (4 done) | [phase-4.md](phase-4.md) |
-| 5 | The skills, the docs, end to end | IN_PROGRESS | 7 (5 done) | [phase-5.md](phase-5.md) |
+| 5 | The skills, the docs, end to end | IN_PROGRESS | 7 (6 done) | [phase-5.md](phase-5.md) |
 
 Every row of this table read `IN_PROGRESS` until 2026-10-05, including Phase 1, which had been
 `completed` in its own frontmatter since the day it shipped. The Tasks column was wrong too --

@@ -195,3 +195,26 @@ and the `reference/` file list; `/tcs-patterns:pattern nope` lists the 21 names.
 in that repository stays clean.
 
 When P2 and P3 pass, tick T5.5's two pending success lines in `plan/phase-5.md`.
+
+## After PR #179 merged (2026-10-07)
+
+#179 (`1d2eb85`) taught CI to honour a next-major or next-minor CHANGELOG heading. `origin/main`
+was then merged into this branch (`efbaecd`). It was merged rather than rebased, because a rebase
+would need a forced push and this repository's safety hook blocks that. Re-measured per leg on the
+merged branch:
+
+| Leg | Result |
+|---|---|
+| pytest | 1465 passed, 0 failed, 1 skipped, 1 deselected (perf) |
+| bats tcs-git-helpers | 1..860, 860 ok, 0 not ok, 0 skip |
+| bats tcs-helper | 1..330, 330 ok, 0 not ok, 0 skip |
+| bats tcs-issues | 1..7, 7 ok |
+| bats tcs-patterns | 1..15, 15 ok |
+| `check-changelog-version-sync.sh --allow-ahead 1` | exit 0; tcs-patterns CHANGELOG 2.0.0 against manifest 1.4.4 now passes |
+| `check-docs-sync.sh` | every affected surface is accounted for |
+| `check-hook-bundle-version.sh origin/main..HEAD` | exit 0 |
+
+The one failure recorded above, `test_repository_is_currently_consistent`, now passes. On merge,
+CI will set tcs-patterns to 2.0.0 from the heading.
+
+Still pending release: P1-P4 above.

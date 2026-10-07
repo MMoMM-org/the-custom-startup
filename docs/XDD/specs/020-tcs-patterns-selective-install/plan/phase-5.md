@@ -374,7 +374,7 @@ four passing test suites.
      - [x] The 39 cross-plugin references in `tcs-team` and `tcs-workflow` name `tcs-<name>`
            rather than `tcs-patterns:<name>` (done alongside, outside this task's files)
 
-- [ ] **T5.4 Both changelogs** `[activity: technical-writing]` `[parallel: true]`
+- [x] **T5.4 Both changelogs** `[activity: technical-writing]` `[parallel: true]`
 
   1. Prime: Read both files and `scripts/ci/check-changelog-version-sync.sh`. The plugin entry
      names the version `plugin.json` is about to carry; the PR-side check tolerates being one
@@ -388,7 +388,7 @@ four passing test suites.
      patterns most repositories never use.
   4. Validate: both CI scripts locally.
   5. Success:
-     - [ ] Both changelogs updated; both sync checks pass locally `[ref: SDD/Project Commands]`
+     - [x] Both changelogs updated; both sync checks pass locally `[ref: SDD/Project Commands]`
      - [x] The breaking change is stated in terms of what a user must now do `[ref: SDD/Deployment View]`
 
 - [ ] **T5.5 End-to-end validation** `[activity: validate]`
@@ -412,4 +412,4 @@ four passing test suites.
      - [ ] Installed patterns appear in a **new** session's listing `[ref: SDD/AC-8]`
      - [ ] The advisory names exactly the bumped pattern `[ref: SDD/AC-11]`
      - [ ] All 18 SDD acceptance criteria verified (AC-18 added 2026-10-04; this read 17) `[ref: SDD/Acceptance Criteria]`
-     - [ ] Both test legs green, each reported separately `[ref: SDD/Quality Requirements]`
+     - [x] Both test legs green, each reported separately `[ref: SDD/Quality Requirements]`
