@@ -183,7 +183,7 @@ Four recent decisions, with the criterion that drove each.
 
 **Trade-off:** Three agents to maintain instead of one + three skills. Mitigated by each agent being already lean — there's little duplication to deduplicate.
 
-### Keep `tcs-patterns:test-design-reviewer` as a forked skill (not convert to a subagent)
+### Keep `tcs-test-design-reviewer` as a forked skill (not convert to a subagent)
 
 **Inputs:** Its whole job is to produce a review report and hand it back — the Load-Bearing Question answers "No, a summary suffices", which points at a subagent. But it already carries `context: fork` + `agent: Explore`, it is reachable as `/test-design-reviewer`, and three other skills route to it by name.
 

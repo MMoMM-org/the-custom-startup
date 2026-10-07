@@ -200,7 +200,7 @@ The Custom Startup evolved from a fork of [the-startup](https://github.com/rsmdt
 - **[Interactive install/uninstall wizards](docs/getting-started/installation.md)** — global / repo / other path, plugin selection, output style, multi-AI templates, statusline with conflict detection, optional Satori setup
 - **[3 statusline variants](docs/guides/statusline.md)** — standard, enhanced (budget bar from `rate_limits`, opt-in extra-usage credit bar, ccusage fallback), Starship bridge — each configurable via `statusline.toml`
 - **[Multi-AI workflow](docs/guides/multi-ai-workflow.md)** — export specs as prompts for Claude.ai or Perplexity, import results back as PRD/SDD
-- **[tcs-patterns plugin](docs/guides/tcs-patterns.md)** — 17 optional domain pattern skills (architecture, testing, platforms, integrations)
+- **[tcs-patterns plugin](docs/guides/tcs-patterns.md)** — a catalogue of 21 domain patterns, installed per repository (architecture, testing, platforms, integrations)
 - **Configurable specs directory** — `.claude/startup.toml` tells skills and scripts where your specs live; fallback chain keeps backward compatibility
 
 See [about/sources.md](docs/about/sources.md) for full attribution.

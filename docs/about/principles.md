@@ -21,7 +21,7 @@ TCS ships four plugins to the Claude Code marketplace:
 
 - **`tcs-workflow`** — spec-driven development: XDD, analysis, review, implementation
 - **`tcs-team`** — activity-scoped subagents for research, design, implementation, review
-- **`tcs-patterns`** — domain pattern skills
+- **`tcs-patterns`** — catalogue of domain patterns, installed per repository
 - **`tcs-helper`** / **`tcs-git-helpers`** / **`tcs-issues`** — authoring, memory, and repo tooling
 
 Every design decision maps to one of the mechanisms Claude Code exposes: **skills**, **subagents**, **agent teams**, and **hooks**. This document is organized around their runtime contracts, not around analogies to human team structures.

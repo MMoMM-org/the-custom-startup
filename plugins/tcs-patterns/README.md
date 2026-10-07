@@ -51,7 +51,7 @@ Installed patterns are copies, so they go stale when the catalogue improves. If 
 
 Claude Code lists every available skill's name and description in every session, and that listing is budgeted. 21 plugin skills spent about 5,900 characters of it in every repository, on patterns most repositories never use. Selective install moves them out of the listing until you ask for them.
 
-- **Before 1.x:** all 21 were active everywhere as `/tcs-patterns:<name>`.
+- **Through 1.x:** all 21 were active everywhere as `/tcs-patterns:<name>`.
 - **From 2.0.0:** none is active until installed, and an installed pattern is `/tcs-<name>` (`/tcs-ddd`, not `/tcs-patterns:ddd`). The `tcs-` prefix keeps them apart from your own skills; the installer refuses to overwrite a skill it did not write.
 - The plugin description's promise, "install only the patterns relevant to your stack", is now what the plugin does.
 
