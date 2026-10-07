@@ -1467,7 +1467,7 @@ messages, warnings and usage go to stderr only.
 | 0 | The verb ran. Per-pattern refusals and failures are **in the JSON channels**, not in the exit code | one JSON document | renders it |
 | 1 | An unexpected exception — a bug. Python's own exit code for an uncaught exception, deliberately left as is, so a crash can never be mistaken for a refusal | empty | shows stderr, says it is a defect in the CLI, and stops |
 | 2 | Usage: the arguments are invalid. `argparse`'s own code, so no custom handling is needed for the shape errors it already catches; the CLI also uses it for names and answers it rejects after parsing (below) | empty | shows stderr, says it is a defect in the skill (the skill built the arguments), and stops |
-| 3 | Refused: a precondition for the whole call failed — interpreter older than 3.11, `<repo>` not inside a git work tree, a manifest that cannot be read or parsed on a verb that writes, an `--accept` naming a pattern the manifest does not list. Nothing written | empty | shows stderr, which names the resolution, and stops |
+| 3 | Refused: a precondition for the whole call failed — interpreter older than 3.11, `<repo>` not inside a git work tree, `<toplevel>/.claude` or `<toplevel>/.claude/skills` being a symlink on a verb that writes, a manifest that cannot be read or parsed on a verb that writes, an `--accept` naming a pattern the manifest does not list. Nothing written | empty | shows stderr, which names the resolution, and stops |
 
 This table is the one authority for how the skill treats an exit code; T5.1 cites it rather than
 restating it.
@@ -1484,14 +1484,15 @@ that must not carry on after a refusal.
 "not inside a git repository: <repo>" — Primary Flow step 1 and the Error Handling row "Not inside a
 git repository". **Every verb then works on the toplevel, not on the path given**, and reports it
 as `repo`. Nothing under the target is opened before this step returns; git's own read of `.git` is
-the check, not a read of the target. (4) The verb.
+the check, not a read of the target. (4) On a writing verb, `install.refuse_symlinked_skills_root(toplevel)` (exit 3), then the manifest read (exit 3). (5) The verb.
+
+**Amended 2026-10-07 (PR #176 review): a symlinked `.claude` or `.claude/skills` is refused.** `install()`, `update()` and `remove()` call `install.refuse_symlinked_skills_root` before anything is written and raise `UnsafeSkillsRootError`; `cli.py` maps it to exit 3. Every path below the link, the manifest included, would otherwise be written wherever it points. `status` is read-only and still reads through the link. Two narrower rules sit beside it: a symlink at a `.tcs-<p>.tmp` / `.tcs-<p>.replaced` debris path is unlinked, never followed (`_clear_own_debris`), and `update` refuses a symlinked or non-directory pattern directory as a per-pattern failure, as `remove` does (its rule 4).
 
 ##### `scan` — reads only
 
 Calls, in order: `detect.detect(toplevel)`; if `--answers` was given, validates it against the
-report and calls `outcomes.decide(report, answers)`; `companions.expand_companions(selection,
-catalogue_root)`, `companions.companion_citations(catalogue_root)` and
-`companions.ambiguous_citations(catalogue_root)`; then the listing cost of every catalogue pattern.
+report and calls `outcomes.decide(report, answers)`; `companions.derive(catalogue)` once, then `.expand(selection)`, `.citations` and
+`.ambiguous` read from that one derivation (one catalogue walk; amended 2026-10-07, PR #176 review); then the listing cost of every catalogue pattern.
 Writes nothing.
 
 **How the answers get back: `scan` is called twice, the second time with `--answers`.** Decided
@@ -1541,7 +1542,7 @@ listing_cost(p) = len("tcs-" + p) + min(len(description(p)), 1536)
 ```
 
 where `description(p)` is the value of the single `description:` line inside the catalogue
-`SKILL.md`'s frontmatter block, parsed with `guard._parse_name_scalar` — the plain/single/double
+`SKILL.md`'s frontmatter block, parsed with `guard.parse_name_scalar` — the plain/single/double
 quoted scalar parser C4 already has, which despite its name parses any single-line scalar — so
 `\"` counts as one character, not two; and `len` counts code points, which equals the harness's
 UTF-16 count for all 21 today (their only non-ASCII character is `—`, in the BMP). It is `null` when
@@ -1756,7 +1757,10 @@ both the writer and the reader need, and nothing that writes:
 PLUGIN_ROOT, PLUGIN_JSON, DEFAULT_CATALOGUE_DIR     path expressions, no I/O at import
 TMP_SUFFIX = ".tmp"; REPLACED_SUFFIX = ".replaced"; REMOVING_SUFFIX = ".removing"
 sha256_or_none(path) -> str | None                  install._hash_if_present, moved
+read_catalogue_version(catalogue_dir, name) -> str  the ONE VERSION reader; raises CatalogueVersionError
 ```
+
+**Amended 2026-10-07 (PR #176 review): `read_catalogue_version` is shared.** It accepts only `^[0-9]{1,9}$` (the bound `manifest.py` puts on a recorded `version`) and raises `CatalogueVersionError` otherwise. `install` and `update` call it before any write and turn the error into a per-pattern failure; `status.catalogue_version` calls it and turns the error into `None`, so a writer and the reporter cannot read one VERSION by two rules.
 
 `install.py` and `companions.py` import the root and the catalogue default from it, which
 collapses two of the three `parents[...]` derivations (`install.py`'s `_PLUGIN_ROOT`,
@@ -1776,7 +1780,7 @@ need. `paths.py` stays importable from a copy, as the others are: no I/O at impo
 The property, stated so a test can check it, as an **allowlist**: among this plugin's modules,
 `status.py` imports only `manifest` and `paths`, each as a plain `import <name>` — no `as` alias and
 no `from manifest import …`, so every use is spelled `manifest.<attr>` and is visible to the check —
-and the only `manifest.<attr>` names it references are `read`, `_manifest_path`,
+and the only `manifest.<attr>` names it references are `read`, `manifest_path`,
 `ManifestUnparseableError`, `MANIFEST_FILENAME`, `Manifest` and `PatternEntry` (the last two are
 pure types). A test parses `status.py` with `ast` and fails on
 any other sibling import, any alias, and any other `manifest` attribute, so a later `write` is
@@ -1811,7 +1815,7 @@ PatternStatus (frozen)
 
 **`state` reuses the reporter's rule; it does not restate it (decided here).** T5.1a moves the comparison out of
 `patterns_drift.py` into `lib/status.py`, as `catalogue_version(catalogue_dir, name) -> str | None`
-(the reporter's `_catalogue_version`, unchanged) and `drift_verdict(installed: str, catalogue: str
+(delegating, since the PR #176 review, to `paths.read_catalogue_version`: only `^[0-9]{1,9}$` is a version, anything else is `None`) and `drift_verdict(installed: str, catalogue: str
 | None) -> "OK" | "DRIFT" | "UNKNOWN"` (`UNKNOWN` when `catalogue` is `None` or the installed
 integer is greater; `DRIFT` when it is smaller; integer comparison throughout). The reporter
 imports both, lazily inside `drift_lines` as it already imports `manifest`, so a missing lib still
@@ -2789,7 +2793,8 @@ decided answer instead of repeating the derivation
 |---|---|---|
 | Not inside a git repository | C3, step 1 | Abort before any read of the target. Message names the resolution. |
 | An unparseable `package.json` / `pyproject.toml` | C2 | **Never fatal; the dependency *read* is skipped, not the manifest.** Corrected 2026-10-05 -- this row read "A broken manifest is not a signal", which measurement contradicts: a rule keying on a manifest's **existence** keeps firing, so a `pyproject.toml` holding `[project` still yields `python-project`, a garbage `go.mod` still yields `go-idiomatic`, and a `tsconfig.json` holding `{` still yields `typescript-strict`. Only content-derived signals vanish. One further deliberate case: `_pyproject_deps_and_pytest` matches `[tool.pytest.ini_options]` by regex **before** parsing, so a file `tomllib` rejected still opens `q3_test_quality` -- a typo in `pyproject.toml` has not stopped the repository running pytest. A broken manifest never poisons its siblings. The file is listed in `manifests_walked` so its absence from dependency evidence is explicable. All six legs are pinned by tests as of 2026-10-05 and each was mutation-checked against the guard clause it covers `[ref: tests/test_patterns_detect.py, "An unparseable manifest"]`. |
-| Target repository unreadable in part | C2 | Scan continues over what is readable; the report names what it could not read, so a thin proposal is never silently a permissions artefact. Unimplemented: `detect.py` skips unreadable paths silently. T5.1a's `unreadable` key is specified to carry them (2026-10-06). |
+| Target repository unreadable in part | C2 | Scan continues over what is readable; the report names what it could not read, so a thin proposal is never silently a permissions artefact. **Implemented (T5.1a, amended 2026-10-07):** `detect()` returns an `unreadable` key, a sorted list of root-relative paths, directories with a trailing `/`: directories `os.walk` could not list, and files whose read raised `OSError`. Read failures are collected through a `ContextVar` set for the duration of `detect()`, so no rule signature changed. A `UnicodeDecodeError` is content, not access, and is not listed. Reads stop at `MAX_READ_BYTES` (1 MiB); a longer file is truncated, not failed, and not listed. Only regular files are read: symlinks and special files (FIFOs, devices) are skipped, so a FIFO cannot block the scan nor `/dev/zero` exhaust it. |
+| `<repo>/.claude` or `<repo>/.claude/skills` is a symlink | C3 / C5, before any write | **Amended 2026-10-07 (PR #176 review).** `install`, `update` and `remove` raise `UnsafeSkillsRootError`; the CLI exits 3 and writes nothing, naming the link to replace. `status` reads through it. A symlinked `.tcs-<p>.tmp` / `.replaced` debris path is unlinked, never followed; a symlinked pattern directory is a per-pattern failure on `update` and `remove`. |
 | Name collision | C4, step 6 | That pattern is not written; the collision is reported with both locations; the remaining patterns still install (F5's fourth criterion). No rescan. |
 | `SKILL.md` without a frontmatter `name:` line, **in the catalogue being installed** | C5 | `InstallError`, nothing written for that pattern. Prevents installing under the unprefixed name. |
 | A `SKILL.md` **in a scanned namespace** that cannot be read or carries no usable `name:` | C4, step 6 | Skipped, never fatal, and reported through `GuardReport.skipped` as `(path, reason)`. Four inputs reach this and each needs a distinguishable reason: unreadable, no frontmatter block, no `name:` key, empty `name:`. Added 2026-10-05; the row above it is the same condition with the opposite behaviour, and the difference is deliberate rather than an inconsistency. **The file C5 refuses to install is ours; the file C4 skips belongs to a third party.** A broken file in our own catalogue is a defect in this repository and must stop that pattern loudly, because installing it would register the pattern under the unprefixed name and silently defeat ADR-1. A broken file in somebody else's plugin is not ours to fix and must not stop this repository's install — the same stance `detect.py` takes for an unparseable manifest two rows above. It is reported rather than swallowed because a name the guard could not check is a name it cannot vouch for, and a caller that cannot see the omission cannot warn about it. Measured: zero of the 259 real `SKILL.md` files on this machine fail to parse, so every one of the four cases is fixture-only `[ref: SDD/Interface Specifications/Data model: the three namespaces (C4)]`. |
@@ -2987,8 +2992,9 @@ and dropping options would hide patterns the gate opened.
 - **Reading is free, writing is announced.** Every write is listed in the final report, and the
   report states that nothing was committed.
 - **No network, no services, no environment variables.** The plugin root is resolved the way
-  `install_files.sh` does it — `CLAUDE_PLUGIN_ROOT` when present, otherwise relative to the
-  module's own location — because that variable does not reach every context.
+  `install_files.sh` does it — relative to the module's own location (`__file__`; the skill's base
+  directory), never `CLAUDE_PLUGIN_ROOT` — because that variable does not reach the Bash-tool
+  subprocess this code runs in (amended 2026-10-07; decision 5 of the install plan).
 
 ## Architecture Decisions
 
@@ -3462,6 +3468,8 @@ The three corrections, in the order they matter:
   prose that happen to exist at this repository's root. One genuine instance, not a class, and the
   7-of-8 rate is further evidence that bare code-span paths cannot be classified mechanically.
   Left for Phase 5's documentation task rather than widening T1.3, whose scope named four sites.
+  **Resolved 2026-10-07 (Phase 5 drift check):** no Phase 5 task had picked it up. The line now
+  names the file with its URL, and event-sourcing's `VERSION` went 1 → 2 (tcs-patterns 2.0.1).
 
 - **Accepted edge cases of the Phase 4 advisory, recorded 2026-10-06.** The session-start hook
   exits before section 8c on a detached HEAD, so no patterns advisory appears there (pre-existing

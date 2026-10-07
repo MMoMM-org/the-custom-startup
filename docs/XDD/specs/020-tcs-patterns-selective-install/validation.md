@@ -9,9 +9,9 @@ Run 2026-10-07 on branch `spec/020-tcs-patterns-selective-install` at `86027da`,
 sandbox. Every command below ran from this checkout; nothing in `plugins/` or `templates/` was edited.
 
 **Verdict:** the nine-step flow, the drift advisory, `update`, `remove` and `status` all behave as
-specified in a fixture repository. **No defect found.** Two T5.5 items need a released
-`tcs-patterns` 2.0.0 and a new Claude Code session; they are listed under
-[Pending release](#pending-release) with the exact steps.
+specified in a fixture repository. **No defect found.** Two T5.5 items needed a released
+`tcs-patterns` 2.0.0 and a new Claude Code session; they have since run (see the status line above
+and [Live validation](#live-validation-2026-10-07)). [Pending release](#pending-release) is kept as the record of the steps.
 
 ## Fixture
 
@@ -155,8 +155,8 @@ Notes, none of which needs a change in this spec's components:
 1. `bundle = "1.4.4"` in the fixture manifest. `install._bundle_version()` reads `plugin.json`,
    which still carries 1.4.4 on this branch; after #179 it records 2.0.0. Drift uses each
    pattern's own `version`, never `bundle`, so nothing is affected.
-2. **Plan text says 17 ACs; the SDD has 18.** `plan/phase-5.md` T5.5's success line "All 17 SDD
-   acceptance criteria verified" predates AC-18. A wording mismatch only; this file covers all 18.
+2. **Plan text said 17 ACs; the SDD has 18.** `plan/phase-5.md` T5.5's success line predated AC-18;
+   it now reads 18 (corrected 2026-10-07). This file covers all 18.
 3. AC-1's "no `tcs-patterns` skill remaining" was true at the relocation commit (measured: 0) and
    is 2 at `HEAD` by design — the two Phase-5 skills. Its first clause (≤ 2) is the one that
    still holds as stated.
