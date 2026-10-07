@@ -42,16 +42,20 @@ reachable skill each one must not be confused with, which is also what its `desc
 | `feature-prioritization` | product | — |
 | `requirements-elicitation` | product | `tcs-workflow:brainstorm`, `tcs-workflow:xdd-prd` |
 | `user-research` | product | — |
-| `api-contract-design` | design | `tcs-patterns:api-design` |
-| `architecture-selection` | design | `tcs-patterns:hexagonal`, `tcs-patterns:event-driven` |
-| `domain-modeling` | design | `tcs-patterns:ddd` |
+| `api-contract-design` | design | `tcs-api-design` |
+| `architecture-selection` | design | `tcs-hexagonal`, `tcs-event-driven` |
+| `domain-modeling` | design | `tcs-ddd` |
 | `frontend-patterns` | design | — |
 | `technical-writing` | delivery | `tcs-workflow:document` |
-| `test-practices` | delivery | `tcs-patterns:testing` |
-| `platform-operations` | delivery | `tcs-patterns:observability`, `tcs-patterns:twelve-factor` |
+| `test-practices` | delivery | `tcs-testing` |
+| `platform-operations` | delivery | `tcs-observability`, `tcs-twelve-factor` |
 | `code-quality-review` | review | `tcs-workflow:review` |
 | `performance-analysis` | review | — |
-| `security-assessment` | review | `tcs-patterns:secure-oauth-oidc` |
+| `security-assessment` | review | `tcs-secure-oauth-oidc` |
+
+The `tcs-<name>` skills in the right-hand column are tcs-patterns catalogue patterns, installed per
+repository with `/tcs-patterns:patterns-setup` (readable without installing via
+`/tcs-patterns:pattern <name>`).
 
 ## Usage
 
@@ -69,7 +73,7 @@ startup. Resolution is **by name against the discovered skill registry**, and a 
 not resolve is skipped with only a debug-log warning — so a typo, or a skill at the wrong depth,
 costs the agent its context and says nothing. A name must also be unique: two discoverable
 skills answering to it make which body loads undefined. That is why `testing` here is
-`test-practices` — `tcs-patterns:testing` already holds the plain name.
+`test-practices` — `tcs-testing` already holds the plain name.
 
 ## Creating New Skills
 

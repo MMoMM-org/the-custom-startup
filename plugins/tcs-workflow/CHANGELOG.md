@@ -8,6 +8,14 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [4.4.9] - 2026-10-07
+
+### Changed
+
+- **`xdd-tdd` references patterns as `tcs-<name>`.** After tcs-patterns 2.0 `tcs-patterns:testing`,
+  `tcs-patterns:mutation-testing` and `tcs-patterns:test-design-reviewer` resolve to nothing; they
+  are repo skills installed with `/tcs-patterns:patterns-setup`.
+
 ## [4.4.8] - 2026-09-03
 
 ### Added

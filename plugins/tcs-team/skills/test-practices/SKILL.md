@@ -1,7 +1,7 @@
 ---
 name: test-practices
 user-invocable: false
-description: "Making tests pass and stay passing: layer-specific mocking rules, debugging a failing test, and managing flaky tests. Use when a test fails, flakes, or mocks the wrong layer. Do NOT use for test structure and style — what to test, behaviour-driven patterns, factories and file layout are tcs-patterns:testing."
+description: "Making tests pass and stay passing: layer-specific mocking rules, debugging a failing test, and managing flaky tests. Use when a test fails, flakes, or mocks the wrong layer. Do NOT use for test structure and style — what to test, behaviour-driven patterns, factories and file layout are tcs-testing."
 ---
 
 ## Persona
