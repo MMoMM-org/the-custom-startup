@@ -8,6 +8,17 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [2.0.1] - 2026-10-07
+
+### Fixed
+
+- **`event-sourcing` no longer cites a path that does not exist where it is installed.** Its
+  `reference/references.md` pointed at `docs/about/sources.md`, a path in this repository, not in
+  a repository the pattern is installed into. It now names that file with its URL. The pattern's
+  `VERSION` is 2, so a repository with `tcs-event-sourcing` installed sees
+  `patterns event-sourcing v1 → v2` at its next session start and can run
+  `/tcs-patterns:patterns-setup update`.
+
 ## [2.0.0] - 2026-10-06
 
 ### Changed (breaking)

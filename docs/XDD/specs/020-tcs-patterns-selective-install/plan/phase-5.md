@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: The skills, the docs, end to end"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 5
 ---
@@ -130,7 +130,7 @@ four passing test suites.
        `.tcs-patterns-manifest`; `diverged` is `None`, not `False`, when `SKILL.md` is absent.
        `status()` writes nothing: digest before and after, and the SDD's `ast` **allowlist** —
        sibling imports only `import manifest` and `import paths`, no alias and no `from` form,
-       and `manifest.<attr>` only for `read`, `_manifest_path`, `ManifestUnparseableError`,
+       and `manifest.<attr>` only for `read`, `manifest_path`, `ManifestUnparseableError`,
        `MANIFEST_FILENAME`, `Manifest` and `PatternEntry`. The test fails on anything else rather
        than looking for named writers; `getattr`/`importlib` bypasses are out of scope.
      - **The reporter's lazy import**, in `tests/test_patterns_drift.py` as a **new** test (the
@@ -391,7 +391,7 @@ four passing test suites.
      - [x] Both changelogs updated; both sync checks pass locally `[ref: SDD/Project Commands]`
      - [x] The breaking change is stated in terms of what a user must now do `[ref: SDD/Deployment View]`
 
-- [ ] **T5.5 End-to-end validation** `[activity: validate]`
+- [x] **T5.5 End-to-end validation** `[activity: validate]`
 
   1. Prime: Read the full primary flow `[ref: SDD/Runtime View/Primary Flow]` and the acceptance
      criteria table `[ref: SDD/Acceptance Criteria]`.
@@ -402,6 +402,7 @@ four passing test suites.
      catalogue `VERSION`, start another session, and confirm the advisory names exactly that
      pattern. Then run `update` and confirm the manifest matches. Then `remove` and confirm both
      the files and the manifest entry are gone.
+     **Note 2026-10-07 (PR #176 review): variant accepted.** The offline walk bumped a catalogue `VERSION` with the real hook, as written. The live run (validation.md P3) lowered the manifest entry instead: a released catalogue cannot be bumped from a consumer repository, and the advisory compares the two versions symmetrically, so the check is equivalent.
   3. Implement: no new production code. Anything missing at this point is a defect against a
      phase that reported complete, and is fixed in that phase's component rather than patched here.
   4. Validate: both legs reported **per leg**, never from a run verdict; all 18 SDD acceptance
@@ -409,7 +410,7 @@ four passing test suites.
      locally before pushing.
   5. Success:
      - [x] The nine-step flow completes in a fixture repository `[ref: SDD/Runtime View/Primary Flow]`
-     - [ ] Installed patterns appear in a **new** session's listing `[ref: SDD/AC-8]`
-     - [ ] The advisory names exactly the bumped pattern `[ref: SDD/AC-11]`
-     - [ ] All 18 SDD acceptance criteria verified (AC-18 added 2026-10-04; this read 17) `[ref: SDD/Acceptance Criteria]`
+     - [x] Installed patterns appear in a **new** session's listing `[ref: SDD/AC-8]`
+     - [x] The advisory names exactly the bumped pattern `[ref: SDD/AC-11]`
+     - [x] All 18 SDD acceptance criteria verified (AC-18 added 2026-10-04; this read 17) `[ref: SDD/Acceptance Criteria]`
      - [x] Both test legs green, each reported separately `[ref: SDD/Quality Requirements]`

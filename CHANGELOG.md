@@ -36,6 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has moved past, and patterns it can no longer account for, and points at
   `/tcs-patterns:patterns-setup update` or `status`.
 
+### Fixed
+
+- **`tcs-patterns` 2.0.1: the `event-sourcing` pattern no longer cites a path that is missing
+  where it is installed.** Its provenance line named `docs/about/sources.md`, a path in this
+  repository only; it now gives the URL. Repositories with `tcs-event-sourcing` installed see
+  `patterns event-sourcing v1 → v2` at the next session start; run
+  `/tcs-patterns:patterns-setup update`.
+
 ## [Unreleased] — observability
 
 ### Added
