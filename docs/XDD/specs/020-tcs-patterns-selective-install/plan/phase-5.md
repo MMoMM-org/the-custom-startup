@@ -404,7 +404,7 @@ four passing test suites.
      the files and the manifest entry are gone.
   3. Implement: no new production code. Anything missing at this point is a defect against a
      phase that reported complete, and is fixed in that phase's component rather than patched here.
-  4. Validate: both legs reported **per leg**, never from a run verdict; all 17 SDD acceptance
+  4. Validate: both legs reported **per leg**, never from a run verdict; all 18 SDD acceptance
      criteria walked and ticked; the CI gate, `docs-sync` and `changelog-version-sync` all run
      locally before pushing.
   5. Success:
