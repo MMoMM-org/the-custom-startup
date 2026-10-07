@@ -21,6 +21,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_DIR = REPO_ROOT / "plugins" / "tcs-patterns"
 LIB_DIR = PLUGIN_DIR / "skills" / "patterns-setup" / "lib"
@@ -338,3 +340,97 @@ def test_cli_exits_zero_silently_naming_status_when_the_lib_has_no_status_py(tmp
     assert len(err_lines) == 1, r.stderr
     assert err_lines[0].startswith("patterns_drift:")
     assert "status" in err_lines[0]
+
+
+def _hand_manifest(repo: Path, names: Sequence[str]) -> None:
+    """A manifest listing `names` at version 1, written by hand so a name the
+    installer would never produce (an over-long one) can be listed."""
+    body = ['bundle = "1.0.0"\n']
+    for n in names:
+        body.append(f'\n[patterns.{n}]\nversion = "1"\ninstalled_as = "tcs-{n}"\nsha256 = "{"0" * 64}"\n')
+    path = _load_lib("manifest")._manifest_path(repo)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(body), encoding="utf-8")
+
+
+def test_a_pattern_name_of_64_chars_is_reported_and_one_of_65_is_skipped(tmp_path):
+    """Review M2: a name reaches the session-start brief verbatim, so the
+    reporter caps it at 64 characters; the brief applies the same cap."""
+    name_64 = "a" * 64
+    name_65 = "b" * 65
+    cat = tmp_path / "catalogue"
+    for n in (name_64, name_65):
+        _catalogue_pattern(cat, n, version="2")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _hand_manifest(repo, [name_64, name_65])
+    assert _load_lib("manifest").read(repo).patterns.keys() == {name_64, name_65}
+
+    assert _lines(repo, cat) == [f"DRIFT:{name_64}:1:2"]
+
+
+def test_a_skipped_over_long_name_does_not_turn_into_ok(tmp_path):
+    """OK claims every installed pattern is current; a skipped one was never checked."""
+    cat = tmp_path / "catalogue"
+    _catalogue_pattern(cat, "c" * 65, version="2")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _hand_manifest(repo, ["c" * 65])
+    assert _lines(repo, cat) == []
+
+
+def test_python_supported_decides_on_3_11():
+    """Review L6: `lib/manifest.py` imports `tomllib` (3.11+)."""
+    supported = _load_drift().python_supported
+    assert supported((3, 10, 14)) is False
+    assert supported((2, 7, 18)) is False
+    assert supported((3, 11, 0)) is True
+    assert supported((3, 14, 3)) is True
+
+
+def test_main_prints_unsupported_python_before_touching_the_lib(tmp_path, monkeypatch, capsys):
+    mod = _load_drift()
+
+    def lib_touched(*_a, **_k):
+        raise AssertionError("drift_lines ran on an unsupported Python")
+
+    monkeypatch.setattr(mod, "python_supported", lambda *_a: False)
+    monkeypatch.setattr(mod, "drift_lines", lib_touched)
+    assert mod.main(["patterns_drift.py", str(tmp_path)]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "UNSUPPORTED:python\n"
+    assert captured.err == ""
+
+
+_OLD_PYTHON = Path("/usr/bin/python3")
+
+
+def _python_version(exe: Path) -> tuple[int, ...] | None:
+    if not exe.is_file():
+        return None
+    r = subprocess.run([str(exe), "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+                       capture_output=True, text=True)
+    return tuple(int(x) for x in r.stdout.split()) if r.returncode == 0 else None
+
+
+def test_cli_under_a_real_pre_3_11_python_prints_unsupported(tmp_path):
+    """Opportunistic: macOS ships /usr/bin/python3 3.9. Skipped where no such
+    interpreter exists; the two tests above cover the decision everywhere."""
+    version = _python_version(_OLD_PYTHON)
+    if version is None or version >= (3, 11):
+        pytest.skip("no pre-3.11 python3 at /usr/bin/python3")
+    repo, cat = _setup(tmp_path, ["ddd"])
+    _set_version(cat, "ddd", "2")
+    r = subprocess.run([str(_OLD_PYTHON), "-I", str(SCRIPT), str(repo), "--catalogue", str(cat)],
+                       capture_output=True, text=True, cwd=tmp_path)
+    assert (r.returncode, r.stdout, r.stderr) == (0, "UNSUPPORTED:python\n", "")
+
+
+def test_cli_works_under_isolated_mode(tmp_path):
+    """Review M4: the brief runs the reporter with `python3 -I` (no script dir
+    on sys.path, no user site, no PYTHON* env); the script bootstraps its lib."""
+    repo, cat = _setup(tmp_path, ["ddd"])
+    _set_version(cat, "ddd", "2")
+    r = subprocess.run([sys.executable, "-I", str(SCRIPT), str(repo), "--catalogue", str(cat)],
+                       capture_output=True, text=True, cwd=tmp_path)
+    assert (r.returncode, r.stdout) == (0, "DRIFT:ddd:1:2\n")

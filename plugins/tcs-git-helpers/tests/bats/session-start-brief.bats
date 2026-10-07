@@ -438,6 +438,13 @@ _ssb_sysmsg() {
     'import json,sys;t=sys.stdin.read().strip();sys.stdout.write(json.loads(t).get("systemMessage","") if t else "")'
 }
 
+# The hookSpecificOutput.additionalContext (the model's context), decoded
+# (empty when absent). Review M2: pattern segments must never reach it.
+_ssb_ctx() {
+  printf '%s' "$output" | python3 -c \
+    'import json,sys;t=sys.stdin.read().strip();sys.stdout.write(json.loads(t).get("hookSpecificOutput",{}).get("additionalContext","") if t else "")'
+}
+
 # Copy the real hook into a tcs-git-helpers plugin root at $1; sets FX_HOOK.
 _fx_git_helpers_at() {
   local root="$1"
@@ -690,6 +697,92 @@ _run_fx_hook() {
   _ssb_has "$msg" "hooks v2.0.0 → v"
   _ssb_has "$msg" "run /tcs-git-helpers:git-setup --update"
   _ssb_has "$msg" "patterns ddd v3 → v4; run /tcs-patterns:patterns-setup update"
+  # Review M2: hook drift keeps reaching the model; pattern drift does not.
+  local ctx
+  ctx="$(_ssb_ctx)"
+  _ssb_has "$ctx" "hooks v2.0.0 → v"
+  _ssb_has "$ctx" "run /tcs-git-helpers:git-setup --update"
+  _ssb_lacks "$ctx" "patterns"
+  _ssb_lacks "$ctx" "ddd"
+}
+
+# Review M2: a pattern name comes from repository content (the manifest), so
+# the patterns segment is shown to the user (systemMessage) and never put in
+# the model's context (additionalContext).
+@test "patterns advisory: pattern drift alone goes to systemMessage only, never additionalContext" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_repo_layout "DRIFT:testing:0:1"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  [ "$(_ssb_sysmsg)" = "[tcs-git-helpers] patterns testing v0 → v1; run /tcs-patterns:patterns-setup update" ]
+  [ -z "$(_ssb_ctx)" ]
+}
+
+@test "patterns advisory: on main the model gets the branch nudge but not the pattern drift" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_repo_layout "DRIFT:testing:0:1"
+  git -C "$TEST_REPO" checkout -q main
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ "$(_ssb_sysmsg)" = "[tcs-git-helpers] patterns testing v0 → v1; run /tcs-patterns:patterns-setup update" ]
+  [ "$(_ssb_ctx)" = "[tcs-git-helpers] On protected branch 'main': do not create or edit non-gitignored files here. Switch to a feature branch before any Write/Edit." ]
+}
+
+@test "patterns advisory: a 64-character pattern name is kept, a 65-character one dropped" {
+  _install_githooks_current
+  _fx_manifest
+  local n64=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  local n65=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  [ "${#n64}" -eq 64 ]
+  [ "${#n65}" -eq 65 ]
+  _fx_repo_layout "DRIFT:${n64}:1:2" "DRIFT:${n65}:1:2" "UNKNOWN:${n65}:1"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  [ "$(_ssb_sysmsg)" = "[tcs-git-helpers] patterns ${n64} v1 → v2; run /tcs-patterns:patterns-setup update" ]
+}
+
+# Review L6: on Python < 3.11 the reporter prints UNSUPPORTED:python instead of
+# failing on `import tomllib`; the brief turns it into a hint, user-only.
+@test "patterns advisory: UNSUPPORTED:python becomes a user-only hint" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_repo_layout "UNSUPPORTED:python"
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  [ "$(_ssb_sysmsg)" = "[tcs-git-helpers] patterns advisory needs python ≥ 3.11" ]
+  [ -z "$(_ssb_ctx)" ]
+}
+
+# Review M4: the reporter runs isolated (python3 -I): no user site, no
+# PYTHON* environment, no script directory on sys.path.
+@test "patterns advisory: the reporter runs under python3 -I" {
+  _install_githooks_current
+  _fx_manifest
+  _fx_repo_layout "DRIFT:ddd:1:2"
+  cat > "$FX_PATTERNS/scripts/patterns_drift.py" << 'PY'
+import pathlib, sys
+here = pathlib.Path(__file__).resolve().parent
+(here / "isolated").write_text(str(sys.flags.isolated))
+print("DRIFT:ddd:1:2")
+PY
+
+  _run_fx_hook
+
+  [ "$status" -eq 0 ]
+  [ "$(cat "$FX_PATTERNS/scripts/isolated")" = "1" ]
 }
 
 @test "patterns advisory: reporter exits non-zero → no segment" {
@@ -750,6 +843,7 @@ _run_fx_hook() {
   [ "$status" -eq 0 ]
   [ -z "$stderr" ]
   [ "$(_ssb_sysmsg)" = "[tcs-git-helpers] patterns ddd v${low} → v${cat_v}; run /tcs-patterns:patterns-setup update" ]
+  [ -z "$(_ssb_ctx)" ]
 }
 
 # spec-020 T4.4 — the two-way property that makes the grain worth its cost.

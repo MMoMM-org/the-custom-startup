@@ -14,6 +14,11 @@ decides what to do, exactly as `drift_check_hook_bundle` does
                               its VERSION is absent or non-numeric, its pattern
                               directory is gone (deleted upstream), or the
                               installed version is AHEAD of it (a rollback)
+    UNSUPPORTED:python        Python older than 3.11; nothing else is checked
+
+A pattern name longer than MAX_NAME_LEN is skipped, never printed: the line
+reaches the session-start brief verbatim (review M2). A skipped name also
+suppresses `OK`, which would claim it current.
 
 Versions compare as integers, so `01` against `1` is current. The rule is
 `status.drift_verdict`, and the catalogue read `status.catalogue_version`, both
@@ -38,9 +43,17 @@ from pathlib import Path
 _PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 _LIB_DIR = _PLUGIN_ROOT / "skills" / "patterns-setup" / "lib"
 DEFAULT_CATALOGUE_DIR = _PLUGIN_ROOT / "templates" / "patterns"
+MAX_NAME_LEN = 64
+MIN_PYTHON = (3, 11)  # lib/manifest.py imports tomllib
 
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
+
+
+def python_supported(version_info: tuple[int, ...] = tuple(sys.version_info)) -> bool:
+    """True when `version_info` can run the lib. Checked before any lib import,
+    so an old interpreter yields `UNSUPPORTED:python` instead of an ImportError."""
+    return tuple(version_info[:2]) >= MIN_PYTHON
 
 
 def drift_lines(repo_dir: Path, *, catalogue_dir: Path = DEFAULT_CATALOGUE_DIR) -> list[str]:
@@ -66,7 +79,11 @@ def drift_lines(repo_dir: Path, *, catalogue_dir: Path = DEFAULT_CATALOGUE_DIR) 
     from status import catalogue_version, drift_verdict
 
     lines: list[str] = []
+    skipped = False
     for name in sorted(current.patterns):
+        if len(name) > MAX_NAME_LEN:
+            skipped = True
+            continue
         entry = current.patterns[name]
         catalogue = catalogue_version(catalogue_dir, name)
         verdict = drift_verdict(entry.version, catalogue)
@@ -74,10 +91,15 @@ def drift_lines(repo_dir: Path, *, catalogue_dir: Path = DEFAULT_CATALOGUE_DIR) 
             lines.append(f"UNKNOWN:{name}:{entry.version}")
         elif verdict == "DRIFT":
             lines.append(f"DRIFT:{name}:{entry.version}:{catalogue}")
-    return lines or ["OK"]
+    if lines or skipped:
+        return lines
+    return ["OK"]
 
 
 def main(argv: list[str]) -> int:
+    if not python_supported():
+        print("UNSUPPORTED:python")
+        return 0
     args = argv[1:]
     catalogue_dir = DEFAULT_CATALOGUE_DIR
     if "--catalogue" in args:

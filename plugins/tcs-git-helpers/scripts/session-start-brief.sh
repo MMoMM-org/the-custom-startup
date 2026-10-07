@@ -185,11 +185,17 @@ fi
 # Silent unless the reporter prints at least one well-formed
 # DRIFT:<pattern>:<installed>:<catalogue> line (→ "update") or
 # UNKNOWN:<pattern>:<installed> line (→ "not in the catalogue", "status");
-# the drift clause comes first. OK and MISSING are suppressed (F7: a repo
-# without patterns is not nagged). Fail-open: no manifest, no python3, no
-# reporter (tcs-patterns absent or at 1.x), a non-zero exit, or a malformed
-# line → silence. Lines are parsed under LC_ALL=C, in a subshell: under a
-# UTF-8 locale bash 3.2's [!a-z0-9-] admits uppercase.
+# the drift clause comes first. UNSUPPORTED:python (Python < 3.11) becomes a
+# one-line hint. OK and MISSING are suppressed (F7: a repo without patterns
+# is not nagged). Fail-open: no manifest, no python3, no reporter
+# (tcs-patterns absent or at 1.x), a non-zero exit, or a malformed line →
+# silence. Lines are parsed under LC_ALL=C, in a subshell: under a UTF-8
+# locale bash 3.2's [!a-z0-9-] admits uppercase. A pattern name longer than
+# 64 characters is malformed.
+# Pattern names come from repository content (the manifest), so this segment
+# goes to the user (systemMessage) only, never into the model's context
+# (additionalContext) — see 9b. The reporter runs under `python3 -I`: no
+# user site, no PYTHON* environment.
 # The manifest test comes first so a repo without patterns never pays for
 # a Python start.
 # ----------------------------------------------------------------------
@@ -244,10 +250,16 @@ _find_patterns_drift() {
 # ranges and must not change the caller's locale.
 _patterns_segs() {
   local _line _kind _pat _inst _cat _rest _drift_list="" _unknown_list=""
+  local _unsupported=""
   LC_ALL=C
   while IFS= read -r _line; do
+    if [ "$_line" = "UNSUPPORTED:python" ]; then
+      _unsupported=1
+      continue
+    fi
     IFS=: read -r _kind _pat _inst _cat _rest <<< "$_line"
     case "$_pat" in ''|*[!a-z0-9-]*) continue ;; esac
+    [ "${#_pat}" -le 64 ] || continue
     case "$_inst" in ''|*[!0-9]*) continue ;; esac
     # Comparing against the rebuilt line rejects extra or trailing-colon fields.
     if [ "$_line" = "DRIFT:${_pat}:${_inst}:${_cat}" ]; then
@@ -263,6 +275,9 @@ _patterns_segs() {
   if [ -n "$_unknown_list" ]; then
     printf '%s' " • patterns ${_unknown_list} not in the catalogue; run /tcs-patterns:patterns-setup status"
   fi
+  if [ -n "$_unsupported" ]; then
+    printf '%s' " • patterns advisory needs python ≥ 3.11"
+  fi
   return 0
 }
 
@@ -271,7 +286,7 @@ if [ -n "$repo_top" ] && [ -f "$repo_top/.claude/skills/.tcs-patterns-manifest" 
    && command -v python3 >/dev/null 2>&1; then
   _drift_py="$(_find_patterns_drift 2>/dev/null)" || _drift_py=""
   if [ -n "$_drift_py" ]; then
-    _drift_out="$(python3 "$_drift_py" "$repo_top" 2>/dev/null)" || _drift_out=""
+    _drift_out="$(python3 -I "$_drift_py" "$repo_top" 2>/dev/null)" || _drift_out=""
     patterns_seg="$(_patterns_segs "$_drift_out" 2>/dev/null)" || patterns_seg=""
   fi
 fi
@@ -291,10 +306,12 @@ if [ -n "$actionable_segs" ]; then
   user_msg="[tcs-git-helpers] ${actionable_segs# • }"
 fi
 
-# 9b. Claude context = user message (when any) + protected-branch nudge.
+# 9b. Claude context = the user-actionable bits EXCEPT patterns_seg (its
+# pattern names are repository content; review M2) + protected-branch nudge.
+ctx_segs="${cleanup_seg}${drift_seg}${setup_seg}"
 ctx_msg=""
-if [ -n "$user_msg" ]; then
-  ctx_msg="$user_msg"
+if [ -n "$ctx_segs" ]; then
+  ctx_msg="[tcs-git-helpers] ${ctx_segs# • }"
 fi
 case "$branch" in
   main|master)
