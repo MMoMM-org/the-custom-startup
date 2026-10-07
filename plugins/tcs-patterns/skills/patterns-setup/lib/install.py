@@ -416,8 +416,13 @@ def _fresh_install(name: str, *, installed_as: str, dest: Path, skills_root: Pat
         except OSError as e:
             raise InstallError(f"catalogue pattern {name!r} has no readable SKILL.md: {e}") from e
 
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as e:
+            raise InstallError(f"catalogue pattern {name!r} has a SKILL.md that is not valid UTF-8: {e}") from e
+
         names = catalogue_names(catalogue_dir)
-        patched = _skill_md_as_installed(raw.decode("utf-8"), installed_as, names).encode("utf-8")
+        patched = _skill_md_as_installed(text, installed_as, names).encode("utf-8")
         skill_md.write_bytes(patched)
         _rewrite_copied_text_files(tmp_dir, names)
 

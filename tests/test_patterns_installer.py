@@ -386,6 +386,29 @@ def test_malformed_name_fails_one_pattern_while_the_other_installs_in_one_call(t
     assert "bad" not in manifest.read(repo).patterns
 
 
+def test_non_utf8_skill_md_fails_one_pattern_while_the_other_installs(tmp_path: Path) -> None:
+    """A catalogue SKILL.md that is not valid UTF-8 is a per-pattern fault:
+    it lands in `failed` naming the file, never escapes `install()` as a
+    UnicodeDecodeError, and leaves neither a temp directory nor a
+    half-written `tcs-bad/`."""
+    install = _load_install()
+    manifest = _load_manifest()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "good")
+    _catalogue_pattern(catalogue, "bad", skill_bytes=b"---\nname: bad\n---\n\nBody \xff\xfe broken.\n")
+    repo = tmp_path / "repo"
+
+    report = install.install(repo, ["good", "bad"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    assert report.installed["good"][0] == "tcs-good"
+    assert "bad" in report.failed
+    assert "SKILL.md" in report.failed["bad"] and "utf-8" in report.failed["bad"].lower()
+    assert (_skills_root(repo) / "tcs-good").is_dir()
+    assert not (_skills_root(repo) / "tcs-bad").exists()
+    assert not (_skills_root(repo) / ".tcs-bad.tmp").exists()
+    assert "bad" not in manifest.read(repo).patterns
+
+
 def test_missing_name_key_raises_rather_than_installing_unprefixed(tmp_path: Path) -> None:
     """Success criterion 2, in isolation: a `SKILL.md` with no frontmatter
     `name:` line must never be installed under any name at all -- not
