@@ -191,7 +191,7 @@ def _description(skill_md: Path) -> str | None:
     found = [line[len(_DESCRIPTION_KEY):] for line in block if line.startswith(_DESCRIPTION_KEY)]
     if len(found) != 1:
         return None
-    value, ok = guard._parse_name_scalar(found[0])
+    value, ok = guard.parse_name_scalar(found[0])
     return value if ok and value else None
 
 
@@ -202,7 +202,7 @@ def _listing_cost(catalogue: Path) -> dict[str, int | None]:
     import companions
 
     costs: dict[str, int | None] = {}
-    for name in companions._pattern_names(catalogue):
+    for name in companions.pattern_names(catalogue):
         description = _description(catalogue / name / "SKILL.md")
         costs[name] = None if description is None else len(PREFIX + name) + min(len(description), MAX_DESCRIPTION_CHARS)
     return costs
@@ -222,8 +222,9 @@ def _scan(toplevel: Path, catalogue: Path, raw_answers: str | None) -> dict:
     else:
         selection = {e["pattern"] for e in report["auto"]} | {e["pattern"] for e in report["baseline"]}
 
-    proposed_names = companions.expand_companions(selection, catalogue)
-    citations = companions.companion_citations(catalogue)
+    derivation = companions.derive(catalogue)  # one catalogue walk for all three answers (PR #176 M3)
+    proposed_names = derivation.expand(selection)
+    citations = derivation.citations
     sources = sorted(selection | proposed_names)
     proposed = {
         companion: [
@@ -240,7 +241,7 @@ def _scan(toplevel: Path, catalogue: Path, raw_answers: str | None) -> dict:
             "target": a.target,
             "candidate_patterns": list(a.candidate_patterns),
         }
-        for a in companions.ambiguous_citations(catalogue)
+        for a in derivation.ambiguous
     ]
 
     return {
@@ -269,7 +270,7 @@ def _install(toplevel: Path, catalogue: Path, names: list[str]) -> dict:
     import guard
     import install
 
-    known = set(companions._pattern_names(catalogue))
+    known = set(companions.pattern_names(catalogue))
     unknown = sorted(set(names) - known)
     if unknown:
         raise _Usage(f"not a catalogue pattern: {', '.join(unknown)}")

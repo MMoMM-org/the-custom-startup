@@ -723,7 +723,7 @@ def test_plain_scalar_name_is_not_skipped() -> None:
     satisfy `test_name_parser_agrees_with_yaml_or_skips` above: a plain,
     unquoted `name:` line must actually produce a value, not a skip."""
     guard = _load_guard()
-    value, ok = guard._parse_name_scalar("ddd")
+    value, ok = guard.parse_name_scalar("ddd")
     assert value == "ddd"
     assert ok is True
 
@@ -733,7 +733,7 @@ def test_trailing_comment_is_stripped_from_plain_scalar() -> None:
     regex captured `ddd # comment` as the name; YAML -- and now this
     parser -- yield `ddd`."""
     guard = _load_guard()
-    value, ok = guard._parse_name_scalar("ddd # comment")
+    value, ok = guard.parse_name_scalar("ddd # comment")
     assert ok is True
     assert value == "ddd"
 

@@ -9,7 +9,7 @@ The verb the advisory's `UNKNOWN` segment points users to
 drives, "status"]`. A module of its own so that "status writes nothing" is
 checkable from its source rather than argued: among this plugin's modules it
 imports only `manifest` and `paths`, each as a plain `import`, and uses only
-`manifest.read`, `_manifest_path`, `ManifestUnparseableError`,
+`manifest.read`, `manifest_path`, `ManifestUnparseableError`,
 `MANIFEST_FILENAME`, `Manifest` and `PatternEntry`. A test parses this file
 with `ast` and fails on anything else, so keep every use spelled
 `manifest.<attr>`.
@@ -189,7 +189,7 @@ def status(repo_dir: Path, *, catalogue_dir: Path = paths.DEFAULT_CATALOGUE_DIR)
     directories and the debris in `<repo_dir>/.claude/skills/`. Writes
     nothing."""
     repo_dir = Path(repo_dir)
-    manifest_path = manifest._manifest_path(repo_dir)
+    manifest_path = manifest.manifest_path(repo_dir)
     skills_root = manifest_path.parent
 
     manifest_error: str | None = None

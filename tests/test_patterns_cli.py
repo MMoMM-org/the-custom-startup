@@ -708,6 +708,40 @@ def test_scan_listing_cost_against_the_real_catalogue(world: World) -> None:
     assert sum(costs.values()) == 5990
 
 
+def test_scan_derives_the_real_catalogue_once_and_keeps_its_companions(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """REAL CATALOGUE. One derivation walk per scan, not one per companion
+    query -- three walks measured ~0.75s each (PR #176 M3). The companions it
+    reports are hand-typed from `test_tcs_patterns_companion_map.py`'s
+    EXPECTED_EDGES: selection {event-sourcing, python-project} closes over
+    event-driven, hexagonal and ddd; hexagonal is cited from every source in
+    the result that has an edge to it, ddd only from hexagonal."""
+    companions = _load_lib("companions")
+    cli = _load_lib("cli")
+    paths = _load_lib("paths")
+    calls = []
+    real_derive = companions.derive
+
+    def counting_derive(*args, **kwargs):
+        calls.append(args)
+        return real_derive(*args, **kwargs)
+
+    monkeypatch.setattr(companions, "derive", counting_derive)
+    _scan_repo(world)
+    answers = json.dumps({"q2_architecture": ["event-sourcing"]})
+    doc = cli._scan(world.repo, paths.DEFAULT_CATALOGUE_DIR, answers)
+
+    assert len(calls) == 1
+    proposed = doc["companions"]["proposed"]
+    assert {companion: sorted({c["from"] for c in cited}) for companion, cited in proposed.items()} == {
+        "ddd": ["hexagonal"],
+        "event-driven": ["event-sourcing"],
+        "hexagonal": ["ddd", "event-driven", "event-sourcing"],
+    }
+    assert doc["companions"]["ambiguous"] == []
+
+
 def test_scan_reports_what_it_could_not_read(world: World) -> None:
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         pytest.skip("root ignores file permissions")

@@ -67,7 +67,7 @@ def drift_lines(repo_dir: Path, *, catalogue_dir: Path = DEFAULT_CATALOGUE_DIR) 
 
     # `read()` maps an absent file to an empty manifest; MISSING keys on the
     # file's absence instead, so a present manifest naming no patterns is OK.
-    if not manifest_lib._manifest_path(repo_dir).is_file():
+    if not manifest_lib.manifest_path(repo_dir).is_file():
         return ["MISSING"]
     try:
         current = manifest_lib.read(repo_dir)

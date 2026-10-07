@@ -74,7 +74,7 @@ def _skills(repo: Path) -> Path:
 
 
 def _manifest_bytes(repo: Path) -> bytes:
-    return _load_lib("manifest")._manifest_path(repo).read_bytes()
+    return _load_lib("manifest").manifest_path(repo).read_bytes()
 
 
 def _digest(root: Path) -> str:
@@ -205,7 +205,7 @@ def test_status_absent_manifest_lists_every_tcs_directory_as_unlisted(tmp_path):
 def test_status_reports_a_directory_at_the_manifest_path_as_unparseable(tmp_path):
     repo, cat = _setup(tmp_path, ["ddd"])
     manifest = _load_lib("manifest")
-    path = manifest._manifest_path(repo)
+    path = manifest.manifest_path(repo)
     path.unlink()
     path.mkdir()
 
@@ -220,7 +220,7 @@ def test_status_reports_a_directory_at_the_manifest_path_as_unparseable(tmp_path
 def test_status_reports_an_unparseable_manifest_verbatim(tmp_path):
     repo, cat = _setup(tmp_path, ["ddd"])
     manifest = _load_lib("manifest")
-    manifest._manifest_path(repo).write_text("this is = = not toml [", encoding="utf-8")
+    manifest.manifest_path(repo).write_text("this is = = not toml [", encoding="utf-8")
     with pytest.raises(manifest.ManifestUnparseableError) as raised:
         manifest.read(repo)
 
@@ -237,7 +237,7 @@ def test_status_and_the_reporter_keep_working_on_a_newer_schema_manifest(tmp_pat
     both read paths report it (PR #176 M7)."""
     repo, cat = _setup(tmp_path, ["ddd"])
     (cat / "ddd" / "VERSION").write_text("2\n", encoding="utf-8")
-    path = _load_lib("manifest")._manifest_path(repo)
+    path = _load_lib("manifest").manifest_path(repo)
     text = path.read_text(encoding="utf-8").replace("schema = 1\n", "schema = 7\nfuture = true\n", 1)
     assert "schema = 7" in text
     path.write_text(text.replace('installed_as = "tcs-ddd"\n', 'installed_as = "tcs-ddd"\nextra = 1\n'), encoding="utf-8")
@@ -251,7 +251,7 @@ def test_status_and_the_reporter_keep_working_on_a_newer_schema_manifest(tmp_pat
 def test_status_and_the_reporter_survive_a_version_too_long_for_int(tmp_path):
     """`int()` refuses past 4300 digits; `read()` must refuse first (PR #176 L1)."""
     repo, cat = _setup(tmp_path, ["ddd"])
-    path = _load_lib("manifest")._manifest_path(repo)
+    path = _load_lib("manifest").manifest_path(repo)
     path.write_text(path.read_text(encoding="utf-8").replace('version = "1"', 'version = "' + "9" * 5000 + '"'), encoding="utf-8")
 
     report = _load_lib("status").status(repo, catalogue_dir=cat)
@@ -267,7 +267,7 @@ def test_update_never_touches_a_directory_an_unbound_installed_as_names(tmp_path
     skills = _skills(repo)
     shutil.copytree(skills / "tcs-ddd", skills / "tcs-mine")
     manifest = _load_lib("manifest")
-    path = manifest._manifest_path(repo)
+    path = manifest.manifest_path(repo)
     path.write_text(path.read_text(encoding="utf-8").replace('"tcs-ddd"', '"tcs-mine"'), encoding="utf-8")
     before = _digest(skills)
 
@@ -280,7 +280,7 @@ def test_update_never_touches_a_directory_an_unbound_installed_as_names(tmp_path
 @_ROOT_IGNORES_PERMISSIONS
 def test_status_reports_an_unreadable_manifest_verbatim(tmp_path):
     repo, cat = _setup(tmp_path, ["ddd"])
-    path = _load_lib("manifest")._manifest_path(repo)
+    path = _load_lib("manifest").manifest_path(repo)
     path.chmod(0)
     try:
         with pytest.raises(OSError) as raised:
@@ -436,7 +436,7 @@ def test_status_writes_nothing(tmp_path):
 _STATUS_SIBLINGS_ALLOWED = {"manifest", "paths"}
 _MANIFEST_ATTRS_ALLOWED = {
     "read",
-    "_manifest_path",
+    "manifest_path",
     "ManifestUnparseableError",
     "MANIFEST_FILENAME",
     "Manifest",
@@ -781,7 +781,7 @@ def test_removing_the_last_pattern_leaves_a_zero_pattern_manifest_the_reporter_c
 def test_remove_propagates_an_unparseable_manifest_before_touching_anything(tmp_path):
     repo, _cat = _setup(tmp_path, ["ddd"])
     manifest = _load_lib("manifest")
-    manifest._manifest_path(repo).write_text("broken = = [", encoding="utf-8")
+    manifest.manifest_path(repo).write_text("broken = = [", encoding="utf-8")
     before = _digest(_skills(repo))
     with pytest.raises(manifest.ManifestUnparseableError):
         _remove(repo, ["ddd"])

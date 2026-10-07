@@ -225,6 +225,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import companions
 import manifest
 import paths
 
@@ -335,12 +336,6 @@ def rename_in_frontmatter(text: str, new_name: str) -> str:
 PLUGIN_SKILL_NAMES = frozenset({"patterns-setup", "pattern"})
 
 _PATTERN_REF_RE = re.compile(r"tcs-patterns:([A-Za-z0-9_-]+)")
-
-
-def catalogue_names(catalogue_dir: Path) -> frozenset[str]:
-    """Every pattern directory directly under `catalogue_dir`, hidden
-    entries excluded -- the same set `companions._pattern_names` reads."""
-    return frozenset(p.name for p in Path(catalogue_dir).iterdir() if p.is_dir() and not p.name.startswith("."))
 
 
 def rewrite_pattern_refs(text: str, names) -> str:
@@ -459,7 +454,7 @@ def _fresh_install(name: str, *, installed_as: str, dest: Path, skills_root: Pat
         except UnicodeDecodeError as e:
             raise InstallError(f"catalogue pattern {name!r} has a SKILL.md that is not valid UTF-8: {e}") from e
 
-        names = catalogue_names(catalogue_dir)
+        names = frozenset(companions.pattern_names(catalogue_dir))
         patched = _skill_md_as_installed(text, installed_as, names).encode("utf-8")
         skill_md.write_bytes(patched)
         _rewrite_copied_text_files(tmp_dir, names)
@@ -668,7 +663,7 @@ def _catalogue_as_installed(catalogue_dir: Path, name: str, installed_as: str) -
     return _skill_md_as_installed(
         _read_text_or_raise(catalogue_dir / name / "SKILL.md", what=f"catalogue SKILL.md for {name!r}"),
         installed_as,
-        catalogue_names(catalogue_dir),
+        frozenset(companions.pattern_names(catalogue_dir)),
     )
 
 

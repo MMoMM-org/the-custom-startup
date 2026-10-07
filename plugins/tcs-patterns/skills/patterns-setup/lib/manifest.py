@@ -233,7 +233,7 @@ class Manifest:
         return Manifest(bundle=bundle, patterns=new_patterns, schema=self.schema)
 
 
-def _manifest_path(repo_dir: Path) -> Path:
+def manifest_path(repo_dir: Path) -> Path:
     return Path(repo_dir).joinpath(*MANIFEST_DIR, MANIFEST_FILENAME)
 
 
@@ -259,7 +259,7 @@ def read(repo_dir: Path) -> Manifest:
     refused by `write()` (see the module docstring). A `schema` below 1, or
     not an integer (a bool included), is unparseable.
     """
-    path = _manifest_path(repo_dir)
+    path = manifest_path(repo_dir)
     if not os.path.lexists(path):
         return Manifest(bundle=None, patterns={})
     if not path.is_file():
@@ -383,7 +383,7 @@ def write(manifest: Manifest, repo_dir: Path) -> None:
     import tempfile  # lazily: see the module docstring (PR #176 M4)
 
     content = _serialize(manifest)
-    path = _manifest_path(repo_dir)
+    path = manifest_path(repo_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{MANIFEST_FILENAME}.", suffix=paths.TMP_SUFFIX)

@@ -319,6 +319,24 @@ def test_a_path_resolving_under_two_other_patterns_is_ambiguous_not_guessed(tmp_
     assert ambiguous[0].candidate_patterns == ("beta", "gamma")
 
 
+def test_a_symlink_leading_out_of_a_pattern_does_not_resolve_under_it(tmp_path: Path) -> None:
+    """`beta/reference/shared.md` is a symlink to a file in `gamma`. Lexically
+    `reference/shared.md` sits under beta; resolved, it lands in gamma, and
+    gamma has no file at that relative path -- so alpha's citation reaches
+    neither and contributes no edge. Pins that each candidate is still
+    resolved after the pattern-root resolve was hoisted out of the
+    per-candidate check (PR #176 M3): a prefix check on the unresolved path
+    would report alpha -> beta."""
+    companions = _load_companions()
+    _write_pattern_file(tmp_path, "alpha", "SKILL.md", "See `reference/shared.md`.\n")
+    _write_pattern_file(tmp_path, "gamma", "elsewhere/real.md", "gamma's file\n")
+    (tmp_path / "beta" / "reference").mkdir(parents=True)
+    (tmp_path / "beta" / "reference" / "shared.md").symlink_to(tmp_path / "gamma" / "elsewhere" / "real.md")
+
+    assert companions.companion_map(tmp_path) == {}
+    assert companions.ambiguous_citations(tmp_path) == ()
+
+
 def test_a_markdown_link_citation_is_a_candidate_too(tmp_path: Path) -> None:
     """`_candidate_targets` extracts from two surfaces -- inline code spans and
     `[text](href)` markdown links -- and **only the first produces any edge in
@@ -343,7 +361,7 @@ def test_a_markdown_link_citation_is_a_candidate_too(tmp_path: Path) -> None:
 
 
 def test_a_hidden_directory_in_the_catalogue_is_not_a_pattern(tmp_path: Path) -> None:
-    """`_pattern_names` filters dot-directories, and nothing exercised it: the
+    """`pattern_names` filters dot-directories, and nothing exercised it: the
     real catalogue has none today, so removing the filter left all 16 tests
     green (measured 2026-10-04 in a scratch copy of the repo).
 
@@ -408,7 +426,7 @@ def test_a_hidden_directory_cannot_supply_a_companion_edge(tmp_path: Path) -> No
 
 
 def test_companion_citations_outer_keys_equal_the_companion_map_edges() -> None:
-    """Filled in the same `_derive` pass, so its two outer key levels equal
+    """Filled in the same `derive` pass, so its two outer key levels equal
     `companion_map()`'s edges by construction -- asserted rather than
     trusted `[ref: SDD/Process contract: the CLI the skill drives, scan,
     "companion_citations() is new"]`. Every edge carries at least one

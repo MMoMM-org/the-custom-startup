@@ -118,7 +118,7 @@ that is what the harness registers under.** A regex that captures
 everything to end-of-line disagrees with real YAML on a trailing comment
 (`name: ddd # comment` registers as `ddd`, not `ddd # comment`), a block
 scalar (`>-`, `|`), a tag (`!!str`), an anchor (`&a`), and a duplicate
-`name:` key (YAML takes the last, never the first). `_parse_name_scalar`
+`name:` key (YAML takes the last, never the first). `parse_name_scalar`
 below implements exactly two YAML scalar forms -- plain and quoted
 (single or double) -- and **skips and reports anything else** rather than
 guessing: a wrong name silently frees the real one, where a skip is at
@@ -192,7 +192,7 @@ class GuardReport:
     skipped: list[tuple[str, str]] = field(default_factory=list)
 
 
-def _parse_name_scalar(raw: str) -> tuple[str | None, bool]:
+def parse_name_scalar(raw: str) -> tuple[str | None, bool]:
     """Parse the text after `name:` as a YAML scalar. Returns `(value,
     ok)`: `ok=False` means "this parser recognises nothing valid here --
     skip and report", which the caller must never second-guess by
@@ -318,7 +318,7 @@ def _skill_name(skill_md: Path) -> tuple[str | None, str | None]:
         # guess which one the harness would actually register under.
         return None, "duplicate name: key"
 
-    value, ok = _parse_name_scalar(matches[0].group(1))
+    value, ok = parse_name_scalar(matches[0].group(1))
     if not ok:
         return None, "unsupported YAML construct in name: value"
     if not value:

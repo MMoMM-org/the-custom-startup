@@ -104,13 +104,13 @@ def test_nonexistent_repo_path_prints_missing(tmp_path):
 def test_unparseable_manifest_prints_missing(tmp_path):
     repo, cat = _setup(tmp_path, ["ddd"])
     lib = _load_lib("manifest")
-    lib._manifest_path(repo).write_text("this is = = not toml [", encoding="utf-8")
+    lib.manifest_path(repo).write_text("this is = = not toml [", encoding="utf-8")
     assert _lines(repo, cat) == ["MISSING"]
 
 
 def test_directory_at_the_manifest_path_prints_missing_and_exits_zero(tmp_path):
     repo, cat = _setup(tmp_path, ["ddd"])
-    path = _load_lib("manifest")._manifest_path(repo)
+    path = _load_lib("manifest").manifest_path(repo)
     path.unlink()
     path.mkdir()
     assert _lines(repo, cat) == ["MISSING"]
@@ -121,7 +121,7 @@ def test_directory_at_the_manifest_path_prints_missing_and_exits_zero(tmp_path):
 def test_schema_invalid_manifest_prints_missing(tmp_path):
     repo, cat = _setup(tmp_path, ["ddd"])
     lib = _load_lib("manifest")
-    lib._manifest_path(repo).write_text('bundle = "1.0.0"\nsurprise = 1\n', encoding="utf-8")
+    lib.manifest_path(repo).write_text('bundle = "1.0.0"\nsurprise = 1\n', encoding="utf-8")
     assert _lines(repo, cat) == ["MISSING"]
 
 
@@ -257,13 +257,13 @@ def test_cli_defaults_to_the_real_catalogue(tmp_path):
 
 def test_non_utf8_manifest_prints_missing(tmp_path):
     repo, cat = _setup(tmp_path, ["ddd"])
-    _load_lib("manifest")._manifest_path(repo).write_bytes(b"\xff\xfe\x00")
+    _load_lib("manifest").manifest_path(repo).write_bytes(b"\xff\xfe\x00")
     assert _lines(repo, cat) == ["MISSING"]
 
 
 def test_present_manifest_naming_no_patterns_prints_ok(tmp_path):
     repo, cat = _setup(tmp_path, ["ddd"])
-    _load_lib("manifest")._manifest_path(repo).write_text('bundle = "1.0.0"\n', encoding="utf-8")
+    _load_lib("manifest").manifest_path(repo).write_text('bundle = "1.0.0"\n', encoding="utf-8")
     assert _lines(repo, cat) == ["OK"]
 
 
@@ -348,7 +348,7 @@ def _hand_manifest(repo: Path, names: Sequence[str]) -> None:
     body = ['bundle = "1.0.0"\n']
     for n in names:
         body.append(f'\n[patterns.{n}]\nversion = "1"\ninstalled_as = "tcs-{n}"\nsha256 = "{"0" * 64}"\n')
-    path = _load_lib("manifest")._manifest_path(repo)
+    path = _load_lib("manifest").manifest_path(repo)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(body), encoding="utf-8")
 

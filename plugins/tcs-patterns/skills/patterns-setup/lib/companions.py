@@ -12,8 +12,11 @@ companion before the user finishes deciding
 `companion_map()` and `expand_companions()` are the two things C3 reads: the
 direct edges, and the transitive closure a selection pulls in.
 `companion_citations()` (T5.1a) returns the citations behind each edge, so a
-proposed companion can arrive with the citation that justified it named. All
-three, like `ambiguous_citations()`, take the catalogue root as a parameter,
+proposed companion can arrive with the citation that justified it named. Each
+of the four walks the whole catalogue; a caller wanting more than one answer
+(`cli.py scan` wants three) calls `derive()` once and reads the `Derivation`
+-- one walk measured ~0.75s on the real catalogue (PR #176 M3). All four,
+like `derive()`, take the catalogue root as a parameter,
 defaulting to the real one (`paths.DEFAULT_CATALOGUE_DIR`) -- the same shape
 `detect(repo_dir)` takes the repository root -- so a test can derive against
 a throwaway `tmp_path` catalogue and never write into
@@ -93,14 +96,16 @@ def _non_fenced_lines(text: str):
         yield n, line
 
 
-def _pattern_names(catalogue_root: Path) -> list[str]:
-    """Every pattern directory directly under `catalogue_root`. Filters
+def pattern_names(catalogue_root: Path) -> list[str]:
+    """Every pattern directory directly under `catalogue_root`, sorted -- the
+    one definition of "a catalogue pattern" `install.py` and `cli.py` read
+    too (PR #176 M6). Filters
     hidden entries -- a stray `.claude/.cc-writes` created by a Bash call
     that happened to `cd` into the real catalogue directory would otherwise
     be counted as a 22nd pattern, the same incident `tests/visible_dirs.py`
     documents for the detection corpus. Not imported from there: this is
     production code and must not depend on the test tree."""
-    return sorted(p.name for p in catalogue_root.iterdir() if p.is_dir() and not p.name.startswith("."))
+    return sorted(p.name for p in Path(catalogue_root).iterdir() if p.is_dir() and not p.name.startswith("."))
 
 
 def _pattern_root(path: Path, catalogue_root: Path) -> Path:
@@ -143,13 +148,18 @@ def _resolves_under(pattern_root: Path, target: str) -> bool:
     """Whether `target`, taken as a path relative to `pattern_root`, names an
     existing file that stays inside `pattern_root` -- a citation that climbs
     out via `../` and happens to land elsewhere does not count, which is also
-    why the `../`-climb shape measures zero edges under this rule."""
+    why the `../`-climb shape measures zero edges under this rule.
+
+    `pattern_root` must already be resolved: `derive()` resolves each root
+    once, not once per candidate (PR #176 M3). The candidate itself is still
+    resolved here, so a symlink leading out of the root is judged by where it
+    lands, never by its lexical prefix."""
     try:
         resolved = (pattern_root / target).resolve()
     except (OSError, ValueError):
         return False
     try:
-        resolved.relative_to(pattern_root.resolve())
+        resolved.relative_to(pattern_root)
     except ValueError:
         return False
     return resolved.is_file()
@@ -181,15 +191,49 @@ class Citation:
 
 
 @dataclass(frozen=True)
-class _Derivation:
+class Derivation:
+    """One walk of the catalogue: what `companion_map()`,
+    `companion_citations()` and `ambiguous_citations()` each return, and the
+    closure `expand_companions()` takes over `edges`."""
+
     edges: dict[str, frozenset[str]]
     ambiguous: tuple[AmbiguousCitation, ...]
     citations: dict[str, dict[str, tuple[Citation, ...]]]
 
+    def expand(self, selected) -> frozenset[str]:
+        """The transitive closure of `selected`'s companions, excluding the
+        selections themselves -- so a caller can present "and these come
+        with it" without filtering `[ref: SDD/Interface Specifications/Data
+        model: companion map, "Expansion is the transitive closure"]`.
 
-def _derive(catalogue_root: Path) -> _Derivation:
+        Carries a visited set seeded with `selected` itself: `ddd`/`hexagonal`
+        and `event-driven`/`event-sourcing` are mutual companions, so an
+        unguarded walk from any of the four never terminates. The walk is
+        iterative, not recursive, so there is no call-stack depth to exhaust
+        either way `[ref: ADR-10, "Expansion is the transitive closure, not
+        one hop"]`."""
+        selected_set = set(selected)
+        visited = set(selected_set)
+        result: set[str] = set()
+        stack = list(selected_set)
+
+        while stack:
+            current = stack.pop()
+            for companion in self.edges.get(current, ()):
+                if companion in visited:
+                    continue
+                visited.add(companion)
+                result.add(companion)
+                stack.append(companion)
+
+        return frozenset(result)
+
+
+def derive(catalogue_root: Path = paths.DEFAULT_CATALOGUE_DIR) -> Derivation:
+    """Walk `catalogue_root` once and return every answer this module gives
+    (PR #176 M3)."""
     catalogue_root = Path(catalogue_root)
-    pattern_roots = {name: (catalogue_root / name).resolve() for name in _pattern_names(catalogue_root)}
+    pattern_roots = {name: (catalogue_root / name).resolve() for name in pattern_names(catalogue_root)}
 
     edges: dict[str, set[str]] = {}
     ambiguous: list[AmbiguousCitation] = []
@@ -225,7 +269,7 @@ def _derive(catalogue_root: Path) -> _Derivation:
                 Citation(source_file=source_file, line=line_no, target=target)
             )
 
-    return _Derivation(
+    return Derivation(
         edges={source: frozenset(targets) for source, targets in edges.items()},
         ambiguous=tuple(ambiguous),
         citations={
@@ -241,19 +285,19 @@ def companion_map(catalogue_root: Path = paths.DEFAULT_CATALOGUE_DIR) -> dict[st
     `[ref: SDD/Interface Specifications/Data model: companion map; ADR-10]`.
     A pattern with no outgoing edge is simply absent as a key, never present
     with an empty set."""
-    return _derive(catalogue_root).edges
+    return derive(catalogue_root).edges
 
 
 def companion_citations(
     catalogue_root: Path = paths.DEFAULT_CATALOGUE_DIR,
 ) -> dict[str, dict[str, tuple[Citation, ...]]]:
     """source -> companion -> the citations that produced that edge, in
-    file-then-line order. Filled in the same `_derive` pass as
+    file-then-line order. Filled in the same `derive` pass as
     `companion_map()`, so its two outer key levels equal that map's edges by
-    construction; `source_file` is catalogue-relative, as `_derive` writes it
+    construction; `source_file` is catalogue-relative, as `derive` writes it
     for `AmbiguousCitation` `[ref: SDD/Process contract: the CLI the skill
     drives, scan, "companion_citations() is new"]`."""
-    return _derive(catalogue_root).citations
+    return derive(catalogue_root).citations
 
 
 def ambiguous_citations(catalogue_root: Path = paths.DEFAULT_CATALOGUE_DIR) -> tuple[AmbiguousCitation, ...]:
@@ -262,34 +306,10 @@ def ambiguous_citations(catalogue_root: Path = paths.DEFAULT_CATALOGUE_DIR) -> t
     today; exists so the day one appears, the suite says so rather than
     silently picking one
     `[ref: SDD/Interface Specifications/Data model: companion map]`."""
-    return _derive(catalogue_root).ambiguous
+    return derive(catalogue_root).ambiguous
 
 
 def expand_companions(selected, catalogue_root: Path = paths.DEFAULT_CATALOGUE_DIR) -> frozenset[str]:
-    """The transitive closure of `selected`'s companions, excluding the
-    selections themselves -- so a caller can present "and these come with
-    it" without filtering `[ref: SDD/Interface Specifications/Data model:
-    companion map, "Expansion is the transitive closure"]`.
-
-    Carries a visited set seeded with `selected` itself: `ddd`/`hexagonal`
-    and `event-driven`/`event-sourcing` are mutual companions, so an
-    unguarded walk from any of the four never terminates. The walk is
-    iterative, not recursive, so there is no call-stack depth to exhaust
-    either way `[ref: ADR-10, "Expansion is the transitive closure, not one
-    hop"]`."""
-    edges = companion_map(catalogue_root)
-    selected_set = set(selected)
-    visited = set(selected_set)
-    result: set[str] = set()
-    stack = list(selected_set)
-
-    while stack:
-        current = stack.pop()
-        for companion in edges.get(current, ()):
-            if companion in visited:
-                continue
-            visited.add(companion)
-            result.add(companion)
-            stack.append(companion)
-
-    return frozenset(result)
+    """`derive(catalogue_root).expand(selected)` -- see `Derivation.expand`
+    for the closure rule and its cycle guard."""
+    return derive(catalogue_root).expand(selected)
