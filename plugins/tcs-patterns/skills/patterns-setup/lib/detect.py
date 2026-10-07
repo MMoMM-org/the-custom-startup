@@ -36,9 +36,11 @@ unsupported interpreter is the decision, not a better regex -- see
 
 from __future__ import annotations
 
+import codecs
 import json
 import os
 import re
+import stat
 import sys
 from contextvars import ContextVar
 from pathlib import Path
@@ -84,7 +86,25 @@ def _require_tomllib() -> None:
 # evidence, for a target repository's own copy too, so excluding it is
 # right on the merits independent of this bug. Measured: none of the 26
 # corpus fixtures depend on walking `.git` or `.claude`.
-SKIP_DIRS = {"node_modules", ".venv", "venv", "vendor", ".git", ".claude"}
+#
+# Build output and tool caches added 2026-10-07 (review L7): they hold
+# generated copies of the repository's own files, so walking them costs time
+# and can read a stale `tsconfig.json` or test bundle as live evidence. Every
+# detection rule was checked first: none looks for evidence inside one of
+# these names (the directory-name rules want `tests`/`test`/`spec`/
+# `__tests__`, `ports`/`adapters`/`domain`, `event_store`/`eventstore`), so
+# none is a signal that skipping would hide.
+SKIP_DIRS = {
+    "node_modules", ".venv", "venv", "vendor", ".git", ".claude",
+    "dist", "build", "target", ".tox", "__pycache__", ".pytest_cache",
+    ".ruff_cache", ".mypy_cache", ".next", "coverage",
+}
+
+# A read stops after this many bytes (review L2): a rule only needs the head
+# of a manifest or test file, and an unbounded read of a huge or endless file
+# is a denial of service. A longer file is truncated, not failed -- it is not
+# an access problem, so it does not appear in `unreadable`.
+MAX_READ_BYTES = 1024 * 1024
 
 # Dependency-manifest filenames, walked at the nested, exclusion-aware depth
 # `[ref: SDD/Detection rules, "The walk excludes..."]`, and reported in
@@ -202,7 +222,17 @@ class _Tree:
             for d in dirnames:
                 self.dir_paths.append(Path(dirpath) / d)
             for name in sorted(filenames):
-                self.files.append(Path(dirpath) / name)
+                path = Path(dirpath) / name
+                # `os.walk` lists symlinks and special files (FIFOs, devices)
+                # among `filenames`. A link can point outside the repository
+                # or at `/dev/zero`, and opening a FIFO blocks: only regular
+                # files are evidence (review L2).
+                try:
+                    if not stat.S_ISREG(path.lstat().st_mode):
+                        continue
+                except OSError:
+                    continue
+                self.files.append(path)
         self.files.sort()
         self.dir_paths.sort()
 
@@ -239,7 +269,14 @@ def _read_text(path: Path) -> Optional[str]:
     `OSError` is recorded for `unreadable`: a `UnicodeDecodeError` is content,
     not access `[ref: SDD/Process contract: the CLI the skill drives, scan]`."""
     try:
-        return path.read_text(encoding="utf-8")
+        with path.open("rb") as handle:
+            data = handle.read(MAX_READ_BYTES + 1)
+        truncated = len(data) > MAX_READ_BYTES
+        # `final=False` on a truncated read: the cut may split a character.
+        decoder = codecs.getincrementaldecoder("utf-8")()
+        text = decoder.decode(data[:MAX_READ_BYTES], final=not truncated)
+        # `read_text` translated newlines; keep that for the rules' regexes.
+        return text.replace("\r\n", "\n").replace("\r", "\n")
     except OSError:
         failures = _READ_FAILURES.get()
         if failures is not None:

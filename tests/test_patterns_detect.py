@@ -111,7 +111,13 @@ def test_corpus_is_not_empty_here_either() -> None:
 # direction instead, asserting equality explicitly rather than by sharing
 # the value -- so the next addition to either side fails loudly here,
 # naming exactly which literal is behind.
-EXCLUDED_SEGMENTS = frozenset({"node_modules", ".venv", "venv", "vendor", ".git", ".claude"})
+EXCLUDED_SEGMENTS = frozenset(
+    {
+        "node_modules", ".venv", "venv", "vendor", ".git", ".claude",
+        "dist", "build", "target", ".tox", "__pycache__", ".pytest_cache",
+        ".ruff_cache", ".mypy_cache", ".next", "coverage",
+    }
+)
 
 
 def test_excluded_segments_matches_skip_dirs() -> None:
@@ -1298,3 +1304,107 @@ def test_unreadable_names_what_the_scan_could_not_list_or_open(tmp_path) -> None
     assert report["schema"] == 1
     # The locked directory's tsconfig.json was never seen, so it proposes nothing.
     assert "typescript-strict" not in {e["pattern"] for e in report["auto"]}
+
+
+# --- Review fixes (PR #176): symlinks, special files, read cap, build dirs ------
+
+
+def _auto_patterns(report: dict) -> set:
+    return {entry["pattern"] for entry in report["auto"]}
+
+
+def _all_patterns(report: dict) -> set:
+    return _auto_patterns(report) | {entry["pattern"] for entry in report.get("proposed", [])}
+
+
+def test_a_symlink_to_a_file_outside_the_repo_is_not_read(tmp_path) -> None:
+    """A committed `foo.test.tsx -> <outside>` must not make the scan read
+    outside the repository (L2). The outside file carries the DOM-render
+    marker, so reading it through the link would propose `frontend-testing`;
+    the same content as a regular file inside the repo does (control)."""
+    outside = tmp_path / "outside" / "secret.txt"
+    outside.parent.mkdir()
+    outside.write_text("render(<App />)\n", encoding="utf-8")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.test.tsx").symlink_to(outside)
+    detect = _load_detect()
+    report = detect.detect(repo)
+    assert "frontend-testing" not in _all_patterns(report)
+    assert report["unreadable"] == []
+
+    control = tmp_path / "control"
+    control.mkdir()
+    (control / "app.test.tsx").write_text("render(<App />)\n", encoding="utf-8")
+    assert "frontend-testing" in _all_patterns(detect.detect(control))
+
+
+def test_a_fifo_does_not_hang_the_scan(tmp_path) -> None:
+    """A named pipe named like a test file lists in `filenames`; opening it
+    for reading blocks forever. Run in a subprocess with a timeout so a
+    regression fails instead of hanging the suite."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    os.mkfifo(repo / "app.test.tsx")
+    script = (
+        "import sys; sys.path.insert(0, sys.argv[1]); import detect; "
+        "print(detect.detect(sys.argv[2])['schema'])"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(LIB_DIR), str(repo)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "1"
+
+
+def test_a_read_is_capped_at_one_mebibyte(tmp_path) -> None:
+    """Only the first 1 MiB of a file is read (L2): a marker placed after
+    1,100,000 bytes of padding is not seen, the same marker at the top is.
+    A truncated read is not an access failure, so `unreadable` stays empty."""
+    detect = _load_detect()
+    late = tmp_path / "late"
+    late.mkdir()
+    (late / "app.test.tsx").write_text("// " + "x" * 1_100_000 + "\nrender(<App />)\n", encoding="utf-8")
+    early = tmp_path / "early"
+    early.mkdir()
+    (early / "app.test.tsx").write_text("render(<App />)\n// " + "x" * 1_100_000 + "\n", encoding="utf-8")
+
+    late_report = detect.detect(late)
+    assert "frontend-testing" not in _all_patterns(late_report)
+    assert late_report["unreadable"] == []
+    assert "frontend-testing" in _all_patterns(detect.detect(early))
+
+
+def test_a_cap_boundary_inside_a_multibyte_character_is_not_a_decode_failure(tmp_path) -> None:
+    """The cut can land mid-character; that must truncate, not drop the file
+    as undecodable. Padding of 1,048,575 ASCII bytes puts the 2-byte `é`
+    straddling the 1 MiB boundary, with the marker placed BEFORE the padding."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.test.tsx").write_text("render(<App />)\n// " + "x" * 1_048_550 + "é" * 100 + "\n", encoding="utf-8")
+    detect = _load_detect()
+    assert "frontend-testing" in _all_patterns(detect.detect(repo))
+
+
+@pytest.mark.parametrize(
+    "dirname",
+    ["dist", "build", "target", ".tox", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".next", "coverage"],
+)
+def test_build_and_cache_directories_are_not_scanned(tmp_path, dirname) -> None:
+    """L7: a `tsconfig.json` only inside a build/cache directory is not
+    evidence; the same file at the root is (control)."""
+    detect = _load_detect()
+    nested = tmp_path / "nested"
+    (nested / dirname).mkdir(parents=True)
+    (nested / dirname / "tsconfig.json").write_text("{}", encoding="utf-8")
+    assert "typescript-strict" not in _all_patterns(detect.detect(nested))
+
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "tsconfig.json").write_text("{}", encoding="utf-8")
+    assert "typescript-strict" in _all_patterns(detect.detect(root))
