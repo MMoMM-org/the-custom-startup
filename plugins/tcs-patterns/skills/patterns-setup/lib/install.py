@@ -3,7 +3,9 @@
 `install(repo_dir, names, *, catalogue_dir) -> InstallReport` writes the
 patterns named in `names` into `<repo_dir>/.claude/skills/tcs-<name>/`, each
 renamed to its prefixed form in the installed `SKILL.md`'s frontmatter
-(ADR-1), and records each write in the manifest (C6). **This module assumes
+(ADR-1), with every `tcs-patterns:<catalogue pattern>` marker in the copied
+UTF-8 files rewritten to `tcs-<pattern>` (`rewrite_pattern_refs`, ADR-1's
+2026-10-07 amendment), and records each write in the manifest (C6). **This module assumes
 every name it is given has already cleared the collision guard (C4) --
 it never imports `guard` and never rescans the three namespaces itself**
 `[ref: docs/XDD/specs/020-tcs-patterns-selective-install/solution.md,
@@ -292,6 +294,64 @@ def rename_in_frontmatter(text: str, new_name: str) -> str:
     return patched + body
 
 
+# This plugin's own skills. They are still plugin skills after 2.0, so a
+# `tcs-patterns:<one of these>` marker resolves as written and is never
+# rewritten -- excluded by name, so a catalogue directory of the same name
+# could not redirect it `[ref: solution.md, ADR-1, "Amended 2026-10-07"]`.
+PLUGIN_SKILL_NAMES = frozenset({"patterns-setup", "pattern"})
+
+_PATTERN_REF_RE = re.compile(r"tcs-patterns:([A-Za-z0-9_-]+)")
+
+
+def catalogue_names(catalogue_dir: Path) -> frozenset[str]:
+    """Every pattern directory directly under `catalogue_dir`, hidden
+    entries excluded -- the same set `companions._pattern_names` reads."""
+    return frozenset(p.name for p in Path(catalogue_dir).iterdir() if p.is_dir() and not p.name.startswith("."))
+
+
+def rewrite_pattern_refs(text: str, names) -> str:
+    """Rewrite each `tcs-patterns:<name>` marker to `tcs-<name>` when `<name>`
+    -- the maximal `[A-Za-z0-9_-]` run after the colon -- is in `names` and
+    is not one of `PLUGIN_SKILL_NAMES`. Every other byte is left alone.
+
+    After 2.0 the plugin address names nothing: an installed pattern is the
+    repository skill `tcs-<name>` (ADR-1). The ONE function both the copy
+    path and `_catalogue_as_installed` use, so the installed file and the
+    text a divergence diff compares it against cannot disagree
+    `[ref: solution.md, ADR-1, "Amended 2026-10-07"]`."""
+    rewritable = frozenset(names) - PLUGIN_SKILL_NAMES
+
+    def replace(m: re.Match) -> str:
+        return f"tcs-{m.group(1)}" if m.group(1) in rewritable else m.group(0)
+
+    return _PATTERN_REF_RE.sub(replace, text)
+
+
+def _skill_md_as_installed(text: str, installed_as: str, names) -> str:
+    """A catalogue `SKILL.md` as installed: frontmatter renamed, markers
+    rewritten. Shared by `_fresh_install` and `_catalogue_as_installed`."""
+    return rewrite_pattern_refs(rename_in_frontmatter(text, installed_as), names)
+
+
+def _rewrite_copied_text_files(root: Path, names) -> None:
+    """Apply `rewrite_pattern_refs` to every file under `root` except
+    `SKILL.md` (rewritten by its caller together with the rename). A file
+    whose bytes are not strict UTF-8 is left byte-for-byte as copied; one
+    with no marker is not rewritten at all."""
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink() or not path.is_file() or path == root / "SKILL.md":
+            continue
+        try:
+            text = path.read_bytes().decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        except OSError as e:
+            raise InstallError(f"could not read {path}: {e}") from e
+        rewritten = rewrite_pattern_refs(text, names)
+        if rewritten != text:
+            path.write_bytes(rewritten.encode("utf-8"))
+
+
 def _bundle_version() -> str:
     """The installed plugin's own version, for the manifest's top-level
     `bundle` field ("the plugin version that produced this selection")
@@ -356,8 +416,10 @@ def _fresh_install(name: str, *, installed_as: str, dest: Path, skills_root: Pat
         except OSError as e:
             raise InstallError(f"catalogue pattern {name!r} has no readable SKILL.md: {e}") from e
 
-        patched = rename_in_frontmatter(raw.decode("utf-8"), installed_as).encode("utf-8")
+        names = catalogue_names(catalogue_dir)
+        patched = _skill_md_as_installed(raw.decode("utf-8"), installed_as, names).encode("utf-8")
         skill_md.write_bytes(patched)
+        _rewrite_copied_text_files(tmp_dir, names)
 
         os.rename(str(tmp_dir), str(dest))
         return hashlib.sha256(patched).hexdigest()
@@ -542,10 +604,16 @@ def _catalogue_as_installed(catalogue_dir: Path, name: str, installed_as: str) -
     keeps the `name:` line out of the diff: without it, every diverged
     pattern reports a spurious `name:` difference the user cannot act on
     `[ref: solution.md, decision 4]`.
+
+    The `tcs-patterns:<name>` markers are rewritten here too, through the
+    same `_skill_md_as_installed` the copy uses: without it every marker
+    line would show in every divergence diff as an edit the user never made
+    `[ref: solution.md, ADR-1, "Amended 2026-10-07"]`.
     """
-    return rename_in_frontmatter(
+    return _skill_md_as_installed(
         _read_text_or_raise(catalogue_dir / name / "SKILL.md", what=f"catalogue SKILL.md for {name!r}"),
         installed_as,
+        catalogue_names(catalogue_dir),
     )
 
 
