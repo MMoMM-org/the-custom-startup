@@ -314,7 +314,7 @@ four passing test suites.
            `[ref: SDD/Interface Specifications/Data model: companion map, "Expansion is the
            transitive closure"]`
 
-- [ ] **T5.2 The catalogue reader skill** `[activity: frontend-ui]` `[parallel: true]`
+- [x] **T5.2 The catalogue reader skill** `[activity: frontend-ui]` `[parallel: true]`
 
   1. Prime: Read the reader's contract
      `[ref: SDD/Interface Specifications/Process contract: the skills]` and F10's criteria
@@ -325,10 +325,10 @@ four passing test suites.
   4. Validate: `python3 -m pytest -q`; invoke it for a pattern and confirm the repository is
      untouched afterwards.
   5. Success:
-     - [ ] Body served, nothing written `[ref: PRD/F10 1st; SDD/AC-15]`
-     - [ ] Unknown name lists the 21 `[ref: PRD/F10 2nd]`
+     - [x] Body served, nothing written `[ref: PRD/F10 1st; SDD/AC-15]`
+     - [x] Unknown name lists the 21 `[ref: PRD/F10 2nd]`
 
-- [ ] **T5.3 Documentation** `[activity: technical-writing]` `[parallel: true]`
+- [x] **T5.3 Documentation** `[activity: technical-writing]` `[parallel: true]`
 
   1. Prime: Read `docs/about/principles.md:167`, which states that plugin skills do not support
      `disable-model-invocation`. Measured false: the flag removes a plugin skill's entry from the
@@ -345,11 +345,11 @@ four passing test suites.
      `docs/reference/` wherever the 21 are enumerated as skills.
   4. Validate: `scripts/ci/check-docs-sync.sh`; grep the repository for stale claims about the 21.
   5. Success:
-     - [ ] `principles.md:167` corrected with the measurement `[ref: SDD/Known Technical Issues]`
-     - [ ] No document claims the plugin ships 21 skills `[ref: PRD/F1]`
-     - [ ] `docs-sync` passes locally before any push `[ref: SDD/Project Commands]`
+     - [x] `principles.md:167` corrected with the measurement `[ref: SDD/Known Technical Issues]`
+     - [x] No document claims the plugin ships 21 skills `[ref: PRD/F1]`
+     - [x] `docs-sync` passes locally before any push `[ref: SDD/Project Commands]`
 
-- [ ] **T5.3a Installed patterns name each other as `tcs-<name>`** `[activity: backend-api]`
+- [x] **T5.3a Installed patterns name each other as `tcs-<name>`** `[activity: backend-api]`
 
   1. Prime: Read ADR-1's 2026-10-07 amendment and the companion-map section's amendment
      `[ref: SDD/Architecture Decisions/ADR-1]`. After 2.0, `tcs-patterns:<name>` resolves to
@@ -371,7 +371,7 @@ four passing test suites.
            non-catalogue names are untouched `[ref: SDD/ADR-1, amendment 2026-10-07]`
      - [x] Divergence detection and both diffs see only user edits, never the rewrite
            `[ref: SDD/ADR-4]`
-     - [ ] The 39 cross-plugin references in `tcs-team` and `tcs-workflow` name `tcs-<name>`
+     - [x] The 39 cross-plugin references in `tcs-team` and `tcs-workflow` name `tcs-<name>`
            rather than `tcs-patterns:<name>` (done alongside, outside this task's files)
 
 - [ ] **T5.4 Both changelogs** `[activity: technical-writing]` `[parallel: true]`
@@ -389,7 +389,7 @@ four passing test suites.
   4. Validate: both CI scripts locally.
   5. Success:
      - [ ] Both changelogs updated; both sync checks pass locally `[ref: SDD/Project Commands]`
-     - [ ] The breaking change is stated in terms of what a user must now do `[ref: SDD/Deployment View]`
+     - [x] The breaking change is stated in terms of what a user must now do `[ref: SDD/Deployment View]`
 
 - [ ] **T5.5 End-to-end validation** `[activity: validate]`
 
