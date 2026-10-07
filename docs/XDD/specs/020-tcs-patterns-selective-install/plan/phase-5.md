@@ -408,8 +408,8 @@ four passing test suites.
      criteria walked and ticked; the CI gate, `docs-sync` and `changelog-version-sync` all run
      locally before pushing.
   5. Success:
-     - [ ] The nine-step flow completes in a fixture repository `[ref: SDD/Runtime View/Primary Flow]`
+     - [x] The nine-step flow completes in a fixture repository `[ref: SDD/Runtime View/Primary Flow]`
      - [ ] Installed patterns appear in a **new** session's listing `[ref: SDD/AC-8]`
      - [ ] The advisory names exactly the bumped pattern `[ref: SDD/AC-11]`
-     - [ ] All 17 SDD acceptance criteria verified `[ref: SDD/Acceptance Criteria]`
+     - [ ] All 18 SDD acceptance criteria verified (AC-18 added 2026-10-04; this read 17) `[ref: SDD/Acceptance Criteria]`
      - [ ] Both test legs green, each reported separately `[ref: SDD/Quality Requirements]`
