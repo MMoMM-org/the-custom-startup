@@ -367,9 +367,9 @@ four passing test suites.
      `tcs-patterns:<word>` — each fails a named test; CLI and skill field tests unchanged;
      `python3 -m pytest -q`.
   5. Success:
-     - [ ] Installed files name catalogue patterns as `tcs-<name>`; the two plugin skills and
+     - [x] Installed files name catalogue patterns as `tcs-<name>`; the two plugin skills and
            non-catalogue names are untouched `[ref: SDD/ADR-1, amendment 2026-10-07]`
-     - [ ] Divergence detection and both diffs see only user edits, never the rewrite
+     - [x] Divergence detection and both diffs see only user edits, never the rewrite
            `[ref: SDD/ADR-4]`
      - [ ] The 39 cross-plugin references in `tcs-team` and `tcs-workflow` name `tcs-<name>`
            rather than `tcs-patterns:<name>` (done alongside, outside this task's files)
