@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: The skills, the docs, end to end"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 5
 ---
@@ -391,7 +391,7 @@ four passing test suites.
      - [x] Both changelogs updated; both sync checks pass locally `[ref: SDD/Project Commands]`
      - [x] The breaking change is stated in terms of what a user must now do `[ref: SDD/Deployment View]`
 
-- [ ] **T5.5 End-to-end validation** `[activity: validate]`
+- [x] **T5.5 End-to-end validation** `[activity: validate]`
 
   1. Prime: Read the full primary flow `[ref: SDD/Runtime View/Primary Flow]` and the acceptance
      criteria table `[ref: SDD/Acceptance Criteria]`.
@@ -409,7 +409,7 @@ four passing test suites.
      locally before pushing.
   5. Success:
      - [x] The nine-step flow completes in a fixture repository `[ref: SDD/Runtime View/Primary Flow]`
-     - [ ] Installed patterns appear in a **new** session's listing `[ref: SDD/AC-8]`
-     - [ ] The advisory names exactly the bumped pattern `[ref: SDD/AC-11]`
-     - [ ] All 18 SDD acceptance criteria verified (AC-18 added 2026-10-04; this read 17) `[ref: SDD/Acceptance Criteria]`
+     - [x] Installed patterns appear in a **new** session's listing `[ref: SDD/AC-8]`
+     - [x] The advisory names exactly the bumped pattern `[ref: SDD/AC-11]`
+     - [x] All 18 SDD acceptance criteria verified (AC-18 added 2026-10-04; this read 17) `[ref: SDD/Acceptance Criteria]`
      - [x] Both test legs green, each reported separately `[ref: SDD/Quality Requirements]`
