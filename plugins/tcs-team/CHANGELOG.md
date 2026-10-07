@@ -15,7 +15,8 @@ enforces that on every merge.
 - **Cross-plugin routing contracts name the installed pattern, `tcs-<name>`.** After tcs-patterns 2.0
   the address `tcs-patterns:<name>` resolves to nothing; a pattern is a repo skill `tcs-<name>`,
   installed with `/tcs-patterns:patterns-setup`. The "Do NOT use ... `tcs-<name>` owns that"
-  clauses in six skill descriptions and the skills README now say so.
+  clauses in six skill descriptions and the skills README now say so, and the descriptions add
+  "if installed", since a repository holds only the patterns it chose.
 
 ## [3.4.4] - 2026-10-01
 

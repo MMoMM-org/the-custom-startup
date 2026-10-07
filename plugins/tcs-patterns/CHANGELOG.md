@@ -40,6 +40,12 @@ enforces that on every merge.
   and the diff is shown first. `status` reports installed, drifted and unaccounted-for patterns.
 - **`/tcs-patterns:pattern <name>`.** Shows one catalogue pattern in the session without installing
   it.
+- **The manifest carries `schema = 1`.** A manifest written by a later tcs-patterns with a
+  higher `schema` can still be read by `status` and the drift advisory. `install`, `update`
+  and `remove` refuse to rewrite it and ask for a plugin update instead, so newer fields are
+  never dropped. Each entry's `installed_as` must be `tcs-<name>`: a hand-edited entry naming
+  another directory makes the manifest unparseable rather than letting `update` overwrite that
+  directory.
 - **Drift advisory.** The `tcs-git-helpers` session brief names installed patterns that are behind
   the catalogue, and patterns the catalogue can no longer account for (see its changelog).
 

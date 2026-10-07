@@ -414,6 +414,7 @@ with `tomllib`.
 
 ```toml
 # Written by /tcs-patterns:patterns-setup. Reviewed and committed like any other file.
+schema = 1                  # format version (amended 2026-10-07, see below)
 bundle = "2.0.0"            # the plugin version that produced this selection
 
 [patterns.ddd]

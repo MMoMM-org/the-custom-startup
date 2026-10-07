@@ -11,7 +11,10 @@
   for one the catalogue cannot account for. The segment is silent when there is no manifest,
   no `python3`, no `tcs-patterns` at 2.x, or the reporter's output is malformed, and a
   repository without patterns does not pay for a Python start. It finds the reporter from the
-  brief's own location, not through `CLAUDE_PLUGIN_ROOT`.
+  brief's own location, not through `CLAUDE_PLUGIN_ROOT`. The segment goes to the user's
+  `systemMessage` only, never into the model's context, because its pattern names are
+  repository content. Names over 64 characters are dropped. The reporter runs as `python3 -I`,
+  and on Python older than 3.11 the segment is a one-line hint instead of silence.
 - **`drift_check_bundle <repo> <expected> [<file>] [<marker_dir>]`** generalises the hook-bundle
   drift check to any marker directory; `drift_check_hook_bundle` stays as a thin wrapper pinned
   to `.githooks`. `drift_check.py` gained the same parameter. The bundle-version gate in
