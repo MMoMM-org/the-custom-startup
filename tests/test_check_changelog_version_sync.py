@@ -79,11 +79,43 @@ def test_changelog_two_ahead_fails_even_on_a_pull_request(tmp_path):
     assert "4.3.2" in r.stderr
 
 
-def test_minor_version_ahead_is_never_tolerated(tmp_path):
-    """The auto-bump only ever moves the patch component."""
-    p = _make_plugin(tmp_path, "demo", "4.3.0", "## [4.4.0] - 2026-08-31")
+@pytest.mark.parametrize("heading, expected", [
+    ("## [2.0.0] - 2026-10-06", "2.0.0"),   # next major
+    ("## [1.5.0] - 2026-10-06", "1.5.0"),   # next minor
+])
+def test_next_major_or_minor_is_tolerated_on_a_pull_request(tmp_path, heading, expected):
+    """The auto-bump sets the manifest to exactly this version on merge."""
+    p = _make_plugin(tmp_path, "demo", "1.4.4", heading)
+    r = _run("--allow-ahead", "1", p)
+    assert r.returncode == 0, r.stderr
+    assert f"CHANGELOG {expected} / manifest 1.4.4" in r.stdout
+
+
+@pytest.mark.parametrize("heading", [
+    "## [2.0.0] - 2026-10-06",
+    "## [1.5.0] - 2026-10-06",
+])
+def test_next_major_or_minor_fails_on_main(tmp_path, heading):
+    """After the merge the bump has happened — a gap left on main is real."""
+    p = _make_plugin(tmp_path, "demo", "1.4.4", heading)
+    r = _run("--allow-ahead", "0", p)
+    assert r.returncode == 1
+    assert "nothing ahead is allowed" in r.stderr
+
+
+@pytest.mark.parametrize("cl_version", [
+    "3.0.0",   # skips a major
+    "1.6.0",   # skips a minor
+    "2.1.0",   # next major, but not its .0.0
+    "2.0.1",
+    "1.5.1",
+])
+def test_anything_else_ahead_fails_even_on_a_pull_request(tmp_path, cl_version):
+    p = _make_plugin(tmp_path, "demo", "1.4.4", f"## [{cl_version}] - 2026-10-06")
     r = _run("--allow-ahead", "1", p)
     assert r.returncode == 1
+    assert f"CHANGELOG documents {cl_version} but plugin.json carries 1.4.4" in r.stderr
+    assert "allowed: up to 1.4.5, or 1.5.0, or 2.0.0" in r.stderr
 
 
 def test_plugin_without_a_changelog_fails(tmp_path):

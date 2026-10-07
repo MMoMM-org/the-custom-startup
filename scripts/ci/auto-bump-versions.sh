@@ -5,9 +5,16 @@
 # Auto-bump plugin manifest versions when plugin code changed without a bump.
 # Triggered by push to main (typically a PR merge). Reads the diff range and:
 #
-#   1. For each plugins/<X>/ with non-manifest changes: patch-bump
+#   1. For each plugins/<X>/ with non-manifest changes: bump
 #      plugins/<X>/.claude-plugin/plugin.json IF its version field did not
-#      already change in the diff.
+#      already change in the diff. The bump is a patch bump, unless the top
+#      version heading of plugins/<X>/CHANGELOG.md (e.g. "## [2.0.0] - ...")
+#      names exactly the next major (M+1.0.0) or the next minor (M.m+1.0) of
+#      the manifest's version — then the manifest is set to that version.
+#      Writing that heading is how a breaking or feature release is requested;
+#      plugin.json is never hand-edited for it. Any other heading (a skipped
+#      major, an Unreleased section, no CHANGELOG) gets the patch bump, and
+#      check-changelog-version-sync.sh reports a heading the bump cannot reach.
 #   2. If ANY plugin manifest changed in the diff (either bumped by step 1 or
 #      manually bumped in the PR): patch-bump .claude-plugin/marketplace.json
 #      IF not already bumped in the diff.
@@ -145,24 +152,38 @@ done
 to_bump="$(printf '%s\n' "$to_bump" | sort -u | grep -v '^$' || true)"
 
 # ---------------------------------------------------------------------------
-# Patch-bump helper (uses python3 for JSON round-trip — preserves field order)
+# Bump helper (uses python3 for JSON round-trip — preserves field order)
 # ---------------------------------------------------------------------------
 
+# Print the version a CHANGELOG's first "## " heading names, or nothing when
+# the file is missing or the first heading is not a version (Unreleased,
+# prose). Same parse as check-changelog-version-sync.sh.
+changelog_version() {
+  grep -m1 '^## ' "$1" 2>/dev/null \
+    | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' \
+    | head -1
+}
+
+# bump_version <manifest> <json-key-path> [<requested-version>]
+#   Patch-bump the version at <json-key-path>, or set it to
+#   <requested-version> when that is exactly the next major or next minor.
 bump_version() {
   manifest="$1"
   key_path="$2"
+  requested="${3:-}"
 
   if [ ! -f "$manifest" ]; then
     printf 'auto-bump-versions: skip — manifest not found: %s\n' "$manifest" >&2
     return 1
   fi
 
-  python3 - "$manifest" "$key_path" <<'PY'
+  python3 - "$manifest" "$key_path" "$requested" <<'PY'
 import json
 import sys
 
 manifest_path = sys.argv[1]
 key_path = sys.argv[2].split('.')
+requested = sys.argv[3]
 
 with open(manifest_path) as f:
     data = json.load(f)
@@ -186,6 +207,17 @@ except ValueError:
           file=sys.stderr)
     sys.exit(1)
 
+# A major or minor release is requested through the CHANGELOG, and honoured
+# only when it is exactly the next one — a skipped version is not a release
+# this script may invent.
+note = ''
+if requested and major.isdigit() and minor.isdigit():
+    next_major = f'{int(major) + 1}.0.0'
+    next_minor = f'{major}.{int(minor) + 1}.0'
+    if requested in (next_major, next_minor):
+        new = requested
+        note = ' (requested by CHANGELOG)'
+
 target[key_path[-1]] = new
 
 with open(manifest_path, 'w') as f:
@@ -196,7 +228,7 @@ with open(manifest_path, 'w') as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
     f.write('\n')
 
-print(f'{manifest_path}: {current} -> {new}')
+print(f'{manifest_path}: {current} -> {new}{note}')
 PY
 }
 
@@ -207,7 +239,8 @@ PY
 bumped_any=0
 for plugin in $to_bump; do
   manifest="plugins/${plugin}/.claude-plugin/plugin.json"
-  if bump_version "$manifest" "version"; then
+  requested="$(changelog_version "plugins/${plugin}/CHANGELOG.md")"
+  if bump_version "$manifest" "version" "$requested"; then
     bumped_any=1
   fi
 done
