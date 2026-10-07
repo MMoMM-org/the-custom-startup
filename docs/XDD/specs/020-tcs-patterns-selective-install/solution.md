@@ -191,7 +191,8 @@ None. The design performs no network access and integrates no service.
 
 - Raising or working around the listing budget for the other three large plugins.
 - Any judgement on the 21 patterns' content: no merging, no pruning, no rewriting of bodies beyond
-  the `name:` line and the three broken references.
+  the `name:` line, the three broken references and the `tcs-patterns:<name>` marker rewrite
+  (ADR-1, 2026-10-07).
 - Changing any pattern's `user-invocable` setting.
 - A graphical or non-interactive selection UI beyond the `--update` path.
 
@@ -399,7 +400,7 @@ additions:
 |---|---|---|
 | `SKILL.md` | yes | the body, frontmatter `name: <name>` (unprefixed — the installer rewrites it) |
 | `VERSION` | yes | one line, a bare integer, maintainer-set. Not semver: a pattern body has no API, only "newer than what you have" |
-| `reference/`, `examples/`, `templates/`, `checklists/` | no | copied verbatim with the pattern |
+| `reference/`, `examples/`, `templates/`, `checklists/` | no | copied with the pattern; UTF-8 files get the marker rewrite (ADR-1, 2026-10-07) |
 
 `VERSION` is an integer rather than semver on purpose. Semver invites a judgement about whether a
 change is breaking, which for prose has no stable meaning, and the only question the drift reporter
@@ -990,8 +991,8 @@ they describe different relations:
 The path rule is correct for this map's purpose, and the measurement is what makes that an
 argument rather than an assumption: the map exists because C5 copies one directory, so the thing
 worth repairing is a path that resolves to nothing in the consumer repository. A marker with no
-accompanying path is prose — "see also `tcs-patterns:testing`" — and nothing breaks when it is
-absent. 43 is "mentions"; 7 is "breaks". An implementation keyed on the marker would add up to six
+accompanying path is a mention — "see also `tcs-patterns:testing`" — that adds no companion
+(the marker is still rewritten on install, ADR-1 amendment 2026-10-07). 43 is "mentions"; 7 is "breaks". An implementation keyed on the marker would add up to six
 companions to a single-pattern selection and justify none of them.
 
 **Amended 2026-10-07 (Marcus): the marker is rewritten on install; "nothing breaks" was false.**
@@ -1027,8 +1028,8 @@ rule would be hiding a real edge. The catalogue records intent beside the path, 
 resolving citations carry a marker, every marker names the pattern the path resolved to, nothing
 is hidden by the precedence, and nothing is mistargeted. This also confirms from the other
 direction why the path rule is the right derivation and the marker is not: the gap between 7 edges
-and 43 markers is entirely markers with **no resolving path** — prose cross-references, where
-nothing breaks when the pattern is installed alone.
+and 43 markers is entirely markers with **no resolving path**, so they produce no companions;
+they are still rewritten to `tcs-<name>` on install (ADR-1, 2026-10-07).
 
 **Expansion is the transitive closure, not one level — settled 2026-10-04 (Marcus).** The document
 said "adds its companions" and never fixed the depth, and the difference is observable on three of
@@ -1851,8 +1852,8 @@ def runtime_deps(root):
 ```
 
 **The name rewrite (ADR-1 against CON-4).** A skill registers under its frontmatter `name:`, so
-copying the directory to `tcs-ddd/` is not enough — the frontmatter must change, and nothing else
-may. The rewrite touches the first `name:` line inside the frontmatter block and refuses if it is
+copying the directory to `tcs-ddd/` is not enough — the frontmatter must change, and `rename_in_frontmatter` changes nothing else
+(the marker rewrite of ADR-1, 2026-10-07, is a separate function, `rewrite_pattern_refs`). The rewrite touches the first `name:` line inside the frontmatter block and refuses if it is
 not there, because a silent no-op would install a pattern under the unprefixed name and defeat
 ADR-1.
 
@@ -2303,7 +2304,7 @@ links to one real directory from reporting the same skill twice under two paths.
   rather than swallowed, and an exception is the loudest possible report. The silent `continue` was
   the only branch in this component that failed that stance.
 7. **Write.** C5 copies each approved pattern's directory to `<repo>/.claude/skills/tcs-<name>/`,
-   rewrites the frontmatter `name:`, computes the hash of the installed `SKILL.md`, and writes the
+   rewrites the frontmatter `name:` and the `tcs-patterns:<name>` markers (ADR-1, 2026-10-07), computes the hash of the installed `SKILL.md`, and writes the
    manifest atomically (`.tmp` then `mv`, following `install_files.sh`).
 #### Data model: the update path (C5's second verb)
 
@@ -2358,8 +2359,8 @@ safety guarantee back into the caller.
 
 **4. The diff compares what the user has against what they would get.** `difflib.unified_diff`
 between the **installed** `SKILL.md` and the catalogue's version **as it would be installed** —
-that is, after the frontmatter rename, so the `name:` line is not reported as a spurious
-difference. Three lines of `difflib` given ADR-2's 3.11 floor
+that is, after the frontmatter rename AND the marker rewrite, so neither the `name:` line nor a
+rewritten marker is reported as a spurious difference. Three lines of `difflib` given ADR-2's 3.11 floor
 `[ref: SDD/Architecture Decisions/ADR-4]`.
 
 **Two properties of this diff are normative, because the user's accept-or-decline decision
