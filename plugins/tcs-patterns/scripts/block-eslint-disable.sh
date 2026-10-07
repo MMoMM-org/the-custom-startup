@@ -24,23 +24,16 @@
 #      carries "minAppVersion", OR the root package.json depends on
 #      "obsidian".
 #
-# #4 is deliberately file-scoped, not repo-scoped: "does the repository this
-# file lives in contain a manifest.json ANYWHERE" (a whole-tree walk, tried
-# and measured here 2026-10-04) answers a different question and answers it
-# wrong -- it classifies a repository that merely CONTAINS a plugin fixture
-# (e.g. a test fixture several directories away from the file being
-# written) as an Obsidian plugin for every file in it. The upward walk
-# answers the question the guard exists for. It is also cheap regardless of
-# repository size (measured: 0.03ms, versus 155-254ms for the whole-tree
-# walk it replaced), so there is no perf reason left to short-circuit on a
-# root-level check before it.
+# #4 is deliberately file-scoped, not repo-scoped: asking "does the repository
+# contain a manifest.json ANYWHERE" would classify a repository that merely
+# holds a plugin fixture (e.g. a test fixture several directories away) as an
+# Obsidian plugin for every file in it. The upward walk answers the question
+# the guard exists for, and costs well under a millisecond regardless of
+# repository size.
 #
-# Detection (#2) still runs BEFORE the scope gate (#3-4): #2 is a grep over
-# the payload string and touches no filesystem, so it is free, and running
-# it first exits the common (allow) path before any filesystem access at
-# all -- the AND is commutative, so whichever side is cheaper to fail on
-# goes first. This no longer carries the perf cost #4 once did, but it is
-# still correct and costs nothing to keep.
+# Detection (#2) runs BEFORE the scope gate (#3-4): it is a grep over the
+# payload string and touches no filesystem, so the common (allow) path exits
+# before any filesystem access at all.
 #
 # Escape hatch: CLAUDE_ALLOW_ESLINT_DISABLE=1 in the environment.
 #
@@ -91,9 +84,8 @@ CONTENT=$(printf '%s' "$INPUT" | jq -r '
 [ -z "$CONTENT" ] && exit 0
 
 # ── Detection ─────────────────────────────────────────────────────────────
-# Moved ahead of the scope gate (below): a string grep over the payload,
-# free of filesystem access, so failing here first costs nothing on the
-# common path where no violation is present.
+# Runs ahead of the scope gate (below): a string grep over the payload with
+# no filesystem access, so the common no-violation path exits here for free.
 VIOLATION=""
 MATCH=""
 
@@ -117,11 +109,7 @@ fi
 [ -z "$VIOLATION" ] && exit 0
 
 # ── Scope gate: is the target file itself inside an Obsidian plugin? ──────
-# Reached only once a violation is already present above. Detection is a
-# free string grep, so it settles most calls on its own -- the AND is
-# commutative and this is simply the cheaper side to fail on first; it is
-# no longer "keeping an expensive walk off the common path", since the
-# upward walk below costs 0.03ms regardless.
+# Reached only once a violation is already present above.
 #
 # Walk up to the nearest existing ancestor — the file itself may not exist yet
 # and its parent directory may be created by the same tool call.
@@ -138,37 +126,25 @@ REPO_DIR=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null || true)
 # stopping at the root, looking for the nearest manifest.json carrying
 # "minAppVersion". "Nearest" and "stop at the root" are what make this
 # file-scoped rather than repo-scoped: a manifest two levels below the file,
-# or three levels above it in an unrelated sibling tree, must not match.
-# Pure directory arithmetic -- no `find`, no subprocess per candidate -- so
-# there is nothing here to prune (no node_modules/.venv/vendor/.git concern:
-# the walk never descends, only ascends past directories already on the
-# path to the file).
+# or above it in an unrelated sibling tree, must not match. Pure directory
+# arithmetic (no `find`, no subprocess per candidate): the walk only ascends.
 #
 # WALK_DIR starts from the CANONICAL form of $DIR (`cd` + `pwd -P`, resolving
-# symlinks), not the literal string -- `git rev-parse --show-toplevel`
-# already returns a canonical $REPO_DIR, and comparing a literal path
-# against a canonical one is a bug, not a style choice: on macOS $TMPDIR is
-# commonly a symlink (e.g. /tmp -> /private/tmp), so a `dirname`-walked
-# literal path never string-equals $REPO_DIR, the loop never hits its only
-# intended exit, and `dirname "/"` is "/" forever. Hung this script for real
-# while testing a monorepo fixture under $TMPDIR before this line was added.
-# The `[ "$WALK_DIR" = "/" ]` bound stays anyway, as a second line of
-# defense against any other case the canonicalization doesn't cover.
+# symlinks), because `git rev-parse --show-toplevel` returns a canonical
+# $REPO_DIR and a literal path never string-equals it when $TMPDIR is a
+# symlink (macOS /tmp -> /private/tmp). Without this the loop never reaches
+# its intended exit and `dirname "/"` is "/" forever. The
+# `[ "$WALK_DIR" = "/" ]` bound stays as a second line of defense.
 #
-# `|| WALK_DIR="$DIR"` guards the `cd` the same way line 134 guards `git`:
-# under `set -e`, an unguarded failing `cd` here would exit this script
-# non-zero, violating the "exit: always 0" contract at the top of the file.
-# Measured 2026-10-05: this is currently UNREACHABLE, not merely defensive.
-# Every shape that makes `cd "$DIR"` fail (mode 000, mode 600, mode 400, a
-# dangling symlink) also makes `git -C "$DIR" rev-parse` fail, since that
-# must chdir into the same directory -- so line 135 already exits 0 first
-# in all four cases, measured. The shield is INCIDENTAL, not designed: it
-# holds only because resolving the repository root happens to require a
-# chdir today. If that resolution ever stopped needing one, this line
-# would start exiting non-zero on a statable-but-not-enterable directory
-# with nothing above it to catch that -- so the guard stays even though no
-# reachable case was found, rather than depending on an earlier line's
-# side effect for a property this file's own contract promises.
+# `|| WALK_DIR="$DIR"` guards the `cd` the way the `|| true` on the
+# `git rev-parse` call above guards `git`: under `set -e` an unguarded failing
+# `cd` would exit non-zero, violating the "exit: always 0" contract at the top
+# of the file. Currently unreachable: every shape that makes `cd "$DIR"` fail
+# (mode 000/600/400, dangling symlink) also makes `git -C "$DIR" rev-parse`
+# fail, so the empty-REPO_DIR exit above already returned 0. That shield is
+# incidental (git happens to need the same chdir), so the guard stays rather
+# than depend on an earlier line's side effect for a property this file's
+# own contract promises.
 IS_OBSIDIAN=0
 WALK_DIR=$(cd "$DIR" 2>/dev/null && pwd -P) || WALK_DIR="$DIR"
 while :; do
@@ -182,9 +158,8 @@ while :; do
   WALK_DIR=$(dirname "$WALK_DIR")
 done
 
-# The package.json dependency check stays root-only, unchanged from before
-# T2.6 -- it was never the source of the repo-wide false positive above,
-# since this repository's own root carries no "obsidian" dependency.
+# The package.json dependency check stays root-only: it never caused the
+# repo-wide false positive the upward walk fixes.
 if [ "$IS_OBSIDIAN" != "1" ] && [ -f "${REPO_DIR}/package.json" ] \
   && jq -e '(.dependencies.obsidian // .devDependencies.obsidian) != null' \
     "${REPO_DIR}/package.json" >/dev/null 2>&1; then

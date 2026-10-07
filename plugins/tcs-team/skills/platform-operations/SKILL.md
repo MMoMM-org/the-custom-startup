@@ -1,7 +1,7 @@
 ---
 name: platform-operations
 user-invocable: false
-description: "Getting a service to production and keeping it there: CI/CD pipeline design, deployment and rollback strategy, SLI/SLO definition, and incident-ready rollouts. Use when the question is how a service ships or how its health is defined. Do NOT use to instrument telemetry (tcs-observability) or to audit configuration and runtime behaviour (tcs-twelve-factor)."
+description: "Getting a service to production and keeping it there: CI/CD pipeline design, deployment and rollback strategy, SLI/SLO definition, and incident-ready rollouts. Use when the question is how a service ships or how its health is defined. Do NOT use to instrument telemetry (tcs-observability) or to audit configuration and runtime behaviour (tcs-twelve-factor), if installed."
 ---
 
 ## Persona

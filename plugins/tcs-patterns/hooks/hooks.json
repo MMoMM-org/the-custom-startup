@@ -1,5 +1,5 @@
 {
-  "description": "tcs-patterns hook registrations — write-time enforcement for pattern rules that cannot be recovered from later (see skills/obsidian-plugin/SKILL.md Step 11).",
+  "description": "tcs-patterns hook registrations — write-time enforcement for pattern rules that cannot be recovered from later (see templates/patterns/obsidian-plugin/SKILL.md Step 11).",
   "hooks": {
     "PreToolUse": [
       {

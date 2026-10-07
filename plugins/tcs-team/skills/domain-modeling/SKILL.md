@@ -1,7 +1,7 @@
 ---
 name: domain-modeling
 user-invocable: false
-description: "Data and schema design for a domain: entity attributes, invariants, consistency rules, and how a schema evolves across migrations. Use when the output is a schema or a migration path. Do NOT use to audit DDD structure — bounded contexts, aggregate roots, value objects, domain events and ubiquitous language belong to tcs-ddd."
+description: "Data and schema design for a domain: entity attributes, invariants, consistency rules, and how a schema evolves across migrations. Use when the output is a schema or a migration path. Do NOT use to audit DDD structure — bounded contexts, aggregate roots, value objects, domain events and ubiquitous language belong to tcs-ddd (if installed)."
 ---
 
 ## Persona

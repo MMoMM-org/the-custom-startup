@@ -10,7 +10,7 @@
 #     21 independently-versioned patterns: bumping ANY one VERSION would
 #     satisfy the row no matter which pattern's files actually changed.
 #   - Pinned design: derive the changed pattern names from the diff itself
-#     (not the working tree) and call the existing check_bundle() once per
+#     (not the working tree) and call the existing gate_bundle_row() once per
 #     changed pattern, each with its OWN marker
 #     (plugins/tcs-patterns/templates/patterns/<name>/VERSION) and glob '*'.
 #
