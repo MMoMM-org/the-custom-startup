@@ -256,6 +256,6 @@ The repository is a Claude Code marketplace. Publishing happens via:
 2. GitHub Actions workflow creates release
 3. Users install via `./install.sh` or `/plugin marketplace add MMoMM-org/the-custom-startup`
 
-Plugin versions are bumped on merge by `.github/workflows/auto-bump-versions.yml`: a patch bump for every plugin the merge touched. A breaking or feature release is requested by writing the next-major or next-minor heading (e.g. `## [2.0.0] - <date>` against a 1.4.x manifest) at the top of the plugin's `CHANGELOG.md`; never hand-edit `plugin.json`. Any other version ahead of the manifest fails `scripts/ci/check-changelog-version-sync.sh`.
+Plugin versions are bumped on merge by `.github/workflows/auto-bump-versions.yml`: a patch bump for every plugin the merge touched. A breaking or feature release is requested by writing the next-major or next-minor heading (e.g. `## [2.0.0] - <date>` against a 1.4.x manifest) at the top of the plugin's `CHANGELOG.md`; never hand-edit `plugin.json`. On a pull request, a CHANGELOG version beyond one patch, the next minor or the next major ahead of the manifest fails `scripts/ci/check-changelog-version-sync.sh`; a pre-release or non-canonical heading (`2.0.0-rc1`, `2.00.0`) requests nothing and gets the patch bump.
 
 
