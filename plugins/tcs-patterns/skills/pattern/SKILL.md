@@ -68,7 +68,9 @@ Glob `*/SKILL.md` in the catalogue. Each match's parent directory name is one av
 ### 4. Show a known name
 
 If `name` is among the available names, Read `<catalogue>/<name>/SKILL.md` and show the whole file
-as the answer. Then Glob `<name>/reference/*` and `<name>/examples/*` in the catalogue and list the names of the
+as the answer. Then add one line: mentions of `tcs-patterns:<name>` in the body name other
+catalogue patterns, readable with `/tcs-patterns:pattern <name>` and installed as `tcs-<name>` via
+`/tcs-patterns:patterns-setup`. Then Glob `<name>/reference/*` and `<name>/examples/*` in the catalogue and list the names of the
 files found, grouped under `reference/` and `examples/`. Omit a group that has no files; if neither has any, say the pattern has no companion files. Say the user can ask for any one by name,
 and Read it on request. Stop.
 

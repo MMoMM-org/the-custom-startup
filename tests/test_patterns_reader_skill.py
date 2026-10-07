@@ -109,6 +109,14 @@ def test_known_name_shows_full_body_and_lists_companion_files():
     assert "Show the pattern's body verbatim and in full." in _body()
 
 
+def test_known_name_explains_tcs_patterns_mentions_after_the_body():
+    known = _section("Show a known name")
+    assert "`tcs-patterns:<name>`" in known
+    assert "`/tcs-patterns:pattern <name>`" in known
+    assert "`tcs-<name>`" in known and "`/tcs-patterns:patterns-setup`" in known
+    assert known.index("show the whole file") < known.index("`tcs-patterns:<name>`")
+
+
 def test_unknown_or_invalid_name_lists_available_never_empty():
     body = _body()
     assert "unknown   // name is well formed but not in the catalogue: available names listed" in body
