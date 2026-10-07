@@ -1,23 +1,35 @@
 """
 drift_check.py — skill-side drift check helper for tcs-git-helpers.
 
-Reads the installed hook bundle version from
-  <repo_path>/.githooks/<version_filename>
+Reads the installed bundle version from
+  <repo_path>/<marker_dir>/<version_filename>
+(marker_dir defaults to .githooks)
 
 and compares it against an expected version string.
 
 Three-state result (mirrors the bash helper drift_check.sh):
   OK      — installed version matches expected
-  MISSING — version file does not exist (hooks not installed, or
-            installed before bundle versioning — ADR-8)
+  MISSING — marker is not a regular file (absent, or a directory; for the hook
+            bundle: hooks not installed, or installed before bundle
+            versioning — ADR-8)
   DRIFT   — installed version differs from expected
 
 Public API:
+  check_bundle(
+      repo_path: Path,
+      expected_version: str,
+      version_filename: str = "tcs-git-helpers-version",
+      marker_dir: str = ".githooks",
+  ) -> DriftResult
+
   check_hook_bundle(
       repo_path: Path,
       expected_version: str,
       version_filename: str = "tcs-git-helpers-version",
   ) -> DriftResult
+
+check_hook_bundle is a thin wrapper over check_bundle with marker_dir pinned
+to ".githooks" (spec 020 T4.1 added marker_dir).
 
 The default value of version_filename preserves backward compatibility
 with all existing callers. Pass a different filename to check any other
@@ -26,7 +38,8 @@ single-line bundle marker file (e.g., "tcs-helper-rule-enforcer-version").
 Side effects: none (read-only).
 Python 3.9+ compatible.
 
-Spec: SDD/Internal API Changes / function: check_hook_bundle
+Spec: SDD/Internal API Changes / function: check_hook_bundle (check_bundle
+is the generalised form; spec 020 T4.1)
 T3.2a: extended with optional version_filename param (Option A).
 """
 from __future__ import annotations
@@ -66,7 +79,7 @@ _VERSION_FILENAME = "tcs-git-helpers-version"
 
 
 class DriftStatus(enum.Enum):
-    """Classification of installed hook bundle version against expected."""
+    """Classification of installed bundle version against expected."""
 
     OK = "OK"
     MISSING = "MISSING"
@@ -75,10 +88,48 @@ class DriftStatus(enum.Enum):
 
 @dataclass(frozen=True)
 class DriftResult:
-    """Immutable result returned by check_hook_bundle."""
+    """Immutable result returned by check_bundle and check_hook_bundle."""
 
     status: DriftStatus
     installed_version: Optional[str]
+
+
+def check_bundle(
+    repo_path: Path,
+    expected_version: str,
+    version_filename: str = "tcs-git-helpers-version",
+    marker_dir: str = ".githooks",
+) -> DriftResult:
+    """Return the drift classification for an installed bundle marker.
+
+    Args:
+        repo_path: Absolute path to the repository root.
+        expected_version: The version string the skill requires (e.g. "h7").
+        version_filename: Name of the single-line marker file under marker_dir.
+        marker_dir: Directory, relative to repo_path, holding the marker.
+            Defaults to ".githooks".
+
+    Returns:
+        DriftResult with status OK / MISSING / DRIFT and the installed
+        version string (None when MISSING).
+    """
+    version_file = repo_path / marker_dir / version_filename
+
+    # bash `[ -f ]`: a directory (or anything not a regular file) is MISSING.
+    if not version_file.is_file():
+        return DriftResult(status=DriftStatus.MISSING, installed_version=None)
+
+    # Match bash `head -n 1 | tr -d '[:space:]'`: first line only, then remove
+    # ALL ASCII whitespace including internal (re.ASCII — a Unicode space such
+    # as U+00A0 is not [:space:] to bash). Read bytes and decode leniently so a
+    # marker with invalid UTF-8 classifies instead of raising, as bash does.
+    first_line = version_file.read_bytes().split(b"\n", 1)[0]
+    installed = re.sub(r"\s+", "", first_line.decode("utf-8", errors="replace"), flags=re.ASCII)
+
+    if installed == expected_version:
+        return DriftResult(status=DriftStatus.OK, installed_version=installed)
+
+    return DriftResult(status=DriftStatus.DRIFT, installed_version=installed)
 
 
 def check_hook_bundle(
@@ -86,31 +137,8 @@ def check_hook_bundle(
     expected_version: str,
     version_filename: str = "tcs-git-helpers-version",
 ) -> DriftResult:
-    """Return the drift classification for the repo's installed hook bundle.
+    """Drift classification for the hook bundle under .githooks/.
 
-    Args:
-        repo_path: Absolute path to the repository root.
-        expected_version: The version string the skill requires (e.g. "h7").
-        version_filename: Name of the single-line marker file under
-            .githooks/ that contains the installed bundle version.
-            Defaults to "tcs-git-helpers-version" for backward
-            compatibility with all existing callers.  Pass a different
-            value (e.g. "tcs-helper-rule-enforcer-version") to check
-            any other bundle marker file.
-
-    Returns:
-        DriftResult with status OK / MISSING / DRIFT and the installed
-        version string (None when MISSING).
+    Thin wrapper over check_bundle; signature and defaults are unchanged.
     """
-    version_file = repo_path / ".githooks" / version_filename
-
-    if not version_file.exists():
-        return DriftResult(status=DriftStatus.MISSING, installed_version=None)
-
-    # Match bash `tr -d '[:space:]'` — remove ALL whitespace including internal
-    installed = re.sub(r'\s+', '', version_file.read_text().split("\n")[0])
-
-    if installed == expected_version:
-        return DriftResult(status=DriftStatus.OK, installed_version=installed)
-
-    return DriftResult(status=DriftStatus.DRIFT, installed_version=installed)
+    return check_bundle(repo_path, expected_version, version_filename, ".githooks")

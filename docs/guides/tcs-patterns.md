@@ -1,60 +1,70 @@
 # tcs-patterns — Domain Pattern Skills
 
-tcs-patterns is an optional plugin that brings 21 opinionated, interactive pattern skills to your Claude Code sessions. Skills are organized across 6 categories — architecture, API design and types, testing, language platforms, DevOps, and integrations — and each one activates on its own trigger terms, so you get focused guidance exactly when the relevant context appears. Install the full plugin and ignore what does not apply to your stack, or install selectively using the individual skill names.
+tcs-patterns is an optional plugin with a catalogue of 21 opinionated, interactive pattern skills — architecture, API design and types, security, testing, language platforms, DevOps, and integrations — and an installer that puts only the patterns your repository needs into that repository. Each installed pattern activates on its own trigger terms, so you get focused guidance when the relevant context appears, and a repository pays for the skill listing of its own patterns only.
+
+> **Upgrading from 1.x:** the 21 patterns are no longer plugin skills. None is active until you run the setup, and an installed pattern is `/tcs-<name>` (for example `/tcs-ddd`), not `/tcs-patterns:<name>`.
+
+## Setup
 
 ```
 /plugin install tcs-patterns@the-custom-startup
+/tcs-patterns:patterns-setup install
 ```
 
-> Install only what's relevant to your stack — each skill adds ~25KB to your context
+Run the second command in the repository you want patterns for (it must be a git repository). The setup:
 
-### Installing individual skills
+1. **Scans** the repository and proposes the patterns its files justify, each with its evidence and its cost in skill-listing characters.
+2. **Asks at most three questions** (backend concerns, architectural styles, test-quality checks), and only those the scan could not settle. A repository without a server framework is never asked about backends.
+3. **Confirms** what will be installed, which companions are offered (a pattern that cites another), and what was left out and why. Nothing is written before you confirm.
+4. **Installs** each pattern into `.claude/skills/tcs-<name>/` and records it in `.claude/skills/.tcs-patterns-manifest`.
+5. **Offers to commit** exactly those files. Teammates get the patterns only once they are committed.
 
-If you don't want the full plugin, you can install individual skills:
+### Installed patterns
 
-**Option A — Use `/skill-import` (requires tcs-helper):**
+An installed pattern is a normal repository skill, invoked by its prefixed name (see the invocation column below) or by its trigger terms. The `tcs-` prefix keeps patterns apart from your own skills; the installer refuses to overwrite a skill it did not write.
 
-```bash
-/skill-import MMoMM-org/the-custom-startup plugins/tcs-patterns/skills/ddd
+### The four verbs
+
+```
+/tcs-patterns:patterns-setup <install|update|remove|status> [path]
 ```
 
-This fetches a single skill from the repository and installs it to the correct location, including any supporting files in `reference/` or `examples/`.
+| Verb | What it does |
+|---|---|
+| `install` | The flow above. |
+| `update` | Refreshes patterns whose catalogue version moved on. A pattern with local edits is shown as a diff and replaced only on your say-so. |
+| `remove` | Deletes a pattern and its manifest entry. Local edits are shown as a diff first and deleted only on your say-so. |
+| `status` | Reports what is installed, its version, what has drifted, and leftovers of an interrupted run. Changes nothing. |
 
-**Option B — Manual copy:**
+### Reading a pattern without installing it
 
-Copy the skill directory from the repo to your Claude Code skills directory:
-
-```bash
-cp -r plugins/tcs-patterns/skills/ddd ~/.claude/skills/ddd
+```
+/tcs-patterns:pattern <pattern-name>
 ```
 
-Include the entire directory (SKILL.md plus any `reference/`, `examples/`, `validation.md` subdirectories) — the skill may reference these supporting files at runtime.
+Prints the pattern's full body as shipped and writes nothing. An unknown name lists the available patterns.
+
+### Drift advisory
+
+Installed patterns are copies. With `tcs-git-helpers` installed, its session-start brief names any installed pattern that is behind the catalogue and points to `/tcs-patterns:patterns-setup update`. Repositories without installed patterns see nothing. Without `tcs-git-helpers`, run `status`.
 
 ### Agent integration
 
-When `tcs-team` agents delegate specialist work, they automatically use relevant pattern skills if installed. You don't need to invoke patterns manually during agent-driven workflows.
-
-| Agent | Uses patterns |
-|---|---|
-| `the-architect/design-system` | `ddd`, `hexagonal`, `event-driven`, `event-sourcing`, `twelve-factor` |
-| `the-architect/review-security` | `api-design`, `secure-oauth-oidc`, `bff-entry-points` |
-| `the-architect/review-robustness` | `functional`, `node-service` |
-| `the-developer/build-feature` | `typescript-strict`, `api-design`, `node-service`, `go-idiomatic`, `python-project` |
-| `the-tester/test-strategy` | `testing`, `mutation-testing`, `frontend-testing`, `react-testing`, `test-design-reviewer` |
-| `the-devops/build-platform` | `twelve-factor` |
-| `the-devops/monitor-production` | `observability` |
+Installed patterns are ordinary repository skills, so any session in that repository, including those that `tcs-team` agents run, can pick them up by their descriptions. Patterns you did not install are not loaded.
 
 ---
 
+The invocation column below shows the name an installed pattern has; arguments are optional scope hints.
+
 ## Architecture
 
-| Skill | What it does | When to invoke | Invocation |
+| Pattern | What it does | When to invoke | Invocation |
 |-------|-------------|----------------|------------|
-| `ddd` | Use when auditing or designing a domain model — triggered by requests to review bounded contexts, aggregate roots, value objects, domain events, or ubiquitous language consistency. | When designing domain models or reviewing bounded context boundaries. | `/ddd [path or scope to audit]` |
-| `hexagonal` | Use when auditing or designing a layered architecture — triggered by requests to review ports and adapters, dependency direction, domain isolation from frameworks, or hexagonal architecture compliance. | When auditing whether infrastructure concerns are leaking into your domain core. | `/hexagonal [path or scope to audit]` |
-| `functional` | Use when implementing or reviewing code for functional correctness — triggered by requests to audit side effects, mutation, impure functions, or error handling in functional pipelines. | When refactoring toward purity or reviewing code for hidden mutation and side effects. | `/functional [path or scope to audit]` |
-| `event-driven` | Use when designing or reviewing event-driven systems — triggered by requests to audit event schemas, command/event naming, handler idempotency, correlation IDs, or message ordering assumptions. | When designing event schemas or auditing handler idempotency and ordering assumptions. | `/event-driven [service or module to audit]` |
-| `event-sourcing` | Use when designing, implementing, or auditing an event-sourced context — the append-only log as source of truth, a Decider write model, rehydration by folding, an event store with optimistic concurrency, projections and read models, event versioning, snapshots. | When the event log is (or is becoming) your source of truth — and to decide whether it should be. | `/event-sourcing [bounded context, module, or path]` |
+| `ddd` | Use when auditing or designing a domain model — triggered by requests to review bounded contexts, aggregate roots, value objects, domain events, or ubiquitous language consistency. | When designing domain models or reviewing bounded context boundaries. | `/tcs-ddd [path or scope to audit]` |
+| `hexagonal` | Use when auditing or designing a layered architecture — triggered by requests to review ports and adapters, dependency direction, domain isolation from frameworks, or hexagonal architecture compliance. | When auditing whether infrastructure concerns are leaking into your domain core. | `/tcs-hexagonal [path or scope to audit]` |
+| `functional` | Use when implementing or reviewing code for functional correctness — triggered by requests to audit side effects, mutation, impure functions, or error handling in functional pipelines. | When refactoring toward purity or reviewing code for hidden mutation and side effects. | `/tcs-functional [path or scope to audit]` |
+| `event-driven` | Use when designing or reviewing event-driven systems — triggered by requests to audit event schemas, command/event naming, handler idempotency, correlation IDs, or message ordering assumptions. | When designing event schemas or auditing handler idempotency and ordering assumptions. | `/tcs-event-driven [service or module to audit]` |
+| `event-sourcing` | Use when designing, implementing, or auditing an event-sourced context — the append-only log as source of truth, a Decider write model, rehydration by folding, an event store with optimistic concurrency, projections and read models, event versioning, snapshots. | When the event log is (or is becoming) your source of truth — and to decide whether it should be. | `/tcs-event-sourcing [bounded context, module, or path]` |
 
 `event-driven` owns events as **messages** — schema, naming, correlation IDs, handler idempotency, ordering. `event-sourcing` owns events as **persistence**. The two are independent: a system can be event-driven over a CRUD database, and event-sourced with no message bus at all.
 
@@ -62,21 +72,21 @@ When `tcs-team` agents delegate specialist work, they automatically use relevant
 
 ## API & Types
 
-| Skill | What it does | When to invoke | Invocation |
+| Pattern | What it does | When to invoke | Invocation |
 |-------|-------------|----------------|------------|
-| `api-design` | Use when designing or reviewing HTTP APIs — enforces RESTful resource modelling, correct HTTP semantics, consistent error shapes, versioning strategy, and pagination contracts. | When designing new endpoints or reviewing an existing API for contract consistency. | `/api-design [API spec file, route definitions, or controller directory]` |
-| `typescript-strict` | Use when working on TypeScript projects — triggered by requests to audit type safety, strict mode configuration, implicit any, null checks, or discriminated union patterns. | When tightening TypeScript strictness or auditing a codebase for unsafe type patterns. | `/typescript-strict [path, file, or tsconfig.json to audit]` |
+| `api-design` | Use when designing or reviewing HTTP APIs — enforces RESTful resource modelling, correct HTTP semantics, consistent error shapes, versioning strategy, and pagination contracts. | When designing new endpoints or reviewing an existing API for contract consistency. | `/tcs-api-design [API spec file, route definitions, or controller directory]` |
+| `typescript-strict` | Use when working on TypeScript projects — triggered by requests to audit type safety, strict mode configuration, implicit any, null checks, or discriminated union patterns. | When tightening TypeScript strictness or auditing a codebase for unsafe type patterns. | `/tcs-typescript-strict [path, file, or tsconfig.json to audit]` |
 
 ---
 
 ## Security
 
-| Skill | What it does | When to invoke | Invocation |
+| Pattern | What it does | When to invoke | Invocation |
 |-------|-------------|----------------|------------|
-| `secure-oauth-oidc` | Use when designing, implementing, auditing, or migrating OAuth 2.0 and OpenID Connect — covers authorization servers, clients and relying parties, resource servers, redirect URIs, PKCE, state and nonce, ID Token validation, refresh rotation, and sender-constrained tokens against the RFC 9700 / BCP 240 baseline. | When designing an auth flow, auditing one, or migrating off implicit or password grants. | `/secure-oauth-oidc [flow, component, or path]` |
-| `bff-entry-points` | Use when adding, hardening, or auditing browser-facing HTTP entry points — an explicit public/protected classification for every production route, a composition-prepared registrar, session cookies, CSRF, Origin and Fetch Metadata policy, protected SSE and WebSocket upgrades, and the automated gates that keep it true. | When adding or reviewing an endpoint, or when nobody can say which routes are public. | `/bff-entry-points [service, route, or path]` |
+| `secure-oauth-oidc` | Use when designing, implementing, auditing, or migrating OAuth 2.0 and OpenID Connect — covers authorization servers, clients and relying parties, resource servers, redirect URIs, PKCE, state and nonce, ID Token validation, refresh rotation, and sender-constrained tokens against the RFC 9700 / BCP 240 baseline. | When designing an auth flow, auditing one, or migrating off implicit or password grants. | `/tcs-secure-oauth-oidc [flow, component, or path]` |
+| `bff-entry-points` | Use when adding, hardening, or auditing browser-facing HTTP entry points — an explicit public/protected classification for every production route, a composition-prepared registrar, session cookies, CSRF, Origin and Fetch Metadata policy, protected SSE and WebSocket upgrades, and the automated gates that keep it true. | When adding or reviewing an endpoint, or when nobody can say which routes are public. | `/tcs-bff-entry-points [service, route, or path]` |
 
-`the-architect/review-security` **reviews** an auth change; this skill is the reference its findings are checkable against. Findings carry a control ID from the RFC 9700 catalog so the two can be reconciled rather than double-counted.
+`the-architect/review-security` **reviews** an auth change; this pattern is the reference its findings are checkable against. Findings carry a control ID from the RFC 9700 catalog so the two can be reconciled rather than double-counted.
 
 `secure-oauth-oidc` stops at "token obtained"; `bff-entry-points` starts at "application session established". One owns the protocol, the other owns the session it produces and every route that session unlocks.
 
@@ -84,32 +94,32 @@ When `tcs-team` agents delegate specialist work, they automatically use relevant
 
 ## Testing
 
-| Skill | What it does | When to invoke | Invocation |
+| Pattern | What it does | When to invoke | Invocation |
 |-------|-------------|----------------|------------|
-| `testing` | Testing patterns for behavior-driven tests. Use when writing tests, creating test factories, structuring test files, or deciding what to test. Do NOT use for UI-specific testing (see frontend-testing or react-testing skills). | When setting up test structure or writing unit and integration tests for non-UI code. | `/testing` |
-| `mutation-testing` | Use when strengthening test suites — runs mutation analysis to find tests that pass without actually verifying behavior, and guides writing assertions that kill surviving mutants. | When your test suite passes but you suspect it is not actually catching regressions. | `/mutation-testing [test directory or module to analyse]` |
-| `frontend-testing` | Use when writing or reviewing frontend tests — enforces testing-library best practices, user-behavior assertions, network mocking at the boundary, and accessible queries. | When writing tests for UI components and you want behavior-first, accessible queries. | `/frontend-testing [test file or directory to audit]` |
-| `react-testing` | Use when testing React components or hooks — enforces react-testing-library patterns, proper hook testing with renderHook, and async state handling. | When testing React components or custom hooks and you need React-specific patterns. | `/react-testing [component or hook test file to audit]` |
-| `test-design-reviewer` | Evaluates test quality using Dave Farley's 8 properties. Use when reviewing tests, assessing test suite quality, or analyzing test effectiveness against TDD best practices. | When reviewing an existing test suite for quality and alignment with TDD principles. | `/test-design-reviewer` |
+| `testing` | Testing patterns for behavior-driven tests. Use when writing tests, creating test factories, structuring test files, or deciding what to test. Do NOT use for UI-specific testing (see frontend-testing or react-testing skills). | When setting up test structure or writing unit and integration tests for non-UI code. | `/tcs-testing` |
+| `mutation-testing` | Use when strengthening test suites — runs mutation analysis to find tests that pass without actually verifying behavior, and guides writing assertions that kill surviving mutants. | When your test suite passes but you suspect it is not actually catching regressions. | `/tcs-mutation-testing [test directory or module to analyse]` |
+| `frontend-testing` | Use when writing or reviewing frontend tests — enforces testing-library best practices, user-behavior assertions, network mocking at the boundary, and accessible queries. | When writing tests for UI components and you want behavior-first, accessible queries. | `/tcs-frontend-testing [test file or directory to audit]` |
+| `react-testing` | Use when testing React components or hooks — enforces react-testing-library patterns, proper hook testing with renderHook, and async state handling. | When testing React components or custom hooks and you need React-specific patterns. | `/tcs-react-testing [component or hook test file to audit]` |
+| `test-design-reviewer` | Evaluates test quality using Dave Farley's 8 properties. Use when reviewing tests, assessing test suite quality, or analyzing test effectiveness against TDD best practices. | When reviewing an existing test suite for quality and alignment with TDD principles. | `/tcs-test-design-reviewer` |
 
 ---
 
 ## Platforms
 
-| Skill | What it does | When to invoke | Invocation |
+| Pattern | What it does | When to invoke | Invocation |
 |-------|-------------|----------------|------------|
-| `node-service` | Use when building or reviewing Node.js services — enforces async/await hygiene, unhandled rejection handling, graceful shutdown, and event loop safety. | When building a Node.js service or auditing one for reliability and event loop safety. | `/node-service [service source path to audit]` |
-| `python-project` | Use when setting up or reviewing a Python project — triggered by requests to audit type hints, linter configuration, virtual environment setup, pytest structure, or PEP 8 compliance. | When starting a Python project or auditing one for type coverage and project hygiene. | `/python-project [project path or file to audit]` |
-| `go-idiomatic` | Use when writing or reviewing Go code — enforces idiomatic error handling, small interface design, standard package layout, goroutine safety, and proper use of defer. | When writing Go code or reviewing it for idiomatic patterns and goroutine correctness. | `/go-idiomatic [package or file path to audit]` |
+| `node-service` | Use when building or reviewing Node.js services — enforces async/await hygiene, unhandled rejection handling, graceful shutdown, and event loop safety. | When building a Node.js service or auditing one for reliability and event loop safety. | `/tcs-node-service [service source path to audit]` |
+| `python-project` | Use when setting up or reviewing a Python project — triggered by requests to audit type hints, linter configuration, virtual environment setup, pytest structure, or PEP 8 compliance. | When starting a Python project or auditing one for type coverage and project hygiene. | `/tcs-python-project [project path or file to audit]` |
+| `go-idiomatic` | Use when writing or reviewing Go code — enforces idiomatic error handling, small interface design, standard package layout, goroutine safety, and proper use of defer. | When writing Go code or reviewing it for idiomatic patterns and goroutine correctness. | `/tcs-go-idiomatic [package or file path to audit]` |
 
 ---
 
 ## DevOps
 
-| Skill | What it does | When to invoke | Invocation |
+| Pattern | What it does | When to invoke | Invocation |
 |-------|-------------|----------------|------------|
-| `twelve-factor` | Use when auditing or designing service configuration, deployment, or runtime behaviour — triggered by requests to review environment config, stateless processes, log handling, backing services, or twelve-factor compliance. | When designing service configuration or auditing a deployment for twelve-factor compliance. | `/twelve-factor [repo path or service to audit]` |
-| `observability` | Use when instrumenting a service or reviewing its telemetry — wide events and canonical log lines, OpenTelemetry traces and metrics, context propagation, sampling and metric cardinality, where instrumentation code belongs, and testing instrumentation as behaviour. | When instrumenting a service, or when nobody can see what production is doing. | `/observability [service, module, or path]` |
+| `twelve-factor` | Use when auditing or designing service configuration, deployment, or runtime behaviour — triggered by requests to review environment config, stateless processes, log handling, backing services, or twelve-factor compliance. | When designing service configuration or auditing a deployment for twelve-factor compliance. | `/tcs-twelve-factor [repo path or service to audit]` |
+| `observability` | Use when instrumenting a service or reviewing its telemetry — wide events and canonical log lines, OpenTelemetry traces and metrics, context propagation, sampling and metric cardinality, where instrumentation code belongs, and testing instrumentation as behaviour. | When instrumenting a service, or when nobody can see what production is doing. | `/tcs-observability [service, module, or path]` |
 
 `twelve-factor` owns log transport and shape; `observability` owns what goes into the stream. SLOs, error budgets, alerting and dashboards belong to `the-devops/monitor-production`, not to either skill.
 
@@ -117,10 +127,10 @@ When `tcs-team` agents delegate specialist work, they automatically use relevant
 
 ## Integrations
 
-| Skill | What it does | When to invoke | Invocation |
+| Pattern | What it does | When to invoke | Invocation |
 |-------|-------------|----------------|------------|
-| `mcp-server` | Use when building or reviewing a Model Context Protocol server — triggered by requests to audit tool definitions, input schemas, error handling, transport setup, or capability declarations. | When building an MCP server or auditing tool definitions and capability declarations. | `/mcp-server [MCP server source path to audit or implement]` |
-| `obsidian-plugin` | Use when building or reviewing Obsidian plugins — enforces plugin lifecycle patterns, proper event listener cleanup, mobile compatibility, and Obsidian API usage over raw DOM manipulation. | When building an Obsidian plugin or auditing one for lifecycle and mobile safety. | `/obsidian-plugin [plugin source path to audit]` |
+| `mcp-server` | Use when building or reviewing a Model Context Protocol server — triggered by requests to audit tool definitions, input schemas, error handling, transport setup, or capability declarations. | When building an MCP server or auditing tool definitions and capability declarations. | `/tcs-mcp-server [MCP server source path to audit or implement]` |
+| `obsidian-plugin` | Use when building or reviewing Obsidian plugins — enforces plugin lifecycle patterns, proper event listener cleanup, mobile compatibility, and Obsidian API usage over raw DOM manipulation. | When building an Obsidian plugin or auditing one for lifecycle and mobile safety. | `/tcs-obsidian-plugin [plugin source path to audit]` |
 
 ---
 

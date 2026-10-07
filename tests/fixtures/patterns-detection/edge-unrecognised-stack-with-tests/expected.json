@@ -1,0 +1,14 @@
+{
+  "auto": [],
+  "baseline": [
+    "testing"
+  ],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": true
+  },
+  "must_not_propose": [],
+  "unrecognised_stack": true,
+  "why": "edge case -- a stack none of the 21 cover (Ruby/Sinatra) proposes nothing from auto, but unrecognised_stack reads auto alone: the bats integration test still reports correctly as baseline testing, and the fixture is not made artificially testless to force a cleaner-looking unrecognised verdict"
+}

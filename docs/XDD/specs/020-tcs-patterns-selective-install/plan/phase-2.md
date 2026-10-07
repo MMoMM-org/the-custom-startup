@@ -1,0 +1,838 @@
+---
+title: "Phase 2: Detection, fixtures before rules"
+status: completed
+version: "1.0"
+phase: 2
+---
+
+# Phase 2: Detection, fixtures before rules
+
+## Phase Context
+
+**GATE**: Read all referenced files before starting this phase.
+
+**Specification References**:
+- `[ref: SDD/Interface Specifications/Data model: detection report]` — the JSON contract, including
+  why `baseline`, `gates` and `unrecognised_stack` are separate fields
+- `[ref: SDD/Interface Specifications/Data model: fixture expectation]` — `expected.json` and why
+  `must_not_propose` is deliberately redundant
+- `[ref: SDD/Runtime View/Complex Logic]` — the gating traced step by step against a real stack,
+  ending in the outcome arithmetic. **Four sets, not three** (2026-10-04): the traced stack opens
+  every gate, so its fourth set is empty and it reads `7 + 8 + 6 + 0 = 21`; a pattern behind a
+  *closed* gate belongs to none of the first three
+- `[ref: SDD/Implementation Examples]` — nested manifests and runtime-only dependencies
+- `[ref: SDD/Architecture Decisions/ADR-2]` — why this is Python
+- `[ref: SDD/Architecture Decisions/ADR-5]` — unrecognised stack versus closed gates
+- `[ref: SDD/Architecture Decisions/ADR-7]` — the duplicated Obsidian rule
+- `[ref: PRD/F2, PRD/F3]` — nine acceptance criteria between them
+- `[ref: PRD/Detailed Feature Specifications]` — the six business rules and seven edge cases
+- `[ref: PRD/Risks and Mitigations]` — the top risk this phase exists to answer
+
+**Key Decisions**:
+- **Fixtures come before rules.** The PRD's top risk is that the detection rules were authored and
+  graded by the same party. A fixture written after the rule it checks inherits that rule's blind
+  spots, so `expected.json` is written from the *specification* and the rule is then made to
+  satisfy it.
+- The detector is **pure**: it reads a directory and returns a report. It writes nothing, asks
+  nothing, and never consults the catalogue for anything but the list of pattern names. That is
+  what makes it callable against a fixture without the interactive setup.
+- A gate decides **whether to ask**, never what to install. No pattern is installed because a gate
+  opened.
+
+**Dependencies**:
+- Phase 1 complete — the detector needs the catalogue's pattern name list, and the Obsidian
+  agreement test needs the relocated pattern.
+
+---
+
+## Tasks
+
+Delivers a detector that a second party can trust, because the corpus it is measured against was
+written from the specification rather than from the implementation.
+
+- [x] **T2.1 The fixture corpus and its expectation format** `[activity: testing]`
+
+  1. Prime: Read the fixture expectation contract
+     `[ref: SDD/Interface Specifications/Data model: fixture expectation]`, **the detection rules
+     themselves** `[ref: SDD/Interface Specifications/Detection rules: the eight stack facts and
+     the three gates]`, the numbered traps `[ref: SDD/Quality Requirements/The seven traps,
+     numbered]` and the PRD's edge cases `[ref: PRD/Detailed Feature Specifications]`. Build each
+     fixture from the written rule, not from any code — no detector exists yet, which is the
+     point. Both of those first two references were added on 2026-10-03 because neither the rule
+     signals nor the trap numbering had ever been written down; before that there was no written
+     rule for this step to read.
+  2. Test: The loader itself is tested first: every fixture directory contains `repo/` and
+     `expected.json`; every `expected.json` validates against the declared shape; every pattern
+     named anywhere in any fixture is one of the 21 read from the catalogue, not hardcoded. A typo
+     in a fixture must fail loudly rather than quietly assert nothing.
+
+     **Three guards are mandatory, because "fail loudly" does not happen by default.** Measured
+     on 2026-10-03, same pytest as the repo baseline:
+
+     - a bare `for p in corpus.glob(...)` loop over an **empty** corpus reports `1 passed` —
+       the body never runs and the test asserts nothing;
+     - `@pytest.mark.parametrize` over that same empty glob reports `1 skipped`, **exit 0**,
+       with `got empty parameter set` — a green suite containing zero cases, which is worse,
+       because T2.1's own validate step reads "every case collected";
+     - a module-level `ImportError` reports `ERROR collecting` and **exit 2** — and aborts the
+       **whole session**, so `pytest -q` runs none of the repo's other tests. Measured on this
+       branch when the detection test imported the absent detector at module level:
+       `1 deselected, 1 error`, exit 2, with all 821 existing tests left unmeasured.
+
+     So: (1) assert the corpus size in a **standalone, non-parametrized** test —
+     `assert len(fixtures) == 18` — never only as a parametrize source, or an empty corpus
+     passes. **`tests/visible_dirs.py` belongs to this task's family and is named here
+     deliberately**, because no task named it and a reader meeting it in a Phase 1 test will
+     otherwise read it as drift. Added at `30bcfd8`; imported by
+     `patterns_detection_corpus_lib.py` and `test_patterns_outcomes.py` inside this phase, and
+     by `test_tcs_patterns_catalogue_relocation.py`, `test_tcs_patterns_catalogue_version.py`
+     and `test_dispatch_detection.py` outside it. It exists because a bare `iterdir()` over a
+     directory picks up the `.claude/` that a `cd` into that directory creates, which broke
+     local discovery while CI stayed green `[ref: SDD/Implementation Gotchas]`.
+     `companions.py`'s `_pattern_names` hidden-directory filter and its two tests are the
+     second instance of the same cause. Accepted as unplanned-but-justified by the Phase 2
+     drift check rather than treated as scope creep.
+     (The literal `18` is what T2.1 was asked for and delivered; the count now lives in
+     `tests/patterns_detection_corpus_lib.py`'s `EXPECTED_CASE_COUNT`, which T2.3 took to **26**
+     when it added eight gate-coverage fixtures. The guard was renamed off its hardcoded count at
+     the same time. The requirement here is the *standalone, non-parametrized* shape, not the
+     number.) (2) assert `repo/` and `expected.json` exist per fixture before validating either;
+     (3) accumulate every validation failure and assert once at the end, so eight bad pattern
+     names report as eight and not as the first one.
+  3. Implement: `tests/fixtures/patterns-detection/<case>/` with `repo/` and `expected.json`.
+     Cases required:
+     - one per auto rule (8)
+     - one per trap (7), each naming the trap in `why` and listing `must_not_propose`
+     - one true-negative: a stack none of the 21 cover, `auto: []`, `unrecognised_stack: true`.
+       It may carry tests: `unrecognised_stack` reads `auto` alone, so `baseline: ["testing"]`
+       alongside `unrecognised_stack: true` is the correct, consistent verdict and the fixture
+       must not be made artificially testless to reach it
+       `[ref: SDD/Architecture Decisions/ADR-5]`
+     - one monorepo: empty root `dependencies`, the real signal three levels down, **and a
+       populated `node_modules`** so the exclusion is asserted rather than assumed
+     - one bare repository: no server framework, no tests — all gates closed, zero questions
+     Fixtures are synthetic. No real repository is copied, and no real repository name or path
+     appears in any fixture `[ref: SDD/Constraints/CON-8]`.
+  4. Validate: `python3 -m pytest tests/test_patterns_detect.py -q` — every case collected, every
+     one failing for want of a detector. A case that passes at this point is a case that asserts
+     nothing.
+
+     **The detector must be imported at *runtime*, inside the test or a fixture — never at module
+     level.** "Every case collected" and a module-level `ImportError` are mutually exclusive: a
+     collection error collects **zero** cases, fails this step and its success criterion on its
+     own terms, and additionally aborts the full suite so the other 821 tests go unrun. The
+     correct RED state is 18 collected, 18 failed, exit 1, with the rest of the suite still
+     reported. This is written down because the opposite was tried on 2026-10-03 — the
+     orchestrator's own dispatch brief demanded the module-level form, citing the exit-2
+     measurement above as if it were the target rather than a hazard, and the implementer
+     followed it and flagged the consequence.
+  5. Success:
+     - [ ] 18 fixtures collected, all failing for the right reason `[ref: PRD/Risks and Mitigations]`
+     - [ ] Each of the seven traps has a fixture naming it `[ref: SDD/Quality Requirements]`
+     - [ ] The true-negative and the monorepo case exist `[ref: PRD/F2 3rd; SDD/AC-4]`
+
+- [x] **T2.2 The eight stack-fact rules** `[activity: backend-api]`
+
+  1. Prime: Read the auto rules and their evidence requirements
+     `[ref: SDD/Interface Specifications/Detection rules: the eight stack facts and the three
+     gates]`, the report they fill
+     `[ref: SDD/Interface Specifications/Data model: detection report]` and the parsing example
+     `[ref: SDD/Implementation Examples]`. The first reference replaces a mis-pointer: this step
+     used to send you to the detection-report model for "the auto rules", and that model is a
+     JSON shape naming two patterns, not a rule set. Two traps are load-bearing here: runtime dependencies
+     only, and nested manifests with vendored trees excluded.
+  2. Test: The T2.1 fixtures for the eight rules, plus traps 2, 3, 4, 5 and 7 — DOM-render evidence
+     required rather than a `ui/` directory name or `jsdom`; federated identity never inferred from
+     session-token or password-hashing libraries; `devDependencies` never read as a runtime signal;
+     nested manifests found and `node_modules` skipped; both `venv` and `.venv` recognised.
+  3. Implement: `plugins/tcs-patterns/skills/patterns-setup/lib/detect.py` — the manifest walk, the
+     runtime-dependency reader, the eight rules, and `evidence` naming the concrete file or
+     dependency for every proposal. An unparseable manifest is skipped, never fatal.
+  4. Validate: **12 of the 18 fixtures green, 6 still red** — `python3 -m pytest tests/test_patterns_detect.py -q` reports `12 passed, 6 failed` plus the standalone corpus
+     guard, so `13 passed, 6 failed`, exit 1. Then `python3 -m pytest -q` for the full leg.
+
+     **Not "those fixtures green", which this task cannot achieve.** The detection test
+     asserts `report["gates"] == expected["gates"]`, so a fixture with any gate open stays
+     red until T2.3 evaluates gates — including three this task's own Test step names:
+     `auto-testing-baseline` and `trap-02` (q3), and `trap-03` (q1 and q2). Counted against
+     the corpus, not estimated: 12 of the 18 fixtures have all three gates closed and are
+     reachable here; the 6 that are not are `auto-testing-baseline`,
+     `edge-unrecognised-stack-with-tests`, `trap-01`, `trap-02` (q3), `trap-03` (q1+q2) and
+     `trap-06` (q2).
+
+     This task must still **emit** the `gates` key or every fixture fails on a missing key.
+     Emit all three as `false` — an honest placeholder that T2.3 replaces with real
+     evaluation, not a rule. `unrecognised_stack` is different and belongs here: it is
+     derived from `auto` alone `[ref: SDD/Architecture Decisions/ADR-5]`, so this task can
+     and must compute it correctly.
+  5. Success:
+     - [ ] Every auto and baseline proposal carries `evidence` naming the file or dependency
+           that justified it, asserted as three invariants in the detection test rather than
+           declared per fixture: non-empty; its path part resolves to a file that exists in
+           the fixture's `repo/`; and that path is not under `node_modules`, `.venv`, `venv`
+           or `vendor`. Nothing asserted `evidence` before 2026-10-03, so a detector emitting
+           `evidence: ""` satisfied all 18 fixtures while failing this criterion
+           `[ref: PRD/F2 1st; SDD/Interface Specifications/Data model: fixture expectation]`
+     - [ ] Traps 2, 3, 4, 5 and 7 each have a passing fixture that fails if the trap returns `[ref: SDD/Quality Requirements]`
+     - [ ] `testing` is reported in `baseline` with `surface: false`, never as a recommendation `[ref: PRD/F2 5th; trap 1]`
+
+- [x] **T2.3 The three gates and the unrecognised-stack flag** `[activity: backend-api]`
+
+  1. Prime: Read the gate table
+     `[ref: SDD/Interface Specifications/Detection rules: the eight stack facts and the three
+     gates]`, the gating walkthrough `[ref: SDD/Runtime View/Complex Logic]` and ADR-5
+     `[ref: SDD/Architecture Decisions/ADR-5]`. The walkthrough traces one stack; the table is
+     the rule set. The subtlety: `unrecognised_stack` is not "all
+     gates closed". A repository in an uncovered language with a ports-and-adapters shape must
+     still open Q2.
+  2. Test: Q1 opens on a server framework in `dependencies` and not on one in `devDependencies`;
+     Q2 opens on Q1 or on a content signal alone; Q3 opens on any test framework; the bare
+     repository closes all three; the true-negative sets `unrecognised_stack` true while gates
+     follow their own evidence; trap 6 — a hand-rolled event store with no broker dependency opens
+     Q2 and auto-proposes nothing.
+
+     **Eight fixtures were added on 2026-10-04 and the corpus is now 26, not 18** -- three for q1
+     below (including the `// indirect` negative), five for q2 further down (including two
+     threshold negatives). Two of the eight came from mutating T2.3's own output after the
+     implementer reported done, which found two written thresholds that nothing enforced.
+     Measured before
+     dispatch: `q1_backend` had exactly one positive case in the whole corpus — `trap-03`, Python
+     via `requirements.txt` — and one negative, `trap-04`, Node via `devDependencies`. No fixture
+     declared a Node or Go server framework in `dependencies`, so a detector implementing Node's
+     q1 path wrongly, or omitting Go's entirely, passed all 18. The two new cases close that, and
+     both were written by the orchestrator from the rules as written, before any gate code existed,
+     keeping T2.1's separation between who declares the expectation and who writes the rule:
+     - `gate-q1-node-runtime-dependency` — `trap-04`'s package.json with the section renamed and
+       nothing else changed except `name`, which no rule reads. The only detectable difference is
+       the section, so it is the positive half of trap 4's pair. It also pins ADR-5 harder than
+       `trap-06` does: no stack fact fires on a bare package.json, so `unrecognised_stack` stays
+       **true while q1 AND q2 are open**.
+     - `gate-q1-go-direct-require` — a `go.mod` with a direct `gin` and an indirect `chi`. q1 opens
+       on `gin`; `chi` carries `// indirect` and must not be credited. The `gates` dict cannot
+       separate those two, so the discrimination lives in q1's `gate_evidence`, which must list
+       **every** contributing dependency, with `gin` present and `chi` absent. Completeness is what
+       carries it and the naming does not: "names the direct one" is satisfied by luck, because a
+       detector stripping `//` comments credits both and reports `gin` first anyway — it precedes
+       `chi` at position 13 in file order and in sort order alike
+       `[ref: SDD/Interface Specifications, "What a gate_evidence entry looks like when the signal
+       is a dependency"]`.
+
+     **`q2_architecture` had the same hole, and four more fixtures close it.** Measured: of the
+     four weak content signals in the q2 row, only the `ports/`+`adapters/`+`domain/` triad had any
+     fixture at all (`trap-06`). The per-module events files, the `event_store` directory and the
+     broker dependency had **none**, so a detector implementing the triad and the q1 disjunct alone
+     passed every case. One signal per fixture, because a fixture carrying two cannot say which one
+     opened the gate:
+     - `gate-q2-events-per-module` — two `events.py` in distinct module directories. q2 opens.
+     - `gate-q2-single-events-file` — the same tree with **one**. q2 stays shut, enforcing the
+       written "two or more" threshold and the reason given for it, that one such file is a utility
+       rather than a convention. Note this case is **green on T2.2's all-`false` placeholder** and
+       must stay green: it is a forward regression guard, not a RED→GREEN case, the same standing
+       the spec gives traps 3, 4 and 6.
+     - `gate-q2-event-store-dir` — one `src/event_store/` directory. q2 opens. Nested rather than
+       at the root, so a detector inspecting only root-level names goes red.
+     - `gate-q2-broker-dependency` — `kafkajs` in `dependencies`. q2 opens and **q1 stays shut**, so
+       a detector matching any networking dependency for q1 goes red.
+
+     Read also the 2026-10-04 ruling that the triad needs no common parent and that none of the
+     four signals is depth-restricted `[ref: SDD/Interface Specifications/Detection rules]`. It was
+     a genuine silence: `trap-06` places the three as siblings and therefore passes under either
+     reading, so no fixture could have settled it.
+
+     `EXPECTED_CASE_COUNT` was 24 when this step was written, 26 by the time T2.3 closed,
+     and is **27** as of 2026-10-05 (`auto-mcp-server-poetry-dev-group`, added with
+     align F4). The guard was renamed from
+     `test_corpus_has_exactly_18_cases` to `test_corpus_has_exactly_the_expected_number_of_cases`
+     — it encoded the count in its own identifier and was cited by seven other assertion messages,
+     so a corpus change left eight places reading `18` and only one of them checked.
+
+     **Four assertions this step must direct, not merely require in its Success list.** Noted
+     2026-10-04 after a gate observed that criteria 2 and 3 demand `gate_evidence`, `schema` and
+     `repo` while this Test step never asked for any of them, and `grep -rn gate_evidence tests/`
+     returned nothing but one fixture's prose. A requirement that lives only in a success checkbox
+     is a requirement nobody is told to build. All four are **universal invariants in
+     `tests/test_patterns_detect.py`**, never per-fixture data — the exact-key guard forbids a new
+     `expected.json` key — and they follow the shape the existing `evidence` and `surface`
+     invariants already use there:
+     - every gate reported **open** has a non-empty `gate_evidence` entry, listing every signal
+       that contributed, each citing a path that resolves inside that fixture's `repo/` and has no
+       segment in `node_modules`, `.venv`, `venv` or `vendor`;
+     - every gate reported **closed** has no entry at all;
+     - `report["schema"] == 1`;
+     - `report["repo"]` is the directory that was passed in, since all evidence is relative to it.
+
+     Each must be shown to discriminate by deleting or weakening it and watching something go red.
+     An invariant that survives its own mutation is decoration, and four tests in this phase were
+     already found re-implementing the loop they claimed to exercise.
+
+     Read the 2026-10-04 ruling **"Which declaration counts as `dependencies` outside
+     `package.json`"** before implementing q1 `[ref: SDD/Interface Specifications/Detection rules]`.
+     It is new, and without it three of the four ecosystems' q1 path are unwritten: a gate reads
+     `package.json` `dependencies`, `pyproject.toml`'s `[project]` and `[tool.poetry]`
+     dependencies, every line of `requirements.txt`, `setup.py`'s `install_requires`, and only
+     **direct** `go.mod` requires. Note that `_go_mod_requires` currently strips `//` comments, so
+     the indirect marker does not survive parsing and must be made to.
+  3. Implement: the gate evaluation and `gate_evidence` in `detect.py`. `unrecognised_stack` is
+     **already done** — T2.2 computed it from `auto` alone per ADR-5, which is independent of
+     the gates by construction. Do not rework it; confirm it still holds once gates are live,
+     since the whole point of ADR-5's clause is that an open gate must not flip the flag.
+  4. Validate: every fixture green — `python3 -m pytest tests/test_patterns_detect.py -q`,
+     exit 0. **Measure the number, do not read one from this line.** It has been wrong at
+     every point it was written down: `19`, then `32`, then `53`, and **`75` measured
+     2026-10-05** against a 27-fixture corpus. The two figures this step used to assert —
+     "all 24 fixtures" and "`32 passed`" — were both stale while the paragraph below them
+     already said the corpus had grown to 26, which is the whole finding: the rule at the
+     end of this step was written and then not applied to the step carrying it. The figure was `19` until
+     2026-10-04 and was stale twice over: it counted 18 comparisons plus the standalone corpus
+     guard, written before T2.1 and T2.2 added the four evidence-invariant tests, the wiring test
+     and the two interpreter tests, and before the six gate fixtures took the corpus to 24.
+     Measured after those were added: 32 collected, 11 failed / 21 passed; the corpus later grew to 26 as T2.3 found two more unenforced thresholds. A target figure nobody
+     re-measures is the same defect class as an unasserted field — count the file, do not inherit
+     the number. Then `python3 -m pytest -q`; baseline before this task is
+     **11 failed, 852 passed, 1 skipped, 1 deselected**.
+
+     This task inherits **11 red fixtures** and its job is to turn exactly those green:
+     `auto-testing-baseline`, `edge-unrecognised-stack-with-tests`, `trap-01` and `trap-02` (q3),
+     `trap-03` (q1+q2), `trap-06` (q2), the two q1 cases (q1+q2) and the three q2-positive cases
+     (q2). The sixth added fixture, `gate-q2-single-events-file`, is already green and must stay
+     green. Verified before dispatch that all eleven fail on the `gates` comparison at
+     `test_patterns_detect.py:161` and on nothing else — every new fixture passes its `auto` and
+     `baseline` assertions already, which is
+     independent agreement between rules derived by the orchestrator and a detector written by
+     T2.2's implementer. It also replaces T2.2's all-`false` gate placeholder with real
+     evaluation, so a fixture that was green on the placeholder and goes red here means the
+     gate logic is wrong, not the fixture.
+  5. Success — restated 2026-10-04 to what this task's output can actually show. Two of the
+     four criteria were transcribed from PRD/F3 lines about **questions asked**, which is
+     C3's behaviour and T5.1's task; one of those could not fail at all, since there are
+     exactly three gate keys and `EXPECTED_GATE_KEYS` enforces them:
+     - [ ] The bare repository closes all three gates. "Zero questions" rests on that, but
+           the question count itself is T5.1's to show `[ref: PRD/F3 1st]`
+     - [ ] Every gate reported open carries non-empty `gate_evidence` whose paths resolve in
+           the fixture's `repo/` and avoid excluded directories; every gate reported closed
+           carries none. Asserted as invariants because no fixture declares `gate_evidence`
+           and the exact-key guard would reject one
+           `[ref: SDD/Interface Specifications/Data model: fixture expectation]`
+     - [ ] `schema` and `repo` asserted too — the 2026-10-04 sweep over every report field
+           found both unasserted. `schema == 1` is the handle a consumer would use to refuse
+           an incompatible report; `repo` is what all evidence is relative to. Cheap, and
+           they close the last of the six fields found this way
+           `[ref: SDD/Interface Specifications/Data model: fixture expectation]`.
+           **Kept deliberately against the objection** that these guard constants T2.2 already
+           shipped rather than logic T2.3 writes, and so share the character of the two criteria
+           this phase discarded. They do not: those two could not fail under any report the
+           detector is able to emit, while changing the `schema` literal turns this one red. A
+           regression guard on a one-line contract field is weak, which is a different thing
+           from vacuous, and weakness is the correct price for the only versioning handle the
+           report has
+     - [ ] Q1 stays shut on a server framework that appears only in `devDependencies`
+           (trap 4), and Q2 opens on a content signal alone with Q1 shut (trap 6)
+     - [ ] An uncovered language with an architectural shape still opens Q2, and
+           `unrecognised_stack` stays true there `[ref: SDD/ADR-5]`
+     - [ ] Added 2026-10-04 with the two new fixtures. `q1_backend` opens on all three
+           ecosystems and not only Python: Node from `dependencies`
+           (`gate-q1-node-runtime-dependency`) and Go from a direct `go.mod` require
+           (`gate-q1-go-direct-require`). Before those existed, q1 had one positive case in
+           the corpus and omitting Go's path entirely cost nothing
+           `[ref: SDD/Interface Specifications/Detection rules, "Which declaration counts as
+           `dependencies` outside `package.json`"]`
+     - [ ] A `go.mod` require marked `// indirect` does not open `q1_backend`, shown by q1's
+           `gate_evidence` in `gate-q1-go-direct-require` listing **every** contributing
+           dependency and that list containing `gin` and not `chi`. The completeness is what
+           carries the check, not the naming: "names the direct one" alone is satisfied by luck,
+           since a detector that strips `//` comments — which `_go_mod_requires` does today —
+           credits both and would report `gin` first anyway, in file order and in sort order
+           alike. `_go_mod_requires` must be made to preserve the marker
+           `[ref: SDD/Interface Specifications, "What a gate_evidence entry looks like when the
+           signal is a dependency"]`
+
+     Moved to T5.1, where the behaviour actually lives: "no more than three questions, each
+     allowing multiple answers" `[ref: PRD/F3 2nd]` and "a closed gate yields no question
+     rather than a question answered 'none'" `[ref: PRD/F3 3rd]`.
+
+- [x] **T2.4 The companion map, derived from the catalogue** `[activity: domain-modeling]`
+
+  1. Prime: Read the companion map contract `[ref: SDD/Interface Specifications/Data model: companion map]`
+     and the install unit `[ref: SDD/Runtime View]` — C5 copies one pattern directory, which is the
+     whole reason this exists. Read `tests/test_tcs_patterns_catalogue_links.py`, whose **extraction
+     plumbing** this reuses — and whose **resolution rule** it must not.
+
+     That sentence read "whose resolution rule this reuses rather than reinvents" until
+     2026-10-04. **Checked before dispatch, and the half about the resolution rule was false.**
+     Reuse what is genuinely shared and do not reach for the rest:
+
+     | In `test_tcs_patterns_catalogue_links.py` | For T2.4 |
+     |---|---|
+     | `_pattern_root(path)` | **reuse** — maps a catalogue file to its pattern directory |
+     | `_non_fenced_lines(text)` | **reuse** — a fenced example must not read as a real citation |
+     | `FENCE`, `INLINE_CODE`, `LINK` | **reuse** — the same two citation surfaces |
+     | `CODE_SPAN_PATH` | **do not reuse** — it requires `^(?:\.\./)+`, a leading climb, and rejects every companion citation, which has none |
+     | `_violation(path, target, n)` | **do not reuse** — it resolves `path.parent / target`, relative to the *citing* file; T2.4 resolves against each *target pattern's* root |
+
+     The two rules also have **opposite polarity**, which is worth holding in mind while reading
+     that file: for the link test a path leaving its own pattern directory is a **defect**; for
+     T2.4 a path resolving under another pattern is a **companion edge**. They do not conflict in
+     practice — the link test keys on climbs and the companion citations never climb, so the two
+     operate on disjoint sets — but an implementer who reuses `_violation` will report every
+     companion as an escape violation. An instrument built on the `../` rule was measured at
+     **zero** edges, which is how this was found.
+  2. Test: Assert the derived map equals the **seven measured pattern-to-pattern edges** exactly —
+     `ddd`→`hexagonal`, `event-driven`→`hexagonal`+`event-sourcing`,
+     `event-sourcing`→`event-driven`+`hexagonal`, `hexagonal`→`ddd`, `observability`→`hexagonal`.
+     Assert the relation is treated as a cycle and not a tree: `ddd`/`hexagonal` and
+     `event-driven`/`event-sourcing` are mutual, so the closure traversal must carry a visited set.
+     Assert a cross-pattern reference to a **new target**, injected into a fixture, makes
+     the test fail — a hardcoded table would pass and go stale.
+
+     **"Injected into a fixture" needs a mechanism, and the precedent already exists.** The
+     derivation reads the catalogue, and a test must never mutate
+     `plugins/tcs-patterns/templates/patterns/` — the `.claude` incident on 2026-10-04 showed how
+     loudly a stray entry there breaks unrelated suites, and a mutated real catalogue would be
+     worse. So the derivation takes the **catalogue root as a parameter**, defaulting to the real
+     one, exactly as `detect(repo_dir)` takes the repository root. The injection test then builds a
+     two-pattern tree under `tmp_path`, plants a citation crossing into a target the real catalogue
+     has no edge to, and asserts the derived map contains that edge — which a hardcoded table
+     cannot produce. Parameterising it is also what makes the ambiguity assertion cheap: a
+     `tmp_path` catalogue with the same filename under two patterns is one fixture, not a
+     contortion.
+
+     **Expansion is the transitive closure (Marcus, 2026-10-04), and three sources make the depth
+     observable** `[ref: SDD/Interface Specifications/Data model: companion map, "Expansion is the
+     transitive closure"]`. Assert all three, because a one-level implementation passes the other
+     two and the seven-edge map equally:
+     - `observability` → `hexagonal`, **`ddd`** (direct would give `hexagonal` alone)
+     - `event-driven` → `event-sourcing`, `hexagonal`, **`ddd`**
+     - `event-sourcing` → `event-driven`, `hexagonal`, **`ddd`**
+
+     And assert the two that do **not** discriminate, so the closure is not over-applied:
+     `ddd` → `hexagonal` only, and `hexagonal` → `ddd` only — a closure that returned the source
+     itself, or that walked into `ddd`'s own companions and back, would differ here.
+
+     **The cycle criterion is only falsifiable now that a traversal exists.** Until the closure was
+     the rule, step 3 asked for a flat edge map and nothing recursed, so "must not recurse forever"
+     could not fail — the same shape as two criteria this phase already discarded. With the closure
+     it is real: an unguarded depth-first walk from any of the four patterns in a mutual pair never
+     terminates. Test it with a timeout or a recursion-depth guard rather than by inspection, so
+     the assertion fails rather than hangs the suite.
+
+     **This step said "the nine measured pairs" three times until 2026-10-04 and then listed the
+     seven-edge table beneath it.** Both numbers are real and describe different things, re-measured
+     against the catalogue before this correction: **14** raw cross-pattern references, **9**
+     distinct (source pattern, cited *path*) pairs, **7** distinct (source, target) *edges*, which
+     is what the rows above sum to. Nine collapses to seven because two sources each cite two files
+     inside one target. The map is the seven edges — a companion is a pattern to add to a proposal,
+     not a path — so that is what the test asserts; the 9 and the 14 are provenance for how the 7
+     was found. An implementer reading the old text could have asserted either count and been
+     compliant, and AC-18 carried the same ambiguity.
+  3. Implement: Derive the map by a **new** resolution rule, reusing only the plumbing named in
+     step 1: a code-span path resolving under no pattern root but another's is a companion edge.
+     This sentence read "by the link test's resolution rule" until 2026-10-04 — the substance after
+     the colon was always right, the attribution never was, and leaving it there meant a reader of
+     this step met the false instruction twice before the correction below landed. Expose **three**
+     things for C3 to read — this step said "two" until 2026-10-04:
+     the seven-edge map itself; a closure function that takes a set of selected patterns
+     and returns the companions to propose; and the list of **ambiguous** citations. The closure
+     carries a visited set; it excludes the selections themselves from its result, so a caller can
+     present "and these come with it" without filtering. The third was flagged as possible
+     over-building by T2.4's review and judged in scope by it, correctly: an ambiguous candidate is
+     merely *absent* from the map and indistinguishable there from "no citation existed", so this
+     step's own requirement that the first ambiguity be **audible** cannot be met by the map alone.
+
+     **Read the 2026-10-04 clause "How the citations are actually written, and why the path rule is
+     the right one" before writing the derivation**
+     `[ref: SDD/Interface Specifications/Data model: companion map]`. The real citation shape is
+     not a `../` climb — a derivation written for that shape, which is what the link test's own
+     rule keys on, finds **zero edges**, measured. The path is relative to the **target** pattern's
+     root and a `tcs-patterns:<name>` marker names the target beside it:
+
+     ```
+     ddd/reference/testing-by-layer.md:3
+       … see `tcs-patterns:hexagonal` `reference/testing-hex-arch.md`.
+     ```
+
+     So: resolve each candidate against **every** pattern root, not against the citing file's
+     directory. Treat a path resolving under more than one other pattern as **ambiguous** rather
+     than picking one; zero are ambiguous today, which is worth asserting so that the day one
+     appears is the day the suite says so. And do **not** derive from the marker: it yields **43**
+     edges against the path rule's 7, because a marker means "mentions" while a path means
+     "breaks when installed alone", and the second is the defect this map exists to prevent. A
+     marker-derived map would add up to six companions to a single-pattern selection and justify
+     none of them.
+  4. Validate: `python3 -m pytest -q`; confirm the derived map's seven edges against the table in
+     the SDD, and that the 9 and the 14 appear nowhere as an assertion -- they are provenance.
+  5. Success:
+     - [ ] The derived map equals the seven pattern-to-pattern edges, and the derivation is
+           keyed on paths resolving under another pattern's root rather than on the
+           `tcs-patterns:<name>` marker, which yields 43 `[ref: SDD/Acceptance Criteria/AC-18]`
+     - [ ] A cross-pattern reference to a new target fails the test `[ref: SDD/Acceptance Criteria/AC-18]`
+     - [ ] No candidate path resolves under more than one other pattern -- zero do today, and
+           the assertion is what makes the first one audible `[ref: SDD/Interface Specifications]`
+     - [ ] The closure traversal terminates on both mutual pairs, shown by a timeout or a
+           recursion-depth guard rather than by inspection -- falsifiable only because the
+           closure is now the rule; while step 3 asked for a flat map, nothing recursed and
+           this criterion could not fail `[ref: SDD/Interface Specifications]`
+     - [ ] The closure equals the direct edges for `ddd` and `hexagonal`, and adds `ddd` for
+           `observability`, `event-driven` and `event-sourcing` -- the three cases where
+           depth is observable `[ref: SDD/Interface Specifications/Data model: companion map]`
+
+     Moved to T5.1, where the behaviour lives: "nothing is installed by the map alone -- it
+     produces a proposal the user can decline" `[ref: ADR-8]`. T2.4 returns data and runs no
+     installer, so nothing in its output can observe it; the same reason two of T2.3's
+     criteria moved there.
+
+- [x] **T2.5 The decided-exactly-once invariant** `[activity: testing]` `[parallel: true]`
+
+  1. Prime: Read the arithmetic at the end of the walkthrough
+     `[ref: SDD/Runtime View/Complex Logic]`. "Each of the 21 is decided exactly once" is F3's
+     fourth criterion and is only a claim until something sums it.
+  2. Test: For every fixture, and for every combination of answers to the open gates, the **four**
+     outcome sets — installed, declined by question, excluded by stack fact, and **not reached
+     because its gate stayed shut** — are pairwise disjoint and their union is exactly the 21
+     pattern names. Generated over the answer space, not written per case.
+
+     **This step said "three" until 2026-10-04 and no fixture could have satisfied it.** Computed
+     over all 26 before dispatch: a three-set partition covers the 21 in **zero** of them. A
+     pattern settled by a closed gate falls outside all three — nobody was asked, so it is neither
+     installed nor declined, and no stack fact excluded it. **Every one of the 26 leaves patterns
+     unaccounted**: fifteen leave 13, four leave 11, four leave 8, and three leave 2 -- the best
+     case in the corpus -- because no fixture opens all three gates. Re-measured 2026-10-04;
+     the earlier "twenty fixtures leave 8 or 13" undercounted and omitted the eleven-pattern
+     bucket altogether. The SDD's walkthrough satisfies the three-set form only because the stack it traces
+     opens every gate, which is exactly why the gap survived review
+     `[ref: SDD/Runtime View/Complex Logic, "There are four outcomes, not three"]`.
+
+     **The answer space is finite and small enough to enumerate.** Q1 settles 6 patterns, Q2
+     settles 5, Q3 settles 2, each multiSelect, so a fixture with all three gates open has
+     2^6 x 2^5 x 2^2 = 8192 answer combinations and a fixture with none has exactly one. Enumerate
+     rather than sample: the invariant must hold for every combination, and a sampled one that
+     holds says nothing about the rest.
+  3. Implement: the partition function in a thin module beside `detect.py` — `outcomes.py`, the way
+     `companions.py` already sits beside it, because `detect.py` is 39 KB — returning the **four**
+     sets, plus the parametrized test that asserts the invariant. The function takes the detection
+     report and the answers and returns the partition; it does **not** re-scan the target
+     repository.
+
+     **The gate-to-pattern table does not exist yet, and this task introduces it.** Measured
+     2026-10-04: `detect.py` holds the constants deciding whether a gate *opens*
+     (`NODE_SERVER_FRAMEWORK_DEPS`, `ARCHITECTURE_TRIAD_DIR_NAMES` and the rest) but nothing
+     mapping a gate to the patterns it *settles*; and `detect()`'s report carries exactly `auto`,
+     `baseline`, `gate_evidence`, `gates`, `manifests_walked`, `repo`, `schema` and
+     `unrecognised_stack` — no list of the 21, no excluded-by-stack-fact set. So "derivable from
+     the report plus an answer set alone" cannot be met literally. Resolve it this way:
+
+     - The module holds an explicit table — each gate to the patterns it settles (6 + 5 + 2 = 13,
+       copied from the `Settles` column of the gate table in `[ref: SDD/Interface Specifications]`)
+       and the eight stack-fact names.
+     - The **function** touches no filesystem. Do not have it read the catalogue.
+     - A **test** cross-checks the table against reality: the union of the two groups is exactly
+       the 21 directories under `templates/patterns/`, and the groups are disjoint.
+
+     **The union check alone is not enough and must not be the only one.** Swapping two names
+     between the groups — putting `testing` under a gate and `mutation-testing` under stack facts —
+     leaves the union at 21 and the groups disjoint, so a union-only test passes a table that is
+     wrong in the way most likely to happen. Assert the gate-settled group against a **hand-typed
+     literal of the thirteen names**, written from the SDD's gate table rather than derived from
+     the module under test. A check that re-derives the code's own logic agrees with it wherever
+     both are wrong.
+  4. Validate: `python3 -m pytest -q`; introduce a deliberate double-assignment locally and confirm
+     the test fails — an invariant test that cannot fail is decoration.
+  5. Success:
+     - [ ] All **four** sets pairwise disjoint and summing to 21 for every fixture and every answer
+           combination `[ref: PRD/F3 4th; SDD/AC-6]`
+     - [ ] The test demonstrably fails on a seeded double-assignment `[ref: SDD/Quality Requirements]`
+     - [ ] It also fails on a seeded **omission** — a pattern assigned to no set at all. That is the
+           failure mode the three-set formulation had in every one of the 26 fixtures, and a test
+           that only catches double-assignment would have passed the broken specification
+           `[ref: SDD/AC-6]`
+     - [ ] `not reached` is non-empty for at least one fixture and empty for at least one, so
+           neither state is asserted by accident. Measured 2026-10-04: **all 26** fixtures have a non-empty
+           fourth set under every answer combination, and **no** fixture in the corpus has an empty
+           one, because none opens all three gates — so the empty case needs a constructed report
+           rather than a fixture `[ref: SDD/Runtime View/Complex Logic]`
+
+- [x] **T2.6 The Obsidian rule agreement test, and the two divergences it exposed**
+  `[activity: testing]` `[parallel: true]`
+
+  1. Prime: Read ADR-7 `[ref: SDD/Architecture Decisions/ADR-7]`, the bash gate in
+     `plugins/tcs-patterns/scripts/block-eslint-disable.sh`, its 12 existing cases in
+     `plugins/tcs-patterns/tests/bats/block-eslint-disable.bats`, and `_rule_obsidian_plugin` in
+     `lib/detect.py`. The hook must stay standalone: giving a write-time guard a dependency
+     outside itself is the failure mode issue #163 already records twice here. ADR-7 buys
+     agreement through two independent implementations plus a test, **not** through a shared
+     source — that stance is unchanged by this task.
+
+     **How the gate must be invoked, measured 2026-10-04 — three ways to get a false verdict.**
+     The hook takes a PreToolUse payload on **stdin**, never an argument:
+     `{"tool_name":"Write","tool_input":{"file_path":"<root>/src/probe.ts","content":"…"}}`.
+     Its scope gate resolves the repository with `git -C "$DIR" rev-parse --show-toplevel`
+     (line 83), so:
+     - **In place inside this worktree: every fixture returns `allow`, the Obsidian one
+       included.** `show-toplevel` resolves to the TCS repository root, which has neither
+       `manifest.json` nor `package.json`, so `IS_OBSIDIAN=0` for all 26. A test built this way
+       reports a divergence on `auto-obsidian-plugin` that is an artefact of the instrument.
+       Same family as the fixture-inherits-the-repo's-`.gitignore` hazard already recorded.
+     - **Copied out of the worktree without `git init`: still `allow` for all 26.** Line 84 exits
+       silently when there is no repository.
+     - **Copied out and `git init`-ed: the gate answers about the fixture.** Use
+       `GIT_CONFIG_GLOBAL=/dev/null git -C "$tmpdir" init`, and `diff -r` the copy against the
+       source before trusting any verdict.
+
+     Hold the payload content constant so the only thing that varies is the scope gate — the rule
+     actually under comparison. Probe each fixture twice: a content carrying a real
+     `eslint-disable`, and a clean content. A `DENY` on the clean payload means the gate fired on
+     something other than the violation.
+  2. Test: For every detection fixture, the bash gate's verdict on `repo/` equals the Python
+     rule's `obsidian-plugin` proposal. Both directions matter — a fixture the bash gate accepts
+     and the detector rejects is as much a divergence as the reverse.
+
+     **Agreement over the corpus already holds, and is nearly powerless on its own.** Measured
+     across all 26 on 2026-10-04 with the method above: **0 disagreements**, but the distribution
+     is 25 × `allow` and exactly 1 × `DENY` (`auto-obsidian-plugin`). A hook that never denies
+     passes 25 of 26; a Python rule that never proposes passes 25 of 26. The corpus can only
+     catch a one-sided change that makes a rule *more restrictive*. Everything in the
+     *permissive* direction rests on one fixture — which is why the two cases below are the
+     substance of this task and the corpus sweep is the floor, not the proof.
+
+     **Two real divergences, measured and in opposite directions. Neither is reachable from any
+     fixture.** `trap-05` does not reach the first: its nested signal sits in `node_modules`,
+     which both sides exclude, and its `expected.json` lists `obsidian-plugin` under
+     `must_not_propose`, so the two agree there for the right reason.
+
+     | Constructed tree | Bash gate | Python rule | |
+     |---|---|---|---|
+     | `packages/plugin/manifest.json` with `minAppVersion`, root `package.json` declaring nothing | `allow` | `propose` | **diverges** |
+     | root `package.json` with `"obsidian"` as a **script name**, `dependencies` holding only `react` | `DENY` | `silent` | **diverges** |
+     | root `manifest.json` with `minAppVersion` (control) | `DENY` | `propose` | agrees |
+
+     Both are **bugs in the hook**, not a legitimate difference of question, and both are live:
+     the hook is registered at `plugins/tcs-patterns/hooks/hooks.json:10`, so every session with
+     the plugin enabled carries them. The first leaves a nested Obsidian plugin unguarded at
+     exactly the point where community-directory submission is at stake. The second denies writes
+     anywhere in a repository that is not an Obsidian plugin at all. Neither is covered by any of
+     the hook's 12 bats cases on either side.
+  3. Implement, in this order:
+
+     a. **`tests/test_obsidian_rule_agreement.py`** — the corpus sweep plus the three constructed
+        trees above, invoking the bash gate as a subprocess. No new abstraction, no shared source.
+        The constructed trees are built in the test at run time and are **not** added to
+        `tests/fixtures/patterns-detection/`: the corpus count is asserted at exactly 26, and a
+        tracked fixture is fittable by the next implementer in a way a constructed tree is not.
+        Write this first and watch the two divergence cases **fail** — that is this task's RED.
+
+     b. **Close both divergences in the hook**, keeping it standalone and bash 3.2 clean:
+        - *Depth*: the gate must stop missing a plugin that sits below the repository root.
+          Decided by Marcus on 2026-10-04: fix the hook rather than assert the asymmetry,
+          because writing a live bug down as intent is worse than either leaving it or fixing it.
+
+          **This bullet originally said "look for `manifest.json` at any depth **below** the
+          repository root ... excluding `node_modules`, `.venv` and `vendor`", and that is not
+          what shipped.** The downward tree walk was built, measured, and then rejected on
+          2026-10-05 for two measured reasons, and the bullet is corrected here because
+          `plan/phase-2.md` was the last document still carrying it — ADR-7 and AC-14 were
+          amended the same day. The shipped gate walks **upward** from the file being written to
+          the repository root, looking for the nearest `manifest.json` that carries
+          `minAppVersion` `[ref: SDD/ADR-7, as amended 2026-10-05]`. Why the downward walk was
+          wrong, both measured:
+          - It answered the wrong question. Six `manifest.json` files carrying `minAppVersion`
+            live in **this** repository as test fixtures, so a walk from the root classified
+            the-custom-startup itself as an Obsidian plugin and denied every write of a
+            non-Markdown file containing `eslint-disable` anywhere in the tree.
+          - It cost 155-254 ms on a tree this size, paid by every such write; the upward walk
+            costs 0.03 ms and needs no exclusion list at all, because it never descends — it only
+            ascends through directories already on the path to the file.
+        - *Precision*: decide the `package.json` signal by parsing the dependency maps with `jq`
+          (which the hook already depends on at line 53) instead of grepping
+          `"obsidian"[[:space:]]*:` across the whole file. Keep `devDependencies` accepted — the
+          detector accepts it (`detect.py` lines 478-479) and one existing bats case covers it.
+        - Every jq pipeline keeps its `2>/dev/null || true`: a malformed payload must still fall
+          through to exit 0, never hard-block an unrelated edit.
+
+        **Both halves were probed on bash 3.2.57 before dispatch, 2026-10-04.** The precision
+        half shipped as probed: `jq -e '(.dependencies.obsidian // .devDependencies.obsidian) !=
+        null'` gives the right answer on all six shapes — `dependencies`, `devDependencies`, a
+        script name, a `resolutions` entry, no `obsidian` at all, and malformed JSON, which falls
+        through to allow.
+
+        The depth half was probed as a `find ... -prune` tree walk and that probe was sound on
+        its own terms — it found a nested `packages/plugin/manifest.json`, pruned the excluded
+        trees, and passed over a `manifest.json` with no `minAppVersion`. **It was the wrong
+        instrument, and the probe could not have shown that**, because it was run against
+        purpose-built trees rather than against a real repository. One run of the shipped hook
+        against this repository is what exposed it. Worth keeping as the lesson: a probe that
+        confirms an idiom works says nothing about whether the idiom answers the right question,
+        and a synthetic tree cannot tell you what a real one contains.
+
+        **A third false positive turned up in that probe and was not in the original pair:** the
+        current whole-file grep also denies on `"obsidian"` inside `resolutions`. Any
+        `"obsidian":` anywhere in the root `package.json` trips it — `overrides`, `pnpm.overrides`
+        and a `workspaces` entry are the same shape. Cover at least the `resolutions` form
+        alongside the script-name one, since both are ordinary things to find in a repository
+        that is not an Obsidian plugin.
+
+     c. **Three bats cases** in `block-eslint-disable.bats` — this asked for two, one per
+        divergence, and three were added. The third, "allows a write OUTSIDE a plugin nested
+        elsewhere in the same repo", is not surplus: it is the asserted divergence the
+        file-scoped ruling *requires*, since the hook answers "is the target file inside a
+        plugin" while `detect()` answers "does this repository contain one", and the two
+        legitimately disagree for a file outside a nested plugin
+        `[ref: SDD/ADR-7, as amended 2026-10-05]`. Corrected here 2026-10-05; `7d7b18a` fixed
+        this task's walk mandate and left its counts behind.
+        The point of all three is that the hook's own suite covers the behaviour
+        independently of the Python comparison.
+  4. Validate: `python3 -m pytest tests/test_obsidian_rule_agreement.py -q`;
+     `bats plugins/tcs-patterns/tests/bats/block-eslint-disable.bats` — **15 ok, 0 not ok**
+     measured 2026-10-05 (this line said 14, matching the two cases asked for rather than the
+     three added), and confirm the 12 pre-existing cases still pass unchanged; then `python3 -m pytest -q` and
+     `shellcheck plugins/tcs-patterns/scripts/block-eslint-disable.sh`. Change one rule locally,
+     on each side in turn, and confirm the test fails — an agreement test that cannot fail is
+     decoration, and over this corpus it very nearly is.
+
+     The hook's behaviour changes for users, so it needs changelog entries. **T5.4 owns both
+     changelogs** — do not write them here; note the change in the commit message so T5.4 has it.
+     Never hand-bump `plugin.json`.
+  5. Success:
+     - [ ] Identical verdicts across all 26 fixtures `[ref: SDD/AC-14]`
+     - [ ] A one-sided change to either rule fails the test, demonstrated on **each** side
+           `[ref: SDD/ADR-7]`
+     - [ ] The nested-`manifest.json` tree and the `"obsidian"`-as-script-name tree both agree
+           after the fix, and both are shown to have **failed before it** — the RED is part of the
+           deliverable, not a claim `[ref: SDD/ADR-7; SDD/AC-14]`
+     - [ ] The hook still exits 0 on a malformed payload and still honours
+           `CLAUDE_ALLOW_ESLINT_DISABLE=1`; all 12 pre-existing bats cases pass unchanged
+           `[ref: SDD/Runtime View/Error Handling]`
+     - [ ] The hook depends on nothing outside itself `[ref: SDD/ADR-7]`
+
+- [x] **T2.7 Phase validation** `[activity: validate]`
+
+  Both legs, reported per leg. Confirm the detector is callable against a fixture directory with no
+  interactive setup and no catalogue writes — the property the PRD's top-risk mitigation depends on.
+  Confirm every fixture's `why` field reads as an explanation a second party could act on, because
+  a fixture whose purpose is unclear will be deleted by someone later.
+
+  **Held-out validation, mandatory and specified here because the corpus cannot provide it.**
+  The 27 fixtures are the detector's own test data, so a detector that fits them passes them.
+  The PRD's top risk is not answered by green fixtures; it is answered by rules holding on a
+  tree the implementer never saw. Four such cases were built on 2026-10-03 **before** T2.2's
+  implementer began, with every expectation derived from `[ref: SDD/Interface Specifications/
+  Detection rules: the eight stack facts and the three gates]` and cited clause by clause.
+  Rebuild and run them; they are deliberately **not** fixtures, because the corpus count is
+  asserted at exactly **27** (`EXPECTED_CASE_COUNT`, `tests/patterns_detection_corpus_lib.py:34`,
+  enforced in **four** test files -- `test_patterns_detection_corpus.py`,
+  `test_patterns_detect.py`, `test_patterns_outcomes.py` and
+  `test_obsidian_rule_agreement.py`) and these must never become data the implementation is
+  tuned to. Three figures were stale here and all three were corrected on 2026-10-05: the
+  count (26 -> 27, `auto-mcp-server-poetry-dev-group` added with align F4), the file count
+  ("two" named two of the four, and the constant's own comment made the same mistake), and
+  the line number -- which had been **26 while the value was also 26**, so the citation read
+  as one number twice and a reader could not tell which was which. It is now `:34` and 27.
+  This sentence read "exactly 18" until 2026-10-04 -- the same stale figure the success criterion
+  below already warns about, left standing in the paragraph that explains why the cases are held
+  out:
+
+  | Case | Tree | What only this case proves |
+  |---|---|---|
+  | mixed Go + Python | root `go.mod`, `cmd/main.go`, `cmd/main_test.go`, `services/api/backend/pyproject.toml` with `django` + `pyjwt`, `services/api/backend/app.py`, `vendor/github.com/x/ui/tsconfig.json` | two ecosystems at once; `vendor/` as the excluded dir; a **server framework three levels down**; Go tests as framework evidence; `typescript-strict` refused from a vendored tree |
+  | bare Go | `go.mod`, `cmd/main.go`, `cmd/hello_test.go` | `testing` firing with no test directory at all, via the tests-beside-code clause |
+  | vendor only | `vendor/x/tsconfig.json` and nothing else | `auto: []` with `unrecognised_stack: true`, and the exclusion applying to a non-manifest file search |
+  | setup.py | `setup.py` with `install_requires` holding `mcp`, plus `src/app.py` | the `setup.py` reader, which **no fixture exercises** -- flagged by T2.2's implementer as implemented and unverified |
+
+  Run the evidence invariants against these too, since they are the only trees where a
+  fabricated `evidence` path cannot hide behind a fixture that happens to contain it.
+
+  Measured against T2.2's detector (`94da599`..`bc6e28f`): all four correct on `auto`,
+  `baseline`, `unrecognised_stack`, `must_not_propose`, `manifests_walked` and every evidence
+  invariant; only `gates` diverged, which is T2.2's placeholder.
+
+  **Re-run after T2.3 (`03d3c31`): zero divergence on all four.** `auto`, `baseline`, `gates`,
+  `unrecognised_stack`, `schema`, `must_not_propose` and every evidence and `gate_evidence`
+  invariant matched the clauses as written, on trees the detector had never seen. Two results
+  worth keeping: q1 fired from a **nested** `pyproject.toml`
+  (`services/api/backend/pyproject.toml: dependencies.django`), which is the four-manifest table
+  working at depth and which no fixture reaches; and q2's evidence was q1's folded in, which is
+  the 2026-10-04 pure-disjunct ruling holding outside the corpus. This is the PRD's top-risk
+  mitigation actually discharged rather than asserted -- green fixtures could never have done it,
+  because the fixtures are the detector's own test data.
+
+  **Re-run after T2.5 and T2.6 (`66e83b1`): zero divergence on all four, now including the
+  partition.** `auto`, `baseline`, `gates`, `gate_evidence`, `unrecognised_stack`,
+  `must_not_propose` and every evidence invariant matched the clauses as written. Added this run:
+  T2.5's `outcomes.decide()` was asserted on each held-out report as well, and the four sets are
+  pairwise disjoint and sum to 21 on all four trees -- `3 + 13 + 5 + 0`, `2 + 2 + 6 + 11`,
+  `0 + 0 + 8 + 13`, `2 + 0 + 6 + 13`. These are the only reports the partition has ever run
+  against that the implementation was not fitted to.
+
+  **One result this run that the specification did not predict: the empty fourth set is reachable
+  from a real tree.** T2.5 records that no corpus fixture opens all three gates, so its empty
+  `not_reached` case needs a constructed report. The mixed Go + Python tree opens all three --
+  q1 from `django` in a nested `pyproject.toml`, q2 from q1, q3 from a `*_test.go` -- and yields
+  `not_reached = 0` from an actual `detect()` run. So T2.5's constructed case is corroborated by
+  a real detector against a real tree rather than only by a hand-built report, which is a
+  stronger position than either artefact reaches alone. It does not change T2.5: a held-out tree
+  must not become the fixture that covers the case, for the same reason these four are not
+  fixtures.
+
+  Two results from the earlier run still hold and are worth keeping: q1 fires from a **nested**
+  `pyproject.toml` (`services/api/backend/pyproject.toml: dependencies.django`), the
+  four-manifest table working at depth, which no fixture reaches; and q2's `gate_evidence` is
+  q1's folded in, the 2026-10-04 pure-disjunct ruling holding outside the corpus.
+
+  **Re-run after align F4's widening (`1815ec3`): zero divergence on all four.** Required
+  rather than optional, because that change altered the return shape of *both* Python dependency
+  readers -- `_pyproject_deps_and_pytest` and `_setup_py_deps` -- and the fourth held-out case
+  exercises `setup.py`, which no fixture reaches. It still yields
+  `setup.py: install_requires.mcp`, so the reader's new `(runtime, extras)` pair did not cost the
+  runtime path. Checked on every tree: `auto`, `baseline`, `gates`, `gate_evidence`,
+  `unrecognised_stack`, `schema`, `manifests_walked`, `must_not_propose`, both evidence
+  invariants, and the partition's sizes, disjointness and sum.
+
+  **The partition sizes were derived by hand before the run and matched the previous run's
+  recorded figures exactly** -- `3 + 13 + 5 + 0`, `2 + 2 + 6 + 11`, `0 + 0 + 8 + 13`,
+  `2 + 0 + 6 + 13`. That agreement is the check that these four trees were *reconstructed*
+  correctly rather than approximately, which is the one weakness of holding them out of the
+  tree: nothing else verifies that this session rebuilt the same cases the last one ran. Worth
+  keeping as the standing method -- derive the expected sizes from the rule tables first, then
+  compare them to what the plan recorded, and only then run the detector.
+
+  **Do not promote these four into tracked tests, tempting though the rebuild cost makes it.**
+  Three sessions have now rebuilt them, and the tax is the price of the property: a tracked test
+  is visible to the next implementer and can be fitted exactly as a fixture can. Held-out means
+  held out of the tree, not merely out of `tests/fixtures/`. The specification above is what
+  makes them reconstructible; keep it accurate instead.
+
+  **The rule that makes this worth anything:** a divergence is resolved against the SDD, never
+  against the fixtures, and never by editing an expectation to match the output.
+
+  **Measured 2026-10-05, both legs reported per leg as the task requires.** Re-measured the
+  same day after the drift remainder and align F4 landed (`073a8ec`, `d0a7453`, `1815ec3`);
+  the earlier figure of `999 passed` is kept below as history, not as the current state.
+  - **Leg 1, pytest:** `1028 passed, 1 skipped, 1 deselected, 0 failed` -- was `999` when
+    this task was first measured, then `1011` after the malformed-manifest guards gained
+    tests (+8), then `1022` after align F4 (+7 tests, +4 corpus sweeps over the 27th
+    fixture), then `1028` after the drift check's remainder arrived (+6: five parametrized
+    `mcp-server` reader cases and the indirect-require pin). Five figures in one day, which
+    is the standing argument for measuring rather than citing.
+  - **Leg 2, bats:** `1187 ok, 0 not ok` across all four plugin suites -- `tcs-git-helpers` 835,
+    `tcs-helper` 330, `tcs-issues` 7, `tcs-patterns` 15. Counted per suite rather than from a run
+    verdict, and `plugins/tcs-helper/tests/bats` alone is **not** the bats leg: it is 330 of 1187,
+    so running only that one would report a quarter of the suite as all of it. No perf flakiness
+    appeared in `tcs-git-helpers` on this run, which had been a carried suspicion.
+
+  **"Callable against a fixture directory with no interactive setup and no catalogue writes",
+  discharged by digest rather than by reading.** `detect.py` imports standalone via
+  `spec_from_file_location` with no harness, no `SKILL.md` and no interview. Every file under
+  `templates/patterns/` (101) and under `tests/fixtures/patterns-detection/` (81) was hashed with
+  sha256, `detect()` was run against all 26 fixtures, and every hash was unchanged. An mtime check
+  would have missed a rewrite with identical content, which is why the content digest is the
+  instrument.
+
+  **Every fixture's `why` reviewed: 24 of 26 held.** The `gate`, `trap` and `edge` entries name the
+  rule, the pair they belong to and often the mutation that proved the gap --
+  `gate-q2-partial-triad` records that relaxing `all()` to `any()` left every test green, which is
+  precisely what a second party needs to know before deleting it. The two that failed are fixed in
+  `92000b7`.
+
+  - Success: all **26** fixtures green -- the figure read 18 until 2026-10-04, before T2.3 added
+    eight gate-coverage cases; count `EXPECTED_CASE_COUNT`, do not inherit the number. All four
+    held-out cases matching the written rules with no divergence; detection suite runnable
+    standalone; both legs green per leg
+    `[ref: SDD/AC-3, AC-4, AC-5, AC-6, AC-14; PRD/Risks and Mitigations]`

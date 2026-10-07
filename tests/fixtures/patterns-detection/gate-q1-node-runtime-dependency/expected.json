@@ -1,0 +1,16 @@
+{
+  "auto": [],
+  "baseline": [],
+  "gates": {
+    "q1_backend": true,
+    "q2_architecture": true,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "node-service",
+    "api-design",
+    "secure-oauth-oidc"
+  ],
+  "unrecognised_stack": true,
+  "why": "the positive half of trap-04's pair, and the only Node repository in the corpus that opens q1_backend. It is a near-minimal pair with trap-04's package.json: the two differ in the section name and in the package name, and since no rule reads `name`, the only detectable property between them is the section split (solution.md, q1 row). Verified by diffing the two files with the section renamed: the `name` line is the sole remaining difference. Two further things it pins: no stack fact fires on a bare package.json, so unrecognised_stack stays true while q1 AND q2 are open -- ADR-5's clause that an open gate must not flip the flag, which trap-06 exercises for q2 alone; and opening q1 proposes nothing, so none of the six patterns q1 settles may appear in auto"
+}

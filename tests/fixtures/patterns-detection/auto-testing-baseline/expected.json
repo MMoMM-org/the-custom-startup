@@ -1,0 +1,16 @@
+{
+  "auto": [
+    "python-project"
+  ],
+  "baseline": [
+    "testing"
+  ],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": true
+  },
+  "must_not_propose": [],
+  "unrecognised_stack": false,
+  "why": "auto rule -- pytest.ini plus a tests/ shape is testing evidence; it reports in baseline (surface:false), never in auto, alongside a recognised stack"
+}

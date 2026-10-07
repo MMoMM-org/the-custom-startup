@@ -1,0 +1,14 @@
+{
+  "auto": [],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "node-service"
+  ],
+  "unrecognised_stack": true,
+  "why": "trap 4 -- a development dependency read as a runtime one; express present only in devDependencies (driving a test harness, not a service) must not open q1_backend. No stack fact fires here, so the stack reports unrecognised"
+}

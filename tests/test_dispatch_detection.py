@@ -20,6 +20,7 @@ stopping; an absent tier proceeds silently, because sixteen specs have one.
 from pathlib import Path
 
 import pytest
+from visible_dirs import visible_dir_names, visible_dirs
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILLS = REPO_ROOT / "plugins" / "tcs-workflow" / "skills"
@@ -314,7 +315,7 @@ DOC_SURFACES = [
 
 
 def _actual_workflow_skill_count():
-    return len([d for d in SKILLS.iterdir() if d.is_dir()])
+    return len(visible_dirs(SKILLS))
 
 
 @pytest.mark.parametrize("doc", DOC_SURFACES, ids=lambda p: p.name)

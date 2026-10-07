@@ -1,0 +1,18 @@
+{
+  "auto": [
+    "go-idiomatic"
+  ],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "node-service",
+    "api-design",
+    "twelve-factor"
+  ],
+  "unrecognised_stack": false,
+  "why": "the negative that makes the `// indirect` ruling enforceable, and the pair with gate-q1-go-direct-require. A CLI whose only server framework arrives transitively: cobra is a direct require and is not a server framework, gin is a server framework and is `// indirect`. q1_backend must stay SHUT, because the gate asks whether this repository RUNS a service and a dependency of a dependency does not make it one. This is asserted through the gates dict, which every fixture already declares -- the two earlier attempts both tried to assert the CONTENT of gate_evidence instead, which no fixture may declare because of the exact-key guard, and both were shown by mutation to be satisfiable while the rule was implemented wrongly. Disabling the exclusion in detect.py must turn THIS fixture red"
+}

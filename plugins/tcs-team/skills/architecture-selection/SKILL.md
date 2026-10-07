@@ -1,7 +1,7 @@
 ---
 name: architecture-selection
 user-invocable: false
-description: "Choosing a system-level architecture: monolith against microservices, event-driven or serverless, with C4 modelling and the scalability trade-offs behind the choice. Use when the style is still open. Do NOT use to audit a style already chosen — ports and adapters are tcs-patterns:hexagonal, event schemas and handler idempotency are tcs-patterns:event-driven."
+description: "Choosing a system-level architecture: monolith against microservices, event-driven or serverless, with C4 modelling and the scalability trade-offs behind the choice. Use when the style is still open. Do NOT use to audit a style already chosen — ports and adapters are tcs-hexagonal, event schemas and handler idempotency are tcs-event-driven (if installed)."
 ---
 
 ## Persona

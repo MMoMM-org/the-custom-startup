@@ -1,0 +1,18 @@
+{
+  "auto": [],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "ddd",
+    "event-driven",
+    "event-sourcing",
+    "hexagonal",
+    "functional"
+  ],
+  "unrecognised_stack": true,
+  "why": "the threshold negative for q2's architecture triad, and the pair with trap-06. Two of the three directories -- ports/ and domain/, no adapters/ -- so q2_architecture must stay SHUT: solution.md requires all three, calling each weak signal's quantity \"fixed, not left to taste\". Nothing enforced it before 2026-10-04. Measured by mutation: relaxing `all(found.values())` to `any(...)` in _architecture_triad_evidence left every test green, and confirmed structurally -- trap-06 was the only fixture containing any of the three names and it contained all three, so a partial layout had never been exercised. A ports-and-domain split without adapters is a plausible real layout rather than a contrived one, which is why the rule needs the guard"
+}

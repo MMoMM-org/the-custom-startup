@@ -21,6 +21,10 @@
 #     force a marker bump. The marker lives in a different directory from
 #     the sources it gates.
 #
+# Extended again in spec-020 T1.4: each pattern under
+# plugins/tcs-patterns/templates/patterns/<name>/ is gated against its own
+# VERSION marker (see "Per-pattern check" below for why).
+#
 # Usage:
 #   check-hook-bundle-version.sh [<diff-range>] [<repo-path>]
 #
@@ -67,7 +71,7 @@ changed_paths="$(git -C "$REPO_PATH" diff --name-only "$DIFF_RANGE" 2>&1)" || {
 
 overall_fail=0
 
-check_bundle() {
+gate_bundle_row() {
   local sources_dir="$1"
   local marker_file="$2"
   local glob="$3"
@@ -137,9 +141,33 @@ PATHS_EOF
 
 while IFS='|' read -r bundle_sources_dir bundle_marker_file bundle_glob; do
   [ -z "$bundle_sources_dir" ] && continue
-  check_bundle "$bundle_sources_dir" "$bundle_marker_file" "$bundle_glob"
+  gate_bundle_row "$bundle_sources_dir" "$bundle_marker_file" "$bundle_glob"
 done <<BUNDLES_EOF
 $BUNDLES
 BUNDLES_EOF
+
+# ---------------------------------------------------------------------------
+# Per-pattern check (spec-020 T1.4): each pattern under
+# plugins/tcs-patterns/templates/patterns/<name>/ owns its own VERSION file.
+# One bundle-table row keyed to a single marker cannot gate this — bumping
+# ANY pattern's VERSION would satisfy the row no matter which pattern's
+# files actually changed (ADR-9). So the names are read from the diff
+# itself (a pattern added in the same changeset is gated too, with nobody
+# needing to register it), and gate_bundle_row is called once per changed
+# pattern, each with its OWN marker.
+# ---------------------------------------------------------------------------
+
+changed_patterns="$(printf '%s\n' "$changed_paths" \
+  | sed -n 's|^plugins/tcs-patterns/templates/patterns/\([^/]*\)/.*|\1|p' \
+  | sort -u)"
+
+while IFS= read -r pattern_name; do
+  [ -z "$pattern_name" ] && continue
+  gate_bundle_row "plugins/tcs-patterns/templates/patterns/$pattern_name" \
+               "plugins/tcs-patterns/templates/patterns/$pattern_name/VERSION" \
+               '*'
+done <<PATTERNS_EOF
+$changed_patterns
+PATTERNS_EOF
 
 exit "$overall_fail"

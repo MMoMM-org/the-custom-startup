@@ -1,7 +1,7 @@
 ---
 name: api-contract-design
 user-invocable: false
-description: "Authoring an API contract: OpenAPI/Swagger specifications, GraphQL schema design, versioning and deprecation strategy, and authentication patterns. Use when the deliverable is the contract itself. Do NOT use to review an existing REST API's resource modelling, HTTP semantics, error shapes or pagination — tcs-patterns:api-design owns that."
+description: "Authoring an API contract: OpenAPI/Swagger specifications, GraphQL schema design, versioning and deprecation strategy, and authentication patterns. Use when the deliverable is the contract itself. Do NOT use to review an existing REST API's resource modelling, HTTP semantics, error shapes or pagination — tcs-api-design owns that (if installed)."
 ---
 
 ## Persona

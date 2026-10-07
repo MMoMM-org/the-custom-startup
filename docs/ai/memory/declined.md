@@ -144,3 +144,23 @@ would plausibly re-propose it, leave it out.
   — an agent doing long work *itself* rather than waiting on a subagent, where delivery measured
   5 of 5. In that case run Gate 1 restricted to that shape, with an explicit `tools:` line on the
   observer. Full evidence: #99 and its two Gate 0 comments.
+
+### 2026-10-04 — split `_pyproject_deps_and_pytest`'s two unrelated return values
+
+- **Proposed:** `_pyproject_deps_and_pytest` in
+  `plugins/tcs-patterns/skills/patterns-setup/lib/detect.py` returns a tuple of a dependency-name
+  list and a boolean about whether the file carries a `[tool.pytest.ini_options]` table — two
+  unrelated facts from one call. Flagged as a smell during spec-020 T2.2's review, and raised again
+  in T2.3's when the gate layer became a second caller.
+- **Decision:** deferred, not split
+- **Why:** the shape exists because one TOML parse answers both questions, and both callers want
+  exactly one half. Splitting it now means either parsing `pyproject.toml` twice for the two
+  callers that each need one answer, or introducing a small result object for a two-field tuple —
+  and either way touching T2.2's call site and T2.3's for a signature cleanup unrelated to what
+  either task was for. The cost is one discarded value per call site, paid twice, and both call
+  sites name what they keep. Reviewed independently in both tasks and reached the same verdict
+  both times.
+- **Revisit if:** a third caller needs a third combination of the two answers; or the two halves
+  need to diverge in how they treat a malformed file — today both swallow a `TOMLDecodeError` and
+  return the same "nothing found" pair, and the moment one of them needs to distinguish "absent"
+  from "unparseable" the single return becomes a genuine obstacle rather than a tax.

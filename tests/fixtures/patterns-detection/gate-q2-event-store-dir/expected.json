@@ -1,0 +1,18 @@
+{
+  "auto": [],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": true,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "ddd",
+    "event-driven",
+    "event-sourcing",
+    "hexagonal",
+    "functional"
+  ],
+  "unrecognised_stack": true,
+  "why": "q2's event-store signal, which no fixture reached: one directory named `event_store` (the rule also accepts `eventstore`). Nested under src/, matching the traced walkthrough's `src/event_store/` rather than sitting at the root, so a detector that only inspects root-level directory names goes red. The directory holds a file because git does not track empty directories -- an empty one would vanish from the commit and the signal with it"
+}

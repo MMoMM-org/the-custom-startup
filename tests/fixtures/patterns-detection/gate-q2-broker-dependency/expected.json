@@ -1,0 +1,18 @@
+{
+  "auto": [],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": true,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "ddd",
+    "event-driven",
+    "event-sourcing",
+    "hexagonal",
+    "functional"
+  ],
+  "unrecognised_stack": true,
+  "why": "q2's broker-dependency signal, which no fixture reached: `kafkajs` in dependencies (the rule also accepts amqplib, @aws-sdk/client-sqs, celery). It doubles as a check that a broker is NOT a server framework: q1_backend must stay shut here, so a detector matching any networking dependency for q1 goes red. No tsconfig and no react, so nothing reaches auto"
+}

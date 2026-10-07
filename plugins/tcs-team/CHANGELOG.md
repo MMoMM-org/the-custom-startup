@@ -8,6 +8,16 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [3.4.5] - 2026-10-07
+
+### Changed
+
+- **Cross-plugin routing contracts name the installed pattern, `tcs-<name>`.** After tcs-patterns 2.0
+  the address `tcs-patterns:<name>` resolves to nothing; a pattern is a repo skill `tcs-<name>`,
+  installed with `/tcs-patterns:patterns-setup`. The "Do NOT use ... `tcs-<name>` owns that"
+  clauses in six skill descriptions and the skills README now say so, and the descriptions add
+  "if installed", since a repository holds only the patterns it chose.
+
 ## [3.4.4] - 2026-10-01
 
 ### Fixed

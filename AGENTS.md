@@ -58,7 +58,8 @@ the-custom-startup/
 │   │
 │   └── tcs-patterns/             # Domain pattern skills plugin (optional, selective install)
 │       ├── .claude-plugin/       # Plugin manifest (plugin.json)
-│       └── skills/               # 21 pattern skills:
+│       ├── skills/               # patterns-setup (installer), pattern (catalogue reader)
+│       └── templates/patterns/   # catalogue: 21 patterns, installed per repo as .claude/skills/tcs-<name>:
 │           │                     # Architecture: ddd, hexagonal, functional, event-driven,
 │           │                     #               event-sourcing
 │           │                     # API & Types: api-design, typescript-strict

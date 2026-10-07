@@ -1,0 +1,7 @@
+{
+  "id": "sample-note-plugin",
+  "name": "Sample Note Plugin",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "A synthetic fixture plugin manifest."
+}

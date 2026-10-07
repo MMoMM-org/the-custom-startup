@@ -1,0 +1,18 @@
+{
+  "auto": [],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "ddd",
+    "event-driven",
+    "event-sourcing",
+    "hexagonal",
+    "functional"
+  ],
+  "unrecognised_stack": true,
+  "why": "the threshold negative for q2's per-module events signal, and the minimal pair with gate-q2-events-per-module: one `events.py` instead of two, nothing else different. solution.md states the reason outright -- \"one `events.py` is a utility file, not a convention\" -- so a detector firing on a single occurrence must go red here. Without this case the \"two or more\" in the rule is unenforced and any count of one or more passes"
+}

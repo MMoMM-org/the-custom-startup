@@ -1,0 +1,14 @@
+{
+  "auto": [
+    "typescript-strict"
+  ],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [],
+  "unrecognised_stack": false,
+  "why": "auto rule -- any tsconfig.json is typescript-strict evidence by presence alone"
+}

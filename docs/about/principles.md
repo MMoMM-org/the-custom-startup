@@ -21,7 +21,7 @@ TCS ships four plugins to the Claude Code marketplace:
 
 - **`tcs-workflow`** — spec-driven development: XDD, analysis, review, implementation
 - **`tcs-team`** — activity-scoped subagents for research, design, implementation, review
-- **`tcs-patterns`** — domain pattern skills
+- **`tcs-patterns`** — catalogue of domain patterns, installed per repository
 - **`tcs-helper`** / **`tcs-git-helpers`** / **`tcs-issues`** — authoring, memory, and repo tooling
 
 Every design decision maps to one of the mechanisms Claude Code exposes: **skills**, **subagents**, **agent teams**, and **hooks**. This document is organized around their runtime contracts, not around analogies to human team structures.
@@ -164,7 +164,7 @@ The discipline matters most for the changes that feel obviously right. A prose r
 
 Verified 2026-08-31 unless noted.
 
-- **`disable-model-invocation` on plugin skills** — plugin skills do not support the field the way user skills do ([anthropics/claude-code#22345][gh-issues], open, last updated 2026-08-30).
+- **`disable-model-invocation` on plugin skills** — supported. Measured 2026-10-06 (spec 020): setting it on a plugin skill removes that skill's entry from the skill listing entirely (−628 tokens) while keeping it typeable. An earlier version of this line said plugin skills do not support the field ([anthropics/claude-code#22345][gh-issues]); that was wrong. The cost is that the model can no longer route to the skill by its description, which is why `tcs-patterns` installs patterns into the repository instead ([spec 020](../XDD/specs/020-tcs-patterns-selective-install/solution.md)).
 - **Cross-surface skill portability** — skills uploaded to claude.ai, the API, and Claude Code do not sync.
 - **Agent Teams maturity** — experimental; real-world patterns still emerging.
 - **Subagent eval tooling** — no official framework for agents specifically; each team reinvents it.

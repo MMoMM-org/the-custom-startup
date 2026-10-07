@@ -1,0 +1,14 @@
+{
+  "auto": [
+    "go-idiomatic"
+  ],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [],
+  "unrecognised_stack": false,
+  "why": "auto rule -- a go.mod is go-idiomatic evidence"
+}

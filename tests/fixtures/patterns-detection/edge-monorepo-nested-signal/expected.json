@@ -1,0 +1,16 @@
+{
+  "auto": [
+    "typescript-strict"
+  ],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "mcp-server"
+  ],
+  "unrecognised_stack": false,
+  "why": "edge case -- a monorepo whose root manifest declares no dependencies, with the real signal three levels down (packages/api/server/tsconfig.json), and a populated node_modules carrying its own decoy dependency signal that must not contribute"
+}

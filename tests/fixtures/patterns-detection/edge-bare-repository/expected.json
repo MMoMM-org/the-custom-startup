@@ -1,0 +1,14 @@
+{
+  "auto": [
+    "typescript-strict"
+  ],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [],
+  "unrecognised_stack": false,
+  "why": "edge case -- a bare repository: no server framework, no architecture signal, no test framework. All three gates stay closed and nothing is asked, even though one stack fact (typescript-strict) is recognised"
+}

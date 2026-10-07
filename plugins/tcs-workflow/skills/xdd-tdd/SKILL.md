@@ -167,7 +167,7 @@ If any tests fail:
 
 ### 7. Mutation Check (reasoning only — the harness runs later)
 
-Do **not** run the mutation harness here. It belongs at the end-of-phase PR-readiness gate, over the accumulated change — see `tcs-patterns:mutation-testing`. Its cost grows with the codebase, and paying it per increment slows the short feedback loop TDD depends on, which is how teams end up abandoning the loop rather than the harness.
+Do **not** run the mutation harness here. It belongs at the end-of-phase PR-readiness gate, over the accumulated change — see `tcs-mutation-testing`. Its cost grows with the codebase, and paying it per increment slows the short feedback loop TDD depends on, which is how teams end up abandoning the loop rather than the harness.
 
 What is worth doing per increment is the cheap version — reasoning, not tooling:
 
@@ -224,6 +224,8 @@ If tests fail after refactor:
 
 - `reference/iron-law.md` — The iron law of TDD and rationalization rejection table
 - `reference/writing-good-tests.md` — Falsifiability: naming the break, deriving expectations independently, and the string-presence and change-detector traps
-- `tcs-patterns:testing` — Test factory patterns, behavior-driven test structure, coverage theater detection
-- `tcs-patterns:mutation-testing` — Mutation analysis for MUTATE phase (optional, requires tcs-patterns plugin)
-- `tcs-patterns:test-design-reviewer` — Evaluate test quality against Dave Farley's 8 properties
+- `tcs-testing` — Test factory patterns, behavior-driven test structure, coverage theater detection
+- `tcs-mutation-testing` — Mutation analysis for MUTATE phase (optional, requires tcs-patterns plugin)
+- `tcs-test-design-reviewer` — Evaluate test quality against Dave Farley's 8 properties
+
+The `tcs-*` entries are tcs-patterns catalogue patterns, installed per repository with `/tcs-patterns:patterns-setup` (or readable without installing via `/tcs-patterns:pattern <name>`).

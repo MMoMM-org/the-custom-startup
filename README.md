@@ -173,17 +173,17 @@ Optional: `setup --with-branch-protection` (GitHub single-coder branch protectio
 
 ### Patterns Plugin (`tcs-patterns`) — Domain Pattern Skills *(optional)*
 
-**21 pattern skills** covering architecture, security, testing, languages, and platform. Install only what you need — they activate on trigger terms. Agents from `tcs-team` automatically use relevant pattern skills when delegating specialist work.
+A catalogue of **21 patterns** covering architecture, security, testing, languages, and platform, and an installer that copies only the ones your repository needs into it. Run `/tcs-patterns:patterns-setup install` in a repository; installed patterns activate on trigger terms. `/tcs-patterns:pattern <name>` shows a pattern without installing it. From 2.0.0 none is active until installed, and an installed pattern is `/tcs-<name>`.
 
-| Category | Skills |
-|----------|--------|
-| **Architecture** | `/ddd` · `/hexagonal` · `/functional` · `/event-driven` · `/event-sourcing` |
-| **Security** | `/secure-oauth-oidc` · `/bff-entry-points` |
-| **API & Types** | `/api-design` · `/typescript-strict` |
-| **Testing** | `/testing` · `/mutation-testing` · `/frontend-testing` · `/react-testing` · `/test-design-reviewer` |
-| **Platforms** | `/node-service` · `/python-project` · `/go-idiomatic` |
-| **DevOps** | `/twelve-factor` · `/observability` |
-| **Integrations** | `/mcp-server` · `/obsidian-plugin` |
+| Category | Patterns |
+|----------|----------|
+| **Architecture** | `ddd` · `hexagonal` · `functional` · `event-driven` · `event-sourcing` |
+| **Security** | `secure-oauth-oidc` · `bff-entry-points` |
+| **API & Types** | `api-design` · `typescript-strict` |
+| **Testing** | `testing` · `mutation-testing` · `frontend-testing` · `react-testing` · `test-design-reviewer` |
+| **Platforms** | `node-service` · `python-project` · `go-idiomatic` |
+| **DevOps** | `twelve-factor` · `observability` |
+| **Integrations** | `mcp-server` · `obsidian-plugin` |
 
 Plus one write-time guard: a `PreToolUse` hook blocks `eslint-disable` from being written into Obsidian plugin repos, because the community-plugin reviewer rejects any submission that contains a disabled rule. See [Hooks](docs/guides/tcs-patterns.md#hooks).
 
@@ -200,7 +200,7 @@ The Custom Startup evolved from a fork of [the-startup](https://github.com/rsmdt
 - **[Interactive install/uninstall wizards](docs/getting-started/installation.md)** — global / repo / other path, plugin selection, output style, multi-AI templates, statusline with conflict detection, optional Satori setup
 - **[3 statusline variants](docs/guides/statusline.md)** — standard, enhanced (budget bar from `rate_limits`, opt-in extra-usage credit bar, ccusage fallback), Starship bridge — each configurable via `statusline.toml`
 - **[Multi-AI workflow](docs/guides/multi-ai-workflow.md)** — export specs as prompts for Claude.ai or Perplexity, import results back as PRD/SDD
-- **[tcs-patterns plugin](docs/guides/tcs-patterns.md)** — 17 optional domain pattern skills (architecture, testing, platforms, integrations)
+- **[tcs-patterns plugin](docs/guides/tcs-patterns.md)** — a catalogue of 21 domain patterns, installed per repository (architecture, testing, platforms, integrations)
 - **Configurable specs directory** — `.claude/startup.toml` tells skills and scripts where your specs live; fallback chain keeps backward compatibility
 
 See [about/sources.md](docs/about/sources.md) for full attribution.

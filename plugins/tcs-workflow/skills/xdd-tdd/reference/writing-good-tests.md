@@ -140,7 +140,7 @@ BEFORE adding a mock:
 Once green, ask: **what single-character change to the production code would this test
 suite still pass?** If you can name one that matters, a test is missing.
 
-`tcs-patterns:mutation-testing` automates this. The manual version is worth doing
+`tcs-mutation-testing` (a tcs-patterns pattern, installed with `/tcs-patterns:patterns-setup`) automates this. The manual version is worth doing
 whenever the suite feels thin.
 
 ---

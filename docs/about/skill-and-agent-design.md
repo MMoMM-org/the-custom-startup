@@ -73,8 +73,8 @@ And one example we **un-extracted**:
 A periodic check that surfaces extraction-without-ROI cases:
 
 ```bash
-# For each skill, count which agents reference it via skills: frontmatter
-for skill in plugins/tcs-team/skills/*/; do
+# For each skill (and each tcs-patterns catalogue entry), count which agents reference it via skills: frontmatter
+for skill in plugins/tcs-team/skills/*/ plugins/tcs-patterns/templates/patterns/*/; do
   name=$(basename "$skill")
   count=$(grep -lE "skills:.*\\b$name\\b" plugins/*/agents/**/*.md 2>/dev/null | wc -l)
   echo "$count $name"
@@ -183,13 +183,13 @@ Four recent decisions, with the criterion that drove each.
 
 **Trade-off:** Three agents to maintain instead of one + three skills. Mitigated by each agent being already lean — there's little duplication to deduplicate.
 
-### Keep `tcs-patterns:test-design-reviewer` as a forked skill (not convert to a subagent)
+### Keep `tcs-test-design-reviewer` as a forked skill (not convert to a subagent)
 
 **Inputs:** Its whole job is to produce a review report and hand it back — the Load-Bearing Question answers "No, a summary suffices", which points at a subagent. But it already carries `context: fork` + `agent: Explore`, it is reachable as `/test-design-reviewer`, and three other skills route to it by name.
 
 **Criterion:** `context: fork` resolves the Load-Bearing Question's "No" branch without leaving the skill mechanism. The skill body runs in an isolated context and only its report returns — the subagent runtime contract — while the `/` entry point and the `tcs-patterns:<name>` address that other skills cite both survive. A subagent has neither.
 
-**Action:** No change to the mechanism. Converted to PICS in place (#120).
+**Action:** No change to the mechanism. Converted to PICS in place (#120). Since tcs-patterns 2.0.0 it ships in the catalogue (`plugins/tcs-patterns/templates/patterns/test-design-reviewer/`) and is installed per repository as `/tcs-test-design-reviewer`; the fork mechanism is unchanged, the `tcs-patterns:<name>` plugin address no longer resolves.
 
 **Trade-off:** It cannot be dispatched in parallel from a workflow the way an agent can. Nothing dispatches it that way today; `tcs-workflow:xdd-tdd` and the sibling pattern skills all reference it by name for a human or the parent to invoke.
 

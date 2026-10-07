@@ -1,0 +1,18 @@
+{
+  "auto": [],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": true,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [
+    "ddd",
+    "event-driven",
+    "event-sourcing",
+    "hexagonal",
+    "functional"
+  ],
+  "unrecognised_stack": true,
+  "why": "trap 6 -- architecture that is routinely hand-rolled; the ports/+adapters/+domain/ triad opens q2_architecture through a content signal alone, with no distinctive dependency and no backend framework, and none of the q2-gated patterns may be auto-proposed even though the gate opens. unrecognised_stack stays true because it is computed from auto alone (ADR-5) -- a repo can be stack-unrecognised and still reach q2"
+}

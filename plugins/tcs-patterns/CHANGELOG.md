@@ -8,6 +8,53 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [2.0.0] - 2026-10-06
+
+### Changed (breaking)
+
+- **The 21 pattern skills are no longer plugin skills.** They moved from `skills/<name>/` to
+  `templates/patterns/<name>/` and are now a catalogue the plugin carries, not skills it registers.
+  After updating, `/tcs-patterns:ddd`, `/tcs-patterns:hexagonal` and the other nineteen no longer
+  exist. Each pattern's `SKILL.md` and `reference/` moved unchanged, and each gained a `VERSION`
+  file that drift detection compares against.
+- **What you do now.** In each repository that used a pattern, run
+  `/tcs-patterns:patterns-setup install` and choose from the proposal. Installed patterns live in
+  `<repo>/.claude/skills/tcs-<pattern>/`, so the name gains a `tcs-` prefix: `/tcs-patterns:ddd`
+  becomes `tcs-ddd`. To read a pattern without installing it, run `/tcs-patterns:pattern ddd`.
+  A user on `1.x` keeps the 21 plugin skills until the plugin updates; after updating they have
+  none until the setup is run.
+- **Why.** Claude Code budgets the skill listing, and 5918 of the 21128 characters the six TCS
+  plugins put into it went on 21 pattern descriptions that most repositories never use. Space
+  freed by one description is consumed by another, so the cost shows up as shortened descriptions
+  for every other skill, not as tokens. A pattern is now in a session's listing only when a
+  repository chose it.
+
+### Added
+
+- **`/tcs-patterns:patterns-setup <install|update|remove|status> [path]`.** `install` scans the
+  repository, proposes patterns from what it finds, asks at most three questions, and writes the
+  selection to `<repo>/.claude/skills/tcs-<pattern>/` together with a `.tcs-patterns-manifest`
+  recording what was installed at which version. `update` refreshes patterns the catalogue has
+  moved past and, for a pattern edited locally, shows the diff instead of overwriting it.
+  `remove` deletes a pattern and its manifest entry; a locally edited one needs `--discard-edits`
+  and the diff is shown first. `status` reports installed, drifted and unaccounted-for patterns.
+- **`/tcs-patterns:pattern <name>`.** Shows one catalogue pattern in the session without installing
+  it.
+- **The manifest carries `schema = 1`.** A manifest written by a later tcs-patterns with a
+  higher `schema` can still be read by `status` and the drift advisory. `install`, `update`
+  and `remove` refuse to rewrite it and ask for a plugin update instead, so newer fields are
+  never dropped. Each entry's `installed_as` must be `tcs-<name>`: a hand-edited entry naming
+  another directory makes the manifest unparseable rather than letting `update` overwrite that
+  directory.
+- **Drift advisory.** The `tcs-git-helpers` session brief names installed patterns that are behind
+  the catalogue, and patterns the catalogue can no longer account for (see its changelog).
+
+### Fixed
+
+- **The plugin description's promise is now kept.** `plugin.json` has said "Install only the
+  patterns relevant to your stack" since the plugin began, but installing the plugin registered
+  all 21. Now only the selected ones reach a repository.
+
 ## [1.4.4] - 2026-09-04
 
 ### Changed

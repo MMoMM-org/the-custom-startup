@@ -24,6 +24,7 @@ T3.2a extension — optional version_filename parameter:
 from __future__ import annotations
 
 import importlib.util
+import os
 import shlex
 import subprocess
 from pathlib import Path
@@ -352,6 +353,138 @@ class TestCustomFilename:
         )
         assert result.status == dc.DriftStatus.DRIFT
         assert result.installed_version == "1.0.0"
+
+
+# ---------------------------------------------------------------------------
+# Spec 020 T4.1 — check_bundle takes a marker directory
+# ---------------------------------------------------------------------------
+
+_PATTERNS_FILENAME = "tcs-patterns-version"
+
+
+def _write_marker(repo_path: Path, marker_dir: str, filename: str, content: str) -> None:
+    d = repo_path / marker_dir
+    d.mkdir(parents=True, exist_ok=True)
+    (d / filename).write_text(content)
+
+
+def _call_bash_bundle(
+    repo_path: Path, expected: str, filename: str, marker_dir: str
+) -> str:
+    script = (
+        f"source {shlex.quote(str(_BASH_HELPER))}; "
+        f"drift_check_bundle {shlex.quote(str(repo_path))} {shlex.quote(expected)} "
+        f"{shlex.quote(filename)} {shlex.quote(marker_dir)}"
+    )
+    result = subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True, timeout=10
+    )
+    result.check_returncode()
+    return result.stdout.strip()
+
+
+class TestCheckBundleMarkerDir:
+    def test_missing_in_custom_dir(self, dc, tmp_path: Path) -> None:
+        r = dc.check_bundle(tmp_path, "1.0", _PATTERNS_FILENAME, ".tcs-patterns")
+        assert r.status == dc.DriftStatus.MISSING
+        assert r.installed_version is None
+
+    def test_ok_in_custom_dir(self, dc, tmp_path: Path) -> None:
+        _write_marker(tmp_path, ".tcs-patterns", _PATTERNS_FILENAME, "1.0\n")
+        r = dc.check_bundle(tmp_path, "1.0", _PATTERNS_FILENAME, ".tcs-patterns")
+        assert r.status == dc.DriftStatus.OK
+        assert r.installed_version == "1.0"
+
+    def test_drift_in_custom_dir(self, dc, tmp_path: Path) -> None:
+        _write_marker(tmp_path, ".tcs-patterns", _PATTERNS_FILENAME, "0.9\n")
+        r = dc.check_bundle(tmp_path, "1.0", _PATTERNS_FILENAME, ".tcs-patterns")
+        assert r.status == dc.DriftStatus.DRIFT
+        assert r.installed_version == "0.9"
+
+    def test_githooks_marker_not_read_when_dir_differs(self, dc, tmp_path: Path) -> None:
+        _write_version_file(tmp_path, "h7\n")
+        r = dc.check_bundle(
+            tmp_path, "h7", "tcs-git-helpers-version", ".tcs-patterns"
+        )
+        assert r.status == dc.DriftStatus.MISSING
+
+    def test_custom_dir_marker_not_read_by_default_dir(self, dc, tmp_path: Path) -> None:
+        _write_marker(tmp_path, ".tcs-patterns", "tcs-git-helpers-version", "h7\n")
+        r = dc.check_bundle(tmp_path, "h7")
+        assert r.status == dc.DriftStatus.MISSING
+
+    def test_default_dir_equals_hook_bundle_wrapper(self, dc, tmp_path: Path) -> None:
+        _write_version_file(tmp_path, "h1\n")
+        assert dc.check_bundle(tmp_path, "h7") == dc.check_hook_bundle(tmp_path, "h7")
+
+
+_BUNDLE_DIRS = [".githooks", ".tcs-patterns", "nested/dir"]
+_BUNDLE_CONTENTS = [None, "h7\n", "  h 7  \r\n", "h1\n", "   \n"]
+
+
+@pytest.mark.parametrize("marker_dir", _BUNDLE_DIRS)
+@pytest.mark.parametrize("content", _BUNDLE_CONTENTS, ids=repr)
+def test_bundle_parity_python_matches_bash(
+    dc, tmp_path: Path, marker_dir: str, content: Optional[str]
+) -> None:
+    """check_bundle and drift_check_bundle agree across marker dirs x verdicts."""
+    if content is not None:
+        _write_marker(tmp_path, marker_dir, _PATTERNS_FILENAME, content)
+    py_wire = _status_to_bash_wire(
+        dc, dc.check_bundle(tmp_path, "h7", _PATTERNS_FILENAME, marker_dir)
+    )
+    bash_wire = _call_bash_bundle(tmp_path, "h7", _PATTERNS_FILENAME, marker_dir)
+    assert py_wire == bash_wire
+    if content is None:
+        assert bash_wire == "MISSING"
+
+
+# Marker shapes the text-only grid above cannot express: a directory at the
+# marker path, a non-breaking space, and bytes that are not valid UTF-8.
+# BSD `tr -d '[:space:]'` is locale-dependent: in a UTF-8 locale it strips
+# U+00A0 and aborts on an invalid byte, while the helper's contract is ASCII
+# whitespace only on whatever bytes the file holds. Bash therefore runs under
+# both a C and a UTF-8 caller locale; the helper must pin its own.
+_BYTES_PARITY_CASES: list[tuple[str, Optional[bytes]]] = [
+    ("directory-at-marker-path", None),
+    ("nbsp-is-not-whitespace", b"h\xc2\xa07\n"),
+    ("invalid-utf8-byte", b"h\xff7\n"),
+    ("invalid-utf8-only-after-first-line", b"h7\n\xff\xfe\n"),
+]
+
+
+@pytest.mark.parametrize("locale", ["C", "en_US.UTF-8"])
+@pytest.mark.parametrize(
+    "content", [c for _, c in _BYTES_PARITY_CASES], ids=[i for i, _ in _BYTES_PARITY_CASES]
+)
+def test_bundle_parity_on_non_text_markers(
+    dc, tmp_path: Path, content: Optional[bytes], locale: str
+) -> None:
+    """Python agrees with bash when the marker is a directory or holds odd bytes."""
+    marker = tmp_path / ".tcs-patterns" / _PATTERNS_FILENAME
+    marker.parent.mkdir(parents=True)
+    if content is None:
+        marker.mkdir()
+    else:
+        marker.write_bytes(content)
+
+    py_wire = _status_to_bash_wire(
+        dc, dc.check_bundle(tmp_path, "h7", _PATTERNS_FILENAME, ".tcs-patterns")
+    )
+    script = (
+        f"source {shlex.quote(str(_BASH_HELPER))}; "
+        f"drift_check_bundle {shlex.quote(str(tmp_path))} h7 "
+        f"{shlex.quote(_PATTERNS_FILENAME)} .tcs-patterns"
+    )
+    result = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        timeout=10,
+        env={**os.environ, "LC_ALL": locale},
+    )
+    result.check_returncode()
+    bash_wire = result.stdout.decode("utf-8", errors="replace").strip()
+    assert py_wire == bash_wire
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,14 @@
+{
+  "auto": [
+    "frontend-testing"
+  ],
+  "baseline": [],
+  "gates": {
+    "q1_backend": false,
+    "q2_architecture": false,
+    "q3_test_quality": false
+  },
+  "must_not_propose": [],
+  "unrecognised_stack": false,
+  "why": "auto rule -- render()/screen. evidence inside a test file is frontend-testing evidence, independent of any manifest"
+}

@@ -215,7 +215,7 @@ _pick_plugins() {
   read -r c </dev/tty
   case "$c" in [yY]|[yY][eE][sS]) PLUGINS="$PLUGINS tcs-git-helpers@the-custom-startup" ;; esac
 
-  ask "tcs-patterns — 17 domain pattern skills (architecture, testing, platforms) [y/N]:"
+  ask "tcs-patterns — 21-pattern catalogue, installed per repo [y/N]:"
   read -r c </dev/tty
   case "$c" in [yY]|[yY][eE][sS]) PLUGINS="$PLUGINS tcs-patterns@the-custom-startup" ;; esac
 
@@ -901,6 +901,10 @@ print_completion() {
   if [[ "$AGENT_TEAMS" != "yes" ]]; then
     printf "${YELLOW}  Tip:${RESET} Enable Agent Teams later by adding to %s:\n" "$SETTINGS_FILE"
     printf "${DIM}       \"env\": { \"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS\": \"1\" }${RESET}\n\n"
+  fi
+
+  if [[ " $PLUGINS " == *" tcs-patterns@the-custom-startup "* ]]; then
+    printf "${YELLOW}  Tip:${RESET} Run /tcs-patterns:patterns-setup install in each repo to choose its patterns.\n\n"
   fi
 
   printf "${DIM}  Learn more: https://github.com/MMoMM-org/the-custom-startup${RESET}\n\n"

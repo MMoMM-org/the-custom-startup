@@ -51,7 +51,7 @@ If you prefer to install via the Claude Code plugin marketplace, start `claude` 
 /plugin install tcs-workflow@the-custom-startup    # core workflow — required
 /plugin install tcs-team@the-custom-startup        # specialist agents — optional
 /plugin install tcs-helper@the-custom-startup      # skill authoring tools — optional
-/plugin install tcs-patterns@the-custom-startup    # domain pattern skills — optional
+/plugin install tcs-patterns@the-custom-startup    # domain pattern catalogue + installer — optional; then /tcs-patterns:patterns-setup install in each repo
 /plugin install tcs-git-helpers@the-custom-startup # git workflow discipline — optional
 /plugin install tcs-issues@the-custom-startup      # GitHub issue + sub-issue management — optional
 ```
@@ -63,7 +63,7 @@ If you prefer to install via the Claude Code plugin marketplace, start `claude` 
 | `tcs-workflow@the-custom-startup` | Core workflow orchestration, XDD spec skills, output styles | Yes |
 | `tcs-team@the-custom-startup` | 8 specialist agent roles (analyst, architect, developer, etc.) | No |
 | `tcs-helper@the-custom-startup` | Skill authoring, Memory Bank, git workflows, project onboarding | No |
-| `tcs-patterns@the-custom-startup` | Domain pattern skills (DDD, hexagonal, testing, TypeScript, and more) — see [tcs-patterns guide](../guides/tcs-patterns.md) | No |
+| `tcs-patterns@the-custom-startup` | Domain pattern catalogue and per-repository installer (DDD, hexagonal, testing, TypeScript, and more) — see [tcs-patterns guide](../guides/tcs-patterns.md) | No |
 | `tcs-git-helpers@the-custom-startup` | Git workflow discipline — destructive-op blocks, per-repo `.githooks/` setup, branch awareness | No |
 | `tcs-issues@the-custom-startup` | GitHub issue lifecycle + native sub-issue (parent/child) management via `gh` and GraphQL | No |
 

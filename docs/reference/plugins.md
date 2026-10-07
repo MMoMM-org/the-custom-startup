@@ -106,12 +106,12 @@ Optional. Provides skill authoring tools, the **[Memory Bank](../about/concepts.
 /plugin install tcs-patterns@the-custom-startup
 ```
 
-Optional. 21 pattern skills covering architecture, security, API design, testing, language platforms, DevOps, and integrations. Install selectively — each skill activates on trigger terms and provides interactive, opinionated guidance for its domain without requiring the whole plugin. You can install the full plugin and only use the skills relevant to your stack.
+Optional. A catalogue of 21 patterns covering architecture, security, API design, testing, language platforms, DevOps, and integrations, plus an installer that copies only the patterns you pick into a repository (`.claude/skills/tcs-<name>/`). The plugin itself adds two skills: `/tcs-patterns:patterns-setup <install|update|remove|status>` and `/tcs-patterns:pattern <name>`, which prints a pattern without installing it. Installed patterns activate on trigger terms.
 
-21 skills — full reference: [../guides/tcs-patterns.md](../guides/tcs-patterns.md)
+Full reference: [../guides/tcs-patterns.md](../guides/tcs-patterns.md)
 
-| Category | Skills |
-|----------|--------|
+| Category | Patterns |
+|----------|----------|
 | **Architecture** | `ddd` · `hexagonal` · `functional` · `event-driven` · `event-sourcing` |
 | **API & Types** | `api-design` · `typescript-strict` |
 | **Security** | `secure-oauth-oidc` · `bff-entry-points` |
@@ -120,7 +120,7 @@ Optional. 21 pattern skills covering architecture, security, API design, testing
 | **DevOps** | `twelve-factor` · `observability` |
 | **Integrations** | `mcp-server` · `obsidian-plugin` |
 
-Invoke any skill by name: `/ddd`, `/hexagonal`, `/typescript-strict`, etc.
+Once installed, a pattern is invoked as `/tcs-<name>`: `/tcs-ddd`, `/tcs-hexagonal`, `/tcs-typescript-strict`, etc.
 
 ---
 

@@ -12,16 +12,28 @@
 # This is the write-time counterpart to the `obsidian-plugin` skill's Step 11,
 # which only catches disables at audit time (i.e. after they were written).
 #
-# Scope gate — the hook stays silent unless ALL of these hold:
-#   1. The target file lives inside a git repository, and
-#   2. that repository looks like an Obsidian plugin
-#      (manifest.json with "minAppVersion", or package.json depending on
-#      "obsidian"), and
-#   3. the target file is not Markdown (docs legitimately quote the pattern).
+# A DENY requires ALL of these to hold:
+#   1. the target file is not Markdown (docs legitimately quote the pattern);
+#   2. the write actually introduces a violation (mirrors the grep patterns
+#      in obsidian-plugin/SKILL.md Step 11): the literal string
+#      `eslint-disable` in any file, or a rule mapped to "off" in an ESLint
+#      config file / package.json;
+#   3. the target file lives inside a git repository, and
+#   4. the file being written is itself inside an Obsidian plugin: walking
+#      UPWARD from it to the repository root, the nearest manifest.json
+#      carries "minAppVersion", OR the root package.json depends on
+#      "obsidian".
 #
-# Detection (mirrors the grep patterns in obsidian-plugin/SKILL.md Step 11):
-#   - any file:    the literal string `eslint-disable` (line, block, file form)
-#   - ESLint config files and package.json: a rule mapped to "off"
+# #4 is deliberately file-scoped, not repo-scoped: asking "does the repository
+# contain a manifest.json ANYWHERE" would classify a repository that merely
+# holds a plugin fixture (e.g. a test fixture several directories away) as an
+# Obsidian plugin for every file in it. The upward walk answers the question
+# the guard exists for, and costs well under a millisecond regardless of
+# repository size.
+#
+# Detection (#2) runs BEFORE the scope gate (#3-4): it is a grep over the
+# payload string and touches no filesystem, so the common (allow) path exits
+# before any filesystem access at all.
 #
 # Escape hatch: CLAUDE_ALLOW_ESLINT_DISABLE=1 in the environment.
 #
@@ -71,27 +83,9 @@ CONTENT=$(printf '%s' "$INPUT" | jq -r '
   | map(select(. != null)) | join("\n")' 2>/dev/null || true)
 [ -z "$CONTENT" ] && exit 0
 
-# ── Scope gate: is the target inside an Obsidian plugin repo? ──────────────
-# Walk up to the nearest existing ancestor — the file itself may not exist yet
-# and its parent directory may be created by the same tool call.
-DIR=$(dirname "$FILE_PATH")
-while [ ! -d "$DIR" ] && [ "$DIR" != "/" ] && [ -n "$DIR" ]; do
-  DIR=$(dirname "$DIR")
-done
-[ -d "$DIR" ] || exit 0
-
-REPO_DIR=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null || true)
-[ -z "$REPO_DIR" ] && exit 0
-
-IS_OBSIDIAN=0
-if [ -f "${REPO_DIR}/manifest.json" ] && grep -q "minAppVersion" "${REPO_DIR}/manifest.json" 2>/dev/null; then
-  IS_OBSIDIAN=1
-elif [ -f "${REPO_DIR}/package.json" ] && grep -qE '"obsidian"[[:space:]]*:' "${REPO_DIR}/package.json" 2>/dev/null; then
-  IS_OBSIDIAN=1
-fi
-[ "$IS_OBSIDIAN" = "1" ] || exit 0
-
 # ── Detection ─────────────────────────────────────────────────────────────
+# Runs ahead of the scope gate (below): a string grep over the payload with
+# no filesystem access, so the common no-violation path exits here for free.
 VIOLATION=""
 MATCH=""
 
@@ -113,6 +107,65 @@ if [ -z "$VIOLATION" ]; then
 fi
 
 [ -z "$VIOLATION" ] && exit 0
+
+# ── Scope gate: is the target file itself inside an Obsidian plugin? ──────
+# Reached only once a violation is already present above.
+#
+# Walk up to the nearest existing ancestor — the file itself may not exist yet
+# and its parent directory may be created by the same tool call.
+DIR=$(dirname "$FILE_PATH")
+while [ ! -d "$DIR" ] && [ "$DIR" != "/" ] && [ -n "$DIR" ]; do
+  DIR=$(dirname "$DIR")
+done
+[ -d "$DIR" ] || exit 0
+
+REPO_DIR=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null || true)
+[ -z "$REPO_DIR" ] && exit 0
+
+# Walk UPWARD from the file's own directory to the repository root,
+# stopping at the root, looking for the nearest manifest.json carrying
+# "minAppVersion". "Nearest" and "stop at the root" are what make this
+# file-scoped rather than repo-scoped: a manifest two levels below the file,
+# or above it in an unrelated sibling tree, must not match. Pure directory
+# arithmetic (no `find`, no subprocess per candidate): the walk only ascends.
+#
+# WALK_DIR starts from the CANONICAL form of $DIR (`cd` + `pwd -P`, resolving
+# symlinks), because `git rev-parse --show-toplevel` returns a canonical
+# $REPO_DIR and a literal path never string-equals it when $TMPDIR is a
+# symlink (macOS /tmp -> /private/tmp). Without this the loop never reaches
+# its intended exit and `dirname "/"` is "/" forever. The
+# `[ "$WALK_DIR" = "/" ]` bound stays as a second line of defense.
+#
+# `|| WALK_DIR="$DIR"` guards the `cd` the way the `|| true` on the
+# `git rev-parse` call above guards `git`: under `set -e` an unguarded failing
+# `cd` would exit non-zero, violating the "exit: always 0" contract at the top
+# of the file. Currently unreachable: every shape that makes `cd "$DIR"` fail
+# (mode 000/600/400, dangling symlink) also makes `git -C "$DIR" rev-parse`
+# fail, so the empty-REPO_DIR exit above already returned 0. That shield is
+# incidental (git happens to need the same chdir), so the guard stays rather
+# than depend on an earlier line's side effect for a property this file's
+# own contract promises.
+IS_OBSIDIAN=0
+WALK_DIR=$(cd "$DIR" 2>/dev/null && pwd -P) || WALK_DIR="$DIR"
+while :; do
+  if [ -f "${WALK_DIR}/manifest.json" ] && grep -q "minAppVersion" "${WALK_DIR}/manifest.json" 2>/dev/null; then
+    IS_OBSIDIAN=1
+    break
+  fi
+  if [ "$WALK_DIR" = "$REPO_DIR" ] || [ "$WALK_DIR" = "/" ]; then
+    break
+  fi
+  WALK_DIR=$(dirname "$WALK_DIR")
+done
+
+# The package.json dependency check stays root-only: it never caused the
+# repo-wide false positive the upward walk fixes.
+if [ "$IS_OBSIDIAN" != "1" ] && [ -f "${REPO_DIR}/package.json" ] \
+  && jq -e '(.dependencies.obsidian // .devDependencies.obsidian) != null' \
+    "${REPO_DIR}/package.json" >/dev/null 2>&1; then
+  IS_OBSIDIAN=1
+fi
+[ "$IS_OBSIDIAN" = "1" ] || exit 0
 
 # ── Deny ──────────────────────────────────────────────────────────────────
 # Trim the matched line so the reason stays readable in the tool result.
