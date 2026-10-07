@@ -14,19 +14,28 @@
 # every change earns an entry, and this repo patch-bumps on any plugin file.
 # A CHANGELOG *ahead* means a version was written down but never shipped.
 #
-#   --allow-ahead N   tolerate the CHANGELOG being N patch releases ahead.
-#                     Use 0 on main, where the bump has already happened.
+#   --allow-ahead N   tolerate the CHANGELOG being N patch releases ahead,
+#                     and, for any N >= 1, also exactly the next major
+#                     (M+1.0.0) or next minor (M.m+1.0) of the manifest.
+#                     Use 0 on main, where the bump has already happened —
+#                     nothing ahead is accepted there.
 #                     Use 1 on a pull request, where the entry names the
 #                     version the merge is about to produce.
+#
+# A breaking or feature release is requested by writing the next-major or
+# next-minor heading in the plugin's CHANGELOG; auto-bump-versions.sh then sets
+# plugin.json to it on merge. plugin.json is never hand-edited for it. Any other
+# version ahead (a skipped major, 1.6.0 against 1.4.x) is one the bump cannot
+# produce, so it fails here, naming what is allowed.
 #
 # Every plugin must have a CHANGELOG.md; a missing one is a failure. Four of the
 # six had none, which is how the tcs-patterns bump in #114/#115 went unnoticed:
 # the check that would have caught a version gap had nothing to compare against
 # for exactly the plugin that had one.
 #
-# A CHANGELOG whose first heading is not a version (e.g. "## [Unreleased]") is
-# skipped for the comparison — the file exists, it just has nothing to compare
-# yet.
+# A CHANGELOG whose first heading is not a release (e.g. "## [Unreleased]",
+# "## [2.0.0-rc1]", or a non-canonical "## [2.00.0]") is skipped for the
+# comparison — the file exists, it just has nothing to compare yet.
 #
 # Usage:
 #   check-changelog-version-sync.sh [--allow-ahead N] [<plugin-dir> ...]
@@ -56,7 +65,8 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     -h|--help)
-      sed -n '3,30p' "$0"
+      # The whole header comment, however long it grows.
+      awk 'NR > 2 { if ($0 !~ /^#/) exit; print }' "$0"
       exit 0
       ;;
     -*)
@@ -75,11 +85,19 @@ if [ -z "${plugin_dirs// /}" ]; then
 fi
 
 # Print the version a CHANGELOG's first "## " heading names, or nothing when
-# the first heading is not a plain semver (Unreleased sections, prose headings).
+# the first heading is not a release (Unreleased sections, prose headings,
+# pre-releases).
+# A release is a canonical X.Y.Z (no leading zeros) opened by "[", whitespace
+# or line start and closed by "]", whitespace or end of line — so a
+# pre-release ("2.0.0-rc1"), build metadata ("2.0.0+7") or "2.00.0" names no
+# release at all. auto-bump-versions.sh and check-changelog-version-sync.sh
+# must apply this same rule, or the PR-side check accepts what the merge
+# will not produce.
 _changelog_version() {
   grep -m1 '^## ' "$1" 2>/dev/null \
-    | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' \
-    | head -1
+    | grep -oE '(^|[[:space:]]|\[)(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\]|[[:space:]]|$)' \
+    | head -1 \
+    | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'
 }
 
 _manifest_version() {
@@ -97,9 +115,10 @@ except (OSError, ValueError, KeyError) as exc:
 PY
 }
 
-# 0 if $1 is more than $allow_ahead patch releases beyond $2, on the same
-# major.minor. A CHANGELOG on a different major.minor than the manifest is
-# reported too — that is a deliberate release the manifest has not followed.
+# 0 if $1 is further ahead of $2 than the merge's auto-bump can take it, and
+# print the reason. Tolerated ahead: up to $allow_ahead patch releases on the
+# same major.minor and, when $allow_ahead >= 1, exactly the next major or the
+# next minor. A CHANGELOG behind or equal to the manifest is always fine.
 _is_too_far_ahead() {
   changelog="$1"
   manifest="$2"
@@ -113,10 +132,22 @@ allow_ahead = int(sys.argv[3])
 if changelog <= manifest:
     sys.exit(1)                     # behind or equal — fine
 
-# Ahead. Tolerated only as patch releases on the same major.minor line.
+if allow_ahead == 0:
+    print('nothing ahead is allowed here')
+    sys.exit(0)
+
+major, minor, patch = manifest
+patch_limit = (major, minor, patch + allow_ahead)
+next_minor = (major, minor + 1, 0)
+next_major = (major + 1, 0, 0)
+
 same_line = changelog[:2] == manifest[:2]
-within = same_line and (changelog[2] - manifest[2]) <= allow_ahead
-sys.exit(1 if within else 0)
+if (same_line and changelog <= patch_limit) or changelog in (next_minor, next_major):
+    sys.exit(1)
+
+fmt = lambda v: '.'.join(str(p) for p in v)
+print(f'allowed: up to {fmt(patch_limit)}, or {fmt(next_minor)}, or {fmt(next_major)}')
+sys.exit(0)
 PY
 }
 
@@ -147,9 +178,9 @@ for dir in $plugin_dirs; do
 
   checked=$((checked + 1))
 
-  if _is_too_far_ahead "$cl_version" "$mf_version"; then
-    printf '%s: CHANGELOG documents %s but plugin.json carries %s\n' \
-      "$dir" "$cl_version" "$mf_version" >&2
+  if reason="$(_is_too_far_ahead "$cl_version" "$mf_version")"; then
+    printf '%s: CHANGELOG documents %s but plugin.json carries %s — %s\n' \
+      "$dir" "$cl_version" "$mf_version" "$reason" >&2
     status=1
   else
     printf '%s: CHANGELOG %s / manifest %s — ok\n' "$dir" "$cl_version" "$mf_version"

@@ -79,11 +79,43 @@ def test_changelog_two_ahead_fails_even_on_a_pull_request(tmp_path):
     assert "4.3.2" in r.stderr
 
 
-def test_minor_version_ahead_is_never_tolerated(tmp_path):
-    """The auto-bump only ever moves the patch component."""
-    p = _make_plugin(tmp_path, "demo", "4.3.0", "## [4.4.0] - 2026-08-31")
+@pytest.mark.parametrize("heading, expected", [
+    ("## [2.0.0] - 2026-10-06", "2.0.0"),   # next major
+    ("## [1.5.0] - 2026-10-06", "1.5.0"),   # next minor
+])
+def test_next_major_or_minor_is_tolerated_on_a_pull_request(tmp_path, heading, expected):
+    """The auto-bump sets the manifest to exactly this version on merge."""
+    p = _make_plugin(tmp_path, "demo", "1.4.4", heading)
+    r = _run("--allow-ahead", "1", p)
+    assert r.returncode == 0, r.stderr
+    assert f"CHANGELOG {expected} / manifest 1.4.4" in r.stdout
+
+
+@pytest.mark.parametrize("heading", [
+    "## [2.0.0] - 2026-10-06",
+    "## [1.5.0] - 2026-10-06",
+])
+def test_next_major_or_minor_fails_on_main(tmp_path, heading):
+    """After the merge the bump has happened — a gap left on main is real."""
+    p = _make_plugin(tmp_path, "demo", "1.4.4", heading)
+    r = _run("--allow-ahead", "0", p)
+    assert r.returncode == 1
+    assert "nothing ahead is allowed" in r.stderr
+
+
+@pytest.mark.parametrize("cl_version", [
+    "3.0.0",   # skips a major
+    "1.6.0",   # skips a minor
+    "2.1.0",   # next major, but not its .0.0
+    "2.0.1",
+    "1.5.1",
+])
+def test_anything_else_ahead_fails_even_on_a_pull_request(tmp_path, cl_version):
+    p = _make_plugin(tmp_path, "demo", "1.4.4", f"## [{cl_version}] - 2026-10-06")
     r = _run("--allow-ahead", "1", p)
     assert r.returncode == 1
+    assert f"CHANGELOG documents {cl_version} but plugin.json carries 1.4.4" in r.stderr
+    assert "allowed: up to 1.4.5, or 1.5.0, or 2.0.0" in r.stderr
 
 
 def test_plugin_without_a_changelog_fails(tmp_path):
@@ -148,3 +180,72 @@ def test_repository_is_currently_consistent():
 def test_invalid_allow_ahead_is_a_usage_error(bad):
     r = _run("--allow-ahead", bad)
     assert r.returncode == 2
+
+
+def test_help_prints_the_whole_header():
+    r = _run("--help")
+    assert r.returncode == 0
+    assert "Usage" in r.stdout
+    assert "Exit" in r.stdout
+
+
+# ---------------------------------------------------------------------------
+# What counts as a release: a canonical X.Y.Z closed by "]", whitespace or end
+# of line — the same rule auto-bump-versions.sh applies, so a heading the PR
+# check accepts is exactly one the merge will produce.
+# ---------------------------------------------------------------------------
+
+
+def _demo_was_compared(r):
+    return "/demo: CHANGELOG" in r.stdout + r.stderr
+
+
+@pytest.mark.parametrize("heading", [
+    "## [2.0.0-rc1] - 2026-10-06",
+    "## [1.5.0-beta.2] - 2026-10-06",
+    "## [2.0.0+build.7] - 2026-10-06",
+])
+def test_a_pre_release_heading_is_not_a_release(tmp_path, heading):
+    """2.0.0-rc1 must not be compared — and accepted — as the final 2.0.0."""
+    p = _make_plugin(tmp_path, "demo", "1.4.4", heading)
+    comparable = _make_plugin(tmp_path, "other", "1.0.0", "## [1.0.0] - 2026-01-01")
+    r = _run("--allow-ahead", "1", p, comparable)
+    assert r.returncode == 0, r.stderr
+    assert not _demo_was_compared(r), r.stdout
+
+
+@pytest.mark.parametrize("heading", [
+    "## [2.00.0] - 2026-10-06",
+    "## [01.5.0] - 2026-10-06",
+    "## [1.05.0] - 2026-10-06",
+])
+def test_a_non_canonical_version_is_not_a_release(tmp_path, heading):
+    """auto-bump will not honour 2.00.0, so the PR side must not accept it as 2.0.0."""
+    p = _make_plugin(tmp_path, "demo", "1.4.4", heading)
+    comparable = _make_plugin(tmp_path, "other", "1.0.0", "## [1.0.0] - 2026-01-01")
+    r = _run("--allow-ahead", "1", p, comparable)
+    assert r.returncode == 0, r.stderr
+    assert not _demo_was_compared(r), r.stdout
+
+
+@pytest.mark.parametrize("raw", [
+    b"# Changelog\r\n\r\n## [2.0.0] - 2026-10-06\r\n\r\n- breaking\r\n",
+    b"# Changelog\r\n\r\n## 2.0.0\r\n\r\n- breaking\r\n",
+])
+def test_a_crlf_heading_is_read(tmp_path, raw):
+    p = _make_plugin(tmp_path, "demo", "1.4.4", None)
+    (p / "CHANGELOG.md").write_bytes(raw)
+    r = _run("--allow-ahead", "0", p)
+    assert r.returncode == 1
+    assert "CHANGELOG documents 2.0.0 but plugin.json carries 1.4.4" in r.stderr
+
+
+@pytest.mark.parametrize("manifest, heading", [
+    ("1.9.3", "## [1.10.0] - 2026-10-06"),
+    ("0.4.2", "## [1.0.0] - 2026-10-06"),
+    ("0.4.2", "## [0.5.0] - 2026-10-06"),
+])
+def test_next_release_from_other_bases_is_tolerated_on_a_pull_request(tmp_path, manifest, heading):
+    p = _make_plugin(tmp_path, "demo", manifest, heading)
+    r = _run("--allow-ahead", "1", p)
+    assert r.returncode == 0, r.stderr
