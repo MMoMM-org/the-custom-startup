@@ -21,6 +21,7 @@ derivation: it must find `lib/` before it can import anything from it.
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
@@ -45,3 +46,36 @@ def sha256_or_none(path: Path) -> str | None:
         return hashlib.sha256(Path(path).read_bytes()).hexdigest()
     except OSError:
         return None
+
+
+# The catalogue VERSION shape, and the same bound `manifest.py` puts on a
+# recorded `version` (ADR-3): a VERSION outside it is one the manifest cannot
+# record, and past 4300 digits `int()` raises (PR #176 M1).
+_CATALOGUE_VERSION_RE = re.compile(r"^[0-9]{1,9}$")
+
+
+class CatalogueVersionError(ValueError):
+    """A catalogue pattern's `VERSION` is absent, unreadable, or not 1-9
+    ASCII digits."""
+
+
+def read_catalogue_version(catalogue_dir: Path, name: str) -> str:
+    """`<catalogue_dir>/<name>/VERSION`, stripped -- the ONE reader the
+    installer (`install`, `update`) and `status` share, so the version a
+    writer acts on and the one `status` compares can never be read by two
+    rules (PR #176 M1). Raises `CatalogueVersionError` for an absent,
+    unreadable or undecodable file, or a value outside `^[0-9]{1,9}$`; the
+    writers turn that into a per-pattern failure BEFORE anything is
+    written, `status` into `None` (its `UNKNOWN`)."""
+    path = Path(catalogue_dir) / name / "VERSION"
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError) as e:
+        raise CatalogueVersionError(f"could not read VERSION for catalogue pattern {name!r}: {e}") from e
+    if not _CATALOGUE_VERSION_RE.fullmatch(text):
+        shown = text if len(text) <= 40 else text[:40] + "..."
+        raise CatalogueVersionError(
+            f"catalogue pattern {name!r} has VERSION {shown!r}, which is not 1-9 digits; "
+            "nothing was written for it"
+        )
+    return text

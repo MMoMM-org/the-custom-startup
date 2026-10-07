@@ -279,7 +279,12 @@ def test_manifest_records_version_installed_name_and_hash_for_each(tmp_path: Pat
         assert entry.sha256 == expected_hash
 
 
-def test_report_lists_writes_and_committed_is_false(tmp_path: Path) -> None:
+def test_report_lists_writes_and_carries_no_committed_field(tmp_path: Path) -> None:
+    """PR #176 L8: `committed` was "always False" on every report and read by
+    nothing -- the skill states "not committed" itself (ADR-8). Removed from
+    all three reports, so no caller can come to depend on a constant."""
+    import dataclasses
+
     install = _load_install()
     catalogue = tmp_path / "catalogue"
     _catalogue_pattern(catalogue, "ddd")
@@ -287,8 +292,16 @@ def test_report_lists_writes_and_committed_is_false(tmp_path: Path) -> None:
 
     report = install.install(repo, ["ddd"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
 
-    assert report.committed is False  # identity, not falsiness -- always False, never merely falsy
     assert set(report.installed) == {"ddd"}
+    fields = {
+        cls.__name__: {f.name for f in dataclasses.fields(cls)}
+        for cls in (install.InstallReport, install.UpdateReport, install.RemoveReport)
+    }
+    assert fields == {
+        "InstallReport": {"installed", "unchanged", "failed"},
+        "UpdateReport": {"refreshed", "declined", "current", "failed"},
+        "RemoveReport": {"removed", "refused", "failed"},
+    }
 
 
 # --- clarification 7: bundle is a parameter, with a derived default --------
@@ -531,7 +544,6 @@ def test_default_catalogue_dir_resolves_to_the_real_templates_patterns_dir(tmp_p
     assert version == expected_version
     installed_skill_md = _skills_root(repo) / "tcs-ddd" / "SKILL.md"
     assert sha256 == hashlib.sha256(installed_skill_md.read_bytes()).hexdigest()
-    assert report.committed is False
 
 
 def test_all_21_catalogue_names_are_plain_scalars_for_the_rename(tmp_path: Path) -> None:
@@ -913,7 +925,6 @@ def test_version_behind_with_matching_hash_refreshes_without_ever_calling_decide
     assert sha256 == hashlib.sha256(installed_skill_md.read_bytes()).hexdigest()
     assert b"Upstream v2 body." in installed_skill_md.read_bytes()
     assert _entry_fields(repo, "testing") == ("2", "tcs-testing", sha256)
-    assert report.committed is False
 
 
 def test_version_behind_hash_matching_overwrites_a_locally_edited_reference_file(tmp_path: Path) -> None:
@@ -1023,7 +1034,6 @@ def test_declining_leaves_the_installed_file_and_the_manifest_byte_identical(tmp
     assert _DIVERGED_NAME in report.declined
     for channel in (report.refreshed, report.current, report.failed):
         assert _DIVERGED_NAME not in channel
-    assert report.committed is False
 
 
 def test_diverged_and_behind_still_asks_and_declining_writes_nothing(tmp_path: Path) -> None:
@@ -1115,7 +1125,6 @@ def test_accepting_a_diverged_pattern_replaces_the_whole_subtree(tmp_path: Path)
     assert sha256 == hashlib.sha256((dest / "SKILL.md").read_bytes()).hexdigest()
     assert _entry_fields(repo, _DIVERGED_NAME) == (got_after, installed_as, sha256)
     assert _DIVERGED_NAME not in report.declined
-    assert report.committed is False
 
 
 # --- the first row: nothing to do -------------------------------------------
@@ -1561,3 +1570,228 @@ def test_install_and_companions_default_to_paths_catalogue_and_drop_their_own() 
         assert inspect.signature(fn).parameters["catalogue_dir"].default is paths.DEFAULT_CATALOGUE_DIR
     for fn in (companions.companion_map, companions.ambiguous_citations, companions.expand_companions):
         assert inspect.signature(fn).parameters["catalogue_root"].default is paths.DEFAULT_CATALOGUE_DIR
+
+
+# --- PR #176 review: per-pattern faults, catalogue VERSION, whole-call refusals ---
+
+
+def _three_installed(tmp_path: Path, *, version: str = "1") -> tuple[Path, Path]:
+    """`alpha`, `beta` and `gamma` installed at `version` -- the batch shape
+    every "one fails, the others still run" test below needs."""
+    install = _load_install()
+    catalogue = tmp_path / "catalogue"
+    for name in ("alpha", "beta", "gamma"):
+        _catalogue_pattern(catalogue, name, version=version)
+    repo = tmp_path / "repo"
+    report = install.install(repo, ["alpha", "beta", "gamma"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+    assert sorted(report.installed) == ["alpha", "beta", "gamma"]
+    return catalogue, repo
+
+
+def test_an_oserror_on_one_install_fails_that_pattern_and_the_batch_continues(tmp_path: Path) -> None:
+    """PR #176 H2. A regular file named `tcs-beta` makes the final rename
+    raise `NotADirectoryError`; before the fix it escaped `install()`, so
+    `gamma` was never attempted and the CLI printed no JSON at all."""
+    install = _load_install()
+    manifest = _load_manifest()
+    catalogue = tmp_path / "catalogue"
+    for name in ("alpha", "beta", "gamma"):
+        _catalogue_pattern(catalogue, name)
+    repo = tmp_path / "repo"
+    _skills_root(repo).mkdir(parents=True)
+    blocker = _skills_root(repo) / "tcs-beta"
+    blocker.write_bytes(b"a user's file, not a skill\n")
+
+    report = install.install(repo, ["alpha", "beta", "gamma"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    assert sorted(report.installed) == ["alpha", "gamma"]
+    assert list(report.failed) == ["beta"]
+    assert blocker.read_bytes() == b"a user's file, not a skill\n"
+    assert not (_skills_root(repo) / ".tcs-beta.tmp").exists()
+    assert sorted(manifest.read(repo).patterns) == ["alpha", "gamma"]
+
+
+def test_an_oserror_on_one_update_fails_that_pattern_and_the_batch_continues(tmp_path: Path) -> None:
+    """PR #176 H2, update's loop. A regular file at `.tcs-beta.replaced`
+    (this installer's stash name) makes the stash clear raise
+    `NotADirectoryError`; `alpha` and `gamma` must still refresh."""
+    install = _load_install()
+    catalogue, repo = _three_installed(tmp_path)
+    for name in ("alpha", "beta", "gamma"):
+        (catalogue / name / "VERSION").write_text("2\n", encoding="utf-8")
+    (_skills_root(repo) / ".tcs-beta.replaced").write_bytes(b"not a directory\n")
+    beta_before = _digest_tree(_skills_root(repo) / "tcs-beta")
+    beta_entry = _entry_fields(repo, "beta")
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    assert sorted(report.refreshed) == ["alpha", "gamma"]
+    assert list(report.failed) == ["beta"]
+    assert _digest_tree(_skills_root(repo) / "tcs-beta") == beta_before
+    assert _entry_fields(repo, "beta") == beta_entry
+    assert _entry_fields(repo, "gamma")[0] == "2"
+
+
+@pytest.mark.parametrize(
+    "bad", ["1.2", "v2", "", "1234567890", "9" * 5000], ids=["dotted", "word", "empty", "ten-digits", "5000-digits"]
+)
+def test_a_catalogue_version_manifest_cannot_record_fails_before_any_write(tmp_path: Path, bad: str) -> None:
+    """PR #176 M1. The manifest accepts `^[0-9]{1,9}$`; a VERSION outside
+    that was read as-is, the directory landed, and only then did the upsert
+    refuse -- orphaning the pattern (install then says "run update", update
+    ignores it, remove refuses it). Validated before anything is written."""
+    install = _load_install()
+    manifest = _load_manifest()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "alpha", version=bad)
+    _catalogue_pattern(catalogue, "gamma")
+    repo = tmp_path / "repo"
+
+    report = install.install(repo, ["alpha", "gamma"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    assert list(report.failed) == ["alpha"]
+    assert "VERSION" in report.failed["alpha"]
+    assert list(report.installed) == ["gamma"]
+    assert sorted(p.name for p in _skills_root(repo).iterdir()) == [".tcs-patterns-manifest", "tcs-gamma"]
+    assert sorted(manifest.read(repo).patterns) == ["gamma"]
+
+
+def test_update_with_a_bad_catalogue_version_leaves_an_accepted_diverged_pattern_untouched(tmp_path: Path) -> None:
+    """PR #176 M1, the worse half: decide said yes, the user's edited
+    directory was replaced, and then the upsert refused `2.0`."""
+    install = _load_install()
+    catalogue, repo = _diverged_fixture(tmp_path)
+    (catalogue / _DIVERGED_NAME / "VERSION").write_text("2.0\n", encoding="utf-8")
+    tree_before = _digest_tree(_skills_root(repo))
+    manifest_before = _manifest_bytes(repo)
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE, decide=lambda n, d: True)
+
+    assert list(report.failed) == [_DIVERGED_NAME]
+    assert "VERSION" in report.failed[_DIVERGED_NAME]
+    assert _digest_tree(_skills_root(repo)) == tree_before
+    assert _manifest_bytes(repo) == manifest_before
+
+
+def _newer_schema(repo: Path) -> None:
+    path = _skills_root(repo) / ".tcs-patterns-manifest"
+    text = path.read_text(encoding="utf-8")
+    assert "schema = 1\n" in text
+    path.write_text(text.replace("schema = 1\n", "schema = 2\n", 1), encoding="utf-8")
+
+
+@pytest.mark.parametrize("verb", ["install", "update", "remove"])
+def test_a_newer_schema_manifest_is_refused_by_each_library_verb_before_any_write(tmp_path: Path, verb: str) -> None:
+    """PR #176: called directly (not through cli.py), `install()` copied the
+    directory and only then did the upsert refuse the newer schema."""
+    install = _load_install()
+    manifest = _load_manifest()
+    catalogue, repo = _three_installed(tmp_path)
+    _catalogue_pattern(catalogue, "delta")
+    for name in ("alpha", "beta", "gamma"):
+        (catalogue / name / "VERSION").write_text("2\n", encoding="utf-8")
+    _newer_schema(repo)
+    before = _digest_tree(repo)
+
+    with pytest.raises(manifest.ManifestNewerSchemaError):
+        if verb == "install":
+            install.install(repo, ["delta"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+        elif verb == "update":
+            install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+        else:
+            install.remove(repo, ["alpha"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    assert _digest_tree(repo) == before
+
+
+def _victim(tmp_path: Path) -> Path:
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    (victim / "precious.txt").write_bytes(b"not this installer's\n")
+    return victim
+
+
+def test_a_symlinked_tmp_debris_path_is_unlinked_never_followed(tmp_path: Path) -> None:
+    """PR #176 L2a. `shutil.rmtree` refuses a symlink with an OSError; the
+    link is this installer's debris name, its target is not."""
+    install = _load_install()
+    catalogue = tmp_path / "catalogue"
+    _catalogue_pattern(catalogue, "alpha")
+    repo = tmp_path / "repo"
+    _skills_root(repo).mkdir(parents=True)
+    victim = _victim(tmp_path)
+    link = _skills_root(repo) / ".tcs-alpha.tmp"
+    link.symlink_to(victim, target_is_directory=True)
+
+    report = install.install(repo, ["alpha"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    assert list(report.installed) == ["alpha"], report.failed
+    assert not os.path.lexists(link)
+    assert sorted(p.name for p in victim.iterdir()) == ["precious.txt"]
+    assert (victim / "precious.txt").read_bytes() == b"not this installer's\n"
+
+
+def test_a_symlinked_replaced_debris_path_is_unlinked_never_followed(tmp_path: Path) -> None:
+    install = _load_install()
+    catalogue, repo = _three_installed(tmp_path)
+    (catalogue / "alpha" / "VERSION").write_text("2\n", encoding="utf-8")
+    victim = _victim(tmp_path)
+    link = _skills_root(repo) / ".tcs-alpha.replaced"
+    link.symlink_to(victim, target_is_directory=True)
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    assert "alpha" in report.refreshed, report.failed
+    assert not os.path.lexists(link)
+    assert sorted(p.name for p in victim.iterdir()) == ["precious.txt"]
+
+
+def test_update_refuses_a_symlinked_pattern_directory(tmp_path: Path) -> None:
+    """PR #176 L2b. `dest.is_dir()` follows the link, so update replaced
+    the directory it points at. `install()` never writes a symlink, so it is
+    not this tool's to refresh -- remove's rule 4, for update."""
+    install = _load_install()
+    catalogue, repo = _three_installed(tmp_path)
+    (catalogue / "alpha" / "VERSION").write_text("2\n", encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere-alpha"
+    os.rename(_skills_root(repo) / "tcs-alpha", elsewhere)
+    (_skills_root(repo) / "tcs-alpha").symlink_to(elsewhere, target_is_directory=True)
+    target_before = _digest_tree(elsewhere)
+    manifest_before = _manifest_bytes(repo)
+
+    report = install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE, decide=lambda n, d: True)
+
+    assert "alpha" in report.failed
+    assert "symlink" in report.failed["alpha"]
+    assert (_skills_root(repo) / "tcs-alpha").is_symlink()
+    assert _digest_tree(elsewhere) == target_before
+    assert _manifest_bytes(repo) == manifest_before
+
+
+@pytest.mark.parametrize("linked", [".claude", ".claude/skills"])
+@pytest.mark.parametrize("verb", ["install", "update", "remove"])
+def test_a_symlinked_claude_or_skills_directory_is_refused_before_any_write(
+    tmp_path: Path, verb: str, linked: str
+) -> None:
+    """PR #176 L2c. Every writer followed the link and wrote outside the
+    repository. Refused as a whole-call condition, nothing written on
+    either side of the link."""
+    install = _load_install()
+    catalogue, repo = _three_installed(tmp_path)
+    _catalogue_pattern(catalogue, "delta")
+    (catalogue / "alpha" / "VERSION").write_text("2\n", encoding="utf-8")
+    real = tmp_path / "outside"
+    os.rename(repo / linked, real)
+    (repo / linked).symlink_to(real, target_is_directory=True)
+    before = (_digest_tree(repo), _digest_tree(real))
+
+    with pytest.raises(install.UnsafeSkillsRootError) as raised:
+        if verb == "install":
+            install.install(repo, ["delta"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+        elif verb == "update":
+            install.update(repo, catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+        else:
+            install.remove(repo, ["alpha"], catalogue_dir=catalogue, bundle=TEST_BUNDLE)
+
+    assert str(repo / linked) in str(raised.value)
+    assert (_digest_tree(repo), _digest_tree(real)) == before

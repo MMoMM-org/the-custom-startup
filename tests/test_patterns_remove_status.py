@@ -131,6 +131,10 @@ VERDICT_TABLE = [
     ("version-absent", "1", _ABSENT, "UNKNOWN", None, "UNKNOWN:ddd:1"),
     ("non-numeric", "1", "v2-beta", "UNKNOWN", None, "UNKNOWN:ddd:1"),
     ("empty", "1", "", "UNKNOWN", None, "UNKNOWN:ddd:1"),
+    # The manifest's own bound, ^[0-9]{1,9}$ (PR #176 M1): ten digits is not a
+    # version this tool can record, and 5000 is past int()'s 4300-digit limit.
+    ("ten-digits", "1", "1234567890", "UNKNOWN", None, "UNKNOWN:ddd:1"),
+    ("too-long-for-int", "1", "9" * 5000, "UNKNOWN", None, "UNKNOWN:ddd:1"),
     ("pattern-directory-deleted", "1", _DELETED, "UNKNOWN", None, "UNKNOWN:ddd:1"),
 ]
 
@@ -288,6 +292,36 @@ def test_status_reports_an_unreadable_manifest_verbatim(tmp_path):
     assert report.manifest_error == str(raised.value)
     assert report.patterns == {}
     assert report.unlisted == ("tcs-ddd",)
+
+
+@_ROOT_IGNORES_PERMISSIONS
+def test_status_reports_an_unlistable_skills_directory_instead_of_crashing(tmp_path):
+    """PR #176 L3c. A PermissionError listing `.claude/skills` escaped
+    `status()`, so the read-only verb exited 1. Reported in `skills_error`,
+    verbatim; the manifest inside it cannot be looked at either, which is
+    `unreadable`, not `absent`."""
+    repo, cat = _setup(tmp_path, ["ddd"])
+    skills = _skills(repo)
+    skills.chmod(0)
+    try:
+        with pytest.raises(OSError) as raised:
+            os.listdir(skills)
+        report = _load_lib("status").status(repo, catalogue_dir=cat)
+    finally:
+        skills.chmod(0o755)
+    assert report.skills_error == str(raised.value)
+    assert report.manifest_state == "unreadable"
+    assert report.manifest_error
+    assert report.unlisted == ()
+    assert report.debris == ()
+
+
+def test_status_skills_error_is_none_when_the_directory_lists(tmp_path):
+    repo, cat = _setup(tmp_path, ["ddd"])
+    assert _load_lib("status").status(repo, catalogue_dir=cat).skills_error is None
+    absent = tmp_path / "bare"
+    absent.mkdir()
+    assert _load_lib("status").status(absent, catalogue_dir=cat).skills_error is None
 
 
 def test_status_names_a_tcs_directory_the_manifest_does_not(tmp_path):
@@ -500,7 +534,6 @@ def test_remove_rule1_never_deletes_a_tcs_directory_the_manifest_does_not_list(t
         "not recorded in the manifest; remove deletes only what the manifest records",
         None,
     )
-    assert report.committed is False
 
 
 def test_remove_rule2_refuses_an_entry_whose_installed_as_names_another_pattern(tmp_path, monkeypatch):
@@ -702,7 +735,6 @@ def test_remove_rule6_removes_directory_and_entry_and_leaves_no_debris(tmp_path)
     report = _remove(repo, ["ddd"])
     assert report.removed == {"ddd": ("tcs-ddd", "1", True)}
     assert report.refused == {} and report.failed == {}
-    assert report.committed is False
     assert not (_skills(repo) / "tcs-ddd").exists()
     assert sorted(_load_lib("manifest").read(repo).patterns) == ["hexagonal"]
     status = _load_lib("status").status(repo, catalogue_dir=cat)

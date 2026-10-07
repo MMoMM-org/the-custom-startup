@@ -117,11 +117,20 @@ def _emit(doc: dict) -> None:
 
 
 def _read_manifest_or_refuse(toplevel: Path):
-    """The writing verbs' up-front manifest read: unparseable or unreadable is
-    exit 3, before the guard or any write. So is a manifest a newer
-    tcs-patterns wrote: readable, but never rewritten by this one."""
+    """The writing verbs' up-front preconditions, before the guard or any
+    write, each exit 3: a symlinked `.claude` or `.claude/skills` (every
+    write would land wherever it points, PR #176 L2c), then an unparseable
+    or unreadable manifest, then a manifest a newer tcs-patterns wrote:
+    readable, but never rewritten by this one. The library entry points
+    raise for the first and the last as well, for a caller that is not this
+    CLI."""
+    import install
     import manifest
 
+    try:
+        install.refuse_symlinked_skills_root(toplevel)
+    except install.UnsafeSkillsRootError as e:
+        raise _Refused(str(e)) from e
     try:
         current = manifest.read(toplevel)
     except (manifest.ManifestUnparseableError, OSError) as e:
@@ -296,7 +305,6 @@ def _install(toplevel: Path, catalogue: Path, names: list[str]) -> dict:
         "failed": dict(report.failed),
         "refused": refused,
         "skipped": [{"path": path, "reason": reason} for path, reason in checked.skipped],
-        "committed": report.committed,
     }
 
 
@@ -319,7 +327,6 @@ def _update(toplevel: Path, catalogue: Path, accept: list[str]) -> dict:
         "declined": {n: {"version": v, "diff": d} for n, (v, d) in report.declined.items()},
         "current": {n: {"installed_as": a, "version": v, "sha256": h} for n, (a, v, h) in report.current.items()},
         "failed": dict(report.failed),
-        "committed": report.committed,
     }
 
 
@@ -340,7 +347,6 @@ def _remove(toplevel: Path, catalogue: Path, names: list[str], discard_edits: li
         },
         "refused": {n: {"reason": reason, "diff": diff} for n, (reason, diff) in report.refused.items()},
         "failed": dict(report.failed),
-        "committed": report.committed,
     }
 
 
@@ -364,6 +370,7 @@ def _status(toplevel: Path, catalogue: Path) -> dict:
         },
         "unlisted": list(report.unlisted),
         "debris": [{"name": d.name, "kind": d.kind, "resolution": d.resolution} for d in report.debris],
+        "skills_error": report.skills_error,
     }
 
 

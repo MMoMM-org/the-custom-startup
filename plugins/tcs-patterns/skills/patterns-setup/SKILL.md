@@ -255,6 +255,8 @@ python3 "<cli>" status "<repo>"
   - `directory_present: false`: check `debris` for its resolution.
 - `unlisted`: `tcs-*` directories this tool did not install; leave them alone.
 - `debris`: each `name`, `kind` and `resolution`, the resolution verbatim.
+- `skills_error`: null, or `.claude/skills` exists but could not be listed — show it verbatim and say
+  `unlisted` and `debris` are empty because nothing in it could be looked at.
 
 ### Entry Point
 

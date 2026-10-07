@@ -498,6 +498,7 @@ SKILL_FIELD_PATHS = {
     "debris.name",
     "debris.kind",
     "debris.resolution",
+    "skills_error",
 }
 
 _DYNAMIC_MAPS = {

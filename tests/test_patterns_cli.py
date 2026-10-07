@@ -43,10 +43,10 @@ BUNDLE = "1.0.0"
 
 # The contract's tables, typed by hand -- `==`, so an extra key fails too.
 SCAN_KEYS = {"repo", "report", "outcomes", "companions", "listing_cost"}
-INSTALL_KEYS = {"repo", "installed", "unchanged", "failed", "refused", "skipped", "committed"}
-UPDATE_KEYS = {"repo", "refreshed", "declined", "current", "failed", "committed"}
-REMOVE_KEYS = {"repo", "removed", "refused", "failed", "committed"}
-STATUS_KEYS = {"repo", "manifest", "patterns", "unlisted", "debris"}
+INSTALL_KEYS = {"repo", "installed", "unchanged", "failed", "refused", "skipped"}
+UPDATE_KEYS = {"repo", "refreshed", "declined", "current", "failed"}
+REMOVE_KEYS = {"repo", "removed", "refused", "failed"}
+STATUS_KEYS = {"repo", "manifest", "patterns", "unlisted", "debris", "skills_error"}
 
 
 def _load_lib(name: str) -> ModuleType:
@@ -247,7 +247,6 @@ def test_install_keys_and_nested_fields(world: World) -> None:
     doc = _doc(_run(world, "install", str(world.repo), "hexagonal"))
     assert set(doc) == INSTALL_KEYS
     assert doc["repo"] == str(world.repo)
-    assert doc["committed"] is False
     assert doc["refused"] == {} and doc["failed"] == {} and doc["unchanged"] == {} and doc["skipped"] == []
     installed_skill = _skills(world.repo) / "tcs-hexagonal" / "SKILL.md"
     assert doc["installed"] == {
@@ -265,7 +264,6 @@ def test_update_keys(world: World) -> None:
     doc = _doc(_run(world, "update", str(world.repo)))
     assert set(doc) == UPDATE_KEYS
     assert doc["repo"] == str(world.repo)
-    assert doc["committed"] is False
     sha = _sha(_skills(world.repo) / "tcs-hexagonal" / "SKILL.md")
     assert doc["current"] == {"hexagonal": {"installed_as": "tcs-hexagonal", "version": "1", "sha256": sha}}
     assert doc["refreshed"] == {} and doc["declined"] == {} and doc["failed"] == {}
@@ -276,7 +274,6 @@ def test_remove_keys(world: World) -> None:
     doc = _doc(_run(world, "remove", str(world.repo), "hexagonal"))
     assert set(doc) == REMOVE_KEYS
     assert doc["repo"] == str(world.repo)
-    assert doc["committed"] is False
     assert doc["removed"] == {
         "hexagonal": {"installed_as": "tcs-hexagonal", "version": "1", "directory_existed": True}
     }
@@ -289,6 +286,7 @@ def test_status_keys(world: World) -> None:
     assert doc["repo"] == str(world.repo)
     assert doc["manifest"] == {"state": "absent", "error": None, "bundle": None}
     assert doc["patterns"] == {} and doc["unlisted"] == [] and doc["debris"] == []
+    assert doc["skills_error"] is None
 
 
 @pytest.mark.parametrize("verb", ["scan", "install", "update", "remove", "status"])
@@ -978,3 +976,76 @@ def test_a_non_ascii_repository_path_round_trips(tmp_path: Path) -> None:
     text = r.stdout.decode("utf-8")
     assert "répo—x" in text and "\\u" not in text
     assert json.loads(text)["repo"] == str(repo.resolve())
+
+
+# =============================================================================
+# PR #176 review: per-pattern OSErrors, symlinked roots, an unlistable skills dir
+# =============================================================================
+
+
+def test_install_an_oserror_on_one_pattern_still_exits_0_with_json(world: World) -> None:
+    """PR #176 H2: a regular file named `tcs-hexagonal` made the rename raise
+    out of `install()` -- exit 1, no JSON, although `ddd` was installed."""
+    _skills(world.repo).mkdir(parents=True)
+    (_skills(world.repo) / "tcs-hexagonal").write_bytes(b"mine\n")
+    doc = _doc(_run(world, "install", str(world.repo), "ddd", "functional", "hexagonal"))
+    assert sorted(doc["installed"]) == ["ddd", "functional"]
+    assert list(doc["failed"]) == ["hexagonal"]
+    assert (_skills(world.repo) / "tcs-hexagonal").read_bytes() == b"mine\n"
+
+
+def test_update_an_oserror_on_one_pattern_still_exits_0_with_json(world: World) -> None:
+    _library_install(world, ["ddd", "functional", "hexagonal"])
+    for name in ("ddd", "functional", "hexagonal"):
+        _write_pattern(world.cat, name, version="2")
+    (_skills(world.repo) / ".tcs-functional.replaced").write_bytes(b"not a directory\n")
+    doc = _doc(_run(world, "update", str(world.repo)))
+    assert sorted(doc["refreshed"]) == ["ddd", "hexagonal"]
+    assert list(doc["failed"]) == ["functional"]
+
+
+@pytest.mark.parametrize("linked", [".claude", ".claude/skills"])
+@pytest.mark.parametrize(
+    "argv",
+    [["install", "{repo}", "ddd"], ["update", "{repo}"], ["remove", "{repo}", "hexagonal"]],
+    ids=["install", "update", "remove"],
+)
+def test_a_symlinked_claude_or_skills_directory_exits_3_on_every_writing_verb(
+    world: World, argv: list[str], linked: str
+) -> None:
+    """PR #176 L2c: the writers followed the link out of the repository."""
+    _library_install(world, ["hexagonal"])
+    _write_pattern(world.cat, "hexagonal", version="2", body="Body v2.\n")
+    real = world.tmp / "outside"
+    os.rename(world.repo / linked, real)
+    (world.repo / linked).symlink_to(real, target_is_directory=True)
+    before = (_digest(world.repo), _digest(real))
+    r = _run(world, *[a.replace("{repo}", str(world.repo)) for a in argv])
+    _refused(r, 3)
+    assert b"symlink" in r.stderr
+    assert (_digest(world.repo), _digest(real)) == before
+
+
+def test_status_still_reports_through_a_symlinked_claude_directory(world: World) -> None:
+    _library_install(world, ["hexagonal"])
+    real = world.tmp / "outside"
+    os.rename(world.repo / ".claude", real)
+    (world.repo / ".claude").symlink_to(real, target_is_directory=True)
+    doc = _doc(_run(world, "status", str(world.repo)))
+    assert set(doc["patterns"]) == {"hexagonal"}
+
+
+def test_status_exits_0_when_the_skills_directory_cannot_be_listed(world: World) -> None:
+    """PR #176 L3c: a PermissionError escaped `status` -- exit 1."""
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root ignores file permissions")
+    _library_install(world, ["hexagonal"])
+    skills = _skills(world.repo)
+    skills.chmod(0)
+    try:
+        doc = _doc(_run(world, "status", str(world.repo)))
+    finally:
+        skills.chmod(0o755)
+    assert str(skills) in doc["skills_error"]
+    assert doc["manifest"]["state"] == "unreadable"
+    assert doc["unlisted"] == [] and doc["debris"] == []

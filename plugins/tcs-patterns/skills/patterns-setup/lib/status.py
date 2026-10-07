@@ -29,21 +29,20 @@ exception's text goes into `manifest_error` verbatim, `patterns` is empty, and
 every `tcs-*` directory is `unlisted` `[ref: SDD/Error Handling, "Manifest
 present but unparseable"]`.
 
+**So is a `.claude/skills` it cannot list** (PR #176 L3c): the exception's
+text goes into `skills_error`, and `unlisted` and `debris` are empty.
+
 Stdlib only, Python 3.11 floor `[ref: SDD/ADR-2]`.
 """
 
 from __future__ import annotations
 
 import os
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import manifest
 import paths
-
-_NUMERIC = re.compile(r"^[0-9]+$")
-
 
 @dataclass(frozen=True)
 class Debris:
@@ -77,7 +76,12 @@ class PatternStatus:
 @dataclass(frozen=True)
 class StatusReport:
     """`manifest_state` is `present`, `absent`, `unparseable` or `unreadable`;
-    `manifest_error` is `str(exception)`, verbatim, for the last two."""
+    `manifest_error` is `str(exception)`, verbatim, for the last two.
+
+    `skills_error` is `str(exception)`, verbatim, when `.claude/skills`
+    exists but cannot be listed (PR #176 L3c); `unlisted` and `debris` are
+    then empty because nothing in it could be looked at. `None` otherwise,
+    an absent directory included."""
 
     manifest_state: str
     manifest_error: str | None
@@ -85,15 +89,18 @@ class StatusReport:
     patterns: dict[str, PatternStatus] = field(default_factory=dict)
     unlisted: tuple[str, ...] = ()
     debris: tuple[Debris, ...] = ()
+    skills_error: str | None = None
 
 
 def catalogue_version(catalogue_dir: Path, name: str) -> str | None:
-    """The pattern's catalogue VERSION, or None if absent, unreadable or non-numeric."""
+    """The pattern's catalogue VERSION, or None if absent, unreadable or not
+    1-9 digits -- `paths.read_catalogue_version`, the reader the installer
+    uses too, so `drift_verdict` never sees a value `int()` refuses
+    (PR #176 M1)."""
     try:
-        text = (Path(catalogue_dir) / name / "VERSION").read_text(encoding="utf-8").strip()
-    except (OSError, UnicodeDecodeError):
+        return paths.read_catalogue_version(catalogue_dir, name)
+    except paths.CatalogueVersionError:
         return None
-    return text if _NUMERIC.match(text) else None
 
 
 def drift_verdict(installed: str, catalogue: str | None) -> str:
@@ -165,11 +172,16 @@ def _classify(name: str, skills_root: Path, listed: dict[str, "manifest.PatternE
     return Debris(name=name, kind="unknown", resolution="not a name this tool writes; left alone")
 
 
-def _entries(skills_root: Path) -> list[str]:
+def _entries(skills_root: Path) -> tuple[list[str], str | None]:
+    """The names in `skills_root`, and `str(exception)` when it exists but
+    cannot be listed -- reported, never raised: `status` is the verb that
+    must still answer (PR #176 L3c)."""
     try:
-        return sorted(os.listdir(skills_root))
+        return sorted(os.listdir(skills_root)), None
     except (FileNotFoundError, NotADirectoryError):
-        return []
+        return [], None
+    except OSError as e:
+        return [], str(e)
 
 
 def status(repo_dir: Path, *, catalogue_dir: Path = paths.DEFAULT_CATALOGUE_DIR) -> StatusReport:
@@ -182,12 +194,19 @@ def status(repo_dir: Path, *, catalogue_dir: Path = paths.DEFAULT_CATALOGUE_DIR)
 
     manifest_error: str | None = None
     current: manifest.Manifest | None = None
-    if not os.path.lexists(manifest_path):
+    # `lstat`, not `os.path.lexists`: that answers False for a path it may
+    # not look at, so a manifest inside an unlistable `.claude/skills` read
+    # as `absent` (PR #176 L3c).
+    manifest_state = "present"
+    try:
+        os.lstat(manifest_path)
+    except (FileNotFoundError, NotADirectoryError):
         manifest_state = "absent"
-    else:
+    except OSError as e:
+        manifest_state, manifest_error = "unreadable", str(e)
+    if manifest_state == "present":
         try:
             current = manifest.read(repo_dir)
-            manifest_state = "present"
         except manifest.ManifestUnparseableError as e:
             manifest_state, manifest_error = "unparseable", str(e)
         except OSError as e:
@@ -212,7 +231,7 @@ def status(repo_dir: Path, *, catalogue_dir: Path = paths.DEFAULT_CATALOGUE_DIR)
         )
 
     owned = {entry.installed_as for entry in listed.values()}
-    names = _entries(skills_root)
+    names, skills_error = _entries(skills_root)
     unlisted = tuple(
         n for n in names if n.startswith("tcs-") and n not in owned and (skills_root / n).is_dir()
     )
@@ -225,4 +244,5 @@ def status(repo_dir: Path, *, catalogue_dir: Path = paths.DEFAULT_CATALOGUE_DIR)
         patterns=patterns,
         unlisted=unlisted,
         debris=debris,
+        skills_error=skills_error,
     )

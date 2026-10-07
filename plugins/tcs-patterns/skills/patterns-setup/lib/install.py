@@ -22,7 +22,6 @@ InstallReport (frozen, named channels)
     installed:  name -> (installed_as, version, sha256)   newly written
     unchanged:  name -> (installed_as, version, sha256)   already current
     failed:     name -> reason                            raised internally, caught, skipped
-    committed:  always False
 ```
 
 **No `report_only` parameter.** An earlier revision of this signature
@@ -35,7 +34,8 @@ a user sees before an install is C3's, not a rehearsal of this function
 `rename_in_frontmatter`, by the catalogue reads around it, and -- wrapped --
 by a failing `manifest.upsert()` call too (the directory has already landed
 by the time that call happens; see point 3). `install()` catches
-`InstallError` **per pattern**, records `failed[name] = reason`, and
+`InstallError` -- and `OSError`, which a filesystem write can raise anywhere
+(PR #176 H2) -- **per pattern**, records `failed[name] = reason`, and
 continues to the next name -- a fault in one pattern never escapes this
 function, which is what makes "a write failing mid-selection leaves earlier
 patterns in place" true at all
@@ -72,10 +72,11 @@ lands** -- directory first, so a crash between the two leaves recoverable
 debris (files with no record) rather than a lie (a record with no files)
 `[ref: solution.md, point 3]`.
 
-**C5 reports; C3 offers.** `InstallReport.committed` is always `False`.
-Stating "nothing was committed" and offering to commit is C3's rendering of
-this report (ADR-8) -- no `AskUserQuestion` belongs in this module, and no
-test here should look for a prompt.
+**C5 reports; C3 offers.** Stating "nothing was committed" and offering to
+commit is C3's rendering of this report (ADR-8) -- no `AskUserQuestion`
+belongs in this module, and no test here should look for a prompt. The
+reports carry no `committed` field: it was always `False` and nothing read
+it (PR #176 L8).
 
 **`catalogue_dir` is a parameter**, defaulting to this plugin's own
 `templates/patterns/` directory, derived from `__file__` rather than
@@ -120,7 +121,6 @@ UpdateReport (frozen, named channels)
     declined:   name -> (version, unified_diff)           diverged, decide() said no
     current:    name -> (installed_as, version, sha256)   nothing to do
     failed:     name -> reason                            raised internally, caught, skipped
-    committed:  always False
 
 decide(name, unified_diff) -> bool                        defaults to False
 ```
@@ -235,6 +235,42 @@ class InstallError(Exception):
     pattern inside `install()` and never allowed to escape it."""
 
 
+class UnsafeSkillsRootError(Exception):
+    """`<repo>/.claude` or `<repo>/.claude/skills` is a symlink. A whole-call
+    condition, raised by `install()`, `update()` and `remove()` before
+    anything is written -- every path below it, the manifest included, would
+    otherwise be written wherever the link points (PR #176 L2c). `cli.py`
+    maps it to exit 3. `status` reads through the link and reports."""
+
+
+def refuse_symlinked_skills_root(repo_dir: Path) -> None:
+    """Raise `UnsafeSkillsRootError` if `.claude` or `.claude/skills` under
+    `repo_dir` is a symlink. `is_symlink()` is an `lstat`: it never follows
+    the link it is asking about."""
+    claude = Path(repo_dir) / ".claude"
+    for path in (claude, claude / "skills"):
+        if path.is_symlink():
+            raise UnsafeSkillsRootError(
+                f"{path} is a symlink; tcs-patterns writes only into a real directory inside the "
+                "repository, so nothing was changed -- replace the link with a directory, then run this again"
+            )
+
+
+def _clear_own_debris(path: Path) -> None:
+    """Delete `path`, one of this installer's own debris names
+    (`.<installed_as>.tmp`, `.<installed_as>.replaced`), if anything is there.
+
+    A symlink is UNLINKED, never followed: `shutil.rmtree` refuses one with
+    an `OSError`, and what it points at is not this installer's to delete
+    (PR #176 L2a). Anything else that is not a directory raises the
+    `OSError` `rmtree` gives, which the per-pattern loop records as that
+    pattern's failure."""
+    if path.is_symlink():
+        path.unlink()
+    elif os.path.lexists(path):
+        shutil.rmtree(path)
+
+
 @dataclass(frozen=True)
 class InstallReport:
     """The whole result of one `install()` call. Named channels, not a
@@ -244,13 +280,11 @@ class InstallReport:
     installed: name -> (installed_as, version, sha256), newly written.
     unchanged: name -> (installed_as, version, sha256), already current.
     failed:    name -> a human-readable reason, nothing written for it.
-    committed: always False -- see the module docstring, "C5 reports; C3 offers".
     """
 
     installed: dict[str, tuple[str, str, str]] = field(default_factory=dict)
     unchanged: dict[str, tuple[str, str, str]] = field(default_factory=dict)
     failed: dict[str, str] = field(default_factory=dict)
-    committed: bool = False
 
 
 def rename_in_frontmatter(text: str, new_name: str) -> str:
@@ -379,10 +413,15 @@ def _bundle_version() -> str:
 
 
 def _read_catalogue_version(catalogue_dir: Path, name: str) -> str:
+    """`paths.read_catalogue_version`, the reader `status` shares, as an
+    `InstallError`. Both callers read it before anything is written, so a
+    VERSION the manifest could not record (`1.2`, ten digits) fails that
+    pattern up front instead of landing a directory the upsert then refuses
+    -- which left it on disk unrecorded (PR #176 M1)."""
     try:
-        return (catalogue_dir / name / "VERSION").read_text(encoding="utf-8").strip()
-    except OSError as e:
-        raise InstallError(f"could not read VERSION for catalogue pattern {name!r}: {e}") from e
+        return paths.read_catalogue_version(catalogue_dir, name)
+    except paths.CatalogueVersionError as e:
+        raise InstallError(str(e)) from e
 
 
 def _fresh_install(name: str, *, installed_as: str, dest: Path, skills_root: Path, catalogue_dir: Path) -> str:
@@ -401,8 +440,7 @@ def _fresh_install(name: str, *, installed_as: str, dest: Path, skills_root: Pat
     tmp_dir = skills_root / f".{installed_as}{paths.TMP_SUFFIX}"
 
     skills_root.mkdir(parents=True, exist_ok=True)
-    if tmp_dir.exists():
-        shutil.rmtree(tmp_dir)
+    _clear_own_debris(tmp_dir)
 
     try:
         try:
@@ -474,13 +512,19 @@ def _install_one(
 
     sha256 = _fresh_install(name, installed_as=installed_as, dest=dest, skills_root=skills_root, catalogue_dir=catalogue_dir)
     # Directory already landed above -- this is the "then manifest" half of
-    # "directory first, then manifest" (point 3). Any failure here (a
-    # corrupt pre-existing manifest, or anything else `manifest.upsert`
-    # raises) must still be a PER-PATTERN fault, not one that escapes
-    # `install()`: the directory stays on disk, uncatalogued, and the next
-    # `install()` call simply retries this pattern. Wrapped rather than left
-    # to propagate, because "a per-pattern fault never escapes install()" is
-    # the contract for every step, not only the frontmatter rewrite.
+    # "directory first, then manifest" (point 3). Any failure here must
+    # still be a PER-PATTERN fault, not one that escapes `install()`.
+    # Wrapped rather than left to propagate, because "a per-pattern fault
+    # never escapes install()" is the contract for every step.
+    #
+    # It is NOT self-healing: the directory stays on disk unrecorded, the
+    # next `install()` reports it "already installed and not current",
+    # `update()` never sees it (it acts only on the manifest), `remove()`
+    # refuses it under rule 1, and `status` lists it as `unlisted`. Hence
+    # everything that can be checked first is: the catalogue VERSION
+    # against the manifest's own bound (above), a newer-schema manifest and
+    # a symlinked `.claude` (in `install()`), an unparseable manifest (in
+    # `cli.py`). What remains is a fault in the write itself.
     try:
         manifest.upsert(
             repo_dir,
@@ -520,10 +564,14 @@ def install(
     repo_dir = Path(repo_dir)
     catalogue_dir = Path(catalogue_dir)
     skills_root = repo_dir / ".claude" / "skills"
+    refuse_symlinked_skills_root(repo_dir)
     if bundle is None:
         bundle = _bundle_version()
 
     manifest_before = manifest.read(repo_dir)
+    # Whole-manifest conditions raise before anything is written; without
+    # this, a direct call copied the directory and only the upsert refused.
+    manifest.refuse_newer_schema(manifest_before)
 
     installed: dict[str, tuple[str, str, str]] = {}
     unchanged: dict[str, tuple[str, str, str]] = {}
@@ -539,7 +587,11 @@ def install(
                 manifest_before=manifest_before,
                 bundle=bundle,
             )
-        except InstallError as e:
+        # `OSError` too: a regular file or dangling symlink named
+        # `tcs-<name>` makes the rename raise `NotADirectoryError`, and a
+        # fault that escaped here left every later name unattempted and the
+        # CLI with no JSON for the earlier ones (PR #176 H2).
+        except (InstallError, OSError) as e:
             failed[name] = str(e)
             continue
 
@@ -577,7 +629,6 @@ class UpdateReport:
     declined:  name -> (version, unified_diff), diverged and `decide` said no
     current:   name -> (installed_as, version, sha256), nothing to do
     failed:    name -> a human-readable reason, nothing written for it
-    committed: always False -- see "C5 reports; C3 offers" above.
 
     `declined` carries the diff because that value is what a later advisory
     shows the user `[ref: SDD/Runtime View/Primary Flow, step 9]`, so it is
@@ -589,7 +640,6 @@ class UpdateReport:
     declined: dict[str, tuple[str, str]] = field(default_factory=dict)
     current: dict[str, tuple[str, str, str]] = field(default_factory=dict)
     failed: dict[str, str] = field(default_factory=dict)
-    committed: bool = False
 
 
 def _read_text_or_raise(path: Path, *, what: str) -> str:
@@ -685,8 +735,7 @@ def _replace_subtree(
     the only directory removed here `[ref: solution.md, decision 5]`.
     """
     stash = _stash_path(skills_root, installed_as)
-    if stash.exists():
-        shutil.rmtree(stash)
+    _clear_own_debris(stash)
     os.rename(str(dest), str(stash))
     try:
         sha256 = _fresh_install(
@@ -754,6 +803,17 @@ def _update_one(
             f"{installed_as!r} was left exactly as it is"
         )
     catalogue_version = _read_catalogue_version(catalogue_dir, name)
+
+    # `install()` never writes a symlink or a file at `installed_as`, so
+    # neither is this verb's to refresh -- remove's rule 4, for update.
+    # Checked before `is_dir()`, which FOLLOWS a link: a symlink to a
+    # directory used to be refreshed, replacing whatever it points at
+    # (PR #176 L2b).
+    if dest.is_symlink() or (os.path.lexists(dest) and not dest.is_dir()):
+        raise InstallError(
+            f"{dest} is a symlink or not a directory; install never writes either, "
+            "so update leaves it alone"
+        )
 
     if not dest.is_dir():
         # A stash beside the absent directory means a refresh was killed
@@ -864,12 +924,14 @@ def update(
     repo_dir = Path(repo_dir)
     catalogue_dir = Path(catalogue_dir)
     skills_root = repo_dir / ".claude" / "skills"
+    refuse_symlinked_skills_root(repo_dir)
     if bundle is None:
         bundle = _bundle_version()
 
     # Read once, up front: `version_before` must be the version as recorded
     # before this call, and `manifest.upsert` rewrites the file per pattern.
     manifest_before = manifest.read(repo_dir)
+    manifest.refuse_newer_schema(manifest_before)  # see install()
 
     refreshed: dict[str, tuple[str, str, str, str]] = {}
     declined: dict[str, tuple[str, str]] = {}
@@ -888,7 +950,7 @@ def update(
                 bundle=bundle,
                 decide=decide,
             )
-        except InstallError as e:
+        except (InstallError, OSError) as e:  # see install()'s loop (PR #176 H2)
             failed[name] = str(e)
             continue
 
@@ -922,13 +984,11 @@ class RemoveReport:
                every other rule
     failed:    name -> reason, an OSError (or a failed manifest write); rolled
                back where possible
-    committed: always False -- see "C5 reports; C3 offers" above.
     """
 
     removed: dict[str, tuple[str, str, bool]] = field(default_factory=dict)
     refused: dict[str, tuple[str, str | None]] = field(default_factory=dict)
     failed: dict[str, str] = field(default_factory=dict)
-    committed: bool = False
 
 
 def _removing_path(skills_root: Path, installed_as: str) -> Path:
@@ -975,7 +1035,9 @@ def _refusal(
     if entry is None:
         return "not recorded in the manifest; remove deletes only what the manifest records", None
     # Rule 2. A hand-edited manifest pointing `ddd` at `tcs-hexagonal` would
-    # otherwise delete the wrong pattern.
+    # otherwise delete the wrong pattern. Unreachable through `manifest.read()`
+    # since it binds `installed_as` to `tcs-<name>` itself (PR #176 H1); kept
+    # as defence in depth for an in-memory `Manifest` no reader returned.
     expected = f"tcs-{name}"
     if entry.installed_as != expected:
         return (
@@ -1068,8 +1130,9 @@ def remove(
     """Delete each named pattern and its manifest entry -- only what the
     manifest records, never a diverged pattern unless its name is in `discard_edits`.
 
-    Reads the manifest once, up front; `ManifestUnparseableError` and
-    `OSError` propagate before anything is touched. Then, per pattern in
+    Reads the manifest once, up front; `ManifestUnparseableError`,
+    `ManifestNewerSchemaError`, `UnsafeSkillsRootError` and `OSError`
+    propagate before anything is touched. Then, per pattern in
     sorted order, the first rule that applies decides (see `_refusal`), and
     rule 6 runs `_remove_one`'s five steps. One pattern's refusal or failure
     never stops the others. The catalogue is read only to diff a rule-5
@@ -1082,12 +1145,14 @@ def remove(
     """
     repo_dir = Path(repo_dir)
     skills_root = repo_dir / ".claude" / "skills"
+    refuse_symlinked_skills_root(repo_dir)
     if bundle is None:
         bundle = _bundle_version()
     discard_edits = frozenset(discard_edits)
     catalogue_dir = Path(catalogue_dir)
 
     manifest_before = manifest.read(repo_dir)
+    manifest.refuse_newer_schema(manifest_before)  # see install()
 
     removed: dict[str, tuple[str, str, bool]] = {}
     refused: dict[str, tuple[str, str | None]] = {}
