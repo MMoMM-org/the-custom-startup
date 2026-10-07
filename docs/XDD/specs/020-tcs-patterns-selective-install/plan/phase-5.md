@@ -349,6 +349,31 @@ four passing test suites.
      - [ ] No document claims the plugin ships 21 skills `[ref: PRD/F1]`
      - [ ] `docs-sync` passes locally before any push `[ref: SDD/Project Commands]`
 
+- [ ] **T5.3a Installed patterns name each other as `tcs-<name>`** `[activity: backend-api]`
+
+  1. Prime: Read ADR-1's 2026-10-07 amendment and the companion-map section's amendment
+     `[ref: SDD/Architecture Decisions/ADR-1]`. After 2.0, `tcs-patterns:<name>` resolves to
+     nothing; 117 such markers sit in the catalogue.
+  2. Test (hand-typed expectations): an installed `SKILL.md` and `reference/` file carry
+     `tcs-<name>` where the catalogue had `tcs-patterns:<name>`; `tcs-patterns:patterns-setup`,
+     `tcs-patterns:pattern` and a non-catalogue `tcs-patterns:foo` are untouched; the manifest hash
+     is the sha256 of the rewritten `SKILL.md`; `update` on an unedited install reports `current`,
+     and after a `VERSION` bump refreshes without calling `decide`; a real local edit is still
+     detected, and both `update`'s and `remove`'s diffs show only that edit; installing the real
+     `ddd` leaves no `tcs-patterns:` marker except the two excluded names.
+  3. Implement: one function in `lib/install.py`, used by the copy path and by
+     `_catalogue_as_installed`.
+  4. Validate: mutants — rewrite in the copy only; rewrite `patterns-setup` too; rewrite any
+     `tcs-patterns:<word>` — each fails a named test; CLI and skill field tests unchanged;
+     `python3 -m pytest -q`.
+  5. Success:
+     - [ ] Installed files name catalogue patterns as `tcs-<name>`; the two plugin skills and
+           non-catalogue names are untouched `[ref: SDD/ADR-1, amendment 2026-10-07]`
+     - [ ] Divergence detection and both diffs see only user edits, never the rewrite
+           `[ref: SDD/ADR-4]`
+     - [ ] The 39 cross-plugin references in `tcs-team` and `tcs-workflow` name `tcs-<name>`
+           rather than `tcs-patterns:<name>` (done alongside, outside this task's files)
+
 - [ ] **T5.4 Both changelogs** `[activity: technical-writing]` `[parallel: true]`
 
   1. Prime: Read both files and `scripts/ci/check-changelog-version-sync.sh`. The plugin entry

@@ -994,6 +994,17 @@ accompanying path is prose — "see also `tcs-patterns:testing`" — and nothing
 absent. 43 is "mentions"; 7 is "breaks". An implementation keyed on the marker would add up to six
 companions to a single-pattern selection and justify none of them.
 
+**Amended 2026-10-07 (Marcus): the marker is rewritten on install; "nothing breaks" was false.**
+After 2.0 the address `tcs-patterns:<name>` resolves to nothing — the 21 are no longer plugin
+skills, and an installed pattern is the repository skill `tcs-<name>` (ADR-1). A marker left as
+written therefore names a skill that cannot exist anywhere, which is a broken reference even with
+no path beside it. The *map* is unaffected — the path rule stays the right derivation, 7 edges, and
+companion derivation keeps reading the catalogue (the **source**, markers unrewritten) — but C5 now
+rewrites every catalogue-pattern marker in the files it copies, so an installed pattern's
+cross-references name skills that can exist in that repository. The rule, its scope and its
+consequences are stated once, under ADR-1's amendment; measured today: **117** markers over 21
+names across the catalogue's `.md` files, **0** naming `patterns-setup` or `pattern`.
+
 Two consequences for T2.4: resolve each candidate path against **every** pattern root rather than
 against the citing file's directory, and treat a path that resolves under **more than one** other
 pattern as ambiguous rather than picking one. Zero are ambiguous today — measured — which is worth
@@ -2958,6 +2969,41 @@ problem and remain one.
 **Consequence for F5.** The collision guard is still built and still tested, but it now rarely
 fires. Its criteria are unchanged — a repository could hold a `tcs-ddd` of its own — and it remains
 the mechanism that keeps a partial install coherent.
+
+**Amended 2026-10-07 (Marcus): the rewrite also covers cross-references in the body.** "The
+installer rewrites the one frontmatter line" is no longer the whole rewrite. An installed pattern is
+`tcs-<name>`, so a body that still says `tcs-patterns:<name>` points at an address 2.0 removed.
+Reverses the companion-map section's "a marker with no path is prose and nothing breaks".
+
+- **What is rewritten.** `tcs-patterns:<name>` → `tcs-<name>`, where `<name>` is the **maximal**
+  run of `[A-Za-z0-9_-]` after the colon (so `tcs-patterns:testing-extra` is the name
+  `testing-extra`, never `testing` plus a tail), and only when `<name>` is a catalogue pattern —
+  a non-hidden directory directly under the catalogue, the set `companions` already uses — **and**
+  is not one of this plugin's own skills, `patterns-setup` and `pattern`. Those two are still
+  plugin skills, so `tcs-patterns:patterns-setup` and `tcs-patterns:pattern` resolve as written
+  and must stay; they are excluded by name, not merely by being absent from the catalogue, so a
+  future catalogue directory of the same name cannot redirect them. Any other `tcs-patterns:<word>`
+  is left alone: rewriting a name that is not a catalogue pattern would invent a `tcs-<word>`
+  skill nothing installs.
+- **Which files.** Every file the install copies whose bytes decode as **strict UTF-8** —
+  `SKILL.md` and everything under `reference/`, whatever the extension — and every other file is
+  copied byte-for-byte. Not `.md`-only: the marker's meaning does not depend on the extension, and
+  an `.md` filter would leave a stale address in the first `reference/example.yaml` anyone adds,
+  silently. Today the copied files are 80 `.md` plus 21 `VERSION`, and `VERSION` carries no
+  marker, so the two rules agree on today's catalogue and differ only on tomorrow's. Bytes outside
+  the markers are preserved exactly — line endings included — because the substitution never
+  touches anything else and a decode/encode round-trip of strict UTF-8 is lossless.
+- **One function, two callers.** The copy path (`_fresh_install`, which `update`'s
+  `_replace_subtree` also uses) and `_catalogue_as_installed` apply the **same** body rewrite
+  through one function, so the file installed and the file a diff compares against cannot
+  disagree.
+- **Consequences.** The manifest `sha256` is of the installed, **rewritten** `SKILL.md` (it
+  already hashed the post-rename bytes). `update`'s divergence *detection* is unchanged — installed
+  hash against manifest hash, both of rewritten text — so a fresh, unedited install is never
+  "diverged" because of the rewrite. Its *diff*, and `remove`'s rule-5 diff, compare the installed
+  file against the catalogue **as installed**, i.e. renamed and rewritten; without the rewrite there,
+  every marker line would appear in every divergence diff as a change the user did not make.
+  Companion derivation still reads the catalogue unchanged.
 
 ### ADR-2: Detector and installer in Python; only the advisory segment in bash — CONFIRMED
 
