@@ -12,6 +12,11 @@
 __pycache__/
 venv/
 .venv/
+# trap 7's decoys must be tracked, or CI never sees them and the venv/.venv
+# walk exclusion goes untested (#188). Re-including the directory itself works
+# because its parent is not excluded.
+!tests/fixtures/patterns-detection/trap-07-venv-and-dot-venv/repo/venv/
+!tests/fixtures/patterns-detection/trap-07-venv-and-dot-venv/repo/.venv/
 *.pyc
 .pytest_cache/
 

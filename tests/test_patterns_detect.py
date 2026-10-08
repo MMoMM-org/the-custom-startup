@@ -49,6 +49,7 @@ from __future__ import annotations
 import importlib
 import os
 import pathlib
+import subprocess
 import sys
 from types import ModuleType
 
@@ -1408,3 +1409,27 @@ def test_build_and_cache_directories_are_not_scanned(tmp_path, dirname) -> None:
     root.mkdir()
     (root / "tsconfig.json").write_text("{}", encoding="utf-8")
     assert "typescript-strict" in _all_patterns(detect.detect(root))
+
+
+# --- #188: trap 7's decoys must be tracked ----------------------------------
+
+TRAP_07_DECOYS = (
+    "tests/fixtures/patterns-detection/trap-07-venv-and-dot-venv/repo/venv/lib/tsconfig.json",
+    "tests/fixtures/patterns-detection/trap-07-venv-and-dot-venv/repo/.venv/lib/tsconfig.json",
+)
+
+
+@pytest.mark.parametrize("decoy", TRAP_07_DECOYS)
+def test_trap_07_decoy_is_tracked_so_ci_exercises_it(decoy: str) -> None:
+    """The root `.gitignore` ignores `venv/` and `.venv/`. Before #188 the
+    decoys were therefore untracked: present on one machine, absent from every
+    clone, and trap 7 passed in CI without a virtual environment to exclude.
+    Locally they were masked a second way -- #183's walk prunes what git
+    ignores -- so dropping `venv` from `SKIP_DIRS` survived everywhere.
+    Tracked is the property that makes the corpus case meaningful; existing on
+    disk is not, since an untracked file exists right here."""
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "--error-unmatch", decoy],
+        capture_output=True,
+    )
+    assert result.returncode == 0, f"{decoy} is not tracked -- check the trap-07 re-include in .gitignore"
