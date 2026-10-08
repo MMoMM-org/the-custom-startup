@@ -6,8 +6,8 @@
 ## Files
 <!-- active.md is @-imported directly from CLAUDE.md, not reached through this index. -->
 <!-- routing-reference.md is /memory-add's routing table, not session content — deliberately unlisted. -->
-- [general.md](general.md) — conventions, style, naming [updated: 2026-09-12]
-- [tools.md](tools.md) — CI, build, local dev [updated: 2026-09-04]
+- [general.md](general.md) — conventions, style, naming [updated: 2026-10-08]
+- [tools.md](tools.md) — CI, build, local dev [updated: 2026-10-08]
 - [domain.md](domain.md) — business rules, data models [updated: YYYY-MM-DD]
 - [decisions.md](decisions.md) — architecture choices [updated: 2026-10-07]
 - [context.md](context.md) — current focus [updated: 2026-09-04]
