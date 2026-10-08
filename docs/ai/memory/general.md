@@ -27,3 +27,6 @@
 - **A reported defect is usually one of several** — sweeping for the class behind a reported instance found 9 shapes where 1 was named, 3 emit sites where 1 was, 4 constant pairs where 1 was. → Fix the class; the instance is the cheapest part.
 - **Green is not evidence until the behaviour is broken** — a test that reads correctly can pass for a reason unrelated to what it claims, and reading the body does not reveal it. → Mutate what it covers; if it stays green it proves nothing.
 - **Two specs' `SDD-AC-n` numbers collide** — each numbers from 1, so a bare reference in a file predating the current spec cites the older one's table. → Prefix every acceptance-criterion reference with its spec.
+
+<!-- 2026-10-08 -->
+- **A fixture file matched by `.gitignore` is tested nowhere** — absent from every clone, and pruned locally by the detect walk's git-ignore check, so a mutant survives both. → Re-include its directory with a `!path/` line and track it.
