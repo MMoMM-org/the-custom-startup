@@ -8,6 +8,19 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [2.0.2] - 2026-10-08
+
+### Fixed
+
+- **`patterns-setup` no longer reads gitignored trees or nested repositories as the
+  repository's stack (#183).** The scan pruned only a fixed list of directory names, so tool
+  caches under an ignored directory and a submodule's files produced proposals for the parent.
+  It now also skips what git reports as untracked and ignored (tracked files stay, even
+  force-added ones), and it does not enter a directory with its own `.git`. Those directories are
+  listed in a new report key, `nested_repos`, and the proposal screen names them. Outside a git
+  work tree the scan is unchanged. Committed test fixtures are still read, as spec 020 decided;
+  decline what they propose.
+
 ## [2.0.1] - 2026-10-07
 
 ### Fixed

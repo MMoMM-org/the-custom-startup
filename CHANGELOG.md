@@ -58,6 +58,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`tcs-patterns` 2.0.2: `/tcs-patterns:patterns-setup` stops proposing patterns from
+  submodules and gitignored caches (#183).** On this repository a submodule proposed
+  `typescript-strict` and `mcp-server`, and a gitignored tool cache was read as evidence. The scan
+  now skips what git ignores and does not enter a nested repository; the proposal screen names
+  the nested repositories it skipped. **What to do:** nothing. Patterns proposed from committed
+  test fixtures still appear with their `tests/fixtures/...` path, so decline them at
+  confirmation.
 - **`tcs-patterns` 2.0.1: the `event-sourcing` pattern no longer cites a path that is missing
   where it is installed.** Its provenance line named `docs/about/sources.md`, a path in this
   repository only; it now gives the URL. Repositories with `tcs-event-sourcing` installed see

@@ -567,6 +567,13 @@ report had no field for it, so `detect.py` silently skips what it cannot list or
 will be a sorted array of root-relative paths, always present. Its definition, and why `schema`
 stays `1`, are under *Process contract: the CLI the skill drives*, `scan`.
 
+**A tenth key, `nested_repos`, added 2026-10-08 (#183).** A sorted array of root-relative
+directory paths with a trailing `/` (the shape of `unreadable`'s directory entries), always
+present, empty when there are none: the directories below the root that are repositories of
+their own and that the walk did not enter (*Detection rules*, "Two structural prunes"). It is
+additive for the same reason as `unreadable`, and `schema` stays `1`. The skill names these
+paths at the proposal screen, so that a missing signal from a submodule can be explained.
+
 #### Detection rules: the eight stack facts and the three gates (C2)
 
 Everything `detect.py` decides, stated as rules rather than as prose about rules. **This section was
@@ -810,6 +817,28 @@ Three consequences the fixtures must assert rather than assume:
   nested Python or Go signal at the root and never exercise trap 5 for those ecosystems.
   `manifest.json` is read for `obsidian-plugin` but is not a dependency manifest and does not
   contribute to `manifests_walked`.
+- **Two structural prunes are layered on the name list (2026-10-08, #183).** The names above
+  are a floor, extended since by build output and tool caches (`detect.py`'s `SKIP_DIRS` is the
+  authority), and no name list covers every tool's cache. On the-custom-startup itself, manifests
+  under the ignored `/claude-docker-home/` and the `modules/satori` submodule were read as the
+  repository's own stack.
+  1. **What git reports as untracked and ignored is not walked.** One call before the walk,
+     `git -c core.fsmonitor=false -C <root> ls-files -z --others --ignored --exclude-standard
+     --directory`. A tracked file is never in that list, so a force-added file inside an ignored
+     directory is still evidence. When git cannot answer (not installed, root outside a work
+     tree, non-zero exit, timeout), the prune is skipped and the walk is the name list alone:
+     fail open to the earlier behaviour, never to a thinner scan. `core.fsmonitor=false` keeps a
+     read-only scan from starting a process the target repository configured.
+  2. **A directory below the root holding its own `.git` is not entered**, whether that `.git`
+     is a directory (nested clone) or a file (submodule, worktree). It is named in
+     `nested_repos` instead `[ref: SDD/Interface Specifications/Data model: detection report]`.
+
+  Neither prune is a name-based exclusion, so neither reopens the residual ruling below:
+  **committed fixtures are still walked**, and in this repository they still produce the same
+  false proposals, now cited from `tests/fixtures/...`. The Obsidian write-time guard needs no
+  change. It resolves the repository with `git rev-parse --show-toplevel` from the written
+  file's directory, so it already stops at a nested repository, and its walk is upward, never
+  across the tree. AC-14 stayed green unchanged.
 - **`manifests_walked` lists every discovered instance of the five dependency-manifest
   filenames, not only the three the walk discovers by -- and `_manifests_walked` opens none
   of them.** Corrected 2026-10-05 by the Phase 2 drift check: this clause read "every

@@ -460,6 +460,7 @@ SKILL_FIELD_PATHS = {
     "report.auto.evidence",
     "report.baseline",
     "report.unreadable",
+    "report.nested_repos",
     "report.gates",
     "report.gate_evidence",
     "listing_cost.<n>",
