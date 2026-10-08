@@ -19,8 +19,8 @@
 - **`tr` maps byte to byte** — `tr ' ' '█'` writes only the first byte of a multibyte replacement, so a rendered bar is invalid UTF-8 shown as replacement glyphs. → Append whole characters in a loop.
 
 <!-- 2026-09-10 -->
-- **Golden-output fixtures live in `tests/fixtures/<area>/<task>_golden/`** — a committed `regenerate.py` builds the input and diffs (`--write` captures once), the `.txt` holds the frozen output, and a sibling test wires the diff into `pytest`. First instance: `observability/t30_golden`. → Never `--write` to silence a mismatch.
-- **Build a fixture tree that must NOT be a git repo under `tempfile.TemporaryDirectory()`** — inside the worktree, `check-ignore` answers with *this* repo's `.gitignore` instead of failing, so the "not a repository" branch never runs and nothing errors. → Materialise outside the worktree at run time.
+- **Golden-output fixtures live in `tests/fixtures/<area>/<task>_golden/`** — a committed `regenerate.py` diffs (`--write` captures once) against the frozen `.txt`; a sibling test runs it. → Never `--write` to silence a mismatch.
+- **Build a fixture that must NOT be a git repo outside the worktree** — inside it, `check-ignore` answers with this repo's `.gitignore`, so the "not a repository" branch never runs. → `tempfile.TemporaryDirectory()` at run time.
 
 <!-- 2026-09-12 -->
 - **A bats needle can match the fixture name, not the message** — `_assert_contains "$output" "ignored"` passed because the work dir was `not-ignored`; the message says `does not ignore`. → Assert literal wording, then blank it and confirm red.

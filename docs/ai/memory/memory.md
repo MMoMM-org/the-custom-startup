@@ -10,8 +10,8 @@
 - [tools.md](tools.md) — CI, build, local dev [updated: 2026-10-08]
 - [domain.md](domain.md) — business rules, data models [updated: YYYY-MM-DD]
 - [decisions.md](decisions.md) — architecture choices [updated: 2026-10-07]
-- [context.md](context.md) — current focus [updated: 2026-09-04]
-- [troubleshooting.md](troubleshooting.md) — known issues [updated: 2026-09-08]
+- [context.md](context.md) — current focus [updated: 2026-10-08]
+- [troubleshooting.md](troubleshooting.md) — known issues [updated: 2026-10-08]
 - [declined.md](declined.md) — what we decided NOT to do, and the condition that reopens it [updated: 2026-09-05]
 
 ## Archive

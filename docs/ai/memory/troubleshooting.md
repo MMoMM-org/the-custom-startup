@@ -4,14 +4,6 @@
 <!-- Resolved entries are archived by /memory-cleanup, not deleted -->
 <!-- A resolved record earns its place only if the fix is non-obvious from the code -->
 
-## Python/bash whitespace divergence in drift-check — Status: resolved
-<!-- 2026-05-13 -->
-Python `strip()` trims only the ends; bash `tr -d '[:space:]'` also removes internal whitespace, so `"h 7"` classified differently in each. → Use `re.sub(r'\s+', '', ...)` to match bash semantics. Parallel bash and python implementations of one check must not diverge.
-
 ## `_write_pr_state_cache` replaces the branch entry rather than merging — Status: resolved
 <!-- 2026-05-23 -->
 Standing caveat, not just a past bug: any partial write silently drops the fields it omits. → Every caller must read the existing entry and pass all fields back in, until the writer merges instead of replacing. [cache.sh:263]
-
-## bash 3.2 heredoc inside a command substitution breaks on an escaped single quote — Status: resolved
-<!-- 2026-09-08 -->
-A `<<'PY'` heredoc feeding `$(...)` fails with "unexpected EOF while looking for matching `''`" if its body contains `\'` anywhere, even though the delimiter is quoted; double-quoting the substitution (`"$(...)"`) makes even one bare apostrophe in a `#` comment do the same. → Assign via unquoted `VAR=$(...)`, and never write `\'` inside the heredoc body.
