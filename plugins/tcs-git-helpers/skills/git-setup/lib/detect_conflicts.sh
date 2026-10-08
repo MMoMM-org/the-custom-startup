@@ -57,11 +57,21 @@ _read_plugin_version() {
 }
 WANT_VERSION="v$(_read_plugin_version)"
 
-# Highest-severity exit so far; bash arithmetic max.
+# Most severe exit so far. The exit codes are NOT ordered by severity
+# (ABORT=2 < CONFLICT=3 < WARN=4), so a numeric max let a later CONFLICT or
+# WARN mask an ABORT (#181). Rank explicitly: ABORT > CONFLICT > WARN > OK.
 STATUS=0
+_severity_rank() {
+  case "$1" in
+    2) printf '3' ;;
+    3) printf '2' ;;
+    4) printf '1' ;;
+    *) printf '0' ;;
+  esac
+}
 _bump() {
-  # $1 = candidate exit code; we keep the higher (= more severe)
-  if [ "$1" -gt "$STATUS" ]; then
+  # $1 = candidate exit code; we keep the more severe one
+  if [ "$(_severity_rank "$1")" -gt "$(_severity_rank "$STATUS")" ]; then
     STATUS="$1"
   fi
 }
@@ -123,14 +133,22 @@ if [ -n "$HOOKS_PATH" ] && [ "$HOOKS_PATH" != ".githooks" ]; then
   # is functionally equivalent to unset. Detect this by canonicalizing both
   # HOOKS_PATH and <repo-root>/.git/hooks via python3 realpath (bash 3.2-safe;
   # avoids GNU coreutils dep; python3 is ubiquitous on macOS/Linux).
+  # The same canonicalisation also accepts any spelling of the repo's own
+  # .githooks (absolute, ./.githooks, via a symlink) as equivalent to the
+  # relative '.githooks' that install_files.sh writes (#181). The cwd is $ROOT
+  # here, which is where git resolves a relative hooksPath from.
   if command -v python3 >/dev/null 2>&1; then
     _resolved_hooks="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$HOOKS_PATH" 2>/dev/null || true)"
     _git_default_hooks="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$ROOT/.git/hooks" 2>/dev/null || true)"
+    _own_githooks="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$ROOT/.githooks" 2>/dev/null || true)"
     if [ -n "$_resolved_hooks" ] && [ "$_resolved_hooks" = "$_git_default_hooks" ]; then
       _emit "INFO" "custom hooksPath resolves to git default (.git/hooks); treating as default-equivalent"
       HOOKS_PATH=""
+    elif [ -n "$_resolved_hooks" ] && [ "$_resolved_hooks" = "$_own_githooks" ]; then
+      _emit "INFO" "core.hooksPath '$HOOKS_PATH' resolves to this repo's .githooks; treating as '.githooks' (setup rewrites it to the relative form)"
+      HOOKS_PATH=""
     fi
-    unset _resolved_hooks _git_default_hooks
+    unset _resolved_hooks _git_default_hooks _own_githooks
   fi
   if [ -n "$HOOKS_PATH" ]; then
     _emit "ABORT" "core.hooksPath is set to '$HOOKS_PATH' (not '.githooks')."

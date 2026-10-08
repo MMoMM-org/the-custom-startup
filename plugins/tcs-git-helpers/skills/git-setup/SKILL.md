@@ -110,6 +110,8 @@ Branch on the exit code:
 | 3 | Existing `.githooks/` no marker, OR older version marker | Conflict / per-file diff flow. With `--update`: show diff and prompt before overwrite. Without: prompt before continuing. |
 | 4 | Non-`.sample` `.git/hooks/*` files OR other soft warning | Warn. Confirm interactively before proceeding (existing files won't fire under `core.hooksPath` but are visible noise). |
 
+When several conditions fire, the exit code is the most severe one, not the highest number: ABORT (2) > CONFLICT (3) > WARN (4). An ABORT is never masked by a later CONFLICT or WARN.
+
 The detector's stdout includes one line per condition with severity tag (`ABORT`, `CONFLICT`, `OUTDATED`, `WARN`, `INFO`, `OK`, `REF`). Surface all of it to the user.
 
 ### 3. User confirmation
@@ -182,7 +184,7 @@ Release the lock on EVERY exit path — success, abort (exit 2), conflict that t
 | lefthook | `lefthook.yml` / `lefthook.yaml` / `.lefthook.yml` at repo root | **ABORT** | `references/migrating-from-husky.md` |
 | pre-commit framework | `.pre-commit-config.yaml` at repo root | **ABORT** | `references/migrating-from-husky.md` |
 | simple-git-hooks | `package.json` `"simple-git-hooks"` key | **ABORT** | `references/migrating-from-husky.md` |
-| Custom `core.hooksPath` | `git config --get core.hooksPath` is non-empty AND ≠ `.githooks` | **ABORT** | `references/migrating-from-husky.md` + `references/sandbox-and-git-config.md` |
+| Custom `core.hooksPath` | `git config --get core.hooksPath` is non-empty AND its realpath is neither `<repo>/.githooks` (any spelling — absolute, `./.githooks`, symlink — counts as `.githooks`) nor `<repo>/.git/hooks` (counts as unset) | **ABORT** | `references/migrating-from-husky.md` + `references/sandbox-and-git-config.md` |
 | Existing `.githooks/`, no marker | No `# tcs-git-helpers: vX.Y.Z` line on lines 1–3 of any standard hook | **CONFLICT** | Per-file diff prompt |
 | Existing `.githooks/`, matching version | Marker `v1.0.0` present | **OK** | Up-to-date noop; skip step 4 |
 | Existing `.githooks/`, older version | Marker `vX.Y.Z` < `v1.0.0` | **OUTDATED** | Use `--update` to refresh |
