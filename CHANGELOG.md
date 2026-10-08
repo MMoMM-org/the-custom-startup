@@ -26,6 +26,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   … check gh CLI status" with nothing to check. That case is now silent and still fails open;
   genuine `gh` failures keep warning. **What to do:** run `/tcs-git-helpers:git-setup --update`
   in each repository (hook bundle h7).
+- **The destructive-git-operation guard can no longer be bypassed with a git global option (#171).**
+  `git -C <path> reset --hard`, `git --no-pager reset --hard` and `git -c k=v push --force` ran
+  without a refusal: 18 of the 20 rules only recognised `git` directly followed by the subcommand.
+  That included `git -C <abspath>`, the form the override guidance recommends. Every rule now sees
+  through global options, `-c core.hooksPath=…` is caught in any position and any letter case, and
+  a path ending in `.git` no longer counts as the `git` command. The rules that check repository
+  state (push to a closed PR, a branch from unfinished work, resuming a squash-merged branch) now
+  check the repository `-C` names. **What to do:** nothing. Commands that were silently allowed
+  before can now be refused; override them as usual with `CLAUDE_ALLOW_<RULE>=1` as the first
+  token.
 
 ## [Unreleased] — tcs-patterns selective install
 
