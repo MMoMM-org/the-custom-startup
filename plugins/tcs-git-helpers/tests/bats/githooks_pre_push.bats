@@ -318,6 +318,18 @@ _no_warn() { ! echo "$1" | grep -qi "tcs-git-helpers:\|warn\|allowing"; }
   _no_warn "$output"
 }
 
+@test "test_degraded_mode_when_the_gh_account_cannot_see_the_repository" {
+  # #184: gh maps the remote fine, but the account it is authenticated as has
+  # no access (multi-account setup, push credential supplied outside gh).
+  # GitHub answers "not found" for both "does not exist" and "may not see it".
+  # Wording captured from a live `gh pr list` (exit 1) on 2026-10-08.
+  _run_hook_with_failing_gh \
+    "GraphQL: Could not resolve to a Repository with the name 'owner/repo'. (repository)"
+
+  [ "$status" -eq 0 ]
+  _no_warn "$output"
+}
+
 @test "test_a_genuine_gh_error_is_still_reported" {
   # The silent branch must stay narrow: a real failure has to keep warning, or
   # widening the match would trade one bug for a worse one.
