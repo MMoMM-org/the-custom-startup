@@ -41,6 +41,7 @@ import json
 import os
 import re
 import stat
+import subprocess
 import sys
 from contextvars import ContextVar
 from pathlib import Path
@@ -196,14 +197,69 @@ def _is_test_filename(name: str) -> bool:
     return False
 
 
+# A git call that hangs (a network filesystem, a stuck lock) must not hang the
+# scan; past this the prune is skipped and the walk falls back to SKIP_DIRS.
+_GIT_TIMEOUT_SECONDS = 10
+
+
+def _git_ignored_paths(root: Path) -> frozenset[str]:
+    """Root-relative paths git reports as untracked AND ignored -- a directory
+    collapsed to one `dir/` entry by `--directory` (#183). On the
+    the-custom-startup scan, `claude-docker-home/.bun/...` tool caches under the
+    ignored `/claude-docker-home/` were read as stack evidence; `SKIP_DIRS`
+    cannot list every tool's cache name, git already knows them.
+
+    Tracked files never appear (`--others`), so a force-added file inside an
+    ignored directory is still walked: it is part of the repository.
+    `--exclude-standard` is what `git status` honours, the user's global
+    excludes included.
+
+    Empty -- and the walk exactly what it was before this existed -- whenever
+    the answer is unavailable: no git, `root` outside a work tree, a non-zero
+    exit, a timeout. Fail open to the old behaviour, never to a thinner scan.
+    `core.fsmonitor=false`: a read-only scan must not let the target
+    repository's own config start an fsmonitor process."""
+    try:
+        result = subprocess.run(
+            [
+                "git", "-c", "core.fsmonitor=false", "-C", str(root),
+                "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory",
+            ],
+            capture_output=True,
+            timeout=_GIT_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return frozenset()
+    if result.returncode != 0:
+        return frozenset()
+    return frozenset(os.fsdecode(entry) for entry in result.stdout.split(b"\0") if entry)
+
+
+def _is_nested_repo(directory: Path) -> bool:
+    """A directory holding its own `.git` -- a directory for a nested clone, a
+    file for a submodule or a worktree -- is a separate repository (#183).
+    `modules/satori` proposed `typescript-strict` and `mcp-server` for its
+    parent. `lexists`: a dangling `.git` link still marks the boundary."""
+    return os.path.lexists(directory / ".git")
+
+
 class _Tree:
     """One pruned `os.walk` over the repository, collected once. Every rule
     below reads from this instead of re-walking the filesystem, which keeps
     the scan to a single pass regardless of how many stack facts it decides
-    `[ref: SDD/Quality Requirements, "Scan cost"]`."""
+    `[ref: SDD/Quality Requirements, "Scan cost"]`.
+
+    Three prunes, layered: `SKIP_DIRS` by name at every depth (the floor, and
+    all there is outside a git work tree), what git reports as ignored, and
+    nested repositories, which are recorded in `nested_repos` so their absence
+    from the report is explicable."""
 
     def __init__(self, root: Path) -> None:
         self.root = root
+        ignored = _git_ignored_paths(root)
+        # Root-relative, trailing `/`, sorted at the end -- the shape of
+        # `unreadable`'s directory entries.
+        self.nested_repos: list[str] = []
         self.files: list[Path] = []
         self.dir_names: set[str] = set()
         # Full paths of every directory seen, post-exclusion, for gate
@@ -217,11 +273,23 @@ class _Tree:
         # read as one with no stack at all.
         self.unlistable_dirs: list[Path] = []
         for dirpath, dirnames, filenames in os.walk(root, onerror=self._record_unlistable):
-            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+            rel_dir = Path(dirpath).relative_to(root).as_posix()
+            prefix = "" if rel_dir == "." else rel_dir + "/"
+            kept = []
+            for d in sorted(dirnames):
+                if d in SKIP_DIRS or prefix + d + "/" in ignored:
+                    continue
+                if _is_nested_repo(Path(dirpath) / d):
+                    self.nested_repos.append(prefix + d + "/")
+                    continue
+                kept.append(d)
+            dirnames[:] = kept
             self.dir_names.update(dirnames)
             for d in dirnames:
                 self.dir_paths.append(Path(dirpath) / d)
             for name in sorted(filenames):
+                if prefix + name in ignored:
+                    continue
                 path = Path(dirpath) / name
                 # `os.walk` lists symlinks and special files (FIFOs, devices)
                 # among `filenames`. A link can point outside the repository
@@ -235,6 +303,7 @@ class _Tree:
                 self.files.append(path)
         self.files.sort()
         self.dir_paths.sort()
+        self.nested_repos.sort()
 
     def _record_unlistable(self, error: OSError) -> None:
         self.unlistable_dirs.append(Path(error.filename))
@@ -1060,4 +1129,7 @@ def detect(repo_dir) -> dict:
         # Additive, so `schema` stays 1: nothing outside this plugin consumes
         # the report `[ref: SDD/Data model: detection report, "A ninth key"]`.
         "unreadable": _unreadable(tree, read_failures),
+        # Additive for the same reason (#183): directories below the root that
+        # are repositories of their own, which the walk did not enter.
+        "nested_repos": tree.nested_repos,
     }

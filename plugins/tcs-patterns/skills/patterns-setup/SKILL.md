@@ -109,6 +109,8 @@ From `report`:
   repository with tests. Show the cost the same way.
 - If `unreadable` is non-empty, say "the scan could not read: …" with every path, so a thin
   proposal is not mistaken for the repository's real shape.
+- If `nested_repos` is non-empty, say "the scan did not enter these nested repositories: …" with
+  every path, and that each is a repository of its own: run setup there if it needs patterns.
 
 #### 3c. Ask the open questions
 
