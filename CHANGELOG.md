@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a foreign hooks path plus an outdated install went into the update flow instead of stopping,
   and hand-written hooks plus a stray `.git/hooks` file skipped the per-file diff before
   overwrite. Severity is now ranked ABORT > CONFLICT > WARN.
+- **`pre-push` no longer warns on every push when `gh` is logged in as an account that cannot
+  see the repository (#184).** Common with two GitHub accounts on one machine, where the push
+  credential comes from outside `gh`: the push works, but every push printed "gh error (exit 1)
+  … check gh CLI status" with nothing to check. That case is now silent and still fails open;
+  genuine `gh` failures keep warning. **What to do:** run `/tcs-git-helpers:git-setup --update`
+  in each repository (hook bundle h7).
 
 ## [Unreleased] — tcs-patterns selective install
 
