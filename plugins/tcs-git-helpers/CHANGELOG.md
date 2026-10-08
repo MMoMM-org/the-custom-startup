@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.2.24] - 2026-10-08
+
+### Fixed
+
+- **`git-setup` no longer aborts on a `core.hooksPath` that already points at the repo's own
+  `.githooks` (#181).** An absolute path, `./.githooks` or a symlinked spelling was reported as a
+  foreign hooks path. The detector now canonicalises it and treats it as `.githooks`; setup
+  rewrites it to the relative form.
+- **An ABORT is no longer masked by a later CONFLICT or WARN (#181).** The detector kept the
+  numerically highest exit code, but the codes are not ordered by severity (ABORT=2, CONFLICT=3,
+  WARN=4): a foreign hooks path plus an outdated marker exited 3 and fell into the update flow,
+  and an unmarked `.githooks/` plus a non-`.sample` `.git/hooks` file exited 4, skipping the
+  per-file diff. Severity is now ranked explicitly, ABORT > CONFLICT > WARN.
+
 ## [2.2.23] - 2026-10-06
 
 ### Added

@@ -403,6 +403,62 @@ _make_clean_repo() {
   echo "$output" | grep -qi 'submodule'
 }
 
+# --- #181: hooksPath equivalence + severity ranking ---
+
+@test "C20a detect_conflicts treats an absolute path to the repo's own .githooks as '.githooks' (#181)" {
+  _make_clean_repo "$TEST_TMP/abs-self"
+  cd "$TEST_TMP/abs-self"
+  # $PWD is the unresolved path (/var/... on macOS) while the detector's root
+  # is git's resolved toplevel (/private/var/...): the comparison must
+  # canonicalise both sides, not compare strings.
+  git config core.hooksPath "$PWD/.githooks"
+  run "$LIB_DIR/detect_conflicts.sh"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | grep -c 'ABORT')" -eq 0 ]
+}
+
+@test "C20b detect_conflicts treats './.githooks' as '.githooks' (#181)" {
+  _make_clean_repo "$TEST_TMP/dot-self"
+  cd "$TEST_TMP/dot-self"
+  git config core.hooksPath ./.githooks
+  run "$LIB_DIR/detect_conflicts.sh"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | grep -c 'ABORT')" -eq 0 ]
+}
+
+@test "C20c detect_conflicts still aborts on a hooksPath outside the repo's .githooks (#181)" {
+  _make_clean_repo "$TEST_TMP/foreign"
+  cd "$TEST_TMP/foreign"
+  git config core.hooksPath "$PWD/.githooks-other"
+  run "$LIB_DIR/detect_conflicts.sh"
+  [ "$status" -eq 2 ]
+  printf '%s\n' "$output" | grep -q 'ABORT'
+}
+
+@test "C20d ABORT outranks OUTDATED: custom hooksPath + older marker exits 2 (#181)" {
+  cd "$(_use_fixture with-tcs-older)"
+  git config core.hooksPath custom-hooks
+  run "$LIB_DIR/detect_conflicts.sh"
+  printf '%s\n' "$output" | grep -q 'OUTDATED'
+  [ "$status" -eq 2 ]
+}
+
+@test "C20e ABORT outranks WARN: custom hooksPath + non-sample .git/hooks exits 2 (#181)" {
+  cd "$(_use_fixture with-non-sample-hooks)"
+  git config core.hooksPath custom-hooks
+  run "$LIB_DIR/detect_conflicts.sh"
+  printf '%s\n' "$output" | grep -q 'WARN'
+  [ "$status" -eq 2 ]
+}
+
+@test "C20f CONFLICT outranks WARN: unmarked .githooks + non-sample .git/hooks exits 3 (#181)" {
+  cd "$(_use_fixture with-existing-hooks)"
+  printf '#!/bin/sh\nexit 0\n' > .git/hooks/post-checkout
+  run "$LIB_DIR/detect_conflicts.sh"
+  printf '%s\n' "$output" | grep -q 'WARN'
+  [ "$status" -eq 3 ]
+}
+
 # --- install_files.sh on a clean repo ---
 
 @test "C21 install_files on clean repo writes .githooks/* with markers" {
