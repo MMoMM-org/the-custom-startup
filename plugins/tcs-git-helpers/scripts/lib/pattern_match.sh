@@ -53,34 +53,47 @@
 # Destructive operation patterns (PRD §Feature M7)
 # ---------------------------------------------------------------------------
 
+# Shared anchor for every git pattern (#171). `git` must be a command word:
+# preceded by the start of the clause or by a character that cannot belong to
+# a path segment's NAME -- so `/usr/bin/git`, `(git`, `'git` and `"git` count,
+# while `/r/.git reset` and `my-git reset` do not. The old anchor,
+# `git[[:space:]]+`, matched any substring, so a path ending in `.git`
+# satisfied it for the wrong reason.
+#
+# Global options between `git` and the subcommand (`-C <path>`, `-c k=v`,
+# `--no-pager`, `--git-dir=…`) are NOT handled here: _clausify adds a
+# normalised copy of each clause with them removed (see _normalize_git_clause),
+# so every pattern below stays written against the plain form.
+_GIT_CMD='(^|[^[:alnum:]_.-])git[[:space:]]+'
+
 # git reset --hard [<ref>]
-PATTERN_RESET_HARD='git[[:space:]]+reset[[:space:]]+--hard([^[:alnum:]_]|$)'
+PATTERN_RESET_HARD="$_GIT_CMD"'reset[[:space:]]+--hard([^[:alnum:]_]|$)'
 
 # git clean -f / -fx / -fX / -Xf / -dfx / --force  (any bundle containing f or x, --force)
 # `-[a-zA-Z]*[fx]` allows uppercase neighbours (e.g. `-fX`, `-Xf`) — `-X` removes
 # only ignored files which is destructive when combined with `-f`. Substring-match
 # means trailing `X` after a matched `-f` does not block the match.
-PATTERN_CLEAN_FORCE='git[[:space:]]+clean[[:space:]]+(-[a-zA-Z]*[fx]|--force)'
+PATTERN_CLEAN_FORCE="$_GIT_CMD"'clean[[:space:]]+(-[a-zA-Z]*[fx]|--force)'
 
 # git checkout .   (require . to be its own argument: end-of-string or whitespace next)
-PATTERN_CHECKOUT_DOT='git[[:space:]]+checkout[[:space:]]+\.([[:space:]]|$)'
+PATTERN_CHECKOUT_DOT="$_GIT_CMD"'checkout[[:space:]]+\.([[:space:]]|$)'
 
 # git checkout -- <path>
-PATTERN_CHECKOUT_PATH='git[[:space:]]+checkout[[:space:]]+--[[:space:]]+[^[:space:]]+'
+PATTERN_CHECKOUT_PATH="$_GIT_CMD"'checkout[[:space:]]+--[[:space:]]+[^[:space:]]+'
 
 # git restore --worktree --source=<ref> ...   OR   --source=<ref> --worktree ...   OR   --staged ...
 # Both flag orderings of --worktree + --source are equally valid git invocations
 # and equally destructive — match either.
-PATTERN_RESTORE_DESTRUCTIVE='git[[:space:]]+restore[[:space:]]+(.*--worktree.*--source.*|.*--source.*--worktree.*|.*--staged.*)'
+PATTERN_RESTORE_DESTRUCTIVE="$_GIT_CMD"'restore[[:space:]]+(.*--worktree.*--source.*|.*--source.*--worktree.*|.*--staged.*)'
 
 # git branch -D <name>   (capital D = force delete; lowercase -d is the safe form)
-PATTERN_BRANCH_FORCE_DELETE='git[[:space:]]+branch[[:space:]]+-D([^[:alnum:]_]|$)'
+PATTERN_BRANCH_FORCE_DELETE="$_GIT_CMD"'branch[[:space:]]+-D([^[:alnum:]_]|$)'
 
 # git stash drop / git stash clear
-PATTERN_STASH_DESTROY='git[[:space:]]+stash[[:space:]]+(drop|clear)([^[:alnum:]_]|$)'
+PATTERN_STASH_DESTROY="$_GIT_CMD"'stash[[:space:]]+(drop|clear)([^[:alnum:]_]|$)'
 
 # git reflog expire ...   (kills the recovery net)
-PATTERN_REFLOG_EXPIRE='git[[:space:]]+reflog[[:space:]]+expire([^[:alnum:]_]|$)'
+PATTERN_REFLOG_EXPIRE="$_GIT_CMD"'reflog[[:space:]]+expire([^[:alnum:]_]|$)'
 
 # git commit ... --no-verify   |   git commit ... -n
 # Caveat: bundled-flag forms like `-nm "msg"` (shell-parsed as -n + -m) are NOT
@@ -93,14 +106,14 @@ PATTERN_REFLOG_EXPIRE='git[[:space:]]+reflog[[:space:]]+expire([^[:alnum:]_]|$)'
 # NOTE: Dispatchers must call _match_no_verify instead of _match_command
 # directly so that compound commands like `git commit && echo -n` do not
 # produce a false-positive. See _match_no_verify below.
-PATTERN_NO_VERIFY='git[[:space:]]+commit.*(--no-verify|-n([^[:alnum:]_]|$))'
+PATTERN_NO_VERIFY="$_GIT_CMD"'commit.*(--no-verify|-n([^[:alnum:]_]|$))'
 
 # ---------------------------------------------------------------------------
 # Push patterns (M1 closed-PR check + M7 destructive push variants)
 # ---------------------------------------------------------------------------
 
 # git push (any form) — used by M1 closed-PR check; not destructive on its own
-PATTERN_PUSH='git[[:space:]]+push([^[:alnum:]_]|$)'
+PATTERN_PUSH="$_GIT_CMD"'push([^[:alnum:]_]|$)'
 
 # git push ... --force   (NEGATIVE: must NOT match --force-with-lease)
 #
@@ -108,37 +121,37 @@ PATTERN_PUSH='git[[:space:]]+push([^[:alnum:]_]|$)'
 # accepts any non-word char — and `-` is non-word, so it DOES match between
 # `e` and `-` in `--force-with-lease`. We instead require the next char
 # after `--force` to be whitespace OR end-of-string.
-PATTERN_PUSH_FORCE='git[[:space:]]+push[[:space:]].*--force([[:space:]]|$)'
+PATTERN_PUSH_FORCE="$_GIT_CMD"'push[[:space:]].*--force([[:space:]]|$)'
 
 # git push ... --delete <branch>   (long-form remote branch delete)
-PATTERN_PUSH_DELETE_FLAG='git[[:space:]]+push[[:space:]]+(.+[[:space:]]+)?--delete([^[:alnum:]_]|$)'
+PATTERN_PUSH_DELETE_FLAG="$_GIT_CMD"'push[[:space:]]+(.+[[:space:]]+)?--delete([^[:alnum:]_]|$)'
 
 # git push <remote> :<branch>   (refspec-form remote branch delete)
-PATTERN_PUSH_COLON_DELETE='git[[:space:]]+push[[:space:]]+[^[:space:]]+[[:space:]]+:[^[:space:]]+'
+PATTERN_PUSH_COLON_DELETE="$_GIT_CMD"'push[[:space:]]+[^[:space:]]+[[:space:]]+:[^[:space:]]+'
 
 # ---------------------------------------------------------------------------
 # Branch create / resume (M2 / M3)
 # ---------------------------------------------------------------------------
 
 # git checkout -b <name>   |   git switch -c <name>
-PATTERN_BRANCH_CREATE='git[[:space:]]+(checkout[[:space:]]+-b|switch[[:space:]]+-c)[[:space:]]+[^[:space:]]+'
+PATTERN_BRANCH_CREATE="$_GIT_CMD"'(checkout[[:space:]]+-b|switch[[:space:]]+-c)[[:space:]]+[^[:space:]]+'
 
 # git checkout <branch>   |   git switch <branch>   (bare; not a flag, not a path)
 # Anchored with $ so trailing args are not allowed (avoids matching pathspec forms).
 # The capture excludes leading `-` (so `-b`/`-c` flag forms do NOT match) and
 # leading `.` (so `git checkout .` and `git checkout .githooks` do NOT match —
 # those are pathspecs, handled by PATTERN_CHECKOUT_DOT / PATTERN_CHECKOUT_PATH).
-PATTERN_BRANCH_RESUME='git[[:space:]]+(checkout|switch)[[:space:]]+([^-.[:space:]][^[:space:]]*)$'
+PATTERN_BRANCH_RESUME="$_GIT_CMD"'(checkout|switch)[[:space:]]+([^-.[:space:]][^[:space:]]*)$'
 
 # ---------------------------------------------------------------------------
 # core.hooksPath subversion (defeats .githooks/)
 # ---------------------------------------------------------------------------
 
 # git -c core.hooksPath=... <subcommand>
-PATTERN_HOOKSPATH_INLINE='git[[:space:]]+-c[[:space:]]+core\.hooksPath'
+PATTERN_HOOKSPATH_INLINE="$_GIT_CMD"'-c[[:space:]]+core\.hooksPath'
 
 # git config [--global|--local|--system|...] core.hooksPath ...
-PATTERN_HOOKSPATH_CONFIG='git[[:space:]]+config[[:space:]]+(--[^[:space:]]+[[:space:]]+)?core\.hooksPath'
+PATTERN_HOOKSPATH_CONFIG="$_GIT_CMD"'config[[:space:]]+(--[^[:space:]]+[[:space:]]+)?core\.hooksPath'
 
 # ---------------------------------------------------------------------------
 # gh API bypass patterns (remote ref deletion via GitHub REST API)
@@ -157,7 +170,7 @@ PATTERN_GH_REF_DELETE_B='gh[[:space:]]+api[[:space:]].*(-X|--method)[[:space:]]+
 # Read-only forms (--get, --get-all, --get-regexp). These never mutate state
 # so they bypass the HOOKSPATH_OVERRIDE check, allowing debugging like
 # `git config --get core.hooksPath` without setting TCS_GIT_HELPERS_SETUP_ACTIVE.
-PATTERN_HOOKSPATH_CONFIG_READ='git[[:space:]]+config[[:space:]]+(--get|--get-all|--get-regexp)([[:space:]]+--[^[:space:]]+)*[[:space:]]+core\.hooksPath'
+PATTERN_HOOKSPATH_CONFIG_READ="$_GIT_CMD"'config[[:space:]]+(--get|--get-all|--get-regexp)([[:space:]]+--[^[:space:]]+)*[[:space:]]+core\.hooksPath'
 
 # Export pattern constants so child shells (e.g. when sourced from a hook
 # script that re-execs in a subshell) see them too.
@@ -197,6 +210,145 @@ _match_command() {
   local cmd="$1"
   local pattern="$2"
   [[ "$cmd" =~ $pattern ]]
+}
+
+# _is_git_token <token>
+#   True iff <token> names the git binary: `git` or `<path>/git`, optionally
+#   behind the opening quote of a `bash -c '…'` payload or a `$(`/backtick.
+_is_git_token() {
+  local t="$1"
+  t="${t#\$(}"
+  t="${t#[\'\"\`(]}"
+  case "$t" in
+    git|*/git) return 0 ;;
+  esac
+  return 1
+}
+
+# _hookspath_config_arg <name=value>
+#   True iff the `-c`/`--config-env` argument sets core.hooksPath. git config
+#   keys are case-insensitive, so `core.hookspath` counts too. bash 3.2 has no
+#   ${v,,}; nocasematch is 3.1+ and is restored before returning.
+_hookspath_config_arg() {
+  local key="${1%%=*}" rc=1 restore=""
+  shopt -q nocasematch || restore=1
+  shopt -s nocasematch
+  case "$key" in
+    core.hookspath) rc=0 ;;
+  esac
+  [ -n "$restore" ] && shopt -u nocasematch
+  return "$rc"
+}
+
+# _normalize_git_clause <clause>
+#   Returns <clause> with git's global options removed from every git
+#   invocation in it (#171): `git -C /r -c k=v --no-pager reset --hard` →
+#   `git reset --hard`. The destructive patterns are written against the plain
+#   form; without this, any global option in between disarmed 18 of them.
+#
+#   Options taking the NEXT token as their value: -C, -c, --git-dir,
+#   --work-tree, --namespace, --config-env, --super-prefix. Every other
+#   leading `-…` token (`--no-pager`, `-P`, `--bare`, the `=` forms) is
+#   dropped alone. An unknown option is dropped too: that direction exposes
+#   the subcommand, so the guard matches more, never less.
+#
+#   One exception: a -c/--config-env that sets core.hooksPath is re-emitted
+#   as `-c core.hooksPath=…` so PATTERN_HOOKSPATH_INLINE still sees it, in
+#   canonical case.
+#
+#   Tokens are rejoined with single spaces; patterns use [[:space:]]+, so that
+#   loses nothing they look at. bash 3.2: `read -ra` and builtins only.
+#
+#   The result is left in _GIT_NORM rather than printed: a hot-path caller
+#   (_with_normalized_clauses, once per clause on every Bash tool call) would
+#   otherwise pay a `$(…)` subshell fork per clause. _normalize_git_clause
+#   wraps it for callers that want stdout.
+_GIT_NORM=""
+_normalize_git_clause_into() {
+  local -a toks
+  local out="" i=0 n t v
+  # Fast path: nothing to strip unless a dash token follows a git. No
+  # here-string (a temp file in bash 3.2) for the common case.
+  case "$1" in
+    *git[[:space:]]*-*) ;;
+    *) _GIT_NORM="$1"; return 0 ;;
+  esac
+  read -ra toks <<< "$1"
+  n=${#toks[@]}
+  while [ "$i" -lt "$n" ]; do
+    t="${toks[$i]}"
+    out="${out}${out:+ }${t}"
+    i=$((i + 1))
+    _is_git_token "$t" || continue
+    while [ "$i" -lt "$n" ]; do
+      t="${toks[$i]}"
+      case "$t" in
+        -C|--git-dir|--work-tree|--namespace|--super-prefix)
+          i=$((i + 2)) ;;
+        -c|--config-env)
+          v="${toks[$((i + 1))]:-}"
+          if _hookspath_config_arg "$v"; then
+            out="${out} -c core.hooksPath=${v#*=}"
+          fi
+          i=$((i + 2)) ;;
+        --config-env=*)
+          v="${t#--config-env=}"
+          if _hookspath_config_arg "$v"; then
+            out="${out} -c core.hooksPath=${v#*=}"
+          fi
+          i=$((i + 1)) ;;
+        -*)
+          i=$((i + 1)) ;;
+        *)
+          break ;;
+      esac
+    done
+  done
+  _GIT_NORM="$out"
+}
+
+_normalize_git_clause() {
+  _normalize_git_clause_into "$1"
+  printf "%s" "$_GIT_NORM"
+}
+
+# _git_dash_c_dir <clause>
+#   The directory the clause's first git invocation runs in, as named by its
+#   `-C` options; empty when there are none. Successive -C values combine the
+#   way git combines them: a relative one is joined onto the previous, an
+#   absolute one resets. Relative results stay relative -- the caller resolves
+#   them against its own working directory.
+_git_dash_c_dir() {
+  local -a toks
+  local dir="" i=0 n t v
+  read -ra toks <<< "$1"
+  n=${#toks[@]}
+  while [ "$i" -lt "$n" ]; do
+    t="${toks[$i]}"
+    i=$((i + 1))
+    _is_git_token "$t" || continue
+    while [ "$i" -lt "$n" ]; do
+      t="${toks[$i]}"
+      case "$t" in
+        -C)
+          v="${toks[$((i + 1))]:-}"
+          case "$v" in
+            /*) dir="$v" ;;
+            "") ;;
+            *) dir="${dir:+$dir/}$v" ;;
+          esac
+          i=$((i + 2)) ;;
+        -c|--git-dir|--work-tree|--namespace|--config-env|--super-prefix)
+          i=$((i + 2)) ;;
+        -*)
+          i=$((i + 1)) ;;
+        *)
+          break ;;
+      esac
+    done
+    break
+  done
+  printf '%s' "$dir"
 }
 
 # _strip_quoted <command>
@@ -362,7 +514,7 @@ _clausify() {
   # ambiguous executor falls back to the original substring behaviour.
   if [[ "$s" =~ (^|[^[:alnum:]_])[a-z]*sh[[:space:]]+-c([[:space:]]|$) ]] \
      || [[ "$s" =~ (^|[^[:alnum:]_])eval([[:space:]]|$) ]]; then
-    printf '%s' "$s"
+    _with_normalized_clauses "$s"
     return 0
   fi
   s="$(_strip_heredocs "$s")"
@@ -372,7 +524,32 @@ _clausify() {
   s="${s//|/$NL}"
   s="${s//;/$NL}"
   s="${s//&/$NL}"
-  printf '%s' "$s"
+  _with_normalized_clauses "$s"
+}
+
+# _with_normalized_clauses <clauses>
+#   Prints each clause, followed -- when it differs -- by its
+#   _normalize_git_clause form (#171). The raw clause stays first and in
+#   place: a caller that maps a match back to its clause (_clause_target_dir)
+#   reads the -C path from it, and no existing match is lost.
+_with_normalized_clauses() {
+  local clause norm out="" NL
+  NL=$'\n'
+  # Fast path: most Bash tool calls have no git with an option at all; they
+  # pay nothing beyond this one glob test, as before #171.
+  case "$1" in
+    *git[[:space:]]*-*) ;;
+    *) printf "%s" "$1"; return 0 ;;
+  esac
+  while IFS= read -r clause; do
+    out="${out}${clause}${NL}"
+    _normalize_git_clause_into "$clause"
+    norm="$_GIT_NORM"
+    if [ -n "$norm" ] && [ "$norm" != "$clause" ]; then
+      out="${out}${norm}${NL}"
+    fi
+  done <<< "$1"
+  printf '%s' "${out%"$NL"}"
 }
 
 # _match_clauses <clausified> <pattern>

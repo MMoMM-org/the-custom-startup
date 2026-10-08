@@ -20,6 +20,11 @@ deny	RESET_HARD	git	reset	--hard
 deny	RESET_HARD	git  reset  --hard
 deny	RESET_HARD	cd foo && git reset --hard
 deny	RESET_HARD	cd /tmp && git reset --hard origin/main
+deny	RESET_HARD	git -C /tmp/repo reset --hard HEAD
+deny	RESET_HARD	git --no-pager -c user.name=x reset --hard
+deny	RESET_HARD	/usr/bin/git -C /tmp/repo reset --hard
+allow	NEGATIVE	ls /r/.git reset --hard
+allow	NEGATIVE	git -C /tmp/repo reset --soft HEAD~1
 allow	NEGATIVE	git reset --soft HEAD~1
 allow	NEGATIVE	git reset HEAD~1
 allow	NEGATIVE	git reset --mixed
