@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.2.25] - 2026-10-08
+
+### Fixed
+
+- **`pre-push` no longer warns on every push when the `gh` account cannot see the repository
+  (#184).** In a multi-account setup whose push credential comes from outside `gh`, `gh pr list`
+  fails with `Could not resolve to a Repository` on every push, and the hook printed the
+  catch-all "gh error" warning each time. That wording now joins the silent fail-open branch
+  beside the #136 patterns; genuine `gh` failures still warn. Hook bundle: **h6 → h7**. Run
+  `/tcs-git-helpers:git-setup --update` to pick it up.
+
 ## [2.2.24] - 2026-10-08
 
 ### Fixed
