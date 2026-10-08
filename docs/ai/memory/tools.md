@@ -26,9 +26,24 @@
 - **`gh pr merge --auto` merges at once when the branch has no required status checks** — auto-merge needs protection rules to have something to wait for. → Block on `gh pr checks` yourself when a check must gate the merge.
 
 <!-- 2026-09-10 -->
-- **CI runs Python 3.11, this machine runs 3.14** — `.github/workflows/tests.yml:61,101` pins `3.11` and runs the whole `pytest -q` on ubuntu AND macos. Anything newer than 3.11 passes locally and breaks CI. → Check the version a stdlib attribute was added in, never just `hasattr` locally.
-- **`tomllib.TOMLDecodeError` has `lineno`/`colno`/`msg` only on 3.14+** (gh-126175) — 3.11.14 exposes none; the position survives only inside `str(e)`. Worse, `getattr`-with-fallback *diverges*: for an end-of-document error 3.14's attribute gives a line and the message gives none. → Parse `str(e)` only (`r"at line (\d+)"`); its wording is byte-identical 3.11→3.14. Treat `None` as a real outcome, not a 3.11 artifact.
-- **`uv` needs both cache and python dirs redirected under the Bash sandbox** — `~/.cache/uv` and `~/.local/share/uv/python` are both denied. → `UV_CACHE_DIR="$TMPDIR/uvcache" UV_PYTHON_INSTALL_DIR="$TMPDIR/uvpython" uv run --python 3.11 --no-project script.py` works and needs no sandbox override.
+- **CI runs Python 3.11, this machine runs 3.14** — `.github/workflows/tests.yml` pins 3.11 for the whole suite on ubuntu and macOS, so newer stdlib passes locally and breaks CI. → Check when an attribute was added, never just `hasattr` locally.
+- **`tomllib.TOMLDecodeError` has `lineno`/`colno`/`msg` only on 3.14+** — on 3.11 the position is only in `str(e)`, and a `getattr` fallback diverges at end of document. → Parse `str(e)` (`r"at line (\d+)"`); treat `None` as a real outcome.
+- **`uv` under the Bash sandbox needs its cache and python dirs redirected** — `~/.cache/uv` and `~/.local/share/uv/python` are denied. → `UV_CACHE_DIR="$TMPDIR/uvcache" UV_PYTHON_INSTALL_DIR="$TMPDIR/uvpython" uv run --python 3.11 …`.
 
 <!-- 2026-10-08 -->
 - **`docs-sync` wants a root `CHANGELOG.md` entry for any change under `plugins/` or `scripts/`** — the plugin's own CHANGELOG does not count; CI reports `CHANGELOG.md` unaccounted. → Write both, or waive it in the PR body.
+
+<!-- 2026-09-01 -->
+- **The Bash tool reaps the process group at the tool-call boundary** — `nohup`/`disown` block SIGHUP, not harness teardown, so a backgrounded server dies silently. → Run it in the foreground inside a `run_in_background: true` call.
+
+<!-- 2026-09-04 -->
+- **`stat -f` is a format string on BSD and means *filesystem* on GNU** — on Linux `stat -f %m` prints a filesystem report and fails, so a `||` fallback appends to it. → `m="$(stat -c %Y "$f" 2>/dev/null)" || m="$(stat -f %m "$f")"`.
+
+<!-- 2026-09-04 -->
+- **Perf test p95 exceeds 100ms cap (2x the 50ms target) under load** — 124.8/156.4ms parallel-agent, 193.5ms alone; max 269ms = macOS's 151-286ms first-exec cost, warmup can't absorb. → `perf`-marked, deselected by default; run `pytest -m perf`.
+
+<!-- 2026-09-08 -->
+- **A `<<'PY'` heredoc inside `$(...)` breaks on bash 3.2 if its body holds `\'`** — "unexpected EOF while looking for matching `''`"; a quoted `"$(...)"` breaks on any apostrophe. → Assign via unquoted `VAR=$(...)`; no `\'` in the body.
+
+<!-- 2026-10-02 -->
+- **`skillOverrides` cannot reach a plugin skill** — `off`/`name-only` are silently ignored for plugin sources; only `enabledPlugins` (whole plugin) works. A repo skill honours it. → Per-skill control means installing into the repo.
