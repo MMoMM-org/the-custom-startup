@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — tcs-git-helpers setup and pre-push fixes
+
+### Fixed
+
+- **`/tcs-git-helpers:git-setup` no longer refuses a repository whose `core.hooksPath` already
+  points at its own `.githooks` (#181).** An absolute path, `./.githooks` or a symlinked spelling
+  was reported as a foreign hooks path and setup aborted. **What to do:** nothing; the next
+  `--update` accepts it and rewrites it to the relative form.
+- **`git-setup`'s conflict detector no longer lets a warning hide an abort (#181).** When several
+  conditions fired, the detector reported the highest exit code rather than the most severe, so
+  a foreign hooks path plus an outdated install went into the update flow instead of stopping,
+  and hand-written hooks plus a stray `.git/hooks` file skipped the per-file diff before
+  overwrite. Severity is now ranked ABORT > CONFLICT > WARN.
+
 ## [Unreleased] — tcs-patterns selective install
 
 ### Changed
