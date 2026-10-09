@@ -202,7 +202,7 @@ _emit_nudge() {
 _CMD_CLAUSES="$(_clausify "$CMD")"
 
 # AC1: git checkout -b <name> | git switch -c <name>
-if _match_clauses "$_CMD_CLAUSES" 'git[[:space:]]+(checkout[[:space:]]+-b|switch[[:space:]]+-c)[[:space:]]+[^[:space:]]+'; then
+if _match_clauses "$_CMD_CLAUSES" "$_GIT_CMD"'(checkout[[:space:]]+-b|switch[[:space:]]+-c)[[:space:]]+[^[:space:]]+'; then
   _emit_nudge "verify-base" \
     "new branch — verify the base is up-to-date before working" \
     "branch-lifecycle.md"
@@ -221,7 +221,7 @@ if _match_clauses "$_CMD_CLAUSES" 'gh[[:space:]]+pr[[:space:]]+create([[:space:]
 fi
 
 # AC2b: git push -u <remote> <branch>  (first push — new PR signal)
-if _match_clauses "$_CMD_CLAUSES" 'git[[:space:]]+push[[:space:]]+(.*[[:space:]]+)?-u[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+'; then
+if _match_clauses "$_CMD_CLAUSES" "$_GIT_CMD"'push[[:space:]]+(.*[[:space:]]+)?-u[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+'; then
   _emit_nudge "verify-pr-title" \
     "confirm the PR title matches Conventional Commits (squash-merge implication)" \
     "pr-vs-commit-messages.md"
@@ -238,7 +238,7 @@ if _match_clauses "$_CMD_CLAUSES" 'gh[[:space:]]+pr[[:space:]]+merge([[:space:]]
 fi
 
 # AC4: git rebase (any variant)
-if _match_clauses "$_CMD_CLAUSES" 'git[[:space:]]+rebase([^[:alnum:]_]|$)'; then
+if _match_clauses "$_CMD_CLAUSES" "$_GIT_CMD"'rebase([^[:alnum:]_]|$)'; then
   _emit_nudge "verify-history" \
     "rebase complete — verify history with git log --oneline -10" \
     "rebase-vs-merge.md"
@@ -246,7 +246,7 @@ if _match_clauses "$_CMD_CLAUSES" 'git[[:space:]]+rebase([^[:alnum:]_]|$)'; then
 fi
 
 # AC5: git stash pop
-if _match_clauses "$_CMD_CLAUSES" 'git[[:space:]]+stash[[:space:]]+pop([^[:alnum:]_]|$)'; then
+if _match_clauses "$_CMD_CLAUSES" "$_GIT_CMD"'stash[[:space:]]+pop([^[:alnum:]_]|$)'; then
   _emit_nudge "verify-orig-cleanup" \
     "stash pop — verify .orig file cleanup" \
     "working-tree-hygiene.md"

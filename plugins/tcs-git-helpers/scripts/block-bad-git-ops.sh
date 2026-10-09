@@ -412,10 +412,13 @@ _check_resume_squash_merged() {
   local rule="RESUME_MERGED_BRANCH"
   local target="" default
 
-  # Re-extract the target branch via the same pattern. Substring match
-  # against full $CMD allows compound forms (`cd foo && git checkout x`).
-  if [[ "$CMD" =~ git[[:space:]]+(checkout|switch)[[:space:]]+([^-.[:space:]][^[:space:]]*)$ ]]; then
-    target="${BASH_REMATCH[2]}"
+  # Re-extract the target branch from the clause that matched, in its
+  # normalised form: raw $CMD would hide the target behind `git -C <dir>`
+  # (#171). Groups: 1 = anchor, 2 = checkout|switch, 3 = target.
+  local clause
+  clause="$(_matching_normalized_clause "$PATTERN_BRANCH_RESUME")"
+  if [[ "$clause" =~ $PATTERN_BRANCH_RESUME ]]; then
+    target="${BASH_REMATCH[3]}"
   fi
   [ -z "$target" ] && return 0
 
@@ -438,6 +441,77 @@ _check_resume_squash_merged() {
     fi
     _record_deny "$rule" \
       "Branch '${target}' was squash-merged. See ${CLAUDE_PLUGIN_ROOT:-tcs-git-helpers}/references/squash-merge-trap.md"
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# Stateful rules run in the repository `git -C <dir>` names (#171)
+# ---------------------------------------------------------------------------
+#
+# The three stateful handlers read state from $PWD -- directly, through
+# git_state.sh and cache.sh, and through `gh`, which resolves the repository
+# from its working directory. Once `git -C <dir> push` matches at all, checking
+# $PWD would judge the wrong repository: a closed PR or dirty tree HERE would
+# deny a push or branch THERE. One `cd` covers every state source.
+# The `cd X && git …` form still checks $PWD, as it always has.
+
+# _matching_normalized_clause <pattern>
+#   The normalised form of the first clause of _CMD_CLAUSES that matches.
+_matching_normalized_clause() {
+  local clause norm
+  while IFS= read -r clause; do
+    _normalize_git_clause_into "$clause"
+    norm="$_GIT_NORM"
+    if _match_command "$norm" "$1"; then
+      printf '%s' "$norm"
+      return 0
+    fi
+  done <<< "$_CMD_CLAUSES"
+  return 1
+}
+
+# _clause_target_dir <pattern>
+#   The `git -C` directory of the first clause whose normalised form matches
+#   <pattern>; empty when that clause has no -C. Raw clauses precede their
+#   normalised copies in _CMD_CLAUSES, so the -C path is read from the raw one.
+_clause_target_dir() {
+  local clause
+  while IFS= read -r clause; do
+    _normalize_git_clause_into "$clause"
+    if _match_command "$_GIT_NORM" "$1"; then
+      _git_dash_c_dir "$clause"
+      return 0
+    fi
+  done <<< "$_CMD_CLAUSES"
+}
+
+# _enter_git_target_dir <pattern> / _leave_git_target_dir
+#   Bracket a stateful handler so it runs with $PWD at the matching clause's
+#   `git -C` directory (relative to $PWD). No -C: nothing changes. A directory
+#   that cannot be entered returns 1, so the handler is skipped -- fail open,
+#   git itself reports the bad -C path. Same shell, so DENY_REASONS survives.
+#   Branch state is cached per invocation and is invalidated on both sides.
+#   Called directly from the dispatch table (not through a "$handler"
+#   indirection) so shellcheck can still see every handler being used.
+_GIT_TARGET_HOME=""
+_enter_git_target_dir() {
+  local dir
+  _GIT_TARGET_HOME="$PWD"
+  dir="$(_clause_target_dir "$1")"
+  [ -z "$dir" ] && return 0
+  case "$dir" in
+    /*) ;;
+    *) dir="$_GIT_TARGET_HOME/$dir" ;;
+  esac
+  cd "$dir" 2>/dev/null || return 1
+  _STATE_INITIALIZED=0
+  return 0
+}
+_leave_git_target_dir() {
+  if [ -n "$_GIT_TARGET_HOME" ] && [ "$PWD" != "$_GIT_TARGET_HOME" ]; then
+    cd "$_GIT_TARGET_HOME" 2>/dev/null || true
+    _STATE_INITIALIZED=0
   fi
   return 0
 }
@@ -471,7 +545,7 @@ _match_clauses "$_CMD_CLAUSES" "$PATTERN_REFLOG_EXPIRE"       && _maybe_deny REF
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_NO_VERIFY"                              && _maybe_deny NO_VERIFY             "--no-verify bypasses .githooks/ — defeats the purpose"
 
 # === Push variants (M1 closed-PR + M7 destructive push forms) ===
-_match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH"                && _check_push_to_closed_pr
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH"                && { _enter_git_target_dir "$PATTERN_PUSH" && _check_push_to_closed_pr; _leave_git_target_dir; }
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH_FORCE"          && _maybe_deny FORCE_PUSH            "use --force-with-lease, not --force"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH_DELETE_FLAG"    && _maybe_deny REMOTE_BRANCH_DELETE  "git push --delete removes remote branch"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH_COLON_DELETE"   && _maybe_deny REMOTE_BRANCH_DELETE  "git push <remote> :<branch> deletes remote branch"
@@ -479,8 +553,8 @@ _match_clauses "$_CMD_CLAUSES" "$PATTERN_GH_REF_DELETE_A"     && _maybe_deny REM
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_GH_REF_DELETE_B"     && _maybe_deny REMOTE_BRANCH_DELETE  "gh api DELETE on git/refs removes remote ref"
 
 # === Branch creation / resume (M2, M3) ===
-_match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_CREATE"       && _check_branch_creation_from_unfinished
-_match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_RESUME"       && _check_resume_squash_merged
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_CREATE"       && { _enter_git_target_dir "$PATTERN_BRANCH_CREATE" && _check_branch_creation_from_unfinished; _leave_git_target_dir; }
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_RESUME"       && { _enter_git_target_dir "$PATTERN_BRANCH_RESUME" && _check_resume_squash_merged; _leave_git_target_dir; }
 
 # === core.hooksPath subversion ===
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_HOOKSPATH_INLINE"    && _maybe_deny HOOKSPATH_OVERRIDE    "git -c core.hooksPath=… disables .githooks/"

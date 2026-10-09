@@ -67,6 +67,17 @@ string against POSIX ERE patterns (one rule per operation). When a pattern
 matches, the hook emits a `permissionDecision: deny` JSON response with a
 denial reason citing this file and the granular override env var.
 
+Git's global options do not hide an operation. `git -C <path> reset --hard`,
+`git --no-pager reset --hard` and `git -c k=v -C <path> reset --hard` are
+matched the same as the plain `git reset --hard`. A `-c core.hooksPath=…` among
+them is still a hooksPath override, whatever its letter case. `git` must be the
+command word: a path ending in `.git` (`/repo/.git reset`) does not count.
+
+Rules that read repository state (push to a closed PR, a branch from
+unfinished work, resuming a squash-merged branch) check the repository
+`-C` names, not the session's working directory. The `cd <path> && git …`
+form is still checked against the working directory the hook runs in.
+
 Patterns are documented in
 `plugins/tcs-git-helpers/tests/fixtures/commands/destructive_corpus.txt`.
 The corpus is the source of truth — every rule has positive (deny) and

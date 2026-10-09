@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.2.26] - 2026-10-09
+
+### Fixed
+
+- **Git global options no longer disarm the destructive-op guard (#171).** 18 of the 20 git
+  patterns were anchored as `git[[:space:]]+<subcommand>`, so `git -C <path>`, `-c k=v`,
+  `--no-pager`, `--git-dir=…` or any other global option in between meant the rule never fired.
+  `_clausify` now adds a normalised copy of each clause with the global options stripped
+  (`_normalize_git_clause`), so every pattern, including those in `nudge-hook.sh`, sees the plain
+  form. A `-c`/`--config-env` setting `core.hooksPath` is kept in canonical case, so the inline
+  hooksPath rule also catches the lower-case key. The shared anchor `_GIT_CMD` requires `git` to
+  be a command word, so `/repo/.git reset --hard` no longer matches for the wrong reason.
+- **Stateful rules check the repository `-C` names.** `PUSH_TO_CLOSED_PR`,
+  `BRANCH_FROM_UNFINISHED` and `RESUME_MERGED_BRANCH` read state from the working directory; under
+  `git -C <dir>` they now run in `<dir>`. The `cd <dir> && git …` form is unchanged and still
+  checks the working directory.
+- A Bash command without a git global option pays nothing extra (a single glob test); a git
+  command with one costs about 2 ms more, measured on macOS.
+
 ## [2.2.25] - 2026-10-08
 
 ### Fixed
