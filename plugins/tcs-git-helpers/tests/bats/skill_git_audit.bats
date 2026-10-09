@@ -16,6 +16,8 @@
 #   - Constraints note 24h cache-staleness threshold
 #   - Graceful degradation when .githooks/ not installed
 
+load 'lib/helpers'
+
 PLUGIN_ROOT="${BATS_TEST_DIRNAME}/../.."
 SKILL_PATH="${PLUGIN_ROOT}/skills/git-audit/SKILL.md"
 
@@ -74,9 +76,9 @@ SKILL_PATH="${PLUGIN_ROOT}/skills/git-audit/SKILL.md"
 
 @test "argument-hint references all 4 mode flags" {
   hint=$(awk '/^---$/{c++; next} c==1' "$SKILL_PATH" | grep -E '^argument-hint:')
-  [[ "$hint" == *"--brief"* ]]
-  [[ "$hint" == *"--cleanup"* ]]
-  [[ "$hint" == *"--json"* ]]
+  _has "$hint" "--brief"
+  _has "$hint" "--cleanup"
+  _has "$hint" "--json"
   [[ "$hint" == *"--overrides"* ]]
 }
 

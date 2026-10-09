@@ -8,6 +8,8 @@
 #     SessionStart events registered
 #   - All referenced scripts exist with bash shebang (stubs OK in this task)
 
+load 'lib/helpers'
+
 PLUGIN_ROOT="${BATS_TEST_DIRNAME}/../.."
 
 setup() {
@@ -123,8 +125,8 @@ setup() {
 @test "PreToolUse has matcher covering Edit, Write, and NotebookEdit" {
   run jq -r '[.hooks.PreToolUse[].matcher] | join(" ")' "${PLUGIN_ROOT}/hooks/hooks.json"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Edit"* ]]
-  [[ "$output" == *"Write"* ]]
+  _has "$output" "Edit"
+  _has "$output" "Write"
   [[ "$output" == *"NotebookEdit"* ]]
 }
 
@@ -145,11 +147,11 @@ setup() {
 @test "hooks.json references all 6 entry-point scripts" {
   run jq -r '[.. | objects | .command? // empty] | join("\n")' "${PLUGIN_ROOT}/hooks/hooks.json"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"block-bad-git-ops.sh"* ]]
-  [[ "$output" == *"pre-edit-branch-check.sh"* ]]
-  [[ "$output" == *"protect-git-internals.sh"* ]]
-  [[ "$output" == *"nudge-hook.sh"* ]]
-  [[ "$output" == *"session-start-brief.sh"* ]]
+  _has "$output" "block-bad-git-ops.sh"
+  _has "$output" "pre-edit-branch-check.sh"
+  _has "$output" "protect-git-internals.sh"
+  _has "$output" "nudge-hook.sh"
+  _has "$output" "session-start-brief.sh"
   [[ "$output" == *"worktree-exit-guard.sh"* ]]
 }
 

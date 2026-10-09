@@ -362,7 +362,7 @@ _default_data_dir() {
   [ "$line_count" -eq 1 ]
 
   # The line must mention gh not being installed.
-  [[ "$output" == *"gh"* ]]
+  _has "$output" "gh"
   [[ "$output" == *"skipped"* ]]
 }
 

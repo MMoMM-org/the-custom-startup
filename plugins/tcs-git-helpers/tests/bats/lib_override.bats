@@ -20,6 +20,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load 'lib/helpers'
+
 setup() {
   # macOS mktemp ignores $TMPDIR by default; pass it explicitly so the
   # sandbox-writable path is honored.
@@ -113,7 +115,7 @@ teardown() {
   export CLAUDE_ALLOW_RESET_HARD=1
   run --separate-stderr _check_and_consume_override RESET_HARD
   [ "$status" -eq 0 ]
-  [[ "$stderr" == *"override consumed"* ]]
+  _has "$stderr" "override consumed"
   [[ "$stderr" == *"CLAUDE_ALLOW_RESET_HARD"* ]]
 }
 
@@ -140,7 +142,7 @@ teardown() {
 
   run --separate-stderr _check_and_consume_override RESET_HARD
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *"double-tap"* ]]
+  _has "$stderr" "double-tap"
   [[ "$stderr" == *"CLAUDE_ALLOW_RESET_HARD"* ]]
 }
 
@@ -202,7 +204,7 @@ teardown() {
   export CLAUDE_ALLOW_GIT_BAD_OPS=1
   run --separate-stderr _check_and_consume_override RESET_HARD
   [ "$status" -eq 0 ]
-  [[ "$stderr" == *"MASTER OVERRIDE"* ]]
+  _has "$stderr" "MASTER OVERRIDE"
   [[ "$stderr" == *"granular"* ]]
 }
 
@@ -214,7 +216,7 @@ teardown() {
   export CLAUDE_ALLOW_GIT_BAD_OPS=1
   run --separate-stderr _check_and_consume_override RESET_HARD
   [ "$status" -eq 0 ]
-  [[ "$stderr" == *'`CLAUDE_ALLOW_<X>=1`'* ]]
+  _has "$stderr" '`CLAUDE_ALLOW_<X>=1`'
   [[ "$stderr" == *'⚠ MASTER OVERRIDE — strongly prefer granular `CLAUDE_ALLOW_<X>=1`'* ]]
 }
 
@@ -543,7 +545,7 @@ teardown() {
   run --separate-stderr _check_and_consume_override PUSH_TO_CLOSED_PR
 
   [ "$status" -eq 0 ]
-  [[ "$stderr" == *"MASTER OVERRIDE"* ]]
+  _has "$stderr" "MASTER OVERRIDE"
   [[ "$stderr" == *"granular"* ]]
 }
 
