@@ -392,6 +392,18 @@ def test_a_no_ff_merge_that_sets_the_version_is_not_bumped_again(repo):
     assert _demo(repo) == "1.4.9"
 
 
+def test_a_no_ff_merge_is_one_bump_however_many_commits_it_brings(repo):
+    """One merge is one push is one run: its side-branch commits are not owed separately."""
+    work, env = repo["work"], repo["env"]
+    _git(work, env, "checkout", "--quiet", "-b", "feature")
+    _commit(repo, "one", write={"plugins/demo/a.md": "a\n"})
+    _commit(repo, "two", write={"plugins/demo/b.md": "b\n"})
+    _git(work, env, "checkout", "--quiet", "main")
+    _git(work, env, "merge", "--quiet", "--no-ff", "-m", "merge feature", "feature")
+    _bump_ok(repo)
+    assert _demo(repo) == "1.4.5"
+
+
 def test_commits_after_a_hand_set_version_each_get_a_patch(repo):
     """Pinned: a rebase-merge loses the push boundary, so 1.5.0 then a fix ships 1.5.1."""
     _commit(repo, "hand bump", write={DEMO_MANIFEST: _manifest_text("1.5.0")})
