@@ -558,11 +558,13 @@ _match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_RESUME"       && { _enter_git_ta
 
 # === core.hooksPath subversion ===
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_HOOKSPATH_INLINE"    && _maybe_deny HOOKSPATH_OVERRIDE    "git -c core.hooksPath=… disables .githooks/"
-# Read-only --get/--get-all/--get-regexp forms short-circuit before the write check.
-# `git config --get core.hooksPath` and friends mutate nothing, so they should
-# never trigger the sentinel-gated denial.
-_match_clauses "$_CMD_CLAUSES" "$PATTERN_HOOKSPATH_CONFIG_READ" || \
-  { _match_clauses "$_CMD_CLAUSES" "$PATTERN_HOOKSPATH_CONFIG" && _maybe_check_setup_sentinel HOOKSPATH_OVERRIDE  "git config core.hooksPath only allowed during /tcs-git-helpers:git-setup (set TCS_GIT_HELPERS_SETUP_ACTIVE=1)"; }
+# Read-only forms (--get/--get-all/--get-regexp/get) mutate nothing and never
+# trigger the sentinel-gated denial -- but only for their own clause (#192).
+# The exemption used to apply to the whole command, so
+# `git config --get core.hooksPath && git config core.hooksPath /dev/null`
+# waved the write through.
+_match_clauses_unless "$_CMD_CLAUSES" "$PATTERN_HOOKSPATH_CONFIG" "$PATTERN_HOOKSPATH_CONFIG_READ" \
+  && _maybe_check_setup_sentinel HOOKSPATH_OVERRIDE  "git config core.hooksPath only allowed during /tcs-git-helpers:git-setup (set TCS_GIT_HELPERS_SETUP_ACTIVE=1)"
 
 # ---------------------------------------------------------------------------
 # Aggregate decision — emit cascading denial if anything matched

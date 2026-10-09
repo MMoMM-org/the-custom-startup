@@ -36,6 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check the repository `-C` names. **What to do:** nothing. Commands that were silently allowed
   before can now be refused; override them as usual with `CLAUDE_ALLOW_<RULE>=1` as the first
   token.
+- **Setting `core.hooksPath` through `git config` can no longer slip past the guard (#192).**
+  Lower-case `core.hookspath`, `--file <f>`, several options, `git config set`, and a write
+  chained after a read such as `git config --get core.hooksPath && git config core.hooksPath …`
+  were all allowed. Each disables every `.githooks/` hook without the setup sentinel. They are now
+  refused; reads stay allowed. A key like `core.hooksPathology` is no longer refused by mistake.
+  **What to do:** nothing.
 
 ## [Unreleased] — tcs-patterns selective install
 
