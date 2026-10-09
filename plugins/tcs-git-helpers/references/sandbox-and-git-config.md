@@ -68,10 +68,20 @@ git -c core.hooksPath=/dev/null commit -m "skip hooks"
 
 The pattern matches:
 
-- `git -c core.hooksPath=…` in any position
-- `git config core.hooksPath …` (write form)
-- `git config --global core.hooksPath …`
-- `git config --local core.hooksPath …`
+- `git -c core.hooksPath=…` in any position, behind other global options too
+- `git config core.hooksPath …` (write form), including `--unset`
+- `git config --global core.hooksPath …`, `--local`, `--file <f>`, or any
+  run of options before the key
+- `git config set core.hooksPath …` / `git config unset core.hooksPath`
+  (git 2.46+ subcommand syntax)
+- the key in any letter case: `core.hookspath`, `CORE.HOOKSPATH` (git
+  config keys are case-insensitive)
+
+Read forms are allowed without the setup sentinel: `--get`, `--get-all`,
+`--get-regexp` and `git config get`. The exemption covers only the clause
+that reads: `git config --get core.hooksPath && git config core.hooksPath …`
+is still refused for its second half. A key that only starts the same way
+(`core.hooksPathology`) is not matched.
 
 The corpus is in
 `plugins/tcs-git-helpers/tests/fixtures/commands/destructive_corpus.txt`

@@ -147,11 +147,19 @@ PATTERN_BRANCH_RESUME="$_GIT_CMD"'(checkout|switch)[[:space:]]+([^-.[:space:]][^
 # core.hooksPath subversion (defeats .githooks/)
 # ---------------------------------------------------------------------------
 
-# git -c core.hooksPath=... <subcommand>
-PATTERN_HOOKSPATH_INLINE="$_GIT_CMD"'-c[[:space:]]+core\.hooksPath'
+# The key, in any letter case: git config keys are case-insensitive, so
+# `core.hookspath` and `CORE.HOOKSPATH` set the same key (#192). POSIX ERE has
+# no case-insensitive flag, hence the bracket pairs.
+_HOOKSPATH_KEY='[Cc][Oo][Rr][Ee]\.[Hh][Oo][Oo][Kk][Ss][Pp][Aa][Tt][Hh]'
 
-# git config [--global|--local|--system|...] core.hooksPath ...
-PATTERN_HOOKSPATH_CONFIG="$_GIT_CMD"'config[[:space:]]+(--[^[:space:]]+[[:space:]]+)?core\.hooksPath'
+# git -c core.hooksPath=... <subcommand>
+PATTERN_HOOKSPATH_INLINE="$_GIT_CMD"'-c[[:space:]]+'"$_HOOKSPATH_KEY"
+
+# git config <any options, with or without values, or a set/unset subcommand> core.hooksPath ...
+# Any run of tokens may sit between `config` and the key (#192): `--file <f>`,
+# `--local --replace-all`, git 2.46's `config set`. The key must end at a
+# space, `=` or the clause end, so `core.hooksPathology` is not it.
+PATTERN_HOOKSPATH_CONFIG="$_GIT_CMD"'config([[:space:]]+[^[:space:]]+)*[[:space:]]+'"$_HOOKSPATH_KEY"'([[:space:]=]|$)'
 
 # ---------------------------------------------------------------------------
 # gh API bypass patterns (remote ref deletion via GitHub REST API)
@@ -167,10 +175,12 @@ PATTERN_GH_REF_DELETE_A='gh[[:space:]]+api[[:space:]].*git/refs/.*(-X|--method)[
 # (method flag BEFORE the URL path)
 PATTERN_GH_REF_DELETE_B='gh[[:space:]]+api[[:space:]].*(-X|--method)[[:space:]]+DELETE.*git/refs/'
 
-# Read-only forms (--get, --get-all, --get-regexp). These never mutate state
-# so they bypass the HOOKSPATH_OVERRIDE check, allowing debugging like
-# `git config --get core.hooksPath` without setting TCS_GIT_HELPERS_SETUP_ACTIVE.
-PATTERN_HOOKSPATH_CONFIG_READ="$_GIT_CMD"'config[[:space:]]+(--get|--get-all|--get-regexp)([[:space:]]+--[^[:space:]]+)*[[:space:]]+core\.hooksPath'
+# Read-only forms (--get, --get-all, --get-regexp, git 2.46's `get`). These
+# never mutate state, so a clause matching this is exempt from the
+# HOOKSPATH_OVERRIDE check -- debugging like `git config --get core.hooksPath`
+# needs no TCS_GIT_HELPERS_SETUP_ACTIVE. The exemption is per clause (#192): a
+# read elsewhere in the command does not exempt a write.
+PATTERN_HOOKSPATH_CONFIG_READ="$_GIT_CMD"'config([[:space:]]+[^[:space:]]+)*[[:space:]]+(--get|--get-all|--get-regexp|get)([[:space:]]+-[^[:space:]]+)*[[:space:]]+'"$_HOOKSPATH_KEY"'([[:space:]]|$)'
 
 # Export pattern constants so child shells (e.g. when sourced from a hook
 # script that re-execs in a subshell) see them too.
@@ -567,6 +577,19 @@ _with_normalized_clauses() {
 _match_clauses() {
   local clause
   while IFS= read -r clause; do
+    _match_command "$clause" "$2" && return 0
+  done <<< "$1"
+  return 1
+}
+
+# _match_clauses_unless <clausified> <pattern> <exempt-pattern>
+#   True (0) iff some clause matches <pattern> and does NOT match
+#   <exempt-pattern>. The exemption is judged per clause: a read-only clause
+#   elsewhere in the command must not exempt a write in a sibling (#192).
+_match_clauses_unless() {
+  local clause
+  while IFS= read -r clause; do
+    _match_command "$clause" "$3" && continue
     _match_command "$clause" "$2" && return 0
   done <<< "$1"
   return 1

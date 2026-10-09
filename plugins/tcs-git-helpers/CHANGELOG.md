@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.2.27] - 2026-10-09
+
+### Fixed
+
+- **Every write form of `git config … core.hooksPath` is refused outside git-setup (#192).** Five
+  forms passed: a non-canonical key case (`core.hookspath`; config keys are case-insensitive), an
+  option with a value (`--file <f>`), two options in a row (`--local --replace-all`), git 2.46's
+  `config set`/`config unset`, and any command that also contained a read, because the read
+  exemption applied to the whole command instead of to its own clause. The key is now matched
+  case-insensitively (`_HOOKSPATH_KEY`), any run of tokens may precede it, and the dispatcher
+  exempts read clauses one at a time (`_match_clauses_unless`). `git config get` joins the read
+  forms.
+- **`git config core.hooksPathology …` is no longer refused.** The key now has to end at a space,
+  `=` or the end of the clause.
+
 ## [2.2.26] - 2026-10-09
 
 ### Fixed
