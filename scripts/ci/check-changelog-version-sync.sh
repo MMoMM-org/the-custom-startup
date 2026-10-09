@@ -196,8 +196,11 @@ fi
 if [ "$status" -ne 0 ]; then
   printf '\nA missing CHANGELOG means a plugin can ship a version nothing records.
 A CHANGELOG ahead of its manifest means a documented version never shipped.\n' >&2
-  printf 'Usually a dropped auto-bump (issue #93) — check the Actions tab for a failed\n' >&2
-  printf '"Auto-bump plugin versions" run, and repair the manifest by hand.\n' >&2
+  printf 'A lost auto-bump run is caught up by the next one (#196); trigger\n' >&2
+  printf '"Auto-bump plugin versions" via Run workflow to catch up now. If the gap\n' >&2
+  printf 'survives a run, the bump cannot close it: a version set by hand, a reverted\n' >&2
+  printf 'bump, a CHANGELOG heading the bump cannot reach, or a push that keeps being\n' >&2
+  printf 'rejected (GH013). Never hand-edit plugin.json to silence it.\n' >&2
 fi
 
 exit "$status"

@@ -11,6 +11,10 @@ simulated run gets its own clone, detached at its own SHA, because that is what
 tree cannot reproduce the race at all: the second would already have the
 first's bump in its HEAD. An earlier version of this file made exactly that
 mistake and stayed green when the fix was removed.
+
+Since #196 what is owed is derived from main's history rather than from the
+push range, so the race resolves differently: the late run finds the bump
+already made. A run that never happens at all is caught up by the next one.
 """
 
 import json
@@ -104,7 +108,6 @@ def world(tmp_path):
         "env": env,
         "remote": remote,
         "work": work,
-        "base": _git(work, "rev-parse", "HEAD", env=env).stdout.strip(),
         "tmp": tmp_path,
         "n": [0],
     }
@@ -131,14 +134,15 @@ def _fresh_checkout(world, sha):
     return dest
 
 
-def _run_bump(world, base, head, extra_env=None, at=None):
+def _run_bump(world, at, extra_env=None):
+    """One CI run, checked out at `at`, the way the workflow invokes it."""
     env = dict(world["env"])
     env["MAX_ATTEMPTS"] = "4"
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
-        ["bash", "scripts/ci/bump-and-push.sh", base, head],
-        cwd=_fresh_checkout(world, at or head),
+        ["bash", "scripts/ci/bump-and-push.sh"],
+        cwd=_fresh_checkout(world, at),
         capture_output=True, text=True, env=env,
     )
 
@@ -162,7 +166,7 @@ def test_happy_path_bumps_and_pushes(world):
     head = _touch_plugin_and_commit(world, "demo", "change demo")
     _git(world["work"], "push", "--quiet", "origin", "main", env=world["env"])
 
-    r = _run_bump(world, world["base"], head)
+    r = _run_bump(world, head)
     assert r.returncode == 0, r.stdout + r.stderr
     assert _remote_plugin_version(world, "demo") == "1.0.1"
     assert _remote_json(world, ".claude-plugin/marketplace.json")["metadata"]["version"] == "1.0.1"
@@ -178,40 +182,87 @@ def test_nothing_to_bump_exits_clean(world):
     _git(work, "push", "--quiet", "origin", "main", env=env)
 
     before = _git(world["remote"], "rev-parse", "main", env=env).stdout.strip()
-    r = _run_bump(world, world["base"], head)
+    r = _run_bump(world, head)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "No version bumps needed" in r.stdout
     assert _git(world["remote"], "rev-parse", "main", env=env).stdout.strip() == before
 
 
-def test_the_race_no_longer_drops_a_bump(world):
-    """The 2026-08-31 failure, reproduced.
+def test_a_run_whose_bump_was_already_made_does_nothing(world):
+    """The #93 shape: two runs, the second checked out before the first's bump.
 
-    Two PRs land seconds apart. The run for the *second* wins the push and
-    bumps `other`. The run for the first then has to bump `demo` on top of a
-    main that has already moved — its checkout predates that move. Before the
-    fix its push was rejected, the job failed, and demo's bump was lost.
+    With the bump derived from main's history, the late run resets onto the
+    bumped main, finds nothing owed, and must neither fail nor bump again.
     """
     work, env = world["work"], world["env"]
-
     head_first = _touch_plugin_and_commit(world, "demo", "PR one touches demo")
     head_second = _touch_plugin_and_commit(world, "other", "PR two touches other")
     _git(work, "push", "--quiet", "origin", "main", env=env)
 
-    # The competing run gets there first and bumps `other`.
-    winner = _run_bump(world, head_first, head_second)
+    winner = _run_bump(world, head_second)
     assert winner.returncode == 0, winner.stdout + winner.stderr
+    assert _remote_plugin_version(world, "demo") == "1.0.1"
     assert _remote_plugin_version(world, "other") == "1.0.1"
-    assert _remote_plugin_version(world, "demo") == "1.0.0"
+    tip = _git(world["remote"], "rev-parse", "main", env=env).stdout.strip()
 
-    # Now the run whose bump used to be dropped. Its checkout is at head_first,
-    # which the winner's release commit has already moved past.
-    r = _run_bump(world, world["base"], head_first, at=head_first)
+    late = _run_bump(world, head_first)
+    assert late.returncode == 0, late.stdout + late.stderr
+    assert "No version bumps needed" in late.stdout
+    assert _git(world["remote"], "rev-parse", "main", env=env).stdout.strip() == tip
+
+
+def test_a_lost_run_is_caught_up_by_the_next_run(world):
+    """#196 end to end: no run for the plugin commit, a run for a docs commit."""
+    work, env = world["work"], world["env"]
+    _touch_plugin_and_commit(world, "demo", "fix demo — its run never happens")
+    (work / "README.md").write_text("docs\n")
+    _git(work, "add", "-A", env=env)
+    _git(work, "commit", "--quiet", "-m", "docs only", env=env)
+    head = _git(work, "rev-parse", "HEAD", env=env).stdout.strip()
+    _git(work, "push", "--quiet", "origin", "main", env=env)
+
+    r = _run_bump(world, head)
     assert r.returncode == 0, r.stdout + r.stderr
+    assert _remote_plugin_version(world, "demo") == "1.0.1"
+    assert _remote_plugin_version(world, "other") == "1.0.0"
+    assert _remote_json(world, ".claude-plugin/marketplace.json")["metadata"]["version"] == "1.0.1"
 
+
+# Rejects the first push, and while doing so moves main to a commit a human
+# pushed meanwhile (staged under refs/pending/human). The retry must see it.
+HOOK_LAND_HUMAN_COMMIT_THEN_REJECT = """#!/bin/sh
+count=$(cat push-count 2>/dev/null || echo 0)
+count=$((count + 1))
+printf '%s' "$count" > push-count
+if [ "$count" -le 1 ]; then
+  env -u GIT_QUARANTINE_PATH git update-ref refs/heads/main refs/pending/human || exit 2
+  echo "simulated race: main moved, rejecting first push" >&2
+  exit 1
+fi
+exit 0
+"""
+
+
+def test_a_commit_landing_mid_run_is_bumped_exactly_once(world):
+    """The retry recomputes what is owed on the moved main, not on its checkout."""
+    work, env = world["work"], world["env"]
+    head = _touch_plugin_and_commit(world, "demo", "change demo")
+    _git(work, "push", "--quiet", "origin", "main", env=env)
+
+    _touch_plugin_and_commit(world, "other", "a human change to other")
+    _git(work, "push", "--quiet", "origin", "HEAD:refs/pending/human", env=env)
+
+    hook = world["remote"] / "hooks" / "pre-receive"
+    hook.write_text(HOOK_LAND_HUMAN_COMMIT_THEN_REJECT)
+    hook.chmod(0o755)
+
+    r = _run_bump(world, head)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "recomputing" in r.stderr, "the first push must have been rejected"
     assert _remote_plugin_version(world, "demo") == "1.0.1"
     assert _remote_plugin_version(world, "other") == "1.0.1", \
-        "the competing run's bump must survive"
+        "the human commit is owed exactly one bump"
+    assert _remote_json(world, ".claude-plugin/marketplace.json")["metadata"]["version"] == "1.0.1"
 
 
 def test_retries_when_the_push_is_rejected(world):
@@ -224,7 +275,7 @@ def test_retries_when_the_push_is_rejected(world):
     hook.write_text(HOOK_REJECT_FIRST)
     hook.chmod(0o755)
 
-    r = _run_bump(world, world["base"], head)
+    r = _run_bump(world, head)
     assert r.returncode == 0, r.stdout + r.stderr
     assert _remote_plugin_version(world, "demo") == "1.0.1", \
         "exactly one bump — a retry must not double-increment"
@@ -239,25 +290,9 @@ def test_gives_up_loudly_when_every_push_is_rejected(world):
     hook.write_text(HOOK_REJECT_ALWAYS)
     hook.chmod(0o755)
 
-    r = _run_bump(world, world["base"], head, extra_env={"MAX_ATTEMPTS": "2"})
+    r = _run_bump(world, head, extra_env={"MAX_ATTEMPTS": "2"})
     assert r.returncode == 1
     assert "could not push after 2 attempts" in r.stderr
-
-
-def test_all_zero_base_sha_does_not_bump_every_plugin(world):
-    """`github.event.before` is all-zeros on a first push.
-
-    Diffing against the empty tree would mark every plugin as touched and bump
-    the entire marketplace; the fallback keeps it to the single commit.
-    """
-    head = _touch_plugin_and_commit(world, "demo", "change demo")
-    _git(world["work"], "push", "--quiet", "origin", "main", env=world["env"])
-
-    r = _run_bump(world, "0" * 40, head)
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "falling back" in r.stderr
-    assert _remote_plugin_version(world, "demo") == "1.0.1"
-    assert _remote_plugin_version(world, "other") == "1.0.0"
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +323,7 @@ def test_manifest_edited_without_a_version_change_still_bumps(world):
     head = _git(work, "rev-parse", "HEAD", env=env).stdout.strip()
     _git(work, "push", "--quiet", "origin", "main", env=env)
 
-    r = _run_bump(world, world["base"], head)
+    r = _run_bump(world, head)
     assert r.returncode == 0, r.stdout + r.stderr
     assert _remote_plugin_version(world, "demo") == "1.0.1", \
         "a manifest edit that leaves the version alone must not suppress the bump"
@@ -304,7 +339,7 @@ def test_a_real_version_change_is_not_bumped_again(world):
     head = _git(work, "rev-parse", "HEAD", env=env).stdout.strip()
     _git(work, "push", "--quiet", "origin", "main", env=env)
 
-    r = _run_bump(world, world["base"], head)
+    r = _run_bump(world, head)
     assert r.returncode == 0, r.stdout + r.stderr
     assert _remote_plugin_version(world, "demo") == "2.0.0", \
         "an author's deliberate bump must survive untouched"
@@ -323,7 +358,7 @@ def test_marketplace_is_bumped_when_a_plugin_ships(world):
     head = _git(work, "rev-parse", "HEAD", env=env).stdout.strip()
     _git(work, "push", "--quiet", "origin", "main", env=env)
 
-    r = _run_bump(world, world["base"], head)
+    r = _run_bump(world, head)
     assert r.returncode == 0, r.stdout + r.stderr
     assert _remote_plugin_version(world, "demo") == "1.0.1"
     assert _remote_json(world, ".claude-plugin/marketplace.json")["metadata"]["version"] == "1.0.1"

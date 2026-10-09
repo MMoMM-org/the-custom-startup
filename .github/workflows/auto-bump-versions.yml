@@ -3,6 +3,12 @@ name: Auto-bump plugin versions
 on:
   push:
     branches: [main]
+  # What is owed is derived from main's history (issue #196), so any run
+  # catches up on runs that never happened. Dispatch is for "now"; the
+  # schedule covers a lost event on the last merge of the day.
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
 
 permissions:
   contents: write
@@ -10,21 +16,24 @@ permissions:
 # Queue runs instead of racing them (issue #93). Two PRs merging seconds apart
 # used to produce two concurrent runs, each checked out at its own commit;
 # whichever pushed second lost a non-fast-forward and its bump was gone. Never
-# cancel-in-progress here — a cancelled run is a dropped bump, which is the bug.
+# cancel-in-progress here: a run mid-push should finish. A queued run that is
+# superseded is harmless — the next run catches up on whatever it owed.
 concurrency:
   group: auto-bump-versions-main
   cancel-in-progress: false
 
 jobs:
   bump:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    # head_commit is null on dispatch and schedule, so those always run. The
+    # ref guard keeps a dispatch from another branch from pushing to main.
+    if: "github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          # Full history: each retry resets onto a moved origin/main and still
-          # has to diff the original push range.
+          # Full history: what is owed is read from main's history, back to
+          # each plugin's last version raise. A shallow clone is refused.
           fetch-depth: 0
 
       - name: Configure committer
@@ -38,7 +47,7 @@ jobs:
       - name: Bump and push, retrying if main moved underneath
         env:
           MAX_ATTEMPTS: "5"
-        run: bash scripts/ci/bump-and-push.sh "${{ github.event.before }}" "${{ github.sha }}"
+        run: bash scripts/ci/bump-and-push.sh
 
       # The state this bug used to leave behind: a CHANGELOG documenting a
       # version the manifest never carried. Strict here (--allow-ahead 0) —

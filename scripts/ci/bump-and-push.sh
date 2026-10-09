@@ -2,13 +2,12 @@
 #
 # scripts/ci/bump-and-push.sh
 #
-# Compute the version bumps for a push range, commit them, and push to main —
+# Compute the version bumps main still owes, commit them, and push to main —
 # retrying against a main that moved underneath us (issue #93).
 #
 # Two PRs merging seconds apart used to produce two concurrent auto-bump runs,
 # each checked out at its own commit. Whichever pushed second lost a
-# non-fast-forward, the job failed, and its bump was gone for good: no later run
-# revisits that push range.
+# non-fast-forward, the job failed, and its bump was gone.
 #
 # Each attempt resets onto the current remote tip and recomputes the bump there.
 # Recomputing rather than rebasing a prepared commit is what makes the retry
@@ -16,11 +15,14 @@
 # Rebasing a "4.3.0 -> 4.3.1" edit onto a main that already says 4.3.1 either
 # conflicts or lands a version that was already shipped.
 #
-# Which plugins need a bump comes from the push range and does not change
-# between attempts; only where the bump is applied does.
+# What is owed is derived from main's history, not from the push that started
+# the run (issue #196), so it is recomputed on every attempt as well: a commit
+# that landed between the fetch and a rejected push is included on the retry,
+# and a run whose bump another run already made finds nothing left to do. A
+# run that is lost entirely is caught up by the next one.
 #
 # Usage:
-#   bump-and-push.sh <base-sha> <head-sha> [<remote>] [<branch>]
+#   bump-and-push.sh [<remote>] [<branch>]
 #
 # Environment:
 #   MAX_ATTEMPTS   push attempts before giving up (default 5)
@@ -36,24 +38,11 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-BASE_SHA="${1:?usage: bump-and-push.sh <base-sha> <head-sha> [remote] [branch]}"
-HEAD_SHA="${2:?usage: bump-and-push.sh <base-sha> <head-sha> [remote] [branch]}"
-REMOTE="${3:-origin}"
-BRANCH="${4:-main}"
+REMOTE="${1:-origin}"
+BRANCH="${2:-main}"
 
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-5}"
 DRY_RUN="${DRY_RUN:-0}"
-
-# On the first push to a branch, `github.event.before` is all-zeros. Fall back
-# to the single-commit range rather than diffing against the empty tree, which
-# would mark every plugin as touched and bump the whole marketplace.
-case "$BASE_SHA" in
-  ''|*[!0-9a-f]*|0000000000000000000000000000000000000000)
-    printf 'bump-and-push: unusable base SHA %s, falling back to %s^\n' \
-      "${BASE_SHA:-<empty>}" "$HEAD_SHA" >&2
-    BASE_SHA="${HEAD_SHA}^"
-    ;;
-esac
 
 attempt=1
 while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
@@ -67,7 +56,7 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
     exit 1
   }
 
-  if ! bash "${SCRIPT_DIR}/auto-bump-versions.sh" "$BASE_SHA" "$HEAD_SHA"; then
+  if ! bash "${SCRIPT_DIR}/auto-bump-versions.sh"; then
     printf 'bump-and-push: auto-bump-versions.sh failed\n' >&2
     exit 1
   fi

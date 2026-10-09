@@ -1,13 +1,15 @@
 """Behavioural coverage for scripts/ci/auto-bump-versions.sh.
 
-The script patch-bumps every plugin a push touched. A major or minor release
-cannot be produced by a patch bump, so it is requested in the plugin's own
-CHANGELOG: when the top heading names exactly the next major (M+1.0.0) or the
-next minor (M.m+1.0) of the manifest's version, the manifest is set to that
-version instead. Anything else falls back to the patch bump.
+The script patch-bumps a plugin once for every commit that touched it since
+its version was last raised, so a run that never happened (#196) is caught up
+by the next one. A major or minor release cannot be produced by a patch bump,
+so it is requested in the plugin's own CHANGELOG: when the top heading names
+exactly the next major (M+1.0.0) or the next minor (M.m+1.0) of the manifest's
+version, the manifest is set to that version instead. Anything else falls back
+to the patch bump.
 
 Each case builds a throwaway git repository with one plugin and a marketplace,
-commits a change, and runs the real script over the commit range. Expected
+commits changes, and runs the real script on the checked-out state. Expected
 versions are typed out by hand, never computed from the input.
 """
 
@@ -110,17 +112,18 @@ def _commit_change(repo, heading=None, manifest_version=None, changelog_bytes=No
     return _git(work, env, "rev-parse", "HEAD")
 
 
-def _run_bump(repo, head):
+def _run_bump(repo, *args):
+    """Run the script the way CI does: on the checked-out state, no range."""
     return subprocess.run(
-        ["bash", str(BUMP), repo["base"], head],
+        ["bash", str(BUMP), *args],
         cwd=repo["work"], capture_output=True, text=True, env=repo["env"],
     )
 
 
 def _bumped_to(repo, heading=None, manifest_version=None, changelog_bytes=None):
-    head = _commit_change(repo, heading=heading, manifest_version=manifest_version,
-                          changelog_bytes=changelog_bytes)
-    r = _run_bump(repo, head)
+    _commit_change(repo, heading=heading, manifest_version=manifest_version,
+                   changelog_bytes=changelog_bytes)
+    r = _run_bump(repo)
     assert r.returncode == 0, r.stdout + r.stderr
     return _version(_manifest_path(repo["work"]), "version")
 
@@ -149,8 +152,8 @@ def test_a_requested_release_still_bumps_the_marketplace_by_a_patch(repo):
 
 
 def test_the_requested_release_is_reported(repo):
-    head = _commit_change(repo, heading="## [2.0.0] - 2026-10-06")
-    r = _run_bump(repo, head)
+    _commit_change(repo, heading="## [2.0.0] - 2026-10-06")
+    r = _run_bump(repo)
     assert "1.4.4 -> 2.0.0" in r.stdout
 
 
@@ -256,3 +259,211 @@ def test_unreleased_above_a_next_major_heading_is_a_patch_bump(repo):
 ])
 def test_next_release_from_other_bases(tmp_path, base, heading, expected):
     assert _bumped_to(_make_repo(tmp_path, base), heading=heading) == expected
+
+
+# ---------------------------------------------------------------------------
+# Catching up (#196): the bump is derived from the state of main, not from the
+# push that triggered the run. GitHub delivered no push event for #187, no run
+# happened, and a range-based bump never looked at that commit again.
+# ---------------------------------------------------------------------------
+
+
+def _commit(repo, message, write=None, remove=None):
+    """Commit arbitrary file writes ({relpath: text}) and removals."""
+    work, env = repo["work"], repo["env"]
+    for rel, text in (write or {}).items():
+        path = work / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    for rel in remove or ():
+        _git(work, env, "rm", "-r", "--quiet", rel)
+    _git(work, env, "add", "-A")
+    _git(work, env, "commit", "--quiet", "-m", message)
+    return _git(work, env, "rev-parse", "HEAD")
+
+
+def _manifest_text(version, indent=2, name="demo"):
+    return json.dumps({"name": name, "version": version}, indent=indent) + "\n"
+
+
+def _bump_ok(repo, *args):
+    r = _run_bump(repo, *args)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return r
+
+
+def _commit_the_bump(repo):
+    return _commit(repo, "chore(release): auto-bump plugin versions [skip ci]")
+
+
+def _demo(repo):
+    return _version(_manifest_path(repo["work"]), "version")
+
+
+DEMO_CHANGELOG = "plugins/demo/CHANGELOG.md"
+DEMO_MANIFEST = "plugins/demo/.claude-plugin/plugin.json"
+MARKETPLACE = ".claude-plugin/marketplace.json"
+
+
+def test_a_lost_run_is_caught_up_by_the_next_run(repo):
+    """#196: the run for the plugin commit never happened; a docs-only push follows."""
+    _commit(repo, "fix demo", write={"plugins/demo/notes.md": "a fix\n"})
+    _commit(repo, "docs only", write={"README.md": "docs\n"})
+    _bump_ok(repo)
+    assert _demo(repo) == "1.4.5"
+    assert _marketplace(repo) == "1.0.1"
+
+
+def test_two_lost_commits_replay_their_own_changelog_headings(repo):
+    """Each lost commit gets the bump its own run would have made."""
+    _commit(repo, "one", write={"plugins/demo/a.md": "a\n",
+                                DEMO_CHANGELOG: _changelog("## [1.4.5] - 2026-10-08")})
+    _commit(repo, "two", write={"plugins/demo/b.md": "b\n",
+                                DEMO_CHANGELOG: _changelog("## [1.4.6] - 2026-10-09")})
+    _bump_ok(repo)
+    assert _demo(repo) == "1.4.6"
+    r = subprocess.run(
+        ["bash", str(SYNC), "--allow-ahead", "0", str(repo["work"] / "plugins" / "demo")],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_a_lost_minor_request_followed_by_a_patch_replays_both(repo):
+    _commit(repo, "feature", write={"plugins/demo/a.md": "a\n",
+                                    DEMO_CHANGELOG: _changelog("## [1.5.0] - 2026-10-08")})
+    _commit(repo, "fix", write={"plugins/demo/b.md": "b\n",
+                                DEMO_CHANGELOG: _changelog("## [1.5.1] - 2026-10-09")})
+    _bump_ok(repo)
+    assert _demo(repo) == "1.5.1"
+
+
+def test_a_second_run_after_the_bump_changes_nothing(repo):
+    _commit(repo, "fix demo", write={"plugins/demo/notes.md": "a fix\n"})
+    _bump_ok(repo)
+    _commit_the_bump(repo)
+    _bump_ok(repo)
+    assert _git(repo["work"], repo["env"], "status", "--porcelain") == ""
+    assert _demo(repo) == "1.4.5"
+
+
+def test_a_reformatted_manifest_is_not_a_version_raise(repo):
+    """The version line changes, the value does not: still owed for the fix."""
+    _commit(repo, "fix demo", write={"plugins/demo/notes.md": "a fix\n"})
+    _commit(repo, "reformat", write={DEMO_MANIFEST: _manifest_text("1.4.4", indent=4)})
+    _bump_ok(repo)
+    # Two commits touched the plugin since 1.4.4 was set: two patch bumps.
+    assert _demo(repo) == "1.4.6"
+
+
+def test_reverting_a_bump_never_reships_its_version(repo):
+    _commit(repo, "fix demo", write={"plugins/demo/notes.md": "a fix\n"})
+    _bump_ok(repo)
+    bump = _commit_the_bump(repo)
+    _git(repo["work"], repo["env"], "revert", "--no-edit", bump)
+    assert _demo(repo) == "1.4.4"
+    _bump_ok(repo)
+    assert _demo(repo) == "1.4.6", "1.4.5 already shipped with other contents"
+
+
+def test_a_hand_set_lower_version_is_not_a_raise(repo):
+    _commit(repo, "downgrade", write={"plugins/demo/notes.md": "x\n",
+                                      DEMO_MANIFEST: _manifest_text("1.4.2")})
+    _bump_ok(repo)
+    assert _demo(repo) == "1.4.5"
+
+
+def test_a_change_and_its_revert_are_both_owed(repo):
+    """main served the change under the old version, however briefly."""
+    _commit(repo, "add", write={"plugins/demo/notes.md": "x\n"})
+    _commit(repo, "revert", remove=["plugins/demo/notes.md"])
+    _bump_ok(repo)
+    assert _demo(repo) == "1.4.6"
+
+
+def test_a_no_ff_merge_that_sets_the_version_is_not_bumped_again(repo):
+    work, env = repo["work"], repo["env"]
+    _git(work, env, "checkout", "--quiet", "-b", "feature")
+    _commit(repo, "code", write={"plugins/demo/notes.md": "x\n"})
+    _commit(repo, "hand bump", write={DEMO_MANIFEST: _manifest_text("1.4.9")})
+    _git(work, env, "checkout", "--quiet", "main")
+    _git(work, env, "merge", "--quiet", "--no-ff", "-m", "merge feature", "feature")
+    _bump_ok(repo)
+    assert _demo(repo) == "1.4.9"
+
+
+def test_commits_after_a_hand_set_version_each_get_a_patch(repo):
+    """Pinned: a rebase-merge loses the push boundary, so 1.5.0 then a fix ships 1.5.1."""
+    _commit(repo, "hand bump", write={DEMO_MANIFEST: _manifest_text("1.5.0")})
+    _commit(repo, "fix", write={"plugins/demo/notes.md": "x\n"})
+    _bump_ok(repo)
+    assert _demo(repo) == "1.5.1"
+
+
+def test_a_hand_set_marketplace_still_gets_a_patch_for_a_plugin_bump(repo):
+    """Pinned: harmless, and AGENTS.md forbids hand-setting versions anyway."""
+    _commit(repo, "both", write={
+        "plugins/demo/notes.md": "x\n",
+        MARKETPLACE: json.dumps({"name": "test", "metadata": {"version": "1.1.0"}},
+                                indent=2) + "\n",
+    })
+    _bump_ok(repo)
+    assert _demo(repo) == "1.4.5"
+    assert _marketplace(repo) == "1.1.1"
+
+
+def test_the_marketplace_catches_up_on_a_lost_hand_bump(repo):
+    _commit(repo, "hand bump", write={DEMO_MANIFEST: _manifest_text("1.4.9")})
+    _commit(repo, "docs only", write={"README.md": "docs\n"})
+    _bump_ok(repo)
+    assert _demo(repo) == "1.4.9"
+    assert _marketplace(repo) == "1.0.1"
+
+
+def test_a_renamed_plugin_is_not_bumped_but_the_marketplace_is(repo):
+    work, env = repo["work"], repo["env"]
+    _git(work, env, "mv", "plugins/demo", "plugins/renamed")
+    _git(work, env, "commit", "--quiet", "-m", "rename")
+    _bump_ok(repo)
+    renamed = work / "plugins" / "renamed" / ".claude-plugin" / "plugin.json"
+    assert _version(renamed, "version") == "1.4.4"
+    assert _marketplace(repo) == "1.0.1"
+
+
+def test_a_deleted_plugin_does_not_break_the_run(repo):
+    _commit(repo, "delete", remove=["plugins/demo"])
+    _bump_ok(repo)
+    assert _marketplace(repo) == "1.0.0"
+
+
+def test_a_shallow_clone_is_refused(repo, tmp_path):
+    _commit(repo, "fix demo", write={"plugins/demo/notes.md": "x\n"})
+    shallow = tmp_path / "shallow"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--depth", "1",
+         f"file://{repo['work']}", str(shallow)],
+        check=True, capture_output=True, env=repo["env"],
+    )
+    r = subprocess.run(["bash", str(BUMP)], cwd=shallow,
+                       capture_output=True, text=True, env=repo["env"])
+    assert r.returncode == 1
+    assert "shallow" in r.stderr
+    assert _version(shallow / DEMO_MANIFEST, "version") == "1.4.4"
+
+
+def test_a_manifest_that_never_carried_a_version_is_an_error(repo):
+    _commit(repo, "broken plugin", write={
+        "plugins/broken/.claude-plugin/plugin.json": json.dumps({"name": "broken"}) + "\n",
+    })
+    r = _run_bump(repo)
+    assert r.returncode == 1
+    assert "plugins/broken" in r.stderr
+
+
+def test_legacy_range_arguments_are_ignored(repo):
+    """A run queued before this change calls the script with <base> <head>."""
+    head = _commit(repo, "fix demo", write={"plugins/demo/notes.md": "x\n"})
+    _commit(repo, "docs only", write={"README.md": "docs\n"})
+    r = _bump_ok(repo, head, head)
+    assert "ignored" in r.stderr
+    assert _demo(repo) == "1.4.5"

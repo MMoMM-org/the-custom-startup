@@ -1,5 +1,5 @@
 # Decisions — the-custom-startup
-<!-- Architecture choices and rationale. Updated: 2026-10-07 -->
+<!-- Architecture choices and rationale. Updated: 2026-10-09 -->
 <!-- What goes here: why we chose X over Y, ADR links, significant tradeoff choices -->
 <!-- Format: ADR-N: [decision]. → [rationale]. No spec refs — git blame has the origin. -->
 
@@ -16,3 +16,6 @@
 
 <!-- 2026-10-07 -->
 - ADR-6 (Marcus): A plugin major/minor release is requested by writing exactly the next-major/minor heading in its CHANGELOG; auto-bump sets plugin.json to it. → CI could only patch-bump, so a breaking release could not ship.
+
+<!-- 2026-10-09 -->
+- ADR-7 (Marcus): Auto-bump derives what is owed from main's history (one bump per commit touching a plugin since its last version raise), not from the push range. → A lost push event otherwise drops its bump for good and reddens every later run.
