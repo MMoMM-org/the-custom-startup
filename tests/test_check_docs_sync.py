@@ -180,10 +180,21 @@ def _commit_files(sha):
     return [line for line in out.stdout.split("\n") if line.strip()]
 
 
-@pytest.mark.skipif(
-    subprocess.run(["git", "cat-file", "-e", "16d2f65"], cwd=REPO_ROOT).returncode != 0,
-    reason="the pre-docs commit of #135 has been garbage-collected",
+# The files changed by 16d2f65, PR #135's branch commit before its
+# documentation commit. Inlined rather than read from git: #135 was
+# squash-merged and its branch deleted, so 16d2f65 is reachable from no ref
+# and no clone fetches it, `fetch-depth: 0` included. Read from git, this test
+# skipped on every CI run (#201). The list is fixed history.
+PRE_DOCS_COMMIT_FILES = (
+    "docs/about/sources.md",
+    "docs/guides/statusline.md",
+    "scripts/statusline.toml",
+    "scripts/the-custom-startup-statusline-enhanced.sh",
+    "scripts/the-custom-startup-statusline-lib.sh",
+    "tests/test_statusline.py",
 )
+
+
 def test_it_catches_the_commit_it_was_built_from(tmp_path):
     """16d2f65 is #135 before its documentation commit — the actual omission.
 
@@ -192,7 +203,7 @@ def test_it_catches_the_commit_it_was_built_from(tmp_path):
     missing was the changelog entry and the configurator.
     """
     real_map = (REPO_ROOT / ".github" / "docs-map").read_text(encoding="utf-8")
-    r = _run(tmp_path, _commit_files("16d2f65"), mapping=real_map)
+    r = _run(tmp_path, list(PRE_DOCS_COMMIT_FILES), mapping=real_map)
 
     assert r.returncode == 1, f"the known-bad commit passed:\n{r.stdout}"
     assert "CHANGELOG.md" in r.stderr, r.stderr
