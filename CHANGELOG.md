@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The session-start cleanup hint no longer names a branch `gh pr merge --delete-branch` already
+  deleted (#203).** `gh` pulls before it deletes the local branch, so the `post-merge` hook
+  recorded the branch as stale-merged while it still existed, and the SessionStart hint and
+  `git-audit --brief` kept pointing at a `--cleanup` with nothing to do. Both now count only
+  cached branches that still exist locally.
+
 - **Plugin hooks now run when the plugin is installed under a path with a space (#175).** Six
   tcs-git-helpers hooks and the tcs-patterns ESLint hook put `${CLAUDE_PLUGIN_ROOT}` into their
   shell command unquoted. Claude Code substitutes that path before the shell splits the command,
