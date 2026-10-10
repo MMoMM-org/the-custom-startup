@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Plugin hooks now run when the plugin is installed under a path with a space (#175).** Six
+  tcs-git-helpers hooks and the tcs-patterns ESLint hook put `${CLAUDE_PLUGIN_ROOT}` into their
+  shell command unquoted. Claude Code substitutes that path before the shell splits the command,
+  so a space in the install path (for example a macOS home directory such as
+  `/Users/Jane Doe`) turned the path into several words, and the hook never executed. The
+  destructive-git-op guard, the edit-on-`main` guard, the git-internals guard and the
+  worktree-exit guard all looked installed and enforced nothing, with no error shown. The
+  commands are now quoted, and a test runs every plugin hook from a path with a space.
+  **What to do:** update the plugins (`/plugin`). The running hooks load from the plugin cache,
+  so nothing changes until you do.
+
 - **`/tcs-git-helpers:git-setup` no longer refuses a repository whose `core.hooksPath` already
   points at its own `.githooks` (#181).** An absolute path, `./.githooks` or a symlinked spelling
   was reported as a foreign hooks path and setup aborted. **What to do:** nothing; the next
