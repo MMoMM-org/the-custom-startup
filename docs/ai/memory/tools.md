@@ -47,3 +47,8 @@
 
 <!-- 2026-10-02 -->
 - **`skillOverrides` cannot reach a plugin skill** — `off`/`name-only` are silently ignored for plugin sources; only `enabledPlugins` (whole plugin) works. A repo skill honours it. → Per-skill control means installing into the repo.
+
+<!-- 2026-10-10 -->
+- **`$TMPDIR` differs between sandboxed and unsandboxed Bash calls** — a file one call writes is absent for the other, and a count over it reads empty, not zero. → Pass the scratchpad's absolute path between calls, never `$TMPDIR`.
+- **A baseline worktree for before/after test runs must be on a branch** — the guard hooks bypass on a detached HEAD, so `git worktree add --detach` yields dozens of false deny failures. → Run `git switch -c tmp/<name>` inside it first.
+- **A squash-merged PR's branch commits are reachable from no ref once the branch is deleted** — no clone fetches them, `fetch-depth: 0` included, so a test reading one skips everywhere. → Inline the data the test needs.
