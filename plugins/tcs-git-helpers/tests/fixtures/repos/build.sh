@@ -408,26 +408,34 @@ build_with_submodules() {
 
 # --- Driver ---------------------------------------------------------------
 
-build_clean_unmerged
-build_dirty
-build_squash_merged
-build_merge_commit_merged
-build_closed_pr
-build_detached_head
-build_rebase_in_progress
-build_large_50_branches
-build_long_1000_commits
-
-# T5.1 setup-skill scenarios
-build_clean_repo
-build_with_husky
-build_with_lefthook
-build_with_pre_commit
-build_with_simple_git_hooks
-build_with_existing_hooks
-build_with_tcs_current
-build_with_tcs_older
-build_with_non_sample_hooks
-build_with_submodules
+# Each scenario is announced on stderr before it runs. Under `set -e` a
+# failing git call aborts the build, so the last announced name is the
+# scenario that failed (#177: an intermittent EINVAL on macOS CI could not be
+# attributed to one of the 19). stdout stays reserved for OUT_DIR, which
+# every caller parses.
+for scenario in \
+  clean_unmerged \
+  dirty \
+  squash_merged \
+  merge_commit_merged \
+  closed_pr \
+  detached_head \
+  rebase_in_progress \
+  large_50_branches \
+  long_1000_commits \
+  clean_repo \
+  with_husky \
+  with_lefthook \
+  with_pre_commit \
+  with_simple_git_hooks \
+  with_existing_hooks \
+  with_tcs_current \
+  with_tcs_older \
+  with_non_sample_hooks \
+  with_submodules
+do
+  printf 'build.sh: %s\n' "$scenario" >&2
+  "build_$scenario"
+done
 
 printf '%s\n' "$OUT_DIR"

@@ -28,7 +28,9 @@ setup_file() {
   # Build all scenarios once per file run for speed.
   export TCS_FIXTURES_OUT
   TCS_FIXTURES_OUT=$(mktemp -d "${TMPDIR:-/tmp}/tcs-fixtures-bats.XXXXXX")
-  bash "$BUILD_SH" "$TCS_FIXTURES_OUT" >/dev/null
+  # Output is not discarded: bats prints setup_file output only when it
+  # fails, and then build.sh's per-scenario progress names the scenario (#177).
+  bash "$BUILD_SH" "$TCS_FIXTURES_OUT"
 }
 
 teardown_file() {
