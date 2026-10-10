@@ -150,7 +150,22 @@ jobs:
       # budget with no regression behind it. A factor of 4 still fails a real
       # regression (50ms becoming 2s) while tolerating the noise floor; locally
       # the factor is 1 and the specified budget is enforced exactly.
+      #
+      # The TAP stream is kept for the next step. `shell: bash` gives pipefail,
+      # so bats' own exit status, not tee's, decides this step.
       - name: Run bats
+        shell: bash
         env:
           TCS_PERF_SLACK: "4"
-        run: bats --recursive --print-output-on-failure plugins/*/tests/bats
+        run: |
+          bats --formatter tap --recursive --print-output-on-failure plugins/*/tests/bats \
+            | tee "$RUNNER_TEMP/bats.tap"
+
+      # A failing setup_file aborts the rest of its file, and those tests emit
+      # no TAP line at all (#178: 35 vanished from one run while the log showed
+      # a single `not ok`). This states plan / executed / skipped / missing on
+      # one line in the job summary and fails when any planned test went
+      # unreported. always(): the count matters most when the bats step failed.
+      - name: Check every planned bats test reported a result
+        if: always()
+        run: python3 scripts/ci/check-tap-plan.py "$RUNNER_TEMP/bats.tap"

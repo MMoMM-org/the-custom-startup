@@ -1,0 +1,14 @@
+1..7
+not ok 1 setup_file failed
+# (from function `setup_file' in test file 1-aborts.bats, line 1)
+#   `setup_file() { echo "building scenario X"; echo "boom" >&2; false; }' failed
+# building scenario X
+# boom
+ok 4 d
+ok 5 e skipped # skip jq required
+not ok 6 f fails
+# (in test file 3-fails.bats, line 1)
+#   `@test "f fails" { echo "detail line"; [ 1 -eq 2 ]; }' failed
+# detail line
+ok 7 g
+# bats warning: Executed 5 instead of expected 7 tests

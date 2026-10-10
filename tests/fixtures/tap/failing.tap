@@ -1,0 +1,8 @@
+1..4
+ok 1 d
+ok 2 e skipped # skip jq required
+not ok 3 f fails
+# (in test file 3-fails.bats, line 1)
+#   `@test "f fails" { echo "detail line"; [ 1 -eq 2 ]; }' failed
+# detail line
+ok 4 g
