@@ -319,7 +319,7 @@ GHSTUB
   local line_count
   line_count="$(printf '%s\n' "$output" | grep -c '^tcs-git-helpers:' 2>/dev/null || true)"
   [ "$line_count" -eq 1 ]
-  [[ "$output" == *"gh"* ]]
+  _has "$output" "gh"
   [[ "$output" == *"skipped"* ]]
 }
 

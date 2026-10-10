@@ -15,6 +15,8 @@
 #   - subsequent attempt within 5s re-denies (double-tap)
 #   - allow path emits override-consumed banner on stderr
 
+load 'lib/helpers'
+
 setup() {
   PLUGIN_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   HOOK="$PLUGIN_ROOT/scripts/worktree-exit-guard.sh"
@@ -264,7 +266,7 @@ _invoke_hook() {
   output_only=$(_invoke_hook "$MADE_REPO_PATH" 2>/dev/null)
   status=$?
   [ "$status" -eq 0 ]
-  ! printf '%s' "$output_only" | grep -q '"permissionDecision":"deny"'
+  _lacks "$output_only" '"permissionDecision":"deny"'
   # Sentinel exists after consumption (5s window).
   [ -f "$CLAUDE_PLUGIN_DATA/cache/override-consumed-CLAUDE_ALLOW_WORKTREE_EXIT_WITH_CHANGES" ]
 }
@@ -275,7 +277,7 @@ _invoke_hook() {
   output_only=$(_invoke_hook "$MADE_REPO_PATH" 2>/dev/null)
   status=$?
   [ "$status" -eq 0 ]
-  ! printf '%s' "$output_only" | grep -q '"permissionDecision":"deny"'
+  _lacks "$output_only" '"permissionDecision":"deny"'
   # Override.sh unsets the env var inside the hook subshell — the parent
   # bats process still has it set, so re-export is unnecessary.
   export CLAUDE_ALLOW_WORKTREE_EXIT_WITH_CHANGES=1

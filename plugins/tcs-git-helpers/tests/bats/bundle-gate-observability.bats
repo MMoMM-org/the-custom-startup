@@ -24,6 +24,8 @@ bats_require_minimum_version 1.5.0
 # Setup / teardown
 # ---------------------------------------------------------------------------
 
+load 'lib/helpers'
+
 setup() {
   TESTS_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")" && pwd)"
   PLUGIN_ROOT="$(cd "$TESTS_DIR/../.." && pwd)"
@@ -223,6 +225,6 @@ _commit_all() {
   head_sha="$(_head_sha)"
 
   run bash -c "bash \"$GATE_SCRIPT\" \"${base_sha}..${head_sha}\" \"$TEST_DIR/repo\" 2>&1 >/dev/null; echo \"exit:\$?\""
-  [[ "$output" == *"logwrite.sh"* ]]
+  _has "$output" "logwrite.sh"
   [[ "$output" == *"tcs-helper-observability-version"* ]]
 }

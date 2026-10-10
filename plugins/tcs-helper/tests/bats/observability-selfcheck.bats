@@ -29,6 +29,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load 'lib/assert'
+
 setup() {
   REPO_ROOT="$(git -C "$BATS_TEST_DIRNAME" rev-parse --show-toplevel)"
   SELFCHECK="$REPO_ROOT/plugins/tcs-helper/scripts/observability/selfcheck.sh"
@@ -104,8 +106,8 @@ _line_count() {
   run _run_selfcheck "$data_dir" "" ""
   [ "$status" -eq 0 ]
 
-  [[ "$output" == *"not recording"* ]]
-  [[ "$output" != *"nothing had been logged"* ]]
+  _has "$output" "not recording"
+  _lacks "$output" "nothing had been logged"
 
   # The side-effect guarantee: checking must not itself start recording.
   [ ! -e "$data_dir" ]
@@ -124,12 +126,12 @@ _line_count() {
   run _run_selfcheck "$data_dir" "1" ""
   [ "$status" -eq 0 ]
 
-  [[ "$output" == *"enabled: yes"* ]]
-  [[ "$output" == *"detail: no"* ]]
+  _has "$output" "enabled: yes"
+  _has "$output" "detail: no"
 
   local file
   file="$(_events_file "$data_dir")"
-  [[ "$output" == *"$file"* ]]
+  _has "$output" "$file"
 
   # Real filesystem state, not just the message: the probe actually landed.
   [ -d "$data_dir/observability" ]
@@ -148,7 +150,7 @@ _line_count() {
   run _run_selfcheck "$data_dir" "1" "1"
   [ "$status" -eq 0 ]
 
-  [[ "$output" == *"enabled: yes"* ]]
+  _has "$output" "enabled: yes"
   [[ "$output" == *"detail: yes"* ]]
 }
 
@@ -168,8 +170,8 @@ _line_count() {
   run _run_selfcheck "$data_dir" "1" ""
   [ "$status" -eq 0 ]
 
-  [[ "$output" != *"not recording"* ]]
-  [[ "$output" == *"nothing had been logged"* ]]
+  _lacks "$output" "not recording"
+  _has "$output" "nothing had been logged"
 
   local file
   file="$(_events_file "$data_dir")"
@@ -194,8 +196,8 @@ _line_count() {
   run _run_selfcheck "$data_dir" "1" ""
   [ "$status" -eq 0 ]
 
-  [[ "$output" == *"2020-01-02T03:04:05Z"* ]]
-  [[ "$output" != *"nothing had been logged"* ]]
+  _has "$output" "2020-01-02T03:04:05Z"
+  _lacks "$output" "nothing had been logged"
 
   # The probe from THIS run is appended on top of the pre-existing line.
   local file="$dir/events.jsonl"
@@ -221,9 +223,9 @@ _line_count() {
   run _run_selfcheck "$data_dir" "1" ""
   [ "$status" -eq 1 ]
 
-  [[ "$output" == *"cannot record"* ]]
-  [[ "$output" != *"nothing had been logged"* ]]
-  [[ "$output" != *"probe write confirmed"* ]]
+  _has "$output" "cannot record"
+  _lacks "$output" "nothing had been logged"
+  _lacks "$output" "probe write confirmed"
 
   chmod 0700 "$dir"
   # No file was ever created inside the unwritable directory.

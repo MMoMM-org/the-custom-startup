@@ -71,7 +71,7 @@ run_parser() {
   rm -f "$CFG"
   run run_parser
   [ "$status" -eq 0 ]
-  [[ "$output" == *"EXIT=0"* ]]
+  _has "$output" "EXIT=0"
   [[ "$output" == *"TCS_PROTECTED_BRANCHES=<unset>"* ]]
 }
 
@@ -82,14 +82,14 @@ run_parser() {
 @test "REJECT: command substitution \$(rm -rf ~)" {
   printf '%s\n' 'TCS_PROTECTED_BRANCHES=$(rm -rf ~)' >"$CFG"
   run run_parser
-  [[ "$output" == *"TCS_PROTECTED_BRANCHES=<unset>"* ]]
+  _has "$output" "TCS_PROTECTED_BRANCHES=<unset>"
   grep -q "rejected\|invalid\|forbidden" "$STDERR"
 }
 
 @test "REJECT: backtick command substitution" {
   printf '%s\n' 'TCS_PROTECTED_BRANCHES=`evil`' >"$CFG"
   run run_parser
-  [[ "$output" == *"TCS_PROTECTED_BRANCHES=<unset>"* ]]
+  _has "$output" "TCS_PROTECTED_BRANCHES=<unset>"
   grep -q "rejected\|invalid\|forbidden" "$STDERR"
 }
 
@@ -101,30 +101,30 @@ run_parser() {
   # line is unconditionally emitted by run_parser, so this assertion has bite.
   printf '%s\n' 'TCS_PROTECTED_BRANCHES=main\nMALICIOUS=1' >"$CFG"
   run run_parser
-  [[ "$output" == *"TCS_PROTECTED_BRANCHES=<unset>"* ]]
-  [[ "$output" == *"MALICIOUS=<unset>"* ]]
-  [[ "$output" != *"MALICIOUS=1"* ]]
+  _has "$output" "TCS_PROTECTED_BRANCHES=<unset>"
+  _has "$output" "MALICIOUS=<unset>"
+  _lacks "$output" "MALICIOUS=1"
   grep -q "rejected\|invalid\|forbidden" "$STDERR"
 }
 
 @test "REJECT: unknown key EVIL=1" {
   printf '%s\n' 'EVIL=1' >"$CFG"
   run run_parser
-  [[ "$output" == *"EVIL=<unset>"* ]]
+  _has "$output" "EVIL=<unset>"
   grep -q "unknown key" "$STDERR"
 }
 
 @test "REJECT: type mismatch TCS_REQUIRE_SCOPE=true (must be 0|1)" {
   printf '%s\n' 'TCS_REQUIRE_SCOPE=true' >"$CFG"
   run run_parser
-  [[ "$output" == *"TCS_REQUIRE_SCOPE=<unset>"* ]]
+  _has "$output" "TCS_REQUIRE_SCOPE=<unset>"
   grep -q "invalid value" "$STDERR"
 }
 
 @test "REJECT: path traversal in TCS_HOOK_EXCLUDE_PATHS_FILE" {
   printf '%s\n' 'TCS_HOOK_EXCLUDE_PATHS_FILE=../../etc/passwd' >"$CFG"
   run run_parser
-  [[ "$output" == *"TCS_HOOK_EXCLUDE_PATHS_FILE=<unset>"* ]]
+  _has "$output" "TCS_HOOK_EXCLUDE_PATHS_FILE=<unset>"
   grep -q "invalid value\|path traversal\|forbidden" "$STDERR"
 }
 
@@ -211,14 +211,15 @@ run_parser() {
   fi
   run run_parser
   [ "$status" -eq 0 ]
-  [[ "$output" == *"EXIT=0"* ]]
+  _has "$output" "EXIT=0"
   # Spot-check a handful of keys are now set
-  [[ "$output" == *"TCS_PROTECTED_BRANCHES=main|master|production|release"* ]]
-  [[ "$output" == *"TCS_REQUIRE_SCOPE=0"* ]]
-  [[ "$output" == *"TCS_MAX_SUBJECT_LENGTH=90"* ]]
+  _has "$output" "TCS_PROTECTED_BRANCHES=main|master|production|release"
+  _has "$output" "TCS_REQUIRE_SCOPE=0"
+  _has "$output" "TCS_MAX_SUBJECT_LENGTH=90"
   # No spurious stderr noise about rejection
-  if [ -s "$STDERR" ]; then
-    ! grep -qi "rejected\|forbidden\|unknown key\|invalid value" "$STDERR"
+  if grep -qi "rejected\|forbidden\|unknown key\|invalid value" "$STDERR"; then
+    printf 'unexpected rejection on stderr: %s\n' "$(cat "$STDERR")" >&2
+    return 1
   fi
 }
 

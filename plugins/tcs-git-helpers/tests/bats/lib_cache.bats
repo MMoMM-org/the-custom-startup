@@ -16,6 +16,8 @@
 #   - Atomic writes (.tmp + mv)
 #   - Reads of missing/corrupt files return empty (no crash)
 
+load 'lib/helpers'
+
 setup() {
   # macOS mktemp ignores $TMPDIR by default; pass it explicitly so the
   # sandbox-writable path is honored.
@@ -169,7 +171,7 @@ teardown() {
 
   run _read_stale_cache_tsv
   [ "$status" -eq 0 ]
-  [[ "$output" == *"feat/a"* ]]
+  _has "$output" "feat/a"
   # No comment lines leak into body
   ! [[ "$output" == *"#"* ]]
 }
@@ -335,7 +337,7 @@ teardown() {
   [ -f "$lock" ]
   local planted
   planted="$(cat "$lock")"
-  [[ "$planted" != *":"* ]]
+  _lacks "$planted" ":"
 
   # Short timeout so a reclaim regression fails fast (1s) rather than
   # silently waiting on the malformed file until the default 10s expires.

@@ -21,6 +21,8 @@
 #   - All file writes via $TMPDIR (sandbox-writable)
 #   - No network calls; gh is stubbed via PATH override
 
+load 'lib/helpers'
+
 PLUGIN_ROOT="${BATS_TEST_DIRNAME}/../.."
 SKILL_DIR="${PLUGIN_ROOT}/skills/git-setup"
 SKILL_PATH="${SKILL_DIR}/SKILL.md"
@@ -68,8 +70,8 @@ FIXTURE_BUILD="${PLUGIN_ROOT}/tests/fixtures/repos/build.sh"
 
 @test "A09 frontmatter argument-hint references --update / --with-gha / --with-branch-protection" {
   hint=$(awk '/^---$/{c++; next} c==1' "$SKILL_PATH" | grep -E '^argument-hint:')
-  [[ "$hint" == *"--update"* ]]
-  [[ "$hint" == *"--with-gha"* ]]
+  _has "$hint" "--update"
+  _has "$hint" "--with-gha"
   [[ "$hint" == *"--with-branch-protection"* ]]
 }
 

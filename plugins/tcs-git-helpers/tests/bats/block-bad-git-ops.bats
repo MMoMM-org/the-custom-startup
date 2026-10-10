@@ -632,15 +632,15 @@ EOF
   run --separate-stderr _run_hook_with_cmd "git reset --hard"
   [ "$status" -eq 0 ]
   [ -z "$output" ] || ! [[ "$output" == *'"permissionDecision":"deny"'* ]]
-  [[ "$stderr" == *"bypass"* ]]
+  _has "$stderr" "bypass"
 }
 
 @test "bypass: detached-HEAD → exit 0 with bypass, no deny even on destructive cmd" {
   cd "$REPOS_ROOT/detached-head"
   run --separate-stderr _run_hook_with_cmd "git reset --hard"
   [ "$status" -eq 0 ]
-  [[ "$stderr" == *"bypass"* ]]
-  [[ "$stderr" == *"detached"* ]]
+  _has "$stderr" "bypass"
+  _has "$stderr" "detached"
 }
 
 @test "bypass: simulated MERGE_HEAD file → bypass triggers" {
@@ -648,8 +648,8 @@ EOF
   : > .git/MERGE_HEAD
   run --separate-stderr _run_hook_with_cmd "git reset --hard"
   [ "$status" -eq 0 ]
-  [[ "$stderr" == *"bypass"* ]]
-  [[ "$stderr" == *"merge"* ]]
+  _has "$stderr" "bypass"
+  _has "$stderr" "merge"
   rm -f .git/MERGE_HEAD
 }
 
@@ -658,8 +658,8 @@ EOF
   : > .git/CHERRY_PICK_HEAD
   run --separate-stderr _run_hook_with_cmd "git reset --hard"
   [ "$status" -eq 0 ]
-  [[ "$stderr" == *"bypass"* ]]
-  [[ "$stderr" == *"cherry-pick"* ]]
+  _has "$stderr" "bypass"
+  _has "$stderr" "cherry-pick"
   rm -f .git/CHERRY_PICK_HEAD
 }
 
@@ -668,8 +668,8 @@ EOF
   : > .git/BISECT_LOG
   run --separate-stderr _run_hook_with_cmd "git reset --hard"
   [ "$status" -eq 0 ]
-  [[ "$stderr" == *"bypass"* ]]
-  [[ "$stderr" == *"bisect"* ]]
+  _has "$stderr" "bypass"
+  _has "$stderr" "bisect"
   rm -f .git/BISECT_LOG
 }
 
@@ -814,7 +814,7 @@ EOF
 @test "denial reason mentions override env-var name" {
   run _run_hook_with_cmd "git reset --hard"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"CLAUDE_ALLOW_RESET_HARD"* ]]
+  _has "$output" "CLAUDE_ALLOW_RESET_HARD"
 }
 
 # S1-AC1 wording lock — preserve the existing parenthesized override-hint

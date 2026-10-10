@@ -14,6 +14,8 @@
 #       pr list --json … -> ARRAY     (jq -e 'type=="array"')
 #       pr view --json … -> OBJECT    (jq -e 'type=="object"')
 
+load 'lib/helpers'
+
 FIXTURE_DIR="${BATS_TEST_DIRNAME}/../fixtures"
 BUILD_SH="${FIXTURE_DIR}/repos/build.sh"
 GH_STUB="${FIXTURE_DIR}/gh_stubs/gh"
@@ -97,7 +99,9 @@ teardown_file() {
   local repo="$TCS_FIXTURES_OUT/dirty"
   run git -C "$repo" status --porcelain
   [ -n "$output" ]
-  [[ "$output" == *" M tracked.txt"*  || "$output" == *"M  tracked.txt"* ]]
+  _has "$output" " M tracked.txt" 2>/dev/null \
+    || _has "$output" "M  tracked.txt" \
+    || return 1
   [[ "$output" == *"?? untracked.txt"* ]]
 }
 
