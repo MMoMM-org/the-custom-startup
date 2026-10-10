@@ -57,6 +57,10 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Three tests read commits or origin/main that a shallow clone does
+          # not contain, and skip without them (#178).
+          fetch-depth: 0
 
       - uses: actions/setup-python@v7
         with:
@@ -65,11 +69,20 @@ jobs:
       - name: Install python test dependencies
         run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
 
+      # The comma-decimal locale guards (a real bug: `printf '%.0f' 23.5`
+      # printing 230) skip where no such locale exists, which on the hosted
+      # images is only Linux (#178).
+      - name: Generate a comma-decimal locale
+        if: runner.os == 'Linux'
+        run: sudo locale-gen de_DE.UTF-8
+
       # Collected from the repo root, not from tests/ — the root conftest.py
       # sets the collection rules and several suites live next to the code they
       # cover (plugins/*/tests/, plugins/tcs-helper/scripts/lib/).
+      # -rs names every skipped test and its reason, so a skip is read, not
+      # inferred from a count (#178).
       - name: Run pytest
-        run: pytest -q
+        run: pytest -q -rs
 
       # Perf tests are opt-in (deselected by default via pytest.ini's
       # addopts) because subprocess-exec latency swings past any fixed
@@ -117,6 +130,12 @@ jobs:
 
       # Fixtures that build throwaway repos rely on a committer identity being
       # resolvable. Most set their own, but not all.
+      # Same locale as the pytest job: observability-timed-wrapper.bats checks
+      # its ms formatting under de_DE and skips without it (#178).
+      - name: Generate a comma-decimal locale
+        if: runner.os == 'Linux'
+        run: sudo locale-gen de_DE.UTF-8
+
       - name: Configure git identity for fixtures
         run: |
           git config --global user.email "ci@example.com"

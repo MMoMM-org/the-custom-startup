@@ -81,7 +81,8 @@ class ConfigError(Exception):
     Never `tomllib.TOMLDecodeError` itself, and never one of its attributes
     read directly by a caller: measured on both interpreters this task must
     run under, `TOMLDecodeError.lineno`/`.colno`/`.msg` exist on 3.14 but
-    NOT on 3.11 (the version CI pins, `.github/workflows/tests.yml:61,101`)
+    NOT on 3.11 (the version CI pins: `python-version` in the pytest and bats
+    jobs of `.github/workflows/tests.yml`)
     -- reading `.lineno` there raises `AttributeError`. Callers and tests
     assert against this module's own error types and their messages, never
     against tomllib's version-dependent surface.
