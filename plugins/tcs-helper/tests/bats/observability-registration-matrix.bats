@@ -69,8 +69,8 @@
 #      not the editor.
 #
 # bash 3.2 compatible (CON-1): no `[[ =~ ]]` with PCRE classes or bounded
-# quantifiers. Every substring assertion goes through _assert_contains /
-# _assert_not_contains (grep -F, a plain command -- trips `set -e`
+# quantifiers. Every substring assertion goes through _has /
+# _lacks (grep -F, a plain command -- trips `set -e`
 # correctly at any position, unlike a bare `[[ ]]` used as a non-final
 # statement; see docs/ai/memory/active.md and observability-detect.bats'
 # header for the measured reason). `timeout` is not used anywhere (absent
@@ -122,17 +122,9 @@ teardown_file() {
 # Shared helpers
 # ---------------------------------------------------------------------------
 
-# _assert_contains/_assert_not_contains -- fixed-string via grep -F (a plain
-# command, so it trips `set -e` correctly at any position in a test body --
-# see the header note; a bare `[[ ]]` does not).
-_assert_contains() {
-  # `--` so a needle that starts with a dash is a pattern, not an option.
-  printf '%s' "$1" | grep -qF -- "$2"
-}
-
-_assert_not_contains() {
-  ! printf '%s' "$1" | grep -qF -- "$2"
-}
+# Substring assertions (_has/_lacks): fixed-string, and they fail the test
+# at any position in its body. See lib/assert.bash.
+load 'lib/assert'
 
 # _copy_fixture <fixture-name> <work-name> -- fresh, independent copy of a
 # built fixture directory, since registration.py mutates its target in
@@ -251,14 +243,14 @@ NAMES
 
   _run_setup "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "registered observability hooks in"
+  _has "$output" "registered observability hooks in"
   [ -f "$target" ]
   run grep -c -F '$HOME/.claude/observability/' "$target"
   [ "$output" -eq 3 ]
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "removed observability hooks from"
+  _has "$output" "removed observability hooks from"
   # registration.py has no path to delete the settings file itself -- only
   # to prune keys inside it (remove_registration's only effect is on the
   # in-memory dict; write_settings always writes SOMETHING). So "restore
@@ -282,11 +274,11 @@ NAMES
 
   _run_setup "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "registered observability hooks in"
+  _has "$output" "registered observability hooks in"
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "removed observability hooks from"
+  _has "$output" "removed observability hooks from"
   # "{}\n" is exactly what json.dumps({}, indent=2) + "\n" produces too, so
   # this is the one case where the byte-identical contract actually holds.
   _assert_bytes_equal "$original" "$target"
@@ -305,14 +297,14 @@ NAMES
 
   _run_setup "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "registered observability hooks in"
-  _assert_contains "$(cat "$target")" "/opt/foreign-audit/hook.sh"
+  _has "$output" "registered observability hooks in"
+  _has "$(cat "$target")" "/opt/foreign-audit/hook.sh"
   run grep -c -F '$HOME/.claude/observability/' "$target"
   [ "$output" -eq 3 ]
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "removed observability hooks from"
+  _has "$output" "removed observability hooks from"
   # The foreign entry survives structurally (same parsed document)...
   _assert_json_equal "$original" "$target"
   # ...but not byte-for-byte: write_settings always re-serializes the WHOLE
@@ -359,7 +351,7 @@ NAMES
   # so status is 'none': nothing written.
   _run_setup "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "already configured:"
+  _has "$output" "already configured:"
   _assert_bytes_equal "$original" "$target"
 
   # remove_registration prunes only what ADR-5 namespace membership marks
@@ -369,7 +361,7 @@ NAMES
   # (foreign-only, same-event-names-populated above).
   _run_remove "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "removed observability hooks from"
+  _has "$output" "removed observability hooks from"
 
   expected="$WORK_PARENT/foreign-plus-ours-current.expected"
   cat > "$expected" <<'EOF'
@@ -396,12 +388,12 @@ EOF
 
   _run_setup "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "already configured:"
+  _has "$output" "already configured:"
   _assert_bytes_equal "$original" "$target"
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "removed observability hooks from"
+  _has "$output" "removed observability hooks from"
 
   expected="$WORK_PARENT/foreign-plus-ours-older.expected"
   cat > "$expected" <<'EOF'
@@ -430,8 +422,8 @@ EOF
 
   _run_setup "$target"
   [ "$status" -eq 1 ]
-  _assert_contains "$output" "cannot parse"
-  _assert_contains "$output" "as JSON"
+  _has "$output" "cannot parse"
+  _has "$output" "as JSON"
   _assert_bytes_equal "$original" "$target"
 
   # load_settings() runs before the --remove branch is ever consulted, so
@@ -439,7 +431,7 @@ EOF
   # no direction-dependent behaviour here at all.
   _run_remove "$target"
   [ "$status" -eq 1 ]
-  _assert_contains "$output" "cannot parse"
+  _has "$output" "cannot parse"
   _assert_bytes_equal "$original" "$target"
 }
 
@@ -456,23 +448,23 @@ EOF
 
   _run_setup "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "registered observability hooks in"
+  _has "$output" "registered observability hooks in"
   # SDD-AC-10 / the module docstring's stated default: ensure_ascii=False,
   # so these bytes must survive literally, not as \uXXXX escapes -- a
   # substring match on the literal UTF-8 text is itself the proof: had
   # json.dump used its true default, these two greps would find nothing,
   # since the source characters would have been rewritten as escape
   # sequences that share none of these bytes.
-  _assert_contains "$(cat "$target")" "Café"
-  _assert_contains "$(cat "$target")" "日本語"
+  _has "$(cat "$target")" "Café"
+  _has "$(cat "$target")" "日本語"
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "removed observability hooks from"
+  _has "$output" "removed observability hooks from"
   _assert_json_equal "$original" "$target"
   _assert_bytes_differ "$original" "$target"
-  _assert_contains "$(cat "$target")" "Café"
-  _assert_contains "$(cat "$target")" "日本語"
+  _has "$(cat "$target")" "Café"
+  _has "$(cat "$target")" "日本語"
 }
 
 # ---------------------------------------------------------------------------
@@ -488,16 +480,16 @@ EOF
 
   _run_setup "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "registered observability hooks in"
-  _assert_contains "$(cat "$target")" "/opt/foreign-audit/on-load.sh"
-  _assert_contains "$(cat "$target")" "/opt/foreign-audit/hook.sh"
-  _assert_contains "$(cat "$target")" "/opt/foreign-audit/on-subagent.sh"
+  _has "$output" "registered observability hooks in"
+  _has "$(cat "$target")" "/opt/foreign-audit/on-load.sh"
+  _has "$(cat "$target")" "/opt/foreign-audit/hook.sh"
+  _has "$(cat "$target")" "/opt/foreign-audit/on-subagent.sh"
   run grep -c -F '$HOME/.claude/observability/' "$target"
   [ "$output" -eq 3 ]
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "removed observability hooks from"
+  _has "$output" "removed observability hooks from"
   _assert_json_equal "$original" "$target"
   _assert_bytes_differ "$original" "$target"
 }
@@ -516,12 +508,12 @@ EOF
 
   _run_setup "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "registered observability hooks in"
+  _has "$output" "registered observability hooks in"
   [ -f "$target" ]
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "removed observability hooks from"
+  _has "$output" "removed observability hooks from"
   run cat "$target"
   [ "$output" = "{}" ]
 }
@@ -566,7 +558,7 @@ EOF
 
   _run_setup "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "registered observability hooks in"
+  _has "$output" "registered observability hooks in"
 
   # settings.json is never a target of this CLI invocation -- it is
   # untouched, byte-for-byte, because registration.py was never told about
@@ -578,8 +570,8 @@ EOF
   # "permissions" key.
   run grep -c -F '$HOME/.claude/observability/' "$target"
   [ "$output" -eq 3 ]
-  _assert_contains "$(cat "$target")" '"allow"'
-  _assert_contains "$(cat "$target")" "Bash(git:*)"
+  _has "$(cat "$target")" '"allow"'
+  _has "$(cat "$target")" "Bash(git:*)"
 
   # The net effect across BOTH files: six hooks now fire where three
   # should -- three legacy (in-repo path) plus three new (namespace path).
@@ -591,7 +583,7 @@ EOF
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "removed observability hooks from"
+  _has "$output" "removed observability hooks from"
   # settings.json (legacy) is STILL untouched -- removal only ever acts on
   # the --settings path it is given, same as setup.
   _assert_bytes_equal "$original_legacy" "$legacy"
@@ -613,11 +605,11 @@ EOF
 
   run python3 "$REGISTRATION_PY" --settings "$target" --migrate-legacy "$legacy"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "removed legacy observability hooks"
-  _assert_contains "$output" "InstructionsLoaded"
-  _assert_contains "$output" "PreToolUse"
-  _assert_contains "$output" "SubagentStart"
-  _assert_contains "$output" "registered observability hooks in"
+  _has "$output" "removed legacy observability hooks"
+  _has "$output" "InstructionsLoaded"
+  _has "$output" "PreToolUse"
+  _has "$output" "SubagentStart"
+  _has "$output" "registered observability hooks in"
 
   # THE number: three, where the flagless invocation above leaves six.
   total="$(cat "$legacy" "$target" | grep -c -F '"type": "command"' || true)"
@@ -634,7 +626,7 @@ EOF
   [ "$output" = "{}" ]
 
   # Content of the shared file this editor never authored is still there.
-  _assert_contains "$(cat "$target")" "Bash(git:*)"
+  _has "$(cat "$target")" "Bash(git:*)"
 
   # No backup outlives a completed migration, on either file.
   [ ! -e "$legacy.tcs-observability.bak" ]
@@ -668,7 +660,7 @@ PY
   # names is not. Ownership in the SHARED file is the event name AND the
   # adapter script name together -- never the event name alone, which would
   # take a third party's hook out with ours.
-  _assert_contains "$(cat "$legacy")" "/opt/foreign-audit/hook.sh"
+  _has "$(cat "$legacy")" "/opt/foreign-audit/hook.sh"
   run grep -c -F '"type": "command"' "$legacy"
   [ "$output" -eq 1 ]
 }
@@ -707,8 +699,8 @@ PY
   # The two genuinely legacy entries are gone; the bundle-pointing one stays.
   run grep -c -F '"type": "command"' "$legacy"
   [ "$output" -eq 1 ]
-  _assert_contains "$(cat "$legacy")" '$HOME/.claude/observability/log_skill.sh'
-  _assert_not_contains "$(cat "$legacy")" "plugins/tcs-helper/scripts/observability"
+  _has "$(cat "$legacy")" '$HOME/.claude/observability/log_skill.sh'
+  _lacks "$(cat "$legacy")" "plugins/tcs-helper/scripts/observability"
 }
 
 @test "already-configured-observability: --remove --remove-legacy takes out both registrations" {
@@ -727,7 +719,7 @@ PY
   [ "$status" -ne 0 ]
   run grep -c -F '$HOME/.claude/observability/' "$target"
   [ "$status" -ne 0 ]
-  _assert_contains "$(cat "$target")" "Bash(git:*)"
+  _has "$(cat "$target")" "Bash(git:*)"
 }
 
 # ---------------------------------------------------------------------------
@@ -746,12 +738,12 @@ PY
 
   _run_setup "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "registered observability hooks in"
+  _has "$output" "registered observability hooks in"
   [ -f "$target" ]
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "removed observability hooks from"
+  _has "$output" "removed observability hooks from"
   run cat "$target"
   [ "$output" = "{}" ]
 }
@@ -770,11 +762,11 @@ PY
 
   _run_setup "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "registered observability hooks in"
+  _has "$output" "registered observability hooks in"
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "removed observability hooks from"
+  _has "$output" "removed observability hooks from"
   _assert_bytes_equal "$original" "$target"
 }
 
@@ -793,7 +785,7 @@ PY
 
   _run_setup "$target"
   [ "$status" -eq 1 ]
-  _assert_contains "$output" '"hooks" is not an object'
+  _has "$output" '"hooks" is not an object'
   _assert_bytes_equal "$original" "$target"
 
   # remove_registration() only ever checks `isinstance(hooks, dict)` and
@@ -806,8 +798,8 @@ PY
   # problems would not be told about this one.
   _run_remove "$target"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "nothing to remove:"
-  _assert_not_contains "$output" "not an object"
+  _has "$output" "nothing to remove:"
+  _lacks "$output" "not an object"
   _assert_bytes_equal "$original" "$target"
 }
 
@@ -860,7 +852,7 @@ PY
   # shape is checked first.
   _assert_bytes_equal "$original" "$legacy"
   [ ! -e "$legacy.tcs-observability.bak" ]
-  _assert_contains "$output" "nothing was written"
+  _has "$output" "nothing was written"
 }
 
 @test "--migrate-legacy names both files and the restore command when the second half fails after the first wrote" {
@@ -888,11 +880,11 @@ PY
   # acts, and the operator is told that rather than told the opposite.
   _assert_bytes_differ "$original" "$legacy"
   [ -f "$legacy.tcs-observability.bak" ]
-  _assert_contains "$output" "PARTIAL MIGRATION"
-  _assert_contains "$output" "This target is NOT recording"
-  _assert_contains "$output" "$legacy.tcs-observability.bak"
-  _assert_contains "$output" "cp -p"
-  _assert_not_contains "$output" "Traceback"
+  _has "$output" "PARTIAL MIGRATION"
+  _has "$output" "This target is NOT recording"
+  _has "$output" "$legacy.tcs-observability.bak"
+  _has "$output" "cp -p"
+  _lacks "$output" "Traceback"
 
   # The backup is a faithful copy of what the shared file held before.
   _assert_bytes_equal "$original" "$legacy.tcs-observability.bak"
@@ -912,10 +904,10 @@ PY
 
   run python3 "$REGISTRATION_PY" --settings "$target" --remove
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "nothing to remove"
-  _assert_not_contains "$output" "Traceback"
+  _has "$output" "nothing to remove"
+  _lacks "$output" "Traceback"
   # The foreign entry is untouched -- a non-string command is not ours.
-  _assert_contains "$(cat "$target")" '"command": 123'
+  _has "$(cat "$target")" '"command": 123'
 }
 
 # ---------------------------------------------------------------------------
@@ -936,7 +928,7 @@ PY
 
   run python3 "$REGISTRATION_PY" --settings "$target" --remove --migrate-legacy "$legacy"
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "--migrate-legacy"
+  _has "$output" "--migrate-legacy"
   _assert_bytes_equal "$original" "$legacy"
 }
 
@@ -950,6 +942,6 @@ PY
 
   run python3 "$REGISTRATION_PY" --settings "$target" --remove-legacy "$legacy"
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "--remove-legacy"
+  _has "$output" "--remove-legacy"
   _assert_bytes_equal "$original" "$legacy"
 }

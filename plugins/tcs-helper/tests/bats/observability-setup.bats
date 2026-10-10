@@ -38,8 +38,8 @@
 # test in this file.
 #
 # bash 3.2 compatible (CON-1): no `[[ =~ ]]` with PCRE classes or bounded
-# quantifiers. Every substring assertion goes through _assert_contains /
-# _assert_not_contains (grep -F, a plain command -- trips `set -e` correctly
+# quantifiers. Every substring assertion goes through _has /
+# _lacks (grep -F, a plain command -- trips `set -e` correctly
 # at any position in a test body, unlike a bare `[[ ]]` used as a non-final
 # statement; see docs/ai/memory/active.md). `timeout` is never used (absent
 # on macOS).
@@ -96,13 +96,9 @@ teardown_file() {
 # Shared helpers
 # ---------------------------------------------------------------------------
 
-_assert_contains() {
-  printf '%s' "$1" | grep -qF -- "$2"
-}
-
-_assert_not_contains() {
-  ! printf '%s' "$1" | grep -qF -- "$2"
-}
+# Substring assertions (_has/_lacks): fixed-string, and they fail the test
+# at any position in its body. See lib/assert.bash.
+load 'lib/assert'
 
 _assert_bytes_equal() {
   cmp -s "$1" "$2"
@@ -225,16 +221,16 @@ _make_record() {
   local dir; dir="$(_copy_fixture absent unknown-verb)"
   _run_setup "$home" frobnicate "$dir"
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "install"
-  _assert_contains "$output" "remove"
-  _assert_contains "$output" "status"
+  _has "$output" "install"
+  _has "$output" "remove"
+  _has "$output" "status"
 }
 
 @test "a missing --target is refused with a non-zero status" {
   local home; home="$(_new_home missing-target)"
   run env HOME="$home" bash "$SETUP_SH" install
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "--target"
+  _has "$output" "--target"
 }
 
 # ---------------------------------------------------------------------------
@@ -252,10 +248,10 @@ _make_record() {
   [ "$status" -eq 0 ]
 
   # F1: the report names which entries were added.
-  _assert_contains "$output" "InstructionsLoaded"
-  _assert_contains "$output" "PreToolUse"
-  _assert_contains "$output" "SubagentStart"
-  _assert_contains "$output" "CLAUDE_OBSERVABILITY_ENABLED"
+  _has "$output" "InstructionsLoaded"
+  _has "$output" "PreToolUse"
+  _has "$output" "SubagentStart"
+  _has "$output" "CLAUDE_OBSERVABILITY_ENABLED"
 
   [ -f "$target" ]
   run _count_our_hooks "$target"
@@ -285,7 +281,7 @@ _make_record() {
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
   # PRD F1: "the report of what changed includes how to undo it".
-  _assert_contains "$output" "remove --target"
+  _has "$output" "remove --target"
 }
 
 @test "re-running install changes nothing and reports the target as already configured" {
@@ -301,11 +297,11 @@ _make_record() {
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "already configured"
+  _has "$output" "already configured"
   # ...and does NOT claim it added anything. A report that names the three
   # entries on every run is indistinguishable from one that named them
   # because they were actually written, which is the whole point of F1.
-  _assert_not_contains "$output" "ADDED"
+  _lacks "$output" "ADDED"
   _assert_bytes_equal "$before" "$target"
 }
 
@@ -316,8 +312,8 @@ _make_record() {
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_not_contains "$output" "CONFLICT"
-  _assert_not_contains "$output" "Foreign hook entries"
+  _lacks "$output" "CONFLICT"
+  _lacks "$output" "Foreign hook entries"
 }
 
 # ---------------------------------------------------------------------------
@@ -335,7 +331,7 @@ _make_record() {
 
   _run_setup "$home" install "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "PLAN"
+  _has "$output" "PLAN"
   # Nothing anywhere: not the settings file, not the bundle.
   [ ! -e "$target" ]
   [ ! -e "$home/.claude/observability" ]
@@ -350,7 +346,7 @@ _make_record() {
 
   _run_setup "$home" install "$dir" --yes --plan
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "PLAN"
+  _has "$output" "PLAN"
   [ ! -e "$target" ]
   [ ! -e "$home/.claude/observability" ]
   _assert_no_lock "$dir"
@@ -363,8 +359,8 @@ _make_record() {
 
   _run_setup "$home" install "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" ".claude/settings.local.json"
-  _assert_contains "$output" "$home/.claude/observability"
+  _has "$output" ".claude/settings.local.json"
+  _has "$output" "$home/.claude/observability"
 }
 
 @test "remove without --yes reports the plan and writes nothing" {
@@ -380,7 +376,7 @@ _make_record() {
 
   _run_setup "$home" remove "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "PLAN"
+  _has "$output" "PLAN"
   _assert_bytes_equal "$after_install" "$target"
   _assert_no_lock "$dir"
 }
@@ -413,17 +409,17 @@ _make_record() {
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "/opt/foreign-audit/hook.sh"
-  _assert_contains "$output" ".claude/settings.local.json"
+  _has "$output" "/opt/foreign-audit/hook.sh"
+  _has "$output" ".claude/settings.local.json"
   # "precisely what and where" -- the event name is half of "where", and it
   # is the half that tells the operator which of their hooks to look at.
-  _assert_contains "$output" "InstructionsLoaded"
-  _assert_contains "$output" "PreToolUse"
-  _assert_contains "$output" "SubagentStart"
+  _has "$output" "InstructionsLoaded"
+  _has "$output" "PreToolUse"
+  _has "$output" "SubagentStart"
   # The STOP line must route the reader to the line that names them rather
   # than restate a claim of its own. Pinned because a message that asserts
   # blindly reads identically to one that checked.
-  _assert_contains "$output" "the CONFLICT line above names each event and command"
+  _has "$output" "the CONFLICT line above names each event and command"
   _assert_no_lock "$dir"
 }
 
@@ -441,8 +437,8 @@ _make_record() {
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "not"
-  _assert_contains "$output" "repository"
+  _has "$output" "not"
+  _has "$output" "repository"
   [ ! -e "$dir/.claude" ]
   [ ! -e "$home/.claude/observability" ]
   _assert_no_lock "$dir"
@@ -460,8 +456,8 @@ _make_record() {
   # THE assertion that catches "any ABORT -> exit 0": this one is a genuine
   # refusal and the non-repository case above is not.
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "ABORT"
-  _assert_contains "$output" "not valid JSON"
+  _has "$output" "ABORT"
+  _has "$output" "not valid JSON"
   _assert_bytes_equal "$original" "$target"
   [ ! -e "$home/.claude/observability" ]
   _assert_no_lock "$dir"
@@ -477,8 +473,8 @@ _make_record() {
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "ABORT"
-  _assert_contains "$output" "unexpected shape"
+  _has "$output" "ABORT"
+  _has "$output" "unexpected shape"
   _assert_bytes_equal "$original" "$target"
   _assert_no_lock "$dir"
 }
@@ -494,8 +490,8 @@ _make_record() {
   # AC-6 sweep test below, which found this exact assertion coincidentally
   # passing only because the WORK-NAME ("not-ignored") contains that
   # substring, not because the message does.
-  _assert_contains "$output" "does not ignore"
-  _assert_contains "$output" ".claude/settings.local.json"
+  _has "$output" "does not ignore"
+  _has "$output" ".claude/settings.local.json"
   [ ! -e "$dir/.claude/settings.local.json" ]
   [ ! -e "$home/.claude/observability" ]
   _assert_no_lock "$dir"
@@ -514,7 +510,7 @@ _make_record() {
   # what keeps a committable .bak out of a repository we do not own.
   _run_setup "$home" install "$dir" --yes
   [ "$status" -ne 0 ]
-  _assert_contains "$output" ".tcs-observability.bak"
+  _has "$output" ".tcs-observability.bak"
   _assert_bytes_equal "$original" "$target"
   _assert_no_lock "$dir"
 }
@@ -534,7 +530,7 @@ _make_record() {
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -ne 0 ]
-  _assert_contains "$output" ".tcs-observability.lock"
+  _has "$output" ".tcs-observability.lock"
   _assert_bytes_equal "$original" "$target"
   _assert_no_lock "$dir"
 }
@@ -549,7 +545,7 @@ _make_record() {
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -ne 0 ]
-  _assert_contains "$output" ".tcs-observability.tmp"
+  _has "$output" ".tcs-observability.tmp"
   _assert_bytes_equal "$original" "$target"
   _assert_no_lock "$dir"
 }
@@ -606,8 +602,8 @@ PY
     # sibling test's "ignored" check happens to pass only because its own
     # WORK-NAME contains that substring, which this test's work-name does
     # not, so it is asserted on the real message text instead.
-    _assert_contains "$output" "does not ignore"
-    _assert_contains "$output" "${path#"$repo_root"/}"
+    _has "$output" "does not ignore"
+    _has "$output" "${path#"$repo_root"/}"
   done < "$paths_file"
 }
 
@@ -631,11 +627,11 @@ PY
   [ "$status" -ne 0 ]
   # The CONTENTION wording specifically. A fix that made the two lock
   # failures share one message would still pass a bare "lock" check.
-  _assert_contains "$output" "another observability setup run holds the lock"
+  _has "$output" "another observability setup run holds the lock"
   [ ! -e "$target" ]
   [ -f "$lock" ]
   run cat "$lock"
-  _assert_contains "$output" "$$"
+  _has "$output" "$$"
 }
 
 @test "a completed install leaves no lock file behind" {
@@ -664,9 +660,9 @@ PY
 
   _run_setup "$home" remove "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "InstructionsLoaded"
-  _assert_contains "$output" "PreToolUse"
-  _assert_contains "$output" "SubagentStart"
+  _has "$output" "InstructionsLoaded"
+  _has "$output" "PreToolUse"
+  _has "$output" "SubagentStart"
   run _count_our_hooks "$target"
   [ "$output" -eq 0 ]
 }
@@ -701,7 +697,7 @@ PY
   _run_setup "$home" remove "$dir" --yes
   [ "$status" -eq 0 ]
 
-  _assert_contains "$(cat "$target")" "/opt/foreign-audit/hook.sh"
+  _has "$(cat "$target")" "/opt/foreign-audit/hook.sh"
   run _count_our_hooks "$target"
   [ "$output" -eq 0 ]
 }
@@ -716,7 +712,7 @@ PY
 
   _run_setup "$home" remove "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "nothing to remove"
+  _has "$output" "nothing to remove"
   _assert_bytes_equal "$original" "$target"
 }
 
@@ -734,7 +730,7 @@ PY
 
   [ -f "$data/observability/events.jsonl" ]
   run cat "$data/observability/events.jsonl"
-  _assert_contains "$output" '"kind":"skill"'
+  _has "$output" '"kind":"skill"'
 }
 
 @test "remove on a non-repository is reported and writes nothing, at exit 0" {
@@ -744,7 +740,7 @@ PY
 
   _run_setup "$home" remove "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "repository"
+  _has "$output" "repository"
   [ ! -e "$dir/.claude" ]
   _assert_no_lock "$dir"
 }
@@ -762,7 +758,7 @@ PY
 
   _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "not configured"
+  _has "$output" "not configured"
 }
 
 @test "status reports a configured target that has produced nothing as configured but silent" {
@@ -777,8 +773,8 @@ PY
 
   _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "configured but silent"
-  _assert_not_contains "$output" "not configured"
+  _has "$output" "configured but silent"
+  _lacks "$output" "not configured"
 }
 
 @test "status reports a configured target with records as recording" {
@@ -798,9 +794,9 @@ PY
   # confirmed by mutation that the assertion below stayed green with the
   # real STATUS line blanked. "STATUS: recording." is the label the message
   # actually carries and cannot appear via any path.
-  _assert_contains "$output" "STATUS: recording."
-  _assert_not_contains "$output" "configured but silent"
-  _assert_not_contains "$output" "not configured"
+  _has "$output" "STATUS: recording."
+  _lacks "$output" "configured but silent"
+  _lacks "$output" "not configured"
 }
 
 @test "status counts a rotated record as a record" {
@@ -816,8 +812,8 @@ PY
 
   _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "recording"
-  _assert_not_contains "$output" "configured but silent"
+  _has "$output" "recording"
+  _lacks "$output" "configured but silent"
 }
 
 @test "a target with records but no registration is reported as not configured, never as recording" {
@@ -829,7 +825,7 @@ PY
 
   _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "not configured"
+  _has "$output" "not configured"
 }
 
 @test "status writes nothing at all" {
@@ -853,7 +849,7 @@ PY
 
   _run_setup "$home" status "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "repository"
+  _has "$output" "repository"
 }
 
 # ---------------------------------------------------------------------------
@@ -867,9 +863,9 @@ PY
 
   _run_setup "$home" status "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "DRIFT"
-  _assert_contains "$output" "h0"
-  _assert_contains "$output" "$CURRENT_BUNDLE_VERSION"
+  _has "$output" "DRIFT"
+  _has "$output" "h0"
+  _has "$output" "$CURRENT_BUNDLE_VERSION"
 }
 
 @test "status reports the bundle as missing when nothing is installed at the resolved HOME" {
@@ -879,7 +875,7 @@ PY
 
   _run_setup "$home" status "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "MISSING"
+  _has "$output" "MISSING"
 }
 
 @test "status reports no drift once install has put the current bundle in place" {
@@ -892,8 +888,8 @@ PY
 
   _run_setup "$home" status "$dir"
   [ "$status" -eq 0 ]
-  _assert_not_contains "$output" "DRIFT"
-  _assert_contains "$output" "$CURRENT_BUNDLE_VERSION"
+  _lacks "$output" "DRIFT"
+  _has "$output" "$CURRENT_BUNDLE_VERSION"
 }
 
 # ---------------------------------------------------------------------------
@@ -914,7 +910,7 @@ PY
   # foreign command anywhere as an occupation of our events.
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_not_contains "$output" "STOP"
+  _lacks "$output" "STOP"
 
   run _count_our_hooks "$target"
   [ "$output" -eq 3 ]
@@ -922,8 +918,8 @@ PY
   # The half worth keeping: the foreign entry survives a run that actually
   # wrote, which is a real preservation assertion rather than one made true
   # by the install being refused. Its non-ASCII bytes survive too.
-  _assert_contains "$(cat "$target")" "/opt/Café-Tools/notify.sh"
-  _assert_contains "$(cat "$target")" "Équipe-Café-日本語"
+  _has "$(cat "$target")" "/opt/Café-Tools/notify.sh"
+  _has "$(cat "$target")" "Équipe-Café-日本語"
   total="$(grep -c -F '"type": "command"' "$target" || true)"
   [ "$total" -eq 4 ]
   _assert_no_lock "$dir"
@@ -973,7 +969,7 @@ PY
   # json.dump defaults to ensure_ascii=True, which would rewrite these bytes
   # as backslash-u escapes: the document would still parse equal while the
   # operator bytes had changed (SDD-AC-10).
-  _assert_contains "$(cat "$target")" "Équipe-Café-日本語"
+  _has "$(cat "$target")" "Équipe-Café-日本語"
 }
 
 # ---------------------------------------------------------------------------
@@ -1015,12 +1011,12 @@ PY
   [ "$status" -eq 0 ]
   # Not detect.sh own LEGACY line, which says only that a migration WILL
   # happen -- the command own report that both halves DID happen.
-  _assert_contains "$output" "MIGRATED"
-  _assert_contains "$output" "removed the legacy in-repo registration from"
-  _assert_contains "$output" ".claude/settings.json"
-  _assert_contains "$output" "ADDED"
-  _assert_contains "$output" ".claude/settings.local.json"
-  _assert_contains "$output" "UNDO"
+  _has "$output" "MIGRATED"
+  _has "$output" "removed the legacy in-repo registration from"
+  _has "$output" ".claude/settings.json"
+  _has "$output" "ADDED"
+  _has "$output" ".claude/settings.local.json"
+  _has "$output" "UNDO"
 }
 
 @test "the legacy migration leaves foreign content in the shared settings file untouched" {
@@ -1050,8 +1046,8 @@ PY
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_contains "$(cat "$legacy")" "/opt/foreign-audit/hook.sh"
-  _assert_contains "$(cat "$legacy")" "Bash(git:*)"
+  _has "$(cat "$legacy")" "/opt/foreign-audit/hook.sh"
+  _has "$(cat "$legacy")" "Bash(git:*)"
   run _count_our_hooks "$target"
   [ "$output" -eq 3 ]
   # The foreign entry is the ONLY command hook left in the shared file: the
@@ -1074,8 +1070,8 @@ PY
 
   _run_setup "$home" install "$dir" --plan
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "PLAN: would remove the legacy in-repo registration from"
-  _assert_not_contains "$output" "MIGRATED"
+  _has "$output" "PLAN: would remove the legacy in-repo registration from"
+  _lacks "$output" "MIGRATED"
   _assert_bytes_equal "$orig_legacy" "$legacy"
   _assert_bytes_equal "$orig_target" "$target"
 }
@@ -1091,7 +1087,7 @@ PY
   run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
   [ "$status" -ne 0 ]
   # The unrelated content of the shared file survives.
-  _assert_contains "$(cat "$dir/.claude/settings.local.json")" "Bash(git:*)"
+  _has "$(cat "$dir/.claude/settings.local.json")" "Bash(git:*)"
 }
 
 @test "status after the legacy migration reports the target as configured, not legacy" {
@@ -1106,12 +1102,12 @@ PY
 
   _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "configured but silent"
+  _has "$output" "configured but silent"
   # The detect.sh state LABEL, not the word anywhere in the output: the work
   # directory this fixture is copied into has "legacy" in its own name, and
   # the TARGET line prints that path.
-  _assert_not_contains "$output" "] LEGACY:"
-  _assert_contains "$output" "] OURS-CURRENT:"
+  _lacks "$output" "] LEGACY:"
+  _has "$output" "] OURS-CURRENT:"
 }
 
 @test "a legacy target whose shared settings file is not ignored by version control is refused" {
@@ -1136,8 +1132,8 @@ PY
   # "not-ignored" tests: this test's own work-name (legacy-not-ignored)
   # contains "ignored", which the TARGET line prints regardless of what
   # the real ABORT message says. Asserted on the actual wording instead.
-  _assert_contains "$output" "does not ignore"
-  _assert_contains "$output" ".claude/settings.json"
+  _has "$output" "does not ignore"
+  _has "$output" ".claude/settings.json"
   _assert_bytes_equal "$original" "$legacy"
   _assert_no_lock "$dir"
 }
@@ -1183,8 +1179,8 @@ PY
 
   # The claim is now the true one, stated positively rather than only as the
   # absence of the false one.
-  _assert_contains "$output" "nothing was written"
-  _assert_not_contains "$output" "The original files are intact"
+  _has "$output" "nothing was written"
+  _lacks "$output" "The original files are intact"
   _assert_no_lock "$dir"
 }
 
@@ -1198,8 +1194,8 @@ PY
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "ABORT"
-  _assert_contains "$output" "unexpected shape"
+  _has "$output" "ABORT"
+  _has "$output" "unexpected shape"
   _assert_bytes_equal "$original" "$dir/.claude/settings.local.json"
   [ ! -e "$home/.claude/observability" ]
   _assert_no_lock "$dir"
@@ -1215,7 +1211,7 @@ PY
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "unexpected shape"
+  _has "$output" "unexpected shape"
   _assert_bytes_equal "$original" "$dir/.claude/settings.local.json"
   _assert_no_lock "$dir"
 }
@@ -1230,11 +1226,11 @@ PY
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "unexpected shape"
+  _has "$output" "unexpected shape"
   # registration.py's own docstring promises a diagnosis rather than a
   # traceback; this shape used to reach `NAMESPACE in 123` and raise a
   # TypeError that nothing caught.
-  _assert_not_contains "$output" "Traceback"
+  _lacks "$output" "Traceback"
   _assert_bytes_equal "$original" "$dir/.claude/settings.local.json"
   _assert_no_lock "$dir"
 }
@@ -1288,8 +1284,8 @@ PY
   [ "$status" -eq 0 ]
   # Acquiring the lock creates .claude/, so the old wording was not quite
   # true. The corrected claim names what it can actually vouch for.
-  _assert_not_contains "$output" "nothing was written"
-  _assert_contains "$output" "no file was written and no bundle installed"
+  _lacks "$output" "nothing was written"
+  _has "$output" "no file was written and no bundle installed"
 }
 
 @test "a migration that fails after writing the shared file says so, and does not claim the originals are intact" {
@@ -1316,11 +1312,11 @@ PY
 
   # The shared file DID change. The command must not say otherwise.
   _assert_bytes_differ "$original" "$legacy"
-  _assert_not_contains "$output" "The original files are intact"
+  _lacks "$output" "The original files are intact"
   # ...and it relays the detail that tells the operator what to do.
-  _assert_contains "$output" "PARTIAL MIGRATION"
-  _assert_contains "$output" "This target is NOT recording"
-  _assert_contains "$output" "$legacy.tcs-observability.bak"
+  _has "$output" "PARTIAL MIGRATION"
+  _has "$output" "This target is NOT recording"
+  _has "$output" "$legacy.tcs-observability.bak"
   _assert_bytes_equal "$original" "$legacy.tcs-observability.bak"
   _assert_no_lock "$dir"
 }
@@ -1361,7 +1357,7 @@ PY
 
   _run_setup "$home" remove "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_not_contains "$output" "Traceback"
+  _lacks "$output" "Traceback"
 
   # Every legacy entry is gone -- no under-removal reported as success, which
   # is the shape ruling (u) exists to close.
@@ -1369,7 +1365,7 @@ PY
   [ "$status" -ne 0 ]
 
   # ...and the malformed entry is untouched. A non-string command is not ours.
-  _assert_contains "$(cat "$legacy")" '"command": 123'
+  _has "$(cat "$legacy")" '"command": 123'
   run _count_our_hooks "$target"
   [ "$output" -eq 0 ]
   _assert_no_lock "$dir"
@@ -1399,12 +1395,12 @@ PY
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_not_contains "$output" "Traceback"
-  _assert_contains "$output" "MIGRATED"
+  _lacks "$output" "Traceback"
+  _has "$output" "MIGRATED"
 
   run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
   [ "$status" -ne 0 ]
-  _assert_contains "$(cat "$legacy")" '"command": 123'
+  _has "$(cat "$legacy")" '"command": 123'
   run _count_our_hooks "$target"
   [ "$output" -eq 3 ]
   _assert_no_lock "$dir"
@@ -1440,7 +1436,7 @@ PY
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "MIGRATED"
+  _has "$output" "MIGRATED"
 
   # No legacy hook survives, and the standard registration is in place once.
   run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
@@ -1475,9 +1471,9 @@ PY
   run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
   [ "$status" -ne 0 ]
   # The report names the two events it actually removed, not a flat three.
-  _assert_contains "$report" "InstructionsLoaded"
-  _assert_contains "$report" "PreToolUse"
-  _assert_not_contains "$report" "removed legacy observability hooks (InstructionsLoaded, PreToolUse, SubagentStart)"
+  _has "$report" "InstructionsLoaded"
+  _has "$report" "PreToolUse"
+  _lacks "$report" "removed legacy observability hooks (InstructionsLoaded, PreToolUse, SubagentStart)"
   _assert_no_lock "$dir"
 }
 
@@ -1501,7 +1497,7 @@ PY
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
 
-  _assert_contains "$(cat "$legacy")" "/opt/other-tool/log_skill.sh"
+  _has "$(cat "$legacy")" "/opt/other-tool/log_skill.sh"
   run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
   [ "$status" -ne 0 ]
   _assert_no_lock "$dir"
@@ -1524,8 +1520,8 @@ PY
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
-  _assert_not_contains "$output" "MIGRATED"
-  _assert_contains "$output" "ADDED"
+  _lacks "$output" "MIGRATED"
+  _has "$output" "ADDED"
   run _count_our_hooks "$target"
   [ "$output" -eq 3 ]
   run cat "$legacy"
@@ -1576,13 +1572,13 @@ PY
   report="$output"
 
   # The shared half genuinely happened, so MIGRATED is true...
-  _assert_contains "$report" "MIGRATED"
+  _has "$report" "MIGRATED"
   run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
   [ "$status" -ne 0 ]
 
   # ...and the local half did not, so ADDED must not be claimed.
-  _assert_not_contains "$report" "ADDED"
-  _assert_contains "$report" "already configured"
+  _lacks "$report" "ADDED"
+  _has "$report" "already configured"
   _assert_bytes_equal "$original" "$target"
   _assert_no_lock "$dir"
 }
@@ -1594,9 +1590,9 @@ PY
 
   _run_setup "$home" install "$dir" --yes --plan
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "no file was written and no bundle installed"
-  _assert_not_contains "$output" "Re-run with --yes"
-  _assert_contains "$output" "Drop --plan"
+  _has "$output" "no file was written and no bundle installed"
+  _lacks "$output" "Re-run with --yes"
+  _has "$output" "Drop --plan"
 }
 
 @test "install without --yes still tells the user to re-run with --yes" {
@@ -1606,8 +1602,8 @@ PY
 
   _run_setup "$home" install "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "Re-run with --yes"
-  _assert_not_contains "$output" "Drop --plan"
+  _has "$output" "Re-run with --yes"
+  _lacks "$output" "Drop --plan"
 }
 
 @test "a refusal names the repo-relative path even when the repository path holds a glob metacharacter" {
@@ -1625,8 +1621,8 @@ PY
 
   _run_setup "$home" install "$dir" --yes
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "does not ignore .claude/settings.local.json.tcs-observability.bak"
-  _assert_not_contains "$output" "does not ignore /"
+  _has "$output" "does not ignore .claude/settings.local.json.tcs-observability.bak"
+  _lacks "$output" "does not ignore /"
   _assert_no_lock "$dir"
 }
 
@@ -1663,16 +1659,16 @@ PY
 
   [ "${report%%|*}" -ne 0 ]
   # Names the real problem...
-  _assert_contains "$output" "could not create the lock file"
-  _assert_contains "$output" "$target.tcs-observability.lock"
+  _has "$output" "could not create the lock file"
+  _has "$output" "$target.tcs-observability.lock"
   # The errno is what makes the message actionable, so pin that it survived
   # rather than falling back. Asserted as the ABSENCE of the fallback text
   # rather than the presence of "Permission denied", which is the shell's
   # wording and would tie this test to a locale.
-  _assert_not_contains "$output" "no further detail"
+  _lacks "$output" "no further detail"
   # ...and does NOT invent a concurrent run.
-  _assert_not_contains "$output" "another observability setup run"
-  _assert_not_contains "$output" "held by a live process"
+  _lacks "$output" "another observability setup run"
+  _lacks "$output" "held by a live process"
 
   # The refusal itself was already correct and stays correct.
   [ ! -e "$target" ]
@@ -1788,9 +1784,9 @@ PY
   chflags nouchg "$target.tcs-observability.bak" 2>/dev/null || true
 
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "ABORT"
-  _assert_contains "$output" "the registration edit failed"
-  _assert_contains "$output" "failed to write"
+  _has "$output" "ABORT"
+  _has "$output" "the registration edit failed"
+  _has "$output" "failed to write"
   _assert_bytes_equal "$original" "$target"
 
   local backup="$target.tcs-observability.bak"
@@ -1917,10 +1913,10 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   # it invisibly -- the file would look right and work only on one machine.
   run _count_our_hooks "$target"
   [ "$output" -eq 3 ]
-  _assert_not_contains "$(cat "$target")" "$other/.claude/observability"
+  _lacks "$(cat "$target")" "$other/.claude/observability"
   # The bytes as JSON actually holds them: the inner quotes are escaped, and
   # $HOME is a literal four characters, not an expansion.
-  _assert_contains "$(cat "$target")" '\"$HOME/.claude/observability/log_skill.sh\"'
+  _has "$(cat "$target")" '\"$HOME/.claude/observability/log_skill.sh\"'
 }
 
 @test "status --home reports the named home's bundle, not the running one" {
@@ -1936,8 +1932,8 @@ json.load(open(sys.argv[1], encoding='utf-8'))
 
   _run_setup "$home" status "$dir" --home "$other"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "MISSING"
-  _assert_contains "$output" "$other/.claude/observability"
+  _has "$output" "MISSING"
+  _has "$output" "$other/.claude/observability"
 }
 
 @test "status --home reports drift against the named home" {
@@ -1951,9 +1947,9 @@ json.load(open(sys.argv[1], encoding='utf-8'))
 
   _run_setup "$home" status "$dir" --home "$other"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "DRIFT"
-  _assert_contains "$output" "h0"
-  _assert_contains "$output" "$CURRENT_BUNDLE_VERSION"
+  _has "$output" "DRIFT"
+  _has "$output" "h0"
+  _has "$output" "$CURRENT_BUNDLE_VERSION"
 }
 
 @test "status --home looks for records under the named home too" {
@@ -1969,8 +1965,8 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   # would be a mixed answer presented as one -- the overclaim shape again.
   _run_setup "$home" status "$dir" --home "$other"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "$other/.claude/plugins/data/observability-"
-  _assert_not_contains "$output" "$home/.claude/plugins/data/observability-"
+  _has "$output" "$other/.claude/plugins/data/observability-"
+  _lacks "$output" "$home/.claude/plugins/data/observability-"
 }
 
 @test "status names the home it checked, so its silence about other homes is stated" {
@@ -1982,7 +1978,7 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   [ "$status" -eq 0 ]
   # This command sees one environment. Saying which one converts silence
   # about a target's other homes into a stated scope rather than an omission.
-  _assert_contains "$output" "HOME: $home"
+  _has "$output" "HOME: $home"
 }
 
 @test "remove refuses --home rather than accepting and ignoring it" {
@@ -1996,8 +1992,8 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   # registration.py's own flag surface.
   _run_setup "$home" remove "$dir" --yes --home "$home"
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "--home has no effect on remove"
-  _assert_not_contains "$output" "unknown option"
+  _has "$output" "--home has no effect on remove"
+  _lacks "$output" "unknown option"
 }
 
 @test "a --home that does not exist is refused, and nothing is written" {
@@ -2008,9 +2004,9 @@ json.load(open(sys.argv[1], encoding='utf-8'))
 
   _run_setup "$home" install "$dir" --yes --home "$WORK_PARENT/no-such-home"
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "--home does not exist or is not a directory"
-  _assert_contains "$output" "$WORK_PARENT/no-such-home"
-  _assert_not_contains "$output" "unknown option"
+  _has "$output" "--home does not exist or is not a directory"
+  _has "$output" "$WORK_PARENT/no-such-home"
+  _lacks "$output" "unknown option"
   [ ! -e "$target" ]
   [ ! -e "$home/.claude/observability" ]
   _assert_no_lock "$dir"
@@ -2032,8 +2028,8 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   _run_setup "$home" install "$dir" --yes --home "$other"
   chmod 700 "$other"
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "--home is not writable"
-  _assert_not_contains "$output" "unknown option"
+  _has "$output" "--home is not writable"
+  _lacks "$output" "unknown option"
   [ ! -e "$target" ]
   _assert_no_lock "$dir"
 }
@@ -2048,9 +2044,9 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   # it instead of to their typo.
   _run_setup "$home" status "$dir" --home "$WORK_PARENT/no-such-home-either"
   [ "$status" -ne 0 ]
-  _assert_contains "$output" "--home does not exist or is not a directory"
-  _assert_not_contains "$output" "unknown option"
-  _assert_not_contains "$output" "MISSING"
+  _has "$output" "--home does not exist or is not a directory"
+  _lacks "$output" "unknown option"
+  _lacks "$output" "MISSING"
 }
 
 @test "status does not require --home to be writable" {
@@ -2085,7 +2081,7 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   # bundle is current. One report, two homes, no way for a reader to tell.
   _run_setup "$home" status "$dir" --home "$other"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "OURS-CURRENT"
-  _assert_not_contains "$output" "OURS-OLD"
-  _assert_not_contains "$output" "no bundle marker is installed"
+  _has "$output" "OURS-CURRENT"
+  _lacks "$output" "OURS-OLD"
+  _lacks "$output" "no bundle marker is installed"
 }

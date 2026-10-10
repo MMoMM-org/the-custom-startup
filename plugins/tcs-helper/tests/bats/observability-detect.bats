@@ -21,7 +21,7 @@
 # -- the exact vacuous-RED shape this task's own instructions warn about,
 # generalising the existing `! cmd`-last-statement note in
 # docs/ai/memory/active.md to `[[ ]]` itself. So every substring assertion
-# below goes through _assert_contains/_assert_not_contains (grep -F, a
+# below goes through _has/_lacks (grep -F, a
 # plain command, which DOES trip set -e correctly regardless of position —
 # verified the same way), and every exit-code check uses `[ ]`.
 
@@ -82,22 +82,10 @@ _run_detect() {
     bash "$DETECT_SH" "$target"
 }
 
-# _assert_contains <haystack> <needle> -- fixed-string, via grep -F (a
-# plain command, so it trips `set -e` correctly at any position -- see the
-# header note; a bare `[[ ]]` does not).
-_assert_contains() {
-  # `--` so a needle that starts with a dash is a pattern, not an option.
-  printf '%s' "$1" | grep -qF -- "$2"
-}
-
-# _assert_not_contains <haystack> <needle> -- the `!` lives INSIDE this
-# helper's own body, not as a bare statement in the test; calling the
-# helper (whose own return status is what matters to the caller) trips
-# `set -e` correctly, unlike `! cmd` typed directly in the test body noted
-# in docs/ai/memory/active.md.
-_assert_not_contains() {
-  ! printf '%s' "$1" | grep -qF -- "$2"
-}
+# Substring assertions (_has/_lacks <haystack> <needle>): fixed-string, and
+# they fail the test at any position in its body, unlike a bare `[[ ]]` or
+# `! cmd` typed directly in a test. See lib/assert.bash.
+load 'lib/assert'
 
 # _mtime <path> -- portable mtime (GNU stat first, BSD stat as the fallback).
 # A helper rather than the shim inline: it appeared six times in one test,
@@ -135,8 +123,8 @@ _count_state_lines() {
 @test "not-a-repository: ABORT, exit 2, nothing else runs" {
   _run_detect "$FIXTURES_DIR/not-a-repository"
   [ "$status" -eq 2 ]
-  _assert_contains "$output" "ABORT"
-  _assert_contains "$output" "not inside a git repository"
+  _has "$output" "ABORT"
+  _has "$output" "not inside a git repository"
   # Only one state line -- no CONFLICT/LEGACY/OURS line leaked past the gate.
   local lines
   lines="$(_count_state_lines "$output")"
@@ -151,20 +139,20 @@ _count_state_lines() {
   local repo="$FIXTURES_DIR/write-path-not-ignored"
   _run_detect "$repo"
   [ "$status" -eq 2 ]
-  _assert_contains "$output" "ABORT"
-  _assert_contains "$output" "not ignored"
+  _has "$output" "ABORT"
+  _has "$output" "not ignored"
   # Never a content classification alongside the abort for the same target.
-  _assert_not_contains "$output" "CLEAN"
-  _assert_not_contains "$output" "CONFLICT"
-  _assert_not_contains "$output" "LEGACY"
-  _assert_not_contains "$output" "OURS"
+  _lacks "$output" "CLEAN"
+  _lacks "$output" "CONFLICT"
+  _lacks "$output" "LEGACY"
+  _lacks "$output" "OURS"
 }
 
 @test "ignored-file-but-not-backup passes the gate (ignored by exact filename, not a directory rule)" {
   local repo="$FIXTURES_DIR/ignored-file-but-not-backup"
   _run_detect "$repo"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "CLEAN"
+  _has "$output" "CLEAN"
 }
 
 # ---------------------------------------------------------------------------
@@ -174,13 +162,13 @@ _count_state_lines() {
 @test "absent: CLEAN, exit 0" {
   _run_detect "$FIXTURES_DIR/absent"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "CLEAN"
+  _has "$output" "CLEAN"
 }
 
 @test "empty-object: CLEAN, exit 0" {
   _run_detect "$FIXTURES_DIR/empty-object"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "CLEAN"
+  _has "$output" "CLEAN"
 }
 
 # ---------------------------------------------------------------------------
@@ -190,19 +178,19 @@ _count_state_lines() {
 @test "foreign-only: CONFLICT, exit 3, names the foreign command" {
   _run_detect "$FIXTURES_DIR/foreign-only"
   [ "$status" -eq 3 ]
-  _assert_contains "$output" "CONFLICT"
-  _assert_contains "$output" "/opt/foreign-audit/hook.sh"
+  _has "$output" "CONFLICT"
+  _has "$output" "/opt/foreign-audit/hook.sh"
 }
 
 @test "same-event-names-populated: CONFLICT, names all three foreign commands, no OURS/LEGACY" {
   _run_detect "$FIXTURES_DIR/same-event-names-populated"
   [ "$status" -eq 3 ]
-  _assert_contains "$output" "CONFLICT"
-  _assert_contains "$output" "/opt/foreign-audit/on-load.sh"
-  _assert_contains "$output" "/opt/foreign-audit/hook.sh"
-  _assert_contains "$output" "/opt/foreign-audit/on-subagent.sh"
-  _assert_not_contains "$output" "OURS"
-  _assert_not_contains "$output" "LEGACY"
+  _has "$output" "CONFLICT"
+  _has "$output" "/opt/foreign-audit/on-load.sh"
+  _has "$output" "/opt/foreign-audit/hook.sh"
+  _has "$output" "/opt/foreign-audit/on-subagent.sh"
+  _lacks "$output" "OURS"
+  _lacks "$output" "LEGACY"
 }
 
 @test "non-ascii: CLEAN, exit 0 -- its only hook is under an event we do not register" {
@@ -212,8 +200,8 @@ _count_state_lines() {
   # discarded the event name.
   _run_detect "$FIXTURES_DIR/non-ascii"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "CLEAN"
-  _assert_not_contains "$output" "CONFLICT"
+  _has "$output" "CLEAN"
+  _lacks "$output" "CONFLICT"
 }
 
 @test "the non-ASCII bytes of a conflicting command survive into the message uncorrupted" {
@@ -239,9 +227,9 @@ PY
 
   _run_detect "$repo"
   [ "$status" -eq 3 ]
-  _assert_contains "$output" "CONFLICT"
-  _assert_contains "$output" "Café"
-  _assert_contains "$output" "PreToolUse"
+  _has "$output" "CONFLICT"
+  _has "$output" "Café"
+  _has "$output" "PreToolUse"
 }
 
 # ---------------------------------------------------------------------------
@@ -254,8 +242,8 @@ PY
   local home="$FIXTURES_DIR/foreign-plus-ours-current.home"
   _run_detect "$repo" "_BUNDLE_INSTALL_TARGET_DIR=$home/.claude/observability"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "OURS-CURRENT"
-  _assert_not_contains "$output" "OURS-OLD"
+  _has "$output" "OURS-CURRENT"
+  _lacks "$output" "OURS-OLD"
 }
 
 @test "foreign-plus-ours-older: OURS-OLD, exit 4" {
@@ -263,8 +251,8 @@ PY
   local home="$FIXTURES_DIR/foreign-plus-ours-older.home"
   _run_detect "$repo" "_BUNDLE_INSTALL_TARGET_DIR=$home/.claude/observability"
   [ "$status" -eq 4 ]
-  _assert_contains "$output" "OURS-OLD"
-  _assert_not_contains "$output" "OURS-CURRENT"
+  _has "$output" "OURS-OLD"
+  _lacks "$output" "OURS-CURRENT"
 }
 
 @test "foreign-plus-ours-current classified against the OLDER home reports OURS-OLD (proves the version comes from \$HOME, not the settings file)" {
@@ -272,7 +260,7 @@ PY
   local older_home="$FIXTURES_DIR/foreign-plus-ours-older.home"
   _run_detect "$repo" "_BUNDLE_INSTALL_TARGET_DIR=$older_home/.claude/observability"
   [ "$status" -eq 4 ]
-  _assert_contains "$output" "OURS-OLD"
+  _has "$output" "OURS-OLD"
 }
 
 # ---------------------------------------------------------------------------
@@ -282,10 +270,10 @@ PY
 @test "already-configured-observability: LEGACY, exit 4, never CLEAN and never a bare CONFLICT" {
   _run_detect "$FIXTURES_DIR/already-configured-observability"
   [ "$status" -eq 4 ]
-  _assert_contains "$output" "LEGACY"
-  _assert_not_contains "$output" "CLEAN"
-  _assert_not_contains "$output" "CONFLICT"
-  _assert_not_contains "$output" "OURS"
+  _has "$output" "LEGACY"
+  _lacks "$output" "CLEAN"
+  _lacks "$output" "CONFLICT"
+  _lacks "$output" "OURS"
 }
 
 # ---------------------------------------------------------------------------
@@ -296,18 +284,18 @@ PY
 @test "malformed: ABORT, exit 2, diagnosis mentions JSON" {
   _run_detect "$FIXTURES_DIR/malformed"
   [ "$status" -eq 2 ]
-  _assert_contains "$output" "ABORT"
-  _assert_contains "$output" "JSON"
+  _has "$output" "ABORT"
+  _has "$output" "JSON"
 }
 
 @test "valid-json-wrong-shape: ABORT, exit 2, diagnosis names the offending key -- not a traceback" {
   _run_detect "$FIXTURES_DIR/valid-json-wrong-shape"
   [ "$status" -eq 2 ]
-  _assert_contains "$output" "ABORT"
-  _assert_contains "$output" "hooks"
-  _assert_not_contains "$output" "Traceback"
-  _assert_not_contains "$output" "TypeError"
-  _assert_not_contains "$output" "KeyError"
+  _has "$output" "ABORT"
+  _has "$output" "hooks"
+  _lacks "$output" "Traceback"
+  _lacks "$output" "TypeError"
+  _lacks "$output" "KeyError"
 }
 
 # ---------------------------------------------------------------------------
@@ -406,7 +394,7 @@ SHAREDJSON
   # The write-protection did not block detection from doing its job: a real
   # classification came back, not a permission error masquerading as ABORT.
   [ "$detect_status" -eq 0 ]
-  _assert_contains "$detect_output" "OURS-CURRENT"
+  _has "$detect_output" "OURS-CURRENT"
 
   local after_local after_shared after_marker
   after_local="$(_mtime "$local_settings")"
@@ -460,9 +448,9 @@ SHAREDJSON
   chmod -R u+w "$protected"
 
   [ "$detect_status" -eq 4 ]
-  _assert_contains "$detect_output" "LEGACY"
-  _assert_not_contains "$detect_output" "OURS-CURRENT"
-  _assert_not_contains "$detect_output" "cannot read"
+  _has "$detect_output" "LEGACY"
+  _lacks "$detect_output" "OURS-CURRENT"
+  _lacks "$detect_output" "cannot read"
 
   run find "$protected" -newer "$FIXTURES_DIR" -type f
   [ "$status" -eq 0 ]
@@ -489,8 +477,8 @@ SHAREDJSON
     bash "$orphan/detect.sh" "$FIXTURES_DIR/absent"
 
   [ "$status" -eq 2 ]
-  _assert_contains "$output" "ABORT"
-  _assert_contains "$output" "drift_check.sh"
+  _has "$output" "ABORT"
+  _has "$output" "drift_check.sh"
   [ "$(_count_state_lines "$output")" -eq 1 ]
 
   rm -rf "$orphan"
@@ -521,9 +509,9 @@ SHAREDJSON
   rm -rf "$target"
 
   [ "$detect_status" -eq 2 ]
-  _assert_contains "$detect_output" "ABORT"
-  _assert_contains "$detect_output" "cannot be read"
-  _assert_not_contains "$detect_output" "is not valid JSON"
+  _has "$detect_output" "ABORT"
+  _has "$detect_output" "cannot be read"
+  _lacks "$detect_output" "is not valid JSON"
   [ "$(_count_state_lines "$detect_output")" -eq 1 ]
 }
 
@@ -534,13 +522,13 @@ SHAREDJSON
     GIT_CONFIG_VALUE_0=/dev/null \
     bash -c 'set -u; cd "$1" && bash "$2"' -- "$FIXTURES_DIR/absent" "$DETECT_SH"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "CLEAN"
+  _has "$output" "CLEAN"
 }
 
 @test "detect.sh sourced under /bin/bash (bash 3.2) with set -u and no argument does not abort on \${1:-}" {
   run /bin/bash -c 'set -u; cd "$1" && bash "$2"' -- "$FIXTURES_DIR/absent" "$DETECT_SH"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "CLEAN"
+  _has "$output" "CLEAN"
 }
 
 # ---------------------------------------------------------------------------
@@ -600,8 +588,8 @@ PY
 )"
   _run_detect "$dir"
   [ "$status" -eq 4 ]
-  _assert_contains "$output" "LEGACY"
-  _assert_not_contains "$output" "CLEAN"
+  _has "$output" "LEGACY"
+  _lacks "$output" "CLEAN"
 }
 
 @test "partial legacy: one event simply absent still classifies LEGACY, and names what it found" {
@@ -616,11 +604,11 @@ PY
 )"
   _run_detect "$dir"
   [ "$status" -eq 4 ]
-  _assert_contains "$output" "LEGACY"
+  _has "$output" "LEGACY"
   # The message names the events actually found rather than implying three.
-  _assert_contains "$output" "InstructionsLoaded"
-  _assert_contains "$output" "PreToolUse"
-  _assert_not_contains "$output" "SubagentStart"
+  _has "$output" "InstructionsLoaded"
+  _has "$output" "PreToolUse"
+  _lacks "$output" "SubagentStart"
 }
 
 @test "partial legacy: a single legacy entry is enough to classify LEGACY" {
@@ -636,8 +624,8 @@ PY
 )"
   _run_detect "$dir"
   [ "$status" -eq 4 ]
-  _assert_contains "$output" "LEGACY"
-  _assert_contains "$output" "InstructionsLoaded"
+  _has "$output" "LEGACY"
+  _has "$output" "InstructionsLoaded"
 }
 
 @test "partial legacy: legacy hooks without the env flag still classify LEGACY" {
@@ -656,7 +644,7 @@ PY
   # no longer gates.
   _run_detect "$dir"
   [ "$status" -eq 4 ]
-  _assert_contains "$output" "LEGACY"
+  _has "$output" "LEGACY"
 }
 
 @test "zero legacy entries still classify CLEAN -- a fully stripped shared file is not a partial one" {
@@ -672,8 +660,8 @@ PY
   # setup down a migration path with nothing to remove.
   _run_detect "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "CLEAN"
-  _assert_not_contains "$output" "LEGACY"
+  _has "$output" "CLEAN"
+  _lacks "$output" "LEGACY"
 }
 
 @test "the env flag alone, with no hooks at all, classifies CLEAN" {
@@ -686,8 +674,8 @@ PY
 )"
   _run_detect "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "CLEAN"
-  _assert_not_contains "$output" "LEGACY"
+  _has "$output" "CLEAN"
+  _lacks "$output" "LEGACY"
 }
 
 @test "a third party's own log_skill.sh is never mistaken for a legacy entry" {
@@ -706,8 +694,8 @@ PY
   # enough that claim becomes a deletion. Ownership is the namespace.
   _run_detect "$dir"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "CLEAN"
-  _assert_not_contains "$output" "LEGACY"
+  _has "$output" "CLEAN"
+  _lacks "$output" "LEGACY"
 }
 
 # ---------------------------------------------------------------------------
@@ -724,8 +712,8 @@ PY
 
   _run_detect "$repo"
   [ "$status" -eq 0 ]
-  _assert_contains "$output" "CLEAN"
-  _assert_not_contains "$output" "CONFLICT"
+  _has "$output" "CLEAN"
+  _lacks "$output" "CONFLICT"
 }
 
 @test "the CLEAN line does not claim there are no foreign hooks at all" {
@@ -739,14 +727,14 @@ PY
   # class as the false ADDED and the phantom lock contention.
   _run_detect "$repo"
   [ "$status" -eq 0 ]
-  _assert_not_contains "$output" "no foreign hook entries in"
-  _assert_contains "$output" "under the event names this feature registers"
+  _lacks "$output" "no foreign hook entries in"
+  _has "$output" "under the event names this feature registers"
 }
 
 @test "a foreign hook under one of our events still classifies CONFLICT and names the event" {
   _run_detect "$FIXTURES_DIR/same-event-names-populated"
   [ "$status" -eq 3 ]
-  _assert_contains "$output" "CONFLICT"
-  _assert_contains "$output" "InstructionsLoaded"
-  _assert_contains "$output" "SubagentStart"
+  _has "$output" "CONFLICT"
+  _has "$output" "InstructionsLoaded"
+  _has "$output" "SubagentStart"
 }
