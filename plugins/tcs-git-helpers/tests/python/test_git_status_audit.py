@@ -198,6 +198,51 @@ class TestBriefMode:
             f"4th segment must contain stale-merged count, got: {parts[3]!r}"
         )
 
+    @pytest.mark.parametrize(
+        "local_branches, expected_count",
+        [
+            ("feat/my-feature\nfix/another-thing\nmain", 1),
+            ("feat/my-feature\nmain", 0),
+        ],
+    )
+    def test_brief_mode_ignores_cached_branches_deleted_since(
+        self, gsa, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        local_branches: str, expected_count: int,
+    ):
+        """
+        #203: `gh pr merge --delete-branch` pulls (post-merge writes the cache)
+        before it deletes the branch. A cached branch that no longer exists
+        locally must not be counted, nor trigger the cleanup suggestion.
+        """
+        repo_path = "/fake/repo/path"
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        _write_stale_cache(cache_dir, repo_path, "main", STALE_ENTRIES)
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "git":
+                if "symbolic-ref" in cmd:
+                    return _git_result("feat/my-feature")
+                if "status" in cmd and "--porcelain" in cmd:
+                    return _git_result("")
+                if "rev-list" in cmd:
+                    return _git_result("0\n0")
+                if "for-each-ref" in cmd:
+                    return _git_result(local_branches)
+            return _git_result("")
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+        monkeypatch.setattr(gsa, "check_hook_bundle", _ok_drift)
+
+        lines: list[str] = []
+        monkeypatch.setattr("builtins.print", lambda s="", **_kw: lines.append(s))
+
+        gsa.cmd_brief(cache_dir=cache_dir, repo_path=repo_path)
+
+        parts = lines[0].split(" • ")
+        assert parts[3] == f"{expected_count} stale-merged", parts
+        assert ("run /tcs-git-helpers:git-audit --cleanup" in parts) == (expected_count > 0), parts
+
     def test_brief_mode_warning_marker_on_protected_branch(
         self, gsa, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
@@ -1704,7 +1749,7 @@ class TestDriftGateAllModes:
                 if "rev-list" in cmd:
                     return _git_result("0\n0")
                 if "for-each-ref" in cmd:
-                    return _git_result("feat/my-feature\nmain")
+                    return _git_result("feat/my-feature\nfeat/old-thing\nfix/another-thing\nmain")
                 if "worktree" in cmd:
                     return _git_result("")
             return _git_result("")
