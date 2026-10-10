@@ -120,6 +120,14 @@ _write_test_cache() {
   } > "$tsv_path"
 }
 
+# Create local branches at HEAD so cached stale rows name branches that exist.
+_create_branches() {
+  local b
+  for b in "$@"; do
+    git -C "$TEST_REPO" branch "$b"
+  done
+}
+
 # Install fake .githooks/ with hooks bannered at a given version. The
 # drift-check in section 8b of session-start-brief.sh reads the first
 # tcs-git-helpers banner line out of pre-commit / pre-push / commit-msg /
@@ -253,6 +261,7 @@ _run_hook() {
 
 @test "cleanup hint surfaces when stale-count > 0" {
   _install_githooks_current
+  _create_branches feat/old-thing fix/another-thing
   local now_iso
   now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   _write_test_cache "$now_iso" \
@@ -274,6 +283,7 @@ _run_hook() {
 @test "main + cleanup: systemMessage has hint, additionalContext has hint + nudge" {
   git -C "$TEST_REPO" checkout -q main 2>/dev/null || true
   _install_githooks_current
+  _create_branches feat/old-thing
   local now_iso
   now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   _write_test_cache "$now_iso" \
@@ -290,6 +300,41 @@ _run_hook() {
   [ "$count" -ge 2 ]
   # Nudge appears only in additionalContext, so just count ≥ 1.
   printf '%s' "$output" | grep -q "protected branch"
+}
+
+# ----------------------------------------------------------------------
+# Test 7b: Cached rows for branches deleted since the cache write (#203)
+# ----------------------------------------------------------------------
+
+@test "cached branch deleted since the write: no cleanup hint, silent on idle (#203)" {
+  _install_githooks_current
+  local now_iso
+  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  # feat/foo exists in the fixture; feat/gone was deleted after the write —
+  # what `gh pr merge --delete-branch` leaves behind.
+  _write_test_cache "$now_iso" \
+    "feat/gone	204	2026-10-10T12:00:00Z"
+
+  _run_hook
+
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ -z "$stderr" ]
+}
+
+@test "cached rows filtered to live branches: hint stays when one survives (#203)" {
+  _install_githooks_current
+  _create_branches feat/old-thing
+  local now_iso
+  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  _write_test_cache "$now_iso" \
+    "feat/gone	204	2026-10-10T12:00:00Z" \
+    "feat/old-thing	38	2026-04-12T10:00:00Z"
+
+  _run_hook
+
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-audit --cleanup"
 }
 
 # ----------------------------------------------------------------------
@@ -354,6 +399,7 @@ STUB
 
 @test "performance p99 under 300ms (100 invocations)" {
   _install_githooks_current
+  _create_branches feat/old-thing fix/another-thing
   local now_iso
   now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   _write_test_cache "$now_iso" \

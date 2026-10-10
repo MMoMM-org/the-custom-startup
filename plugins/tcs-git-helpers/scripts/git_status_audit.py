@@ -546,7 +546,13 @@ def _brief_output(*, cache_dir: Path, repo_path: str, drift_ok: bool) -> None:
     if drift_ok:
         tsv_path = _stale_tsv_path(cache_dir, repo_path)
         cache_data = _read_stale_cache(cache_dir, repo_path)
-        stale_count = len(cache_data.get("stale_branches", []))
+        cached = cache_data.get("stale_branches", [])
+        # #203: the cache can name branches deleted after it was written
+        # (`gh pr merge --delete-branch` pulls first, deletes second).
+        if cached:
+            local_branches = set(_get_local_branches(repo_path))
+            cached = [e for e in cached if e.get("name") in local_branches]
+        stale_count = len(cached)
         age_hours = _get_cache_age_hours(tsv_path)
     else:
         stale_count = 0

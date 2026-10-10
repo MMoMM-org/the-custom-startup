@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.2.31] - 2026-10-10
+
+### Fixed
+
+- **The stale-merged count no longer names branches that `gh pr merge --delete-branch` already
+  deleted (#203).** `gh` pulls before it deletes the local branch, so `post-merge` writes the
+  branch into the stale cache while it still exists, and nothing rewrites the cache afterwards.
+  The SessionStart hint and `git-audit --brief` then sent the user to a `--cleanup` with nothing
+  to do. Both readers now drop cached rows whose branch is gone from `refs/heads` (one local
+  `git for-each-ref`, only when the cache has rows; still no `gh` call).
+
 ## [2.2.27] - 2026-10-09
 
 ### Fixed

@@ -24,7 +24,7 @@ Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the pl
 | `PreToolUse(Edit\|Write\|NotebookEdit)` | `protect-git-internals.sh` | Block edits to `.git/` internals |
 | `PreToolUse(ExitWorktree)` | `worktree-exit-guard.sh` | Four-check guard before worktree exit — uncommitted, untracked, unmerged, unpushed |
 | `PostToolUse(Bash)` | `nudge-hook.sh` | Soft, success-only nudges after `git checkout -b`, `gh pr create`, first `git push -u`, `gh pr merge`, `git rebase`, `git stash pop` (60s same-nudge dedup) |
-| `SessionStart` | `session-start-brief.sh` | One-line branch awareness brief — branch, working-tree state, ahead/behind, stale-merged count (cache-only, ≤300ms p99, no `gh` calls) |
+| `SessionStart` | `session-start-brief.sh` | One-line branch awareness brief — branch, working-tree state, ahead/behind, stale-merged count (cached rows whose branch still exists locally, ≤300ms p99, no `gh` calls) |
 
 ## How It Works
 

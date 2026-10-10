@@ -113,6 +113,16 @@ fi
 
 stale_count=0
 stale_rows="$(_read_stale_cache_tsv 2>/dev/null || true)"
+# #203: drop rows for branches deleted after the cache write
+# (`gh pr merge --delete-branch` pulls first, deletes second).
+if [ -n "$stale_rows" ]; then
+  stale_rows="$(LOCAL_BRANCHES="$(git for-each-ref refs/heads/ --format='%(refname:short)' 2>/dev/null || true)" \
+    awk -F'\t' 'BEGIN { n = split(ENVIRON["LOCAL_BRANCHES"], b, "\n"); for (i = 1; i <= n; i++) live[b[i]] = 1 }
+                ($1 in live)' <<EOF
+$stale_rows
+EOF
+)" || stale_rows=""
+fi
 if [ -n "$stale_rows" ]; then
   stale_count="$(printf '%s\n' "$stale_rows" | wc -l | tr -d '[:space:]')"
 fi
