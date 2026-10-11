@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.2.36] - 2026-10-11
+
+### Fixed
+
+- **A `bash -c` or `eval` that a heredoc body or a quoted message only mentions no longer
+  switches off body stripping (#213).** The guard checked for a shell executor on the raw
+  command, so one mention anywhere sent the whole command to raw matching, and every
+  destructive literal in the data matched again. A `cat >> file <<'EOF'` adding bats tests was
+  denied for a `git branch -D` in its body. The check now runs on the stripped text. Executors
+  that really run still trigger it: `$( … )` stays code inside double quotes, and a heredoc
+  feeding a shell keeps its body.
+
 ## [2.2.34] - 2026-10-11
 
 ### Fixed

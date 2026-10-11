@@ -617,3 +617,30 @@ _no_match_in_clauses() {
   _no_match_in_clauses "$cmd" "$PATTERN_RESET_HARD"
 }
 
+# --- #213: an executor that is only mentioned must not disable stripping ---
+#
+# The executor guard used to look at the raw command, so a `bash -c` inside a
+# heredoc body or a quoted message sent the WHOLE command to raw matching and
+# every destructive literal in the data matched again.
+
+@test "_clausify: heredoc body naming 'bash -c' still has its body stripped (#213)" {
+  local cmd
+  cmd="$(printf "cat >> t.bats <<'EOF'\n  git reset --hard\n  run bash -c \"true\"\nEOF")"
+  _no_match_in_clauses "$cmd" "$PATTERN_RESET_HARD"
+}
+
+@test "_clausify: commit message naming 'sh -c' and 'eval' is still stripped (#213)" {
+  _no_match_in_clauses 'git commit -m "why sh -c and eval ran git reset --hard"' \
+    "$PATTERN_RESET_HARD"
+}
+
+@test "_clausify: 'bash -c' inside a double-quoted substitution still executes (#213)" {
+  # Fail closed: $( ) stays code inside "…", so the executor survives stripping.
+  _match_clauses "$(_clausify "echo \"\$(bash -c 'git reset --hard')\"")" \
+    "$PATTERN_RESET_HARD"
+}
+
+@test "_clausify: 'eval' outside quotes still forces raw matching (#213)" {
+  _match_clauses "$(_clausify "eval 'git reset --hard'")" "$PATTERN_RESET_HARD"
+}
+

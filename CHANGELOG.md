@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The git guard no longer blocks a heredoc or commit message just because it mentions
+  `bash -c` (#213).** One such mention made the guard check the whole text again, so a
+  destructive git command described in the same body was blocked as if it were run. Commands
+  that really execute a shell are still checked.
+
 - **The `implement` review agents no longer touch your stashes or working tree (#156).** A
   code-quality reviewer wrapped a check in `git stash` / `git stash pop`. The stash saved
   nothing, so the pop applied an unrelated stash of yours. Reviewers now use read-only git and
