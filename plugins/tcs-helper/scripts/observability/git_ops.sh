@@ -33,8 +33,12 @@
 # Known limits (documented, not silent): `xargs git …`, `find … -exec git …`,
 # git run from a script file, and git inside a `$( )` that is not at command
 # position (`echo $(git reset)`) are not recognised and record nothing. In the
-# executor fallback, nested quoting is gone, so a quoted multi-word value
-# before the subcommand can shift which word is read as the subcommand.
+# executor fallback, nested quoting is gone, so any value before the
+# subcommand (wrapper option or duration, empty assignment, global option
+# other than the value-less ones) makes the subcommand `?` rather than risk a
+# value fragment in its place (CON-13); such records lose the name, not the
+# record. override_first belongs to the whole command (the guard applies a
+# first-position override to all of it); `overrides` to the clause.
 #
 # COPIED, NOT SOURCED (SDD/ADR-2, CON-12):
 #   _git_ops_strip_heredocs, _git_ops_strip_quoted and
@@ -309,7 +313,7 @@ _git_ops_trim_closers() {
 }
 
 # _git_ops_parse_clause <clause>
-#   (reads mode, first_left; may clear first_left — locals of _git_ops_parse)
+#   (reads mode and first — locals of _git_ops_parse)
 #   Prints the record for the clause's git invocation, if it has one and it is
 #   not read-only. Word splitting relies on the caller's IFS and noglob.
 # shellcheck disable=SC2016 # '$(' patterns are literal openers
@@ -317,15 +321,17 @@ _git_ops_parse_clause() {
   local -a t
   # shellcheck disable=SC2206 # deliberate word splitting; caller set noglob
   t=($1)
-  local n=${#t[@]} i=0 tok name val ovr="" ofirst="" letters
+  local n=${#t[@]} i=0 tok name val ovr="" letters
   if [ "$n" -eq 0 ]; then return 0; fi
 
-  # override_first: the clause the guard reads as first, i.e. the first one
-  # whose first word is the first-position override assignment.
-  if [ -n "$first_left" ] && [ "${t[0]}" = "${first_left}=1" ]; then
-    ofirst="$first_left"
-    first_left=""
-  fi
+  # Executor fallback only: an option value or an assignment value may have
+  # been a quoted multi-word string whose fragments now stand where the
+  # subcommand is read (`bash -c "git -C 'my dir' reset"`). So every wrapper
+  # option, the timeout duration, an emptied assignment and every global option
+  # but the value-less ones set cut, and cut makes the subcommand `?` (CON-13).
+  # ex is 1 in that mode, so `cut=$ex` is a no-op elsewhere.
+  local ex=0 cut=0
+  if [ "$mode" = "executor" ]; then ex=1; fi
 
   # Command position: openers, assignments, wrappers.
   while [ "$i" -lt "$n" ]; do
@@ -349,6 +355,7 @@ _git_ops_parse_clause() {
           *[![:alnum:]_]*) return 0 ;;
         esac
         val="${tok#*=}"
+        if [ -z "$val" ]; then cut=$ex; fi
         case "$name" in
           CLAUDE_ALLOW_?*)
             case "${name#CLAUDE_ALLOW_}" in
@@ -370,8 +377,8 @@ _git_ops_parse_clause() {
         i=$((i + 1))
         while [ "$i" -lt "$n" ]; do
           case "${t[$i]}" in
-            -u | --unset) i=$((i + 2)) ;;
-            -*) i=$((i + 1)) ;;
+            -u | --unset) i=$((i + 2)) cut=$ex ;;
+            -*) i=$((i + 1)) cut=$ex ;;
             *) break ;;
           esac
         done
@@ -380,8 +387,8 @@ _git_ops_parse_clause() {
         i=$((i + 1))
         while [ "$i" -lt "$n" ]; do
           case "${t[$i]}" in
-            -u | -g | -h | -p | -C | -D | -r | -t | -U) i=$((i + 2)) ;;
-            -*) i=$((i + 1)) ;;
+            -u | -g | -h | -p | -C | -D | -r | -t | -U) i=$((i + 2)) cut=$ex ;;
+            -*) i=$((i + 1)) cut=$ex ;;
             *) break ;;
           esac
         done
@@ -390,7 +397,7 @@ _git_ops_parse_clause() {
         i=$((i + 1))
         while [ "$i" -lt "$n" ]; do
           case "${t[$i]}" in
-            -*) i=$((i + 1)) ;;
+            -*) i=$((i + 1)) cut=$ex ;;
             *) break ;;
           esac
         done
@@ -399,8 +406,8 @@ _git_ops_parse_clause() {
         i=$((i + 1))
         while [ "$i" -lt "$n" ]; do
           case "${t[$i]}" in
-            -n) i=$((i + 2)) ;;
-            -*) i=$((i + 1)) ;;
+            -n) i=$((i + 2)) cut=$ex ;;
+            -*) i=$((i + 1)) cut=$ex ;;
             *) break ;;
           esac
         done
@@ -409,12 +416,12 @@ _git_ops_parse_clause() {
         i=$((i + 1))
         while [ "$i" -lt "$n" ]; do
           case "${t[$i]}" in
-            -s | -k) i=$((i + 2)) ;;
-            -*) i=$((i + 1)) ;;
+            -s | -k) i=$((i + 2)) cut=$ex ;;
+            -*) i=$((i + 1)) cut=$ex ;;
             *) break ;;
           esac
         done
-        i=$((i + 1)) # the duration
+        i=$((i + 1)) cut=$ex # the duration
         ;;
       nohup | exec)
         i=$((i + 1))
@@ -424,7 +431,7 @@ _git_ops_parse_clause() {
         while [ "$i" -lt "$n" ]; do
           case "${t[$i]}" in
             -*[vV]*) return 0 ;; # a lookup, not an invocation
-            -*) i=$((i + 1)) ;;
+            -*) i=$((i + 1)) cut=$ex ;;
             *) break ;;
           esac
         done
@@ -452,19 +459,25 @@ _git_ops_parse_clause() {
   i=$((i + 1))
 
   # Global options between `git` and the subcommand. In the executor fallback
-  # a value ending in `=` was cut open by quote removal (`-c k='v w'`): the
-  # next word is still value, so the subcommand cannot be determined (CON-13).
-  local cut=0
+  # every option except the value-less ones makes the subcommand `?`: a
+  # separate or joined value may have been quoted and split by quote removal
+  # (`-C 'my dir'` → `-C  my dir`, `--git-dir='a b'` → `--git-dir= a b`).
   while [ "$i" -lt "$n" ]; do
     case "${t[$i]}" in
       --version | --help) return 0 ;;
       -C | -c | --git-dir | --work-tree | --namespace | --config-env | --super-prefix | --exec-path)
-        if [ "$mode" = "executor" ]; then
-          case "${t[$((i + 1))]-}" in *=) cut=1 ;; esac
-        fi
         i=$((i + 2))
+        cut=$ex
         ;;
-      -*) i=$((i + 1)) ;;
+      -p | -P | --paginate | --no-pager | --bare | --no-replace-objects | --literal-pathspecs | \
+        --glob-pathspecs | --noglob-pathspecs | --icase-pathspecs | --no-optional-locks | --no-advice | \
+        --no-lazy-fetch)
+        i=$((i + 1))
+        ;;
+      -*)
+        i=$((i + 1))
+        cut=$ex
+        ;;
       *) break ;;
     esac
   done
@@ -615,7 +628,7 @@ _git_ops_parse_clause() {
   # message could look like a flag. Flag names are not trusted there.
   if [ "$mode" = "executor" ]; then flags="(executor)"; fi
 
-  printf '%s\t%s\t%s\t%s\t%s\n' "$sub" "$action" "$flags" "${ovr# }" "$ofirst"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$sub" "$action" "$flags" "${ovr# }" "$first"
 }
 
 # _git_ops_parse <decoded command>
@@ -626,16 +639,18 @@ _git_ops_parse() {
     *git*) ;;
     *) return 0 ;;
   esac
-  local NL=$'\n' h q text mode="normal" first_left="" scan
+  local NL=$'\n' h q text mode="normal" first="" scan
   local cd_re='^[[:space:]]*(cd|pushd)[[:space:]]+[^&;]*(&&|;)[[:space:]]*'
   local ovr_re='^(CLAUDE_ALLOW_[A-Z0-9_]+)=1[[:space:]]'
 
   # The guard's first-token rule (lib/override.sh), on the command as typed:
   # newlines read as `;`, one leading cd/pushd clause stripped, then the
-  # override must be the very first word.
+  # override must be the very first word. The guard then applies it to the
+  # whole command, so override_first goes on every record of the command,
+  # while `overrides` stays per clause.
   scan="${cmd//$NL/;}"
   if [[ "$scan" =~ $cd_re ]]; then scan="${scan:${#BASH_REMATCH[0]}}"; fi
-  if [[ "$scan" =~ $ovr_re ]]; then first_left="${BASH_REMATCH[1]}"; fi
+  if [[ "$scan" =~ $ovr_re ]]; then first="${BASH_REMATCH[1]}"; fi
 
   h="$(_git_ops_strip_heredocs "$cmd")"
   q="$(_git_ops_strip_quoted "$h")"

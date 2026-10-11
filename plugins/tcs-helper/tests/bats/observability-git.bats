@@ -113,7 +113,7 @@ expect_decode() {
 @test "traced example yields exactly the two SDD records" {
   local cmd expected
   cmd='cd repo && CLAUDE_ALLOW_RESET_HARD=1 git -C sub reset --hard origin/main; git status; git commit -m "drop git reset" -qa'
-  expected="$(rec reset '' '--hard' CLAUDE_ALLOW_RESET_HARD CLAUDE_ALLOW_RESET_HARD)${NL}$(rec commit '' '-m -q' '' '')"
+  expected="$(rec reset '' '--hard' CLAUDE_ALLOW_RESET_HARD CLAUDE_ALLOW_RESET_HARD)${NL}$(rec commit '' '-m -q' '' CLAUDE_ALLOW_RESET_HARD)"
   expect_parse "$cmd" "$expected"
 }
 
@@ -121,7 +121,7 @@ expect_decode() {
   local payload decoded expected
   payload='{"session_id":"s","tool_name":"Bash","tool_input":{"command":"cd repo && CLAUDE_ALLOW_RESET_HARD=1 git -C sub reset --hard origin/main; git status; git commit -m \"drop git reset\" -qa","description":"d"}}'
   decoded="$(_git_ops_command "$payload")"
-  expected="$(rec reset '' '--hard' CLAUDE_ALLOW_RESET_HARD CLAUDE_ALLOW_RESET_HARD)${NL}$(rec commit '' '-m -q' '' '')"
+  expected="$(rec reset '' '--hard' CLAUDE_ALLOW_RESET_HARD CLAUDE_ALLOW_RESET_HARD)${NL}$(rec commit '' '-m -q' '' CLAUDE_ALLOW_RESET_HARD)"
   expect_parse "$decoded" "$expected"
 }
 
@@ -403,6 +403,46 @@ expect_decode() {
   expect_parse "bash -c \"git -c core.editor='vim' commit\"" "$(rec '?' '' '(executor)' '' '')"
 }
 
+@test "executor: a separate global option value makes the subcommand ?" {
+  local want
+  want="$(rec '?' '' '(executor)' '' '')"
+  expect_parse "bash -c \"git -C 'my dir' reset\"" "$want" || return 1
+  expect_parse "bash -c \"git --git-dir 'a b' push\"" "$want" || return 1
+  expect_parse "bash -c \"git --work-tree 'a b' push\"" "$want" || return 1
+  expect_parse "bash -c 'git -C dir reset'" "$want"
+}
+
+@test "executor: a joined global option value makes the subcommand ?" {
+  local want
+  want="$(rec '?' '' '(executor)' '' '')"
+  expect_parse "bash -c \"git --git-dir='a b' push\"" "$want" || return 1
+  expect_parse "bash -c \"git --git-dir=a' b' push\"" "$want" || return 1
+  expect_parse "bash -c 'git --git-dir=x push'" "$want"
+}
+
+@test "executor: value-less global options keep the subcommand" {
+  expect_parse "bash -c 'git --no-pager -p reset'" "$(rec reset '' '(executor)' '' '')"
+}
+
+@test "executor: an emptied assignment before git makes the subcommand ?" {
+  expect_parse "bash -c \"A='git push-me' true\"" "$(rec '?' '' '(executor)' '' '')"
+}
+
+@test "executor: a wrapper option or duration makes the subcommand ?" {
+  local want
+  want="$(rec '?' '' '(executor)' '' '')"
+  expect_parse "bash -c \"sudo -u 'x git' secretword\"" "$want" || return 1
+  expect_parse "bash -c \"env -u 'x git' secretword\"" "$want" || return 1
+  expect_parse "bash -c \"env -S 'git secretword'\"" "$want" || return 1
+  expect_parse "bash -c \"nice -n '5 git' secretword\"" "$want" || return 1
+  expect_parse "bash -c \"timeout '5 git' secretword\"" "$want" || return 1
+  expect_parse "bash -c \"time -p git push\"" "$want"
+}
+
+@test "executor: wrappers without options keep the subcommand" {
+  expect_parse "bash -c 'sudo env nohup git push'" "$(rec push '' '(executor)' '' '')"
+}
+
 @test "executor: read-only invocations inside bash -c record nothing" {
   expect_parse "bash -c 'git status && git log'" ''
 }
@@ -516,9 +556,29 @@ expect_decode() {
     "$(rec push '' '--force' 'CLAUDE_ALLOW_A CLAUDE_ALLOW_B' CLAUDE_ALLOW_A)"
 }
 
-@test "overrides: only the first-position clause carries override_first" {
-  expect_parse 'CLAUDE_ALLOW_X=1 git reset --hard && CLAUDE_ALLOW_X=1 git push' \
-    "$(rec reset '' '--hard' CLAUDE_ALLOW_X CLAUDE_ALLOW_X)${NL}$(rec push '' '' CLAUDE_ALLOW_X '')"
+@test "overrides: override_first goes on every record of the command" {
+  expect_parse 'CLAUDE_ALLOW_X=1 git reset --hard && CLAUDE_ALLOW_X=1 git push && git clean -f' \
+    "$(rec reset '' '--hard' CLAUDE_ALLOW_X CLAUDE_ALLOW_X)${NL}$(rec push '' '' CLAUDE_ALLOW_X CLAUDE_ALLOW_X)${NL}$(rec clean '' '-f' '' CLAUDE_ALLOW_X)"
+}
+
+@test "overrides: a first-position override on a non-git clause covers the command" {
+  expect_parse 'CLAUDE_ALLOW_RESET_HARD=1 true && git reset --hard' \
+    "$(rec reset '' '--hard' '' CLAUDE_ALLOW_RESET_HARD)"
+}
+
+@test "overrides: a first-position override on a read-only clause covers the command" {
+  expect_parse 'CLAUDE_ALLOW_RESET_HARD=1 git status && git reset --hard' \
+    "$(rec reset '' '--hard' '' CLAUDE_ALLOW_RESET_HARD)"
+}
+
+@test "overrides: a mid-command override is in overrides only" {
+  expect_parse 'git status && CLAUDE_ALLOW_RESET_HARD=1 git reset --hard' \
+    "$(rec reset '' '--hard' CLAUDE_ALLOW_RESET_HARD '')"
+}
+
+@test "overrides: in the executor fallback override_first is per command too" {
+  expect_parse "CLAUDE_ALLOW_RESET_HARD=1 bash -c 'git status; git reset --hard'" \
+    "$(rec reset '' '(executor)' '' CLAUDE_ALLOW_RESET_HARD)"
 }
 
 @test "overrides: an override through env counts, but not as first" {
@@ -551,6 +611,21 @@ expect_decode() {
     "bash -c 'git commit -m$s --author=$s'"
     "bash -c \"git -c http.extraHeader='Authorization: Bearer $s' push\""
     "bash -c \"git -c x='$s' push\""
+    "bash -c \"git -c 'x.y=a $s' push\""
+    "bash -c \"git -C 'my $s' reset\""
+    "bash -c \"git --git-dir 'a $s' push\""
+    "bash -c \"git --git-dir='a $s' push\""
+    "bash -c \"git --git-dir=a' $s' push\""
+    "bash -c \"git --work-tree 'a $s' push\""
+    "bash -c \"git --work-tree='a $s' push\""
+    "bash -c \"git --namespace 'a $s' push\""
+    "bash -c \"git --frob 'a $s' push\""
+    "bash -c \"A='git $s' true\""
+    "bash -c \"sudo -u 'x git' $s\""
+    "bash -c \"env -u 'x git' $s\""
+    "bash -c \"env -S 'git $s'\""
+    "bash -c \"nice -n '5 git' $s\""
+    "bash -c \"timeout '5 git' $s\""
   )
   for ((i = 0; i < ${#corpus[@]}; i++)); do
     out="$(_git_ops_parse "${corpus[$i]}")"
