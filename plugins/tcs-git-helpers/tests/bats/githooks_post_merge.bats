@@ -3,7 +3,7 @@
 # tests/bats/githooks_post_merge.bats
 #
 # Coverage for templates/githooks/post-merge
-# Test count: 11
+# Test count: 14
 #
 # Spec references:
 #   - PRD M6 AC1-AC3 — stale-branch surfacing after merge
@@ -543,4 +543,67 @@ GHSTUB2
   [ "$final_count" -eq 1 ]
 
   rm -rf "$large_repo" "$counter_dir"
+}
+
+# ---------------------------------------------------------------------------
+# #206: a successful query with no stale branches clears the old cache;
+# a failed query leaves it alone.
+# ---------------------------------------------------------------------------
+
+# Seed a cache holding one row from an earlier run.
+_seed_prior_cache() {
+  local hash
+  hash="$(_repo_hash)"
+  printf 'feat/long-gone\t7\t2026-01-01T00:00:00Z\n' > "$CACHE_DIR/${hash}-stale-cache.tsv"
+  printf '{"version":1,"stale_branches":[{"name":"feat/long-gone","pr_number":7,"merged_at":"2026-01-01T00:00:00Z"}]}\n' \
+    > "$CACHE_DIR/${hash}-stale-cache.json"
+}
+
+_assert_cache_cleared() {
+  local hash
+  hash="$(_repo_hash)"
+  _lacks "$(cat "$CACHE_DIR/${hash}-stale-cache.tsv")" "feat/long-gone"
+  [ "$(jq '.stale_branches | length' "$CACHE_DIR/${hash}-stale-cache.json")" -eq 0 ]
+}
+
+_assert_cache_untouched() {
+  local hash
+  hash="$(_repo_hash)"
+  _has "$(cat "$CACHE_DIR/${hash}-stale-cache.tsv")" "feat/long-gone"
+  _has "$(cat "$CACHE_DIR/${hash}-stale-cache.json")" "feat/long-gone"
+}
+
+@test "test_empty_merged_list_clears_prior_cache (#206)" {
+  _seed_prior_cache
+  GH_STUB_SCENARIO="default"   # gh succeeds with []
+  export GH_STUB_SCENARIO
+
+  run bash -c "cd '$REPO' && bash '$HOOK'"
+
+  [ "$status" -eq 0 ]
+  _assert_cache_cleared
+}
+
+@test "test_no_local_match_clears_prior_cache (#206)" {
+  _seed_prior_cache
+  # The fixture branches sit on main's commit, so -d deletes them.
+  git -C "$REPO" branch -d feat/stale-a fix/stale-b chore/stale-c >/dev/null
+  GH_STUB_SCENARIO="stale-3-branches"   # merged PRs exist, none local
+  export GH_STUB_SCENARIO
+
+  run --separate-stderr bash -c "cd '$REPO' && bash '$HOOK'"
+
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  _assert_cache_cleared
+}
+
+@test "test_failed_gh_query_keeps_prior_cache (#206)" {
+  local scenario
+  for scenario in network-fail no-auth; do
+    _seed_prior_cache
+    GH_STUB_SCENARIO="$scenario" run bash -c "cd '$REPO' && bash '$HOOK'"
+    [ "$status" -eq 0 ]
+    _assert_cache_untouched
+  done
 }

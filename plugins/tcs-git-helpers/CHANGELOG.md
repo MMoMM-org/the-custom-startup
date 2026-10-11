@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.2.32] - 2026-10-11
+
+### Fixed
+
+- **`post-merge` now clears the stale-branch cache when nothing is stale (#206).** It wrote the
+  cache only when it found stale branches, so a run that found none left an earlier run's rows
+  in place until `git-audit --cleanup` refreshed them. A successful `gh` query now always
+  rewrites the cache, empty or not. A failed query (gh missing, unauthenticated, network error)
+  still leaves it untouched. Hook bundle `h7` → `h8`: run `/tcs-git-helpers:git-setup --update`.
+- **The cache `post-merge` writes now carries its header (#208).** `lib-bundle.sh` wrote only the
+  data rows, without the `# updated_iso=` line the other writers emit, so `git-audit --brief`
+  could not tell the cache's age after a hook write and never showed `cache Nh old`. Same
+  bundle bump as above.
+
 ## [2.2.31] - 2026-10-10
 
 ### Fixed

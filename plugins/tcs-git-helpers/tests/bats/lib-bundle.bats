@@ -350,6 +350,60 @@ _make_git_repo() {
   grep -q "feat/my-branch" "$TEST_DIR/cache/${repo_hash}-stale-cache.tsv"
 }
 
+@test "_write_stale_cache TSV carries the schema header the readers parse (#208)" {
+  _make_git_repo "$TEST_DIR/repo"
+  cd "$TEST_DIR/repo"
+
+  local repo_path
+  repo_path="$(git rev-parse --show-toplevel)"
+  local repo_hash
+  repo_hash="$(printf '%s' "$repo_path" | shasum | head -c 12)"
+
+  run bash -c "
+    export CLAUDE_PLUGIN_DATA='$TEST_DIR'
+    source \"$LIB\"
+    printf 'feat/my-branch\t99\t2026-01-01T00:00:00Z\n' \
+      | _write_stale_cache '2026-05-13T12:00:00Z' '$repo_path' 'main'
+  "
+  [ "$status" -eq 0 ]
+
+  local tsv="$TEST_DIR/cache/${repo_hash}-stale-cache.tsv"
+  local expected
+  expected="$(printf '# tcs-git-helpers stale cache v1\n# updated_iso=2026-05-13T12:00:00Z\n# repo_path=%s\n# default_branch=main\nfeat/my-branch\t99\t2026-01-01T00:00:00Z' "$repo_path")"
+  [ "$(cat "$tsv")" = "$expected" ]
+
+  # The Python reader must find the timestamp (it returned None before #208).
+  run python3 -I -c "
+import sys, importlib.util
+spec = importlib.util.spec_from_file_location('gsa', sys.argv[1])
+gsa = importlib.util.module_from_spec(spec); spec.loader.exec_module(gsa)
+from pathlib import Path
+print(gsa._get_cache_age_hours(Path(sys.argv[2])) is None)
+" "$BATS_TEST_DIRNAME/../../scripts/git_status_audit.py" "$tsv"
+  [ "$status" -eq 0 ]
+  [ "$output" = "False" ]
+}
+
+@test "_write_stale_cache TSV with no rows is header-only (#208)" {
+  _make_git_repo "$TEST_DIR/repo"
+  cd "$TEST_DIR/repo"
+
+  local repo_path
+  repo_path="$(git rev-parse --show-toplevel)"
+  local repo_hash
+  repo_hash="$(printf '%s' "$repo_path" | shasum | head -c 12)"
+
+  run bash -c "
+    export CLAUDE_PLUGIN_DATA='$TEST_DIR'
+    source \"$LIB\"
+    printf '' | _write_stale_cache '2026-05-13T12:00:00Z' '$repo_path' 'main'
+  "
+  [ "$status" -eq 0 ]
+
+  # Every line is a header comment: no blank or data line.
+  [ "$(grep -vc '^#' "$TEST_DIR/cache/${repo_hash}-stale-cache.tsv")" -eq 0 ]
+}
+
 @test "_write_stale_cache JSON is valid and contains stale_branches array" {
   _make_git_repo "$TEST_DIR/repo"
   cd "$TEST_DIR/repo"
