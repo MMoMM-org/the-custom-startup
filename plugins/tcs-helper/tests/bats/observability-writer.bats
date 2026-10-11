@@ -1905,9 +1905,10 @@ with open('$out', 'w') as f:
 # 27. Spec 021 F6 — owner-only creation and deny-list backstop
 # ---------------------------------------------------------------------------
 
-# Octal mode of $1, on both BSD (macOS) and GNU (ubuntu) stat.
+# Octal mode of $1, on both BSD (macOS) and GNU (ubuntu) stat. GNU first:
+# GNU `stat -f` means --file-system and prints junk on stdout before failing.
 _mode_of() {
-  stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"
+  stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
 }
 
 # One write, with the caller's umask set to $2; prints "<umask before>
@@ -1962,10 +1963,13 @@ _write_backstop() {
     export CLAUDE_OBSERVABILITY_ENABLED=1
     export CLAUDE_OBSERVABILITY_DATA="$data_dir"
     [ "$detail" = "1" ] && export CLAUDE_OBSERVABILITY_DETAIL=1
+    # Unprefixed description is the backstop case, so it is only sent in
+    # reduced mode; with detail on, only the prefixed one is under test.
+    extra=description=DESCCANARY
+    [ "$detail" = "1" ] && extra=detail:description=DETAILDESC
     _observability_write kind=hook session=sess-bs args=ARGSCANARY \
-      command_args=CMDARGSCANARY description=DESCCANARY \
-      tool_input=TOOLINPUTCANARY command=COMMANDCANARY detail:description=DETAILDESC \
-      tool=Bash
+      command_args=CMDARGSCANARY "$extra" \
+      tool_input=TOOLINPUTCANARY command=COMMANDCANARY tool=Bash
   ' _ "$data_dir" "$REPO" "$WRITER" "$detail"
   cat "$data_dir/observability/events.jsonl"
 }
