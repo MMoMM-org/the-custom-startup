@@ -162,8 +162,19 @@ _write_stale_cache() {
   local tsv_file="${data_dir}/${repo_hash}-stale-cache.tsv"
   local json_file="${data_dir}/${repo_hash}-stale-cache.json"
 
-  # Write TSV atomically.
-  { printf '%s\n' "$tsv_rows" > "${tsv_file}.tmp"; } 2>/dev/null || {
+  # Write TSV atomically. The header matches scripts/lib/cache.sh; readers
+  # take the cache age from `# updated_iso=` (#208).
+  {
+    {
+      printf '# tcs-git-helpers stale cache v1\n'
+      printf '# updated_iso=%s\n' "$updated_iso"
+      printf '# repo_path=%s\n' "$repo_path"
+      printf '# default_branch=%s\n' "$default_branch"
+      if [ -n "$tsv_rows" ]; then
+        printf '%s\n' "$tsv_rows"
+      fi
+    } > "${tsv_file}.tmp"
+  } 2>/dev/null || {
     _emit_skip "cache-write" \
       "TSV write failed" \
       "Check write permissions on $data_dir"

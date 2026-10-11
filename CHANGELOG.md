@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The `post-merge` hook now clears the stale-branch cache when nothing is stale (#206).** It
   only wrote the cache when it found stale branches, so rows from an earlier run stayed in it.
-  A failed `gh` query still leaves the cache alone. **What to do:** run
+  A failed `gh` query still leaves the cache alone. The cache it writes now also carries the
+  timestamp header, so `git-audit --brief` can report its age again (#208). **What to do:** run
   `/tcs-git-helpers:git-setup --update` in each repo to install the new hook bundle (`h8`).
 
 - **The session-start cleanup hint no longer names a branch `gh pr merge --delete-branch` already
