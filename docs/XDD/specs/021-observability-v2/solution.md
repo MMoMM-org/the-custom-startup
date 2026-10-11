@@ -511,7 +511,7 @@ Input (decoded): `cd repo && CLAUDE_ALLOW_RESET_HARD=1 git -C sub reset --hard o
 
 | Step | Result |
 |---|---|
-| strip heredocs, strip quotes (copied `_strip_heredocs`, `_strip_quoted`) | `… git commit -m                  -qa` |
+| strip heredocs (copied `_strip_heredocs`); each quoted span becomes one opaque word | `… git commit -m %%%%%%%%%%%%%%%%%% -qa` |
 | executor check on stripped text (#213 rule) | none → use stripped text |
 | split on `&& \|\| \| ; &` and newline | `cd repo` / `CLAUDE_ALLOW_RESET_HARD=1 git -C sub reset --hard origin/main` / `git status` / `git commit -m                  -qa` |
 | clause 2: leading assignments | `CLAUDE_ALLOW_RESET_HARD=1` → overrides `CLAUDE_ALLOW_RESET_HARD`; first token of the command after one leading `cd`/`pushd` clause → `override_first: CLAUDE_ALLOW_RESET_HARD` |
@@ -650,7 +650,7 @@ executor decision on a shared corpus; the fallback is `git_ops.sh`'s own and has
 **Command position.** Clauses are split on `&&`, `||`, `|`, `;`, `&` and newline. Within a clause,
 leading tokens are skipped in this order, repeatedly:
 - openers and keywords: `(`, `{`, `!`, `if`, `then`, `elif`, `else`, `while`, `until`, `do`; a
-  token's leading `` ` `` or `(` is trimmed (`$(` is already blanked by `_strip_quoted`);
+  token's leading `(` is trimmed;
 - `NAME=value` assignments (a `CLAUDE_ALLOW_*=1` among them is an override, wherever it stands);
 - wrappers with their options: `env` (`-i`, `-u NAME`, assignments), `sudo` (`-u -g -h -p -C -D -r
   -t -U` take a value; other single-dash options do not), `time` (`-p`), `nice` (`-n N`),
@@ -665,6 +665,16 @@ with `=`); `-p`, `-P`, `--paginate`, `--no-pager`, `--bare`, `--no-replace-objec
 `--no-optional-locks`, `--no-advice`, `--no-lazy-fetch` do not; any other leading `-` token is skipped
 alone. `xargs git …`, `find … -exec git …` and git run from a script file are not recognised
 (gotcha below).
+
+**Words (settled in T1.3).** In normal mode a quoted span is one opaque word, never a name. A command
+substitution (`$( … )` or backticks, outside single quotes, at any depth) is executed code and one
+argument at once: its content is parsed as clauses of its own (`echo $(git reset --hard)` and
+`git commit -m "$(git reset --hard)"` record `reset`), and in the enclosing clause it is one opaque
+word (`git -C $(pwd) push` records `push`; `GIT_DIR=$(pwd) git push` records `push`;
+`git $(echo reset)` records `?`). Names are matched against ASCII letter lists, not `[[:lower:]]`
+or `[a-z]`, which match `é` in a UTF-8 locale on bash 3.2. In executor mode a scan that stops on an
+unrecognised word after a value cut, with a `git` word later in the clause, records `?`: the record
+is kept, the name is lost.
 
 **Report shape.** `fired_names` returns `set[(kind, name)]` with no session or route, and feeds
 `union_fired_names` and the multi-source path. A new `firing_events(records)` yields one normalised
