@@ -24,9 +24,11 @@
 #   has an undeterminable subcommand `?`). When the stripped text runs a shell
 #   on a payload (`bash -c`, `eval`), the executor fallback applies instead:
 #   every quote character becomes a space and the records carry
-#   flags `(executor)`. Clauses split on && || | ; & and newline; in each, the
-#   command position skips openers, assignments and wrappers (env sudo time
-#   nice timeout nohup exec command) before looking for `git` or `*/git`.
+#   flags `(executor)`; there the subcommand is recorded by name only if it
+#   is on _GIT_OPS_EXECUTOR_COMMANDS, else `?`. Clauses split on && || | ;
+#   & and newline; in each, the command position skips openers,
+#   assignments and wrappers (env sudo time nice timeout nohup exec command)
+#   before looking for `git` or `*/git`.
 #   override_first mirrors the guard's first-token rule
 #   (tcs-git-helpers lib/override.sh, one leading cd/pushd clause stripped).
 #
@@ -62,7 +64,8 @@
 # The comments INSIDE the copied functions are verbatim from the guard; their
 # references to the dispatcher and _clausify point at tcs-git-helpers, not here.
 #
-# Sourced by a hook: defines functions only. No output, no external commands,
+# Sourced by a hook: defines functions and one constant
+# (_GIT_OPS_EXECUTOR_COMMANDS). No output, no external commands,
 # no `set -e`/`set -u` at source time; every function is `set -u` safe.
 # bash 3.2 compatible.
 
@@ -212,6 +215,18 @@ _git_ops_has_shell_executor() {
   [[ "$1" =~ (^|[^[:alnum:]_])[a-z]*sh[[:space:]]+-c([[:space:]]|$) ]] \
     || [[ "$1" =~ (^|[^[:alnum:]_])eval([[:space:]]|$) ]]
 }
+
+# _GIT_OPS_EXECUTOR_COMMANDS -- the closed list of git's own command names that
+# the executor fallback records by name (SDD Complex Logic). Quote removal there
+# exposes separators inside nested quotes, so `bash -c "git commit -m 'wip; git
+# tok'"` yields a fake clause `git tok`; a subcommand off this list is `?`, so a
+# message word can never stand in the record. Normal mode does not use it.
+# Source: `git help -a` (git version 2.50.1, Apple Git-155), sections "Main
+# Porcelain", "Ancillary", "Interacting with Others" and "Low-level"; the
+# interface/format guides and external commands are excluded; plus `lfs`.
+# A space-delimited string: membership is one glob test, no loop, no fork (the
+# idiom of logwrite.sh's _OBSERVABILITY_DETAIL_ONLY_FIELDS).
+_GIT_OPS_EXECUTOR_COMMANDS=" add am annotate apply archimport archive backfill bisect blame branch bugreport bundle cat-file check-attr check-ignore check-mailmap check-ref-format checkout checkout-index cherry cherry-pick citool clean clone column commit commit-graph commit-tree config count-objects credential credential-cache credential-store cvsexportcommit cvsimport cvsserver daemon describe diagnose diff diff-files diff-index diff-pairs diff-tree difftool fast-export fast-import fetch fetch-pack filter-branch fmt-merge-msg for-each-ref for-each-repo format-patch fsck gc get-tar-commit-id gitk gitweb grep gui hash-object help hook http-backend imap-send index-pack init instaweb interpret-trailers log ls-files ls-remote ls-tree mailinfo mailsplit maintenance merge merge-base merge-file merge-index merge-one-file merge-tree mergetool mktag mktree multi-pack-index mv name-rev notes p4 pack-objects pack-redundant pack-refs patch-id prune prune-packed pull push quiltimport range-diff read-tree rebase reflog refs remote repack replace replay request-pull rerere reset restore rev-list rev-parse revert rm scalar send-email send-pack sh-i18n sh-setup shortlog show show-branch show-index show-ref sparse-checkout stash status stripspace submodule svn switch symbolic-ref tag unpack-file unpack-objects update-index update-ref update-server-info var verify-commit verify-pack verify-tag version whatchanged worktree write-tree lfs "
 
 # ---------------------------------------------------------------------------
 # Parser (T1.3). Helpers below share state with _git_ops_parse through bash's
@@ -488,6 +503,12 @@ _git_ops_parse_clause() {
   _git_ops_trim_closers
   sub="$tok"
   if [ "$cut" -eq 1 ]; then sub='?'; fi
+  if [ "$ex" -eq 1 ]; then
+    case "$_GIT_OPS_EXECUTOR_COMMANDS" in
+      *" $sub "*) ;;
+      *) sub='?' ;;
+    esac
+  fi
   case "$sub" in
     [[:lower:]]*)
       case "$sub" in

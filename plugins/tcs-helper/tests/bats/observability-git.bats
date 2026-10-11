@@ -443,6 +443,29 @@ expect_decode() {
   expect_parse "bash -c 'sudo env nohup git push'" "$(rec push '' '(executor)' '' '')"
 }
 
+@test "executor: a fake clause from a nested-quote separator never names a command" {
+  local commit_rec unknown
+  commit_rec="$(rec commit '' '(executor)' '' '')"
+  unknown="$(rec '?' '' '(executor)' '' '')"
+  expect_parse "bash -c \"git commit -m 'a && git push-it now'\"" "${commit_rec}${NL}${unknown}" || return 1
+  expect_parse "bash -c \"git commit -m 'wip; git hunter2tok'\"" "${commit_rec}${NL}${unknown}"
+}
+
+@test "executor: an alias behind bash -c gives ?" {
+  expect_parse "bash -c 'git co main'" "$(rec '?' '' '(executor)' '' '')"
+}
+
+@test "executor: git's own commands are on the closed list" {
+  local c failed=""
+  for c in reset push commit stash worktree lfs cherry-pick filter-branch; do
+    run _git_ops_parse "bash -c 'git $c'"
+    if [ "$output" != "$(rec "$c" '' '(executor)' '' '')" ]; then
+      failed="$failed ${c}[$output]"
+    fi
+  done
+  [ -z "$failed" ] || { echo "not recorded by name:$failed"; return 1; }
+}
+
 @test "executor: read-only invocations inside bash -c record nothing" {
   expect_parse "bash -c 'git status && git log'" ''
 }
@@ -626,6 +649,9 @@ expect_decode() {
     "bash -c \"env -S 'git $s'\""
     "bash -c \"nice -n '5 git' $s\""
     "bash -c \"timeout '5 git' $s\""
+    "bash -c \"git commit -m 'wip; git $s'\""
+    "bash -c \"git commit -m 'a && git $s now'\""
+    "bash -c \"git commit -m 'a || git push-it now'\""
   )
   for ((i = 0; i < ${#corpus[@]}; i++)); do
     out="$(_git_ops_parse "${corpus[$i]}")"
@@ -634,7 +660,7 @@ expect_decode() {
       continue
     fi
     case "$out" in
-      *"$s"* | *github.com* | *origin* | *Bearer* | *Authorization* | *https* | *GITHUB_TOKEN* | *GH_TOKEN*)
+      *"$s"* | *github.com* | *origin* | *Bearer* | *Authorization* | *https* | *GITHUB_TOKEN* | *GH_TOKEN* | *push-it*)
         failed="$failed [leak: ${corpus[$i]} -> $out]"
         ;;
     esac
