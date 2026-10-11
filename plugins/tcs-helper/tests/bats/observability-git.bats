@@ -611,7 +611,7 @@ expect_decode() {
 # --- CON-13: no value in any record -----------------------------------------
 
 @test "secrets corpus: no value reaches any record" {
-  local s="hunter2tok" i out failed=""
+  local s="hunter2tok" i out line why failed=""
   local -a corpus
   corpus=(
     "GITHUB_TOKEN=$s git push"
@@ -652,20 +652,147 @@ expect_decode() {
     "bash -c \"git commit -m 'wip; git $s'\""
     "bash -c \"git commit -m 'a && git $s now'\""
     "bash -c \"git commit -m 'a || git push-it now'\""
+    "bash -c \"git -C 'a --version' push\""
+    # Command substitutions (one opaque word; content parsed on its own).
+    'git -C $(echo hunter2) push'
+    'git --git-dir $(realpath hunter2) push'
+    'git -C `realpath hunter2` push'
+    'git -C $(cd hunter2 && pwd) push'
+    'git -C $(dirname $(echo hunter2)) push'
+    'git -C $(echo `echo hunter2`) push'
+    'git $(echo hunter2) push'
+    'GIT_DIR=$(pwd) git push'
+    'GIT_DIR=$(echo hunter2) git push'
+    'git commit -m "$(git reset --hard)"'
+    "bash -c \"A='x y' git push\""
+    "bash -c \"A='x $s' git push\""
+    # Non-ASCII words never pass as names.
+    'git é'
+    'git Ä --x'
+    'git pushé'
   )
   for ((i = 0; i < ${#corpus[@]}; i++)); do
-    out="$(_git_ops_parse "${corpus[$i]}")"
+    out="$(LC_ALL=en_US.UTF-8 _git_ops_parse "${corpus[$i]}")"
     if [ -z "$out" ]; then
       failed="$failed [no record: ${corpus[$i]}]"
       continue
     fi
-    case "$out" in
-      *"$s"* | *github.com* | *origin* | *Bearer* | *Authorization* | *https* | *GITHUB_TOKEN* | *GH_TOKEN* | *push-it*)
-        failed="$failed [leak: ${corpus[$i]} -> $out]"
-        ;;
-    esac
+    while IFS= read -r line; do
+      why="$(_record_violation "$line")"
+      if [ -n "$why" ]; then
+        failed="$failed [${corpus[$i]} -> $line: $why]"
+      fi
+    done <<< "$out"
   done
   [ -z "$failed" ] || { echo "$failed"; return 1; }
+}
+
+# _record_violation <record>  prints why a record breaks CON-13, or nothing.
+#   Every field is checked against the shape a NAME may have, so a value can
+#   only pass by being shaped like a name; the corpus's secret words are
+#   rejected by equality in the name fields and as substrings anywhere.
+_record_violation() {
+  local line="$1" f1 f2 f3 f4 f5 rest w tabs
+  local lower='abcdefghijklmnopqrstuvwxyz' upper='ABCDEFGHIJKLMNOPQRSTUVWXYZ' digit='0123456789'
+  tabs="${line//[!$TAB]/}"
+  if [ "${#tabs}" -ne 4 ]; then echo "not five fields"; return 0; fi
+  f1="${line%%"$TAB"*}"; rest="${line#*"$TAB"}"
+  f2="${rest%%"$TAB"*}"; rest="${rest#*"$TAB"}"
+  f3="${rest%%"$TAB"*}"; rest="${rest#*"$TAB"}"
+  f4="${rest%%"$TAB"*}"; f5="${rest#*"$TAB"}"
+  for w in hunter2tok hunter2 push-it é Ä; do
+    case "$line" in *"$w"*) echo "contains secret word $w"; return 0 ;; esac
+    if [ "$f1" = "$w" ] || [ "$f2" = "$w" ]; then echo "names $w"; return 0; fi
+  done
+  case "$f1" in
+    '?') ;;
+    [$lower]*) case "$f1" in *[!$lower$digit-]*) echo "subcommand not a name"; return 0 ;; esac ;;
+    *) echo "subcommand not a name"; return 0 ;;
+  esac
+  case "$f2" in *[!$lower-]*) echo "action not a name"; return 0 ;; esac
+  for w in $f3; do
+    case "$w" in
+      '(executor)') ;;
+      -*=* | -*"%"*) echo "flag carries a value: $w"; return 0 ;;
+      -*) ;;
+      *) echo "flag field holds a non-flag: $w"; return 0 ;;
+    esac
+  done
+  for w in $f4 $f5; do
+    case "$w" in
+      CLAUDE_ALLOW_?*) case "${w#CLAUDE_ALLOW_}" in *[!$upper${digit}_]*) echo "override not a name: $w"; return 0 ;; esac ;;
+      *) echo "override not a name: $w"; return 0 ;;
+    esac
+  done
+}
+
+# --- command substitution: executed code, and one word around it --------------
+
+@test "substitution: a \$( ) value after -C is one word" {
+  expect_parse 'git -C $(echo x) push' "$(rec push '' '' '' '')"
+}
+
+@test "substitution: a \$( ) value after --git-dir is one word" {
+  expect_parse 'git --git-dir $(realpath x) push' "$(rec push '' '' '' '')"
+}
+
+@test "substitution: a backtick value after -C is one word" {
+  expect_parse 'git -C `realpath x` push' "$(rec push '' '' '' '')"
+}
+
+@test "substitution: a value with a separator inside stays one word" {
+  expect_parse 'git -C $(cd x && pwd) push' "$(rec push '' '' '' '')"
+}
+
+@test "substitution: nested substitutions are one word" {
+  expect_parse 'git -C $(dirname $(echo x)) push' "$(rec push '' '' '' '')" || return 1
+  expect_parse 'git -C $(echo `echo x`) push' "$(rec push '' '' '' '')"
+}
+
+@test "substitution: an assignment value keeps the assignment one word" {
+  expect_parse 'GIT_DIR=$(pwd) git push' "$(rec push '' '' '' '')"
+}
+
+@test "substitution: in subcommand position gives ?" {
+  expect_parse 'git $(echo reset) --hard' "$(rec '?' '' '--hard' '' '')"
+}
+
+@test "substitution: its content is parsed as its own clauses" {
+  expect_parse 'git commit -m "$(git reset --hard)"' "$(rec commit '' '-m' '' '')${NL}$(rec reset '' '--hard' '' '')" || return 1
+  expect_parse 'echo $(git reset --hard)' "$(rec reset '' '--hard' '' '')" || return 1
+  expect_parse 'echo `git push`' "$(rec push '' '' '' '')"
+}
+
+@test "substitution: nested content is parsed at every depth" {
+  expect_parse 'echo $(echo $(git push --force))' "$(rec push '' '--force' '' '')"
+}
+
+@test "substitution: inside single quotes it is data" {
+  expect_parse "git commit -m '\$(git reset --hard)'" "$(rec commit '' '-m' '' '')"
+}
+
+@test "executor: a value fragment that stops the scan still yields ?" {
+  local want
+  want="$(rec '?' '' '(executor)' '' '')"
+  expect_parse "bash -c \"A='x y' git push\"" "$want" || return 1
+  expect_parse "bash -c \"sudo -u 'a b' git push\"" "$want" || return 1
+  expect_parse "bash -c \"git -C 'a --version' push\"" "$want"
+}
+
+@test "executor: without a cut an unknown first word is no invocation" {
+  expect_parse "bash -c 'echo git push'" ''
+}
+
+@test "names are ASCII: non-ASCII letters give ? in a UTF-8 locale" {
+  run env LC_ALL=en_US.UTF-8 bash -c 'source "$1"; _git_ops_parse "git é"; _git_ops_parse "git Ä"; _git_ops_parse "git pushé"' _ "$BUNDLE_LIB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(rec '?' '' '' '' '')${NL}$(rec '?' '' '' '' '')${NL}$(rec '?' '' '' '' '')" ]
+}
+
+@test "a non-ASCII assignment name is no assignment in a UTF-8 locale" {
+  run env LC_ALL=en_US.UTF-8 bash -c 'source "$1"; _git_ops_parse "CLAUDE_ALLOW_RÉSET=1 git push"' _ "$BUNDLE_LIB"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
 
 # --- robustness -------------------------------------------------------------

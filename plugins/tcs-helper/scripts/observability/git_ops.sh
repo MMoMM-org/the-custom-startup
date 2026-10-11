@@ -18,13 +18,18 @@
 #                               cap is the writer's job.
 #
 # Parsing (SDD Runtime View, Complex Logic; ADR-3, ADR-9):
-#   heredoc bodies and quoted text are stripped with the copied functions
-#   below; quoted text is then re-marked with `%` so a quoted argument still
-#   counts as one opaque word (`git branch "x"` has a positional, `git "reset"`
-#   has an undeterminable subcommand `?`). When the stripped text runs a shell
-#   on a payload (`bash -c`, `eval`), the executor fallback applies instead:
-#   every quote character becomes a space and the records carry
-#   flags `(executor)`; there the subcommand is recorded by name only if it
+#   heredoc bodies are stripped with the copied function below, then quoted
+#   text and command substitutions are re-marked (_git_ops_mark_words): a
+#   quoted span is one opaque word of `%` (`git branch "x"` has a positional,
+#   `git "reset"` has an undeterminable subcommand `?`); a substitution,
+#   `$( … )` or backticks at any depth, is one `%` word in the command around
+#   it (`git -C $(pwd) push` → push, `GIT_DIR=$(pwd) git push` → push,
+#   `git $(echo reset)` → `?`) and its content is parsed as clauses of its
+#   own (`git commit -m "$(git reset)"` → commit and reset). The copied quote
+#   stripper decides only the executor predicate. When the stripped text
+#   runs a shell on a payload (`bash -c`, `eval`), the executor fallback
+#   applies instead: every quote character becomes a space and the records
+#   carry flags `(executor)`; there the subcommand is recorded by name only if it
 #   is on _GIT_OPS_EXECUTOR_COMMANDS, else `?`. Clauses split on && || | ;
 #   & and newline; in each, the command position skips openers,
 #   assignments and wrappers (env sudo time nice timeout nohup exec command)
@@ -32,15 +37,18 @@
 #   override_first mirrors the guard's first-token rule
 #   (tcs-git-helpers lib/override.sh, one leading cd/pushd clause stripped).
 #
-# Known limits (documented, not silent): `xargs git …`, `find … -exec git …`,
-# git run from a script file, and git inside a `$( )` that is not at command
-# position (`echo $(git reset)`) are not recognised and record nothing. In the
+# Known limits (documented, not silent): `xargs git …`, `find … -exec git …`
+# and git run from a script file are not recognised and record nothing. In the
 # executor fallback, nested quoting is gone, so any value before the
 # subcommand (wrapper option or duration, empty assignment, global option
 # other than the value-less ones) makes the subcommand `?` rather than risk a
-# value fragment in its place (CON-13); such records lose the name, not the
-# record. override_first belongs to the whole command (the guard applies a
-# first-position override to all of it); `overrides` to the clause.
+# value fragment in its place (CON-13); when such a fragment then stops the
+# command-position scan, a later git word still yields a `?` record
+# (_git_ops_cut_stop). Substitutions in that mode are handled only at command
+# position. Name patterns are ASCII letter lists, not ranges or classes, so
+# they hold in any locale. override_first belongs to the whole command (the
+# guard applies a first-position override to all of it); `overrides` to the
+# clause.
 #
 # COPIED, NOT SOURCED (SDD/ADR-2, CON-12):
 #   _git_ops_strip_heredocs, _git_ops_strip_quoted and
@@ -276,44 +284,111 @@ _git_ops_command() {
   done
 }
 
-# _git_ops_mark_quoted   (reads h, q; assigns text — locals of _git_ops_parse)
-#   h is the heredoc-stripped command, q the same after _git_ops_strip_quoted;
-#   the two are position-aligned (stripping maps one byte to one byte). Every
-#   run of blanks in q whose bytes in h are not blank was quoted text or a
-#   `$(`/`)` delimiter. The delimiters become blanks again (the substitution's
-#   code stays in scope); the quoted span between the run's edges becomes `%`,
-#   one opaque word that can be counted but never matches a name.
-_git_ops_mark_quoted() {
-  # shellcheck disable=SC2016 # a literal glob bracket of $ ( )
-  local rest="$q" off=0 run seg lead trail mid n subst='[$()]'
-  if [ "$h" = "$q" ]; then
-    text="$q"
-    return 0
-  fi
-  text=""
-  while [ -n "$rest" ]; do
-    run="${rest%%' '*}"
-    text="${text}${run}"
-    off=$((off + ${#run}))
-    rest="${rest:${#run}}"
-    if [ -z "$rest" ]; then break; fi
-    run="${rest%%[! ]*}"
-    n=${#run}
-    seg="${h:$off:$n}"
-    if [ "$seg" != "$run" ]; then
-      seg="${seg//$subst/ }"
-      seg="${seg//[[:space:]]/ }"
-      lead="${seg%%[! ]*}"
-      if [ "${#lead}" -lt "$n" ]; then
-        trail="${seg##*[! ]}"
-        mid="${seg:${#lead}:$((n - ${#lead} - ${#trail}))}"
-        seg="${lead}${mid//?/%}${trail}"
-      fi
-    fi
-    text="${text}${seg}"
-    off=$((off + n))
-    rest="${rest:$n}"
+# _git_ops_mark_words   (reads h, NL; assigns text — locals of _git_ops_parse)
+#   Rewrites the heredoc-stripped command h for clause parsing, with the same
+#   quote states as _git_ops_strip_quoted (N code, S single-, D double-quoted;
+#   `\"` does not close D; `$(` opens code in N and D):
+#     - every byte of a quoted span, quotes included, becomes `%`, so the span
+#       is one opaque word that can be counted but never matches a name;
+#     - a command substitution, `$( … )` or `` ` … ` `` (in N or D), is
+#       executed code AND one argument of the command around it: in its
+#       enclosing text it becomes a single `%`; its content is appended to
+#       text after a newline, as clauses of their own. Nested substitutions
+#       follow the same rule at every depth. An unclosed one is closed at the
+#       end of input.
+#   Outside quotes and substitutions every byte is kept.
+# shellcheck disable=SC2016 # '$(' is a literal pattern
+_git_ops_mark_words() {
+  local len=${#h} i=0 ch nxt state="N" prev="" d=0 states="" kinds="" subs=""
+  local -a buf
+  case "$h" in
+    *"'"* | *'"'* | *'`'* | *'$('*) ;;
+    *)
+      text="$h"
+      return 0
+      ;;
+  esac
+  buf[0]=""
+  while [ "$i" -lt "$len" ]; do
+    ch="${h:$i:1}"
+    nxt="${h:$((i + 1)):1}"
+    case "$state" in
+      S)
+        if [ "$ch" = "'" ]; then state="N"; fi
+        buf[d]="${buf[d]}%"
+        ;;
+      D)
+        if [ "$ch" = '$' ] && [ "$nxt" = "(" ]; then
+          _git_ops_open_subst P
+          i=$((i + 2))
+          continue
+        elif [ "$ch" = '`' ]; then
+          _git_ops_open_subst B
+          i=$((i + 1))
+          continue
+        fi
+        if [ "$ch" = '"' ] && [ "$prev" != "\\" ]; then state="N"; fi
+        buf[d]="${buf[d]}%"
+        ;;
+      N)
+        if [ "$ch" = '$' ] && [ "$nxt" = "(" ]; then
+          _git_ops_open_subst P
+          i=$((i + 2))
+          continue
+        fi
+        case "$ch" in
+          "'")
+            state="S"
+            buf[d]="${buf[d]}%"
+            ;;
+          '"')
+            state="D"
+            buf[d]="${buf[d]}%"
+            ;;
+          '`')
+            if [ "${kinds:0:1}" = "B" ]; then
+              _git_ops_close_subst
+            else
+              _git_ops_open_subst B
+            fi
+            ;;
+          ')')
+            if [ "${kinds:0:1}" = "P" ]; then
+              _git_ops_close_subst
+            else
+              buf[d]="${buf[d]})"
+            fi
+            ;;
+          *) buf[d]="${buf[d]}${ch}" ;;
+        esac
+        ;;
+    esac
+    prev="$ch"
+    i=$((i + 1))
   done
+  while [ "$d" -gt 0 ]; do _git_ops_close_subst; done
+  text="${buf[0]}${subs}"
+}
+
+# _git_ops_open_subst <P|B>   (part of _git_ops_mark_words; shares its locals)
+_git_ops_open_subst() {
+  buf[d]="${buf[d]}%"
+  states="${state}${states}"
+  kinds="${1}${kinds}"
+  d=$((d + 1))
+  buf[d]=""
+  state="N"
+  prev="("
+}
+
+# _git_ops_close_subst   (part of _git_ops_mark_words; shares its locals)
+_git_ops_close_subst() {
+  subs="${subs}${NL}${buf[d]}"
+  d=$((d - 1))
+  state="${states:0:1}"
+  states="${states:1}"
+  kinds="${kinds:1}"
+  prev=")"
 }
 
 # _git_ops_trim_closers   (assigns tok — a local of the caller)
@@ -324,6 +399,27 @@ _git_ops_trim_closers() {
       *'`' | *')') tok="${tok%?}" ;;
       *) return 0 ;;
     esac
+  done
+}
+
+# _git_ops_cut_stop   (part of _git_ops_parse_clause; shares its locals)
+#   Command-position scanning stopped on a word it does not recognise. In the
+#   executor fallback after a cut, that word may be a fragment of a quoted
+#   value (`bash -c "A='x y' git push"` → `A= x y git push`): if a git word
+#   follows, the invocation is recorded as `?` rather than lost (fail closed,
+#   never a value). Elsewhere the clause simply has no git invocation.
+_git_ops_cut_stop() {
+  local j
+  if [ "$ex" -ne 1 ] || [ "$cut" -ne 1 ]; then return 0; fi
+  j=$((i + 1))
+  while [ "$j" -lt "$n" ]; do
+    case "${t[$j]}" in
+      git | */git)
+        printf '%s\t%s\t%s\t%s\t%s\n' '?' '' '(executor)' "${ovr# }" "$first"
+        return 0
+        ;;
+    esac
+    j=$((j + 1))
   done
 }
 
@@ -364,17 +460,20 @@ _git_ops_parse_clause() {
         continue
         ;;
       git | */git) break ;;
-      [[:alpha:]_]*=*)
+      [abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_]*=*)
         name="${tok%%=*}"
         case "$name" in
-          *[![:alnum:]_]*) return 0 ;;
+          *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*)
+            _git_ops_cut_stop
+            return 0
+            ;;
         esac
         val="${tok#*=}"
         if [ -z "$val" ]; then cut=$ex; fi
         case "$name" in
           CLAUDE_ALLOW_?*)
             case "${name#CLAUDE_ALLOW_}" in
-              *[![:upper:][:digit:]_]*) ;;
+              *[!ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*) ;;
               *) if [ "$val" = "1" ]; then ovr="${ovr} ${name}"; fi ;;
             esac
             ;;
@@ -455,7 +554,7 @@ _git_ops_parse_clause() {
         if [ "$mode" != "executor" ]; then return 0; fi
         i=$((i + 1))
         ;;
-      sh | [[:lower:]]*sh | */sh | */[[:lower:]]*sh)
+      sh | [abcdefghijklmnopqrstuvwxyz]*sh | */sh | */[abcdefghijklmnopqrstuvwxyz]*sh)
         # Only in the executor fallback, where `bash -c 'git …'` has lost its
         # quotes and the payload's words follow the shell's options.
         if [ "$mode" != "executor" ]; then return 0; fi
@@ -467,7 +566,10 @@ _git_ops_parse_clause() {
           esac
         done
         ;;
-      *) return 0 ;;
+      *)
+        _git_ops_cut_stop
+        return 0
+        ;;
     esac
   done
   if [ "$i" -ge "$n" ]; then return 0; fi
@@ -479,7 +581,14 @@ _git_ops_parse_clause() {
   # (`-C 'my dir'` → `-C  my dir`, `--git-dir='a b'` → `--git-dir= a b`).
   while [ "$i" -lt "$n" ]; do
     case "${t[$i]}" in
-      --version | --help) return 0 ;;
+      --version | --help)
+        # After a cut in the executor fallback this may be a value fragment
+        # of the global option before it: keep the record, as `?`.
+        if [ "$ex" -eq 1 ] && [ "$cut" -eq 1 ]; then
+          printf '%s\t%s\t%s\t%s\t%s\n' '?' '' '(executor)' "${ovr# }" "$first"
+        fi
+        return 0
+        ;;
       -C | -c | --git-dir | --work-tree | --namespace | --config-env | --super-prefix | --exec-path)
         i=$((i + 2))
         cut=$ex
@@ -510,9 +619,9 @@ _git_ops_parse_clause() {
     esac
   fi
   case "$sub" in
-    [[:lower:]]*)
+    [abcdefghijklmnopqrstuvwxyz]*)
       case "$sub" in
-        *[![:lower:][:digit:]-]*) sub='?' ;;
+        *[!abcdefghijklmnopqrstuvwxyz0123456789-]*) sub='?' ;;
       esac
       ;;
     *) sub='?' ;;
@@ -662,7 +771,7 @@ _git_ops_parse() {
   esac
   local NL=$'\n' h q text mode="normal" first="" scan
   local cd_re='^[[:space:]]*(cd|pushd)[[:space:]]+[^&;]*(&&|;)[[:space:]]*'
-  local ovr_re='^(CLAUDE_ALLOW_[A-Z0-9_]+)=1[[:space:]]'
+  local ovr_re='^(CLAUDE_ALLOW_[ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]+)=1[[:space:]]'
 
   # The guard's first-token rule (lib/override.sh), on the command as typed:
   # newlines read as `;`, one leading cd/pushd clause stripped, then the
@@ -680,7 +789,7 @@ _git_ops_parse() {
     text="${h//\'/ }"
     text="${text//\"/ }"
   else
-    _git_ops_mark_quoted
+    _git_ops_mark_words
   fi
 
   # `2>&1` and `&>f` are redirections, not the `&` separator.
