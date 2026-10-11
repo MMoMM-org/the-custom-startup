@@ -570,6 +570,13 @@ _observability_field_is_detail_only() {
   return 1
 }
 
+# Put back a umask read earlier; a no-op for an empty value. Always returns 0
+# so a `set -e` caller never sees the restore fail.
+_observability_restore_umask() {
+  [ -z "${1:-}" ] || umask "$1" 2>/dev/null || true
+  return 0
+}
+
 # Append one JSON-object line to this repo's observability event log.
 # Always returns 0 and never writes to stdout or stderr (CON-4, CON-5): a
 # hook's stdout is parsed as JSON and its exit status must never change
@@ -642,17 +649,20 @@ _observability_write() {
   local events_dir="$data_dir/observability"
   local events_file="$events_dir/events.jsonl"
 
-  # Owner-only at creation (spec 021 ADR-4, F6): the directory and the first
-  # append are made under umask 077 so no later chmod fork is needed. The
-  # caller's umask is read once (one builtin subshell, no exec) and restored
-  # on every return path below.
-  local prev_umask
-  prev_umask="$(umask)" || prev_umask=""
-  umask 077 2>/dev/null || true
-
-  if ! mkdir -p "$events_dir" 2>/dev/null; then
-    [ -n "$prev_umask" ] && umask "$prev_umask" 2>/dev/null
-    return 0
+  # Owner-only at creation (spec 021 ADR-4, F6): a directory or file this
+  # call CREATES is made under umask 077, so no later chmod is needed. The
+  # caller's umask is read (a builtin subshell) only when something is about
+  # to be created; the steady state, where both already exist, forks nothing
+  # (CON-7). The umask is restored before every return.
+  local prev_umask=""
+  if [ ! -d "$events_dir" ]; then
+    prev_umask="$(umask)" || prev_umask=""
+    umask 077 2>/dev/null || true
+    if ! mkdir -p "$events_dir" 2>/dev/null; then
+      _observability_restore_umask "$prev_umask"
+      return 0
+    fi
+    _observability_restore_umask "$prev_umask"
   fi
 
   _observability_rotate_if_oversized "$events_file" || true
@@ -737,7 +747,15 @@ _observability_write() {
   # reported by the shell itself, before the command ever runs, so a
   # trailing `2>/dev/null` placed after it is too late to suppress that
   # message (CON-5 — this must stay silent on stderr too).
-  printf '%s\n' "$json" 2>/dev/null >>"$events_file" || true
-  [ -n "$prev_umask" ] && umask "$prev_umask" 2>/dev/null
+  if [ -e "$events_file" ]; then
+    printf '%s\n' "$json" 2>/dev/null >>"$events_file" || true
+  else
+    # First record, or rotation just moved the file away: this append creates
+    # it, so create it owner-only.
+    prev_umask="$(umask)" || prev_umask=""
+    umask 077 2>/dev/null || true
+    printf '%s\n' "$json" 2>/dev/null >>"$events_file" || true
+    _observability_restore_umask "$prev_umask"
+  fi
   return 0
 }

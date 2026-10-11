@@ -1993,3 +1993,25 @@ _write_backstop() {
     *) printf 'detail:description missing: %s\n' "$output" >&2; return 1 ;;
   esac
 }
+
+@test "owner-only: the events.jsonl a rotation leaves to be recreated is 0600" {
+  local data_dir="$TEST_DIR/f6_rot"
+  local dir="$data_dir/observability"
+  mkdir -p "$dir"
+  dd if=/dev/zero of="$dir/events.jsonl" bs=1024 count=1000 status=none
+  chmod 644 "$dir/events.jsonl"
+
+  run _write_under_umask "$data_dir" 022
+  [ "$status" -eq 0 ]
+  [ -f "$dir/events.jsonl.1" ] || return 1
+  [ "$(_mode_of "$dir/events.jsonl")" = "600" ] || return 1
+  [ "$output" = "0022 0022" ] || [ "$output" = "022 022" ] || return 1
+}
+
+@test "owner-only: a write to an existing dir and file leaves the caller's umask alone" {
+  local data_dir="$TEST_DIR/f6_steady"
+  run _write_under_umask "$data_dir" 022
+  run _write_under_umask "$data_dir" 027
+  [ "$status" -eq 0 ]
+  [ "$output" = "0027 0027" ] || [ "$output" = "027 027" ] || return 1
+}
