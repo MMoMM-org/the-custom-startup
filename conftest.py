@@ -7,7 +7,7 @@
 
 collect_ignore = [
     "plugins/tcs-helper/skills/rule-enforcer/templates/test_ci_template.py",
-    "plugins/tcs-helper/templates/githooks/test_pre_push_template.py",
+    "tests/tcs-helper/test_pre_push_template.py",
 ]
 
 # tests/fixtures/patterns-detection/*/repo/ holds synthetic repository trees

@@ -10,7 +10,7 @@ Uses stdlib only — no jinja2 dependency.
 Renders via str.replace() with sample contexts for both response_style values.
 
 Run:
-  python3 plugins/tcs-helper/templates/githooks/test_pre_push_template.py
+  python3 tests/tcs-helper/test_pre_push_template.py
 """
 
 import os
@@ -19,7 +19,12 @@ import subprocess
 import sys
 import tempfile
 
-TEMPLATES_DIR = os.path.dirname(os.path.abspath(__file__))
+# Lives outside the bundle so editing a test never forces a marker bump
+# (#174: the CI gate matches every file in the template directory).
+TEMPLATES_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..", "..", "plugins", "tcs-helper", "templates", "githooks",
+))
 
 SAMPLE_CONTEXT_BLOCK = {
     "{{rule_description}}": "CHANGELOG must be touched before pushing feat: commits",
