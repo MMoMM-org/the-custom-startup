@@ -232,11 +232,28 @@ build_long_1000_commits() {
   _commit "$repo" main.txt "main" "feat: initial"
   git -C "$repo" checkout -q -b feat/long
 
-  # Empty commits keep this fast (~1.2s on M-series macOS in practice).
-  local i
+  # One fast-import process writes all 1000 empty commits into a single pack.
+  # A loop of 1000 `git commit` runs wrote 1000 loose objects, and on the
+  # macOS runner one of those writes intermittently failed with EINVAL
+  # ("unable to create temporary file", #177). The commits are byte-identical
+  # to what that loop made: same identity, date and message (commit -m adds
+  # the trailing newline, so the data block carries it too).
+  local i msg when
+  # BSD date (macOS) first, GNU date (Linux) second.
+  when="$(date -u -j -f '%Y-%m-%dT%H:%M:%S' "${GIT_COMMITTER_DATE%+0000}" +%s 2>/dev/null)" \
+    || when="$(date -u -d "$GIT_COMMITTER_DATE" +%s)"
   for i in $(seq 1 1000); do
-    git -C "$repo" commit -q --allow-empty -m "feat: commit ${i}"
-  done
+    msg="feat: commit ${i}"
+    printf 'commit refs/heads/feat/long\n'
+    printf 'author %s <%s> %s +0000\n' "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$when"
+    printf 'committer %s <%s> %s +0000\n' "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL" "$when"
+    printf 'data %d\n%s\n' "$((${#msg} + 1))" "$msg"
+    # The branch already exists; ^0 makes fast-import start from its tip.
+    if [ "$i" -eq 1 ]; then
+      printf 'from refs/heads/feat/long^0\n'
+    fi
+    printf '\n'
+  done | git -C "$repo" fast-import --quiet
 }
 
 # --- Scenarios for skill_setup (T5.1) ------------------------------------

@@ -171,6 +171,15 @@ teardown_file() {
   [ "$output" -ge 1000 ]
 }
 
+@test "long-1000-commits: commits carry the fixture's fixed date and message (#177)" {
+  # fast-import takes the date as epoch seconds; build.sh converts it with BSD
+  # or GNU date. A wrong conversion would still give 1000 commits.
+  local repo="$TCS_FIXTURES_OUT/long-1000-commits"
+  run git -C "$repo" log -1 --format='%at %ct %s' feat/long
+  [ "$status" -eq 0 ]
+  [ "$output" = "1767225600 1767225600 feat: commit 1000" ]
+}
+
 # ---------------------------------------------------------------------------
 # Corpus files: trailing newline + parseable rows
 # ---------------------------------------------------------------------------
