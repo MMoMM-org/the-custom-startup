@@ -123,8 +123,9 @@ bash plugins/tcs-git-helpers/scripts/ci/check-hook-bundle-version.sh origin/main
 bash scripts/ci/check-docs-sync.sh --changed-files <file> --pr-body <file>
 bash scripts/ci/check-changelog-version-sync.sh --allow-ahead 1
 
-# Perf (opt-in)
-pytest -m perf -q        # bats perf cases scale by TCS_PERF_SLACK
+# Perf
+pytest -m perf -q        # python perf tests only (opt-in)
+# bats perf cases run in every bats run; bounds scale by TCS_PERF_SLACK (4 in CI)
 ```
 
 ---
@@ -142,6 +143,8 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 - [ ] [Phase 5: Guard fast path and end-to-end validation](phase-5.md)
 
 Dependencies: 1 → 2 → 3; 4 needs 2 (record shapes); 5's T5.1 is independent of 1–4 and may run any time; T5.2–T5.3 need 1–4.
+
+**Ships as one pull request.** `check-hook-bundle-version.sh` gates `scripts/observability/*.sh` over the PR's whole range: Phase 1 changes gated scripts, and the marker moves to h2 only in T3.2. A PR cut before T3.2 fails the gate.
 
 ---
 
@@ -168,7 +171,7 @@ Dependencies: 1 → 2 → 3; 4 needs 2 (record shapes); 5's T5.1 is independent 
 | F1 AC5 | T4.1 |
 | F2 AC1, AC2, AC4 | T2.1 |
 | F2 AC3 | T4.1 |
-| F3 AC6, AC7, AC8, AC9 | T1.3 (parsing), T2.2 (records) |
+| F3 AC6, AC7, AC8, AC9 | T1.3 (parsing), T2.2 (records, end to end) |
 | F3 AC1, AC2, AC3, AC4, AC5, AC10 | T2.2 |
 | F4 AC1, AC2, AC4 | T4.1 |
 | F4 AC3, AC5 | T4.2 |
@@ -176,4 +179,4 @@ Dependencies: 1 → 2 → 3; 4 needs 2 (record shapes); 5's T5.1 is independent 
 | F6 AC1, AC3 | T1.1 |
 | F6 AC2 | T3.2 |
 | F7 AC1, AC2 | T5.1 |
-| F8 | not planned (Could; SDD § Building Block View) |
+| F8 | deferred (Could; marked deferred in the PRD; excluded from T5.3's check-off) |

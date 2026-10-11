@@ -304,7 +304,7 @@ again be unattributable.
 
 ### Could Have Features
 
-#### Feature 8: Typed custom commands and MCP prompts are recorded
+#### Feature 8: Typed custom commands and MCP prompts are recorded (deferred — not planned in this spec)
 
 - **User Story:** As the framework maintainer, I want typed commands that are not skills recorded as
   their own kind of firing, so that repository-local commands such as Hashi's `/miyo-inbox` show up
@@ -351,10 +351,10 @@ attempted and by whom, and nothing of what the command was applied to.
 5. The command then proceeds to the guards, which may still refuse it.
 
 **Business Rules:**
-- Rule 1: Recording happens before any guard decides, so an attempt is recorded whether or not it
-  goes through.
-- Rule 2: Only names are recorded: the git subcommand, flag names (`--hard`, `-D`, `--force`) and
-  override variable names. Values of flags, positional arguments, assignments, URLs, messages and
+- Rule 1: Recording happens independently of any guard's decision, so an attempt is recorded
+  whether or not it goes through.
+- Rule 2: Only names are recorded: the git subcommand, a sub-verb from a fixed list (`stash pop`,
+  `worktree remove`), flag names (`--hard`, `-D`, `--force`) and override variable names. Values of flags, positional arguments, assignments, URLs, messages and
   paths are never recorded.
 - Rule 3: The read-only list is closed and explicit; every subcommand not on it is recorded.
 - Rule 4: An override counts as in first position only when it would take effect as the guard reads

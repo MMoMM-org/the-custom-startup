@@ -39,8 +39,8 @@ version: "1.0"
 |---|---|
 | specId | 021-observability-v2 |
 | architecture | Hook adapters writing to the existing per-repo JSONL record (018/019), extended by two adapters, one sourced classifier and report/registration changes |
-| validationPassed | see § Validation, in the README Decisions Log once run |
-| nextSteps | Decomposition |
+| validationPassed | spec validation 2026-10-11: 0 FAIL, all WARNs addressed (README Decisions Log) |
+| nextSteps | Implementation (Incremental, plan/) |
 
 ### ArchitectureSummary
 
@@ -89,7 +89,7 @@ Inherited unchanged from 018 and 019 unless stated:
 
 - **CON-1 — bash 3.2 and BSD userland** (018 CON-1). No `declare -A`, `mapfile`, `${var^^}`, PCRE in
   `[[ =~ ]]`, `EPOCHREALTIME`.
-- **CON-2 — interpreter line** (018 CON-2, **superseded for `log_tool.sh` only by ADR-6**). Every other
+- **CON-2 — interpreter line** (018 CON-2, **superseded for `log_tool.sh` and the guard by ADR-6**). Every other
   script keeps `#!/usr/bin/env bash`.
 - **CON-3 — `LC_ALL=C`** before formatting or arithmetic (018 CON-3; `logwrite.sh` exports it).
 - **CON-4 — the hook protocol is load-bearing** (018 CON-4). No stdout, no stderr, exit 0 from every
@@ -301,9 +301,9 @@ graph LR
 
 | Component | Owns | PRD |
 |---|---|---|
-| `log_tool.sh` (NEW) | PreToolUse dispatch by `tool_name`; skill records with `route: tool`; dispatch records; the non-git fast path | F1 (tool route), F2 |
-| `git_ops.sh` (NEW) | JSON string decoding of `tool_input.command`; clause splitting (copied); git invocation parsing; read-only predicate; override names and position; git records | F3 |
-| `log_expansion.sh` (NEW) | Typed skill records (`route: typed`, `args_present`) | F1 (typed route) |
+| `log_tool.sh` (NEW) | PreToolUse dispatch by `tool_name`; the non-git fast path; skill records with `route: tool`; dispatch records; git records (one write per line `git_ops.sh` prints) | F1 (tool route), F2, F3 (records) |
+| `git_ops.sh` (NEW) | Pure parser, no writing, no `git` calls: JSON string decoding of `tool_input.command`; clause stripping (copied); git invocation parsing; read-only predicate; action, flag and override names | F3 (parsing) |
+| `log_expansion.sh` (NEW) | Typed skill records (`route: typed`, `args_present`, `source`); reads with `$(cat)` (the expansion payload carries the expanded prompt and can be large, ADR-6) | F1 (typed route) |
 | `logwrite.sh` (MODIFY) | Owner-only creation; deny list additions | F6 (new files, `args`) |
 | `registration.py` + `detect.sh` (MODIFY) | Expected registration; per-repo completeness state `OURS-INCOMPLETE` | F5 |
 | `setup.sh` (MODIFY) | Parsing the new state (`:601` label list, `:617-618` `IS_OURS`); tightening existing record files and directories on install; status wording; `_REGISTERED_EVENTS` | F5, F6 (existing files) |
@@ -419,10 +419,13 @@ ENTITY: Event (MODIFIED)
     # never: tool_input.prompt
 
   WHEN kind = git:                          # NEW (ADR-9)
-    subcommand:    string    # [a-z][a-z0-9-]* or "?" when undeterminable
-    flags:         string    # space-separated names: --long (no =value), -x (first letter, ADR-3); "" if none
-    overrides:     string    # space-separated CLAUDE_ALLOW_* names; "" if none
-    override_first: "yes" | "no" | ""       # "" when overrides = ""
+    subcommand:    string    # [a-z][a-z0-9-]* or "?" when undeterminable (an alias that fails the pattern is "?")
+    action:        string    # sub-verb from the closed ACTIONS list for this subcommand, else "" (never free text)
+    flags:         string    # space-separated names: --long (no =value), -x (first letter, ADR-3), "--" kept as a name;
+                             # "(executor)" when parsed through the executor fallback; "" if none;
+                             # longer than 256 bytes → cut, record carries truncated: true
+    overrides:     string    # space-separated CLAUDE_ALLOW_* names assigned =1 (other values are not overrides); "" if none
+    override_first: string   # the override name that stands in first position as the guard reads it, else ""
     caller:        "main" | "subagent"
     caller_agent_type: string   # present when caller = subagent (same names as on dispatch;
     caller_agent_id:   string   # on `agent` records agent_type means the spawned agent instead)
@@ -437,11 +440,11 @@ ENTITY: Event (MODIFIED)
 ```yaml
 - from: log_tool.sh
   to: git_ops.sh
-  protocol: bash source, only when tool_name = Bash and the payload contains "git"
-  data_flow: "decoded command string, session, tool_use_id, agent_id, agent_type"
-- from: git_ops.sh
+  protocol: bash source, only when tool_name = Bash and the command value contains "git"
+  data_flow: "raw payload in; one line per non-read-only invocation out: subcommand TAB action TAB flags TAB overrides TAB override_first"
+- from: log_tool.sh
   to: logwrite.sh
-  protocol: _observability_write kind=git … (one call per non-read-only invocation)
+  protocol: _observability_write kind=git … (one call per line from git_ops.sh), plus session, tool_use_id and caller fields from the payload
 - from: report.py
   to: events.jsonl
   protocol: offline read
@@ -467,7 +470,10 @@ if [ "${CLAUDE_OBSERVABILITY_ENABLED:-}" != "1" ]; then cat >/dev/null 2>&1; exi
 _payload="$(cat)" || _payload=""
 case "$_payload" in
   *'"tool_name":"Bash"'*)
-    case "$_payload" in *git*) ;; *) exit 0 ;; esac   # non-git: no source, no further fork
+    # Test the command value, not the whole payload: cwd and transcript_path
+    # may contain "git" (~/github/…) and would defeat the fast path.
+    _cmd_tail="${_payload#*\"command\":\"}"
+    case "$_cmd_tail" in *git*) ;; *) exit 0 ;; esac   # non-git: no source, no further fork
     _kind=git ;;
   *'"tool_name":"Skill"'*) _kind=skill ;;
   *'"tool_name":"Agent"'*) _kind=dispatch ;;
@@ -476,8 +482,10 @@ esac
 # only now: source logwrite.sh (and git_ops.sh for _kind=git), extract, write, exit 0
 ```
 
-The substring test is conservative: `github`, `.git/` or a commit message mentioning git fall
-through to precise parsing, which then finds no invocation and writes nothing.
+The substring test runs on everything after `"command":"` — the command and any later
+`tool_input` keys such as `description`. It is conservative: `github`, `.git/` or a description
+mentioning git fall through to precise parsing, which then finds no invocation and writes nothing.
+If the key is absent the expansion leaves the payload unchanged, which also falls through.
 
 #### Example: decoding `tool_input.command` (gotcha found in design)
 
@@ -503,14 +511,14 @@ Input (decoded): `cd repo && CLAUDE_ALLOW_RESET_HARD=1 git -C sub reset --hard o
 |---|---|
 | strip heredocs, strip quotes (copied `_strip_heredocs`, `_strip_quoted`) | `… git commit -m                  -qa` |
 | executor check on stripped text (#213 rule) | none → use stripped text |
-| split on `&& \|\| \| ; &` | `cd repo` / `CLAUDE_ALLOW_RESET_HARD=1 git -C sub reset --hard origin/main` / `git status` / `git commit -m                  -qa` |
-| clause 2: leading assignments | `CLAUDE_ALLOW_RESET_HARD=1` → overrides `CLAUDE_ALLOW_RESET_HARD`; first token of the command after one leading `cd`/`pushd` clause → `override_first: yes` |
+| split on `&& \|\| \| ; &` and newline | `cd repo` / `CLAUDE_ALLOW_RESET_HARD=1 git -C sub reset --hard origin/main` / `git status` / `git commit -m                  -qa` |
+| clause 2: leading assignments | `CLAUDE_ALLOW_RESET_HARD=1` → overrides `CLAUDE_ALLOW_RESET_HARD`; first token of the command after one leading `cd`/`pushd` clause → `override_first: CLAUDE_ALLOW_RESET_HARD` |
 | clause 2: git token, global options | `-C sub` skipped with its value |
 | clause 2: subcommand, flags | `reset`; `--hard`; `origin/main` is positional → dropped |
 | clause 3 | `status` is read-only → no record |
 | clause 4 | `commit`; `-m` (value blanked), `-qa` → `-q` (ADR-3) |
 
-Records written: `git subcommand=reset flags="--hard" overrides="CLAUDE_ALLOW_RESET_HARD" override_first=yes …` and `git subcommand=commit flags="-m -q" overrides="" override_first="" …`.
+Records written: `git subcommand=reset action="" flags="--hard" overrides="CLAUDE_ALLOW_RESET_HARD" override_first="CLAUDE_ALLOW_RESET_HARD" …` and `git subcommand=commit action="" flags="-m -q" overrides="" override_first="" …`.
 
 #### Example: read-only predicate (ADR-9)
 
@@ -532,7 +540,21 @@ read-only only in these forms (else recorded):
   reflog     no argument, or show
   notes      list | show
   submodule  no argument, or status
+no subcommand at all  bare `git`, `git --version`, `git --help`, `git help …`
 everything else → recorded (fail-closed); undeterminable subcommand → recorded as "?"
+
+"present" means anywhere among the subcommand's flags: `config --global --get k` is read-only.
+
+ACTIONS (closed; the first positional is recorded as `action` only if it is in the list):
+  stash      push pop apply drop clear branch create store save list show
+  worktree   add remove move prune lock unlock repair list
+  remote     add remove rm rename set-url set-head set-branches prune update show get-url
+  reflog     expire delete show
+  submodule  add deinit update init sync set-url set-branch absorbgitdirs status foreach
+  notes      add append copy edit merge remove prune list show
+  bisect     start good bad new old skip reset run
+  sparse-checkout  init set add reapply disable list
+  lfs        install uninstall track untrack push pull fetch migrate prune
 ```
 
 A flag that takes a separate value (`--contains abc`) makes `abc` look positional, so `branch
@@ -607,13 +629,30 @@ the whole raw command to substring patterns (`_with_normalized_clauses`, no clau
 fallback is NOT copied, because a command-position rule needs clauses. `git_ops.sh` instead, when
 the predicate fires, replaces every quote character in the raw text with a space and splits that on
 separators, so `bash -c 'git reset --hard'` yields the clause `git reset --hard` and a `reset`
-record. A `bash -c` that appears only inside a heredoc body or a quoted message is gone after
+record. In this fallback the payload's own quoting is gone, so a word from a message could look like
+a flag (`bash -c "git commit -m '--codename-x'"`). The fallback therefore records `subcommand`,
+`action` and overrides only, and `flags: (executor)`. A `bash -c` that appears only inside a heredoc body or a quoted message is gone after
 stripping and changes nothing. The parity test (ADR-2) compares the copied functions' output and the
 executor decision on a shared corpus; the fallback is `git_ops.sh`'s own and has its own tests.
 
-**Command position.** A git invocation is a clause whose first token, after leading `NAME=value`
-assignments and the wrappers `env`, `command`, `nohup`, `time`, `sudo`, `exec`, is `git` or a path
-ending in `/git`. `xargs git …` and `find … -exec git …` are not recognised (gotcha below).
+**Command position.** Clauses are split on `&&`, `||`, `|`, `;`, `&` and newline. Within a clause,
+leading tokens are skipped in this order, repeatedly:
+- openers and keywords: `(`, `{`, `!`, `if`, `then`, `elif`, `else`, `while`, `until`, `do`; a
+  token's leading `` ` `` or `(` is trimmed (`$(` is already blanked by `_strip_quoted`);
+- `NAME=value` assignments (a `CLAUDE_ALLOW_*=1` among them is an override, wherever it stands);
+- wrappers with their options: `env` (`-i`, `-u NAME`, assignments), `sudo` (`-u -g -h -p -C -D -r
+  -t -U` take a value; other single-dash options do not), `time` (`-p`), `nice` (`-n N`),
+  `timeout` (options, then one duration), `nohup`, `exec`; `command` (`-p` skipped; `-v`/`-V` make
+  the clause a lookup, not an invocation).
+The next token is a git invocation if it is `git` or ends in `/git`.
+
+Global options between `git` and the subcommand: `-C`, `-c`, `--git-dir`, `--work-tree`,
+`--namespace`, `--config-env`, `--super-prefix`, `--exec-path` take a value (separate, or joined
+with `=`); `-p`, `-P`, `--paginate`, `--no-pager`, `--bare`, `--no-replace-objects`,
+`--literal-pathspecs`, `--glob-pathspecs`, `--noglob-pathspecs`, `--icase-pathspecs`,
+`--no-optional-locks`, `--no-advice`, `--no-lazy-fetch` do not; any other leading `-` token is skipped
+alone. `xargs git …`, `find … -exec git …` and git run from a script file are not recognised
+(gotcha below).
 
 **Report shape.** `fired_names` returns `set[(kind, name)]` with no session or route, and feeds
 `union_fired_names` and the multi-source path. A new `firing_events(records)` yields one normalised
@@ -626,7 +665,10 @@ whose `agent_type` is in that set yields no firing (its dispatch already credite
 `agent` record whose `agent_type` is neither an inventory name, nor in `BUILTIN_AGENT_TYPES`
 (`general-purpose`, `Explore`, `Plan`, `statusline-setup`, `claude-code-guide`, `fork` — a constant
 in `report.py`, extended when a probe shows a new one), nor a dispatch name, is listed as
-"uncreditable (may be a spawn name)" and yields no firing.
+"uncreditable (may be a spawn name)" and yields no firing. A dispatch with an empty `subagent_type`
+yields no firing. Typed records whose `skill` has no `plugin:` qualifier (project or personal skills,
+custom commands) never count: the denominator is the shipped plugin inventory. Pre-h2 `skill`
+records without `route` count as `tool`, which is the only route `PreToolUse:Skill` could see.
 
 Trace, one interactive session:
 
@@ -772,8 +814,12 @@ Also recorded, not an ADR of this spec: **018/019 Won't Have "no Bash recording"
 
 ## Quality Requirements
 
-- **Performance:** non-git Bash ≤ 5 ms added at p50, macOS, warmed fixture; git record ≤ 15 ms;
-  guard non-git ≤ 5 ms at p50 (F7). Perf cases use `_perf_budget_ms` × `TCS_PERF_SLACK`.
+- **Performance:** measured as wall time of one hook invocation fed a realistic payload (a `cwd`
+  without "git"), median of 20 runs after one warm-up run, on macOS: non-git Bash ≤ 5 ms; a git record
+  ≤ 15 ms; guard non-git ≤ 5 ms (F7). Linux runs the same cases. The bats perf cases run in every
+  bats run, CI included, with the bound multiplied by `TCS_PERF_SLACK` (4 in CI); each suite carries
+  its own copy of `_perf_budget_ms`/`_now_ms` (tcs-helper suites are standalone), tcs-git-helpers
+  uses `_perf_budget` from `tests/bats/lib/helpers.bash`.
 - **Security:** a secrets corpus (tokens in assignments, URL userinfo, auth headers, glued short-flag
   values, `--with-token`, `set-url`) leaves none of its values in the record, in reduced and detail
   mode; Agent `prompt` and expansion `prompt`/`command_args` never appear.
@@ -797,10 +843,10 @@ Also recorded, not an ADR of this spec: **018/019 Won't Have "no Bash recording"
 - [ ] THE SYSTEM SHALL NOT record `tool_input.prompt`; WHERE detail mode is on, THE SYSTEM SHALL record `description` (AC 2.4)
 
 **F3 — git** (PRD F3)
-- [ ] WHEN a Bash command contains a git invocation whose form is not read-only, THE SYSTEM SHALL write one `git` record per such invocation with `subcommand`, `flags`, `caller` (AC 3.1, 3.9)
+- [ ] WHEN a Bash command contains a git invocation whose form is not read-only, THE SYSTEM SHALL write one `git` record per such invocation with `subcommand`, `action`, `flags`, `caller` (AC 3.1, 3.9)
 - [ ] WHERE the payload carries `agent_id`, THE SYSTEM SHALL record `caller: subagent`, `caller_agent_type`, `caller_agent_id`; otherwise `caller: main` (AC 3.2, 3.3)
 - [ ] WHEN `CLAUDE_ALLOW_*=` assignments precede the invocation, THE SYSTEM SHALL record their names and `override_first` and never their values (AC 3.4)
-- [ ] THE SYSTEM SHALL record before and independently of any guard's decision (AC 3.5)
+- [ ] THE SYSTEM SHALL record independently of any guard's decision; a command a guard denies is recorded (AC 3.5)
 - [ ] IF the form is on the read-only list, THEN THE SYSTEM SHALL write nothing for it (AC 3.6); every other subcommand SHALL be recorded, `?` if undeterminable (AC 3.7)
 - [ ] THE SYSTEM SHALL NOT write any flag value, positional, assignment value, URL, message or path (AC 3.8)
 - [ ] IF the Bash command contains no git invocation, THEN THE SYSTEM SHALL write nothing (AC 3.10)
@@ -860,6 +906,10 @@ Also recorded, not an ADR of this spec: **018/019 Won't Have "no Bash recording"
 - `"name":"` must be matched as a key with its leading quote; `"tool_name":"` does not contain it,
   and escaped occurrences inside `prompt` are `\"name\":\"`, so the flat scan stays correct.
 - `UserPromptExpansion` also fires for `mcp_prompt`; only `slash_command` is recorded.
+- Older Claude Code versions named the Agent tool `Task`; the matcher does not include it, so such a
+  version records no dispatches (CON-9: nothing rather than something wrong).
+- `IFS= read -r -d ''` costs 62 ms at 200 KB (ADR-6); `log_expansion.sh` must not copy that line
+  from `log_skill.sh`.
 - Hooks run in parallel: the record cannot know the guard's verdict (PRD Won't Have).
 
 ## Glossary
@@ -878,7 +928,7 @@ Also recorded, not an ADR of this spec: **018/019 Won't Have "no Bash recording"
 
 | Term | Definition | Context |
 |---|---|---|
-| Fast path | The check that ends a hook before any fork or `source` | `log_tool.sh`, guard (F7) |
+| Fast path | The test on the `command` value that ends a hook right after reading stdin, before any `source` or further process | `log_tool.sh`, guard (F7) |
 | Clause | One command between shell separators after heredoc and quote stripping | `git_ops.sh` |
 | Executor | `sh -c`/`bash -c`/`eval`: its quoted payload is code | Complex Logic |
 | Parity test | A test running both copies of shared logic on one corpus and requiring equal output | ADR-2 |
