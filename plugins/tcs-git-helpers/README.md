@@ -61,6 +61,8 @@ CLAUDE_ALLOW_WORKTREE_EXIT_WITH_CHANGES=1   # exit worktree with dirty tree
 
 The master override `CLAUDE_ALLOW_GIT_BAD_OPS=1` exists as a tripwire-style escape but emits a loud stderr warning recommending the granular form. All consumption events are appended to `${CLAUDE_PLUGIN_DATA}/audit/overrides.jsonl` (rotated at 1MB). Audit-write failures NEVER block hook decisions.
 
+Overrides are environment variables, so a subagent can set them as easily as the main session. Nothing intercepts a delegated agent that decides its case is exceptional. Do not treat these hooks as the last line of defense for delegated work; fence the agent itself (#156).
+
 ## References
 
 Cited from denial messages by absolute plugin path. See [references/INDEX.md](references/INDEX.md) for the full by-topic and by-failure-mode index.

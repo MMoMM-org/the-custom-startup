@@ -8,7 +8,20 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
-## [4.4.9] - 2026-10-07
+## [4.4.10] - 2026-10-11
+
+### Fixed
+
+- **The gate agents can no longer damage the worktree they review (#156).** `tdd-guardian` had
+  no `tools:` line and inherited every tool, Write and Edit included. It now carries
+  `Read, Grep, Glob`, and its YOLO logging, which already happens in the dispatching
+  coordinator, is gone from the agent. `code-quality-reviewer` gains a Worktree Safety section:
+  read-only git only, no stash/pop pair, mutation checks in a `git archive` copy, and no
+  `CLAUDE_ALLOW_*` override after a hook denial. `implement-incremental` repeats the rule in
+  every reviewer prompt (4f/4g). It was written after a reviewer's stash/pop popped a user's
+  unrelated stash.
+
+ - 2026-10-07
 
 ### Changed
 

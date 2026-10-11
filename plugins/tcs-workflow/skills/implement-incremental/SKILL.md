@@ -224,6 +224,13 @@ BLOCKED             → assess blocker:
 
 #### 4f. Spec Compliance Review
 
+> **Reviewer fence (4f and 4g).** Reviewers run in the same worktree as the user. Every reviewer
+> prompt states: read-only git in this worktree — no `stash`, `checkout`, `reset`, `restore` or
+> `clean`; mutation checks only in an isolated copy (`git archive` into a temp dir); never a
+> `CLAUDE_ALLOW_*` override, and a hook denial is reported, not bypassed. The agent definitions
+> carry the same rule; repeating it in the prompt covers a reviewer dispatched under another
+> type (#156).
+
 Dispatch the `spec-compliance-reviewer` agent (Agent tool, `subagent_type: spec-compliance-reviewer`) with:
 - Full task requirements text
 - Implementer's report (what they claim they built)
