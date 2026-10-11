@@ -516,19 +516,26 @@ _strip_heredocs() {
 _clausify() {
   local s NL
   NL=$'\n'
+  local stripped
   s="$1"
+  stripped="$(_strip_heredocs "$s")"
+  stripped="$(_strip_quoted "$stripped")"
   # Shell-executor guard: when the command invokes a shell on a quoted payload
   # (`bash -c '…'`, `sh -c "…"`, `eval '…'`), that payload is CODE, not data —
   # a destructive op hidden in a subshell must still be caught. Leave it intact
   # (raw whole-command match) rather than blanking the quotes. Conservative: an
   # ambiguous executor falls back to the original substring behaviour.
-  if [[ "$s" =~ (^|[^[:alnum:]_])[a-z]*sh[[:space:]]+-c([[:space:]]|$) ]] \
-     || [[ "$s" =~ (^|[^[:alnum:]_])eval([[:space:]]|$) ]]; then
+  # Detected on the STRIPPED text (#213): a `bash -c` that a heredoc body or a
+  # commit message merely mentions executes nothing, and must not switch off
+  # stripping for the whole command. Executors that do run survive stripping —
+  # `$( … )` stays code inside double quotes, and a heredoc feeding a shell
+  # keeps its body.
+  if [[ "$stripped" =~ (^|[^[:alnum:]_])[a-z]*sh[[:space:]]+-c([[:space:]]|$) ]] \
+     || [[ "$stripped" =~ (^|[^[:alnum:]_])eval([[:space:]]|$) ]]; then
     _with_normalized_clauses "$s"
     return 0
   fi
-  s="$(_strip_heredocs "$s")"
-  s="$(_strip_quoted "$s")"
+  s="$stripped"
   s="${s//&&/$NL}"
   s="${s//||/$NL}"
   s="${s//|/$NL}"
