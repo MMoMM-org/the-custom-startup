@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The `post-merge` hook now clears the stale-branch cache when nothing is stale (#206).** It
+  only wrote the cache when it found stale branches, so rows from an earlier run stayed in it.
+  A failed `gh` query still leaves the cache alone. **What to do:** run
+  `/tcs-git-helpers:git-setup --update` in each repo to install the new hook bundle (`h8`).
+
 - **The session-start cleanup hint no longer names a branch `gh pr merge --delete-branch` already
   deleted (#203).** `gh` pulls before it deletes the local branch, so the `post-merge` hook
   recorded the branch as stale-merged while it still existed, and the SessionStart hint and
