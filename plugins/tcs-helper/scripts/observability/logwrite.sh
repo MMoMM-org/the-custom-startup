@@ -651,9 +651,9 @@ _observability_write() {
 
   # Owner-only at creation (spec 021 ADR-4, F6): a directory or file this
   # call CREATES is made under umask 077, so no later chmod is needed. The
-  # caller's umask is read (a builtin subshell) only when something is about
-  # to be created; the steady state, where both already exist, forks nothing
-  # (CON-7). The umask is restored before every return.
+  # caller's umask is read (`$(umask)` is a command-substitution fork) only
+  # when something is about to be created; the steady state, where both
+  # already exist, forks nothing (CON-7). The umask is restored before every return.
   local prev_umask=""
   if [ ! -d "$events_dir" ]; then
     prev_umask="$(umask)" || prev_umask=""

@@ -1943,6 +1943,8 @@ _write_under_umask() {
 }
 
 @test "owner-only: the caller's umask is restored when mkdir fails" {
+  # root ignores chmod 500, so mkdir would succeed and nothing is exercised.
+  [ "$(id -u)" -ne 0 ] || skip "root bypasses directory permissions"
   local parent="$TEST_DIR/f6_umask_fail"
   mkdir -p "$parent"
   chmod 500 "$parent"
@@ -2015,6 +2017,7 @@ _write_backstop() {
 @test "owner-only: a write to an existing dir and file leaves the caller's umask alone" {
   local data_dir="$TEST_DIR/f6_steady"
   run _write_under_umask "$data_dir" 022
+  [ "$status" -eq 0 ]
   run _write_under_umask "$data_dir" 027
   [ "$status" -eq 0 ]
   [ "$output" = "0027 0027" ] || [ "$output" = "027 027" ] || return 1
