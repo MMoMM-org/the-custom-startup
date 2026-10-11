@@ -635,7 +635,11 @@ record. In this fallback the payload's own quoting is gone, so a word from a mes
 a flag (`bash -c "git commit -m '--codename-x'"`). The fallback therefore records `subcommand`,
 `action` and overrides only, and `flags: (executor)`. A quoted multi-word value of a global option
 (`bash -c "git -C 'my dir' reset"`) would leave a fragment in subcommand position, so in this mode a
-global option that takes a separate value makes the subcommand `?`. Settled in implementation
+global option that takes a separate value makes the subcommand `?`. Quote removal also exposes
+separators inside nested quotes (`bash -c "git commit -m 'wip; git tok'"` splits into a fake clause
+`git tok`), so in this mode the subcommand is recorded only when it is on a closed list of git's own
+command names (`git help -a`, plus `lfs`), fixed in `git_ops.sh`; anything else is `?`. A fake clause
+can still produce a `git ? (executor)` record: a false positive, never a value. Settled in implementation
 (T1.3): the fallback text is the heredoc-stripped command (bodies that feed a shell are kept by
 `_strip_heredocs`) with quote characters replaced by spaces; a shell word with its options and `eval`
 count as wrappers in this mode only; the read-only check still applies (`bash -c 'git status'`
