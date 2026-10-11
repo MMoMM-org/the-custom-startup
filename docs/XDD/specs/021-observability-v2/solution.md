@@ -1,6 +1,6 @@
 ---
 title: "Observability v2: typed skills, named subagents and git commands leave a record"
-status: draft
+status: complete
 version: "1.0"
 ---
 

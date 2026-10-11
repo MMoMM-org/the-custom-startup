@@ -5,8 +5,8 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-10-11 |
-| **Current Phase** | SDD |
-| **Decomposition tier** | {{DECOMPOSITION_TIER}} |
+| **Current Phase** | PLAN |
+| **Decomposition tier** | Incremental |
 | **Last Updated** | 2026-10-11 |
 
 ## Documents
@@ -14,8 +14,8 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | 8 features (6 Must, 1 Should, 1 Could), 35 acceptance criteria |
-| solution.md | in_progress | 9 ADRs confirmed; reviewed against code |
-| plan/ | pending | |
+| solution.md | completed | 9 ADRs confirmed; reviewed against code |
+| plan/ | in_progress | 5 phases, 13 tasks; awaiting validation |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -35,6 +35,7 @@
 | 2026-10-11 | Supersedes the 018/019 *Won't Have* "no Bash recording" | #172: a destructive git op is otherwise unattributable; bounded by the field rules above. |
 | 2026-10-11 | PRD approved; continue to SDD | Brainstorm step skipped: problem, scope and contested choices were settled by the issues, research and the decisions above. |
 | 2026-10-11 | SDD: 9 ADRs confirmed; ADR-6 revised to `$(cat)` and extended to the guard's shebang | Independent review against the code found 3 factual, 3 gap, 5 breakage and 5 consistency defects; all fixed. Measured: `read -d ''` is 62 ms at 200 KB vs 6 ms for `cat`. PRD F5 AC2 and F6 AC2 amended to match ADR-1 and ADR-4. |
+| 2026-10-11 | Decomposition tier: Incremental | Classifier recommended Incremental (rule 1: 3 new components — log_tool.sh, git_ops.sh, log_expansion.sh; 6 Must features, 35 ACs; no parallel markers). Accepted. |
 
 ## Context
 
