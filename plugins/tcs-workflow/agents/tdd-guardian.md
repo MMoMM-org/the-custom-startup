@@ -4,6 +4,7 @@ description: "Lightweight TDD enforcement agent. Dispatched by implement alongsi
 user-invocable: false
 model: haiku
 color: yellow
+tools: Read, Grep, Glob
 ---
 
 **Active agent: tcs-workflow:tdd-guardian**
@@ -22,10 +23,9 @@ Constraints {
     Ask at most one clarifying question when the approach is genuinely ambiguous
   }
   never {
-    Write implementation code
+    Write or edit any file
     Review code quality — that is the code reviewer's job
     Approve an approach that describes writing implementation before tests
-    Block in YOLO mode — log and warn instead
   }
 }
 ```
@@ -58,14 +58,8 @@ BLOCK: {
 
 ## YOLO Mode
 
-```
-YOLO=true:
-  If violation detected:
-    Log to docs/ai/memory/yolo-review.md:
-      - [ ] [tdd-guardian] <task_description>: <violation reason>
-    Return APPROVE with warning_flag: true
-  Do NOT block in YOLO mode.
-```
+Return BLOCK on every violation, YOLO or not. The dispatching coordinator logs a BLOCK to
+`docs/ai/memory/yolo-review.md` under `YOLO=true` and proceeds.
 
 ## Evaluation Logic
 
