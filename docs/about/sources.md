@@ -269,6 +269,20 @@ gh api "/repos/<owner>/<repo>/commits/<sha>" \
 gh api "/repos/<owner>/<repo>/contents/<path>" --jq '.content' | base64 -d
 ```
 
+**5. Claude Code itself, against the watch issues.** Some decisions wait on Anthropic rather than
+on a source repo (#144: whether the `Write`/`Edit` that subagent `memory:` grants gets scoped).
+Each such issue carries the label `parked` and a `Watch terms:` line in its body. Read the
+[changelog](https://code.claude.com/docs/en/changelog.md) entries since the previous sweep's date,
+search them for every open watch issue's terms, and on a hit re-run the check that issue
+describes. Record the Claude Code version reached in the sweep log, so the next sweep knows where
+to start.
+
+```bash
+# Open watch issues and their terms
+gh issue list --label parked --state open --json number,title,body \
+  --jq '.[] | "#\(.number) \(.title)\n  \(.body | capture("Watch terms: (?<t>[^\n]+)").t // "NO WATCH TERMS")"'
+```
+
 Two rules learned the hard way:
 
 - **Do not adopt a claim because upstream states it.** Upstream drifts too. The 2026-08-31 sweep found stale model pricing (3× off) and a closed bug listed as open in a document we were about to import.
@@ -319,6 +333,7 @@ the same ordering #118 landed on after the BSD-first form was found to pollute s
 
 | Date | Scope | Outcome |
 |---|---|---|
+| 2026-10-11 | Claude Code changelog 2026-09-01 → 2.1.296 (2026-10-09), watch issue #144 | Late August was not read. No entry in range changes the scope of the `memory:` grant; docs still say Read/Write/Edit are enabled with no confinement. Step 5 added to this procedure. |
 | 2026-09-05 | tonydzi/claude-bible | Reviewed on request. One gap found and closed the same day (declined-decisions journal, #148); their precedence scheme declined; five mechanisms already covered, two of them in a stronger form. |
 | 2026-09-04 | dsebastien/claude-epic-status-line (#72) | Reviewed on request rather than as part of a sweep. Three adoption candidates filed as #129, #130, #131 — all three landed the same day. |
 | 2026-08-31 | All eight sources | Three found still worth monitoring, five retired to historical. Tracked as epic #73 with twelve child issues. Landed: `tcs-patterns` defect fixes (#74), `principles.md` rewrite (#75), this file (#78). |
