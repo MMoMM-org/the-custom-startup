@@ -39,6 +39,8 @@
 | 2026-10-11 | Git record gains `action`: a sub-verb from a closed list (stash pop/drop/push, worktree remove, …) | Spec validation: `stash pop` and `stash push` were indistinguishable, so the #156 case could not be told apart from harmless use. Closed list keeps CON-13. |
 | 2026-10-11 | Executor fallback records subcommand, action and overrides only; `flags: (executor)` | Spec validation: removing quotes inside `bash -c` can turn a message word into a flag. |
 | 2026-10-11 | Spec validation: 0 FAIL, 37 WARN across completeness, alignment and coverage; all addressed | Fast path tests the command value only; global options, wrappers, openers and newline separators specified; overrides count only with `=1`; one PR for the whole feature (the bundle-version gate is range-based); manual steps marked. |
+| 2026-10-11 | `override_first` is per command: every record of a command carries the first-position override name | T1.3 found that an override before a read-only or non-git clause (`CLAUDE_ALLOW_RESET_HARD=1 true && git reset --hard`) passes the guard but left no trace in any record. Chosen by Marcus over first-record-only and per-clause. `overrides` stays per clause. |
+| 2026-10-11 | Executor fallback: a separate-value global option makes the subcommand `?` | T1.3: quote removal split `-C 'my dir'` and put `dir` in subcommand position, a value leak (CON-13). |
 
 ## Context
 

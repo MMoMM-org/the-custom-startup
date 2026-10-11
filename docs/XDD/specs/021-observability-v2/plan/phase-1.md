@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Writer hardening and git parsing"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 1
 ---
@@ -33,7 +33,7 @@ phase: 1
 
 Establishes the two pieces every new adapter stands on: a writer that creates owner-only files and drops the new free-text field names, and a pure git parser that turns a decoded command into zero or more name-only descriptions.
 
-- [ ] **T1.1 Writer: owner-only creation and deny-list backstop** `[activity: backend]` `[parallel: true]`
+- [x] **T1.1 Writer: owner-only creation and deny-list backstop** `[activity: backend]` `[parallel: true]`
 
   1. Prime: `logwrite.sh` `_observability_write` (:601), its single `mkdir` (:643), the deny list (:557) and `_observability_field_is_detail_only` (:562) `[ref: SDD/Data Storage Changes]` `[ref: 018 SDD/Complex Logic]`
   2. Test: a fresh data dir is created 0700 and `events.jsonl` 0600; the caller's `umask` is unchanged afterwards; with detail off, unprefixed `args`, `command_args`, `description`, `tool_input` are dropped and the record still writes; with detail on, `detail:description` survives; existing deny-listed names still drop; an unwritable dir still returns 0 silently
@@ -41,7 +41,7 @@ Establishes the two pieces every new adapter stands on: a writer that creates ow
   4. Validate: `bats plugins/tcs-helper/tests/bats/observability-writer.bats` and the redaction suites green; shellcheck clean; mutate (drop the `umask`; drop one deny name) and watch a test fail
   5. Success: new record files are owner-only `[ref: PRD/F6 AC1]`; tool-route `args` never reaches a reduced record `[ref: PRD/F6 AC3]`; `[ref: SDD/Acceptance Criteria/F6]`
 
-- [ ] **T1.2 Copied clause stripping with a parity test** `[activity: backend]` `[parallel: true]`
+- [x] **T1.2 Copied clause stripping with a parity test** `[activity: backend]` `[parallel: true]`
 
   1. Prime: `pattern_match.sh` `_strip_quoted` (:385), `_strip_heredocs` (:462), `_clausify` (:516) incl. the #213 executor check on stripped text; `observability-setup/lib/drift_check.sh:18-25` (mirror the contract) `[ref: SDD/ADR-2]` `[ref: SDD/Runtime View/Complex Logic]`
   2. Test: a shared corpus (commit/PR bodies naming git ops, `<<'EOF'` and `<<-EOF` heredocs, heredoc into `bash`, `bash -c '…'`, `eval`, `$( … )` with inner quotes, `<<<`, unterminated heredoc) produces byte-identical stripped output and the same executor decision from the bundle copy and from tcs-git-helpers; the bats file sources each implementation in its own subshell

@@ -425,7 +425,9 @@ ENTITY: Event (MODIFIED)
                              # "(executor)" when parsed through the executor fallback; "" if none;
                              # longer than 256 bytes → cut, record carries truncated: true
     overrides:     string    # space-separated CLAUDE_ALLOW_* names assigned =1 (other values are not overrides); "" if none
-    override_first: string   # the override name that stands in first position as the guard reads it, else ""
+    override_first: string   # the override name that stands in first position of the whole command as the guard
+                             # reads it, else ""; a property of the command, so every record from that command
+                             # carries it, even when the override's own clause is read-only or not git (2026-10-11)
     caller:        "main" | "subagent"
     caller_agent_type: string   # present when caller = subagent (same names as on dispatch;
     caller_agent_id:   string   # on `agent` records agent_type means the spawned agent instead)
@@ -518,7 +520,7 @@ Input (decoded): `cd repo && CLAUDE_ALLOW_RESET_HARD=1 git -C sub reset --hard o
 | clause 3 | `status` is read-only → no record |
 | clause 4 | `commit`; `-m` (value blanked), `-qa` → `-q` (ADR-3) |
 
-Records written: `git subcommand=reset action="" flags="--hard" overrides="CLAUDE_ALLOW_RESET_HARD" override_first="CLAUDE_ALLOW_RESET_HARD" …` and `git subcommand=commit action="" flags="-m -q" overrides="" override_first="" …`.
+Records written: `git subcommand=reset action="" flags="--hard" overrides="CLAUDE_ALLOW_RESET_HARD" override_first="CLAUDE_ALLOW_RESET_HARD" …` and `git subcommand=commit action="" flags="-m -q" overrides="" override_first="CLAUDE_ALLOW_RESET_HARD" …`. `overrides` belongs to the clause; `override_first` to the command, because the guard applies a first-position override to the whole command: `CLAUDE_ALLOW_RESET_HARD=1 true && git reset --hard` passes the guard and records `reset` with `overrides=""`, `override_first="CLAUDE_ALLOW_RESET_HARD"`.
 
 #### Example: read-only predicate (ADR-9)
 
@@ -631,7 +633,13 @@ the predicate fires, replaces every quote character in the raw text with a space
 separators, so `bash -c 'git reset --hard'` yields the clause `git reset --hard` and a `reset`
 record. In this fallback the payload's own quoting is gone, so a word from a message could look like
 a flag (`bash -c "git commit -m '--codename-x'"`). The fallback therefore records `subcommand`,
-`action` and overrides only, and `flags: (executor)`. A `bash -c` that appears only inside a heredoc body or a quoted message is gone after
+`action` and overrides only, and `flags: (executor)`. A quoted multi-word value of a global option
+(`bash -c "git -C 'my dir' reset"`) would leave a fragment in subcommand position, so in this mode a
+global option that takes a separate value makes the subcommand `?`. Settled in implementation
+(T1.3): the fallback text is the heredoc-stripped command (bodies that feed a shell are kept by
+`_strip_heredocs`) with quote characters replaced by spaces; a shell word with its options and `eval`
+count as wrappers in this mode only; the read-only check still applies (`bash -c 'git status'`
+records nothing). A `bash -c` that appears only inside a heredoc body or a quoted message is gone after
 stripping and changes nothing. The parity test (ADR-2) compares the copied functions' output and the
 executor decision on a shared corpus; the fallback is `git_ops.sh`'s own and has its own tests.
 
