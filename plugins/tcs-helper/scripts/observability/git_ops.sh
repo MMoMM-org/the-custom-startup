@@ -21,6 +21,9 @@
 #   shared corpus through both and compares the stripped text and the
 #   executor decision byte for byte. Change one copy, change the other.
 #
+# The comments INSIDE the copied functions are verbatim from the guard; their
+# references to the dispatcher and _clausify point at tcs-git-helpers, not here.
+#
 # Sourced by a hook: defines functions only. No output, no external commands,
 # no `set -e`/`set -u` at source time. bash 3.2 compatible.
 

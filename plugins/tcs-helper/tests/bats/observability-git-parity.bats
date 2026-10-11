@@ -30,7 +30,10 @@ source "$lib" || exit 97
 h=$("${prefix}strip_heredocs" "$cmd"; printf x); h=${h%x}
 q=$("${prefix}strip_quoted" "$h"; printf x); q=${q%x}
 if "${prefix}has_shell_executor" "$q"; then e=1; else e=0; fi
-printf '[heredocs]%s[/heredocs]\n[stripped]%s[/stripped]\n[executor]%s\n' "$h" "$q" "$e"
+# The predicate on the raw text too: stripping always appends a newline, which
+# hides edge cases such as `-c` at the very end of the input.
+if "${prefix}has_shell_executor" "$cmd"; then r=1; else r=0; fi
+printf '[heredocs]%s[/heredocs]\n[stripped]%s[/stripped]\n[executor]%s\n[executor-raw]%s\n' "$h" "$q" "$e" "$r"
 DRIVER_EOF
   NL=$'\n'
   CASES=()
@@ -52,6 +55,15 @@ DRIVER_EOF
   done
   # `git stash` ends in "sh" but is no interpreter: its heredoc body is data.
   CASES+=("git stash <<'EOF'${NL}git reset --hard${NL}EOF")
+  # Delimiter parsing: operator glued to the delimiter, double-quoted delimiter
+  # (a command AFTER the terminator shows whether the terminator was matched).
+  CASES+=("cat <<EOF|grep x${NL}git reset --hard${NL}EOF${NL}git push")
+  CASES+=("cat <<EOF&&git status${NL}git reset --hard${NL}EOF${NL}git push")
+  CASES+=("git commit -F - <<\"EOF\"${NL}git reset --hard${NL}EOF${NL}git push")
+  # Executor edges: -c at end of input; the word anchor before [a-z]*sh.
+  CASES+=("bash -c")
+  CASES+=("my_bash -c 'git reset --hard'")
+  CASES+=("/bin/bash -c 'x'")
   # Executors: real ones vs. ones a body merely mentions (#213).
   CASES+=("bash -c 'git reset --hard'")
   CASES+=("sh -c \"git push --force\"")
@@ -97,9 +109,13 @@ _stripped_part() {
   run bash -c 'source "$1"' _ "$BUNDLE_LIB"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
+  # Sourcing must not leave errexit (e) or nounset (u) switched on.
+  run bash -c 'source "$1"; printf "%s" "$-"' _ "$BUNDLE_LIB"
+  [ "$status" -eq 0 ]
+  case "$output" in *e* | *u*) return 1 ;; esac
 }
 
-@test "git_ops.sh sources nothing (CON-12)" {
+@test "git_ops.sh has no line-start source or . command (CON-12)" {
   run grep -En '^[[:space:]]*(source|\.)[[:space:]]' "$BUNDLE_LIB"
   [ "$status" -eq 1 ]
 }
