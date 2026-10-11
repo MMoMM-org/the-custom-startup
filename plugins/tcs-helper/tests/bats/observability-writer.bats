@@ -1900,3 +1900,96 @@ with open('$out', 'w') as f:
     return 1
   fi
 }
+
+# ---------------------------------------------------------------------------
+# 27. Spec 021 F6 — owner-only creation and deny-list backstop
+# ---------------------------------------------------------------------------
+
+# Octal mode of $1, on both BSD (macOS) and GNU (ubuntu) stat.
+_mode_of() {
+  stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"
+}
+
+# One write, with the caller's umask set to $2; prints "<umask before>
+# <umask after>". $3 optionally names extra fields; $4 sets DETAIL.
+_write_under_umask() {
+  local data_dir="$1" mask="$2"
+  bash -c '
+    data_dir="$1"; repo="$2"; writer="$3"; mask="$4"
+    cd "$repo" || exit 90
+    . "$writer" || exit 91
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    umask "$mask"
+    before="$(umask)"
+    _observability_write kind=hook session=sess-mode
+    printf "%s %s\n" "$before" "$(umask)"
+  ' _ "$data_dir" "$REPO" "$WRITER" "$mask"
+}
+
+@test "owner-only: a fresh data dir is created 0700 and events.jsonl 0600, even under umask 022" {
+  local data_dir="$TEST_DIR/f6_modes/deep"
+  run _write_under_umask "$data_dir" 022
+  [ "$status" -eq 0 ]
+  [ "$(_mode_of "$data_dir/observability")" = "700" ] || return 1
+  [ "$(_mode_of "$data_dir/observability/events.jsonl")" = "600" ] || return 1
+}
+
+@test "owner-only: the caller's umask is unchanged after a write" {
+  run _write_under_umask "$TEST_DIR/f6_umask" 022
+  [ "$status" -eq 0 ]
+  [ "$output" = "0022 0022" ] || [ "$output" = "022 022" ] || return 1
+}
+
+@test "owner-only: the caller's umask is restored when mkdir fails" {
+  local parent="$TEST_DIR/f6_umask_fail"
+  mkdir -p "$parent"
+  chmod 500 "$parent"
+  run _write_under_umask "$parent/child" 022
+  chmod 700 "$parent"
+  [ "$status" -eq 0 ]
+  [ "$output" = "0022 0022" ] || [ "$output" = "022 022" ] || return 1
+}
+
+# Writes args/command_args/description/tool_input (plus a named control),
+# with DETAIL=$2, and prints the record.
+_write_backstop() {
+  local data_dir="$1" detail="$2"
+  bash -c '
+    data_dir="$1"; repo="$2"; writer="$3"; detail="$4"
+    cd "$repo" || exit 90
+    . "$writer" || exit 91
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    [ "$detail" = "1" ] && export CLAUDE_OBSERVABILITY_DETAIL=1
+    _observability_write kind=hook session=sess-bs args=ARGSCANARY \
+      command_args=CMDARGSCANARY description=DESCCANARY \
+      tool_input=TOOLINPUTCANARY command=COMMANDCANARY detail:description=DETAILDESC \
+      tool=Bash
+  ' _ "$data_dir" "$REPO" "$WRITER" "$detail"
+  cat "$data_dir/observability/events.jsonl"
+}
+
+@test "deny list: args, command_args, description, tool_input and command are dropped in reduced mode, record still written" {
+  run _write_backstop "$TEST_DIR/f6_reduced" 0
+  [ "$status" -eq 0 ]
+  local canary
+  for canary in ARGSCANARY CMDARGSCANARY DESCCANARY TOOLINPUTCANARY COMMANDCANARY DETAILDESC; do
+    case "$output" in
+      *"$canary"*) printf 'leaked: %s\n%s\n' "$canary" "$output" >&2; return 1 ;;
+    esac
+  done
+  case "$output" in
+    *'"tool":"Bash"'*) : ;;
+    *) printf 'record missing control field: %s\n' "$output" >&2; return 1 ;;
+  esac
+}
+
+@test "deny list: with detail on, detail:description survives" {
+  run _write_backstop "$TEST_DIR/f6_detail" 1
+  [ "$status" -eq 0 ]
+  case "$output" in
+    *'"description":"DETAILDESC"'*) : ;;
+    *) printf 'detail:description missing: %s\n' "$output" >&2; return 1 ;;
+  esac
+}

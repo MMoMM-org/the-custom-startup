@@ -550,11 +550,13 @@ _observability_redact_path() {
 # "this field is sensitive"; this list is what happens when an adapter forgets
 # to say it. Every name here is a category the keep/drop table drops outright:
 # Bash arguments and hook command strings, file contents, transcript_path,
-# absolute cwd, and any prompt or response text.
+# absolute cwd, and any prompt or response text. `args`, `command_args`,
+# `description` and `tool_input` are the tool-route argument carriers (spec 021
+# F6): an adapter must say `detail:` to emit them.
 #
 # A space-delimited string rather than an array: bash 3.2 has no associative
 # arrays (CON-1), and membership is one glob test with no loop and no fork.
-_OBSERVABILITY_DETAIL_ONLY_FIELDS=" command full_command hook_command content file_content transcript_path cwd prompt prompt_text response response_text "
+_OBSERVABILITY_DETAIL_ONLY_FIELDS=" command full_command hook_command content file_content transcript_path cwd prompt prompt_text response response_text args command_args description tool_input "
 
 # Is this field name emitted only in detail mode? Returns 0 if so. An empty
 # name is not — the membership pattern below would otherwise match on the
@@ -640,7 +642,18 @@ _observability_write() {
   local events_dir="$data_dir/observability"
   local events_file="$events_dir/events.jsonl"
 
-  mkdir -p "$events_dir" 2>/dev/null || return 0
+  # Owner-only at creation (spec 021 ADR-4, F6): the directory and the first
+  # append are made under umask 077 so no later chmod fork is needed. The
+  # caller's umask is read once (one builtin subshell, no exec) and restored
+  # on every return path below.
+  local prev_umask
+  prev_umask="$(umask)" || prev_umask=""
+  umask 077 2>/dev/null || true
+
+  if ! mkdir -p "$events_dir" 2>/dev/null; then
+    [ -n "$prev_umask" ] && umask "$prev_umask" 2>/dev/null
+    return 0
+  fi
 
   _observability_rotate_if_oversized "$events_file" || true
 
@@ -725,5 +738,6 @@ _observability_write() {
   # trailing `2>/dev/null` placed after it is too late to suppress that
   # message (CON-5 — this must stay silent on stderr too).
   printf '%s\n' "$json" 2>/dev/null >>"$events_file" || true
+  [ -n "$prev_umask" ] && umask "$prev_umask" 2>/dev/null
   return 0
 }
