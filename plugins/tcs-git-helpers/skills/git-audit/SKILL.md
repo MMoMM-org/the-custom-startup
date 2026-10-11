@@ -115,6 +115,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/git_status_audit.py" --overrides --limit 
 
 The script self-detects cache age and prepends `(cache Nh old)` to the brief / status output when mtime > 24h. Surface this verbatim — do not strip the warning. If the user asks why the cache is stale, point them at `git fetch && /tcs-git-helpers:git-audit --cleanup` to refresh.
 
+A `cache-write skipped` line on stderr with exit 0 means the cache could not be written, which is expected inside Claude Code's Bash sandbox. The line only follows a live `gh` query, and the `--cleanup` list comes from that query, so use it as is; do not re-run outside the sandbox for it (#216).
+
 ### 5. Setup degradation
 
 If the script reports `tcs-git-helpers not installed in this repo`, surface the message and suggest the user run `/tcs-git-helpers:git-setup`. The status report still renders — the missing githooks only affect post-merge cache refresh, not the live git/PR queries.
