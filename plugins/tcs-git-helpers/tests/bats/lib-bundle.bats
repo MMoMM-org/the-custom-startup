@@ -404,6 +404,58 @@ print(gsa._get_cache_age_hours(Path(sys.argv[2])) is None)
   [ "$(grep -vc '^#' "$TEST_DIR/cache/${repo_hash}-stale-cache.tsv")" -eq 0 ]
 }
 
+# ---------------------------------------------------------------------------
+# #160: a cache-write skip names the sandbox when the sandbox caused it
+# ---------------------------------------------------------------------------
+
+# Run _write_stale_cache against an unwritable target. Args: $1 = sandbox
+# marker value ("" leaves SANDBOX_RUNTIME unset), $2 = "dir" (cache dir
+# cannot be created) or "tsv" (dir exists, TSV write fails).
+_run_unwritable_cache_write() {
+  local marker="$1" kind="$2"
+  _make_git_repo "$TEST_DIR/repo"
+  local data="$TEST_DIR/data"
+  if [ "$kind" = "dir" ]; then
+    printf 'not a dir\n' > "$data"
+  else
+    mkdir -p "$data/cache"
+    chmod 555 "$data/cache"
+  fi
+  run --separate-stderr bash -c "
+    unset SANDBOX_RUNTIME
+    [ -n '$marker' ] && export SANDBOX_RUNTIME='$marker'
+    export CLAUDE_PLUGIN_DATA='$data'
+    cd '$TEST_DIR/repo'
+    source '$LIB'
+    printf 'feat/x\t1\t2026-01-01T00:00:00Z\n' | _write_stale_cache '2026-05-13T12:00:00Z' \"\$(pwd -P)\" main
+  "
+  chmod -R u+w "$data" 2>/dev/null || true
+}
+
+@test "cache-write skip under the Bash sandbox names the sandbox, not permissions (#160)" {
+  _run_unwritable_cache_write 1 tsv
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$stderr" | grep -c '^tcs-git-helpers:')" -eq 1 ]
+  _has "$stderr" "Claude Code's Bash sandbox"
+  _lacks "$stderr" "Check write permissions"
+}
+
+@test "cache-dir skip under the Bash sandbox names the sandbox too (#160)" {
+  _run_unwritable_cache_write 1 dir
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$stderr" | grep -c '^tcs-git-helpers:')" -eq 1 ]
+  _has "$stderr" "Claude Code's Bash sandbox"
+  _lacks "$stderr" "Check write permissions"
+}
+
+@test "cache-write skip outside the sandbox keeps the permissions advice (#160)" {
+  _run_unwritable_cache_write "" tsv
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$stderr" | grep -c '^tcs-git-helpers:')" -eq 1 ]
+  _has "$stderr" "Check write permissions on $TEST_DIR/data/cache"
+  _lacks "$stderr" "sandbox"
+}
+
 @test "_write_stale_cache JSON is valid and contains stale_branches array" {
   _make_git_repo "$TEST_DIR/repo"
   cd "$TEST_DIR/repo"
