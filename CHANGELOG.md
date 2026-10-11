@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The "cache-write skipped" message no longer gives wrong advice inside Claude Code's Bash
+  sandbox (#160).** It told you to check write permissions on a directory that the sandbox
+  blocks by policy. It now names the sandbox and says the skip is harmless. Install the new
+  hook bundle (`h9`) with `/tcs-git-helpers:git-setup --update`.
+
 - **The `post-merge` hook now clears the stale-branch cache when nothing is stale (#206).** It
   only wrote the cache when it found stale branches, so rows from an earlier run stayed in it.
   A failed `gh` query still leaves the cache alone. The cache it writes now also carries the

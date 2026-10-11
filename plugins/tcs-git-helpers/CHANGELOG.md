@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.2.33] - 2026-10-11
+
+### Fixed
+
+- **A cache-write skip inside Claude Code's Bash sandbox now says so (#160).** The sandbox denies
+  the plugin data directory by policy, not by file mode, so the old advice "Check write
+  permissions on <dir>" sent the user to a directory they own and can write from their own
+  shell. When `SANDBOX_RUNTIME=1` is set, which happens only inside that sandbox, the skip names
+  the sandbox and says the next pull or merge outside it refreshes the cache. Outside the
+  sandbox the permissions advice stays. Hook bundle `h8` → `h9`.
+
 ## [2.2.32] - 2026-10-11
 
 ### Fixed
