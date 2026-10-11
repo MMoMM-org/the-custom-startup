@@ -350,16 +350,19 @@ def write_stale_cache(
     default_branch: str,
     updated_iso: str,
     entries: list[dict],
-) -> None:
+) -> bool:
     """
     Write both TSV and JSON stale-branch cache atomically.
 
     Atomic order (per spec): write JSON .tmp, write TSV .tmp, os.replace JSON,
     os.replace TSV. TSV is the "freshness signal" for the bash hot path.
 
+    A write that fails (Claude Code's Bash sandbox denies the plugin data dir,
+    #216) is a warning, not a crash: leftover .tmp files are removed and the
+    function returns False. Returns True when both files were written.
+
     entries: list of {"name": str, "pr_number": int, "merged_at": str}
     """
-    cache_dir.mkdir(parents=True, exist_ok=True)
     rh = _repo_hash(repo_path)
     tsv_path = cache_dir / f"{rh}-stale-cache.tsv"
     json_path = cache_dir / f"{rh}-stale-cache.json"
@@ -367,6 +370,52 @@ def write_stale_cache(
     tsv_tmp = Path(str(tsv_path) + ".tmp")
     json_tmp = Path(str(json_path) + ".tmp")
 
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        _write_stale_cache_files(
+            json_tmp=json_tmp,
+            tsv_tmp=tsv_tmp,
+            json_path=json_path,
+            tsv_path=tsv_path,
+            repo_path=repo_path,
+            default_branch=default_branch,
+            updated_iso=updated_iso,
+            entries=entries,
+        )
+    except OSError as exc:
+        for tmp in (json_tmp, tsv_tmp):
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        _warn_cache_write_skipped(exc, cache_dir)
+        return False
+    return True
+
+
+def _warn_cache_write_skipped(exc: OSError, cache_dir: Path) -> None:
+    """Same wording as lib-bundle.sh _emit_cache_write_skip (#160)."""
+    reason = exc.strerror or str(exc)
+    if os.environ.get("SANDBOX_RUNTIME") == "1":
+        reason += f" (Claude Code's Bash sandbox denies {cache_dir})"
+        suggestion = "Harmless: the next pull or merge outside the sandbox refreshes the cache"
+    else:
+        suggestion = f"Check write permissions on {cache_dir}"
+    print(f"tcs-git-helpers: cache-write skipped — {reason}. {suggestion}.", file=sys.stderr)
+
+
+def _write_stale_cache_files(
+    *,
+    json_tmp: Path,
+    tsv_tmp: Path,
+    json_path: Path,
+    tsv_path: Path,
+    repo_path: str,
+    default_branch: str,
+    updated_iso: str,
+    entries: list[dict],
+) -> None:
+    """Write both .tmp files, then move them into place. Raises OSError."""
     # JSON tmp
     json_data = {
         "version": 1,
@@ -401,13 +450,7 @@ def write_stale_cache(
 
     # Atomic commit: JSON first, then TSV (TSV = freshness signal)
     os.replace(json_tmp, json_path)
-    try:
-        os.replace(tsv_tmp, tsv_path)
-    except OSError as exc:
-        print(
-            f"[tcs-git-helpers] WARNING: TSV cache mv failed after JSON succeeded: {exc}",
-            file=sys.stderr,
-        )
+    os.replace(tsv_tmp, tsv_path)
 
 
 # ---------------------------------------------------------------------------
@@ -470,7 +513,8 @@ def refresh_stale_cache(
     Fetch merged PRs via a single batched gh call, cross-reference against
     local branches, and write the stale-branch cache.
 
-    Returns the list of stale entries written.
+    Returns the stale entries found live, whether or not the cache could be
+    written (#216).
     """
     local_branches = set(_get_local_branches(repo_path))
     merged_prs = _fetch_merged_prs(repo_path)
@@ -649,6 +693,7 @@ def cmd_cleanup(
 
     # --- Live refresh (T2.3, Bug 1 fix) ---
     default_branch = _read_stale_cache(cache_dir, repo_path).get("default_branch", "main")
+    live_entries: list[dict] | None = None
     if not _gh_available():
         print(
             "tcs-git-helpers: gh CLI not found — "
@@ -662,15 +707,19 @@ def cmd_cleanup(
             file=sys.stderr,
         )
     else:
-        refresh_stale_cache(
+        live_entries = refresh_stale_cache(
             cache_dir=cache_dir,
             repo_path=repo_path,
             default_branch=default_branch,
         )
 
-    # --- Read refreshed (or fallback) cache ---
-    cache_data = _read_stale_cache(cache_dir, repo_path)
-    stale_entries = cache_data.get("stale_branches", [])
+    # --- Live result, or the cache when no refresh ran ---
+    # The live list wins even when the cache write failed (#216); re-reading
+    # the cache would show the old state, or nothing.
+    if live_entries is not None:
+        stale_entries = live_entries
+    else:
+        stale_entries = _read_stale_cache(cache_dir, repo_path).get("stale_branches", [])
 
     # Build exclusion set: branches checked out in any worktree
     worktree_branches = _get_worktree_branches(repo_path)

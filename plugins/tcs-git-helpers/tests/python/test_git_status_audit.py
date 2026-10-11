@@ -648,6 +648,113 @@ class TestCacheWrite:
 
 
 # ===========================================================================
+# #216: an unwritable cache is a warning, not a crash
+# ===========================================================================
+
+def _deny_mkdir_of(monkeypatch: pytest.MonkeyPatch, denied: Path) -> None:
+    """Make Path.mkdir raise PermissionError for one directory, as the sandbox does."""
+    original = Path.mkdir
+
+    def fake_mkdir(self, *args, **kwargs):
+        if self == denied:
+            raise PermissionError(1, "Operation not permitted", str(self))
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", fake_mkdir)
+
+
+class TestCacheWriteFailure:
+    ENTRIES = [{"name": "feat/x", "pr_number": 7, "merged_at": "2026-05-01T00:00:00Z"}]
+
+    def _write(self, gsa, cache_dir: Path) -> None:
+        gsa.write_stale_cache(
+            cache_dir=cache_dir,
+            repo_path="/fake/denied/repo",
+            default_branch="main",
+            updated_iso="2026-05-09T14:23:11Z",
+            entries=self.ENTRIES,
+        )
+
+    def test_denied_cache_dir_warns_instead_of_raising(
+        self, gsa, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+    ):
+        monkeypatch.delenv("SANDBOX_RUNTIME", raising=False)
+        cache_dir = tmp_path / "cache"
+        _deny_mkdir_of(monkeypatch, cache_dir)
+
+        self._write(gsa, cache_dir)
+
+        err = capsys.readouterr().err
+        assert "cache-write skipped" in err, err
+        assert f"Check write permissions on {cache_dir}" in err, err
+        assert "sandbox" not in err, err
+
+    def test_denied_cache_dir_inside_sandbox_names_the_sandbox(
+        self, gsa, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+    ):
+        monkeypatch.setenv("SANDBOX_RUNTIME", "1")
+        cache_dir = tmp_path / "cache"
+        _deny_mkdir_of(monkeypatch, cache_dir)
+
+        self._write(gsa, cache_dir)
+
+        err = capsys.readouterr().err
+        assert f"Claude Code's Bash sandbox denies {cache_dir}" in err, err
+        assert "Check write permissions" not in err, err
+
+    def test_failed_replace_leaves_no_tmp_files(
+        self, gsa, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+    ):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+
+        def fake_replace(src, dst):
+            raise PermissionError(1, "Operation not permitted", str(dst))
+
+        monkeypatch.setattr(gsa.os, "replace", fake_replace)
+
+        self._write(gsa, cache_dir)
+
+        assert sorted(p.name for p in cache_dir.iterdir()) == [], (
+            f"expected no leftovers, got {sorted(p.name for p in cache_dir.iterdir())}"
+        )
+        assert "cache-write skipped" in capsys.readouterr().err
+
+    def test_cleanup_lists_live_result_when_cache_is_denied(
+        self, gsa, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+    ):
+        """No cache on disk and none writable: the live gh result is still listed."""
+        repo_path = "/fake/denied/repo"
+        cache_dir = tmp_path / "cache"
+        _deny_mkdir_of(monkeypatch, cache_dir)
+        monkeypatch.setattr(gsa, "check_hook_bundle", _ok_drift)
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "git":
+                if "worktree" in cmd and "list" in cmd:
+                    return _git_result("")
+                if "for-each-ref" in cmd:
+                    return _git_result("feat/old-thing\nfix/another-thing\nmain")
+                return _git_result("")
+            return _gh_result(
+                [
+                    {"headRefName": "feat/old-thing", "number": 38, "mergedAt": "2026-04-12T10:00:00Z"},
+                    {"headRefName": "fix/another-thing", "number": 40, "mergedAt": "2026-04-15T09:00:00Z"},
+                ]
+            )
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        gsa.cmd_cleanup(cache_dir=cache_dir, repo_path=repo_path, interactive=False)
+
+        captured = capsys.readouterr()
+        assert "feat/old-thing" in captured.out and "PR #38" in captured.out, captured.out
+        assert "fix/another-thing" in captured.out and "PR #40" in captured.out, captured.out
+        assert "No stale-merged branches" not in captured.out, captured.out
+        assert "cache-write skipped" in captured.err, captured.err
+
+
+# ===========================================================================
 # Test 9: batched gh pr list — single call, not per-branch
 # ===========================================================================
 

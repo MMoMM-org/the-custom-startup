@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.2.38] - 2026-10-11
+
+### Fixed
+
+- **`git-audit --cleanup` no longer crashes when the stale-branch cache cannot be written
+  (#216).** Claude Code's Bash sandbox denies the plugin data directory, so every `--cleanup`
+  from a Claude session ended in a `PermissionError` traceback and listed nothing. A failed
+  cache write is now a `cache-write skipped` warning worded like the hook side's (#160), leftover
+  `.tmp` files are removed, and `--cleanup` lists and deletes from the live `gh` result instead
+  of re-reading the cache it could not write.
+
 ## [2.2.36] - 2026-10-11
 
 ### Fixed

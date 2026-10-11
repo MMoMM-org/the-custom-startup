@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`/tcs-git-helpers:git-audit --cleanup` works from a Claude session again (#216).** The
+  sandbox blocks the cache the cleanup writes, and the script crashed on that instead of going
+  on. It now warns and lists the merged branches it just looked up.
+
 - **The git guard no longer blocks a heredoc or commit message just because it mentions
   `bash -c` (#213).** One such mention made the guard check the whole text again, so a
   destructive git command described in the same body was blocked as if it were run. Commands
