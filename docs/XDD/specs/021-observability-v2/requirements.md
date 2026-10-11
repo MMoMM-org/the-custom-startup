@@ -269,8 +269,8 @@ again be unattributable.
 - **Acceptance Criteria:**
   - [ ] Given a repository registered by the previous version, When setup runs, Then the new hooks
     are added and every existing hook keeps working
-  - [ ] Given several of our hooks on the same event with different scopes, When setup runs again,
-    Then each is kept, none is duplicated and none is removed
+  - [ ] Given setup has already run, When it runs again, Then exactly one entry of ours remains per
+    registered event, none duplicated, and every foreign entry is untouched
   - [ ] Given the shared bundle is current but a repository's registration lacks a new hook, When
     the status is checked for that repository, Then it reports the repository as outdated and names
     what is missing
@@ -285,8 +285,8 @@ again be unattributable.
 - **Acceptance Criteria:**
   - [ ] Given recording writes for the first time in a repository, When the file and its directory
     are created, Then only the owning user can read them
-  - [ ] Given an existing record file readable by others, When the next record is written, Then its
-    permissions are tightened to owner-only
+  - [ ] Given an existing record file readable by others, When setup next runs for the repository,
+    Then its permissions and its directory's are tightened to owner-only
   - [ ] Given a skill invoked through the tool with arguments, When it is recorded in reduced mode,
     Then the arguments are not in the record
 
