@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.3.13] - 2026-10-11
+
+### Fixed
+
+- **The rule-enforcer bundle marker moves to `h2` (#174).** The pre-push template gained the
+  new-branch push fix (`REMOTE_SHA=0000…0`) after `h1` was set, so an install from before that
+  fix read as current. `/rule-enforcer` now reports such installs as outdated. The template's
+  test moved to `tests/tcs-helper/`, so editing it no longer counts as a bundle change.
+
 ## [4.3.5] - 2026-09-05
 
 ### Added

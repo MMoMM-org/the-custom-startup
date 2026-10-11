@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.2.34] - 2026-10-11
+
+### Fixed
+
+- **The hook bundle CI gate now covers the rule-enforcer bundle (#174).** Its marker
+  `tcs-helper-rule-enforcer-version` had no row in `check-hook-bundle-version.sh`, and the
+  pre-push template changed twice without a bump. The table gains the row with a match-all glob,
+  and a new test fails when any `*-version` marker a plugin ships has no row.
+
 ## [2.2.33] - 2026-10-11
 
 ### Fixed

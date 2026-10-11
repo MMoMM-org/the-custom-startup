@@ -20,6 +20,10 @@
 #     installed bundle but is prose, not a source — a wording fix must not
 #     force a marker bump. The marker lives in a different directory from
 #     the sources it gates.
+#   - rule-enforcer pre-push template: glob "*", for the same reason as the
+#     git-helpers row — the gated source is a .sh.j2, and an extension
+#     filter is one rename away from missing it. Its test therefore lives in
+#     tests/tcs-helper/, not beside the template (#174).
 #
 # Extended again in spec-020 T1.4: each pattern under
 # plugins/tcs-patterns/templates/patterns/<name>/ is gated against its own
@@ -46,7 +50,8 @@ set -uo pipefail
 # ---------------------------------------------------------------------------
 
 BUNDLES='plugins/tcs-git-helpers/templates/githooks|plugins/tcs-git-helpers/templates/githooks/tcs-git-helpers-version|*
-plugins/tcs-helper/scripts/observability|plugins/tcs-helper/templates/observability/tcs-helper-observability-version|*.sh'
+plugins/tcs-helper/scripts/observability|plugins/tcs-helper/templates/observability/tcs-helper-observability-version|*.sh
+plugins/tcs-helper/templates/githooks|plugins/tcs-helper/templates/githooks/tcs-helper-rule-enforcer-version|*'
 
 # ---------------------------------------------------------------------------
 # Arguments

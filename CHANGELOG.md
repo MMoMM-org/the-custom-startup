@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Rule-enforcer pre-push hooks installed before the new-branch push fix now show as outdated
+  (#174).** The bundle marker stayed at `h1` through two template changes, so the drift check
+  called old installs current. It is now `h2`, and CI rejects a template change without a bump.
+  **What to do:** if `/rule-enforcer` reports the marker differs, re-install the hook.
+
 - **The "cache-write skipped" message no longer gives wrong advice inside Claude Code's Bash
   sandbox (#160).** It told you to check write permissions on a directory that the sandbox
   blocks by policy. It now names the sandbox and says the skip is harmless. Install the new
