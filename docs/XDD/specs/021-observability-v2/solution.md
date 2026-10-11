@@ -156,7 +156,7 @@ command; no hook types one. The property still holds by construction.
   why: "_observability_write (:601), _observability_field (:448), deny list (:557), mkdir (:643)"
 - file: plugins/tcs-helper/scripts/observability/log_skill.sh
   relevance: HIGH
-  why: "Adapter template: relative source, fork-free read, field extraction, exit 0"
+  why: "Adapter template: relative source, field extraction, exit 0 — but not its `read -d ''` (ADR-6)"
 - file: plugins/tcs-helper/scripts/observability/log_agent.sh
   relevance: MEDIUM
   why: "SubagentStart adapter whose agent_type carries the spawn name interactively"
