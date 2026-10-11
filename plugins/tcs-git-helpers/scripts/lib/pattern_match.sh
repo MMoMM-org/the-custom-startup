@@ -498,6 +498,17 @@ _strip_heredocs() {
   printf '%s' "$out"
 }
 
+# _has_shell_executor <stripped-command>
+#   True (0) iff the command, already reduced by _strip_heredocs and
+#   _strip_quoted, invokes a shell on a payload (`bash -c`, `sh -c`) or `eval`.
+#   Called on STRIPPED text only (#213). Copied into the observability bundle
+#   as _git_ops_has_shell_executor; keep the two equal (parity test:
+#   plugins/tcs-helper/tests/bats/observability-git-parity.bats).
+_has_shell_executor() {
+  [[ "$1" =~ (^|[^[:alnum:]_])[a-z]*sh[[:space:]]+-c([[:space:]]|$) ]] \
+    || [[ "$1" =~ (^|[^[:alnum:]_])eval([[:space:]]|$) ]]
+}
+
 # _clausify <command>
 #   Returns <command> reduced to its real command clauses, one per line:
 #     1. heredoc bodies blanked (via _strip_heredocs), then quoted content
@@ -530,8 +541,7 @@ _clausify() {
   # stripping for the whole command. Executors that do run survive stripping —
   # `$( … )` stays code inside double quotes, and a heredoc feeding a shell
   # keeps its body.
-  if [[ "$stripped" =~ (^|[^[:alnum:]_])[a-z]*sh[[:space:]]+-c([[:space:]]|$) ]] \
-     || [[ "$stripped" =~ (^|[^[:alnum:]_])eval([[:space:]]|$) ]]; then
+  if _has_shell_executor "$stripped"; then
     _with_normalized_clauses "$s"
     return 0
   fi
