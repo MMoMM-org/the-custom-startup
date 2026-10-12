@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — observability v2
+
+### Added
+
+- **The observability recorder now records a typed `/plugin:skill`, a named subagent dispatch and
+  git operations (#165, #166, #172, spec 021).** A skill you type made no `Skill` tool call, so
+  it never showed up; a subagent dispatch showed only the agent type it became; and a destructive
+  git command left no trace. Skill records now carry `route: typed` or `tool`, a new dispatch
+  record carries the agent type and spawn name, and a new git record carries the subcommand, flag
+  names, override-variable names and who ran it (main session or subagent), never values or the
+  command line. `report.py` counts both skill routes, credits a dispatched agent through its
+  name, lists a name that matches nothing as `uncreditable`, and gains a "Git operations" section.
+  `observability-setup` calls a repository with only some of the hooks `OURS-INCOMPLETE`.
+  **What to do:** after updating tcs-helper, run `/tcs-helper:observability-setup install` in
+  every repository that records; nothing new is recorded there until you do.
+  Not covered: git calls made through `xargs`, `find -exec` or a script file are not recognised,
+  and an interactive spawn name is recorded once, not twice.
+
+### Changed
+
+- **The record file is now `0600` and its directories `0700`**, because it now holds commands'
+  shapes. `args` is also on the reduced-mode deny list.
+- **The git guard returns early for a Bash call with no `git` in it (spec 021).** About 59 ms
+  became about 4 ms per call; calls that mention `git` are checked as before. Update tcs-git-helpers.
+
 ## [Unreleased] — tcs-git-helpers setup and pre-push fixes
 
 ### Fixed

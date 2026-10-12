@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.2.39] - 2026-10-12
+
+### Changed
+
+- **The destructive-git-operation guard now returns before it starts `jq` for a Bash call that
+  has no `git` in it (spec 021).** Every Bash call the model made paid for the guard's full
+  parse, about 59 ms on macOS, even for `ls`. A command that does not mention `git` now exits
+  in about 4 ms; one that does is checked exactly as before. The guard's shebang is now
+  `/bin/bash`, so it no longer depends on which `bash` is first on `PATH`.
+- **The guard's quote stripper is linear in the command length.** It took 3.2 s on a 10 KB
+  command and is now bounded; the guard and the observability bundle's copy are kept equal by a
+  parity test. **What to do:** update the plugin (`/plugin`); nothing to re-install.
+
 ## [2.2.38] - 2026-10-11
 
 ### Fixed

@@ -1,5 +1,52 @@
 # Changelog
 
+## [4.4.0] - 2026-10-12
+
+### Added
+
+- **The observability recorder now sees a typed `/plugin:skill`, a named subagent dispatch and
+  your git operations (#165, #166, #172).** Until now a skill you typed made no `Skill` tool call,
+  so it left no record; a dispatched subagent was only visible by the agent type it ended up as;
+  and `git reset --hard`, `git stash pop` and friends left no trace at all. Three new records
+  close those gaps:
+  - `kind: skill` now carries `route: typed` or `route: tool`. A typed command that resolves
+    to nothing, or to an MCP prompt, writes no record. Arguments are kept as presence only, never
+    as text.
+  - `kind: dispatch` records the `subagent_type` and the spawn `name` of every `Agent` call.
+  - `kind: git` records every `git` call except a read-only allowlist: the subcommand, a sub-verb
+    such as `stash pop`, flag names, override-variable names and their position, and whether the
+    main session or a subagent ran it. It never records values or the command line, not even in
+    detail mode. Commands behind `env`, `sudo`, `time` and similar wrappers, and inside `bash -c` or
+    `eval`, are read too; a command above 4 KB gets one value-free `(oversize)` record. Git run
+    through `xargs`, `find -exec` or a script file is not recognised.
+- **`scripts/observability/report.py` reads the new records.** Skills show their typed and tool
+  counts side by side. A dispatched subagent credits the agent it names, and a name that matches
+  nothing is listed as `uncreditable` instead of silently dropped. A new "Git operations" section
+  lists each operation per session and caller; identical operations collapse to one line with
+  `(N records)`.
+- **`observability-setup` reports a repository with some of the four hooks as `OURS-INCOMPLETE`
+  (#165, #166, #172).** The new records need a changed `PreToolUse` registration (`log_tool.sh`
+  replaces `log_skill.sh`) and a new `UserPromptExpansion` one. A repository that has only the older ones is judged on its own registration,
+  not against the bundle, so it no longer reads as current while recording nothing new.
+- **`scripts/observability/e2e_probe.sh` is a live end-to-end probe** of all of the above against
+  real headless sessions in a scratch repository. It costs a rate-limit window, so it is not part
+  of CI; `--keep` leaves the scratch repository for the one manual step (an interactive spawn name).
+
+### Changed
+
+- **The record file is now owner-only: directories `0700`, `events.jsonl` `0600`.** Recording
+  commands raises how sensitive the file is, so the writer tightens modes on every write, including
+  on a file an earlier version created.
+- **`args` is on the reduced-mode deny list.** It was an open spec-018 recommendation.
+- **The observability bundle marker moves to `h2`** (a different marker from the rule-enforcer
+  one below). Installs from before this release read as outdated.
+
+**What to do:** after updating the plugin, run `/tcs-helper:observability-setup install` once in
+every repository that records, and check it with `observability-setup status`. The running hooks
+load from the plugin cache and the registered scripts from each repository's bundle, so nothing
+new is recorded until you do. A repository you do not re-install keeps recording what it recorded
+before and reports as outdated.
+
 ## [4.3.13] - 2026-10-11
 
 ### Fixed
