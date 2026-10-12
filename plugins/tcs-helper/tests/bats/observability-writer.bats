@@ -2052,8 +2052,13 @@ _field_differential() {
       printf "%s" "${body%%\"*}" || true
       return 0
     }
-    # Multibyte text in front of the key, in a UTF-8 locale where one exists.
-    export LC_ALL=en_US.UTF-8 2>/dev/null || true
+    # Multibyte text in front of the key, in a UTF-8 locale (set AFTER
+    # sourcing, as a hostile caller would). A locale that is not installed
+    # would make this test pass vacuously, so refuse to run without one.
+    for l in $(locale -a 2>/dev/null); do
+      case "$l" in en_US.UTF-8|en_US.utf8|C.UTF-8|C.utf8) export LC_ALL="$l"; break ;; esac
+    done
+    [ "$(printf "\303\251" | wc -m | tr -d " ")" = "1" ] || { echo "NO-UTF8-LOCALE"; exit 92; }
     mb=$(printf "\303\244\303\266\342\202\254\360\237\230\200")
     bad=$(printf "\377\376")
     big=$(printf "z%.0s" $(seq 1 3000))
@@ -2099,7 +2104,7 @@ line2\"}"
         fi
       done
     done
-    printf "cases=%d\n" "$n"
+    printf "cases=%d expected=%d\n" "$n" "$(( ${#payloads[@]} * ${#keys[@]} ))"
   ' _ "$WRITER"
 }
 
@@ -2107,14 +2112,26 @@ line2\"}"
   run _field_differential
   [ "$status" -eq 0 ]
   _lacks "$output" "MISMATCH"
-  _has "$output" "cases=234"
+  local cases expected
+  cases="${output##*cases=}"; cases="${cases%% *}"
+  expected="${output##*expected=}"
+  [ "$cases" -gt 0 ]
+  [ "$cases" = "$expected" ]
 }
 
 # Time `_observability_field` for a key behind N bytes of text; prints ms.
 _time_field_behind() {
-  local n="$1"
+  local n="$1" utf8="${2:-}"
   bash -c '
     . "$1" || exit 91
+    # Optional hostile caller: a UTF-8 locale exported AFTER sourcing. The
+    # function must still be fast (its local LC_ALL=C wins) and correct.
+    if [ -n "$3" ]; then
+      for l in $(locale -a 2>/dev/null); do
+        case "$l" in en_US.UTF-8|en_US.utf8|C.UTF-8|C.utf8) export LC_ALL="$l"; break ;; esac
+      done
+      [ "$(printf "\303\251" | wc -m | tr -d " ")" = "1" ] || { echo "NO-UTF8-LOCALE"; exit 92; }
+    fi
     big="$(printf "x%.0s" $(seq 1 "$2"))"
     p="{\"description\":\"d\",\"prompt\":\"$big\",\"tool_use_id\":\"toolu_01ABC\"}"
     v="$(_observability_field "$p" tool_use_id)"
@@ -2122,7 +2139,7 @@ _time_field_behind() {
     v="$(_observability_field "$p" tool_use_id)"
     e="$(perl -MTime::HiRes=time -e "printf q{%d}, time()*1000")"
     printf "%d %s\n" "$((e - s))" "$v"
-  ' _ "$WRITER" "$n"
+  ' _ "$WRITER" "$n" "$utf8"
 }
 
 @test "field: a key behind 200 KB costs at most 20x the same key behind 20 KB, and stays under budget" {
@@ -2141,4 +2158,13 @@ _time_field_behind() {
   if [ "$allowed" -lt 100 ]; then allowed=100; fi
   [ "$t200" -le "$(_perf_budget_ms "$allowed")" ]
   [ "$t200" -le "$(_perf_budget_ms 300)" ]
+}
+
+@test "field: a UTF-8 locale exported after sourcing neither slows the search nor changes the answer" {
+  if ! command -v perl >/dev/null 2>&1; then skip "perl not available for a sub-second clock"; fi
+  local r
+  r="$(_time_field_behind 200000 utf8)"
+  [ "${r#* }" = "toolu_01ABC" ]
+  printf 'field behind 200KB, UTF-8 caller: %s ms\n' "${r%% *}" >&3
+  [ "${r%% *}" -le "$(_perf_budget_ms 300)" ]
 }

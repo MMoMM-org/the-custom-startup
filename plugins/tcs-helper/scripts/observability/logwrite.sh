@@ -380,19 +380,34 @@ _observability_repo_field() {
 # writer forks no stream editor or JSON parser" can be checked statically);
 # this costs ~0 ms, because it forks nothing (ADR-5, CON-7).
 #
-#   local body="${1#*\"$2\":\"}"   everything after the literal  "key":"
-#   [ "$body" = "$1" ] -> absent   parameter expansion that finds NO match
-#                                  returns the string UNCHANGED
-#   printf '%s' "${body%%\"*}"     up to the closing quote
+# MECHANISM (no fork, three steps):
+#   1. Presence: `case "$payload" in *"$needle"*)` where needle is `"key":"`.
+#      Absent -> print nothing and return. This is the redaction-critical
+#      step: an absent key returns BEFORE any slice is taken, so the payload
+#      can never come back as a "value" (on a Bash PreToolUse that would be
+#      the full command line, credentials included). Its test is
+#      tests/bats/observability-writer.bats, "a payload missing the
+#      requested key yields empty, never the whole payload", which scans the
+#      raw record bytes for a token-shaped canary rather than looking up a
+#      field: a `field == ""` check alone would stay green while the payload
+#      leaked into some other field.
+#   2. Bisect to the end of the FIRST occurrence: the shortest prefix of the
+#      payload that still matches `*"$needle"*` ends exactly where the first
+#      `"key":"` ends. About 18 glob tests at 200 KB.
+#   3. Value: everything after that point, up to the first `"` BYTE
+#      (`${rest%%\"*}`).
 #
-# THE SECOND LINE IS THE REDACTION-CRITICAL LINE OF THE WHOLE DESIGN. Without
-# it, a request for an absent key returns the ENTIRE payload — which, on a
-# Bash PreToolUse, is the full command line, credentials included. It has its
-# own test (tests/bats/observability-writer.bats, "a payload missing the
-# requested key yields empty, never the whole payload"), which scans the raw
-# record bytes for a token-shaped canary rather than looking up a field: a
-# check of `field == ""` alone would stay green while the payload leaked into
-# some other field.
+# WHY BISECT. The obvious `${p#*"needle"}` is quadratic in the text in front
+# of the key: 0.4 s behind 20 KB, 36 s behind 200 KB (an Agent `prompt` sits
+# in front of `tool_use_id`). `${p%%"needle"*}` is linear but ~4 us per byte
+# (0.9 s at 200 KB). The `case` glob is the fast primitive (~1 ms at 150 KB),
+# so the search is built from it: ~50-90 ms at 200 KB, flat per byte.
+#
+# LC_ALL=C is LOCAL to the function, as a guard: callers may change LC_ALL
+# after sourcing this file. It makes ${#s} and ${s:n:m} count bytes; in a
+# UTF-8 locale the same search measured ~5x slower (0.149 s against 0.028 s at
+# 200 KB). Slower, not quadratic, and the answer is identical; the scale test
+# runs it both ways.
 #
 # The opening quote in the pattern is load-bearing too, in a quieter way: the
 # search is for `"key":"`, not `key":"`, so a short key cannot match inside a
@@ -403,7 +418,7 @@ _observability_repo_field() {
 # Known limits, both accepted (SDD/Known Technical Issues — "a string
 # operation, not a JSON parser"):
 #   - A value containing an escaped quote (\") is cut at that quote, because
-#     `${body%%\"*}` stops at the first `"` BYTE. The extractor therefore
+#     `${rest%%\"*}` stops at the first `"` BYTE. The extractor therefore
 #     UNDER-captures. It never over-captures, which is the direction that
 #     would leak; the escaper downstream keeps the resulting dangling
 #     backslash legal JSON. Both directions are tested.
@@ -411,23 +426,17 @@ _observability_repo_field() {
 #     result is still a value from within the payload, never the payload
 #     itself, so the redaction guarantee holds; the field could be wrong.
 #
-# THE PRESENCE PRE-CHECK — a cost fix, not a semantic one. Prefix removal that
-# finds NO match is quadratic in bash: it tries every split point in the
-# payload before concluding there is none. Measured on this function with the
-# key ABSENT: 197 ms at 25 KB, 771 ms at 50 KB, 3377 ms at 100 KB, 6630 ms at
-# 150 KB — against CON-7's 1 ms-per-hook-invocation budget. log_agent.sh asks
-# for a parent key that is absent on every non-nested dispatch, i.e. the
-# COMMON case paid the WORST case, and a hook stalling for seconds blocks the
-# session. A `case` glob test short-circuits on the first attempt: 1 ms at
-# 150 KB, the identical answer roughly 6600x faster. (A bash `=~` regex also
-# measured 1 ms; scanning only the first 4 KB measured 9 ms but changes what
-# the function finds, so it was rejected.) The pre-check
-# is the first line of the redaction defence: an absent key returns before any
-# value is sliced, so the payload can never come back as a "value".
+# WHY THE PRESENCE CHECK COMES FIRST AND ALONE. A prefix removal that finds NO
+# match is quadratic in bash (it tries every split point): measured with the
+# key ABSENT, 197 ms at 25 KB, 771 ms at 50 KB, 3377 ms at 100 KB, 6630 ms at
+# 150 KB, against CON-7's 1 ms-per-hook budget. A `case` glob short-circuits:
+# 1 ms at 150 KB, the identical answer roughly 6600x faster. (A bash `=~`
+# regex also measured 1 ms; scanning only the first 4 KB measured 9 ms but
+# changes what the function finds, so it was rejected.)
 #
 # KEYS ARE LITERAL, NOT PATTERNS — a deliberate BEHAVIOUR CHANGE that came
-# with the pre-check. Both the `case` test and the prefix removal now quote
-# "$key", so a key is matched byte for byte. Previously the removal's `$key`
+# with the pre-check. The `case` test and every glob test of the bisect use the
+# one quoted needle, so a key is matched byte for byte. Previously the removal's `$key`
 # was UNQUOTED inside the pattern, so glob metacharacters in a KEY acted as
 # wildcards. A quoted `case` and an unquoted removal disagree on exactly
 # these inputs (all measured):
@@ -446,9 +455,9 @@ _observability_repo_field() {
 # tests/bats/observability-writer.bats, "a key containing glob metacharacters
 # is matched literally, not as a pattern".
 _observability_field() {
-  # LC_ALL=C: ${#s}, ${s:n:m} and the glob below count BYTES, not characters.
-  # In a UTF-8 locale bash walks multibyte characters to reach offset n, which
-  # is O(n) per slice and would turn the search below quadratic.
+  # LC_ALL=C (local, a guard against callers that change it after sourcing):
+  # ${#s}, ${s:n:m} and the glob below count BYTES. UTF-8 would work but run
+  # ~5x slower (0.149 s against 0.028 s at 200 KB).
   local payload="${1:-}" key="${2:-}" LC_ALL=C
   # An empty key would make the pattern `*"":"`, which matches unrelated
   # text. Nothing legitimately asks for it.
@@ -460,12 +469,8 @@ _observability_field() {
     *"$needle"*) ;;                     # present — the search below
     *) printf '' || true; return 0 ;;   # absent — same answer, no scan
   esac
-  # LINEAR FIRST-OCCURRENCE SEARCH. `${p#*"needle"}` is quadratic in the text
-  # in front of the key (36 s for a key behind 200 KB), and `${p%%"needle"*}`
-  # is linear but ~4 us per byte (0.9 s at 200 KB). The `case` glob above is
-  # the fast primitive (~1 ms at 150 KB), so bisect with it: the shortest
-  # prefix that still contains the needle ends exactly where the first
-  # occurrence ends. About 18 glob tests at 200 KB, no fork.
+  # Bisect with the same glob: the shortest prefix still containing the
+  # needle ends exactly where the first occurrence ends (see MECHANISM above).
   local lo=${#needle} hi=${#payload} mid
   while [ "$lo" -lt "$hi" ]; do
     mid=$(((lo + hi) / 2))
