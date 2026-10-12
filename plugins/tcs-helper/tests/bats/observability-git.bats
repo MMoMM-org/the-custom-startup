@@ -1482,7 +1482,13 @@ _now_us() {
   perl -MTime::HiRes=time -e 'printf q{%d}, time()*1000000'
 }
 
-@test "perf: one git record costs at most 15 ms over the non-git path (CON-7)" {
+# CON-7 (revised 2026-10-12, README Decisions Log): one git record may add
+# at most 30 ms over the non-git path. The recorder runs in parallel with the
+# guard, so its cost overlaps the guard's. On macOS about 12 ms of it is the
+# one `git rev-parse` through the xcrun shim; the writer's fast path keeps
+# the record itself to a few ms. Best of 15 on each side, so a busy machine
+# only adds noise to both.
+@test "perf: one git record costs at most 30 ms over the non-git path (CON-7)" {
   _e2e_setup || return 1
   command -v perl >/dev/null 2>&1 || { echo "perl is required for a sub-second clock"; return 1; }
   _bash_payload 'git push origin main' > "$TEST_DIR/git.json"
@@ -1492,7 +1498,7 @@ _now_us() {
   floor_ms="$(cd "$REPO" && _best_ms 15 "$ADAPTER" "$TEST_DIR/nongit.json")"
   git_ms="$(cd "$REPO" && _best_ms 15 "$ADAPTER" "$TEST_DIR/git.json")"
   added=$((git_ms - floor_ms))
-  budget="$(_perf_budget_ms 15)"
+  budget="$(_perf_budget_ms 30)"
   printf 'git record: %d ms total, %d ms non-git floor, %d ms added (budget %d ms)\n' \
     "$git_ms" "$floor_ms" "$added" "$budget" >&3
   [ "$(_git_count)" -ge 1 ] || return 1
