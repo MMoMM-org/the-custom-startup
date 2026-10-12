@@ -354,8 +354,9 @@ _differential() {
 
 # _scale <function> <locale> <prose|dense> <budget-ms>
 #   Times the function on a command built by repeating one unit to 2 KB,
-#   20 KB and 200 KB, inside one child bash (perl timer: BSD date has no %N;
-#   the cost of the timer itself is measured and subtracted). Steps stop at
+#   20 KB and 200 KB, inside one child bash (timer: $EPOCHREALTIME on bash 5,
+#   perl on bash 3.2, where BSD date has no %N; the cost of the timer itself
+#   is measured and subtracted). Steps stop at
 #   the first one over budget, so quadratic code fails at 2 KB or 20 KB
 #   instead of running 200 KB for twenty minutes. Requires:
 #     - 2 KB and 20 KB each under <budget-ms> (times TCS_PERF_SLACK);
@@ -387,8 +388,16 @@ case "$fn-$unit" in
     u="git commit -F - <<'EOF'${NL}body names git reset --hard and \$(x) é${NL}second line 'q'${NL}EOF${NL}bash <<EOF${NL}echo hi${NL}EOF${NL}git status${NL}" ;;
   *) exit 98 ;;
 esac
-ms() { perl -MTime::HiRes -e 'printf "%d", Time::HiRes::time()*1000'; }
-a=$(ms); b=$(ms); overhead=$((b - a))
+# Milliseconds. bash 5 has $EPOCHREALTIME; bash 3.2 needs perl. A timer that
+# prints nothing would read as 0 ms and pass every bound, so it is checked.
+if [ -n "${EPOCHREALTIME:-}" ]; then
+  ms() { local t="${EPOCHREALTIME/[.,]/}"; printf '%s' "${t%???}"; }
+else
+  ms() { perl -MTime::HiRes -e 'printf "%d", Time::HiRes::time()*1000'; }
+fi
+a=$(ms); b=$(ms)
+case "$a$b" in ''|*[!0-9]*) echo "no working millisecond timer" >&2; exit 96 ;; esac
+overhead=$((b - a))
 for n in 2000 20000 200000; do
   s="$u"; while [ "${#s}" -lt "$n" ]; do s="$s$s"; done; s="${s:0:$n}"
   t0=$(ms); "$fn" "$s" > /dev/null; t1=$(ms)
