@@ -739,18 +739,20 @@ _UNDO_HINT="bash $_SETUP_LIB_DIR/setup.sh remove --target $REPO_ROOT --yes"
 # directories 0700 and files 0600; records an older bundle wrote are brought
 # to the same modes here. Confined to the target's data dir, its
 # observability/ directory and events.jsonl* (rotations included): nothing
-# else is chmod-ed. The data dir is resolved by the writer's own
-# _observability_data_dir, under the same HOME override `status` uses.
+# else is chmod-ed. The data dir is resolved ONCE, below, by the writer's own
+# _observability_data_dir under the same HOME override `status` uses.
 # A path that cannot be changed (not owned, immutable) is a WARN, never an
 # abort. Nothing is created: an absent path is skipped.
+_RECORD_DATA_DIR=""
+if [ -n "$_LOGWRITE_SH" ]; then
+  _RECORD_DATA_DIR="$(HOME="$RESOLVED_HOME"; _observability_data_dir "$REPO_ROOT")" || _RECORD_DATA_DIR=""
+fi
+
 _tighten_record_modes() {
-  local data_dir="" events_dir path
-  if [ -n "$_LOGWRITE_SH" ]; then
-    data_dir="$(HOME="$RESOLVED_HOME"; _observability_data_dir "$REPO_ROOT")" || data_dir=""
-  fi
-  [ -n "$data_dir" ] || return 0
-  events_dir="$data_dir/observability"
-  for path in "$data_dir" "$events_dir"; do
+  local events_dir path
+  [ -n "$_RECORD_DATA_DIR" ] || return 0
+  events_dir="$_RECORD_DATA_DIR/observability"
+  for path in "$_RECORD_DATA_DIR" "$events_dir"; do
     [ -d "$path" ] || continue
     chmod 700 "$path" 2>/dev/null || _emit "WARN" "could not restrict $path to owner-only (0700); left as is."
   done
@@ -761,8 +763,31 @@ _tighten_record_modes() {
   return 0
 }
 
+# _records_need_tightening -- true when an existing record path under
+# $_RECORD_DATA_DIR has a mode other than the owner-only one. Same path set
+# as _tighten_record_modes. GNU stat first (BSD stat rejects -c).
+_records_need_tightening() {
+  local events_dir path mode
+  [ -n "$_RECORD_DATA_DIR" ] || return 1
+  events_dir="$_RECORD_DATA_DIR/observability"
+  for path in "$_RECORD_DATA_DIR" "$events_dir"; do
+    [ -d "$path" ] || continue
+    mode="$(stat -c %a "$path" 2>/dev/null || stat -f %Lp "$path" 2>/dev/null)" || mode=""
+    [ "$mode" = "700" ] || return 0
+  done
+  for path in "$events_dir"/events.jsonl "$events_dir"/events.jsonl.*; do
+    [ -f "$path" ] || continue
+    mode="$(stat -c %a "$path" 2>/dev/null || stat -f %Lp "$path" 2>/dev/null)" || mode=""
+    [ "$mode" = "600" ] || return 0
+  done
+  return 1
+}
+
 if [ "$VERB" = "install" ]; then
   _emit "PLAN" "would install the observability bundle into $BUNDLE_DIR"
+  if _records_need_tightening; then
+    _emit "PLAN" "would restrict existing record files under $_RECORD_DATA_DIR to owner-only (dirs 0700, events.jsonl* 0600)"
+  fi
   if [ "$IS_LEGACY" -eq 1 ]; then
     _emit "PLAN" "would remove the legacy in-repo registration from $SHARED_SETTINGS"
     _emit "PLAN" "would add hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH to $LOCAL_SETTINGS"

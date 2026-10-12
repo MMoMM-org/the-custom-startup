@@ -2279,3 +2279,37 @@ _seed_loose_records() {
   [ -f "$dir/.claude/settings.local.json" ]
   [ "$(_mode "$data/observability/events.jsonl.1")" = "600" ]
 }
+
+@test "dry run with loose existing records announces the tightening and changes no mode" {
+  local home dir data
+  home="$(_new_home plan-loose)"
+  dir="$(_copy_fixture absent plan-loose)"
+  data="$WORK_PARENT/plan-loose.data"
+  _seed_loose_records "$data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir"
+  [ "$status" -eq 0 ]
+  _has "$output" "PLAN: would restrict existing record files under $data to owner-only (dirs 0700, events.jsonl* 0600)"
+  [ "$(_mode "$data")" = "755" ]
+  [ "$(_mode "$data/observability")" = "755" ]
+  [ "$(_mode "$data/observability/events.jsonl")" = "644" ]
+  [ "$(_mode "$data/observability/events.jsonl.1")" = "644" ]
+}
+
+@test "dry run with no records, or records already owner-only, has no tightening PLAN line" {
+  local home dir data
+  home="$(_new_home plan-quiet)"
+  dir="$(_copy_fixture absent plan-quiet)"
+  data="$WORK_PARENT/plan-quiet.data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir"
+  [ "$status" -eq 0 ]
+  _lacks "$output" "would restrict"
+
+  _seed_loose_records "$data"
+  chmod 700 "$data" "$data/observability"
+  chmod 600 "$data/observability/events.jsonl" "$data/observability/events.jsonl.1"
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir"
+  [ "$status" -eq 0 ]
+  _lacks "$output" "would restrict"
+}
