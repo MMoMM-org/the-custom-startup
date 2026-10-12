@@ -143,8 +143,8 @@ jq 'select(.kind == "skill")' "$HOME/.claude/plugins/data/observability-the-cust
 ```
 
 Every line carries four fields no matter what kind of event it is — `ts` (UTC timestamp), `kind`
-(what happened — `instruction`, `skill`, `dispatch`, `agent`, `git`, `state`, or `hook`), `session` (the session it happened
-in), and `repo` (this repo's name, never an absolute path) — plus a handful of fields specific to
+(what happened — `instruction`, `skill`, `dispatch`, `agent`, `git`, `state`, or `hook`),
+`session` (the session it happened in), and `repo` (this repo's name, never an absolute path) — plus a handful of fields specific to
 that `kind`. A line may also carry `"truncated":true` if one of its fields was cut down to the
 256-byte-per-field limit.
 
@@ -382,10 +382,8 @@ to turn recording on.
 There's a companion skill, `observability-setup`, backed by a dispatcher script at
 `plugins/tcs-helper/skills/observability-setup/lib/setup.sh`. It does everything "Registering the
 hooks" (above) walks through by hand, plus one thing a hand edit cannot check for itself: whether
-version control actually ignores what it is about to write. `install` also restricts existing
-record files to owner-only (directories `0700`, `events.jsonl*` `0600`). When
-`CLAUDE_OBSERVABILITY_DATA` is set in the environment `install` runs in, the directory it names is
-the record directory, so that directory itself is set to `0700`.
+version control actually ignores what it is about to write. The skill documents the owner-only
+permissions `install` applies to existing record files, including under `CLAUDE_OBSERVABILITY_DATA`.
 
 Three verbs, each taking `--target <path>` (the repository, or a subdirectory of one, to act on):
 
@@ -418,13 +416,9 @@ A few things worth knowing before running it:
   Stopping recording and discarding what was already recorded are two separate acts; `remove` only
   ever performs the first. Use "How to delete it" (above) if discarding records is what you
   actually want.
-- **After updating the plugin, re-run `install` in every registered repository.** The bundle under
-  `$HOME` is shared, so the first repository updated makes the bundle current for all of them, but
-  each repository's own entries stay as they were. `status` then reports `OURS-INCOMPLETE`, naming
-  each `<event> (missing)` or `<event> (outdated)`. A registration from before spec 021 shows
-  `PreToolUse (outdated), UserPromptExpansion (missing)` and records no typed skills, dispatches or
-  git operations until `install` runs there. One run replaces the outdated
-  entry, adds the missing one, and leaves the other entries and any foreign ones alone.
+- **After updating the plugin, re-run `install` in every registered repository.** One run replaces
+  outdated entries, adds missing ones, and leaves other entries and any foreign ones alone. The
+  `OURS-INCOMPLETE` reading and what it means: see the `observability-setup` skill.
 
 ## Watching several repositories at once: the locations config
 
