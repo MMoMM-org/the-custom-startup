@@ -144,9 +144,9 @@ jq 'select(.kind == "skill")' "$HOME/.claude/plugins/data/observability-the-cust
 
 Every line carries four fields no matter what kind of event it is — `ts` (UTC timestamp), `kind`
 (what happened — `instruction`, `skill`, `dispatch`, `agent`, `git`, `state`, or `hook`),
-`session` (the session it happened in), and `repo` (this repo's name, never an absolute path) — plus a handful of fields specific to
-that `kind`. A line may also carry `"truncated":true` if one of its fields was cut down to the
-256-byte-per-field limit.
+`session` (the session it happened in), and `repo` (this repo's name, never an absolute path) —
+plus a handful of fields specific to that `kind`. A line may also carry `"truncated":true` if one
+of its fields was cut down to the 256-byte-per-field limit.
 
 ### The fields each kind carries
 
