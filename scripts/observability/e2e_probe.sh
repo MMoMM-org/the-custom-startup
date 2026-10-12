@@ -368,7 +368,7 @@ _check_report() {
 }
 
 _check_report_git() {
-  local triples="$1" sub_commits main_reset
+  local triples="$1" sub_commits main_reset rc
   sub_commits="$(printf '%s\n' "$triples" | grep -c "^$SID_R4|general-purpose [^|]*|commit -- flags: --allow-empty -m")"
   main_reset="$(printf '%s\n' "$triples" | grep "^$SID_R3|main|reset -- flags: --hard; overrides: CLAUDE_ALLOW_RESET_HARD (first position)")"
   [ "$sub_commits" = "2" ] && [ -n "$main_reset" ] \

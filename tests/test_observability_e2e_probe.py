@@ -243,14 +243,14 @@ def _installed_commands() -> dict[str, str]:
     return {event: f'"$HOME/.claude/observability/{script}"' for event, script in INSTALLED.items()}
 
 
-def _run_registration(tmp_path: Path, commands: dict[str, str]):
+def _run_registration(tmp_path: Path, commands: dict[str, str], shome: Path | None = None):
     """Write a settings.local.json holding `commands`, repoint it, check it."""
     repo = tmp_path / "repo"
     (repo / ".claude").mkdir(parents=True)
     hooks = {e: [{"matcher": "", "hooks": [{"type": "command", "command": c}]}] for e, c in commands.items()}
     settings = {"env": {"CLAUDE_OBSERVABILITY_ENABLED": "1"}, "hooks": hooks}
     (repo / ".claude" / "settings.local.json").write_text(json.dumps(settings, indent=2))
-    env = {**os.environ, "REPO": str(repo), "S_HOME": str(tmp_path / "shome")}
+    env = {**os.environ, "REPO": str(repo), "S_HOME": str(shome or tmp_path / "shome")}
     script = f'source "{PROBE}"; FAILURES=0; _repoint_registration; _check_registration; echo REACHED'
     return subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=60)
 
@@ -282,10 +282,17 @@ def test_registration_repoints_every_occurrence_of_the_bundle_prefix(tmp_path):
     assert "$HOME" not in result.stdout
 
 
-def test_registration_prefix_is_literal_not_a_pattern(tmp_path):
-    lookalike = '"/x/shomeX.claude/observability/log_tool.sh"'  # `.` must not match any character
+def test_registration_prefix_is_literal_not_a_regex(tmp_path):
+    # Shares the real bundle prefix and differs only where a regex `.` would match.
+    lookalike = f'"{tmp_path}/shome/Xclaude/observability/log_tool.sh"'
     result = _run_registration(tmp_path, {**_installed_commands(), "PreToolUse": lookalike})
-    assert result.returncode == 2, result.stdout
+    assert result.returncode == 2 and "REACHED" not in result.stdout, result.stdout
+
+
+def test_registration_prefix_is_literal_not_a_glob(tmp_path):
+    result = _run_registration(tmp_path, _installed_commands(), shome=tmp_path / "sh[o]me*")
+    assert result.returncode == 0 and "REACHED" in result.stdout, result.stderr
+    assert _failed(result.stdout) == [], result.stdout
 
 
 @pytest.mark.parametrize("keep", [3, 5])
