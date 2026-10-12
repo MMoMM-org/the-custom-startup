@@ -6,7 +6,7 @@
 # tools worth recording. One process per tool call, dispatched on tool_name:
 #   Skill -> kind=skill    route=tool          (F1 AC2)
 #   Agent -> kind=dispatch                      (F2, ADR-8)
-#   Bash  -> kind=git      hand-off to T2.2     (git_ops.sh; not written here)
+#   Bash  -> kind=git      one record per non-read-only git call (F3, ADR-9)
 #   other -> nothing
 #
 # ORDER OF OPERATIONS IS THE PERFORMANCE BUDGET (ADR-1, ADR-6, CON-7). This
@@ -19,6 +19,10 @@
 #                         `"command":"` key (cwd/transcript_path may contain
 #                         "github"); no "git" there -> exit, nothing sourced
 #   5. only now        -> source logwrite.sh, extract, write
+#   6. git path only   -> source git_ops.sh (guarded), decode, parse; only
+#                         when the parse yields a record: one `git rev-parse
+#                         --show-toplevel`, shared by every record of the
+#                         payload via `_observability_toplevel=` (CON-7)
 #
 # FIELD OCCURRENCE (`_observability_field` takes the FIRST `"key":"` hit and is
 # linear for any key position, so a 200 KB prompt costs nothing extra):
@@ -58,9 +62,59 @@ case "${BASH_SOURCE[0]}" in */*) _log_tool_dir="${BASH_SOURCE[0]%/*}" ;; *) _log
 # shellcheck source=./logwrite.sh
 . "$_log_tool_dir/logwrite.sh" >/dev/null 2>&1 || exit 0
 
-# T2.2 hand-off: parse the command and write git records. Not implemented in
-# T2.1; the function exists so T2.2 replaces one clearly marked point.
-_log_tool_git() { return 0; }
+# _log_tool_caller  sets the array `_caller` to the caller fields of a
+# dispatch or git record: caller=main, or caller=subagent with the payload's
+# agent_type and agent_id (see FIELD OCCURRENCE above).
+_log_tool_caller() {
+  local agent_id agent_type
+  agent_id="$(_observability_field "$_payload" agent_id)" || agent_id=""
+  _caller=(caller=main)
+  if [ -n "$agent_id" ]; then
+    agent_type="$(_observability_field "$_payload" agent_type)" || agent_type=""
+    _caller=(caller=subagent caller_agent_type="$agent_type" caller_agent_id="$agent_id")
+  fi
+}
+
+# _log_tool_git  writes one kind=git record per line _git_ops_parse prints
+# (subcommand TAB action TAB flags TAB overrides TAB override_first). Every
+# field is a name from the parser (CON-13); empty fields are written as ""
+# so every git record has one shape. git_ops.sh missing, unreadable or
+# defining nothing (a half-updated bundle) means no git record and no
+# output: the skill and dispatch paths never source it.
+_log_tool_git() {
+  [ -f "$_log_tool_dir/git_ops.sh" ] || return 0
+  # shellcheck source=./git_ops.sh
+  . "$_log_tool_dir/git_ops.sh" >/dev/null 2>&1 || return 0
+  declare -F _git_ops_command _git_ops_parse >/dev/null 2>&1 || return 0
+
+  local cmd lines line rest sub action flags overrides first top use_id
+  local TAB=$'\t' NL=$'\n'
+  cmd="$(_git_ops_command "$_payload" 2>/dev/null)" || cmd=""
+  [ -n "$cmd" ] || return 0
+  lines="$(_git_ops_parse "$cmd" 2>/dev/null)" || lines=""
+  [ -n "$lines" ] || return 0
+
+  # Once per payload, not per record, and only when there is a record.
+  top="$(git rev-parse --show-toplevel 2>/dev/null)" || top=""
+  use_id="$(_observability_field "$_payload" tool_use_id)" || use_id=""
+  _log_tool_caller
+
+  rest="$lines$NL"
+  while [ -n "$rest" ]; do
+    line="${rest%%"$NL"*}"
+    rest="${rest#*"$NL"}"
+    [ -n "$line" ] || continue
+    # Split by hand: with IFS=TAB `read` would merge empty fields.
+    sub="${line%%"$TAB"*}";       line="${line#*"$TAB"}"
+    action="${line%%"$TAB"*}";    line="${line#*"$TAB"}"
+    flags="${line%%"$TAB"*}";     line="${line#*"$TAB"}"
+    overrides="${line%%"$TAB"*}"; first="${line#*"$TAB"}"
+    _observability_write kind=git session="$_session" "_observability_toplevel=$top" \
+      subcommand="$sub" action="$action" flags="$flags" overrides="$overrides" \
+      override_first="$first" "${_caller[@]}" tool_use_id="$use_id" >/dev/null 2>&1
+  done
+  return 0
+}
 
 _session="$(_observability_field "$_payload" session_id)" || _session=""
 
@@ -78,12 +132,7 @@ case "$_kind" in
     _name="$(_observability_field "$_payload" name)" || _name=""
     _use_id="$(_observability_field "$_payload" tool_use_id)" || _use_id=""
     _desc="$(_observability_field "$_payload" description)" || _desc=""
-    _agent_id="$(_observability_field "$_payload" agent_id)" || _agent_id=""
-    _caller=(caller=main)
-    if [ -n "$_agent_id" ]; then
-      _caller_type="$(_observability_field "$_payload" agent_type)" || _caller_type=""
-      _caller=(caller=subagent caller_agent_type="$_caller_type" caller_agent_id="$_agent_id")
-    fi
+    _log_tool_caller
     _observability_write kind=dispatch session="$_session" \
       subagent_type="$_sub_type" name="$_name" tool_use_id="$_use_id" \
       "${_caller[@]}" "detail:description=$_desc" >/dev/null 2>&1

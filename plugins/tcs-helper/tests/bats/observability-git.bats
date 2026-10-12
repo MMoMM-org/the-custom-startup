@@ -20,6 +20,9 @@
 # oracle), never derived from the parser. Records are built with `rec`, which
 # joins five fields with TABs.
 #
+# The last section (T2.2) runs log_tool.sh end to end and reads the git
+# records back from events.jsonl.
+#
 # bash 3.2 compatible; no process substitution (bats `run` forbids it).
 
 setup() {
@@ -721,9 +724,12 @@ expect_decode() {
 
 # --- CON-13: no value in any record -----------------------------------------
 
-@test "secrets corpus: no value reaches any record" {
-  local s="hunter2tok" i out line why failed=""
-  local -a corpus
+# _secrets_corpus  fills the caller's array `corpus` with credential-bearing
+#   command lines. Shared by the parser test below and the end-to-end test in
+#   the T2.2 section (the same corpus through log_tool.sh into events.jsonl).
+#   Every secret word is one of hunter2tok, hunter2, push-it, é, Ä.
+_secrets_corpus() {
+  local s="hunter2tok"
   corpus=(
     "GITHUB_TOKEN=$s git push"
     "GH_TOKEN=$s CLAUDE_ALLOW_PUSH=1 git push origin main"
@@ -793,6 +799,12 @@ expect_decode() {
     'git Ä --x'
     'git pushé'
   )
+}
+
+@test "secrets corpus: no value reaches any record" {
+  local i out line why failed=""
+  local -a corpus
+  _secrets_corpus
   _utf8_locale || return 1
   for ((i = 0; i < ${#corpus[@]}; i++)); do
     out="$(export LC_ALL="$UTF8_LOCALE"; _git_ops_parse "${corpus[$i]}")"
@@ -1143,4 +1155,364 @@ _scale() {
     case "$-" in *f*) ;; *) echo noglob-switched-off ;; esac' _ "$BUNDLE_LIB"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
+}
+
+# =============================================================================
+# T2.2 -- end to end: log_tool.sh writes git records
+# =============================================================================
+#
+# The adapter is exec'd as an external process from inside a throwaway repo,
+# payload on stdin, as the harness runs it; the record file is then read
+# back. Parser-level expectations live above; these cases check what reaches
+# events.jsonl: the record shape, the caller fields, the fail-open paths and
+# the cost (PRD F3 AC1-AC10, SDD Runtime View primary flow and error
+# handling, CON-7, CON-13).
+#
+# Each case calls _e2e_setup first; the parser cases above stay fixture-free.
+
+_e2e_setup() {
+  ADAPTER_DIR="$REPO_ROOT/plugins/tcs-helper/scripts/observability"
+  ADAPTER="$ADAPTER_DIR/log_tool.sh"
+  GUARD="$REPO_ROOT/plugins/tcs-git-helpers/scripts/block-bad-git-ops.sh"
+
+  local tmpbase="${TMPDIR:-/tmp}"
+  while [ "$tmpbase" != "/" ] && [ "${tmpbase%/}" != "$tmpbase" ]; do
+    tmpbase="${tmpbase%/}"
+  done
+  TEST_DIR="$(mktemp -d "$tmpbase/tcs-observability-git.XXXXXX")" || return 1
+
+  # git -C plus an isolated global config: a failed init must never fall
+  # back to the enclosing repository.
+  REPO="$TEST_DIR/myrepo"
+  mkdir -p "$REPO"
+  export GIT_CONFIG_GLOBAL=/dev/null
+  git -C "$REPO" init -q -b main || return 1
+  [ -d "$REPO/.git" ] || return 1
+
+  DATA="$TEST_DIR/data"
+  EVENTS="$DATA/observability/events.jsonl"
+
+  # Warm the files under test: macOS charges 150-290 ms for a file's first exec.
+  printf '{}' | CLAUDE_OBSERVABILITY_ENABLED=1 "$ADAPTER" >/dev/null 2>&1 </dev/null
+  return 0
+}
+
+teardown() {
+  [ -n "${TEST_DIR:-}" ] && [ -d "$TEST_DIR" ] && rm -rf "$TEST_DIR"
+  return 0
+}
+
+# _json_str <text>  prints <text> as the body of a JSON string (no quotes).
+_json_str() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+# _bash_payload <command> [extra top-level JSON fragment]
+#   A PreToolUse Bash payload in the field order Claude Code 2.1.296 sends.
+_bash_payload() {
+  printf '{"session_id":"sess-g","transcript_path":"/home/u/.claude/projects/x/s.jsonl","cwd":"%s"%s,"permission_mode":"default","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"%s","description":"d"},"tool_use_id":"toolu_01GIT"}' \
+    "$REPO" "${2:-}" "$(_json_str "$1")"
+}
+
+# _adapter <script> <payload file> [NAME=VALUE ...]
+#   Runs <script> from $REPO with the payload on stdin and recording on.
+#   Sets status; stdout and stderr land in $TEST_DIR/out and $TEST_DIR/err.
+_adapter() {
+  local script="$1" file="$2"
+  shift 2
+  status=0
+  env CLAUDE_OBSERVABILITY_ENABLED=1 CLAUDE_OBSERVABILITY_DATA="$DATA" "$@" \
+    bash -c 'cd "$1" && "$2" < "$3"' _ "$REPO" "$script" "$file" \
+    >"$TEST_DIR/out" 2>"$TEST_DIR/err" </dev/null || status=$?
+}
+
+# _record_git <command> [extra fragment] [NAME=VALUE ...]  runs the real
+#   adapter on a Bash payload for <command> and requires exit 0, silence.
+_record_git() {
+  local cmd="$1" extra="${2:-}"
+  shift 2 2>/dev/null || shift $#
+  _bash_payload "$cmd" "$extra" > "$TEST_DIR/payload.json"
+  _adapter "$ADAPTER" "$TEST_DIR/payload.json" "$@"
+  _silent_ok
+}
+
+_silent_ok() {
+  [ "$status" -eq 0 ] || { echo "exit $status"; return 1; }
+  [ -s "$TEST_DIR/out" ] && { echo "stdout: $(cat "$TEST_DIR/out")"; return 1; }
+  [ -s "$TEST_DIR/err" ] && { echo "stderr: $(cat "$TEST_DIR/err")"; return 1; }
+  return 0
+}
+
+# _git_lines  prints the kind=git records written so far (one per line).
+_git_lines() {
+  [ -f "$EVENTS" ] || return 0
+  grep -F '"kind":"git"' "$EVENTS" || true
+}
+
+_git_count() {
+  local n
+  n="$(_git_lines | wc -l | tr -d ' ')"
+  printf '%s' "$n"
+}
+
+# _expect_line <line> <exact JSON fragment>...  every fragment must occur.
+_expect_line() {
+  local line="$1" f
+  shift
+  for f in "$@"; do
+    case "$line" in
+      *"$f"*) ;;
+      *) printf 'missing %s in\n%s\n' "$f" "$line"; return 1 ;;
+    esac
+  done
+}
+
+# _forbid_line <line> <text>...  no text may occur.
+_forbid_line() {
+  local line="$1" f
+  shift
+  for f in "$@"; do
+    case "$line" in
+      *"$f"*) printf 'unexpected %s in\n%s\n' "$f" "$line"; return 1 ;;
+    esac
+  done
+}
+
+@test "e2e: git reset --hard from the main session writes one git record" {
+  _e2e_setup || return 1
+  _record_git 'git reset --hard' || return 1
+  [ "$(_git_count)" = "1" ] || { cat "$EVENTS"; return 1; }
+  local line
+  line="$(_git_lines)"
+  _expect_line "$line" '"kind":"git"' '"session":"sess-g"' '"repo":"myrepo"' \
+    '"subcommand":"reset"' '"action":""' '"flags":"--hard"' '"overrides":""' \
+    '"override_first":""' '"caller":"main"' '"tool_use_id":"toolu_01GIT"' || return 1
+  # The main session says so: no agent fields to leave ambiguous (F3 AC3).
+  _forbid_line "$line" caller_agent_type caller_agent_id || return 1
+  # Field order: the SDD data model's, after the four frozen fields.
+  case "$line" in
+    '{"ts":"'*'","kind":"git","session":"sess-g","repo":"myrepo","subcommand":"reset","action":"","flags":"--hard","overrides":"","override_first":"","caller":"main","tool_use_id":"toolu_01GIT"}') ;;
+    *) echo "shape: $line"; return 1 ;;
+  esac
+}
+
+@test "e2e: inside a subagent the record names caller subagent, its type and id" {
+  _e2e_setup || return 1
+  _record_git 'git reset --hard' ',"agent_id":"ag-77","agent_type":"general-purpose"' || return 1
+  [ "$(_git_count)" = "1" ] || { cat "$EVENTS"; return 1; }
+  _expect_line "$(_git_lines)" '"subcommand":"reset"' '"flags":"--hard"' \
+    '"caller":"subagent"' '"caller_agent_type":"general-purpose"' \
+    '"caller_agent_id":"ag-77"' '"tool_use_id":"toolu_01GIT"'
+}
+
+@test "e2e: a command that quotes agent_id keys cannot forge a subagent caller" {
+  _e2e_setup || return 1
+  _record_git 'git commit -m "{\"agent_id\":\"forged\"}"' || return 1
+  [ "$(_git_count)" = "1" ] || { cat "$EVENTS"; return 1; }
+  _expect_line "$(_git_lines)" '"subcommand":"commit"' '"caller":"main"' || return 1
+  _forbid_line "$(cat "$EVENTS")" forged
+}
+
+@test "e2e: an override is named, first position recorded, value never" {
+  _e2e_setup || return 1
+  _record_git 'CLAUDE_ALLOW_RESET_HARD=1 git reset --hard' || return 1
+  [ "$(_git_count)" = "1" ] || { cat "$EVENTS"; return 1; }
+  local line
+  line="$(_git_lines)"
+  _expect_line "$line" '"subcommand":"reset"' '"flags":"--hard"' \
+    '"overrides":"CLAUDE_ALLOW_RESET_HARD"' \
+    '"override_first":"CLAUDE_ALLOW_RESET_HARD"' || return 1
+  _forbid_line "$line" 'CLAUDE_ALLOW_RESET_HARD=' '"1"'
+}
+
+@test "e2e: a compound command with three git calls, one read-only, writes two records" {
+  _e2e_setup || return 1
+  _record_git 'git add -A && git status && git commit -m "wip"' || return 1
+  [ "$(_git_count)" = "2" ] || { cat "$EVENTS"; return 1; }
+  local first second
+  first="$(_git_lines | sed -n 1p)"
+  second="$(_git_lines | sed -n 2p)"
+  _expect_line "$first" '"subcommand":"add"' '"flags":"-A"' '"tool_use_id":"toolu_01GIT"' || return 1
+  _expect_line "$second" '"subcommand":"commit"' '"flags":"-m"' '"tool_use_id":"toolu_01GIT"' || return 1
+  _forbid_line "$(cat "$EVENTS")" '"subcommand":"status"' wip
+}
+
+@test "e2e: git status alone writes nothing" {
+  _e2e_setup || return 1
+  _record_git 'git status' || return 1
+  [ ! -e "$EVENTS" ] || { cat "$EVENTS"; return 1; }
+}
+
+@test "e2e: a command naming git without running it writes nothing" {
+  _e2e_setup || return 1
+  # Passes the adapter's "git" substring test, so the parser runs.
+  _record_git 'echo github digit && ls .gitignore' || return 1
+  [ ! -e "$EVENTS" ] || { cat "$EVENTS"; return 1; }
+  _record_git 'ls -la' || return 1
+  [ ! -e "$EVENTS" ] || { cat "$EVENTS"; return 1; }
+}
+
+@test "e2e: git stash pop is recorded with action pop" {
+  _e2e_setup || return 1
+  _record_git 'git stash pop' || return 1
+  [ "$(_git_count)" = "1" ] || { cat "$EVENTS"; return 1; }
+  _expect_line "$(_git_lines)" '"subcommand":"stash"' '"action":"pop"' '"flags":""'
+}
+
+@test "e2e: an oversize command writes the one value-free marker record" {
+  _e2e_setup || return 1
+  _record_git "git commit -m $(_pad 5000)" || return 1
+  [ "$(_git_count)" = "1" ] || { cat "$EVENTS"; return 1; }
+  _expect_line "$(_git_lines)" '"subcommand":"?"' '"flags":"(oversize)"' || return 1
+  _forbid_line "$(cat "$EVENTS")" xxxxxxxx
+}
+
+@test "e2e: flags over 256 bytes are cut by the writer and marked truncated" {
+  _e2e_setup || return 1
+  local f="" i
+  for ((i = 0; i < 40; i++)); do f="$f --flag-number-$i"; done
+  _record_git "git push$f" || return 1
+  [ "$(_git_count)" = "1" ] || { cat "$EVENTS"; return 1; }
+  _expect_line "$(_git_lines)" '"subcommand":"push"' '"flags":"--flag-number-0 ' '"truncated":true'
+}
+
+@test "e2e: a guard-denied git reset --hard is still recorded (hooks run side by side)" {
+  _e2e_setup || return 1
+  command -v jq >/dev/null 2>&1 || { echo "jq is required by the guard under test"; return 1; }
+  _bash_payload 'git reset --hard' > "$TEST_DIR/payload.json"
+  # Claude Code runs every matching PreToolUse hook on the same payload;
+  # neither waits for the other.
+  _adapter "$GUARD" "$TEST_DIR/payload.json"
+  [ "$status" -eq 0 ] || return 1
+  grep -qF '"permissionDecision":"deny"' "$TEST_DIR/out" || { cat "$TEST_DIR/out"; return 1; }
+  grep -qF 'RESET_HARD' "$TEST_DIR/out" || return 1
+  _adapter "$ADAPTER" "$TEST_DIR/payload.json"
+  _silent_ok || return 1
+  [ "$(_git_count)" = "1" ] || { cat "$EVENTS"; return 1; }
+  _expect_line "$(_git_lines)" '"subcommand":"reset"' '"flags":"--hard"' '"override_first":""'
+}
+
+@test "e2e: git_ops.sh missing or broken: no git record, exit 0, silent; skill and dispatch still record" {
+  _e2e_setup || return 1
+  local bundle="$TEST_DIR/bundle" variant
+  for variant in missing syntax empty; do
+    rm -rf "$bundle" "$DATA"
+    mkdir -p "$bundle"
+    cp "$ADAPTER_DIR/log_tool.sh" "$ADAPTER_DIR/logwrite.sh" "$bundle/"
+    case "$variant" in
+      syntax) printf '_git_ops_parse() {\n  if then\n' > "$bundle/git_ops.sh" ;;
+      empty) : > "$bundle/git_ops.sh" ;;
+    esac
+    _bash_payload 'git reset --hard' > "$TEST_DIR/payload.json"
+    _adapter "$bundle/log_tool.sh" "$TEST_DIR/payload.json"
+    _silent_ok || { echo "variant $variant"; return 1; }
+    [ "$(_git_count)" = "0" ] || { echo "variant $variant"; cat "$EVENTS"; return 1; }
+
+    printf '{"session_id":"sess-g","hook_event_name":"PreToolUse","tool_name":"Skill","tool_input":{"skill":"tcs-issues:issue"},"tool_use_id":"toolu_S"}' > "$TEST_DIR/skill.json"
+    _adapter "$bundle/log_tool.sh" "$TEST_DIR/skill.json"
+    _silent_ok || return 1
+    printf '{"session_id":"sess-g","hook_event_name":"PreToolUse","tool_name":"Agent","tool_input":{"description":"d","prompt":"p","subagent_type":"Explore"},"tool_use_id":"toolu_A"}' > "$TEST_DIR/agent.json"
+    _adapter "$bundle/log_tool.sh" "$TEST_DIR/agent.json"
+    _silent_ok || return 1
+    grep -qF '"kind":"skill"' "$EVENTS" || { echo "variant $variant: no skill record"; return 1; }
+    grep -qF '"kind":"dispatch"' "$EVENTS" || { echo "variant $variant: no dispatch record"; return 1; }
+  done
+}
+
+@test "e2e: git rev-parse runs once per payload, however many records" {
+  _e2e_setup || return 1
+  local shim="$TEST_DIR/shim" count="$TEST_DIR/rev-parse.count" real
+  real="$(command -v git)"
+  mkdir -p "$shim"
+  printf '#!/bin/sh\n[ "$1" = rev-parse ] && printf x >> "%s"\nexec "%s" "$@"\n' "$count" "$real" > "$shim/git"
+  chmod +x "$shim/git"
+  : > "$count"
+  _record_git 'git add -A && git commit -m x && git push && git tag v1' '' PATH="$shim:$PATH" || return 1
+  [ "$(_git_count)" = "4" ] || { cat "$EVENTS"; return 1; }
+  [ "$(wc -c < "$count" | tr -d ' ')" = "1" ] || { echo "rev-parse ran $(wc -c < "$count" | tr -d ' ') times"; return 1; }
+  # The toplevel it resolved is the one every record carries.
+  [ "$(grep -c '"repo":"myrepo"' "$EVENTS" | tr -d ' ')" = "4" ]
+}
+
+@test "e2e: the secrets corpus leaves no value in events.jsonl, reduced or detail" {
+  _e2e_setup || return 1
+  local -a corpus
+  _secrets_corpus
+  local mode i before after w failed=""
+  for mode in 0 1; do
+    rm -rf "$DATA"
+    for ((i = 0; i < ${#corpus[@]}; i++)); do
+      before="$(_git_count)"
+      _bash_payload "${corpus[$i]}" > "$TEST_DIR/payload.json"
+      _adapter "$ADAPTER" "$TEST_DIR/payload.json" CLAUDE_OBSERVABILITY_DETAIL="$mode"
+      _silent_ok || { failed="$failed [detail=$mode not silent: ${corpus[$i]}]"; continue; }
+      after="$(_git_count)"
+      # Every corpus command is a git command: no record would make the
+      # leak check below vacuous for it.
+      [ "$after" -gt "$before" ] || failed="$failed [detail=$mode no record: ${corpus[$i]}]"
+    done
+    for w in hunter2tok hunter2 push-it é Ä; do
+      if grep -qF -- "$w" "$EVENTS"; then
+        failed="$failed [detail=$mode: $w in $(grep -F -- "$w" "$EVENTS" | head -1)]"
+      fi
+    done
+  done
+  [ -z "$failed" ] || { echo "$failed"; return 1; }
+}
+
+# _best_ms <runs> <script> <payload file>  prints the fastest wall time, in
+#   ms, of <runs> adapter execs (wall clock, so a busy machine only slows it).
+_best_ms() {
+  local runs="$1" script="$2" file="$3" i t0 t1 best=""
+  for ((i = 0; i < runs; i++)); do
+    t0="$(_now_us)"
+    CLAUDE_OBSERVABILITY_ENABLED=1 CLAUDE_OBSERVABILITY_DATA="$DATA" "$script" < "$file" >/dev/null 2>&1
+    t1="$(_now_us)"
+    if [ -z "$best" ] || [ $((t1 - t0)) -lt "$best" ]; then best=$((t1 - t0)); fi
+  done
+  printf '%d' $((best / 1000))
+}
+
+_now_us() {
+  perl -MTime::HiRes=time -e 'printf q{%d}, time()*1000000'
+}
+
+@test "perf: one git record costs at most 15 ms over the non-git path (CON-7)" {
+  _e2e_setup || return 1
+  command -v perl >/dev/null 2>&1 || { echo "perl is required for a sub-second clock"; return 1; }
+  _bash_payload 'git push origin main' > "$TEST_DIR/git.json"
+  _bash_payload 'ls -la' > "$TEST_DIR/nongit.json"
+  local git_ms floor_ms added budget
+  (cd "$REPO" && _best_ms 2 "$ADAPTER" "$TEST_DIR/git.json" >/dev/null)
+  floor_ms="$(cd "$REPO" && _best_ms 15 "$ADAPTER" "$TEST_DIR/nongit.json")"
+  git_ms="$(cd "$REPO" && _best_ms 15 "$ADAPTER" "$TEST_DIR/git.json")"
+  added=$((git_ms - floor_ms))
+  budget="$(_perf_budget_ms 15)"
+  printf 'git record: %d ms total, %d ms non-git floor, %d ms added (budget %d ms)\n' \
+    "$git_ms" "$floor_ms" "$added" "$budget" >&3
+  [ "$(_git_count)" -ge 1 ] || return 1
+  [ "$added" -le "$budget" ]
+}
+
+@test "perf (gross guard): a 4 KB compound git command stays bounded" {
+  _e2e_setup || return 1
+  command -v perl >/dev/null 2>&1 || { echo "perl is required for a sub-second clock"; return 1; }
+  local cmd="" ms budget
+  local msg=""
+  # A typical large command: a few git calls around a long message.
+  while [ "${#msg}" -lt 3950 ]; do msg="${msg}Rework the parser so a value stays one word. "; done
+  cmd="git add -A && git commit -m \"${msg:0:3950}\" && git push origin main"
+  [ "${#cmd}" -le 4096 ] || { echo "fixture is ${#cmd} bytes"; return 1; }
+  _bash_payload "$cmd" > "$TEST_DIR/big.json"
+  ms="$(cd "$REPO" && _best_ms 3 "$ADAPTER" "$TEST_DIR/big.json")"
+  budget="$(_perf_budget_ms 1000)"
+  printf '4 KB compound command (%d bytes): %d ms, %d records per run (budget %d ms)\n' \
+    "${#cmd}" "$ms" $(( $(_git_count) / 3 )) "$budget" >&3
+  [ "$(_git_count)" = "9" ] || return 1
+  [ "$ms" -le "$budget" ]
 }
