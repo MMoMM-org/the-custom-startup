@@ -136,7 +136,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 
 > **Tracking Principle**: Track logical units that produce verifiable outcomes. The TDD cycle is the method, not separate tracked items.
 
-- [ ] [Phase 1: Writer hardening and git parsing](phase-1.md)
+- [x] [Phase 1: Writer hardening and git parsing](phase-1.md)
 - [ ] [Phase 2: Adapters](phase-2.md)
 - [ ] [Phase 3: Registration and install](phase-3.md)
 - [ ] [Phase 4: Report](phase-4.md)

@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Writer hardening and git parsing"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -35,7 +35,7 @@ Establishes the two pieces every new adapter stands on: a writer that creates ow
 
 - [x] **T1.1 Writer: owner-only creation and deny-list backstop** `[activity: backend]` `[parallel: true]`
 
-  1. Prime: `logwrite.sh` `_observability_write` (:601), its single `mkdir` (:643), the deny list (:557) and `_observability_field_is_detail_only` (:562) `[ref: SDD/Data Storage Changes]` `[ref: 018 SDD/Complex Logic]`
+  1. Prime: `logwrite.sh` `_observability_write` (:610 after T1.1), its `mkdir` (:661), the deny list (:559) and `_observability_field_is_detail_only` (:564) `[ref: SDD/Data Storage Changes]` `[ref: 018 SDD/Complex Logic]`
   2. Test: a fresh data dir is created 0700 and `events.jsonl` 0600; the caller's `umask` is unchanged afterwards; with detail off, unprefixed `args`, `command_args`, `description`, `tool_input` are dropped and the record still writes; with detail on, `detail:description` survives; existing deny-listed names still drop; an unwritable dir still returns 0 silently
   3. Implement: set and restore `umask 077` around the `mkdir -p` and the append in `logwrite.sh`; add the four names to the deny list
   4. Validate: `bats plugins/tcs-helper/tests/bats/observability-writer.bats` and the redaction suites green; shellcheck clean; mutate (drop the `umask`; drop one deny name) and watch a test fail
@@ -49,7 +49,7 @@ Establishes the two pieces every new adapter stands on: a writer that creates ow
   4. Validate: parity suite green; mutate one copied line (e.g. drop the dq `$(` handling) and the parity test fails; shellcheck clean
   5. Success: the bundle strips exactly as the guard does, without sourcing it `[ref: SDD/ADR-2]` `[ref: SDD/Constraints/CON-12]`
 
-- [ ] **T1.3 Git invocation parser** `[activity: backend]`
+- [x] **T1.3 Git invocation parser** `[activity: backend]`
 
   1. Prime: decoder and traced parse example, read-only predicate, command position, executor fallback `[ref: SDD/Implementation Examples]` `[ref: SDD/Runtime View/Complex Logic]` `[ref: SDD/ADR-3, ADR-9]`
   2. Test: decoder handles `\"`, `\\`, `\n`, `\t`, missing key and unterminated string (→ empty); the traced example yields exactly the two descriptions in the SDD; every always-read-only subcommand yields nothing; each flag-dependent form is nothing when read-only and recorded otherwise (`branch` vs `branch -D x` vs `branch newname`; `stash list` vs `stash pop`; `config --get` vs `config user.name x`; `tag` vs `tag v1`); an unknown subcommand is recorded; `git $X` gives `?`; global options (`-C dir`, `-c k=v`, `--git-dir=…`) are skipped with their values; `--opt=value` → `--opt`; `-mfoo` → `-m`, `-fd` → `-f`; `--` ends flags; `bash -c 'git reset --hard'` yields `reset`; a commit message mentioning `git reset` yields only `commit`; wrappers `env`/`sudo`/`command`/`nohup`/`time`/`exec` and leading assignments are skipped; `CLAUDE_ALLOW_*=1` names and `override_first` (the name, or empty) follow the guard's first-token rule incl. one leading `cd`/`pushd`, and `=0`/`=yes` are not overrides; `stash pop`/`stash drop`/`stash push`, `worktree remove`, `remote set-url` give their `action` and a positional outside the ACTIONS list gives none; global options with and without values (`-c x=y -C d commit`, `--git-dir x reset`, `-p log`, `--no-pager reset`); wrappers with options (`sudo -u u git push`, `env -i git …`, `env -u V git …`, `time -p git push`, `nice -n 5 git gc`, `timeout 5 git fetch`; `command -v git` is no invocation); openers (`x=$(git reset --hard)`, `` `git pull` ``, `(git reset)`, `if git pull; then`, `! git push`); newline-separated commands; `<<<` here-string; `git`, `git --version`, `git --help` give nothing; `checkout -- file` records `--` as a flag name; executor fallback gives `flags: (executor)` and the executor cases join the secrets corpus; a secrets corpus (token assignments, `https://u:p@h`, `Authorization:` headers, `-mSECRET`, `--with-token`, `set-url` with a token) leaves no value in any description
@@ -57,14 +57,14 @@ Establishes the two pieces every new adapter stands on: a writer that creates ow
   4. Validate: `plugins/tcs-helper/tests/bats/observability-git.bats` green; mutate the read-only list (drop `status`), the short-flag reduction, the ACTIONS list and the executor fallback — each fails a named test; shellcheck clean
   5. Success: parsing meets every F3 rule on names, scope and edge cases `[ref: PRD/F3 AC6, AC7, AC8, AC9]` `[ref: PRD/Detailed Feature Specifications/Business Rules 2, 3, 4, 6]` `[ref: SDD/Acceptance Criteria/F3]`
 
-- [ ] **T1.5 Linear clause stripping in the guard and its copy** `[activity: backend]`
+- [x] **T1.5 Linear clause stripping in the guard and its copy** `[activity: backend]`
 
   1. Prime: `plugins/tcs-git-helpers/scripts/lib/pattern_match.sh` `_strip_quoted`, `_strip_heredocs`; the measurement in SDD Known Technical Issues; `observability-git-parity.bats` `[ref: SDD/Complex Logic/Size cap]` `[ref: SDD/ADR-2]`
-  2. Test: a differential test feeds a corpus plus generated inputs (random mixes of quotes, `$(`, backticks, backslashes, heredocs, separators) through the old and the new implementation and requires byte-identical output; a scale test bounds `_strip_quoted` and `_strip_heredocs` at 20 KB and 200 KB (linear growth: 10x input ≤ ~15x time); the full guard suite stays green
+  2. Test: a differential test feeds a corpus plus generated inputs (random mixes of quotes, `$(`, backticks, backslashes, heredocs, separators) through the old and the new implementation and requires byte-identical output; a scale test bounds `_strip_quoted` and `_strip_heredocs` at 20 KB and 200 KB (linear growth: 10x input ≤ 20x time; quadratic code shows ~100x); the full guard suite stays green
   3. Implement: rewrite both functions in `pattern_match.sh` to consume runs in bulk instead of one byte per iteration with re-slicing; recopy into `git_ops.sh` under `_git_ops_` names (parity suite green)
   4. Validate: guard bats (all), parity, git bats; bash 3.2 and 5.2; mutate one branch of the new code and the differential test fails
-  5. Success: the guard and the recorder strip a 20 KB command in under 100 ms for prose and under 250 ms for token-dense input (a shell special every few bytes; measured 45-92 ms); output unchanged for every input `[ref: SDD/Known Technical Issues]`
+  5. Success: the guard and the recorder strip a 20 KB command in under 100 ms for prose and under 250 ms for token-dense input (a shell special every few bytes; measured 45-102 ms under load); output unchanged for every input `[ref: SDD/Known Technical Issues]`
 
-- [ ] **T1.4 Phase Validation** `[activity: validate]`
+- [x] **T1.4 Phase Validation** `[activity: validate]`
 
   - Run the writer, parity and git suites plus all existing observability suites; shellcheck every touched script. Check against SDD CON-13 and ADR-2/3/4/9.

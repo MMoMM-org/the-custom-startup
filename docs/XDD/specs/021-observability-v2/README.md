@@ -46,6 +46,7 @@
 | 2026-10-12 | Parse cap with an `(oversize)` marker record | T1.3 code review measured the decoder at 105 s for an 87 KB payload and the parse at 25 s for a 20 KB quoted message. Above the cap one value-free `? (oversize)` record is written when a free-standing `git` word is present. Chosen by Marcus over a silent cap and no cap. |
 | 2026-10-12 | The guard's quadratic `_strip_quoted` is fixed in this spec (T1.5), both copies | Measured 3.2 s at 10 KB in the production guard. Chosen by Marcus over a separate issue; parity keeps the two copies equal. |
 | 2026-10-12 | Parse cap 4096 bytes | Measured after T1.3/T1.5 made every step linear: a 15 KB command still cost up to ~1.3 s with dense shell syntax. At 4 KB the worst case is ~0.4 s and typical commands stay far below. Chosen by Marcus over 16 KB and 8 KB. |
+| 2026-10-12 | T1.2 extracted the guard's inline executor test into `_has_shell_executor` (pattern_match.sh) | A pure refactor so the parity test can call both sides; behaviour unchanged, guard suite green. Recorded as Extra by the Phase 1 drift check. |
 
 ## Context
 
