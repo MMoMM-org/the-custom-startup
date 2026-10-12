@@ -709,11 +709,17 @@ projection of it, so its callers are unchanged, and route counts and the per-sou
 whose `agent_type` is in that set yields no firing (its dispatch already credited the type). An
 `agent` record whose `agent_type` is neither an inventory name, nor in `BUILTIN_AGENT_TYPES`
 (`general-purpose`, `Explore`, `Plan`, `statusline-setup`, `claude-code-guide`, `fork` — a constant
-in `report.py`, extended when a probe shows a new one), nor a dispatch name, is listed as
-"uncreditable (may be a spawn name)" and yields no firing. A dispatch with an empty `subagent_type`
-yields no firing. Typed records whose `skill` has no `plugin:` qualifier (project or personal skills,
-custom commands) never count: the denominator is the shipped plugin inventory. Pre-h2 `skill`
-records without `route` count as `tool`, which is the only route `PreToolUse:Skill` could see.
+in `report.py`, extended when a probe shows a new one), nor a type any dispatch carried, is listed as
+"uncreditable (may be a spawn name)" and counts toward no entry. `firing_events` has no inventory,
+so it still yields such a record as an `agent`/`start` event; the coverage join decides, keeping it
+out of the fired and the not-in-inventory lists (settled in T4.1). A dispatch with an empty
+`subagent_type` yields no firing. Typed records whose `skill` has no `plugin:` qualifier (project or
+personal skills, custom commands) never count: the denominator is the shipped plugin inventory. A
+typed bare name never credits an entry, even when a tool record carries the same bare name; that
+entry's `typed` count comes from its qualified name only. Pre-h2 `skill` records without `route`
+count as `tool`, which is the only route `PreToolUse:Skill` could see; a `route` other than `tool`
+or `typed` yields no firing. Per-route counts and the uncreditable list render in single-source and
+union coverage only, not in the per-source detail.
 
 Trace, one interactive session:
 

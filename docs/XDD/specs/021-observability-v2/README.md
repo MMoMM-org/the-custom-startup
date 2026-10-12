@@ -7,7 +7,7 @@
 | **Created** | 2026-10-11 |
 | **Current Phase** | Ready |
 | **Decomposition tier** | Incremental |
-| **Last Updated** | 2026-10-11 |
+| **Last Updated** | 2026-10-12 |
 
 ## Documents
 
@@ -50,6 +50,12 @@
 | 2026-10-12 | Git record budget 30 ms added (was 15 ms); fork-free writer fast path | T2.2 measured 42 ms added on macOS: ~20 ms writer forks (`_observability_prepare_field`), ~12 ms `git rev-parse` via the xcrun shim, ~6 ms source and parse. Chosen by Marcus: a fork-free writer path for short printable-ASCII values (helps every adapter) and a 30 ms budget, because the recorder runs in parallel with the guard. `rev-parse` stays (no builtin repo walk). |
 | 2026-10-12 | `_observability_field` made linear (bisect) in the shared writer | T2.1 measured ~37 s for a key behind a 200 KB Agent prompt; fixed once in logwrite.sh rather than per adapter (single source of truth), differential-tested against the old function. |
 | 2026-10-12 | A Skill tool call with an empty `skill` value writes no record | A truncated or drifted payload would otherwise add `skill=""` rows that pollute firing counts (CON-9: nothing rather than something wrong). Dispatches with an empty `subagent_type` are still recorded; the report ignores them (ADR-8). |
+| 2026-10-12 | Report: uncreditable decided at the coverage join, not in `firing_events` | T4.1: `firing_events` has no inventory, so it cannot tell a spawn name from an inventory name. The reader sees the same result; the SDD's Complex Logic sentence was amended. Phase 4 drift check, accepted by Marcus. |
+| 2026-10-12 | Report: an agent name any dispatch carried as `subagent_type` is never uncreditable | T4.1: an unnamed dispatch of a personal agent would otherwise be called a possible spawn name; it is listed as not in inventory instead. |
+| 2026-10-12 | Report: bare and qualified records of one skill both credit it; a typed bare name never does | T4.1: before, a bare tool record beside a qualified one was left as unmatched (F4 AC1: both routes count). T4.1 review: a typed bare `/test` was summed into a plugin skill's `typed=` when a tool record shared the bare name; fixed. |
+| 2026-10-12 | Report: unknown `route` values yield no firing; malformed or unhashable fields drop the record, never abort | T4.1/T4.2: matches the module's posture that unknown is excluded, never folded in. T4.1 review found a `TypeError` regression on unhashable fields; fixed. |
+| 2026-10-12 | Report: per-route counts and the uncreditable list render in single-source and union coverage only; identical git operations collapse to one line with `(N records)` | T4.1/T4.2; F4 AC1 and AC3 are satisfied (the operations are still listed, with a count). Recorded as Extra by the Phase 4 drift check. |
+| 2026-10-12 | Report: the matching-rule text states the settled rule; the spec-018 "confirmed at T3.6 … until then" wording is removed | 018 T3.6 closed 2026-09-08 (`05c838d`); found stale by the Phase 4 drift check. Chosen by Marcus along with four optional T4.2 review cleanups. |
 
 ## Context
 

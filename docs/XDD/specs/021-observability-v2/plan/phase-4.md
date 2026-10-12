@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Report"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 4
 ---
@@ -48,6 +48,6 @@ Makes the report credit every route and dispatch correctly and show git activity
   4. Validate: report tests green (`.github/docs-map` has no observability rule, so docs-sync proves nothing here; the README/SKILL.md changes are reviewed by hand)
   5. Success: `[ref: PRD/F4 AC3, AC5]`; `[ref: SDD/Acceptance Criteria/F4]`
 
-- [ ] **T4.3 Phase Validation** `[activity: validate]`
+- [x] **T4.3 Phase Validation** `[activity: validate]`
 
   - Full pytest. Manual: render a report over a fixture holding every record kind and read it as the maintainer persona would.

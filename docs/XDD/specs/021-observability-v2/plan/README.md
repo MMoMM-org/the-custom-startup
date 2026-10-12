@@ -139,7 +139,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 - [x] [Phase 1: Writer hardening and git parsing](phase-1.md)
 - [x] [Phase 2: Adapters](phase-2.md)
 - [x] [Phase 3: Registration and install](phase-3.md)
-- [ ] [Phase 4: Report](phase-4.md)
+- [x] [Phase 4: Report](phase-4.md)
 - [ ] [Phase 5: Guard fast path and end-to-end validation](phase-5.md)
 
 Dependencies: 1 → 2 → 3; 4 needs 2 (record shapes); 5's T5.1 is independent of 1–4 and may run any time; T5.2–T5.3 need 1–4.
