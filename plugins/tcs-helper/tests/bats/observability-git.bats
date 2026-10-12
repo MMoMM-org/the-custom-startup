@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# shellcheck disable=SC2016,SC1003 # commands and payloads under test are literal text
+# shellcheck disable=SC2016,SC1003,SC2030,SC2031 # literal commands under test; bats run sets status/output
 #
 # tests/bats/observability-git.bats
 #
@@ -923,11 +923,29 @@ _record_violation() {
 
 # --- size cap and scale (SDD Complex Logic, Size cap) -----------------------
 
+
+# _rep <unit> <n>  prints the first n bytes of <unit> repeated.
+_rep() {
+  local s="$1"
+  while [ "${#s}" -lt "$2" ]; do s="$s$s"; done
+  printf '%s' "${s:0:$2}"
+}
+
 # _pad <n>  prints n `x` bytes.
 _pad() {
-  local s="x"
-  while [ "${#s}" -lt "$1" ]; do s="$s$s"; done
-  printf '%s' "${s:0:$1}"
+  _rep x "$1"
+}
+
+# _best_of_3 <command…>  runs the command three times (output discarded) and
+#   prints the fastest wall time as TIMEFORMAT=%R prints it. Defined here and
+#   handed to the timing subshells with `declare -f`.
+_best_of_3() {
+  local TIMEFORMAT=%R t best="" _
+  for _ in 1 2 3; do
+    t=$( { time "$@" >/dev/null; } 2>&1 )
+    if [ -z "$best" ] || [ "${t/./}" -lt "${best/./}" ]; then best="$t"; fi
+  done
+  printf '%s' "$best"
 }
 
 # Scale a wall-clock budget (in ms) by $TCS_PERF_SLACK (4 in CI), the
@@ -951,19 +969,31 @@ _ms() {
   printf '%d' $((10#$whole * 1000 + 10#$frac))
 }
 
-# _linear_ok <ms at 1x> <ms at 10x> <absolute budget ms>
-#   10x the input may take at most ~15x the time (with a 200 ms floor for
-#   timer resolution and load; the quadratic versions took seconds) and must stay inside the slack-scaled budget.
+# _linear_ok <ms at 1x> <ms at 10x> <absolute budget ms> [floor ms]
+#   Ten times the input may take at most ~15 times as long, never less than
+#   the floor (default 200 ms; timer resolution and machine load), and must
+#   stay inside the absolute budget. Both bounds scale with TCS_PERF_SLACK.
+#   The quadratic versions this guards against took seconds at 10x.
 _linear_ok() {
-  local t1="$1" t10="$2" budget allowed
+  local t1="$1" t10="$2" budget allowed floor="${4:-200}"
   budget="$(_perf_budget_ms "$3")"
   allowed=$((t1 * 15))
-  if [ "$allowed" -lt 200 ]; then allowed=200; fi
+  if [ "$allowed" -lt "$floor" ]; then allowed="$floor"; fi
   allowed="$(_perf_budget_ms "$allowed")"
   if [ "$t10" -gt "$allowed" ] || [ "$t10" -gt "$budget" ]; then
     echo "1x ${t1} ms, 10x ${t10} ms (allowed ${allowed} ms, budget ${budget} ms)"
     return 1
   fi
+}
+
+# _scale <budget ms> <floor ms> <script>  runs <script> in bash 3.2 with the
+#   library sourced, _rep and _best_of_3 defined and LC_ALL=C (the locale
+#   _git_ops_parse runs its helpers under); the script prints "<t1> <t10>".
+_scale() {
+  run bash -c 'export LC_ALL=C; source "$1"; eval "$2"; eval "$3"' _ \
+    "$BUNDLE_LIB" "$(declare -f _rep _best_of_3)" "$3"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  _linear_ok "$(_ms "${output% *}")" "$(_ms "${output#* }")" "$1" "$2"
 }
 
 @test "size cap: the cap is 16384" {
@@ -991,35 +1021,66 @@ _linear_ok() {
   expect_parse "${cmd}x" "$(rec '?' '' '(oversize)' '' '')"
 }
 
+@test "size cap: the cap counts bytes in a UTF-8 caller locale too" {
+  _utf8_locale || return 1
+  run env LC_ALL="$UTF8_LOCALE" bash -c 'source "$1"; _GIT_OPS_MAX_BYTES=20
+    x="é"; [ "${#x}" -eq 1 ] || exit 3
+    _git_ops_parse "git push # éééééé"' _ "$BUNDLE_LIB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(rec '?' '' '(oversize)' '' '')" ]
+}
+
 @test "scale: the decoder is linear in the number of escapes and stays correct" {
-  run bash -c '
-    source "$1"
+  _scale 2000 500 '
     mk() { local k=0 s=""; while [ "$k" -lt "$1" ]; do s="${s}ab \\\"q\\\" \\n"; k=$((k + 1)); done
       printf "{\"tool_input\":{\"command\":\"git commit -m \\\\\"%s\\\\\"\"}}" "$s"; }
     want() { local k=0 s=""; while [ "$k" -lt "$1" ]; do s="${s}ab \"q\" "$'"'\n'"'; k=$((k + 1)); done
       printf "git commit -m \"%s\"" "$s"; }
     p1=$(mk 300); p10=$(mk 3000)
     [ "$(_git_ops_command "$p10")" = "$(want 3000)" ] || { echo wrong-decode; exit 1; }
-    TIMEFORMAT=%R
-    t1=$( { time _git_ops_command "$p1" >/dev/null; } 2>&1 )
-    t10=$( { time _git_ops_command "$p10" >/dev/null; } 2>&1 )
-    echo "$t1 $t10"' _ "$BUNDLE_LIB"
-  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
-  _linear_ok "$(_ms "${output% *}")" "$(_ms "${output#* }")" 2000
+    echo "$(_best_of_3 _git_ops_command "$p1") $(_best_of_3 _git_ops_command "$p10")"'
 }
 
 @test "scale: marking a long quoted span is linear" {
-  run bash -c '
-    source "$1"
+  _scale 1000 200 '
     NL=$'"'\n'"'
-    mk() { local s="x"; while [ "${#s}" -lt "$1" ]; do s="$s$s"; done; printf "git commit -m \"%s\"" "${s:0:$1}"; }
-    TIMEFORMAT=%R
-    h=$(mk 1500); t1=$( { time _git_ops_mark_words; } 2>&1 )
-    h=$(mk 15000); t10=$( { time _git_ops_mark_words; } 2>&1 )
-    echo "$t1 $t10"' _ "$BUNDLE_LIB"
-  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
-  _linear_ok "$(_ms "${output% *}")" "$(_ms "${output#* }")" 1000
+    h="git commit -m \"$(_rep x 1500)\""; t1=$(_best_of_3 _git_ops_mark_words)
+    h="git commit -m \"$(_rep x 15000)\""; t10=$(_best_of_3 _git_ops_mark_words)
+    echo "$t1 $t10"'
 }
+
+@test "scale: marking special-dense code is linear" {
+  _scale 2000 200 '
+    NL=$'"'\n'"'
+    h="git commit $(_rep "\"a\" \$x \\\\ " 1500)"; t1=$(_best_of_3 _git_ops_mark_words)
+    h="git commit $(_rep "\"a\" \$x \\\\ " 15000)"; t10=$(_best_of_3 _git_ops_mark_words)
+    echo "$t1 $t10"'
+}
+
+@test "scale: marking escaped dollars inside double quotes is linear" {
+  _scale 2000 200 '
+    NL=$'"'\n'"'
+    h="git commit -m \"$(_rep "\\\$x" 1500)\""; t1=$(_best_of_3 _git_ops_mark_words)
+    h="git commit -m \"$(_rep "\\\$x" 15000)\""; t10=$(_best_of_3 _git_ops_mark_words)
+    echo "$t1 $t10"'
+}
+
+# The full parse with the copied strippers replaced by identity functions:
+# this task's code end to end (unquoting, word marking, clause split, clause
+# parse). The strippers themselves are T1.5's (made linear there).
+@test "scale: parsing dense, quoted-git, clause-heavy and word-heavy commands is linear (strippers stubbed)" {
+  _scale 6000 300 '
+    _git_ops_strip_quoted() { printf "%s" "$1"; }
+    _git_ops_strip_heredocs() { printf "%s" "$1"; }
+    t1=0 t10=0
+    for unit in "\"a\" \$x \\\\ " "'"'"'git'"'"' x;" "git a; " "a " "-x "; do
+      a=$(_best_of_3 _git_ops_parse "git commit $(_rep "$unit" 1500)")
+      b=$(_best_of_3 _git_ops_parse "git commit $(_rep "$unit" 15000)")
+      t1=$((t1 + 10#${a/./})); t10=$((t10 + 10#${b/./}))
+    done
+    printf "%d.%03d %d.%03d\n" $((t1 / 1000)) $((t1 % 1000)) $((t10 / 1000)) $((t10 % 1000))'
+}
+
 
 @test "unquote: a mismatched quote pair does not hide a later quoted git" {
   expect_parse "git commit -m \"git' x\"; \"git\" push" "$(rec commit '' '-m' '' '')${NL}$(rec push '' '' '' '')"
