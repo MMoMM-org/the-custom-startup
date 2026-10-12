@@ -421,9 +421,9 @@ _observability_repo_field() {
 # session. A `case` glob test short-circuits on the first attempt: 1 ms at
 # 150 KB, the identical answer roughly 6600x faster. (A bash `=~` regex also
 # measured 1 ms; scanning only the first 4 KB measured 9 ms but changes what
-# the function finds, so it was rejected.) The `[ "$body" = "$payload" ]`
-# guard below is KEPT as a backstop — the pre-check is now the first line of
-# the redaction defence, not its replacement.
+# the function finds, so it was rejected.) The pre-check
+# is the first line of the redaction defence: an absent key returns before any
+# value is sliced, so the payload can never come back as a "value".
 #
 # KEYS ARE LITERAL, NOT PATTERNS — a deliberate BEHAVIOUR CHANGE that came
 # with the pre-check. Both the `case` test and the prefix removal now quote
@@ -446,22 +446,36 @@ _observability_repo_field() {
 # tests/bats/observability-writer.bats, "a key containing glob metacharacters
 # is matched literally, not as a pattern".
 _observability_field() {
-  local payload="${1:-}" key="${2:-}"
+  # LC_ALL=C: ${#s}, ${s:n:m} and the glob below count BYTES, not characters.
+  # In a UTF-8 locale bash walks multibyte characters to reach offset n, which
+  # is O(n) per slice and would turn the search below quadratic.
+  local payload="${1:-}" key="${2:-}" LC_ALL=C
   # An empty key would make the pattern `*"":"`, which matches unrelated
   # text. Nothing legitimately asks for it.
   [ -n "$key" ] || { printf '' || true; return 0; }
-  # Presence first. The quoted `"\"$key\":\""` is matched literally; the
-  # bare `*` on either side are the only wildcards in the pattern.
+  local needle="\"$key\":\""
+  # Presence first. The quoted needle is matched literally; the bare `*` on
+  # either side are the only wildcards in the pattern.
   case "$payload" in
-    *"\"$key\":\""*) ;;                 # present — the fast path below
-    *) printf '' || true; return 0 ;;   # absent — same answer, no O(n^2) scan
+    *"$needle"*) ;;                     # present — the search below
+    *) printf '' || true; return 0 ;;   # absent — same answer, no scan
   esac
-  local body="${payload#*"\"$key\":\""}"
-  if [ "$body" = "$payload" ]; then   # key absent — NOT the whole payload
-    printf '' || true
-    return 0
-  fi
-  printf '%s' "${body%%\"*}" || true
+  # LINEAR FIRST-OCCURRENCE SEARCH. `${p#*"needle"}` is quadratic in the text
+  # in front of the key (36 s for a key behind 200 KB), and `${p%%"needle"*}`
+  # is linear but ~4 us per byte (0.9 s at 200 KB). The `case` glob above is
+  # the fast primitive (~1 ms at 150 KB), so bisect with it: the shortest
+  # prefix that still contains the needle ends exactly where the first
+  # occurrence ends. About 18 glob tests at 200 KB, no fork.
+  local lo=${#needle} hi=${#payload} mid
+  while [ "$lo" -lt "$hi" ]; do
+    mid=$(((lo + hi) / 2))
+    case "${payload:0:mid}" in
+      *"$needle"*) hi=$mid ;;
+      *) lo=$((mid + 1)) ;;
+    esac
+  done
+  local rest="${payload:$lo}"
+  printf '%s' "${rest%%\"*}" || true
   return 0
 }
 

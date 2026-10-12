@@ -8,6 +8,8 @@
 # later task in the same plan; this suite must not assume they exist yet.
 
 bats_require_minimum_version 1.5.0
+
+load 'lib/assert'
 #
 # The resolver under test lives in .claude/observability/logwrite.sh, which is
 # untracked by design: `.claude/` is gitignored wholesale in this repo (see
@@ -2021,4 +2023,122 @@ _write_backstop() {
   run _write_under_umask "$data_dir" 027
   [ "$status" -eq 0 ]
   [ "$output" = "0027 0027" ] || [ "$output" = "027 027" ] || return 1
+}
+
+# ---------------------------------------------------------------------------
+# `_observability_field`: linear search (spec 021 T2.1).
+#
+# The old form, `${payload#*"key":"}`, is quadratic in the text in front of
+# the key: 36 s for `tool_use_id` behind a 200 KB Agent prompt. The new form
+# bisects with the `case` glob. Semantics must not move: first occurrence,
+# value up to the first quote, empty when absent, never the whole payload.
+# ---------------------------------------------------------------------------
+
+# Differential harness: the FROZEN old function (verbatim from before the
+# change) against the live one, over a corpus. Prints "<cases> <mismatches>"
+# then one line per mismatch.
+_field_differential() {
+  bash -c '
+    . "$1" || exit 91
+    _old_field() {
+      local payload="${1:-}" key="${2:-}"
+      [ -n "$key" ] || { printf "" || true; return 0; }
+      case "$payload" in
+        *"\"$key\":\""*) ;;
+        *) printf "" || true; return 0 ;;
+      esac
+      local body="${payload#*"\"$key\":\""}"
+      if [ "$body" = "$payload" ]; then printf "" || true; return 0; fi
+      printf "%s" "${body%%\"*}" || true
+      return 0
+    }
+    # Multibyte text in front of the key, in a UTF-8 locale where one exists.
+    export LC_ALL=en_US.UTF-8 2>/dev/null || true
+    mb=$(printf "\303\244\303\266\342\202\254\360\237\230\200")
+    bad=$(printf "\377\376")
+    big=$(printf "z%.0s" $(seq 1 3000))
+    Q=\"
+    payloads=(
+      "{\"k\":\"v\"}"
+      "{\"k\":\"v\",\"other\":\"w\"}"
+      "{\"a\":\"1\",\"k\":\"mid\",\"b\":\"2\"}"
+      "{\"a\":\"1\",\"b\":\"2\",\"k\":\"end\"}"
+      "{\"a\":\"1\"}"
+      "{\"tool_name\":\"Bash\",\"name\":\"n\"}"
+      "{\"tool_name\":\"Bash\"}"
+      "{\"subagent_type\":\"x\",\"agent_type\":\"y\"}"
+      "{\"subagent_type\":\"x\"}"
+      "{\"k\":\"\"}"
+      "{\"k\":\"\",\"k\":\"second\"}"
+      "{\"k\":\"first\",\"k\":\"second\"}"
+      "{\"p\":\"a \\\"k\\\":\\\"fake\\\" b\",\"k\":\"real\"}"
+      "{\"k\":\"va\\\"lue\",\"z\":\"1\"}"
+      "{\"p\":\"$mb\",\"k\":\"after-mb\"}"
+      "{\"p\":\"$mb$mb$mb$mb\",\"x\":\"1\"}"
+      "{\"p\":\"$bad\",\"k\":\"after-bad\"}"
+      "{\"p\":\"$big\",\"k\":\"after-big\"}"
+      "{\"k\":\"before-big\",\"p\":\"$big\"}"
+      "no quote at all k"
+      "k\":\"loose\""
+      "\"k\":\"only\""
+      "\"k\":\""
+      "{\"k\":\"unterminated"
+      ""
+      "{\"k\":\"line1
+line2\"}"
+    )
+    keys=(k name tool_name agent_type subagent_type absent "k\":\"" "a b" "")
+    n=0
+    for p in "${payloads[@]}"; do
+      for key in "${keys[@]}"; do
+        n=$((n + 1))
+        o="$(_old_field "$p" "$key"; printf x)"
+        w="$(_observability_field "$p" "$key"; printf x)"
+        if [ "$o" != "$w" ]; then
+          printf "MISMATCH key=%s payload=%s old=%s new=%s\n" "$key" "${p:0:60}" "${o:0:40}" "${w:0:40}"
+        fi
+      done
+    done
+    printf "cases=%d\n" "$n"
+  ' _ "$WRITER"
+}
+
+@test "field: linear search agrees byte-for-byte with the frozen quadratic version over a corpus" {
+  run _field_differential
+  [ "$status" -eq 0 ]
+  _lacks "$output" "MISMATCH"
+  _has "$output" "cases=234"
+}
+
+# Time `_observability_field` for a key behind N bytes of text; prints ms.
+_time_field_behind() {
+  local n="$1"
+  bash -c '
+    . "$1" || exit 91
+    big="$(printf "x%.0s" $(seq 1 "$2"))"
+    p="{\"description\":\"d\",\"prompt\":\"$big\",\"tool_use_id\":\"toolu_01ABC\"}"
+    v="$(_observability_field "$p" tool_use_id)"
+    s="$(perl -MTime::HiRes=time -e "printf q{%d}, time()*1000")"
+    v="$(_observability_field "$p" tool_use_id)"
+    e="$(perl -MTime::HiRes=time -e "printf q{%d}, time()*1000")"
+    printf "%d %s\n" "$((e - s))" "$v"
+  ' _ "$WRITER" "$n"
+}
+
+@test "field: a key behind 200 KB costs at most 20x the same key behind 20 KB, and stays under budget" {
+  if ! command -v perl >/dev/null 2>&1; then skip "perl not available for a sub-second clock"; fi
+  local r20 r200 t20 t200 allowed
+  r20="$(_time_field_behind 20000)"
+  r200="$(_time_field_behind 200000)"
+  t20="${r20%% *}"
+  t200="${r200%% *}"
+  [ "${r20#* }" = "toolu_01ABC" ]
+  [ "${r200#* }" = "toolu_01ABC" ]
+  printf 'field behind 20KB: %s ms, behind 200KB: %s ms\n' "$t20" "$t200" >&3
+  # The old form took ~0.4 s and ~36 s; the floor keeps timer noise at 20 KB
+  # from making the ratio meaningless.
+  allowed=$((t20 * 20))
+  if [ "$allowed" -lt 100 ]; then allowed=100; fi
+  [ "$t200" -le "$(_perf_budget_ms "$allowed")" ]
+  [ "$t200" -le "$(_perf_budget_ms 300)" ]
 }
