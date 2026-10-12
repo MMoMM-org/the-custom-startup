@@ -21,6 +21,7 @@
 #   clean (absent/empty)     CLEAN            0
 #   ours-current             OURS-CURRENT     0
 #   ours-old                 OURS-OLD         4
+#   ours-incomplete          OURS-INCOMPLETE  4
 #   legacy in-repo           LEGACY           4
 #   foreign-only             CONFLICT         3
 #   not-a-repository         ABORT            2
@@ -28,10 +29,10 @@
 #   valid-json-wrong-shape   ABORT            2
 #   write-path-not-ignored   ABORT            2
 #
-# LEGACY and OURS-OLD are WARN, not ABORT, deliberately: both mean "action
-# available, nothing broken" — the maintainer-approved migration of this
-# repository's own legacy registration runs through setup, and an abort
-# there would force that migration to be a manual two-step.
+# LEGACY, OURS-OLD and OURS-INCOMPLETE are WARN, not ABORT, deliberately: all
+# three mean "action available, nothing broken" — the maintainer-approved
+# migration of this repository's own legacy registration runs through setup,
+# and an abort there would force that migration to be a manual two-step.
 #
 # GATE ORDERING (one labelled line per target — never both ABORT and a
 # content classification for the same target):
@@ -68,6 +69,21 @@
 # reporting it a bare CONFLICT would name our own scripts as a third
 # party's. So it gets its own label, checked independently of whatever
 # settings.local.json holds.
+#
+# OURS-INCOMPLETE (spec 021 ADR-5) IS the part that is observable from the
+# settings file. The bundle marker is global: the first repository whose setup
+# re-runs after a plugin update installs the new bundle, and from then on every
+# other repository reads current by the marker alone, while its own entries
+# still name the old scripts. So, once the marker is current, this repository's
+# entries of ours are compared against EXPECTED (registration.py's
+# REGISTRATION, restated below); any event missing, or carrying something other
+# than exactly the one expected entry, is named with "(missing)" or
+# "(outdated)", comma-separated, in EXPECTED's order. A marker that is NOT
+# current still reports OURS-OLD: re-running setup fixes both, and the bundle
+# is the larger half. The OURS decision still precedes the CONFLICT scan (spec
+# 019's ordering), so a foreign hook under an event of ours does not stop an
+# already-registered repository; when that event is incomplete, the hook is
+# named in the OURS-INCOMPLETE message instead.
 #
 # OURS-CURRENT vs OURS-OLD IS NOT OBSERVABLE FROM THE SETTINGS FILE AT ALL:
 # ADR-5 makes the registration command string version-opaque on purpose (a
@@ -197,18 +213,18 @@ import sys
 # PAIRED DEFINITION: registration.py's NAMESPACE holds this same string.
 OUR_NAMESPACE = "$HOME/.claude/observability/"
 
-# The three events this feature registers, and therefore the only events
-# under which a foreign hook is a conflict. SDD-AC-4 and PRD F1 both say "a
-# foreign entry under one of the three event names"; this used to be tested
+# The events this feature registers, and therefore the only events under
+# which a foreign hook is a conflict. SDD-AC-4 and PRD F1 both say "a
+# foreign entry under one of the three event names" (four since spec 021); this used to be tested
 # by discarding the event name entirely, which refused targets whose hooks
 # did not overlap ours at all (measured during T4.2 on a target carrying only
 # PostToolUse and SessionStart -- neither of them ours).
 #
-# WHY THE TEST IS AT EVENT LEVEL AND NOT MATCHER LEVEL (ruling (aa)). Two of
-# the three are registered with matcher "" which the harness documents as
+# WHY THE TEST IS AT EVENT LEVEL AND NOT MATCHER LEVEL (ruling (aa)). Three of
+# the four are registered with matcher "" which the harness documents as
 # "match all", so any foreign hook under them overlaps ours by construction
-# and a matcher test would change nothing. The third, PreToolUse, we register
-# with matcher "Skill" -- and deciding that a foreign matcher does NOT
+# and a matcher test would change nothing. The fourth, PreToolUse, we register
+# with matcher "Skill|Agent|Bash" -- and deciding that a foreign matcher does NOT
 # overlap it means evaluating that matcher the way the harness does: an exact
 # string, or a "|"/"," list, or, the moment it contains any other character,
 # an unanchored JavaScript regular expression tested with RegExp.test. This
@@ -217,9 +233,20 @@ OUR_NAMESPACE = "$HOME/.claude/observability/"
 # alongside ours, which is the dangerous direction. A CONFLICT costs a
 # conversation; a missed one costs correctness. So the floor is the event.
 #
-# PAIRED DEFINITION: registration.py's REGISTRATION keys are these same three
+# PAIRED DEFINITION: registration.py's REGISTRATION keys are these same
 # names, and the two must change together.
-OUR_EVENTS = ("InstructionsLoaded", "PreToolUse", "SubagentStart")
+OUR_EVENTS = ("InstructionsLoaded", "PreToolUse", "SubagentStart", "UserPromptExpansion")
+
+# event -> (matcher, script) this feature writes today, for OURS-INCOMPLETE
+# (spec 021 ADR-5). PAIRED DEFINITION: registration.py's REGISTRATION, the
+# whole mapping, equated by test_observability_cross_file_agreement.py. A
+# copy rather than an import for the reason given at LEGACY_SCRIPTS below.
+EXPECTED = {
+    "InstructionsLoaded": ("", "log_instructions.sh"),
+    "PreToolUse": ("Skill|Agent|Bash", "log_tool.sh"),
+    "SubagentStart": ("", "log_agent.sh"),
+    "UserPromptExpansion": ("", "log_expansion.sh"),
+}
 # Event name -> the adapter script this feature's own bundle installs for
 # it. Used ONLY to recognise the legacy in-repo shape (settings.json,
 # scripts under $CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability
@@ -363,6 +390,38 @@ def legacy_events(shared_data):
     return sorted(matched_events)
 
 
+def entry_is_ours(entry):
+    """registration.py's entry_is_ours, over an already shape-checked entry."""
+    return any(
+        isinstance(one, dict)
+        and isinstance(one.get("command"), str)
+        and OUR_NAMESPACE in one["command"]
+        for one in entry.get("hooks", [])
+    )
+
+
+def incomplete_events(local_hooks):
+    """[(event, "missing" or "outdated"), ...] in EXPECTED order.
+
+    "outdated" is exactly the condition under which add_registration rewrites
+    an event: anything other than ONE entry of ours equal to the expected
+    entry. Judging by the same rule is what makes the state go away after one
+    setup run and never come back on the next.
+    """
+    found = []
+    for event, (matcher, script) in EXPECTED.items():
+        expected = {
+            "matcher": matcher,
+            "hooks": [{"type": "command", "command": "\"%s%s\"" % (OUR_NAMESPACE, script)}],
+        }
+        ours = [e for e in local_hooks.get(event, []) if entry_is_ours(e)]
+        if not ours:
+            found.append((event, "missing"))
+        elif ours != [expected]:
+            found.append((event, "outdated"))
+    return found
+
+
 def main():
     local_path, shared_path = sys.argv[1], sys.argv[2]
 
@@ -422,7 +481,20 @@ def main():
 
     ours = [cmd for _, cmd in local_commands if OUR_NAMESPACE in cmd]
     if ours:
-        print("OURS")
+        incomplete = incomplete_events(local_hooks)
+        if not incomplete:
+            print("OURS")
+            return
+        names = {event for event, _ in incomplete}
+        detail = ", ".join("%s (%s)" % pair for pair in incomplete)
+        beside = sorted({
+            "%s -> %s" % (event, cmd)
+            for event, cmd in local_commands
+            if OUR_NAMESPACE not in cmd and event in names
+        })
+        if beside:
+            detail += "; foreign hook entries under those events: " + ", ".join(beside)
+        print("OURS_INCOMPLETE|" + detail)
         return
 
     # The event name is load-bearing, not a throwaway: a foreign hook under
@@ -464,7 +536,11 @@ case "$CLASSIFY_OUTPUT" in
     _emit "LEGACY" "Observability hooks already registered in .claude/settings.json under the legacy in-repo namespace (plugins/tcs-helper/scripts/observability/) for: ${CLASSIFY_OUTPUT#LEGACY|}; setup will migrate these to \$HOME/.claude/observability/."
     exit 4
     ;;
-  OURS)
+  OURS|OURS_INCOMPLETE\|*)
+    INCOMPLETE=""
+    case "$CLASSIFY_OUTPUT" in
+      OURS_INCOMPLETE\|*) INCOMPLETE="${CLASSIFY_OUTPUT#OURS_INCOMPLETE|}" ;;
+    esac
     EXPECTED_VERSION="$(_read_observability_bundle_version 2>/dev/null || true)"
     if [ -z "$EXPECTED_VERSION" ]; then
       _emit "ABORT" "Could not read this plugin's own observability bundle version marker"
@@ -473,6 +549,10 @@ case "$CLASSIFY_OUTPUT" in
     DRIFT_RESULT="$(_drift_check_observability_bundle "$EXPECTED_VERSION")"
     case "$DRIFT_RESULT" in
       OK)
+        if [ -n "$INCOMPLETE" ]; then
+          _emit "OURS-INCOMPLETE" "Observability hooks registered under \$HOME/.claude/observability/ and the bundle is current ($EXPECTED_VERSION), but this repository's own registration is not: $INCOMPLETE. Re-run setup to bring it forward."
+          exit 4
+        fi
         _emit "OURS-CURRENT" "Observability hooks registered under \$HOME/.claude/observability/ at the current bundle version ($EXPECTED_VERSION)."
         exit 0
         ;;

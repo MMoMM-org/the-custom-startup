@@ -49,6 +49,7 @@
 #   exit 0  clean                    CLEAN            0   proceed
 #   exit 0  ours, current bundle     OURS-CURRENT     0   already configured
 #   exit 4  ours, older bundle       OURS-OLD         0   proceed (refresh)
+#   exit 4  ours, entries outdated   OURS-INCOMPLETE  0   proceed (update)
 #   exit 4  legacy in-repo shape     LEGACY           0   proceed (migrate)
 #   exit 3  foreign entries          CONFLICT         0   STOP, change nothing
 #   exit 2  unparseable              ABORT            1   refuse
@@ -598,7 +599,7 @@ printf '%s\n' "$DETECT_OUTPUT"
 # The LABEL is the state channel detect.sh documents; the message after it is
 # prose this dispatcher never branches on.
 DETECT_LABEL="$(printf '%s\n' "$DETECT_OUTPUT" \
-  | grep -E '^\[tcs-helper:observability-setup\] (CLEAN|CONFLICT|LEGACY|OURS-CURRENT|OURS-OLD|ABORT):' \
+  | grep -E '^\[tcs-helper:observability-setup\] (CLEAN|CONFLICT|LEGACY|OURS-CURRENT|OURS-OLD|OURS-INCOMPLETE|ABORT):' \
   | tail -n 1 \
   | sed -e 's/^\[tcs-helper:observability-setup\] //' -e 's/:.*$//')" || DETECT_LABEL=""
 
@@ -613,9 +614,13 @@ case "$DETECT_STATUS" in
     ;;
 esac
 
+# OURS-INCOMPLETE (spec 021 ADR-5) is ours: a repository registered under an
+# older bundle whose own entries setup has not brought forward yet. Leaving it
+# out of this list reports such a repository as "not configured" -- the one
+# answer that is certainly wrong, since it still records the older kinds.
 IS_OURS=0
 case "$DETECT_LABEL" in
-  OURS-CURRENT|OURS-OLD|LEGACY) IS_OURS=1 ;;
+  OURS-CURRENT|OURS-OLD|OURS-INCOMPLETE|LEGACY) IS_OURS=1 ;;
 esac
 
 # ---------------------------------------------------------------------------
@@ -682,6 +687,10 @@ if [ "$VERB" = "status" ]; then
     _emit "RECORDS" "could not resolve a record location for this target."
   fi
 
+  if [ "$DETECT_LABEL" = "OURS-INCOMPLETE" ]; then
+    _emit "REGISTRATION" "outdated in $LOCAL_SETTINGS -- the OURS-INCOMPLETE line above names each entry. Run: install --target $REPO_ROOT --yes$_HOME_HINT"
+  fi
+
   if [ "$IS_OURS" -eq 0 ]; then
     _emit "STATUS" "not configured -- this feature has never registered here."
   elif [ "$RECORD_PRESENT" -eq 1 ]; then
@@ -716,7 +725,8 @@ if [ "$IS_LEGACY" -eq 1 ]; then
   fi
 fi
 
-_REGISTERED_EVENTS="InstructionsLoaded, PreToolUse, SubagentStart"
+# PAIRED with registration.py's REGISTRATION keys; prose only, never parsed.
+_REGISTERED_EVENTS="InstructionsLoaded, PreToolUse, SubagentStart, UserPromptExpansion"
 _ENV_SWITCH="CLAUDE_OBSERVABILITY_ENABLED"
 _UNDO_HINT="bash $_SETUP_LIB_DIR/setup.sh remove --target $REPO_ROOT --yes"
 

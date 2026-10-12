@@ -10,7 +10,7 @@ reviewer rather than by a test, which is the signal to mechanise:
      that restates strings owned elsewhere will keep going stale; this file
      makes that mechanical instead of observational.
 
-  2. Four constants are defined once in `detect.sh` (inside a python heredoc
+  2. Five constants are defined once in `detect.sh` (inside a python heredoc
      a shell script wraps) and again in `registration.py`. They carry
      "must change together" comments, which only work on a reader who looks.
      The failure direction is permissive: someone adding a fourth registered
@@ -76,7 +76,7 @@ def _detect_constant(name):
 
 
 # ---------------------------------------------------------------------------
-# The four constants defined on both sides of the shell/python boundary.
+# The five constants defined on both sides of the shell/python boundary.
 # ---------------------------------------------------------------------------
 
 def test_our_events_matches_the_events_registration_actually_registers():
@@ -103,11 +103,19 @@ def test_legacy_namespace_matches():
     assert _detect_constant("LEGACY_NAMESPACE") == registration.LEGACY_NAMESPACE
 
 
-def test_the_legacy_shape_is_keyed_on_the_events_we_register():
-    """The two sets are the same three names today, and the legacy shape is
-    defined per registered event. Pinned so a fourth event added to one is
-    not silently absent from the other."""
-    assert set(registration.LEGACY_SCRIPTS) == set(registration.REGISTRATION)
+def test_the_legacy_shape_is_keyed_on_events_we_register():
+    """The legacy shape is defined per registered event, so every event it
+    names must still be one we register. A subset, not equality, since spec
+    021: UserPromptExpansion is registered and has no legacy form."""
+    assert set(registration.LEGACY_SCRIPTS) <= set(registration.REGISTRATION)
+
+
+def test_expected_registration_matches_registration():
+    """spec 021 ADR-5. detect.sh judges a repository's own entries against
+    EXPECTED to report OURS-INCOMPLETE; registration.py writes REGISTRATION.
+    If the two differ, every repository setup has just updated reads as
+    incomplete -- or an outdated one reads as current."""
+    assert _detect_constant("EXPECTED") == registration.REGISTRATION
 
 
 # ---------------------------------------------------------------------------

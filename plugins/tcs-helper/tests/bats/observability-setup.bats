@@ -251,11 +251,12 @@ _make_record() {
   _has "$output" "InstructionsLoaded"
   _has "$output" "PreToolUse"
   _has "$output" "SubagentStart"
+  _has "$output" "UserPromptExpansion"
   _has "$output" "CLAUDE_OBSERVABILITY_ENABLED"
 
   [ -f "$target" ]
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
 }
 
 @test "install writes the bundle and its version marker into the resolved HOME" {
@@ -663,6 +664,7 @@ PY
   _has "$output" "InstructionsLoaded"
   _has "$output" "PreToolUse"
   _has "$output" "SubagentStart"
+  _has "$output" "UserPromptExpansion"
   run _count_our_hooks "$target"
   [ "$output" -eq 0 ]
 }
@@ -853,6 +855,95 @@ PY
 }
 
 # ---------------------------------------------------------------------------
+# spec 021 F5 -- a repository setup registered under h1. The bundle marker is
+# global, so the first repository updated makes it current for every other
+# one; the repository's own entries are what still say "outdated".
+# ---------------------------------------------------------------------------
+
+# _write_h1_local <repo> [<extra hooks json, comma-led>] -- the registration
+# spec 019's setup wrote (bundle h1): PreToolUse matcher "Skill" ->
+# log_skill.sh, and no UserPromptExpansion.
+_write_h1_local() {
+  _write_local "$1" '{
+  "env": { "CLAUDE_OBSERVABILITY_ENABLED": "1" },
+  "hooks": {
+    "InstructionsLoaded": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_instructions.sh\"" }]}],
+    "PreToolUse": [{ "matcher": "Skill", "hooks": [
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_skill.sh\"" }]}],
+    "SubagentStart": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_agent.sh\"" }]}]'"${2:-}"'
+  }
+}'
+}
+
+@test "status shows an h1 registration under a current bundle as ours and outdated, never not configured" {
+  local home dir data
+  home="$(_home_with_bundle_version status-h1 "$CURRENT_BUNDLE_VERSION")"
+  dir="$(_copy_fixture absent status-h1)"
+  data="$WORK_PARENT/status-h1.data"
+  mkdir -p "$data"
+  _write_h1_local "$dir"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
+  [ "$status" -eq 0 ]
+  _has "$output" "] OURS-INCOMPLETE: "
+  _has "$output" "PreToolUse (outdated), UserPromptExpansion (missing)"
+  _has "$output" "] REGISTRATION: outdated"
+  _has "$output" "STATUS: configured but silent"
+  _lacks "$output" "not configured"
+}
+
+@test "install over an h1 registration updates it in place; a second install changes nothing" {
+  local home dir target before
+  home="$(_home_with_bundle_version install-h1 "$CURRENT_BUNDLE_VERSION")"
+  dir="$(_copy_fixture absent install-h1)"
+  target="$dir/.claude/settings.local.json"
+  _write_h1_local "$dir" ',
+    "Stop": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "/opt/foreign-audit/on-stop.sh" }]}]'
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _has "$output" "OURS-INCOMPLETE"
+  _lacks "$output" "STOP"
+  run _count_our_hooks "$target"
+  [ "$output" -eq 4 ]
+  _has "$(cat "$target")" '\"$HOME/.claude/observability/log_tool.sh\"'
+  _has "$(cat "$target")" '\"$HOME/.claude/observability/log_expansion.sh\"'
+  _has "$(cat "$target")" '"Skill|Agent|Bash"'
+  _lacks "$(cat "$target")" "log_skill.sh"
+  _has "$(cat "$target")" "/opt/foreign-audit/on-stop.sh"
+
+  before="$WORK_PARENT/install-h1.after-first"
+  cp -p "$target" "$before"
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _has "$output" "OURS-CURRENT"
+  _has "$output" "already configured"
+  _assert_bytes_equal "$before" "$target"
+}
+
+@test "a foreign UserPromptExpansion hook beside an h1 registration does not stop install, and survives it" {
+  local home dir target
+  home="$(_home_with_bundle_version install-h1-foreign-upe "$CURRENT_BUNDLE_VERSION")"
+  dir="$(_copy_fixture absent install-h1-foreign-upe)"
+  target="$dir/.claude/settings.local.json"
+  _write_h1_local "$dir" ',
+    "UserPromptExpansion": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "/opt/other/expand.sh" }]}]'
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _has "$output" "UserPromptExpansion -> /opt/other/expand.sh"
+  _lacks "$output" "STOP"
+  _lacks "$output" "CONFLICT"
+  run _count_our_hooks "$target"
+  [ "$output" -eq 4 ]
+  _has "$(cat "$target")" "/opt/other/expand.sh"
+}
+
+# ---------------------------------------------------------------------------
 # SDD-AC-15 -- drift reaches the verb a person actually runs.
 # ---------------------------------------------------------------------------
 
@@ -913,7 +1004,7 @@ PY
   _lacks "$output" "STOP"
 
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
 
   # The half worth keeping: the foreign entry survives a run that actually
   # wrote, which is a real preservation assertion rather than one made true
@@ -921,7 +1012,7 @@ PY
   _has "$(cat "$target")" "/opt/Café-Tools/notify.sh"
   _has "$(cat "$target")" "Équipe-Café-日本語"
   total="$(grep -c -F '"type": "command"' "$target" || true)"
-  [ "$total" -eq 4 ]
+  [ "$total" -eq 5 ]
   _assert_no_lock "$dir"
 }
 
@@ -965,7 +1056,7 @@ PY
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   # json.dump defaults to ensure_ascii=True, which would rewrite these bytes
   # as backslash-u escapes: the document would still parse equal while the
   # operator bytes had changed (SDD-AC-10).
@@ -979,7 +1070,7 @@ PY
 # is never simultaneously double and never silently off.
 # ---------------------------------------------------------------------------
 
-@test "install on a legacy target migrates it: three hooks fire afterwards, not six" {
+@test "install on a legacy target migrates it: four hooks fire afterwards, not seven" {
   local home dir legacy target total
   home="$(_new_home legacy-migrate)"
   dir="$(_copy_fixture already-configured-observability legacy-migrate)"
@@ -993,11 +1084,11 @@ PY
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
 
-  # After: exactly three command hooks across BOTH files, all of them ours.
+  # After: exactly four command hooks across BOTH files, all of them ours.
   total="$(cat "$legacy" "$target" | grep -c -F '"type": "command"' || true)"
-  [ "$total" -eq 3 ]
+  [ "$total" -eq 4 ]
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
   [ "$status" -ne 0 ]
 }
@@ -1049,7 +1140,7 @@ PY
   _has "$(cat "$legacy")" "/opt/foreign-audit/hook.sh"
   _has "$(cat "$legacy")" "Bash(git:*)"
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   # The foreign entry is the ONLY command hook left in the shared file: the
   # three legacy ones are gone. Without this, "the foreign entry survives"
   # would also be true of a run that did nothing at all.
@@ -1402,7 +1493,7 @@ PY
   [ "$status" -ne 0 ]
   _has "$(cat "$legacy")" '"command": 123'
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   _assert_no_lock "$dir"
 }
 
@@ -1442,7 +1533,7 @@ PY
   run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
   [ "$status" -ne 0 ]
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   _assert_no_lock "$dir"
 }
 
@@ -1523,7 +1614,7 @@ PY
   _lacks "$output" "MIGRATED"
   _has "$output" "ADDED"
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   run cat "$legacy"
   [ "$output" = "{}" ]
   _assert_no_lock "$dir"
@@ -1849,7 +1940,7 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   [ "$observations" -gt 0 ]
 
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   _assert_no_lock "$dir"
 }
 
@@ -1912,11 +2003,11 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   # would destroy exactly the property --home exists to serve, and would do
   # it invisibly -- the file would look right and work only on one machine.
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   _lacks "$(cat "$target")" "$other/.claude/observability"
   # The bytes as JSON actually holds them: the inner quotes are escaped, and
   # $HOME is a literal four characters, not an expansion.
-  _has "$(cat "$target")" '\"$HOME/.claude/observability/log_skill.sh\"'
+  _has "$(cat "$target")" '\"$HOME/.claude/observability/log_tool.sh\"'
 }
 
 @test "status --home reports the named home's bundle, not the running one" {

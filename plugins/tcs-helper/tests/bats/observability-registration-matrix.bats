@@ -246,7 +246,7 @@ NAMES
   _has "$output" "registered observability hooks in"
   [ -f "$target" ]
   run grep -c -F '$HOME/.claude/observability/' "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
@@ -300,7 +300,7 @@ NAMES
   _has "$output" "registered observability hooks in"
   _has "$(cat "$target")" "/opt/foreign-audit/hook.sh"
   run grep -c -F '$HOME/.claude/observability/' "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
@@ -346,7 +346,7 @@ NAMES
   original="$WORK_PARENT/foreign-plus-ours-current.orig"
   cp -p "$target" "$original"
 
-  # add_registration sees data['hooks'] already carrying all three expected
+  # add_registration sees data['hooks'] already carrying all four expected
   # ours-entries (now correctly alongside the foreign one, post-64c0db3) --
   # so status is 'none': nothing written.
   _run_setup "$target"
@@ -407,6 +407,56 @@ EOF
 }
 EOF
   _assert_json_equal "$expected" "$target"
+}
+
+# ---------------------------------------------------------------------------
+# spec 021 F5 -- a registration h1 wrote is brought forward in place.
+# ---------------------------------------------------------------------------
+
+@test "an h1 registration: setup rewrites PreToolUse in place and adds UserPromptExpansion; a second run changes nothing; removal takes all four" {
+  local dir target after_first
+  dir="$(_copy_fixture foreign-plus-ours-current h1-registration)"
+  target="$dir/.claude/settings.local.json"
+  # Turn the fixture's current registration back into what h1 wrote.
+  python3 - "$target" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    data = json.load(handle)
+hooks = data["hooks"]
+del hooks["UserPromptExpansion"]
+hooks["PreToolUse"][1] = {"matcher": "Skill", "hooks": [
+    {"type": "command", "command": "\"$HOME/.claude/observability/log_skill.sh\""}]}
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2, ensure_ascii=False)
+    handle.write("\n")
+PY
+  run grep -c -F '$HOME/.claude/observability/' "$target"
+  [ "$output" -eq 3 ]
+
+  _run_setup "$target"
+  [ "$status" -eq 0 ]
+  _has "$output" "updated observability registration in"
+  # The whole document now equals the fixture's current registration: the
+  # foreign PreToolUse entry still first, ours rewritten at index 1, the
+  # other two of ours untouched, UserPromptExpansion added.
+  _assert_json_equal "$FIXTURES_DIR/foreign-plus-ours-current/.claude/settings.local.json" "$target"
+  _lacks "$(cat "$target")" "log_skill.sh"
+  after_first="$WORK_PARENT/h1-registration.after-first"
+  cp -p "$target" "$after_first"
+
+  _run_setup "$target"
+  [ "$status" -eq 0 ]
+  _has "$output" "already configured:"
+  _assert_bytes_equal "$after_first" "$target"
+
+  _run_remove "$target"
+  [ "$status" -eq 0 ]
+  run grep -c -F '$HOME/.claude/observability/' "$target"
+  [ "$output" -eq 0 ]
+  _has "$(cat "$target")" "/opt/foreign-audit/hook.sh"
 }
 
 # ---------------------------------------------------------------------------
@@ -485,7 +535,7 @@ EOF
   _has "$(cat "$target")" "/opt/foreign-audit/hook.sh"
   _has "$(cat "$target")" "/opt/foreign-audit/on-subagent.sh"
   run grep -c -F '$HOME/.claude/observability/' "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
@@ -540,7 +590,7 @@ EOF
 # what it does when told where the legacy file is.
 # ---------------------------------------------------------------------------
 
-@test "already-configured-observability: a flagless setup adds a SECOND registration beside the untouched legacy one -- six hooks fire, not three" {
+@test "already-configured-observability: a flagless setup adds a SECOND registration beside the untouched legacy one -- seven hooks fire, not four" {
   local dir legacy target original_target original_legacy
   dir="$(_copy_fixture already-configured-observability already-configured-observability)"
   legacy="$dir/.claude/settings.json"
@@ -565,21 +615,21 @@ EOF
   # it.
   _assert_bytes_equal "$original_legacy" "$legacy"
 
-  # settings.local.json now carries its OWN full set of 3 ours-entries,
+  # settings.local.json now carries its OWN full set of 4 ours-entries,
   # pointed at $HOME/.claude/observability/, alongside the untouched
   # "permissions" key.
   run grep -c -F '$HOME/.claude/observability/' "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   _has "$(cat "$target")" '"allow"'
   _has "$(cat "$target")" "Bash(git:*)"
 
-  # The net effect across BOTH files: six hooks now fire where three
-  # should -- three legacy (in-repo path) plus three new (namespace path).
+  # The net effect across BOTH files: seven hooks now fire where four
+  # should -- three legacy (in-repo path) plus four new (namespace path).
   # This is the number the task that produced this file measured by hand;
   # this test is what makes that number regression-proof.
   local total
   total="$(cat "$legacy" "$target" | grep -c -F '"type": "command"')"
-  [ "$total" -eq 6 ]
+  [ "$total" -eq 7 ]
 
   _run_remove "$target"
   [ "$status" -eq 0 ]
@@ -594,7 +644,7 @@ EOF
   _assert_bytes_differ "$original_target" "$target"
 }
 
-@test "already-configured-observability: --migrate-legacy takes the legacy entries out as the standard ones go in -- three hooks fire, not six" {
+@test "already-configured-observability: --migrate-legacy takes the legacy entries out as the standard ones go in -- four hooks fire, not seven" {
   local dir legacy target total
   dir="$(_copy_fixture already-configured-observability already-configured-migrate)"
   legacy="$dir/.claude/settings.json"
@@ -611,11 +661,11 @@ EOF
   _has "$output" "SubagentStart"
   _has "$output" "registered observability hooks in"
 
-  # THE number: three, where the flagless invocation above leaves six.
+  # THE number: four, where the flagless invocation above leaves seven.
   total="$(cat "$legacy" "$target" | grep -c -F '"type": "command"' || true)"
-  [ "$total" -eq 3 ]
+  [ "$total" -eq 4 ]
   run grep -c -F '$HOME/.claude/observability/' "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
   [ "$status" -ne 0 ]
 
