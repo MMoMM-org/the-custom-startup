@@ -68,10 +68,23 @@ def _run_checks(tmp_path: Path, records: list[dict], checks: str, prelude: str =
         "SID_R3": SID_R3,
         "SID_R4": SID_R4,
     }
-    script = f'source "{PROBE}"; {prelude}; FAILURES=0; for c in {checks}; do "$c"; done; echo "FAILURES=$FAILURES"'
+    script = (f'source "{PROBE}"; {prelude}; FAILURES=0; '
+              f'for c in {checks}; do "$c"; echo "RC:$c:$?"; done; echo "FAILURES=$FAILURES"')
     result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stderr
+    _assert_checks_ran_cleanly(result, checks.split())
     return result.stdout
+
+
+def _assert_checks_ran_cleanly(result: subprocess.CompletedProcess, checks: list[str]) -> None:
+    """A renamed or crashing check prints to stderr and no FAIL line: catch it here."""
+    assert result.stderr == "", result.stderr
+    for check in checks:
+        assert f"RC:{check}:0" in result.stdout.splitlines(), f"{check} did not exit 0:\n{result.stdout}"
+
+
+def _passed(output: str) -> int:
+    return sum(1 for line in output.splitlines() if line.startswith("PASS  "))
 
 
 def _failed(output: str) -> list[str]:
@@ -99,11 +112,15 @@ def test_every_record_check_passes_on_the_real_run(tmp_path):
     output = _run_checks(tmp_path, _records(), RECORD_CHECKS)
     assert _failed(output) == [], output
     assert "FAILURES=0" in output
+    # 9 single-verdict checks (typed, tool_skill, dispatch, subagent_git, reset,
+    # stash, main_git, unknown, privacy) + 3 from _check_isolation.
+    assert _passed(output) == 12, output
 
 
 def test_every_report_check_passes_on_the_real_run(tmp_path):
     output = _run_checks(tmp_path, _records(), "_check_report")
     assert _failed(output) == [], output
+    assert _passed(output) == 4, output  # exit 0, route counts, built-in credit, git callers
 
 
 def _typed_twice(records):
@@ -129,6 +146,11 @@ def _leak(field_value):
     def mutate(records):
         return _edit(records, SID_R2, {"kind": "instruction"}, path=field_value)
     return mutate
+
+
+def _leak_in_scratch(tmp_path, suffix):
+    scratch = tmp_path / "scratch"
+    return {"scratch": str(scratch), "scratch_real": str(scratch.resolve()), "s_home": str(scratch / "home")}[suffix]
 
 
 MUTANTS = {
@@ -157,6 +179,11 @@ MUTANTS = {
     "override value leaked": (_leak("CLAUDE_ALLOW_RESET_HARD=1"), "S7 privacy"),
     "commit message leaked": (_leak("probe-msg"), "S7 privacy"),
     "args leaked": (_leak("check nothing"), "S7 privacy"),
+    "named description leaked": (_leak("probe named"), "S7 privacy"),
+    "unnamed description leaked": (_leak("probe unnamed"), "S7 privacy"),
+    "prompt text leaked": (_leak("Automated observability test"), "S7 privacy"),
+    "override name leaked without value": (_leak("CLAUDE_ALLOW_RESET_HARD=x"), "S7 privacy"),
+    "bare =1 leaked": (_leak("a=1"), "S7 privacy"),
 }
 
 
@@ -168,8 +195,9 @@ def test_a_broken_field_fails_exactly_its_check(tmp_path, name):
     assert len(failed) == 1 and failed[0].startswith(expected), output
 
 
-def test_a_scratch_path_in_a_record_fails_the_privacy_check(tmp_path):
-    scratch = str(tmp_path / "scratch")
+@pytest.mark.parametrize("which", ["scratch", "scratch_real", "s_home"])
+def test_a_scratch_path_in_a_record_fails_the_privacy_check(tmp_path, which):
+    scratch = _leak_in_scratch(tmp_path, which)
     records = _edit(_records(), SID_R1, {"kind": "instruction"}, path=scratch + "/CLAUDE.md")
     failed = _failed(_run_checks(tmp_path, records, "_check_privacy"))
     assert len(failed) == 1 and failed[0].startswith("S7 privacy")
@@ -198,3 +226,81 @@ def test_a_commit_moved_to_main_fails_the_report_git_check(tmp_path):
     records = _edit(_records(), SID_R4, {"kind": "git"}, caller="main")
     failed = _failed(_run_checks(tmp_path, records, "_check_report"))
     assert any(f.startswith("S8 report: commit under") for f in failed), failed
+
+
+# --- the registration gate and -h ------------------------------------------
+
+# The shape `setup.sh install` writes: a double-quoted "$HOME/..." command.
+INSTALLED = {
+    "InstructionsLoaded": "log_instructions.sh",
+    "PreToolUse": "log_tool.sh",
+    "SubagentStart": "log_agent.sh",
+    "UserPromptExpansion": "log_expansion.sh",
+}
+
+
+def _installed_commands() -> dict[str, str]:
+    return {event: f'"$HOME/.claude/observability/{script}"' for event, script in INSTALLED.items()}
+
+
+def _run_registration(tmp_path: Path, commands: dict[str, str]):
+    """Write a settings.local.json holding `commands`, repoint it, check it."""
+    repo = tmp_path / "repo"
+    (repo / ".claude").mkdir(parents=True)
+    hooks = {e: [{"matcher": "", "hooks": [{"type": "command", "command": c}]}] for e, c in commands.items()}
+    settings = {"env": {"CLAUDE_OBSERVABILITY_ENABLED": "1"}, "hooks": hooks}
+    (repo / ".claude" / "settings.local.json").write_text(json.dumps(settings, indent=2))
+    env = {**os.environ, "REPO": str(repo), "S_HOME": str(tmp_path / "shome")}
+    script = f'source "{PROBE}"; FAILURES=0; _repoint_registration; _check_registration; echo REACHED'
+    return subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, timeout=60)
+
+
+def test_registration_passes_when_all_four_commands_are_repointed(tmp_path):
+    result = _run_registration(tmp_path, _installed_commands())
+    assert result.returncode == 0 and "REACHED" in result.stdout, result.stderr
+    assert _failed(result.stdout) == [] and _passed(result.stdout) == 2, result.stdout
+    assert str(tmp_path / "shome" / ".claude" / "observability" / "log_tool.sh") in result.stdout
+
+
+def test_registration_exits_2_when_a_command_still_names_home(tmp_path):
+    commands = {**_installed_commands(), "PreToolUse": '"$HOME/.claude/elsewhere/log_tool.sh"'}
+    result = _run_registration(tmp_path, commands)
+    assert result.returncode == 2 and "REACHED" not in result.stdout, result.stdout
+    assert "points outside the scratch home" in result.stderr
+
+
+def test_registration_exits_2_when_a_second_literal_home_remains(tmp_path):
+    commands = {**_installed_commands(), "PreToolUse": '"$HOME/.claude/observability/log_tool.sh" --dir "$HOME/x"'}
+    result = _run_registration(tmp_path, commands)
+    assert result.returncode == 2 and "REACHED" not in result.stdout, result.stdout
+
+
+def test_registration_repoints_every_occurrence_of_the_bundle_prefix(tmp_path):
+    twice = '"$HOME/.claude/observability/log_tool.sh" --lib "$HOME/.claude/observability/lib"'
+    result = _run_registration(tmp_path, {**_installed_commands(), "PreToolUse": twice})
+    assert result.returncode == 0 and _failed(result.stdout) == [], result.stdout
+    assert "$HOME" not in result.stdout
+
+
+def test_registration_prefix_is_literal_not_a_pattern(tmp_path):
+    lookalike = '"/x/shomeX.claude/observability/log_tool.sh"'  # `.` must not match any character
+    result = _run_registration(tmp_path, {**_installed_commands(), "PreToolUse": lookalike})
+    assert result.returncode == 2, result.stdout
+
+
+@pytest.mark.parametrize("keep", [3, 5])
+def test_registration_exits_2_unless_exactly_four_commands(tmp_path, keep):
+    commands = _installed_commands()
+    commands["Extra"] = '"$HOME/.claude/observability/log_extra.sh"'
+    commands = dict(list(commands.items())[:keep])
+    result = _run_registration(tmp_path, commands)
+    assert result.returncode == 2 and "REACHED" not in result.stdout, result.stdout
+    assert "expected 4 registered commands" in result.stderr
+
+
+def test_help_prints_the_usage_and_exit_paragraphs():
+    result = subprocess.run(["bash", str(PROBE), "-h"], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("Usage:")
+    assert "PROBE_MODEL" in result.stdout and "NEEDS_CONTEXT" in result.stdout
+    assert "WHAT IT NEVER TOUCHES" not in result.stdout

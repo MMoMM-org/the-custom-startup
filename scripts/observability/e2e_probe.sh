@@ -73,11 +73,17 @@ EOF
   return 0
 }
 
+# _usage  prints the header from the Usage line to the end of the Exit
+# paragraph (the second bare `#` line after it), so it cannot drift.
+_usage() {
+  awk '/^# Usage:/ {p=1} p && /^#$/ && ++n == 2 {exit} p {sub(/^# ?/, ""); print}' "${BASH_SOURCE[0]}"
+}
+
 _parse_args() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --keep) KEEP=1 ;;
-      -h|--help) sed -n '13,18p' "${BASH_SOURCE[0]}"; exit 0 ;;
+      -h|--help) _usage; exit 0 ;;
       *) _die 2 "unknown argument: $1" ;;
     esac
     shift
@@ -118,14 +124,18 @@ _make_scratch() {
   : >"$SCRATCH/start.stamp"
 }
 
+# The scratch-setup git calls ignore global and system config (hooks, signing,
+# templates) so a user's setup cannot abort them; the claude runs keep theirs.
+git_() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$REPO" "$@"; }
+
 _make_repo() {
-  git -C "$REPO" -c init.defaultBranch=probe init -q || _die 2 "git init failed"
-  git -C "$REPO" config user.name "e2e probe"
-  git -C "$REPO" config user.email "e2e-probe@example.invalid"
+  git_ -c init.defaultBranch=probe init -q || _die 2 "git init failed"
+  git_ config user.name "e2e probe"
+  git_ config user.email "e2e-probe@example.invalid"
   printf '%s\n' '.claude/settings.local.json*' '.claude/*.lock' '.claude/*.bak' >"$REPO/.gitignore"
   printf 'one\n' >"$REPO/tracked.txt"
-  git -C "$REPO" add .gitignore tracked.txt || _die 2 "git add failed"
-  git -C "$REPO" commit -q -m init || _die 2 "initial commit failed"
+  git_ add .gitignore tracked.txt || _die 2 "git add failed"
+  git_ commit -q -m init || _die 2 "initial commit failed"
   # Dirty, so `git stash` has something to stash and `stash pop` succeeds.
   printf 'two\n' >"$REPO/tracked.txt"
 }
@@ -144,21 +154,35 @@ _repoint_registration() {
   local settings="$REPO/.claude/settings.local.json" bundle="$S_HOME/.claude/observability"
   local rewritten
   rewritten="$(jq --arg b "$bundle" '.hooks |= with_entries(.value |= map(.hooks |= map(
-      .command |= sub("\\$HOME/\\.claude/observability"; $b))))' "$settings")" || _die 2 "cannot rewrite $settings"
+      .command |= gsub("\\$HOME/\\.claude/observability"; $b))))' "$settings")" || _die 2 "cannot rewrite $settings"
   printf '%s\n' "$rewritten" >"$settings"
+}
+
+# _outside_bundle <bundle> <command>  succeeds when the command does not start
+# with the quoted scratch bundle path, or still names a literal $HOME.
+_outside_bundle() {
+  case "$2" in "\"$1/"*) ;; *) return 0 ;; esac
+  case "$2" in *\$HOME*) return 0 ;; esac
+  return 1
 }
 
 _check_registration() {
   local settings="$REPO/.claude/settings.local.json" bundle="$S_HOME/.claude/observability"
-  local cmds outside enabled
+  local cmds outside="" enabled cmd count rc
   cmds="$(jq -r '.hooks[][].hooks[].command' "$settings")"
-  outside="$(printf '%s\n' "$cmds" | grep -v "^\"$bundle/" || true)"
+  while IFS= read -r cmd; do
+    _outside_bundle "$bundle" "$cmd" && outside="$outside$cmd"$'\n'
+  done <<EOF
+$cmds
+EOF
+  count="$(printf '%s\n' "$cmds" | grep -c .)"
   enabled="$(jq -r '.env.CLAUDE_OBSERVABILITY_ENABLED // ""' "$settings")"
-  [ -z "$outside" ] && [ "$(printf '%s\n' "$cmds" | wc -l | tr -d ' ')" = "4" ]
+  [ -z "$outside" ] && [ "$count" = "4" ]
   rc=$?; _check "registration: all 4 commands point into the scratch home" "$rc" "$cmds"
   [ "$enabled" = "1" ]
   rc=$?; _check "registration: env CLAUDE_OBSERVABILITY_ENABLED=1 from install" "$rc"
   [ -z "$outside" ] || _die 2 "a registered command points outside the scratch home; not running claude"
+  [ "$count" = "4" ] || _die 2 "expected 4 registered commands, found $count; not running claude"
 }
 
 # --- headless runs ----------------------------------------------------------
@@ -219,7 +243,7 @@ _recs() { jq -c --arg s "$1" "select(.session == \$s) | select($2)" "$EVENTS" 2>
 _count() { _recs "$1" "$2" | grep -c . ; }
 
 _check_typed() {
-  local typed bad
+  local typed bad rc
   typed="$(_recs "$SID_R1" '.kind == "skill"')"
   bad="$(_recs "$SID_R1" '.kind == "skill" and (.skill != "tcs-workflow:verify" or .route != "typed"
       or .args_present != "yes" or (.source // "") == "")')"
@@ -228,7 +252,7 @@ _check_typed() {
 }
 
 _check_tool_skill() {
-  local recs
+  local recs rc
   recs="$(_recs "$SID_R3" '.kind == "skill"')"
   [ -n "$(_recs "$SID_R3" '.kind == "skill" and .skill == "tcs-workflow:verify" and .route == "tool"')" ] \
     && [ -z "$(_recs "$SID_R3" '.kind == "skill" and .route != "tool"')" ]
@@ -236,7 +260,7 @@ _check_tool_skill() {
 }
 
 _check_dispatch() {
-  local recs named unnamed
+  local recs named unnamed rc
   recs="$(_recs "$SID_R4" '.kind == "dispatch"')"
   named="$(_count "$SID_R4" '.kind == "dispatch" and .subagent_type == "general-purpose" and .name == "probe-named" and .caller == "main"')"
   unnamed="$(_count "$SID_R4" '.kind == "dispatch" and .subagent_type == "general-purpose" and .name == "" and .caller == "main"')"
@@ -247,7 +271,7 @@ _check_dispatch() {
 # Every git record of R4 is a subagent commit; both dispatched agents (their
 # ids taken from the SubagentStart records) committed; no `status` record.
 _check_subagent_git() {
-  local recs ids id bad missing=""
+  local recs ids id bad missing="" rc
   recs="$(_recs "$SID_R4" '.kind == "git"')"
   bad="$(_recs "$SID_R4" '.kind == "git" and (.subcommand != "commit" or .caller != "subagent"
       or .caller_agent_type != "general-purpose" or (.caller_agent_id // "") == "")')"
@@ -260,7 +284,7 @@ _check_subagent_git() {
 }
 
 _check_reset() {
-  local recs bad
+  local recs bad rc
   recs="$(_recs "$SID_R3" '.kind == "git" and .subcommand == "reset"')"
   bad="$(_recs "$SID_R3" '.kind == "git" and .subcommand == "reset" and (.flags != "--hard" or .caller != "main"
       or .overrides != "CLAUDE_ALLOW_RESET_HARD" or .override_first != "CLAUDE_ALLOW_RESET_HARD")')"
@@ -269,7 +293,7 @@ _check_reset() {
 }
 
 _check_stash() {
-  local recs
+  local recs rc
   recs="$(_recs "$SID_R3" '.kind == "git" and .subcommand == "stash"')"
   [ -n "$(_recs "$SID_R3" '.kind == "git" and .subcommand == "stash" and .action == "pop" and .caller == "main"')" ] \
     && [ -n "$(_recs "$SID_R3" '.kind == "git" and .subcommand == "stash" and .action == ""')" ]
@@ -277,7 +301,7 @@ _check_stash() {
 }
 
 _check_main_git() {
-  local recs bad
+  local recs bad rc
   recs="$(_recs "$SID_R3" '.kind == "git"')"
   bad="$(_recs "$SID_R3" '.kind == "git" and .subcommand != "stash" and .subcommand != "reset"')"
   [ -n "$recs" ] && [ -z "$bad" ]
@@ -285,7 +309,7 @@ _check_main_git() {
 }
 
 _check_unknown() {
-  local recs
+  local recs rc
   recs="$(_recs "$SID_R2" '.kind == "skill"')"
   [ -z "$recs" ] && [ -n "$(_recs "$SID_R2" 'true')" ]
   rc=$?; _check "S6 /nonexistent-skill: no skill record (session itself did record)" "$rc" "$recs"
@@ -294,7 +318,7 @@ _check_unknown() {
 # --- privacy, isolation, protection -----------------------------------------
 
 _check_privacy() {
-  local needle hits="" all
+  local needle hits="" all rc
   for needle in "$NONCE" "probe-msg" "check nothing" "probe named" "probe unnamed" "Automated observability" \
       "$SCRATCH" "$SCRATCH_REAL" "$S_HOME" "CLAUDE_ALLOW_RESET_HARD=" "=1"; do
     grep -qF -- "$needle" "$EVENTS" && hits="$hits [${needle##*/}]"
@@ -309,13 +333,12 @@ _check_privacy() {
 _mode_of() { ls -ld "$1" 2>/dev/null | cut -c1-10; }
 
 _check_isolation() {
-  local modes
+  local modes touched="" rc
   modes="$(_mode_of "$DATA/observability") $(_mode_of "$EVENTS")"
   [ "$modes" = "drwx------ -rw-------" ]
   rc=$?; _check "F6 protection: record dir 0700, events.jsonl 0600" "$rc" "$modes"
   [ ! -e "$REAL_DATA" ]
   rc=$?; _check "isolation: nothing written to the real data dir for this repo" "$rc" "${REAL_DATA/#$HOME/~}"
-  local touched=""
   [ -d "$HOME/.claude/observability" ] && touched="$(find "$HOME/.claude/observability" -newer "$SCRATCH/start.stamp" 2>/dev/null)"
   [ -z "$touched" ]
   rc=$?; _check "isolation: the real home's bundle is untouched" "$rc" "$touched"
@@ -332,9 +355,9 @@ _git_triples() {
 }
 
 _check_report() {
+  local rc route triples
   python3 "$_REPORT_PY" --events "$EVENTS" --repo-root "$_REPO_ROOT" >"$SCRATCH/report.txt" 2>&1
   rc=$?; _check "S8 report: report.py exits 0" "$rc"
-  local route triples
   route="$(grep -E '^  tcs-workflow:verify \[skill\]: tool=[1-9][0-9]*, typed=1$' "$SCRATCH/report.txt")"
   rc=$?; _check "S8 report: tcs-workflow:verify counted with both routes, typed=1" "$rc" "$route"
   grep -A3 'not found in this inventory at all' "$SCRATCH/report.txt" | grep -q '^  general-purpose \[agent\]$' \
@@ -354,7 +377,7 @@ _check_report_git() {
 }
 
 _check_no_leftovers() {
-  local procs
+  local procs rc
   procs="$(pgrep -fl -- "$SCRATCH" 2>/dev/null || true)"
   [ -z "$procs" ]
   rc=$?; _check "no process left referencing the scratch dir" "$rc" "$procs"
