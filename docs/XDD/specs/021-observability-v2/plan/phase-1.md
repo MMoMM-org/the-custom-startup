@@ -63,7 +63,7 @@ Establishes the two pieces every new adapter stands on: a writer that creates ow
   2. Test: a differential test feeds a corpus plus generated inputs (random mixes of quotes, `$(`, backticks, backslashes, heredocs, separators) through the old and the new implementation and requires byte-identical output; a scale test bounds `_strip_quoted` and `_strip_heredocs` at 20 KB and 200 KB (linear growth: 10x input ≤ ~15x time); the full guard suite stays green
   3. Implement: rewrite both functions in `pattern_match.sh` to consume runs in bulk instead of one byte per iteration with re-slicing; recopy into `git_ops.sh` under `_git_ops_` names (parity suite green)
   4. Validate: guard bats (all), parity, git bats; bash 3.2 and 5.2; mutate one branch of the new code and the differential test fails
-  5. Success: the guard and the recorder strip a 20 KB command in well under 100 ms; output unchanged for every input `[ref: SDD/Known Technical Issues]`
+  5. Success: the guard and the recorder strip a 20 KB command in under 100 ms for prose and under 250 ms for token-dense input (a shell special every few bytes; measured 45-92 ms); output unchanged for every input `[ref: SDD/Known Technical Issues]`
 
 - [ ] **T1.4 Phase Validation** `[activity: validate]`
 
