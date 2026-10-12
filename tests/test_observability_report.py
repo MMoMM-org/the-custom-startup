@@ -3236,3 +3236,353 @@ def test_cli_data_dir_has_no_effect_once_a_config_is_in_play(tmp_path):
     assert "=== Source A ===" in result.stdout
     assert "a.md: 1 load(s)" in result.stdout
     assert "decoy.md" not in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# spec-021 T4.1: firings -- routes, dispatches, dedupe, legacy caveat
+# (SDD/Runtime View/Complex Logic, ADR-7, ADR-8; PRD F4 AC1/AC2/AC4,
+# F1 AC5, F2 AC3).
+#
+# Every expected coverage figure below is counted by hand from the fixture
+# and written as a literal -- never computed with report.py's own helpers.
+# ---------------------------------------------------------------------------
+
+
+def _routed_skill_record(skill: str, route: str, session: str = "s1") -> dict:
+    """A post-h2 `kind: skill` record, shaped as log_tool.sh (`route: tool`)
+    or log_expansion.sh (`route: typed`) writes it."""
+    record = _skill_record(skill, session=session)
+    record["route"] = route
+    if route == "typed":
+        record["args_present"] = "no"
+        record["source"] = "plugin"
+    return record
+
+
+def _dispatch_record(subagent_type: str, name: str = "", session: str = "s1") -> dict:
+    """A `kind: dispatch` record, shaped as log_tool.sh writes it (ADR-8)."""
+    return {
+        "ts": "2026-09-06T16:43:28Z", "kind": "dispatch", "session": session,
+        "repo": "the-custom-startup", "subagent_type": subagent_type, "name": name,
+        "tool_use_id": "toolu_1", "caller": "main",
+    }
+
+
+def _section(text: str, start_marker: str, end_marker: str | None = None) -> str:
+    start = text.index(start_marker)
+    if end_marker is None:
+        return text[start:]
+    return text[start:text.index(end_marker, start)]
+
+
+def test_firing_events_on_sdd_traced_session_yields_the_table_outcomes():
+    """SDD/Runtime View/Complex Logic, the traced session table, row by row."""
+    records = [
+        _dispatch_record("tcs-workflow:tdd-guardian", name="tdd-T1"),
+        _agent_record("tdd-T1"),
+        _dispatch_record("Explore", name=""),
+        _agent_record("Explore"),
+        _agent_record("impl-t41"),
+    ]
+
+    events = report.firing_events(records)
+
+    assert events == [
+        ("agent", "tcs-workflow:tdd-guardian", "dispatch", "s1"),  # row 1: credited to its type
+        # row 2 (`agent tdd-T1`) yields nothing: the name is in the session's dispatch set
+        ("agent", "Explore", "dispatch", "s1"),  # row 3
+        ("agent", "Explore", "start", "s1"),  # row 4: same (kind, name) set entry
+        ("agent", "impl-t41", "start", "s1"),  # row 5: classified at the inventory join, below
+    ]
+
+    entries = [report.InventoryEntry(qualified="tcs-workflow:tdd-guardian", bare="tdd-guardian", kind="agent")]
+    coverage = report.firing_coverage(
+        entries, report.fired_names(records), report.firing_route_counts(events)
+    )
+
+    assert coverage.fired == entries
+    assert coverage.unmatched_record_names == ["Explore [agent]"]  # built-in, outside inventory
+    assert coverage.uncreditable_record_names == ["impl-t41 [agent]"]  # row 5
+    assert coverage.ambiguous_record_names == []
+
+
+def test_pre_h2_skill_record_without_route_counts_as_tool():
+    assert report.firing_events([_skill_record("tcs-issues:issue")]) == [
+        ("skill", "tcs-issues:issue", "tool", "s1")
+    ]
+
+
+def test_skill_record_with_unrecognised_route_yields_no_firing():
+    """Only `tool` and `typed` exist; any other value is a producer bug and is
+    excluded, never folded into either route (module docstring posture)."""
+    assert report.firing_events([_routed_skill_record("tcs-issues:issue", "bogus")]) == []
+
+
+def test_tool_and_typed_records_for_one_skill_both_count_and_route_counts_render():
+    """PRD F4 AC1: both routes count toward the one skill -- including a tool
+    record carrying the bare name alongside a typed record carrying the
+    qualified one -- and the report shows the per-route counts."""
+    inventory = report.SkillAgentInventory(
+        entries=[report.InventoryEntry(qualified="tcs-issues:issue", bare="issue", kind="skill")],
+        skill_count=1,
+        agent_count=0,
+    )
+    records = [
+        _routed_skill_record("issue", "tool"),
+        _skill_record("tcs-issues:issue"),  # pre-h2, read as tool
+        _routed_skill_record("tcs-issues:issue", "typed"),
+    ]
+    events = report.firing_events(records)
+
+    coverage = report.firing_coverage(
+        inventory.entries, report.fired_names(records), report.firing_route_counts(events)
+    )
+    text = report.build_load_report({}, [], skill_agent_inventory=inventory, firing=coverage)
+
+    assert coverage.fired == inventory.entries
+    assert coverage.unmatched_record_names == []  # the bare tool record is not "not in inventory"
+    assert "Coverage: 1/1 fired." in text
+    assert "  tcs-issues:issue [skill]: tool=2, typed=1" in text
+
+
+def test_typed_bare_name_is_not_a_skill_firing_while_typed_qualified_name_is():
+    """ADR-7, PRD F1 AC5: a custom command `/test` arrives as typed `test`
+    and must not satisfy the bare-name fallback; typed `tcs-issues:issue`
+    is an exact qualified inventory name and counts."""
+    test_skill = report.InventoryEntry(qualified="tcs-workflow:test", bare="test", kind="skill")
+    issue_skill = report.InventoryEntry(qualified="tcs-issues:issue", bare="issue", kind="skill")
+    records = [_routed_skill_record("test", "typed"), _routed_skill_record("tcs-issues:issue", "typed")]
+
+    coverage = report.firing_coverage(
+        [test_skill, issue_skill],
+        report.fired_names(records),
+        report.firing_route_counts(report.firing_events(records)),
+    )
+
+    assert coverage.fired == [issue_skill]
+    assert coverage.unused == [test_skill]
+    assert coverage.unmatched_record_names == ["test [skill]"]  # listed as not in inventory
+
+
+def test_tool_record_keeps_the_bare_name_fallback_when_a_typed_record_shares_the_name():
+    """The exact-match rule is scoped to the typed route: a Skill tool call
+    naming bare `test` still credits the unique `test` entry."""
+    test_skill = report.InventoryEntry(qualified="tcs-workflow:test", bare="test", kind="skill")
+    records = [_routed_skill_record("test", "typed"), _routed_skill_record("test", "tool")]
+
+    coverage = report.firing_coverage(
+        [test_skill], report.fired_names(records), report.firing_route_counts(report.firing_events(records))
+    )
+
+    assert coverage.fired == [test_skill]
+    assert coverage.unmatched_record_names == []
+
+
+def test_typed_bare_name_shared_by_two_entries_is_not_in_inventory_rather_than_ambiguous():
+    """A typed bare name cannot be attributed by bare name at all, so it is
+    not an ambiguous inventory name either -- it is not in the inventory."""
+    a = report.InventoryEntry(qualified="plugin-a:test", bare="test", kind="skill")
+    b = report.InventoryEntry(qualified="plugin-b:test", bare="test", kind="skill")
+    records = [_routed_skill_record("test", "typed")]
+
+    coverage = report.firing_coverage(
+        [a, b], report.fired_names(records), report.firing_route_counts(report.firing_events(records))
+    )
+
+    assert coverage.ambiguous_record_names == []
+    assert coverage.unmatched_record_names == ["test [skill]"]
+
+
+def test_dispatch_with_empty_subagent_type_yields_no_firing():
+    assert report.firing_events([_dispatch_record("", name="worker")]) == []
+    assert report.fired_names([_dispatch_record("")]) == set()
+
+
+def test_named_dispatch_credits_its_subagent_type_and_its_subagent_start_adds_nothing():
+    """PRD F2 AC3 / F4 AC2."""
+    records = [_dispatch_record("tcs-team:the-tester:test-strategy", name="tester-1"), _agent_record("tester-1")]
+
+    assert report.fired_names(records) == {("agent", "tcs-team:the-tester:test-strategy")}
+
+
+def test_dispatch_name_dedupes_only_within_its_own_session():
+    """ADR-8: dedupe is per session -- the same spawn name in another session
+    with no dispatch there is still that session's own agent record."""
+    records = [
+        _dispatch_record("tcs-workflow:tdd-guardian", name="tdd-T1", session="s1"),
+        _agent_record("tdd-T1", session="s1"),
+        _agent_record("tdd-T1", session="s2"),
+    ]
+
+    assert report.firing_events(records) == [
+        ("agent", "tcs-workflow:tdd-guardian", "dispatch", "s1"),
+        ("agent", "tdd-T1", "start", "s2"),
+    ]
+
+
+def test_spawn_name_agent_record_without_dispatch_is_listed_uncreditable_and_not_counted():
+    """PRD F4 AC4: neither an inventory name, a built-in type nor a dispatch
+    name -- listed as uncreditable (may be a spawn name), never counted and
+    never listed as an ordinary not-in-inventory name."""
+    inventory = report.SkillAgentInventory(
+        entries=[report.InventoryEntry(qualified="tcs-workflow:tdd-guardian", bare="tdd-guardian", kind="agent")],
+        skill_count=0,
+        agent_count=1,
+    )
+    records = [_agent_record("impl-t41")]
+
+    coverage = report.firing_coverage(
+        inventory.entries, report.fired_names(records), report.firing_route_counts(report.firing_events(records))
+    )
+    text = report.build_load_report({}, [], skill_agent_inventory=inventory, firing=coverage)
+
+    assert coverage.numerator == 0
+    assert coverage.unmatched_record_names == []
+    assert coverage.uncreditable_record_names == ["impl-t41 [agent]"]
+    uncreditable_section = _section(text, "uncreditable (may be a spawn name)")
+    assert "  impl-t41 [agent]" in uncreditable_section
+    assert "not found in this inventory at all" not in text
+
+
+BUILTIN_AGENT_TYPES_BY_HAND = ["general-purpose", "Explore", "Plan", "statusline-setup", "claude-code-guide", "fork"]
+
+
+def test_builtin_agent_types_constant_is_the_phase_4_list():
+    assert report.BUILTIN_AGENT_TYPES == frozenset(BUILTIN_AGENT_TYPES_BY_HAND)
+
+
+def test_builtin_agent_types_are_not_called_uncreditable():
+    records = [_agent_record(name) for name in BUILTIN_AGENT_TYPES_BY_HAND]
+
+    coverage = report.firing_coverage(
+        [], report.fired_names(records), report.firing_route_counts(report.firing_events(records))
+    )
+
+    assert coverage.uncreditable_record_names == []
+    assert sorted(coverage.unmatched_record_names) == sorted(f"{n} [agent]" for n in BUILTIN_AGENT_TYPES_BY_HAND)
+
+
+def test_agent_record_naming_a_dispatched_type_is_not_called_uncreditable():
+    """An unnamed dispatch of a personal agent `my-reviewer` (outside the
+    shipped inventory) writes `dispatch subagent_type=my-reviewer` and then
+    `agent agent_type=my-reviewer`: a dispatch named it as a TYPE, so it is
+    not a spawn name -- reported as not in inventory, not as uncreditable."""
+    records = [_dispatch_record("my-reviewer"), _agent_record("my-reviewer")]
+
+    coverage = report.firing_coverage(
+        [], report.fired_names(records), report.firing_route_counts(report.firing_events(records))
+    )
+
+    assert coverage.uncreditable_record_names == []
+    assert coverage.unmatched_record_names == ["my-reviewer [agent]"]
+
+
+def test_per_source_detail_scopes_the_spawn_name_caveat_to_records_without_dispatch():
+    """The legacy caveat: only records written before dispatch recording are
+    blind to a named dispatch; a `dispatch` record credits its type."""
+    inventory = report.SkillAgentInventory(
+        entries=[report.InventoryEntry(qualified="a:x", bare="x", kind="skill")], skill_count=1, agent_count=0
+    )
+
+    text = "\n".join(report._render_per_source_firing_detail(inventory, [("source-a", set())]))
+
+    assert "before dispatch recording" in text
+    assert "a `dispatch` record credits its `subagent_type`" in text
+
+
+def _write_firing_inventory(shipping_root: Path) -> None:
+    """Four entries: skills plugin:alpha, plugin:beta, plugin:test (bare
+    `test`), and agent tcs-team:the-x:reviewer (bare `reviewer`)."""
+    _make_skill(shipping_root, "plugin", "alpha")
+    _make_skill(shipping_root, "plugin", "beta")
+    _make_skill(shipping_root, "plugin", "test")
+    _make_agent(shipping_root, "tcs-team", "the-x/reviewer.md", "reviewer")
+
+
+def test_cli_single_source_firing_figures_equal_hand_derived_values(tmp_path):
+    """Hand count over the 4-entry inventory:
+    alpha   <- tool `alpha` (bare, unique)                      fired
+    beta    <- typed `plugin:beta` (exact qualified)            fired
+    test    <- typed `test` only (bare, typed: no fallback)     unused
+    reviewer <- dispatch subagent_type=reviewer name=rev-1      fired
+    `agent rev-1` deduped; `agent Explore` built-in, not in inventory;
+    `agent impl-t41` uncreditable. Coverage 3/4."""
+    shipping_root = tmp_path / "shipping"
+    _write_firing_inventory(shipping_root)
+    events = tmp_path / "events.jsonl"
+    _write_jsonl(
+        events,
+        [
+            _routed_skill_record("alpha", "tool"),
+            _routed_skill_record("plugin:beta", "typed"),
+            _routed_skill_record("test", "typed"),
+            _dispatch_record("reviewer", name="rev-1"),
+            _agent_record("rev-1"),
+            _agent_record("Explore"),
+            _agent_record("impl-t41"),
+        ],
+    )
+
+    result = _run_report_cli(
+        ["--events", str(events), "--repo-root", str(shipping_root), "--home", str(tmp_path / "home")]
+    )
+
+    assert result.returncode == 0, result.stderr
+    out = result.stdout
+    assert "Coverage: 3/4 fired." in out
+    assert "  plugin:alpha [skill]: tool=1, typed=0" in out
+    assert "  plugin:beta [skill]: tool=0, typed=1" in out
+    unused = _section(out, "Never fired -- unused, not missing (1):", "record(s)")
+    assert "  plugin:test [skill]" in unused
+    unmatched = _section(out, "not found in this inventory at all", "uncreditable")
+    assert "  Explore [agent]" in unmatched
+    assert "  test [skill]" in unmatched
+    assert "  impl-t41 [agent]" in _section(out, "uncreditable (may be a spawn name)")
+    assert "rev-1" not in out
+
+
+def test_cli_multi_source_firing_figures_equal_hand_derived_values(tmp_path):
+    """Hand count, same 4-entry inventory:
+    source-a: tool `alpha` -> alpha; typed `test` -> nothing; `agent rev-1`
+              with NO dispatch in this source -> uncreditable.     1/4
+    source-b: dispatch reviewer name=rev-1 -> reviewer; `agent rev-1`
+              deduped; typed `plugin:beta` -> beta.                2/4
+    union:    alpha, beta, reviewer.                               3/4"""
+    shipping_root = tmp_path / "shipping"
+    _write_firing_inventory(shipping_root)
+    claude_dir = shipping_root / ".claude"
+    claude_dir.mkdir(parents=True)
+
+    roots = {}
+    for label, records in (
+        ("source-a", [_routed_skill_record("alpha", "tool"), _routed_skill_record("test", "typed"), _agent_record("rev-1")]),
+        (
+            "source-b",
+            [_dispatch_record("reviewer", name="rev-1"), _agent_record("rev-1"), _routed_skill_record("plugin:beta", "typed")],
+        ),
+    ):
+        repo, home = tmp_path / f"{label}-repo", tmp_path / f"{label}-home"
+        repo.mkdir()
+        home.mkdir()
+        _write_source_events(repo, home, records)
+        roots[label] = (repo, home)
+
+    (claude_dir / "observability-sources.toml").write_text(
+        "".join(
+            f'[[source]]\nlabel = "{label}"\nrepo_root = "{repo}"\nhomes = ["{home}"]\n\n'
+            for label, (repo, home) in roots.items()
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_report_cli(["--repo-root", str(shipping_root), "--home", str(tmp_path / "unused-home")])
+
+    assert result.returncode == 0, result.stderr
+    union = _section(result.stdout, "=== Firing coverage: union across all sources", "Per-source firing detail:")
+    assert "Coverage: 3/4 fired." in union
+    assert "  plugin:test [skill]" in _section(union, "Never fired -- unused, not missing (1):", "record(s)")
+    assert "  plugin:beta [skill]: tool=0, typed=1" in union
+    assert "  rev-1 [agent]" in _section(union, "uncreditable (may be a spawn name)")
+    detail = _section(result.stdout, "Per-source firing detail:")
+    assert "  source-a: 1/4 of the shipped inventory fired here." in detail
+    assert "  source-b: 2/4 of the shipped inventory fired here." in detail
