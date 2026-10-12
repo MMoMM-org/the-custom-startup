@@ -40,7 +40,7 @@ Makes the report credit every route and dispatch correctly and show git activity
   4. Validate: `pytest tests/test_observability_report.py tests/test_observability_sources.py tests/test_observability_report_t30_golden.py` green; T30 golden regenerated via `tests/fixtures/observability/t30_golden/regenerate.py` only if rendering changed, and the diff reviewed line by line
   5. Success: `[ref: PRD/F4 AC1, AC2, AC4]`; `[ref: PRD/F1 AC5]`; `[ref: PRD/F2 AC3]`; `[ref: SDD/Acceptance Criteria/F4]`
 
-- [ ] **T4.2 Git section and wording** `[activity: backend]` `[parallel: true]`
+- [x] **T4.2 Git section and wording** `[activity: backend]` `[parallel: true]`
 
   1. Prime: `build_load_report` (:1561-1712); README coverage wording (:211-218) `[ref: SDD/Acceptance Criteria/F4]`
   2. Test: git records render grouped by session, then caller (`main` or `<caller_agent_type> <caller_agent_id>`), each with subcommand, flags and overrides; a source with none says no git activity was recorded and that this is not proof none happened; multi-source keeps the per-repo split (019 ADR-7)
