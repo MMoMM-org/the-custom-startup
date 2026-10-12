@@ -54,8 +54,7 @@ case "$_payload" in
   *) exit 0 ;;
 esac
 
-_log_tool_dir="${BASH_SOURCE[0]%/*}"
-case "${BASH_SOURCE[0]}" in */*) ;; *) _log_tool_dir="." ;; esac
+case "${BASH_SOURCE[0]}" in */*) _log_tool_dir="${BASH_SOURCE[0]%/*}" ;; *) _log_tool_dir="." ;; esac
 # shellcheck source=./logwrite.sh
 . "$_log_tool_dir/logwrite.sh" >/dev/null 2>&1 || exit 0
 
@@ -71,7 +70,8 @@ case "$_kind" in
     ;;
   skill)
     _skill="$(_observability_field "$_payload" skill)" || _skill=""
-    _observability_write kind=skill session="$_session" skill="$_skill" route=tool >/dev/null 2>&1
+    # An empty skill name (malformed payload) would only add a junk row.
+    [ -n "$_skill" ] && _observability_write kind=skill session="$_session" skill="$_skill" route=tool >/dev/null 2>&1
     ;;
   dispatch)
     _sub_type="$(_observability_field "$_payload" subagent_type)" || _sub_type=""
@@ -79,17 +79,14 @@ case "$_kind" in
     _use_id="$(_observability_field "$_payload" tool_use_id)" || _use_id=""
     _desc="$(_observability_field "$_payload" description)" || _desc=""
     _agent_id="$(_observability_field "$_payload" agent_id)" || _agent_id=""
+    _caller=(caller=main)
     if [ -n "$_agent_id" ]; then
       _caller_type="$(_observability_field "$_payload" agent_type)" || _caller_type=""
-      _observability_write kind=dispatch session="$_session" \
-        subagent_type="$_sub_type" name="$_name" tool_use_id="$_use_id" \
-        caller=subagent caller_agent_type="$_caller_type" caller_agent_id="$_agent_id" \
-        "detail:description=$_desc" >/dev/null 2>&1
-    else
-      _observability_write kind=dispatch session="$_session" \
-        subagent_type="$_sub_type" name="$_name" tool_use_id="$_use_id" \
-        caller=main "detail:description=$_desc" >/dev/null 2>&1
+      _caller=(caller=subagent caller_agent_type="$_caller_type" caller_agent_id="$_agent_id")
     fi
+    _observability_write kind=dispatch session="$_session" \
+      subagent_type="$_sub_type" name="$_name" tool_use_id="$_use_id" \
+      "${_caller[@]}" "detail:description=$_desc" >/dev/null 2>&1
     ;;
 esac
 

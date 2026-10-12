@@ -120,6 +120,15 @@ _assert_silent() {
   _assert_absent 'CANARY-ARGS-1' "$EVENTS"
 }
 
+@test "a Skill payload without a skill name writes no record" {
+  _run_tool '{"session_id":"sess-t","tool_name":"Skill"'
+  _assert_silent
+  [ ! -e "$EVENTS" ]
+  _run_tool "$(_hook Skill '{"args":"x"}')"
+  _assert_silent
+  [ ! -e "$EVENTS" ]
+}
+
 # ---------------------------------------------------------------------------
 # Agent dispatch
 # ---------------------------------------------------------------------------
@@ -158,6 +167,26 @@ _assert_silent() {
   _assert_silent
   _assert_present '"caller":"main"' "$EVENTS"
   _assert_absent 'forged' "$EVENTS"
+}
+
+@test "an Agent payload without subagent_type still writes a dispatch record" {
+  _run_tool "$(_hook Agent '{"description":"d","prompt":"p"}')"
+  _assert_silent
+  _assert_present '"kind":"dispatch"' "$EVENTS"
+  _assert_present '"subagent_type":""' "$EVENTS"
+}
+
+@test "inside a subagent, description is withheld without detail and present with it" {
+  local p
+  p="$(_hook Agent '{"description":"CANARY-DESC-9","prompt":"p","subagent_type":"Explore"}' ',"agent_id":"ag-1","agent_type":"general-purpose"')"
+  _run_tool "$p"
+  _assert_silent
+  _assert_present '"caller":"subagent"' "$EVENTS"
+  _assert_absent 'CANARY-DESC-9' "$EVENTS"
+  rm -f "$EVENTS"
+  _run_tool "$p" CLAUDE_OBSERVABILITY_DETAIL=1
+  _assert_silent
+  _assert_present 'CANARY-DESC-9' "$EVENTS"
 }
 
 @test "description appears only with detail on, prompt never" {
@@ -264,11 +293,35 @@ _assert_silent() {
   _hook Bash "{\"command\":\"echo $big\"}" > "$TEST_DIR/big2.json"
   _run_file "$ADAPTER" "$TEST_DIR/big2.json"
   _assert_silent
+  # The non-git 200 KB Bash payload adds no record: still the one dispatch.
+  [ "$(wc -l < "$EVENTS" | tr -d ' ')" = "1" ]
 }
 
 # ---------------------------------------------------------------------------
-# Performance: the non-git path (CON-7)
+# Cost of the non-git path (CON-7)
+#
+# The exact-cost guard is the exec count below: one extra fork (~0.8 ms) is
+# invisible to a wall-clock budget, so the deterministic test counts execs.
+# The timing test after it only catches gross regressions (a sourced writer,
+# a quadratic scan).
 # ---------------------------------------------------------------------------
+
+@test "non-git Bash path execs exactly one external command (cat) and nothing else" {
+  # PATH holds only a counting `cat` shim. Any other external command (git,
+  # sed, awk, jq, ...) fails with "command not found" on stderr; a second cat
+  # raises the count. Bash itself is invoked by absolute path.
+  local shimdir="$TEST_DIR/shim" counter="$TEST_DIR/cat.count"
+  mkdir -p "$shimdir"
+  printf '#!/bin/bash\nprintf x >> "%s"\nexec /bin/cat "$@"\n' "$counter" > "$shimdir/cat"
+  chmod +x "$shimdir/cat"
+  : > "$counter"
+  printf '%s' "$(_hook Bash '{"command":"ls -la"}')" > "$TEST_DIR/nongit.json"
+  run --separate-stderr env -i PATH="$shimdir" HOME="$TEST_DIR" CLAUDE_OBSERVABILITY_ENABLED=1 \
+    CLAUDE_OBSERVABILITY_DATA="$DATA" /bin/bash -c '"$1" < "$2"' _ "$STUB/log_tool.sh" "$TEST_DIR/nongit.json"
+  _assert_silent
+  [ "$(wc -c < "$counter" | tr -d ' ')" = "1" ]
+  [ ! -e "$MARKER" ]
+}
 
 # Copied, not sourced: these observability suites are standalone.
 _perf_budget_ms() {
@@ -284,7 +337,7 @@ _now_ms() {
   perl -MTime::HiRes=time -e 'printf q{%d}, time()*1000'
 }
 
-@test "perf: the non-git Bash path costs no more than a bare shell start plus cat" {
+@test "perf (gross-regression guard only): the non-git Bash path stays near a bare shell start" {
   if ! command -v perl >/dev/null 2>&1; then skip "perl not available for a sub-second clock"; fi
 
   local payload_file="$TEST_DIR/p.json" big
