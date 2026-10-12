@@ -2168,3 +2168,104 @@ _time_field_behind() {
   printf 'field behind 200KB, UTF-8 caller: %s ms\n' "${r%% *}" >&3
   [ "${r%% *}" -le "$(_perf_budget_ms 300)" ]
 }
+
+# ---------------------------------------------------------------------------
+# Fast path (spec 021 T2.2, CON-7): a printable-ASCII value of at most 256
+# bytes is escaped inline instead of through _observability_prepare_field's
+# three subshells. Records must not move by a byte: the live writer is run
+# against a FROZEN copy of the writer from before the change
+# (fixtures/logwrite-pre-fastpath.sh, verbatim from 621bf45) over a corpus,
+# each in its own process, and the two event files are compared with only the
+# timestamp normalised.
+# ---------------------------------------------------------------------------
+
+# _writer_corpus <writer file> <data dir> <locale: C|utf8> <detail: 0|1>
+#   Sources <writer> in a fresh bash, then writes one record per corpus value
+#   (as an ordinary field, a `detail:` field and a deny-listed field) plus one
+#   record carrying every value at once.
+_writer_corpus() {
+  bash -c '
+    . "$1" || exit 91
+    if [ "$3" = utf8 ]; then
+      for l in $(locale -a 2>/dev/null); do
+        case "$l" in en_US.UTF-8|en_US.utf8|C.UTF-8|C.utf8) export LC_ALL="$l"; break ;; esac
+      done
+      [ "$(printf "\303\251" | wc -m | tr -d " ")" = "1" ] || { echo "NO-UTF8-LOCALE"; exit 92; }
+    fi
+    export CLAUDE_OBSERVABILITY_ENABLED=1 CLAUDE_OBSERVABILITY_DATA="$2" CLAUDE_OBSERVABILITY_DETAIL="$4"
+    x255=$(printf "x%.0s" $(seq 1 255))
+    x256="${x255}x"
+    x257="${x256}x"
+    q256="\"${x255}"
+    b300="$(printf "\\\\%.0s" $(seq 1 300))"
+    values=(
+      "push" "--hard -m --no-verify" "" " " "a\"b" "a\\b" "\\\"" "${x255}\""
+      "a]b[c" "!^-~\`$(printf "\047")" "{}|<>&;*?" "$(printf "a\tb")" "$(printf "a\nb")"
+      "$(printf "a\rb")" "$(printf "\001\037")" "$(printf "x\177y")"
+      "$(printf "\303\251\346\274\242")" "$(printf "\377\376ok")" "$(printf "\303")"
+      "$x255" "$x256" "$x257" "$q256" "${x255}$(printf "\303\251")" "$b300"
+      "$(printf "%0300d" 0)"
+    )
+    all=()
+    i=0
+    for v in "${values[@]}"; do
+      _observability_write kind=k session=s _observability_toplevel=/r/myrepo "f=$v" "detail:d=$v" "command=$v"
+      all[${#all[@]}]="f$i=$v"
+      i=$((i + 1))
+    done
+    _observability_write kind=k session=s _observability_toplevel=/r/myrepo "${all[@]}" "detail:description=x" "cwd=/abs"
+    echo "values=${#values[@]}"
+  ' _ "$@"
+}
+
+_normalised_events() {
+  sed 's/^{"ts":"[^"]*"/{"ts":"T"/' "$1/observability/events.jsonl"
+}
+
+@test "fast path: records are byte-identical to the pre-fast-path writer over a corpus" {
+  local frozen="$BATS_TEST_DIRNAME/fixtures/logwrite-pre-fastpath.sh" loc detail out n
+  [ -f "$frozen" ]
+  for loc in C utf8; do
+    for detail in 0 1; do
+      out="$(_writer_corpus "$frozen" "$TEST_DIR/old-$loc-$detail" "$loc" "$detail")" || { echo "$out"; return 1; }
+      out="$(_writer_corpus "$WRITER" "$TEST_DIR/new-$loc-$detail" "$loc" "$detail")" || { echo "$out"; return 1; }
+      n="${out#values=}"
+      _normalised_events "$TEST_DIR/old-$loc-$detail" > "$TEST_DIR/old.txt"
+      _normalised_events "$TEST_DIR/new-$loc-$detail" > "$TEST_DIR/new.txt"
+      # One record per value plus the combined one: nothing was skipped.
+      [ "$(wc -l < "$TEST_DIR/new.txt" | tr -d ' ')" = "$((n + 1))" ] || { echo "$loc/$detail: line count"; return 1; }
+      cmp -s "$TEST_DIR/old.txt" "$TEST_DIR/new.txt" || {
+        echo "$loc detail=$detail differs:"; diff "$TEST_DIR/old.txt" "$TEST_DIR/new.txt" | head -20; return 1; }
+    done
+  done
+  # The corpus does reach the cap, the marker and the escapes.
+  grep -qF '"truncated":true' "$TEST_DIR/new.txt"
+}
+
+# _prepare_calls <field value ...>  writes one record with these values as
+#   fields f0..fN through the live writer, with _observability_prepare_field
+#   (the subshell path) wrapped to count its calls; prints the count.
+_prepare_calls() {
+  bash -c '
+    . "$1" || exit 91
+    count="$2"; shift 2
+    eval "_counted_prepare() $(declare -f _observability_prepare_field | tail -n +2)"
+    _observability_prepare_field() { printf x >> "$count"; _counted_prepare "$@"; }
+    : > "$count"
+    export CLAUDE_OBSERVABILITY_ENABLED=1 CLAUDE_OBSERVABILITY_DATA="$(dirname "$count")/data"
+    fields=(); i=0
+    for v in "$@"; do fields[${#fields[@]}]="f$i=$v"; i=$((i + 1)); done
+    _observability_write kind=git session=sess-1 _observability_toplevel=/r/myrepo "${fields[@]}"
+    wc -c < "$count" | tr -d " "
+  ' _ "$WRITER" "$TEST_DIR/prepare.count" "$@"
+}
+
+@test "fast path: an all-ASCII 11-field record takes no subshell to prepare its fields" {
+  run _prepare_calls reset "" --hard "" "" main toolu_01ABC
+  [ "$status" -eq 0 ]
+  [ "$output" = "0" ]
+  # Positive control: the counter does see the slow path.
+  run _prepare_calls reset "$(printf '\303\251')" "$(printf 'a\tb')"
+  [ "$status" -eq 0 ]
+  [ "$output" = "2" ]
+}

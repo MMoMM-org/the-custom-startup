@@ -589,6 +589,10 @@ _observability_field_is_detail_only() {
   return 1
 }
 
+# The 95 printable ASCII bytes, 0x20-0x7E, spelled out for the writer's fast
+# path (a bracket range would follow the caller's collation, see there).
+_OBSERVABILITY_PRINTABLE_ASCII=' !"#$%&'"'"'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+
 # Put back a umask read earlier; a no-op for an empty value. Always returns 0
 # so a `set -e` caller never sees the restore fail.
 _observability_restore_umask() {
@@ -746,9 +750,34 @@ _observability_write() {
   done
 
   local json="{" first=1 any_truncated=0
-  local n=${#field_names[@]} idx prepared trunc_flag escaped
+  local n=${#field_names[@]} idx prepared trunc_flag escaped fval
   for ((idx = 0; idx < n; idx++)); do
-    prepared="$(_observability_prepare_field "${field_values[$idx]}")" || prepared=""
+    fval="${field_values[$idx]}"
+    # Fast path (spec 021 CON-7): a value of printable ASCII only, at most
+    # 256 bytes, is what _observability_prepare_field would return after
+    # escaping just `\` and `"` -- sanitizing changes no byte of it, the cap
+    # does not cut it, and the other escapes are for bytes it does not hold.
+    # Done inline, it costs no subshell; the slow path forks three per field.
+    # The character list is explicit, not a range: a range follows the
+    # caller's collation, and a caller may change LC_ALL after sourcing.
+    # With every byte on the list, ${#fval} counts bytes in any locale.
+    # Pinned byte for byte against the pre-fast-path writer by
+    # tests/bats/observability-writer.bats ("fast path: ...").
+    case "$fval" in
+      *[!"$_OBSERVABILITY_PRINTABLE_ASCII"]*) prepared="" ;;
+      *)
+        if [ "${#fval}" -le 256 ]; then
+          escaped="${fval//\\/\\\\}"
+          escaped="${escaped//\"/\\\"}"
+          prepared="0"$'\37'"$escaped"
+        else
+          prepared=""
+        fi
+        ;;
+    esac
+    if [ -z "$prepared" ]; then
+      prepared="$(_observability_prepare_field "$fval")" || prepared=""
+    fi
     trunc_flag="${prepared%%$'\37'*}"
     escaped="${prepared#*$'\37'}"
     [ "$trunc_flag" = "1" ] && any_truncated=1
