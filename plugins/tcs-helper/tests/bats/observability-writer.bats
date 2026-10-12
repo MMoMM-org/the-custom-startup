@@ -2177,7 +2177,31 @@ _time_field_behind() {
 # (fixtures/logwrite-pre-fastpath.sh, verbatim from 621bf45) over a corpus,
 # each in its own process, and the two event files are compared with only the
 # timestamp normalised.
+#
+# The oracle pins only the fast-path change: it is the writer as it stood
+# before it. When the writer changes on purpose, refresh the fixture from
+# the new tip or retire the differential test.
 # ---------------------------------------------------------------------------
+
+# _printable_ascii  prints the 95 printable ASCII bytes 0x20..0x7E in order,
+#   each built from its octal code, never from the writer's constant.
+_printable_ascii() {
+  local i out="" c
+  for ((i = 32; i <= 126; i++)); do
+    printf -v c "\\%03o" "$i"
+    printf -v c "$c"
+    out="$out$c"
+  done
+  printf '%s' "$out"
+}
+
+@test "fast path: the printable-ASCII list is exactly the bytes 0x20..0x7E" {
+  local want got
+  want="$(_printable_ascii)"
+  [ "${#want}" -eq 95 ]
+  got="$(bash -c '. "$1"; printf "%s" "$_OBSERVABILITY_PRINTABLE_ASCII"' _ "$WRITER")"
+  [ "$got" = "$want" ] || { printf 'want [%s]\ngot  [%s]\n' "$want" "$got"; return 1; }
+}
 
 # _writer_corpus <writer file> <data dir> <locale: C|utf8> <detail: 0|1>
 #   Sources <writer> in a fresh bash, then writes one record per corpus value
@@ -2186,6 +2210,7 @@ _time_field_behind() {
 _writer_corpus() {
   bash -c '
     . "$1" || exit 91
+    eval "$5"
     if [ "$3" = utf8 ]; then
       for l in $(locale -a 2>/dev/null); do
         case "$l" in en_US.UTF-8|en_US.utf8|C.UTF-8|C.utf8) export LC_ALL="$l"; break ;; esac
@@ -2204,7 +2229,7 @@ _writer_corpus() {
       "$(printf "a\rb")" "$(printf "\001\037")" "$(printf "x\177y")"
       "$(printf "\303\251\346\274\242")" "$(printf "\377\376ok")" "$(printf "\303")"
       "$x255" "$x256" "$x257" "$q256" "${x255}$(printf "\303\251")" "$b300"
-      "$(printf "%0300d" 0)"
+      "$(printf "%0300d" 0)" "$(_printable_ascii)"
     )
     all=()
     i=0
@@ -2215,7 +2240,7 @@ _writer_corpus() {
     done
     _observability_write kind=k session=s _observability_toplevel=/r/myrepo "${all[@]}" "detail:description=x" "cwd=/abs"
     echo "values=${#values[@]}"
-  ' _ "$@"
+  ' _ "$@" "$(declare -f _printable_ascii)"
 }
 
 _normalised_events() {
@@ -2261,7 +2286,7 @@ _prepare_calls() {
 }
 
 @test "fast path: an all-ASCII 11-field record takes no subshell to prepare its fields" {
-  run _prepare_calls reset "" --hard "" "" main toolu_01ABC
+  run _prepare_calls reset "" --hard "" "" main "$(_printable_ascii)"
   [ "$status" -eq 0 ]
   [ "$output" = "0" ]
   # Positive control: the counter does see the slow path.

@@ -83,6 +83,7 @@ _log_tool_caller() {
 # output: the skill and dispatch paths never source it.
 _log_tool_git() {
   [ -f "$_log_tool_dir/git_ops.sh" ] || return 0
+  # Sourced inside a function: git_ops.sh's top-level `declare`s become local here.
   # shellcheck source=./git_ops.sh
   . "$_log_tool_dir/git_ops.sh" >/dev/null 2>&1 || return 0
   declare -F _git_ops_command _git_ops_parse >/dev/null 2>&1 || return 0
@@ -103,7 +104,9 @@ _log_tool_git() {
   while [ -n "$rest" ]; do
     line="${rest%%"$NL"*}"
     rest="${rest#*"$NL"}"
-    [ -n "$line" ] || continue
+    # Five fields or none: a short line (parser drift) would shift values
+    # into the wrong fields.
+    case "$line" in *"$TAB"*"$TAB"*"$TAB"*"$TAB"*) ;; *) continue ;; esac
     # Split by hand: with IFS=TAB `read` would merge empty fields.
     sub="${line%%"$TAB"*}";       line="${line#*"$TAB"}"
     action="${line%%"$TAB"*}";    line="${line#*"$TAB"}"
