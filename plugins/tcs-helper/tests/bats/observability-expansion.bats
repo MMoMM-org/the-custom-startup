@@ -168,6 +168,16 @@ _now_ms() {
   _assert_present '"args_present":"no"' "$EVENTS_FILE"
 }
 
+@test "expansion: real non-empty command_args plus an escaped empty look-alike in the prompt yields args_present yes" {
+  local payload
+  payload='{"session_id":"sess-exp-4b","expansion_type":"slash_command","command_name":"commit","command_args":"real","command_source":"plugin","prompt":"see \"command_args\":\"\" here"}'
+
+  run _run_adapter_enabled "$payload"
+  [ "$status" -eq 0 ]
+  _assert_one_record
+  _assert_present '"args_present":"yes"' "$EVENTS_FILE"
+}
+
 # ---------------------------------------------------------------------------
 # Canary: argument and prompt text never reach the record (CON-13), in
 # reduced AND detail mode.
@@ -293,26 +303,63 @@ _now_ms() {
 # Scale: the payload carries the whole expanded prompt (ADR-6).
 # ---------------------------------------------------------------------------
 
-@test "expansion: a 200 KB expanded prompt stays within the adapter budget" {
+# Wall time in ms of one adapter run over payload file $1.
+_time_run_ms() {
+  local start end
+  start="$(_now_ms)"
+  _run_adapter_enabled_from_file "$1" >/dev/null 2>&1 || true
+  end="$(_now_ms)"
+  printf '%d' $((end - start))
+}
+
+# CPU milliseconds (user+sys of the adapter and its children) for one run
+# over payload file $1. CPU time, not wall time: the host this suite runs on
+# is routinely loaded, and wall time then swamps a ~60 ms difference (measured
+# at load average 260: wall-clock deltas of 26-155 ms for the correct reader
+# against 146-310 ms for the mutant, overlapping; CPU deltas 40-50 against 180,
+# repeatable). perl's times() has 10 ms resolution, ample for this bound.
+# shellcheck disable=SC2016
+_cpu_run_ms() {
+  ( cd "$REPO" && \
+    env -u CLAUDE_OBSERVABILITY_DETAIL \
+      "CLAUDE_OBSERVABILITY_ENABLED=1" "CLAUDE_OBSERVABILITY_DATA=$DATA_DIR" \
+      perl -e 'my $pid = fork();
+               if ($pid == 0) { open(STDIN, "<", $ARGV[1]) or exit 0;
+                                open(STDOUT, ">", "/dev/null"); open(STDERR, ">", "/dev/null");
+                                exec($ARGV[0]) or exit 0 }
+               waitpid($pid, 0); my @t = times();
+               printf q{%d}, ($t[2] + $t[3]) * 1000' "$ADAPTER" "$1" )
+}
+
+# Best of five CPU runs: the minimum discards scheduling noise.
+_best_cpu_ms() {
+  local best="" t
+  for _ in 1 2 3 4 5; do
+    t="$(_cpu_run_ms "$1")"
+    if [ -z "$best" ] || [ "$t" -lt "$best" ]; then best="$t"; fi
+  done
+  printf '%d' "$best"
+}
+
+# Same payload shape at a chosen prompt size; command fields first, the big
+# prompt last (real field order).
+_write_payload() {              # _write_payload <file> <prompt-bytes>
+  perl -e 'print q({"session_id":"sess-large","hook_event_name":"UserPromptExpansion","expansion_type":"slash_command","command_name":"tcs-issues:issue","command_args":"CANARY-LARGE-ARGS","command_source":"plugin","prompt":"), "x" x $ARGV[0], q("})' "$2" > "$1"
+  [ -s "$1" ]
+}
+
+@test "expansion: a 200 KB expanded prompt records correctly and under a gross ceiling" {
   if ! command -v perl >/dev/null 2>&1; then
     skip "perl not available for a sub-second clock"
   fi
-
   local payload_file="$TEST_DIR/large_payload.json"
-  # Real field order: command fields first, the big prompt last.
-  perl -e 'print q({"session_id":"sess-large","hook_event_name":"UserPromptExpansion","expansion_type":"slash_command","command_name":"tcs-issues:issue","command_args":"CANARY-LARGE-ARGS","command_source":"plugin","prompt":"), "x" x 204800, q("})' > "$payload_file"
-  [ -s "$payload_file" ]
+  _write_payload "$payload_file" 204800
 
-  local start end elapsed budget
-  start="$(_now_ms)"
-  run _run_adapter_enabled_from_file "$payload_file"
-  end="$(_now_ms)"
-  [ "$status" -eq 0 ]
-
-  elapsed=$((end - start))
+  local elapsed budget
+  elapsed="$(_time_run_ms "$payload_file")"
   budget="$(_perf_budget_ms 1000)"
   if [ "$elapsed" -gt "$budget" ]; then
-    printf 'SLOW: %s ms against a %s ms budget\n' "$elapsed" "$budget" >&2
+    printf 'SLOW: %s ms against a %s ms ceiling\n' "$elapsed" "$budget" >&2
     return 1
   fi
 
@@ -321,4 +368,31 @@ _now_ms() {
   _assert_present '"args_present":"yes"' "$EVENTS_FILE"
   _assert_absent 'CANARY-LARGE-ARGS' "$EVENTS_FILE"
   _assert_absent 'xxxxxxxxxx' "$EVENTS_FILE"
+}
+
+# ADR-6: `IFS= read -r -d ''` costs ~120+ ms more CPU at 200 KB than `$(cat)`,
+# which is why this adapter must not copy that line from log_skill.sh. An
+# absolute bound cannot see that, so the cost is measured as a DIFFERENCE of
+# CPU time: best-of-5 at 200 KB minus best-of-5 at ~1 KB, same payload shape.
+# Measured on macOS: $(cat) delta 40-50 ms; the `read -d ''` mutant 180 ms.
+# 110 ms (x TCS_PERF_SLACK) leaves margin on both sides.
+@test "expansion: reading 200 KB costs at most 110 ms more CPU than reading 1 KB (no read -d)" {
+  if ! command -v perl >/dev/null 2>&1; then
+    skip "perl not available for a sub-second clock"
+  fi
+  local big="$TEST_DIR/big.json" small="$TEST_DIR/small.json"
+  _write_payload "$big" 204800
+  _write_payload "$small" 1000
+
+  local big_ms small_ms delta budget
+  big_ms="$(_best_cpu_ms "$big")"
+  small_ms="$(_best_cpu_ms "$small")"
+  delta=$((big_ms - small_ms))
+  budget="$(_perf_budget_ms 110)"
+  if [ "$delta" -gt "$budget" ]; then
+    printf 'READ COST: 200KB %s ms - 1KB %s ms = %s ms CPU over a %s ms bound\n' \
+      "$big_ms" "$small_ms" "$delta" "$budget" >&2
+    return 1
+  fi
+  [ -f "$EVENTS_FILE" ]
 }
