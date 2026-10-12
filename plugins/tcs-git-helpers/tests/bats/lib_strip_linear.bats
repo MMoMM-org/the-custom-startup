@@ -17,9 +17,10 @@
 #      fixed corpus and for thousands of generated inputs, in the C locale and
 #      in a UTF-8 locale (the guard runs in the caller's locale, and in UTF-8 a
 #      multibyte character inside quotes is one space, not one per byte);
-#   2. the scale tests bound both functions at 20 KB of a realistic command
-#      (SDD: well under 100 ms) and require linear growth from 20 KB to
-#      200 KB, for that command and for a token-dense one.
+#   2. the scale tests bound both functions at 20 KB -- under 100 ms for a
+#      realistic command (SDD: well under 100 ms), under 250 ms for a
+#      token-dense one -- and require linear growth from 20 KB to 200 KB for
+#      both.
 #
 # The generator is an explicit LCG, not $RANDOM: the same inputs on bash 3.2
 # and 5.x. Outputs go to files and are compared with cmp, so trailing newlines
@@ -367,8 +368,8 @@ _differential() {
 #              message, a cut every ~40 bytes, heredoc lines of ~65 bytes.
 #              Budget 100 ms (SDD: well under 100 ms at 20 KB).
 #     dense -- a cut every ~10 bytes, heredoc lines of ~13 bytes: per-step
-#              cost at its worst. Held to linear growth; its absolute budget
-#              only catches a gross regression.
+#              cost at its worst (45-92 ms at 20 KB when measured). Budget
+#              250 ms, and held to linear growth.
 _scale() {
   local fn="$1" loc="$2" unit="$3" budget driver out t2 t20 t200 floor=10
   [ -n "$loc" ] || { echo "no locale given (no UTF-8 locale on this host?)" >&2; return 1; }
@@ -426,12 +427,12 @@ DRIVER_EOF
   _scale _strip_quoted "$UTF8_LOCALE" prose 100
 }
 
-@test "scale: _strip_quoted, dense, linear to 200 KB (C locale)" {
-  _scale _strip_quoted C dense 1000
+@test "scale: _strip_quoted, dense, under 250 ms at 20 KB and linear to 200 KB (C locale)" {
+  _scale _strip_quoted C dense 250
 }
 
-@test "scale: _strip_quoted, dense, linear to 200 KB (UTF-8 locale)" {
-  _scale _strip_quoted "$UTF8_LOCALE" dense 1000
+@test "scale: _strip_quoted, dense, under 250 ms at 20 KB and linear to 200 KB (UTF-8 locale)" {
+  _scale _strip_quoted "$UTF8_LOCALE" dense 250
 }
 
 @test "scale: _strip_heredocs, prose, under 100 ms at 20 KB and linear to 200 KB (C locale)" {
@@ -442,10 +443,10 @@ DRIVER_EOF
   _scale _strip_heredocs "$UTF8_LOCALE" prose 100
 }
 
-@test "scale: _strip_heredocs, dense, linear to 200 KB (C locale)" {
-  _scale _strip_heredocs C dense 1000
+@test "scale: _strip_heredocs, dense, under 250 ms at 20 KB and linear to 200 KB (C locale)" {
+  _scale _strip_heredocs C dense 250
 }
 
-@test "scale: _strip_heredocs, dense, linear to 200 KB (UTF-8 locale)" {
-  _scale _strip_heredocs "$UTF8_LOCALE" dense 1000
+@test "scale: _strip_heredocs, dense, under 250 ms at 20 KB and linear to 200 KB (UTF-8 locale)" {
+  _scale _strip_heredocs "$UTF8_LOCALE" dense 250
 }
