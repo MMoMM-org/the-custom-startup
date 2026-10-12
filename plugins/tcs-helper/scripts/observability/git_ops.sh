@@ -1145,16 +1145,6 @@ _git_ops_parse() {
     *) return 0 ;;
   esac
 
-  # Size cap: above it, no parse; one value-free marker record when a
-  # free-standing `git` word is present (SDD Complex Logic, Size cap).
-  if [ "${#cmd}" -gt "$_GIT_OPS_MAX_BYTES" ]; then
-    local oversize_re='(^|[[:space:];&|(`])git([[:space:]]|$)'
-    if [[ "$cmd" =~ $oversize_re ]]; then
-      printf '%s\t%s\t%s\t%s\t%s\n' '?' '' '(oversize)' '' ''
-    fi
-    return 0
-  fi
-
   local NL=$'\n' h q text mode="normal" first="" scan
   # The guard's first-token rule (lib/override.sh), on the command as typed:
   # newlines read as `;`, one leading cd/pushd clause stripped, then the
@@ -1171,6 +1161,18 @@ _git_ops_parse() {
   scan="$cmd"
   if [[ "$scan" =~ $cd_re ]]; then scan="${scan:${#BASH_REMATCH[0]}}"; fi
   if [[ "$scan" =~ $ovr_re ]]; then first="${BASH_REMATCH[1]}"; fi
+
+  # Size cap: above it, no parse; one value-free marker record when a
+  # free-standing `git` word is present (SDD Complex Logic, Size cap). It
+  # carries override_first (computed above, anchored at the start, so it
+  # does not depend on parsing) and no overrides (those need clauses).
+  if [ "${#cmd}" -gt "$_GIT_OPS_MAX_BYTES" ]; then
+    local oversize_re='(^|[[:space:];&|(`])git([[:space:]]|$)'
+    if [[ "$cmd" =~ $oversize_re ]]; then
+      printf '%s\t%s\t%s\t%s\t%s\n' '?' '' '(oversize)' '' "$first"
+    fi
+    return 0
+  fi
 
   local -a parts clauses
   h="$(_git_ops_strip_heredocs "$cmd")"

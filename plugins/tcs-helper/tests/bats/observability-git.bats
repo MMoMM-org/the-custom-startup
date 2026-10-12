@@ -1017,6 +1017,21 @@ _scale() {
   expect_parse "echo $(_pad 17000);(git push)" "$(rec '?' '' '(oversize)' '' '')"
 }
 
+@test "size cap: the oversize marker keeps a first-position override" {
+  expect_parse "CLAUDE_ALLOW_RESET_HARD=1 git reset --hard # $(_pad 4200)" \
+    "$(rec '?' '' '(oversize)' '' CLAUDE_ALLOW_RESET_HARD)"
+}
+
+@test "size cap: the oversize marker keeps an override after one leading cd" {
+  expect_parse "cd /x && CLAUDE_ALLOW_X=1 git push --force # $(_pad 4200)" \
+    "$(rec '?' '' '(oversize)' '' CLAUDE_ALLOW_X)"
+}
+
+@test "size cap: a mid-command override is not override_first on the marker" {
+  expect_parse "git status; CLAUDE_ALLOW_X=1 git push --force # $(_pad 4200)" \
+    "$(rec '?' '' '(oversize)' '' '')"
+}
+
 @test "size cap: above the cap without a free-standing git word nothing is printed" {
   expect_parse "echo digit $(_pad 17000) gitx" ''
 }
