@@ -18,23 +18,24 @@
 #                               cap is the writer's job.
 #
 # Parsing (SDD Runtime View, Complex Logic; ADR-3, ADR-9):
-#   heredoc bodies are stripped with the copied function below, then quoted
-#   text and command substitutions are re-marked (_git_ops_mark_words): a
-#   quoted span is one opaque word of `%` (`git branch "x"` has a positional,
-#   `git "reset"` has an undeterminable subcommand `?`); a substitution,
-#   `$( … )` or backticks at any depth, is one `%` word in the command around
-#   it (`git -C $(pwd) push` → push, `GIT_DIR=$(pwd) git push` → push,
-#   `git $(echo reset)` → `?`) and its content is parsed as clauses of its
-#   own (`git commit -m "$(git reset)"` → commit and reset). The copied quote
-#   stripper decides only the executor predicate. When the stripped text
-#   runs a shell on a payload (`bash -c`, `eval`), the executor fallback
-#   applies instead: every quote character becomes a space and the records
-#   carry flags `(executor)`; there the subcommand is recorded by name only if it
-#   is on _GIT_OPS_EXECUTOR_COMMANDS, else `?`. Clauses split on && || | ;
-#   & and newline; in each, the command position skips openers,
-#   assignments and wrappers (env sudo time nice timeout nohup exec command)
-#   before looking for `git` or `*/git`.
-#   override_first mirrors the guard's first-token rule
+#   heredoc bodies are stripped with the copied function below, then the text
+#   is cut into words by _git_ops_mark_words so that a value always stays in
+#   one word: a quoted span, a backslash-escaped byte (`my\ dir`) and a
+#   parameter expansion `${ … }` are opaque `%` words (`git branch "x"` has a
+#   positional); a command or process substitution, `$( … )`, backticks,
+#   `<( … )`, `>( … )`, at any depth, is one `%` word in the command around it
+#   (`git -C $(pwd) push` → push, `GIT_DIR=$(pwd) git push` → push) and its
+#   content is parsed as clauses of its own (`git commit -m "$(git reset)"`
+#   → commit and reset). The copied quote stripper decides only the executor
+#   predicate. When the stripped text runs a shell on a payload (`bash -c`,
+#   `eval`), the executor fallback applies instead: every quote character
+#   becomes a space and the records carry flags `(executor)`. In both modes
+#   the subcommand is recorded by name only if it is on _GIT_OPS_COMMANDS,
+#   else `?` (aliases, unknown and undeterminable names, `git "reset"`,
+#   `git $(echo reset)`). Clauses split on && || | ; & and newline; in each,
+#   the command position skips openers, assignments and wrappers (env sudo
+#   time nice timeout nohup exec command) before looking for `git` or
+#   `*/git`. override_first mirrors the guard's first-token rule
 #   (tcs-git-helpers lib/override.sh, one leading cd/pushd clause stripped).
 #
 # Known limits (documented, not silent): `xargs git …`, `find … -exec git …`
@@ -42,13 +43,13 @@
 # executor fallback, nested quoting is gone, so any value before the
 # subcommand (wrapper option or duration, empty assignment, global option
 # other than the value-less ones) makes the subcommand `?` rather than risk a
-# value fragment in its place (CON-13); when such a fragment then stops the
-# command-position scan, a later git word still yields a `?` record
-# (_git_ops_cut_stop). Substitutions in that mode are handled only at command
-# position. Name patterns are ASCII letter lists, not ranges or classes, so
-# they hold in any locale. override_first belongs to the whole command (the
-# guard applies a first-position override to all of it); `overrides` to the
-# clause.
+# value fragment in its place (CON-13); when such a fragment, or one after
+# any assignment, then stops the command-position scan, a later git word
+# still yields a `?` record (_git_ops_cut_stop). Substitutions in that mode
+# are handled only at command position. Name patterns are ASCII letter lists,
+# not ranges or classes, so they hold in any locale. override_first belongs to
+# the whole command (the guard applies a first-position override to all of
+# it); `overrides` to the clause.
 #
 # COPIED, NOT SOURCED (SDD/ADR-2, CON-12):
 #   _git_ops_strip_heredocs, _git_ops_strip_quoted and
@@ -73,7 +74,7 @@
 # references to the dispatcher and _clausify point at tcs-git-helpers, not here.
 #
 # Sourced by a hook: defines functions and one constant
-# (_GIT_OPS_EXECUTOR_COMMANDS). No output, no external commands,
+# (_GIT_OPS_COMMANDS). No output, no external commands,
 # no `set -e`/`set -u` at source time; every function is `set -u` safe.
 # bash 3.2 compatible.
 
@@ -224,17 +225,17 @@ _git_ops_has_shell_executor() {
     || [[ "$1" =~ (^|[^[:alnum:]_])eval([[:space:]]|$) ]]
 }
 
-# _GIT_OPS_EXECUTOR_COMMANDS -- the closed list of git's own command names that
-# the executor fallback records by name (SDD Complex Logic). Quote removal there
-# exposes separators inside nested quotes, so `bash -c "git commit -m 'wip; git
-# tok'"` yields a fake clause `git tok`; a subcommand off this list is `?`, so a
-# message word can never stand in the record. Normal mode does not use it.
+# _GIT_OPS_COMMANDS -- the closed list of git's own command names. In both
+# modes the subcommand is recorded by name only if it is on this list, else
+# `?` (unknown, alias, undeterminable; SDD data model, 2026-10-12): whatever
+# syntax splits a value into words, no word other than a git command name can
+# reach the record (CON-13).
 # Source: `git help -a` (git version 2.50.1, Apple Git-155), sections "Main
 # Porcelain", "Ancillary", "Interacting with Others" and "Low-level"; the
 # interface/format guides and external commands are excluded; plus `lfs`.
 # A space-delimited string: membership is one glob test, no loop, no fork (the
 # idiom of logwrite.sh's _OBSERVABILITY_DETAIL_ONLY_FIELDS).
-_GIT_OPS_EXECUTOR_COMMANDS=" add am annotate apply archimport archive backfill bisect blame branch bugreport bundle cat-file check-attr check-ignore check-mailmap check-ref-format checkout checkout-index cherry cherry-pick citool clean clone column commit commit-graph commit-tree config count-objects credential credential-cache credential-store cvsexportcommit cvsimport cvsserver daemon describe diagnose diff diff-files diff-index diff-pairs diff-tree difftool fast-export fast-import fetch fetch-pack filter-branch fmt-merge-msg for-each-ref for-each-repo format-patch fsck gc get-tar-commit-id gitk gitweb grep gui hash-object help hook http-backend imap-send index-pack init instaweb interpret-trailers log ls-files ls-remote ls-tree mailinfo mailsplit maintenance merge merge-base merge-file merge-index merge-one-file merge-tree mergetool mktag mktree multi-pack-index mv name-rev notes p4 pack-objects pack-redundant pack-refs patch-id prune prune-packed pull push quiltimport range-diff read-tree rebase reflog refs remote repack replace replay request-pull rerere reset restore rev-list rev-parse revert rm scalar send-email send-pack sh-i18n sh-setup shortlog show show-branch show-index show-ref sparse-checkout stash status stripspace submodule svn switch symbolic-ref tag unpack-file unpack-objects update-index update-ref update-server-info var verify-commit verify-pack verify-tag version whatchanged worktree write-tree lfs "
+_GIT_OPS_COMMANDS=" add am annotate apply archimport archive backfill bisect blame branch bugreport bundle cat-file check-attr check-ignore check-mailmap check-ref-format checkout checkout-index cherry cherry-pick citool clean clone column commit commit-graph commit-tree config count-objects credential credential-cache credential-store cvsexportcommit cvsimport cvsserver daemon describe diagnose diff diff-files diff-index diff-pairs diff-tree difftool fast-export fast-import fetch fetch-pack filter-branch fmt-merge-msg for-each-ref for-each-repo format-patch fsck gc get-tar-commit-id gitk gitweb grep gui hash-object help hook http-backend imap-send index-pack init instaweb interpret-trailers log ls-files ls-remote ls-tree mailinfo mailsplit maintenance merge merge-base merge-file merge-index merge-one-file merge-tree mergetool mktag mktree multi-pack-index mv name-rev notes p4 pack-objects pack-redundant pack-refs patch-id prune prune-packed pull push quiltimport range-diff read-tree rebase reflog refs remote repack replace replay request-pull rerere reset restore rev-list rev-parse revert rm scalar send-email send-pack sh-i18n sh-setup shortlog show show-branch show-index show-ref sparse-checkout stash status stripspace submodule svn switch symbolic-ref tag unpack-file unpack-objects update-index update-ref update-server-info var verify-commit verify-pack verify-tag version whatchanged worktree write-tree lfs "
 
 # ---------------------------------------------------------------------------
 # Parser (T1.3). Helpers below share state with _git_ops_parse through bash's
@@ -285,24 +286,30 @@ _git_ops_command() {
 }
 
 # _git_ops_mark_words   (reads h, NL; assigns text — locals of _git_ops_parse)
-#   Rewrites the heredoc-stripped command h for clause parsing, with the same
-#   quote states as _git_ops_strip_quoted (N code, S single-, D double-quoted;
-#   `\"` does not close D; `$(` opens code in N and D):
-#     - every byte of a quoted span, quotes included, becomes `%`, so the span
-#       is one opaque word that can be counted but never matches a name;
-#     - a command substitution, `$( … )` or `` ` … ` `` (in N or D), is
-#       executed code AND one argument of the command around it: in its
-#       enclosing text it becomes a single `%`; its content is appended to
-#       text after a newline, as clauses of their own. Nested substitutions
-#       follow the same rule at every depth. An unclosed one is closed at the
-#       end of input.
-#   Outside quotes and substitutions every byte is kept.
-# shellcheck disable=SC2016 # '$(' is a literal pattern
+#   Rewrites the heredoc-stripped command h into words for clause parsing.
+#   States: N code, S single-quoted, D double-quoted (`$(` opens code in N and
+#   D, as in _git_ops_strip_quoted). Every rule below keeps a value inside
+#   one word, so a value can never be split into a word that reads as a name:
+#     - every byte of a quoted span, quotes included, becomes `%`: one opaque
+#       word that can be counted but never matches a name;
+#     - a backslash in N or D makes the next byte part of the current word
+#       (both become `%`; `my\ dir` is one word); backslash-newline is a line
+#       continuation and disappears;
+#     - a parameter expansion `${ … }` in N or D (braces, quotes and escapes
+#       inside included) becomes `%` bytes, one opaque word;
+#     - a command substitution `$( … )` or `` ` … ` `` (in N or D) and a
+#       process substitution `<( … )` / `>( … )` (in N) is executed code AND
+#       one argument of the command around it: in its enclosing text it is a
+#       single `%`; its content is appended to text after a newline, as
+#       clauses of its own. Nesting follows the same rules at every depth; an
+#       unclosed one is closed at the end of input.
+#   Outside these every byte is kept.
+# shellcheck disable=SC2016 # '$(' and '${' are literal patterns
 _git_ops_mark_words() {
-  local len=${#h} i=0 ch nxt state="N" prev="" d=0 states="" kinds="" subs=""
+  local len=${#h} i=0 ch nxt state="N" d=0 states="" kinds="" subs=""
   local -a buf
   case "$h" in
-    *"'"* | *'"'* | *'`'* | *'$('*) ;;
+    *"'"* | *'"'* | *'`'* | *'$('* | *'${'* | *\\* | *'<('* | *'>('*) ;;
     *)
       text="$h"
       return 0
@@ -312,62 +319,121 @@ _git_ops_mark_words() {
   while [ "$i" -lt "$len" ]; do
     ch="${h:$i:1}"
     nxt="${h:$((i + 1)):1}"
-    case "$state" in
-      S)
-        if [ "$ch" = "'" ]; then state="N"; fi
-        buf[d]="${buf[d]}%"
-        ;;
-      D)
-        if [ "$ch" = '$' ] && [ "$nxt" = "(" ]; then
-          _git_ops_open_subst P
+    if [ "$state" = "S" ]; then
+      if [ "$ch" = "'" ]; then state="N"; fi
+      buf[d]="${buf[d]}%"
+      i=$((i + 1))
+      continue
+    fi
+    # N or D from here on.
+    case "$ch" in
+      \\)
+        if [ "$nxt" = "$NL" ]; then
           i=$((i + 2))
-          continue
-        elif [ "$ch" = '`' ]; then
-          _git_ops_open_subst B
+        elif [ -z "$nxt" ]; then
+          buf[d]="${buf[d]}%"
           i=$((i + 1))
-          continue
-        fi
-        if [ "$ch" = '"' ] && [ "$prev" != "\\" ]; then state="N"; fi
-        buf[d]="${buf[d]}%"
-        ;;
-      N)
-        if [ "$ch" = '$' ] && [ "$nxt" = "(" ]; then
-          _git_ops_open_subst P
+        else
+          buf[d]="${buf[d]}%%"
           i=$((i + 2))
-          continue
         fi
-        case "$ch" in
-          "'")
-            state="S"
-            buf[d]="${buf[d]}%"
+        continue
+        ;;
+      '$')
+        case "$nxt" in
+          '(')
+            _git_ops_open_subst P
+            i=$((i + 2))
+            continue
             ;;
-          '"')
-            state="D"
-            buf[d]="${buf[d]}%"
+          '{')
+            _git_ops_mark_braced
+            continue
             ;;
-          '`')
-            if [ "${kinds:0:1}" = "B" ]; then
-              _git_ops_close_subst
-            else
-              _git_ops_open_subst B
-            fi
-            ;;
-          ')')
-            if [ "${kinds:0:1}" = "P" ]; then
-              _git_ops_close_subst
-            else
-              buf[d]="${buf[d]})"
-            fi
-            ;;
-          *) buf[d]="${buf[d]}${ch}" ;;
         esac
         ;;
+      '`')
+        if [ "$state" = "N" ] && [ "${kinds:0:1}" = "B" ]; then
+          _git_ops_close_subst
+        else
+          _git_ops_open_subst B
+        fi
+        i=$((i + 1))
+        continue
+        ;;
     esac
-    prev="$ch"
+    if [ "$state" = "D" ]; then
+      if [ "$ch" = '"' ]; then state="N"; fi
+      buf[d]="${buf[d]}%"
+      i=$((i + 1))
+      continue
+    fi
+    case "$ch" in
+      "'")
+        state="S"
+        buf[d]="${buf[d]}%"
+        ;;
+      '"')
+        state="D"
+        buf[d]="${buf[d]}%"
+        ;;
+      '<' | '>')
+        if [ "$nxt" = "(" ]; then
+          _git_ops_open_subst P
+          i=$((i + 2))
+          continue
+        fi
+        buf[d]="${buf[d]}${ch}"
+        ;;
+      ')')
+        if [ "${kinds:0:1}" = "P" ]; then
+          _git_ops_close_subst
+        else
+          buf[d]="${buf[d]})"
+        fi
+        ;;
+      *) buf[d]="${buf[d]}${ch}" ;;
+    esac
     i=$((i + 1))
   done
   while [ "$d" -gt 0 ]; do _git_ops_close_subst; done
   text="${buf[0]}${subs}"
+}
+
+# _git_ops_mark_braced   (part of _git_ops_mark_words; shares its locals)
+#   At i is `${`. Consumes through the matching `}` (nested braces, quoted
+#   segments and backslash escapes inside do not end it; an unclosed one runs
+#   to the end of input) and appends one `%` per byte.
+_git_ops_mark_braced() {
+  local depth=0 c q=""
+  i=$((i + 1))
+  buf[d]="${buf[d]}%"
+  while [ "$i" -lt "$len" ]; do
+    c="${h:$i:1}"
+    buf[d]="${buf[d]}%"
+    i=$((i + 1))
+    if [ -n "$q" ]; then
+      if [ "$c" = "\\" ] && [ "$q" = '"' ]; then
+        buf[d]="${buf[d]}%"
+        i=$((i + 1))
+      elif [ "$c" = "$q" ]; then
+        q=""
+      fi
+      continue
+    fi
+    case "$c" in
+      \\)
+        buf[d]="${buf[d]}%"
+        i=$((i + 1))
+        ;;
+      "'" | '"') q="$c" ;;
+      '{') depth=$((depth + 1)) ;;
+      '}')
+        depth=$((depth - 1))
+        if [ "$depth" -eq 0 ]; then return 0; fi
+        ;;
+    esac
+  done
 }
 
 # _git_ops_open_subst <P|B>   (part of _git_ops_mark_words; shares its locals)
@@ -378,7 +444,6 @@ _git_ops_open_subst() {
   d=$((d + 1))
   buf[d]=""
   state="N"
-  prev="("
 }
 
 # _git_ops_close_subst   (part of _git_ops_mark_words; shares its locals)
@@ -388,7 +453,6 @@ _git_ops_close_subst() {
   state="${states:0:1}"
   states="${states:1}"
   kinds="${kinds:1}"
-  prev=")"
 }
 
 # _git_ops_trim_closers   (assigns tok — a local of the caller)
@@ -404,13 +468,15 @@ _git_ops_trim_closers() {
 
 # _git_ops_cut_stop   (part of _git_ops_parse_clause; shares its locals)
 #   Command-position scanning stopped on a word it does not recognise. In the
-#   executor fallback after a cut, that word may be a fragment of a quoted
-#   value (`bash -c "A='x y' git push"` → `A= x y git push`): if a git word
-#   follows, the invocation is recorded as `?` rather than lost (fail closed,
-#   never a value). Elsewhere the clause simply has no git invocation.
+#   executor fallback after a cut or any assignment, that word may be a
+#   fragment of a quoted value (`bash -c "A='x y' git push"` → `A= x y git
+#   push`, `A=x' 'y` → `A=x  y`): if a git word follows, the invocation is
+#   recorded as `?` rather than lost (fail closed, never a value). Elsewhere
+#   the clause simply has no git invocation.
 _git_ops_cut_stop() {
   local j
-  if [ "$ex" -ne 1 ] || [ "$cut" -ne 1 ]; then return 0; fi
+  if [ "$ex" -ne 1 ]; then return 0; fi
+  if [ "$cut" -ne 1 ] && [ "$assigned" -ne 1 ]; then return 0; fi
   j=$((i + 1))
   while [ "$j" -lt "$n" ]; do
     case "${t[$j]}" in
@@ -441,7 +507,7 @@ _git_ops_parse_clause() {
   # option, the timeout duration, an emptied assignment and every global option
   # but the value-less ones set cut, and cut makes the subcommand `?` (CON-13).
   # ex is 1 in that mode, so `cut=$ex` is a no-op elsewhere.
-  local ex=0 cut=0
+  local ex=0 cut=0 assigned=0
   if [ "$mode" = "executor" ]; then ex=1; fi
 
   # Command position: openers, assignments, wrappers.
@@ -470,6 +536,7 @@ _git_ops_parse_clause() {
         esac
         val="${tok#*=}"
         if [ -z "$val" ]; then cut=$ex; fi
+        assigned=1
         case "$name" in
           CLAUDE_ALLOW_?*)
             case "${name#CLAUDE_ALLOW_}" in
@@ -612,12 +679,10 @@ _git_ops_parse_clause() {
   _git_ops_trim_closers
   sub="$tok"
   if [ "$cut" -eq 1 ]; then sub='?'; fi
-  if [ "$ex" -eq 1 ]; then
-    case "$_GIT_OPS_EXECUTOR_COMMANDS" in
-      *" $sub "*) ;;
-      *) sub='?' ;;
-    esac
-  fi
+  case "$_GIT_OPS_COMMANDS" in
+    *" $sub "*) ;;
+    *) sub='?' ;;
+  esac
   case "$sub" in
     [abcdefghijklmnopqrstuvwxyz]*)
       case "$sub" in

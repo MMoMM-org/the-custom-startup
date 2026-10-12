@@ -294,8 +294,52 @@ expect_decode() {
   expect_parse 'git push origin pop' "$(rec push '' '' '' '')"
 }
 
-@test "unknown subcommand is recorded (fail closed)" {
-  expect_parse 'git frobnicate --x' "$(rec frobnicate '' '--x' '' '')"
+@test "unknown subcommand is recorded as ? (fail closed, closed list)" {
+  expect_parse 'git frobnicate --x' "$(rec '?' '' '--x' '' '')"
+}
+
+@test "an alias is recorded as ?" {
+  expect_parse 'git co main' "$(rec '?' '' '' '' '')"
+}
+
+# --- words: a value always stays in one word --------------------------------
+
+@test "words: a backslash-escaped space keeps -C's value one word" {
+  expect_parse 'git -C my\ secretdir push' "$(rec push '' '' '' '')"
+}
+
+@test "words: a backslash-escaped space keeps -c's value one word" {
+  expect_parse 'git -c user.name=john\ doe commit' "$(rec commit '' '' '' '')"
+}
+
+@test "words: a backslash-escaped space keeps a positional one word" {
+  expect_parse 'git commit --author a\ --hunter2' "$(rec commit '' '--author' '' '')"
+}
+
+@test "words: a backslash-escaped space keeps an assignment one word" {
+  expect_parse 'A=x\ y git push' "$(rec push '' '' '' '')"
+}
+
+@test "words: backslash-newline is a line continuation" {
+  expect_parse "git push \\${NL}  --force" "$(rec push '' '--force' '' '')"
+}
+
+@test "words: a parameter expansion is one word" {
+  expect_parse 'git -C ${D:-a b c} push' "$(rec push '' '' '' '')" || return 1
+  expect_parse 'git -C ${D:-"a } b"} push' "$(rec push '' '' '' '')" || return 1
+  expect_parse 'git -C ${D:-${E:-a b}} push' "$(rec push '' '' '' '')"
+}
+
+@test "words: a process substitution is code and one word" {
+  expect_parse 'diff <(git push) x' "$(rec push '' '' '' '')" || return 1
+  expect_parse 'git apply <(cat p) --index' "$(rec apply '' '--index' '' '')"
+}
+
+@test "executor: an assignment with a quoted value before git yields ?" {
+  local want
+  want="$(rec '?' '' '(executor)' '' '')"
+  expect_parse "bash -c \"A=\\\"x y\\\" git push\"" "$want" || return 1
+  expect_parse "bash -c \"A=x' 'y git push\"" "$want"
 }
 
 @test "undeterminable subcommand: git \$X gives ?" {
@@ -666,6 +710,17 @@ expect_decode() {
     'git commit -m "$(git reset --hard)"'
     "bash -c \"A='x y' git push\""
     "bash -c \"A='x $s' git push\""
+    # Escapes, parameter expansions, process substitutions, closed list.
+    'git -C my\ hunter2 push'
+    'git -c user.name=john\ hunter2 commit'
+    'git -C ${D:-a hunter2 c} push'
+    'git commit --author a\ --hunter2'
+    'A=x\ hunter2 git push'
+    "bash -c \"A=\\\"x hunter2\\\" git push\""
+    "bash -c \"A=x' 'hunter2 git push\""
+    'diff <(git push hunter2) x'
+    'git hunter2'
+    'git co hunter2'
     # Non-ASCII words never pass as names.
     'git é'
     'git Ä --x'
