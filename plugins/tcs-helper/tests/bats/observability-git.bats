@@ -49,6 +49,26 @@ expect_parse() {
   fi
 }
 
+# _utf8_locale  sets UTF8_LOCALE to the first installed UTF-8 locale out of
+#   en_US.UTF-8 and C.UTF-8 (any spelling `locale -a` uses). Fails, rather than
+#   skipping, when there is none: the locale tests must never pass vacuously.
+_utf8_locale() {
+  local l
+  UTF8_LOCALE=""
+  for l in $(locale -a 2>/dev/null); do
+    case "$l" in
+      en_US.UTF-8 | en_US.utf8) UTF8_LOCALE="$l"; return 0 ;;
+    esac
+  done
+  for l in $(locale -a 2>/dev/null); do
+    case "$l" in
+      C.UTF-8 | C.utf8) UTF8_LOCALE="$l"; return 0 ;;
+    esac
+  done
+  echo "no UTF-8 locale (en_US.UTF-8 or C.UTF-8) installed" >&2
+  return 1
+}
+
 # expect_decode <payload> <expected decoded command>
 expect_decode() {
   run _git_ops_command "$1"
@@ -300,6 +320,45 @@ expect_decode() {
 
 @test "an alias is recorded as ?" {
   expect_parse 'git co main' "$(rec '?' '' '' '' '')"
+}
+
+@test "command position: a backslash-escaped git is the invocation" {
+  expect_parse '\git push' "$(rec push '' '' '' '')"
+}
+
+@test "command position: a single-quoted git is the invocation" {
+  expect_parse "'git' push" "$(rec push '' '' '' '')"
+}
+
+@test "command position: a double-quoted git is the invocation" {
+  expect_parse '"git" push' "$(rec push '' '' '' '')" || return 1
+  expect_parse '"/usr/bin/git" push' "$(rec push '' '' '' '')"
+}
+
+@test "command position: a quoted git inside a message stays in the message" {
+  expect_parse "git commit -m \"say 'git' push\"" "$(rec commit '' '-m' '' '')"
+}
+
+@test "command position: leading redirections are skipped" {
+  expect_parse '>/dev/null git push' "$(rec push '' '' '' '')" || return 1
+  expect_parse '2>/dev/null git push' "$(rec push '' '' '' '')" || return 1
+  expect_parse '2>&1 git push' "$(rec push '' '' '' '')" || return 1
+  expect_parse '> out git push' "$(rec push '' '' '' '')"
+}
+
+@test "stash: an option before the verb means an implicit push, so -m list is recorded" {
+  expect_parse 'git stash -m list' "$(rec stash '' '-m' '' '')" || return 1
+  expect_parse 'git stash -m show' "$(rec stash '' '-m' '' '')"
+}
+
+@test "stash: the verb right after stash still decides" {
+  expect_parse 'git stash list' '' || return 1
+  expect_parse 'git stash push -m x' "$(rec stash push '-m' '' '')"
+}
+
+@test "flags: an unquoted separate value beginning with - reads as a flag (ADR-3 residual)" {
+  expect_parse 'git commit -m --x' "$(rec commit '' '-m --x' '' '')" || return 1
+  expect_parse 'git commit -m -x' "$(rec commit '' '-m -x' '' '')"
 }
 
 # --- words: a value always stays in one word --------------------------------
@@ -726,8 +785,9 @@ expect_decode() {
     'git Ä --x'
     'git pushé'
   )
+  _utf8_locale || return 1
   for ((i = 0; i < ${#corpus[@]}; i++)); do
-    out="$(LC_ALL=en_US.UTF-8 _git_ops_parse "${corpus[$i]}")"
+    out="$(export LC_ALL="$UTF8_LOCALE"; _git_ops_parse "${corpus[$i]}")"
     if [ -z "$out" ]; then
       failed="$failed [no record: ${corpus[$i]}]"
       continue
@@ -838,14 +898,25 @@ _record_violation() {
   expect_parse "bash -c 'echo git push'" ''
 }
 
+@test "a UTF-8 locale exists and bash reads a two-byte letter as one character in it" {
+  _utf8_locale || return 1
+  run env LC_ALL="$UTF8_LOCALE" bash -c 'x="é"; printf %s "${#x}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
 @test "names are ASCII: non-ASCII letters give ? in a UTF-8 locale" {
-  run env LC_ALL=en_US.UTF-8 bash -c 'source "$1"; _git_ops_parse "git é"; _git_ops_parse "git Ä"; _git_ops_parse "git pushé"' _ "$BUNDLE_LIB"
+  _utf8_locale || return 1
+  run env LC_ALL="$UTF8_LOCALE" bash -c 'x="é"; [ "${#x}" -eq 1 ] || exit 3
+    source "$1"; _git_ops_parse "git é"; _git_ops_parse "git Ä"; _git_ops_parse "git pushé"' _ "$BUNDLE_LIB"
   [ "$status" -eq 0 ]
   [ "$output" = "$(rec '?' '' '' '' '')${NL}$(rec '?' '' '' '' '')${NL}$(rec '?' '' '' '' '')" ]
 }
 
 @test "a non-ASCII assignment name is no assignment in a UTF-8 locale" {
-  run env LC_ALL=en_US.UTF-8 bash -c 'source "$1"; _git_ops_parse "CLAUDE_ALLOW_RÉSET=1 git push"' _ "$BUNDLE_LIB"
+  _utf8_locale || return 1
+  run env LC_ALL="$UTF8_LOCALE" bash -c 'x="é"; [ "${#x}" -eq 1 ] || exit 3
+    source "$1"; _git_ops_parse "CLAUDE_ALLOW_RÉSET=1 git push"' _ "$BUNDLE_LIB"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }

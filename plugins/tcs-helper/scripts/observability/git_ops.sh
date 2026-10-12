@@ -12,10 +12,20 @@
 #                               read-only:
 #                               subcommand TAB action TAB flags TAB overrides
 #                               TAB override_first
-#                               Names only (CON-13): no flag value, positional,
-#                               path, URL, message or assignment value is ever
-#                               printed. Flags are printed in full; the 256-byte
-#                               cap is the writer's job.
+#                               Names only (CON-13): the subcommand is a git
+#                               command name or `?`, the action is from a
+#                               closed list, overrides are CLAUDE_ALLOW_*
+#                               names, and positionals, paths, URLs, messages
+#                               and assignment values are never printed. A
+#                               flag's value is not printed when it is glued
+#                               to the flag (`-mX` → `-m`, `--o=X` → `--o`),
+#                               quoted, or a plain word; but an unquoted
+#                               separate value that itself begins with `-` is
+#                               read as a flag (`-m --x` → `-m --x`, `-m -x`
+#                               → `-m -x`), the names-only trade-off ADR-3
+#                               accepts (the SDD has no per-flag value table).
+#                               Flags are printed in full; the 256-byte cap is
+#                               the writer's job.
 #
 # Parsing (SDD Runtime View, Complex Logic; ADR-3, ADR-9):
 #   heredoc bodies are stripped with the copied function below, then the text
@@ -38,8 +48,12 @@
 #   `*/git`. override_first mirrors the guard's first-token rule
 #   (tcs-git-helpers lib/override.sh, one leading cd/pushd clause stripped).
 #
-# Known limits (documented, not silent): `xargs git …`, `find … -exec git …`
-# and git run from a script file are not recognised and record nothing. In the
+# Known limits (documented, not silent): `xargs git …`, `find … -exec git …`,
+# git run from a script file, git behind `setsid` or another wrapper not
+# listed above, git behind `env -C dir` (that value is not skipped) and git
+# inside `case … in pattern) git …` are not recognised and record nothing.
+# Executor mode is decided for the whole command: one `bash -c` or `eval`
+# anywhere puts every clause of it through the fallback. In the
 # executor fallback, nested quoting is gone, so any value before the
 # subcommand (wrapper option or duration, empty assignment, global option
 # other than the value-less ones) makes the subcommand `?` rather than risk a
@@ -285,6 +299,26 @@ _git_ops_command() {
   done
 }
 
+# _git_ops_unquote_git   (reads and assigns h — a local of _git_ops_parse)
+#   A word whose shell-unquoted form is exactly `git` or ends in `/git` is the
+#   invocation, however it is quoted: `\git`, `'git'`, `"git"`, `"/usr/bin/git"`
+#   (the usual way round an alias). Their quotes are removed before the words
+#   are marked, so the word reads as `git`. Inside a quoted message the same
+#   rewrite only drops quote characters around the word, which leaves it in
+#   the message.
+_git_ops_unquote_git() {
+  local re m pre rest
+  h="${h//\\git/git}"
+  re='(^|[[:space:];&|(`])(['"'"'"])([^'"'"'"[:space:]]*/)?git(['"'"'"])([[:space:];&|)`]|$)'
+  while [[ "$h" =~ $re ]]; do
+    if [ "${BASH_REMATCH[2]}" != "${BASH_REMATCH[4]}" ]; then return 0; fi
+    m="${BASH_REMATCH[0]}"
+    pre="${h%%"$m"*}"
+    rest="${h#*"$m"}"
+    h="${pre}${BASH_REMATCH[1]}${BASH_REMATCH[3]}git${BASH_REMATCH[5]}${rest}"
+  done
+}
+
 # _git_ops_mark_words   (reads h, NL; assigns text — locals of _git_ops_parse)
 #   Rewrites the heredoc-stripped command h into words for clause parsing.
 #   States: N code, S single-quoted, D double-quoted (`$(` opens code in N and
@@ -526,6 +560,13 @@ _git_ops_parse_clause() {
         continue
         ;;
       git | */git) break ;;
+      [0123456789]'<'* | [0123456789]'>'* | '<'* | '>'*)
+        # A leading redirection; a bare operator takes the next word.
+        val="${tok#[0123456789]}"
+        val="${val//[<>-]/}"
+        if [ -z "$val" ]; then i=$((i + 2)); else i=$((i + 1)); fi
+        continue
+        ;;
       [abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_]*=*)
         name="${tok%%=*}"
         case "$name" in
@@ -695,7 +736,7 @@ _git_ops_parse_clause() {
 
   # Flags and positionals. Positionals are counted, never printed: the first
   # one is compared against the read-only forms and the ACTIONS list only.
-  local flags="" npos=0 pos1="" ended=0 listing=1 skip=0
+  local flags="" npos=0 pos1="" ended=0 listing=1 skip=0 first_word="${t[$i]-}"
   while [ "$i" -lt "$n" ]; do
     tok="${t[$i]}"
     i=$((i + 1))
@@ -747,6 +788,15 @@ _git_ops_parse_clause() {
     esac
   done
   flags="${flags# }"
+
+  # git stash <verb> [options]: the verb is the word right after `stash`; when
+  # that word is an option (or absent) the verb is an implicit push, so a
+  # value such as `-m list` is never read as the verb.
+  if [ "$sub" = "stash" ]; then
+    case "$first_word" in
+      '' | -*) pos1="" ;;
+    esac
+  fi
 
   # Read-only predicate (ADR-9, closed list; everything else is recorded).
   case "$sub" in
@@ -854,12 +904,16 @@ _git_ops_parse() {
     text="${h//\'/ }"
     text="${text//\"/ }"
   else
+    _git_ops_unquote_git
     _git_ops_mark_words
   fi
 
   # `2>&1` and `&>f` are redirections, not the `&` separator.
-  text="${text//'>&'/'> '}"
-  text="${text//'&>'/' >'}"
+  # bash 3.2 keeps quotes in a quoted replacement inside "…", so the
+  # replacements come from variables.
+  local gt_sp='> ' sp_gt=' >'
+  text="${text//'>&'/$gt_sp}"
+  text="${text//'&>'/$sp_gt}"
   text="${text//'&&'/$NL}"
   text="${text//'||'/$NL}"
   text="${text//'|'/$NL}"
