@@ -996,8 +996,8 @@ _scale() {
   _linear_ok "$(_ms "${output% *}")" "$(_ms "${output#* }")" "$1" "$2"
 }
 
-@test "size cap: the cap is 16384" {
-  [ "$_GIT_OPS_MAX_BYTES" -eq 16384 ]
+@test "size cap: the cap is 4096" {
+  [ "$_GIT_OPS_MAX_BYTES" -eq 4096 ]
 }
 
 @test "size cap: above the cap a free-standing git word gives one oversize marker" {
@@ -1014,18 +1014,24 @@ _scale() {
 
 @test "size cap: at the cap the command is parsed; one byte more is not" {
   local cmd
-  _GIT_OPS_MAX_BYTES=40
-  cmd="git push --force # $(_pad 21)"
-  [ "${#cmd}" -eq 40 ] || return 1
+  cmd="git push --force # $(_pad 4077)"
+  [ "${#cmd}" -eq 4096 ] || return 1
   expect_parse "$cmd" "$(rec push '' '--force' '' '')" || return 1
   expect_parse "${cmd}x" "$(rec '?' '' '(oversize)' '' '')"
 }
 
+@test "size cap: a quoted message just under the cap is parsed" {
+  expect_parse "git commit -m \"$(_pad 4000)\" && git push" \
+    "$(rec commit '' '-m' '' '')${NL}$(rec push '' '' '' '')"
+}
+
 @test "size cap: the cap counts bytes in a UTF-8 caller locale too" {
   _utf8_locale || return 1
-  run env LC_ALL="$UTF8_LOCALE" bash -c 'source "$1"; _GIT_OPS_MAX_BYTES=20
+  # 2100 two-byte letters: 4211 bytes but only 2111 characters.
+  run env LC_ALL="$UTF8_LOCALE" bash -c 'source "$1"
     x="é"; [ "${#x}" -eq 1 ] || exit 3
-    _git_ops_parse "git push # éééééé"' _ "$BUNDLE_LIB"
+    s="é"; while [ "${#s}" -lt 2100 ]; do s="$s$s"; done
+    _git_ops_parse "git push # ${s:0:2100}"' _ "$BUNDLE_LIB"
   [ "$status" -eq 0 ]
   [ "$output" = "$(rec '?' '' '(oversize)' '' '')" ]
 }
@@ -1065,13 +1071,12 @@ _scale() {
     echo "$t1 $t10"'
 }
 
-# The full parse with the copied strippers replaced by identity functions:
-# this task's code end to end (unquoting, word marking, clause split, clause
-# parse). The strippers themselves are T1.5's (made linear there).
-@test "scale: parsing dense, quoted-git, clause-heavy and word-heavy commands is linear (strippers stubbed)" {
-  _scale 6000 300 '
-    _git_ops_strip_quoted() { printf "%s" "$1"; }
-    _git_ops_strip_heredocs() { printf "%s" "$1"; }
+# The full parse end to end (stripping, word marking, clause split, clause
+# parse), with the cap lifted for the measurement: the linearity it protects
+# is what makes any cap value affordable.
+@test "scale: parsing dense, quoted-git, clause-heavy and word-heavy commands is linear" {
+  _scale 12000 300 '
+    _GIT_OPS_MAX_BYTES=999999
     t1=0 t10=0
     for unit in "\"a\" \$x \\\\ " "'"'"'git'"'"' x;" "git a; " "a " "-x "; do
       a=$(_best_of_3 _git_ops_parse "git commit $(_rep "$unit" 1500)")

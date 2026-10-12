@@ -293,18 +293,22 @@ _GIT_OPS_COMMANDS=" add am annotate apply archimport archive backfill bisect bla
 # _GIT_OPS_MAX_BYTES -- the parse cap (SDD Complex Logic, Size cap). A decoded
 # command longer than this is not parsed: _git_ops_parse prints one value-free
 # `? (oversize)` record when it holds a free-standing `git` word, else
-# nothing. 16384 is a first setting; T1.5 re-measures it once the copied
-# strippers are linear. Measured with ${#cmd}, which counts bytes under the
-# hook's LC_ALL=C (CON-3) and characters in a UTF-8 locale (never more than
-# the bytes, so the cap can only be reached later, by at most the byte width).
-_GIT_OPS_MAX_BYTES=16384
+# nothing. Set to 4096 by the maintainer (SDD Size cap, 2026-10-12) from
+# measurement: every step below it is linear, but linear is not cheap in
+# bash. On macOS bash 3.2 under load a 4 KB command costs ~55 ms as prose,
+# ~180 ms with dense quoting and ~390 ms with a shell special every few
+# bytes; commands of a few hundred bytes stay within the CON-7 budget, so the
+# cap bounds the worst case and the 15 ms git-record budget holds for typical
+# commands only. Measured with ${#cmd} under _git_ops_parse's own
+# `local LC_ALL=C`, so it counts bytes whatever the caller's locale.
+_GIT_OPS_MAX_BYTES=4096
 
 # ---------------------------------------------------------------------------
 # Parser (T1.3). Helpers below share state with their caller through bash's
 # dynamic scoping: each one's comment names the caller locals it reads and
 # writes. This keeps the hook path free of per-clause command substitutions.
-# Every step below the cap is linear in the input apart from the copied
-# strippers above (made linear in T1.5).
+# Every step below the cap is linear in the input, the copied strippers above
+# included (made linear in T1.5); see _GIT_OPS_MAX_BYTES for what that costs.
 # ---------------------------------------------------------------------------
 
 # _git_ops_command <payload>
