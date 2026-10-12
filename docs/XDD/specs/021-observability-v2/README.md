@@ -42,6 +42,7 @@
 | 2026-10-11 | `override_first` is per command: every record of a command carries the first-position override name | T1.3 found that an override before a read-only or non-git clause (`CLAUDE_ALLOW_RESET_HARD=1 true && git reset --hard`) passes the guard but left no trace in any record. Chosen by Marcus over first-record-only and per-clause. `overrides` stays per clause. |
 | 2026-10-11 | Executor fallback: a separate-value global option makes the subcommand `?` | T1.3: quote removal split `-C 'my dir'` and put `dir` in subcommand position, a value leak (CON-13). |
 | 2026-10-11 | Executor fallback: subcommand only from a closed list of git command names, else `?` | T1.3: a separator inside a nested quote (`bash -c "git commit -m 'wip; git tok'"`) made a fake clause and put `tok` in the record. Chosen by Marcus over parsing the payload recursively: provably closed, same principle as `action`; costs `?` for aliases behind `bash -c` and a possible false-positive `?` record. |
+| 2026-10-12 | Subcommand only from the closed list of git command names in both modes, else `?` | T1.3's fourth review round still found value fragments in the subcommand slot (`git -C my\ dir push` recorded `dir`). Chosen by Marcus over tokenizer fixes alone: the field is provably closed whatever syntax is missed. Costs alias names (`git co` records `?`). Tokenizer fixes (`\ `, `${…}`, `<( )`) ship too, so records and flags stay correct. |
 
 ## Context
 

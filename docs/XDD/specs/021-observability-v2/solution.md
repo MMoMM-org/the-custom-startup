@@ -419,7 +419,8 @@ ENTITY: Event (MODIFIED)
     # never: tool_input.prompt
 
   WHEN kind = git:                          # NEW (ADR-9)
-    subcommand:    string    # [a-z][a-z0-9-]* or "?" when undeterminable (an alias that fails the pattern is "?")
+    subcommand:    string    # a name from the closed list of git command names (`git help -a`, plus `lfs`),
+                             # else "?" (unknown, alias, undeterminable); never any other word (2026-10-12)
     action:        string    # sub-verb from the closed ACTIONS list for this subcommand, else "" (never free text)
     flags:         string    # space-separated names: --long (no =value), -x (first letter, ADR-3), "--" kept as a name;
                              # "(executor)" when parsed through the executor fallback; "" if none;
@@ -543,7 +544,8 @@ read-only only in these forms (else recorded):
   notes      list | show
   submodule  no argument, or status
 no subcommand at all  bare `git`, `git --version`, `git --help`, `git help …`
-everything else → recorded (fail-closed); undeterminable subcommand → recorded as "?"
+everything else → recorded (fail-closed); a subcommand not on the closed list of git command names
+(aliases, unknown, undeterminable) → recorded as "?"
 
 "present" means anywhere among the subcommand's flags: `config --global --get k` is read-only.
 
@@ -637,8 +639,8 @@ a flag (`bash -c "git commit -m '--codename-x'"`). The fallback therefore record
 (`bash -c "git -C 'my dir' reset"`) would leave a fragment in subcommand position, so in this mode a
 global option that takes a separate value makes the subcommand `?`. Quote removal also exposes
 separators inside nested quotes (`bash -c "git commit -m 'wip; git tok'"` splits into a fake clause
-`git tok`), so in this mode the subcommand is recorded only when it is on a closed list of git's own
-command names (`git help -a`, plus `lfs`), fixed in `git_ops.sh`; anything else is `?`. A fake clause
+`git tok`); like every subcommand, it is recorded only when it is on the closed list of git's own
+command names (see Words); anything else is `?`. A fake clause
 can still produce a `git ? (executor)` record: a false positive, never a value. Settled in implementation
 (T1.3): the fallback text is the heredoc-stripped command (bodies that feed a shell are kept by
 `_strip_heredocs`) with quote characters replaced by spaces; a shell word with its options and `eval`
@@ -671,7 +673,12 @@ substitution (`$( … )` or backticks, outside single quotes, at any depth) is e
 argument at once: its content is parsed as clauses of its own (`echo $(git reset --hard)` and
 `git commit -m "$(git reset --hard)"` record `reset`), and in the enclosing clause it is one opaque
 word (`git -C $(pwd) push` records `push`; `GIT_DIR=$(pwd) git push` records `push`;
-`git $(echo reset)` records `?`). Names are matched against ASCII letter lists, not `[[:lower:]]`
+`git $(echo reset)` records `?`). Process substitution `<( … )` / `>( … )` is treated the same way.
+A backslash-escaped character (`my\ dir`) belongs to its word, and a parameter expansion `${ … }`
+is one opaque word, so neither can split a value into two words. The subcommand is recorded only
+when it is on a closed list of git's own command names (`git help -a`, plus `lfs`), fixed in
+`git_ops.sh`, in both modes; anything else is `?` (2026-10-12): whatever syntax a future review
+finds, no word other than a git command name can reach the field. Names are matched against ASCII letter lists, not `[[:lower:]]`
 or `[a-z]`, which match `é` in a UTF-8 locale on bash 3.2. In executor mode a scan that stops on an
 unrecognised word after a value cut, with a `git` word later in the clause, records `?`: the record
 is kept, the name is lost.
