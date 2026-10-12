@@ -251,10 +251,21 @@ _git_ops_has_shell_executor() {
 # idiom of logwrite.sh's _OBSERVABILITY_DETAIL_ONLY_FIELDS).
 _GIT_OPS_COMMANDS=" add am annotate apply archimport archive backfill bisect blame branch bugreport bundle cat-file check-attr check-ignore check-mailmap check-ref-format checkout checkout-index cherry cherry-pick citool clean clone column commit commit-graph commit-tree config count-objects credential credential-cache credential-store cvsexportcommit cvsimport cvsserver daemon describe diagnose diff diff-files diff-index diff-pairs diff-tree difftool fast-export fast-import fetch fetch-pack filter-branch fmt-merge-msg for-each-ref for-each-repo format-patch fsck gc get-tar-commit-id gitk gitweb grep gui hash-object help hook http-backend imap-send index-pack init instaweb interpret-trailers log ls-files ls-remote ls-tree mailinfo mailsplit maintenance merge merge-base merge-file merge-index merge-one-file merge-tree mergetool mktag mktree multi-pack-index mv name-rev notes p4 pack-objects pack-redundant pack-refs patch-id prune prune-packed pull push quiltimport range-diff read-tree rebase reflog refs remote repack replace replay request-pull rerere reset restore rev-list rev-parse revert rm scalar send-email send-pack sh-i18n sh-setup shortlog show show-branch show-index show-ref sparse-checkout stash status stripspace submodule svn switch symbolic-ref tag unpack-file unpack-objects update-index update-ref update-server-info var verify-commit verify-pack verify-tag version whatchanged worktree write-tree lfs "
 
+# _GIT_OPS_MAX_BYTES -- the parse cap (SDD Complex Logic, Size cap). A decoded
+# command longer than this is not parsed: _git_ops_parse prints one value-free
+# `? (oversize)` record when it holds a free-standing `git` word, else
+# nothing. 16384 is a first setting; T1.5 re-measures it once the copied
+# strippers are linear. Measured with ${#cmd}, which counts bytes under the
+# hook's LC_ALL=C (CON-3) and characters in a UTF-8 locale (never more than
+# the bytes, so the cap can only be reached later, by at most the byte width).
+_GIT_OPS_MAX_BYTES=16384
+
 # ---------------------------------------------------------------------------
-# Parser (T1.3). Helpers below share state with _git_ops_parse through bash's
-# dynamic scoping: they read and assign locals that _git_ops_parse declares,
-# which keeps the hook path free of per-clause command substitutions.
+# Parser (T1.3). Helpers below share state with their caller through bash's
+# dynamic scoping: each one's comment names the caller locals it reads and
+# writes. This keeps the hook path free of per-clause command substitutions.
+# Every step below the cap is linear in the input apart from the copied
+# strippers above (made linear in T1.5).
 # ---------------------------------------------------------------------------
 
 # _git_ops_command <payload>
@@ -262,64 +273,91 @@ _GIT_OPS_COMMANDS=" add am annotate apply archimport archive backfill bisect bla
 #   The key is matched with its leading quote, so an escaped occurrence
 #   (`\"command\":\"` inside another string) is not a match. Nothing is printed
 #   when the key is missing or the string never closes (CON-9).
+#   One pass: the rest of the payload is split once on `\` (read -a), so each
+#   part after the first starts with an escaped byte; the first unescaped `"`
+#   in a literal stretch ends the string. Pieces are collected in an array and
+#   printed once, so no string is re-sliced or re-copied per escape.
 _git_ops_command() {
-  local payload="${1-}" rest out="" upto_quote upto_bs chunk esc
+  local payload="${1-}" rest p esc first_part=1 lit_only=0 k=0
+  local -a parts out
   case "$payload" in
     *'"command":"'*) ;;
     *) return 0 ;;
   esac
   rest="${payload#*\"command\":\"}"
-  while :; do
-    upto_quote="${rest%%\"*}"
-    upto_bs="${rest%%\\*}"
-    chunk="$upto_quote"
-    if [ "${#upto_bs}" -lt "${#chunk}" ]; then chunk="$upto_bs"; fi
-    # Neither a quote nor a backslash left: the string is unterminated.
-    if [ "${#chunk}" -eq "${#rest}" ]; then return 0; fi
-    out="${out}${chunk}"
-    rest="${rest:${#chunk}}"
-    case "$rest" in
-      '"'*)
-        printf '%s' "$out"
+  # shellcheck disable=SC2141 # the backslash IS the separator here
+  IFS=$'\\' read -r -d '' -a parts <<< "$rest" || :
+  out=()
+  # Iterated with for, appended at a running index: bash 3.2 arrays are lists,
+  # so an indexed read inside the loop would make the pass quadratic.
+  for p in ${parts[@]+"${parts[@]}"}; do
+    if [ "$first_part" -eq 1 ]; then
+      first_part=0
+    else
+      if [ "$lit_only" -eq 1 ]; then
+        # This part follows an escaped backslash: no escape at its start.
+        lit_only=0
+      elif [ -z "$p" ]; then
+        # `\\`: the escaped byte is the next backslash itself.
+        out[k]=$'\\'
+        k=$((k + 1))
+        lit_only=1
+        continue
+      else
+        esc="${p:0:1}"
+        p="${p:1}"
+        case "$esc" in
+          '"') out[k]='"' ;;
+          /) out[k]='/' ;;
+          n) out[k]=$'\n' ;;
+          t) out[k]=$'\t' ;;
+          r) out[k]=$'\r' ;;
+          *) out[k]="\\${esc}" ;;
+        esac
+        k=$((k + 1))
+      fi
+    fi
+    case "$p" in
+      *'"'*)
+        out[k]="${p%%\"*}"
+        printf '%s' "${out[@]}"
         return 0
         ;;
     esac
-    esc="${rest:1:1}"
-    case "$esc" in
-      '') return 0 ;;
-      '"') out="${out}\"" ;;
-      \\) out="${out}\\" ;;
-      /) out="${out}/" ;;
-      n) out="${out}"$'\n' ;;
-      t) out="${out}"$'\t' ;;
-      r) out="${out}"$'\r' ;;
-      *) out="${out}\\${esc}" ;;
-    esac
-    rest="${rest:2}"
+    out[k]="$p"
+    k=$((k + 1))
   done
+  # No closing quote: the string is unterminated.
+  return 0
 }
 
-# _git_ops_unquote_git   (reads and assigns h — a local of _git_ops_parse)
+# _git_ops_unquote_git   (_git_ops_parse locals: reads and writes h)
 #   A word whose shell-unquoted form is exactly `git` or ends in `/git` is the
 #   invocation, however it is quoted: `\git`, `'git'`, `"git"`, `"/usr/bin/git"`
 #   (the usual way round an alias). Their quotes are removed before the words
 #   are marked, so the word reads as `git`. Inside a quoted message the same
 #   rewrite only drops quote characters around the word, which leaves it in
-#   the message.
+#   the message. A match whose quotes differ (`"git'`) is left as it is and
+#   the scan continues after it.
 _git_ops_unquote_git() {
-  local re m pre rest
+  local re m pre rest done_part=""
   h="${h//\\git/git}"
   re='(^|[[:space:];&|(`])(['"'"'"])([^'"'"'"[:space:]]*/)?git(['"'"'"])([[:space:];&|)`]|$)'
-  while [[ "$h" =~ $re ]]; do
-    if [ "${BASH_REMATCH[2]}" != "${BASH_REMATCH[4]}" ]; then return 0; fi
+  rest="$h"
+  while [[ "$rest" =~ $re ]]; do
     m="${BASH_REMATCH[0]}"
-    pre="${h%%"$m"*}"
-    rest="${h#*"$m"}"
-    h="${pre}${BASH_REMATCH[1]}${BASH_REMATCH[3]}git${BASH_REMATCH[5]}${rest}"
+    pre="${rest%%"$m"*}"
+    if [ "${BASH_REMATCH[2]}" = "${BASH_REMATCH[4]}" ]; then
+      done_part="${done_part}${pre}${BASH_REMATCH[1]}${BASH_REMATCH[3]}git${BASH_REMATCH[5]}"
+    else
+      done_part="${done_part}${pre}${m}"
+    fi
+    rest="${rest#*"$m"}"
   done
+  h="${done_part}${rest}"
 }
 
-# _git_ops_mark_words   (reads h, NL; assigns text — locals of _git_ops_parse)
+# _git_ops_mark_words   (_git_ops_parse locals: reads h, NL; writes text)
 #   Rewrites the heredoc-stripped command h into words for clause parsing.
 #   States: N code, S single-quoted, D double-quoted (`$(` opens code in N and
 #   D, as in _git_ops_strip_quoted). Every rule below keeps a value inside
@@ -338,9 +376,14 @@ _git_ops_unquote_git() {
 #       clauses of its own. Nesting follows the same rules at every depth; an
 #       unclosed one is closed at the end of input.
 #   Outside these every byte is kept.
-# shellcheck disable=SC2016 # '$(' and '${' are literal patterns
+#   Linear: each step consumes the run up to the next byte that matters in the
+#   current state (`'` in S; `"`, `\`, `$`, backtick in D; those plus `'`,
+#   `(`, `)`, `<`, `>` in N) and appends it, or that many `%` from a pad built
+#   once, in one append.
+# shellcheck disable=SC2016,SC2295 # literal $( ${ patterns; spec vars are globs
 _git_ops_mark_words() {
-  local len=${#h} i=0 ch nxt state="N" d=0 states="" kinds="" subs=""
+  local rest="$h" run c nxt state="N" d=0 states="" kinds="" subs="" pad="%"
+  local nspec='['"'"'"\\$`()<>]*' dspec='["\\$`]*'
   local -a buf
   case "$h" in
     *"'"* | *'"'* | *'`'* | *'$('* | *'${'* | *\\* | *'<('* | *'>('*) ;;
@@ -349,27 +392,52 @@ _git_ops_mark_words() {
       return 0
       ;;
   esac
+  while [ "${#pad}" -lt "${#h}" ]; do pad="${pad}${pad}"; done
   buf[0]=""
-  while [ "$i" -lt "$len" ]; do
-    ch="${h:$i:1}"
-    nxt="${h:$((i + 1)):1}"
-    if [ "$state" = "S" ]; then
-      if [ "$ch" = "'" ]; then state="N"; fi
-      buf[d]="${buf[d]}%"
-      i=$((i + 1))
-      continue
-    fi
-    # N or D from here on.
-    case "$ch" in
+  while [ -n "$rest" ]; do
+    case "$state" in
+      S)
+        run="${rest%%\'*}"
+        buf[d]="${buf[d]}${pad:0:${#run}}"
+        rest="${rest:${#run}}"
+        if [ -z "$rest" ]; then break; fi
+        buf[d]="${buf[d]}%"
+        rest="${rest:1}"
+        state="N"
+        continue
+        ;;
+      D)
+        run="${rest%%$dspec}"
+        buf[d]="${buf[d]}${pad:0:${#run}}"
+        rest="${rest:${#run}}"
+        if [ -z "$rest" ]; then break; fi
+        if [ "${rest:0:1}" = '"' ]; then
+          buf[d]="${buf[d]}%"
+          rest="${rest:1}"
+          state="N"
+          continue
+        fi
+        ;;
+      N)
+        run="${rest%%$nspec}"
+        buf[d]="${buf[d]}${run}"
+        rest="${rest:${#run}}"
+        if [ -z "$rest" ]; then break; fi
+        ;;
+    esac
+    # At a byte that matters, in N or D.
+    c="${rest:0:1}"
+    nxt="${rest:1:1}"
+    case "$c" in
       \\)
         if [ "$nxt" = "$NL" ]; then
-          i=$((i + 2))
+          rest="${rest:2}"
         elif [ -z "$nxt" ]; then
           buf[d]="${buf[d]}%"
-          i=$((i + 1))
+          rest=""
         else
           buf[d]="${buf[d]}%%"
-          i=$((i + 2))
+          rest="${rest:2}"
         fi
         continue
         ;;
@@ -377,14 +445,15 @@ _git_ops_mark_words() {
         case "$nxt" in
           '(')
             _git_ops_open_subst P
-            i=$((i + 2))
-            continue
+            rest="${rest:2}"
             ;;
-          '{')
-            _git_ops_mark_braced
-            continue
+          '{') _git_ops_mark_braced ;;
+          *)
+            if [ "$state" = "D" ]; then buf[d]="${buf[d]}%"; else buf[d]="${buf[d]}\$"; fi
+            rest="${rest:1}"
             ;;
         esac
+        continue
         ;;
       '`')
         if [ "$state" = "N" ] && [ "${kinds:0:1}" = "B" ]; then
@@ -392,17 +461,12 @@ _git_ops_mark_words() {
         else
           _git_ops_open_subst B
         fi
-        i=$((i + 1))
+        rest="${rest:1}"
         continue
         ;;
     esac
-    if [ "$state" = "D" ]; then
-      if [ "$ch" = '"' ]; then state="N"; fi
-      buf[d]="${buf[d]}%"
-      i=$((i + 1))
-      continue
-    fi
-    case "$ch" in
+    # N only from here on.
+    case "$c" in
       "'")
         state="S"
         buf[d]="${buf[d]}%"
@@ -414,10 +478,10 @@ _git_ops_mark_words() {
       '<' | '>')
         if [ "$nxt" = "(" ]; then
           _git_ops_open_subst P
-          i=$((i + 2))
+          rest="${rest:2}"
           continue
         fi
-        buf[d]="${buf[d]}${ch}"
+        buf[d]="${buf[d]}${c}"
         ;;
       ')')
         if [ "${kinds:0:1}" = "P" ]; then
@@ -426,40 +490,49 @@ _git_ops_mark_words() {
           buf[d]="${buf[d]})"
         fi
         ;;
-      *) buf[d]="${buf[d]}${ch}" ;;
+      *) buf[d]="${buf[d]}${c}" ;;
     esac
-    i=$((i + 1))
+    rest="${rest:1}"
   done
   while [ "$d" -gt 0 ]; do _git_ops_close_subst; done
   text="${buf[0]}${subs}"
 }
 
-# _git_ops_mark_braced   (part of _git_ops_mark_words; shares its locals)
-#   At i is `${`. Consumes through the matching `}` (nested braces, quoted
-#   segments and backslash escapes inside do not end it; an unclosed one runs
-#   to the end of input) and appends one `%` per byte.
+# _git_ops_mark_braced   (_git_ops_mark_words locals: reads pad; writes rest,
+#   buf[d])
+#   rest starts with `${`. Consumes through the matching `}` (nested braces,
+#   quoted segments and backslash escapes inside do not end it; an unclosed
+#   one runs to the end of input) and appends one `%` per character, a run at
+#   a time.
+# shellcheck disable=SC2295 # the spec variables are glob patterns
 _git_ops_mark_braced() {
-  local depth=0 c q=""
-  i=$((i + 1))
+  local depth=0 c q="" run bspec=$'[{}\\\\\'"]*' dqspec='["\\]*'
   buf[d]="${buf[d]}%"
-  while [ "$i" -lt "$len" ]; do
-    c="${h:$i:1}"
+  rest="${rest:1}"
+  while [ -n "$rest" ]; do
+    if [ "$q" = "'" ]; then
+      run="${rest%%\'*}"
+    elif [ -n "$q" ]; then
+      run="${rest%%$dqspec}"
+    else
+      run="${rest%%$bspec}"
+    fi
+    buf[d]="${buf[d]}${pad:0:${#run}}"
+    rest="${rest:${#run}}"
+    if [ -z "$rest" ]; then return 0; fi
+    c="${rest:0:1}"
+    if [ "$c" = "\\" ]; then
+      buf[d]="${buf[d]}%%"
+      rest="${rest:2}"
+      continue
+    fi
     buf[d]="${buf[d]}%"
-    i=$((i + 1))
+    rest="${rest:1}"
     if [ -n "$q" ]; then
-      if [ "$c" = "\\" ] && [ "$q" = '"' ]; then
-        buf[d]="${buf[d]}%"
-        i=$((i + 1))
-      elif [ "$c" = "$q" ]; then
-        q=""
-      fi
+      q=""
       continue
     fi
     case "$c" in
-      \\)
-        buf[d]="${buf[d]}%"
-        i=$((i + 1))
-        ;;
       "'" | '"') q="$c" ;;
       '{') depth=$((depth + 1)) ;;
       '}')
@@ -470,7 +543,8 @@ _git_ops_mark_braced() {
   done
 }
 
-# _git_ops_open_subst <P|B>   (part of _git_ops_mark_words; shares its locals)
+# _git_ops_open_subst <P|B>   (_git_ops_mark_words locals: writes buf, d,
+#   states, kinds, state)
 _git_ops_open_subst() {
   buf[d]="${buf[d]}%"
   states="${state}${states}"
@@ -480,7 +554,8 @@ _git_ops_open_subst() {
   state="N"
 }
 
-# _git_ops_close_subst   (part of _git_ops_mark_words; shares its locals)
+# _git_ops_close_subst   (_git_ops_mark_words locals: reads NL; writes buf, d,
+#   states, kinds, state, subs)
 _git_ops_close_subst() {
   subs="${subs}${NL}${buf[d]}"
   d=$((d - 1))
@@ -489,7 +564,7 @@ _git_ops_close_subst() {
   kinds="${kinds:1}"
 }
 
-# _git_ops_trim_closers   (assigns tok — a local of the caller)
+# _git_ops_trim_closers   (caller local: reads and writes tok)
 #   Drops trailing backticks and parentheses: `(git reset)`, `` `git pull` ``.
 _git_ops_trim_closers() {
   while :; do
@@ -500,7 +575,15 @@ _git_ops_trim_closers() {
   done
 }
 
-# _git_ops_cut_stop   (part of _git_ops_parse_clause; shares its locals)
+# _git_ops_emit <subcommand> <action> <flags>
+#   (_git_ops_parse_clause locals: reads ovr; _git_ops_parse: reads first)
+#   Prints one record line.
+_git_ops_emit() {
+  printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "${ovr# }" "$first"
+}
+
+# _git_ops_cut_stop   (_git_ops_parse_clause locals: reads t, n, i, ex, cut,
+#   assigned)
 #   Command-position scanning stopped on a word it does not recognise. In the
 #   executor fallback after a cut or any assignment, that word may be a
 #   fragment of a quoted value (`bash -c "A='x y' git push"` → `A= x y git
@@ -515,7 +598,7 @@ _git_ops_cut_stop() {
   while [ "$j" -lt "$n" ]; do
     case "${t[$j]}" in
       git | */git)
-        printf '%s\t%s\t%s\t%s\t%s\n' '?' '' '(executor)' "${ovr# }" "$first"
+        _git_ops_emit '?' '' '(executor)'
         return 0
         ;;
     esac
@@ -523,30 +606,47 @@ _git_ops_cut_stop() {
   done
 }
 
-# _git_ops_parse_clause <clause>
-#   (reads mode and first — locals of _git_ops_parse)
-#   Prints the record for the clause's git invocation, if it has one and it is
-#   not read-only. Word splitting relies on the caller's IFS and noglob.
+# _git_ops_skip_wrapper_options <value-taking options> [lookup]
+#   (_git_ops_parse_clause locals: reads t, n, ex; writes i, cut)
+#   i is just past a wrapper word. Skips its options; an option named in the
+#   space-separated list also takes the next word. Every option sets cut in
+#   the executor fallback (its value may have been quoted and split). With
+#   `lookup`, an option containing v or V (`command -v`) makes the clause a
+#   lookup: returns 1, no invocation.
+_git_ops_skip_wrapper_options() {
+  local takes=" $1 " lookup="${2-}" o
+  while [ "$i" -lt "$n" ]; do
+    o="${t[$i]}"
+    case "$o" in
+      -*) ;;
+      *) return 0 ;;
+    esac
+    if [ -n "$lookup" ]; then
+      case "$o" in -*[vV]*) return 1 ;; esac
+    fi
+    cut=$ex
+    case "$takes" in
+      *" $o "*) i=$((i + 2)) ;;
+      *) i=$((i + 1)) ;;
+    esac
+  done
+  return 0
+}
+
+# _git_ops_command_position   (_git_ops_parse_clause locals: reads t, n, ex,
+#   mode; writes i, tok, cut, assigned, ovr, and t[i] for a substitution
+#   value)
+#   Skips openers, leading redirections, assignments and wrappers. Returns 0
+#   with t[i] the git word, or 1 when the clause has no git invocation (after
+#   _git_ops_cut_stop has had its say).
 # shellcheck disable=SC2016 # '$(' patterns are literal openers
-_git_ops_parse_clause() {
-  local -a t
-  # shellcheck disable=SC2206 # deliberate word splitting; caller set noglob
-  t=($1)
-  local n=${#t[@]} i=0 tok name val ovr="" letters
-  if [ "$n" -eq 0 ]; then return 0; fi
-
-  # Executor fallback only: an option value or an assignment value may have
-  # been a quoted multi-word string whose fragments now stand where the
-  # subcommand is read (`bash -c "git -C 'my dir' reset"`). So every wrapper
-  # option, the timeout duration, an emptied assignment and every global option
-  # but the value-less ones set cut, and cut makes the subcommand `?` (CON-13).
-  # ex is 1 in that mode, so `cut=$ex` is a no-op elsewhere.
-  local ex=0 cut=0 assigned=0
-  if [ "$mode" = "executor" ]; then ex=1; fi
-
-  # Command position: openers, assignments, wrappers.
+_git_ops_command_position() {
+  local name val
   while [ "$i" -lt "$n" ]; do
     tok="${t[$i]}"
+    # `$(` and a leading backtick survive only in the executor fallback's
+    # text; in normal mode _git_ops_mark_words has turned them into `%`. A
+    # leading `(` (subshell) can appear in both.
     while :; do
       case "$tok" in
         '$('*) tok="${tok#??}" ;;
@@ -557,22 +657,20 @@ _git_ops_parse_clause() {
     case "$tok" in
       '' | '{' | '!' | if | then | elif | else | while | until | do)
         i=$((i + 1))
-        continue
         ;;
-      git | */git) break ;;
+      git | */git) return 0 ;;
       [0123456789]'<'* | [0123456789]'>'* | '<'* | '>'*)
         # A leading redirection; a bare operator takes the next word.
         val="${tok#[0123456789]}"
         val="${val//[<>-]/}"
         if [ -z "$val" ]; then i=$((i + 2)); else i=$((i + 1)); fi
-        continue
         ;;
       [abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_]*=*)
         name="${tok%%=*}"
         case "$name" in
           *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*)
             _git_ops_cut_stop
-            return 0
+            return 1
             ;;
         esac
         val="${tok#*=}"
@@ -587,85 +685,48 @@ _git_ops_parse_clause() {
             ;;
         esac
         case "$val" in
-          '`'* | '$('*)
-            t[i]="$val"
-            continue
-            ;;
+          '`'* | '$('*) t[i]="$val" ;; # the value is a command: examine it
+          *) i=$((i + 1)) ;;
         esac
-        i=$((i + 1))
-        continue
         ;;
       env)
         i=$((i + 1))
-        while [ "$i" -lt "$n" ]; do
-          case "${t[$i]}" in
-            -u | --unset) i=$((i + 2)) cut=$ex ;;
-            -*) i=$((i + 1)) cut=$ex ;;
-            *) break ;;
-          esac
-        done
+        _git_ops_skip_wrapper_options "-u --unset"
         ;;
       sudo)
         i=$((i + 1))
-        while [ "$i" -lt "$n" ]; do
-          case "${t[$i]}" in
-            -u | -g | -h | -p | -C | -D | -r | -t | -U) i=$((i + 2)) cut=$ex ;;
-            -*) i=$((i + 1)) cut=$ex ;;
-            *) break ;;
-          esac
-        done
+        _git_ops_skip_wrapper_options "-u -g -h -p -C -D -r -t -U"
         ;;
       time)
         i=$((i + 1))
-        while [ "$i" -lt "$n" ]; do
-          case "${t[$i]}" in
-            -*) i=$((i + 1)) cut=$ex ;;
-            *) break ;;
-          esac
-        done
+        _git_ops_skip_wrapper_options ""
         ;;
       nice)
         i=$((i + 1))
-        while [ "$i" -lt "$n" ]; do
-          case "${t[$i]}" in
-            -n) i=$((i + 2)) cut=$ex ;;
-            -*) i=$((i + 1)) cut=$ex ;;
-            *) break ;;
-          esac
-        done
+        _git_ops_skip_wrapper_options "-n"
         ;;
       timeout)
         i=$((i + 1))
-        while [ "$i" -lt "$n" ]; do
-          case "${t[$i]}" in
-            -s | -k) i=$((i + 2)) cut=$ex ;;
-            -*) i=$((i + 1)) cut=$ex ;;
-            *) break ;;
-          esac
-        done
-        i=$((i + 1)) cut=$ex # the duration
+        _git_ops_skip_wrapper_options "-s -k"
+        i=$((i + 1)) # the duration
+        cut=$ex
         ;;
       nohup | exec)
         i=$((i + 1))
         ;;
       command)
         i=$((i + 1))
-        while [ "$i" -lt "$n" ]; do
-          case "${t[$i]}" in
-            -*[vV]*) return 0 ;; # a lookup, not an invocation
-            -*) i=$((i + 1)) cut=$ex ;;
-            *) break ;;
-          esac
-        done
+        _git_ops_skip_wrapper_options "" lookup || return 1
         ;;
       eval)
-        if [ "$mode" != "executor" ]; then return 0; fi
+        if [ "$mode" != "executor" ]; then return 1; fi
         i=$((i + 1))
         ;;
       sh | [abcdefghijklmnopqrstuvwxyz]*sh | */sh | */[abcdefghijklmnopqrstuvwxyz]*sh)
         # Only in the executor fallback, where `bash -c 'git …'` has lost its
-        # quotes and the payload's words follow the shell's options.
-        if [ "$mode" != "executor" ]; then return 0; fi
+        # quotes and the payload's words follow the shell's options. These
+        # options do not cut: `-c` precedes every payload.
+        if [ "$mode" != "executor" ]; then return 1; fi
         i=$((i + 1))
         while [ "$i" -lt "$n" ]; do
           case "${t[$i]}" in
@@ -676,26 +737,31 @@ _git_ops_parse_clause() {
         ;;
       *)
         _git_ops_cut_stop
-        return 0
+        return 1
         ;;
     esac
   done
-  if [ "$i" -ge "$n" ]; then return 0; fi
-  i=$((i + 1))
+  return 1
+}
 
-  # Global options between `git` and the subcommand. In the executor fallback
-  # every option except the value-less ones makes the subcommand `?`: a
-  # separate or joined value may have been quoted and split by quote removal
-  # (`-C 'my dir'` → `-C  my dir`, `--git-dir='a b'` → `--git-dir= a b`).
+# _git_ops_global_options   (_git_ops_parse_clause locals: reads t, n, ex;
+#   writes i, cut)
+#   i is just past `git`. Skips global options. Returns 0 with t[i] the
+#   subcommand word, 1 when there is none (bare `git`, --version, --help).
+#   In the executor fallback every option except the value-less ones makes
+#   the subcommand `?`: a separate or joined value may have been quoted and
+#   split by quote removal (`-C 'my dir'` → `-C  my dir`, `--git-dir='a b'`
+#   → `--git-dir= a b`).
+_git_ops_global_options() {
   while [ "$i" -lt "$n" ]; do
     case "${t[$i]}" in
       --version | --help)
         # After a cut in the executor fallback this may be a value fragment
         # of the global option before it: keep the record, as `?`.
         if [ "$ex" -eq 1 ] && [ "$cut" -eq 1 ]; then
-          printf '%s\t%s\t%s\t%s\t%s\n' '?' '' '(executor)' "${ovr# }" "$first"
+          _git_ops_emit '?' '' '(executor)'
         fi
-        return 0
+        return 1
         ;;
       -C | -c | --git-dir | --work-tree | --namespace | --config-env | --super-prefix | --exec-path)
         i=$((i + 2))
@@ -710,12 +776,17 @@ _git_ops_parse_clause() {
         i=$((i + 1))
         cut=$ex
         ;;
-      *) break ;;
+      *) return 0 ;;
     esac
   done
-  if [ "$i" -ge "$n" ]; then return 0; fi
+  return 1
+}
 
-  local sub
+# _git_ops_read_subcommand   (_git_ops_parse_clause locals: reads t, i, cut;
+#   writes tok, sub)
+#   The subcommand is a name from _GIT_OPS_COMMANDS or `?` (closed list in
+#   both modes, SDD data model 2026-10-12); after a cut it is always `?`.
+_git_ops_read_subcommand() {
   tok="${t[$i]}"
   _git_ops_trim_closers
   sub="$tok"
@@ -732,11 +803,15 @@ _git_ops_parse_clause() {
       ;;
     *) sub='?' ;;
   esac
-  i=$((i + 1))
+}
 
-  # Flags and positionals. Positionals are counted, never printed: the first
-  # one is compared against the read-only forms and the ACTIONS list only.
-  local flags="" npos=0 pos1="" ended=0 listing=1 skip=0 first_word="${t[$i]-}"
+# _git_ops_scan_arguments   (_git_ops_parse_clause locals: reads t, n, sub;
+#   writes i, tok, flags, npos, pos1, listing)
+#   i is just past the subcommand. Collects flag names (ADR-3) and counts
+#   positionals; positionals are never printed: the first one is compared
+#   against the read-only forms and the ACTIONS list only.
+_git_ops_scan_arguments() {
+  local ended=0 skip=0 first_word="${t[$i]-}" name val letters
   while [ "$i" -lt "$n" ]; do
     tok="${t[$i]}"
     i=$((i + 1))
@@ -750,10 +825,10 @@ _git_ops_parse_clause() {
       continue
     fi
     case "$tok" in
-      '' ) ;;
-      '<'* | '>'* | [[:digit:]]'<'* | [[:digit:]]'>'*)
+      '') ;;
+      '<'* | '>'* | [0123456789]'<'* | [0123456789]'>'*)
         # A redirection. Bare operator: its target is the next word.
-        val="${tok#[[:digit:]]}"
+        val="${tok#[0123456789]}"
         val="${val//[<>-]/}"
         if [ -z "$val" ]; then skip=1; fi
         ;;
@@ -797,8 +872,13 @@ _git_ops_parse_clause() {
       '' | -*) pos1="" ;;
     esac
   fi
+}
 
-  # Read-only predicate (ADR-9, closed list; everything else is recorded).
+# _git_ops_is_read_only   (_git_ops_parse_clause locals: reads sub, flags,
+#   npos, pos1, listing)
+#   Returns 0 when the invocation is read-only (ADR-9, closed list; anything
+#   not listed here, `?` included, is recorded).
+_git_ops_is_read_only() {
   case "$sub" in
     status | log | diff | show | rev-parse | rev-list | ls-files | ls-tree | ls-remote | \
       cat-file | blame | describe | shortlog | grep | for-each-ref | show-ref | name-rev | \
@@ -836,9 +916,14 @@ _git_ops_parse_clause() {
       if [ "$npos" -eq 0 ] || [ "$pos1" = "status" ]; then return 0; fi
       ;;
   esac
+  return 1
+}
 
-  # ACTIONS (closed): the first positional is the action only if listed.
-  local action=""
+# _git_ops_read_action   (_git_ops_parse_clause locals: reads sub, pos1;
+#   writes action)
+#   ACTIONS (closed): the first positional is the action only if listed.
+_git_ops_read_action() {
+  action=""
   case "$sub" in
     stash)
       case "$pos1" in push | pop | apply | drop | clear | branch | create | store | save | list | show) action="$pos1" ;; esac
@@ -868,12 +953,46 @@ _git_ops_parse_clause() {
       case "$pos1" in install | uninstall | track | untrack | push | pull | fetch | migrate | prune) action="$pos1" ;; esac
       ;;
   esac
+}
+
+# _git_ops_parse_clause <clause>
+#   (_git_ops_parse locals: reads mode, first)
+#   Prints the record for the clause's git invocation, if it has one and it is
+#   not read-only. Word splitting relies on the caller's IFS and noglob.
+#   The steps are helpers sharing this function's locals: command position,
+#   global options, subcommand, arguments, read-only predicate, action.
+_git_ops_parse_clause() {
+  local -a t
+  # shellcheck disable=SC2206 # deliberate word splitting; caller set noglob
+  t=($1)
+  local n=${#t[@]} i=0 tok ovr=""
+  if [ "$n" -eq 0 ]; then return 0; fi
+
+  # Executor fallback only: an option value or an assignment value may have
+  # been a quoted multi-word string whose fragments now stand where the
+  # subcommand is read (`bash -c "git -C 'my dir' reset"`). So every wrapper
+  # option, the timeout duration, an emptied assignment and every global option
+  # but the value-less ones set cut, and cut makes the subcommand `?` (CON-13).
+  # ex is 1 in that mode, so `cut=$ex` is a no-op elsewhere.
+  local ex=0 cut=0 assigned=0
+  if [ "$mode" = "executor" ]; then ex=1; fi
+
+  _git_ops_command_position || return 0
+  i=$((i + 1))
+  _git_ops_global_options || return 0
+
+  local sub flags="" npos=0 pos1="" listing=1 action
+  _git_ops_read_subcommand
+  i=$((i + 1))
+  _git_ops_scan_arguments
+  if _git_ops_is_read_only; then return 0; fi
+  _git_ops_read_action
 
   # Executor fallback: the payload's own quoting is gone, so a word from a
   # message could look like a flag. Flag names are not trusted there.
-  if [ "$mode" = "executor" ]; then flags="(executor)"; fi
+  if [ "$ex" -eq 1 ]; then flags="(executor)"; fi
 
-  printf '%s\t%s\t%s\t%s\t%s\n' "$sub" "$action" "$flags" "${ovr# }" "$first"
+  _git_ops_emit "$sub" "$action" "$flags"
 }
 
 # _git_ops_parse <decoded command>
@@ -884,6 +1003,17 @@ _git_ops_parse() {
     *git*) ;;
     *) return 0 ;;
   esac
+
+  # Size cap: above it, no parse; one value-free marker record when a
+  # free-standing `git` word is present (SDD Complex Logic, Size cap).
+  if [ "${#cmd}" -gt "$_GIT_OPS_MAX_BYTES" ]; then
+    local oversize_re='(^|[[:space:];&|(`])git([[:space:]]|$)'
+    if [[ "$cmd" =~ $oversize_re ]]; then
+      printf '%s\t%s\t%s\t%s\t%s\n' '?' '' '(oversize)' '' ''
+    fi
+    return 0
+  fi
+
   local NL=$'\n' h q text mode="normal" first="" scan
   local cd_re='^[[:space:]]*(cd|pushd)[[:space:]]+[^&;]*(&&|;)[[:space:]]*'
   local ovr_re='^(CLAUDE_ALLOW_[ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]+)=1[[:space:]]'
@@ -920,14 +1050,14 @@ _git_ops_parse() {
   text="${text//';'/$NL}"
   text="${text//'&'/$NL}"
 
-  local had_noglob=0 clause rest
+  local had_noglob=0 clause
+  local -a clauses
   case "$-" in *f*) had_noglob=1 ;; esac
   set -f
+  # One split into clauses (read -a on newline), not a re-slice per clause.
+  IFS="$NL" read -r -d '' -a clauses <<< "$text" || :
   local IFS=$' \t'
-  rest="${text}${NL}"
-  while [ -n "$rest" ]; do
-    clause="${rest%%"$NL"*}"
-    rest="${rest#*"$NL"}"
+  for clause in ${clauses[@]+"${clauses[@]}"}; do
     _git_ops_parse_clause "$clause"
   done
   if [ "$had_noglob" -eq 0 ]; then set +f; fi

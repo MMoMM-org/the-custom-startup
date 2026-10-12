@@ -921,6 +921,110 @@ _record_violation() {
   [ -z "$output" ]
 }
 
+# --- size cap and scale (SDD Complex Logic, Size cap) -----------------------
+
+# _pad <n>  prints n `x` bytes.
+_pad() {
+  local s="x"
+  while [ "${#s}" -lt "$1" ]; do s="$s$s"; done
+  printf '%s' "${s:0:$1}"
+}
+
+# Scale a wall-clock budget (in ms) by $TCS_PERF_SLACK (4 in CI), the
+# convention of the other observability suites; duplicated, they are
+# standalone.
+_perf_budget_ms() {
+  local budget="$1" slack="${TCS_PERF_SLACK:-1}"
+  case "$slack" in
+    '' | *[!0-9]*) slack=1 ;;
+  esac
+  if [ "$slack" -lt 1 ]; then slack=1; fi
+  printf '%d' $((budget * slack))
+}
+
+# _ms <seconds as printed by TIMEFORMAT=%R>  prints whole milliseconds.
+_ms() {
+  local s="$1" whole frac
+  whole="${s%%.*}"
+  frac="${s#*.}000"
+  frac="${frac:0:3}"
+  printf '%d' $((10#$whole * 1000 + 10#$frac))
+}
+
+# _linear_ok <ms at 1x> <ms at 10x> <absolute budget ms>
+#   10x the input may take at most ~15x the time (with a 200 ms floor for
+#   timer resolution and load; the quadratic versions took seconds) and must stay inside the slack-scaled budget.
+_linear_ok() {
+  local t1="$1" t10="$2" budget allowed
+  budget="$(_perf_budget_ms "$3")"
+  allowed=$((t1 * 15))
+  if [ "$allowed" -lt 200 ]; then allowed=200; fi
+  allowed="$(_perf_budget_ms "$allowed")"
+  if [ "$t10" -gt "$allowed" ] || [ "$t10" -gt "$budget" ]; then
+    echo "1x ${t1} ms, 10x ${t10} ms (allowed ${allowed} ms, budget ${budget} ms)"
+    return 1
+  fi
+}
+
+@test "size cap: the cap is 16384" {
+  [ "$_GIT_OPS_MAX_BYTES" -eq 16384 ]
+}
+
+@test "size cap: above the cap a free-standing git word gives one oversize marker" {
+  expect_parse "git commit -m \"$(_pad 17000)\" && git push" "$(rec '?' '' '(oversize)' '' '')"
+}
+
+@test "size cap: above the cap a git word after ( or a separator still gives the marker" {
+  expect_parse "echo $(_pad 17000);(git push)" "$(rec '?' '' '(oversize)' '' '')"
+}
+
+@test "size cap: above the cap without a free-standing git word nothing is printed" {
+  expect_parse "echo digit $(_pad 17000) gitx" ''
+}
+
+@test "size cap: at the cap the command is parsed; one byte more is not" {
+  local cmd
+  _GIT_OPS_MAX_BYTES=40
+  cmd="git push --force # $(_pad 21)"
+  [ "${#cmd}" -eq 40 ] || return 1
+  expect_parse "$cmd" "$(rec push '' '--force' '' '')" || return 1
+  expect_parse "${cmd}x" "$(rec '?' '' '(oversize)' '' '')"
+}
+
+@test "scale: the decoder is linear in the number of escapes and stays correct" {
+  run bash -c '
+    source "$1"
+    mk() { local k=0 s=""; while [ "$k" -lt "$1" ]; do s="${s}ab \\\"q\\\" \\n"; k=$((k + 1)); done
+      printf "{\"tool_input\":{\"command\":\"git commit -m \\\\\"%s\\\\\"\"}}" "$s"; }
+    want() { local k=0 s=""; while [ "$k" -lt "$1" ]; do s="${s}ab \"q\" "$'"'\n'"'; k=$((k + 1)); done
+      printf "git commit -m \"%s\"" "$s"; }
+    p1=$(mk 300); p10=$(mk 3000)
+    [ "$(_git_ops_command "$p10")" = "$(want 3000)" ] || { echo wrong-decode; exit 1; }
+    TIMEFORMAT=%R
+    t1=$( { time _git_ops_command "$p1" >/dev/null; } 2>&1 )
+    t10=$( { time _git_ops_command "$p10" >/dev/null; } 2>&1 )
+    echo "$t1 $t10"' _ "$BUNDLE_LIB"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  _linear_ok "$(_ms "${output% *}")" "$(_ms "${output#* }")" 2000
+}
+
+@test "scale: marking a long quoted span is linear" {
+  run bash -c '
+    source "$1"
+    NL=$'"'\n'"'
+    mk() { local s="x"; while [ "${#s}" -lt "$1" ]; do s="$s$s"; done; printf "git commit -m \"%s\"" "${s:0:$1}"; }
+    TIMEFORMAT=%R
+    h=$(mk 1500); t1=$( { time _git_ops_mark_words; } 2>&1 )
+    h=$(mk 15000); t10=$( { time _git_ops_mark_words; } 2>&1 )
+    echo "$t1 $t10"' _ "$BUNDLE_LIB"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  _linear_ok "$(_ms "${output% *}")" "$(_ms "${output#* }")" 1000
+}
+
+@test "unquote: a mismatched quote pair does not hide a later quoted git" {
+  expect_parse "git commit -m \"git' x\"; \"git\" push" "$(rec commit '' '-m' '' '')${NL}$(rec push '' '' '' '')"
+}
+
 # --- robustness -------------------------------------------------------------
 
 @test "a non-git command and empty input print nothing" {
