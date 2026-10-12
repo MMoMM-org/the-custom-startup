@@ -350,6 +350,64 @@ _differential() {
 }
 
 # ---------------------------------------------------------------------------
+# Caller state
+# ---------------------------------------------------------------------------
+#
+# _strip_quoted switches globbing off to split and sets IFS; both belong to
+# the caller and must come back as they were. Called directly here, not in
+# $( ), where a leak would die with the subshell and never show.
+
+# _caller_state <function> <setup>: runs <setup>, then the function, in a
+# child bash; prints the noglob flag and IFS (as %q, or "unset") before and
+# after the call.
+_caller_state() {
+  local driver="$BATS_TEST_TMPDIR/state-$1.sh"
+  cat > "$driver" <<'DRIVER_EOF'
+source "$1" || exit 97
+eval "$3"
+_state() {
+  case "$-" in *f*) printf 'noglob=on ' ;; *) printf 'noglob=off ' ;; esac
+  if [ -n "${IFS+set}" ]; then printf 'IFS=%q\n' "$IFS"; else printf 'IFS=unset\n'; fi
+}
+before=$(_state)
+"$2" "a 'b' \"c \$(d) e\" f) <<EOF
+x
+EOF
+g" > /dev/null || exit 95
+after=$(_state)
+printf '%s\n%s\n' "$before" "$after"
+DRIVER_EOF
+  run bash "$driver" "$LIB" "$1" "$2"
+  [ "$status" -eq 0 ] || { echo "driver exited $status: $output" >&2; return 1; }
+  local before="${output%%$'\n'*}" after="${output#*$'\n'}"
+  [ "$before" = "$after" ] || { printf 'caller state changed (%s)\n before: %s\n after:  %s\n' "$2" "$before" "$after" >&2; return 1; }
+}
+
+@test "caller state: globbing on and a custom IFS survive both functions" {
+  _caller_state _strip_quoted "set +f; IFS=':'" || return 1
+  _caller_state _strip_heredocs "set +f; IFS=':'" || return 1
+  run bash -c 'source "$1"; set +f; _strip_quoted "x" > /dev/null; case "$-" in *f*) echo on ;; *) echo off ;; esac' _ "$LIB"
+  [ "$output" = "off" ]
+}
+
+@test "caller state: globbing off stays off, default IFS is kept" {
+  _caller_state _strip_quoted "set -f" || return 1
+  _caller_state _strip_heredocs "set -f" || return 1
+  run bash -c 'source "$1"; set -f; _strip_quoted "x" > /dev/null; case "$-" in *f*) echo on ;; *) echo off ;; esac' _ "$LIB"
+  [ "$output" = "on" ]
+}
+
+@test "caller state: an unset IFS stays unset" {
+  _caller_state _strip_quoted "unset IFS" || return 1
+  _caller_state _strip_heredocs "unset IFS" || return 1
+}
+
+@test "caller state: both functions run under set -u" {
+  _caller_state _strip_quoted "set -u" || return 1
+  _caller_state _strip_heredocs "set -u" || return 1
+}
+
+# ---------------------------------------------------------------------------
 # Scale
 # ---------------------------------------------------------------------------
 
@@ -357,12 +415,14 @@ _differential() {
 #   Times the function on a command built by repeating one unit to 2 KB,
 #   20 KB and 200 KB, inside one child bash (timer: $EPOCHREALTIME on bash 5,
 #   perl on bash 3.2, where BSD date has no %N; the cost of the timer itself
-#   is measured and subtracted). Steps stop at
-#   the first one over budget, so quadratic code fails at 2 KB or 20 KB
-#   instead of running 200 KB for twenty minutes. Requires:
+#   is measured and subtracted). Each size is timed three times and the best
+#   run counts, so a busy machine does not fail a budget the code meets.
+#   Steps stop at the first one over budget, so quadratic code fails at 2 KB
+#   or 20 KB instead of running 200 KB for twenty minutes. Requires:
 #     - 2 KB and 20 KB each under <budget-ms> (times TCS_PERF_SLACK);
-#     - 200 KB at most 15x the 20 KB time (linear growth, with a 10 ms floor
-#       so a tiny baseline cannot make the ratio meaningless).
+#     - 200 KB at most 15x the 20 KB time (linear growth, with a 25 ms floor
+#       so a tiny baseline cannot make the ratio meaningless: the prose
+#       command takes 14-48 ms at 20 KB, within reach of the timer's noise).
 #   Units:
 #     prose -- what a 20 KB command is in practice: a PR body or commit
 #              message, a cut every ~40 bytes, heredoc lines of ~65 bytes.
@@ -371,7 +431,7 @@ _differential() {
 #              cost at its worst (45-92 ms at 20 KB when measured). Budget
 #              250 ms, and held to linear growth.
 _scale() {
-  local fn="$1" loc="$2" unit="$3" budget driver out t2 t20 t200 floor=10
+  local fn="$1" loc="$2" unit="$3" budget driver out t2 t20 t200 floor=25
   [ -n "$loc" ] || { echo "no locale given (no UTF-8 locale on this host?)" >&2; return 1; }
   budget="$(_perf_budget "$4")"
   driver="$BATS_TEST_TMPDIR/scale-$fn-$unit.sh"
@@ -396,13 +456,22 @@ if [ -n "${EPOCHREALTIME:-}" ]; then
 else
   ms() { perl -MTime::HiRes -e 'printf "%d", Time::HiRes::time()*1000'; }
 fi
-a=$(ms); b=$(ms)
-case "$a$b" in ''|*[!0-9]*) echo "no working millisecond timer" >&2; exit 96 ;; esac
-overhead=$((b - a))
+# The timer's own cost: the smallest of three, so no more is subtracted
+# than the timer really takes.
+overhead=""
+for try in 1 2 3; do
+  a=$(ms); b=$(ms)
+  case "$a$b" in ''|*[!0-9]*) echo "no working millisecond timer" >&2; exit 96 ;; esac
+  if [ -z "$overhead" ] || [ $((b - a)) -lt "$overhead" ]; then overhead=$((b - a)); fi
+done
 for n in 2000 20000 200000; do
   s="$u"; while [ "${#s}" -lt "$n" ]; do s="$s$s"; done; s="${s:0:$n}"
-  t0=$(ms); "$fn" "$s" > /dev/null; t1=$(ms)
-  t=$((t1 - t0 - overhead)); [ "$t" -ge 0 ] || t=0
+  t=""
+  for try in 1 2 3; do
+    t0=$(ms); "$fn" "$s" > /dev/null; t1=$(ms)
+    d=$((t1 - t0 - overhead)); [ "$d" -ge 0 ] || d=0
+    if [ -z "$t" ] || [ "$d" -lt "$t" ]; then t="$d"; fi
+  done
   printf '%s ' "$t"
   if [ "$n" -lt 200000 ] && [ "$t" -ge "$budget" ]; then echo; exit 0; fi
 done
