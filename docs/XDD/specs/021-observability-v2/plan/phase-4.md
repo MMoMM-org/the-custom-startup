@@ -44,7 +44,7 @@ Makes the report credit every route and dispatch correctly and show git activity
 
   1. Prime: `build_load_report` (:1561-1712); README coverage wording (:211-218) `[ref: SDD/Acceptance Criteria/F4]`
   2. Test: git records render grouped by session, then caller (`main` or `<caller_agent_type> <caller_agent_id>`), each with subcommand, flags and overrides; a source with none says no git activity was recorded and that this is not proof none happened; multi-source keeps the per-repo split (019 ADR-7)
-  3. Implement: the section in `report.py`; update `plugins/tcs-helper/scripts/observability/README.md` (new kinds, routes, dispatch, git, the uncreditable caveat, wording, and the stale registration example at :282-309 showing matcher `Skill`/`log_skill.sh`) and `plugins/tcs-helper/skills/observability-setup/SKILL.md` (registered events, OURS-INCOMPLETE, re-run setup after the update)
+  3. Implement: the section in `report.py`; update `plugins/tcs-helper/scripts/observability/README.md` (new kinds, routes, dispatch, git, the uncreditable caveat, wording, and the stale registration example at :282-309 showing matcher `Skill`/`log_skill.sh`) and `plugins/tcs-helper/skills/observability-setup/SKILL.md` (registered events, OURS-INCOMPLETE, re-run setup after the update); also from Phase 3 review: add `WARN` to SKILL.md's label list and tell the reader to relay a WARN (a record stayed readable), and note that setup restricts a `CLAUDE_OBSERVABILITY_DATA` override directory to 0700
   4. Validate: report tests green (`.github/docs-map` has no observability rule, so docs-sync proves nothing here; the README/SKILL.md changes are reviewed by hand)
   5. Success: `[ref: PRD/F4 AC3, AC5]`; `[ref: SDD/Acceptance Criteria/F4]`
 

@@ -627,6 +627,8 @@ sequenceDiagram
   `OURS-INCOMPLETE` until setup re-runs.
 - **Setup cannot chmod an existing file** (not owned): reported in setup's output as a warning; setup
   does not abort.
+- **A record path is a symbolic link:** setup skips it with a warning; `chmod` would follow the link
+  out of the data dir (settled in T3.2).
 
 ### Complex Logic
 
@@ -801,14 +803,22 @@ Not applicable: no UI. User-facing text is the report and setup's status lines.
     "when setup next runs".
   - Trade-offs: a repo that never re-runs setup keeps its old 0644 file (it also keeps recording
     only the old kinds).
+  - Settled in T3.2: setup restricts the resolved data dir itself, its `observability/` subdir and
+    `events.jsonl` with its rotations `.1`-`.3` (one shared path list); a dry run announces it with a
+    `PLAN:` line when a looser mode exists; symlinked paths are skipped with a warning. With a
+    `CLAUDE_OBSERVABILITY_DATA` override the override directory becomes 0700.
   - User confirmed: 2026-10-11
 - [x] **ADR-5 Drift per repository: `OURS-INCOMPLETE`.**
   - Rationale: OURS-CURRENT is decided by the global bundle marker alone (`detect.sh:467-488`), so
     the first repo updated makes every other repo read current. `detect.sh` now also compares the
     repo's own entries against an EXPECTED copy of `REGISTRATION` (paired, test-pinned, because the
     heredoc cannot import).
-  - Output: `OURS-INCOMPLETE|<event> (missing)`, `<event> (outdated)`, comma-separated, exit 4 (WARN)
-    like OURS-OLD. `setup.sh` accepts the label and counts it as ours.
+  - Output: label `OURS-INCOMPLETE`, whose message names each `<event> (missing)` or
+    `<event> (outdated)`, comma-separated in registration order; exit 4 (WARN) like OURS-OLD.
+    `setup.sh` accepts the label and counts it as ours. "Outdated" means anything other than exactly
+    one entry of ours equal to the expected one, the same rule `add_registration` uses to decide a
+    rewrite; a cross-file test pins that the two agree, so the state clears after one setup run.
+    With an older bundle marker the state stays OURS-OLD.
   - Ordering kept from 019: `OURS` is decided before the CONFLICT scan. A foreign hook under
     `UserPromptExpansion` in an already-registered repo therefore does not stop setup; it is named
     in the OURS-INCOMPLETE message instead. In a CLEAN repo the same hook is a CONFLICT, as for the
