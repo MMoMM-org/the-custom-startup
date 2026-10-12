@@ -1337,3 +1337,118 @@ _run_is_ahead_of_merged() {
   run _run_hook_with_cmd 'sh -c "git reset --hard"'
   _assert_deny_for_rule "RESET_HARD"
 }
+
+# ----------------------------------------------------------------------
+# Spec 021 F7 / ADR-6: fast path — no git/gh in the command exits before jq
+#
+# Payloads mirror the real PreToolUse field order (cwd precedes the command)
+# and are compact JSON, as Claude Code sends them.
+# ----------------------------------------------------------------------
+
+# Put a counting jq in front of PATH: appends a line per call, then execs the
+# real jq. Sets JQ_CALLS (file) for the caller.
+_install_jq_counter() {
+  local real_jq stub_dir
+  real_jq="$(command -v jq)"
+  stub_dir="$BATS_TEST_TMPDIR/jqstub"
+  mkdir -p "$stub_dir"
+  JQ_CALLS="$BATS_TEST_TMPDIR/jq-calls"
+  : > "$JQ_CALLS"
+  printf '#!/bin/bash\necho x >> "%s"\nexec "%s" "$@"\n' "$JQ_CALLS" "$real_jq" > "$stub_dir/jq"
+  chmod +x "$stub_dir/jq"
+  PATH="$stub_dir:$PATH"
+  export PATH JQ_CALLS
+}
+
+# Compact payload in the real field order. Args: command, cwd.
+_real_payload() {
+  jq -nc --arg c "$1" --arg d "${2:-/work/project}" \
+    '{session_id:"s1",transcript_path:"/t/s1.jsonl",cwd:$d,permission_mode:"default",
+      hook_event_name:"PreToolUse",tool_name:"Bash",
+      tool_input:{command:$c,description:"d"},tool_use_id:"toolu_1"}'
+}
+
+_jq_call_count() { wc -l < "$JQ_CALLS" | tr -d ' '; }
+
+_run_hook_with_payload() {
+  run bash -c 'printf "%s" "$1" | bash "$2"' _ "$1" "$HOOK"
+}
+
+@test "fast path: non-git command allows with zero jq calls" {
+  payload="$(_real_payload "ls -la /tmp")"
+  _install_jq_counter
+  _run_hook_with_payload "$payload"
+  _assert_allow
+  [ "$(_jq_call_count)" -eq 0 ]
+}
+
+@test "fast path: cwd containing github does not defeat it" {
+  payload="$(_real_payload "ls -la /tmp" "/Users/x/github/proj")"
+  _install_jq_counter
+  _run_hook_with_payload "$payload"
+  _assert_allow
+  [ "$(_jq_call_count)" -eq 0 ]
+}
+
+@test "fast path: a git command still reaches jq and denies" {
+  payload="$(_real_payload "git reset --hard")"
+  _install_jq_counter
+  _run_hook_with_payload "$payload"
+  _assert_deny_for_rule "RESET_HARD"
+  [ "$(_jq_call_count)" -ge 1 ]
+}
+
+@test "fast path: a gh command still reaches jq" {
+  payload="$(_real_payload "gh pr list")"
+  _install_jq_counter
+  _run_hook_with_payload "$payload"
+  _assert_allow
+  [ "$(_jq_call_count)" -ge 1 ]
+}
+
+@test "fast path: gh api ref DELETE in a real payload still denies" {
+  payload="$(_real_payload "gh api repos/o/r/git/refs/heads/feat/old -X DELETE")"
+  _run_hook_with_payload "$payload"
+  _assert_deny_for_rule "REMOTE_BRANCH_DELETE"
+}
+
+@test "fast path: escaped quote before git reset --hard still denies" {
+  payload="$(_real_payload 'echo "x" && git reset --hard')"
+  _has "$payload" 'echo \"x\" && git reset --hard'
+  _install_jq_counter
+  _run_hook_with_payload "$payload"
+  _assert_deny_for_rule "RESET_HARD"
+  [ "$(_jq_call_count)" -ge 1 ]
+}
+
+@test "fast path: space after the colon takes the full path (jq runs, still denies)" {
+  payload="$(_real_payload "git reset --hard" | jq .)"
+  _has "$payload" '"command": "git reset --hard"'
+  _install_jq_counter
+  _run_hook_with_payload "$payload"
+  _assert_deny_for_rule "RESET_HARD"
+  [ "$(_jq_call_count)" -ge 1 ]
+}
+
+@test "perf: non-git fast path median under 5ms over 20 runs after warm-up" {
+  _real_payload "ls -la /tmp" > "$BATS_TEST_TMPDIR/payload.json"
+  run perl -MTime::HiRes=time -e '
+    my ($hook, $file) = @ARGV;
+    my @t;
+    for my $i (0 .. 20) {
+      my $t0 = time;
+      my $pid = fork;
+      if (!$pid) {
+        open(STDIN, "<", $file); open(STDOUT, ">", "/dev/null"); open(STDERR, ">&STDOUT");
+        exec("/bin/bash", $hook); exit 127;
+      }
+      waitpid($pid, 0);
+      push @t, (time - $t0) * 1000 if $i > 0;
+    }
+    @t = sort { $a <=> $b } @t;
+    printf "%d", $t[10];
+  ' "$HOOK" "$BATS_TEST_TMPDIR/payload.json"
+  [ "$status" -eq 0 ]
+  echo "median_ms=$output" >&3
+  [ "$output" -le "$(_perf_budget 5)" ]
+}
