@@ -15,8 +15,9 @@
 #   source:       command_source ("plugin", "projectSettings", ...)
 #
 # `command_args` and `prompt` (the whole expanded prompt) are never read into
-# a variable that reaches the writer. args_present comes from a `case` glob
-# on the raw payload: `"command_args":""` is empty, `"command_args":"` followed
+# a variable that reaches the writer. The payload is compact JSON (no space
+# after the colon), the same assumption `_observability_field` makes.
+# args_present comes from a `case` glob on the raw payload: `"command_args":""` is empty, `"command_args":"` followed
 # by anything else is non-empty, absent is "no". A JSON-escaped occurrence
 # inside the prompt text reads `\"command_args\":\"`, which neither glob
 # matches, so the flat scan stays correct.

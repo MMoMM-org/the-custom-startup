@@ -312,30 +312,43 @@ _time_run_ms() {
   printf '%d' $((end - start))
 }
 
-# CPU milliseconds (user+sys of the adapter and its children) for one run
-# over payload file $1. CPU time, not wall time: the host this suite runs on
-# is routinely loaded, and wall time then swamps a ~60 ms difference (measured
-# at load average 260: wall-clock deltas of 26-155 ms for the correct reader
-# against 146-310 ms for the mutant, overlapping; CPU deltas 40-50 against 180,
-# repeatable). perl's times() has 10 ms resolution, ample for this bound.
+# CPU milliseconds (user+sys of the adapter child only) for one run fed
+# payload file $1 THROUGH A PIPE. A pipe, not a redirected file: the real hook
+# reads a pipe, where bash's read builtin takes one byte per syscall (ADR-6);
+# from a seekable file it reads in chunks and the cost vanishes. The perl
+# parent is the pipe's writer; its own CPU is excluded because times() splits
+# the waited-for child ($t[2], $t[3]) from the parent ($t[0], $t[1]).
+# Exit 127 if the adapter cannot be exec'd, so a missing script fails the test
+# instead of measuring nothing.
+# CPU time, not wall time: the host is routinely loaded, and wall time then
+# swamps the difference (load average 260: wall deltas overlapped).
 # shellcheck disable=SC2016
 _cpu_run_ms() {
   ( cd "$REPO" && \
     env -u CLAUDE_OBSERVABILITY_DETAIL \
       "CLAUDE_OBSERVABILITY_ENABLED=1" "CLAUDE_OBSERVABILITY_DATA=$DATA_DIR" \
-      perl -e 'my $pid = fork();
-               if ($pid == 0) { open(STDIN, "<", $ARGV[1]) or exit 0;
-                                open(STDOUT, ">", "/dev/null"); open(STDERR, ">", "/dev/null");
-                                exec($ARGV[0]) or exit 0 }
-               waitpid($pid, 0); my @t = times();
+      perl -e 'open(my $in, "<", $ARGV[1]) or exit 126;
+               my $data = do { local $/; <$in> };
+               pipe(my $r, my $w) or exit 126;
+               my $pid = fork();
+               exit 126 unless defined $pid;
+               if ($pid == 0) {
+                 close $w; open(STDIN, "<&", $r) or exit 126;
+                 open(STDOUT, ">", "/dev/null"); open(STDERR, ">", "/dev/null");
+                 exec { $ARGV[0] } $ARGV[0]; exit 127;
+               }
+               close $r; syswrite($w, $data); close $w;
+               waitpid($pid, 0);
+               exit(($? >> 8) || 1) if $? != 0;
+               my @t = times();
                printf q{%d}, ($t[2] + $t[3]) * 1000' "$ADAPTER" "$1" )
 }
 
 # Best of five CPU runs: the minimum discards scheduling noise.
 _best_cpu_ms() {
-  local best="" t
+  local best="" t _
   for _ in 1 2 3 4 5; do
-    t="$(_cpu_run_ms "$1")"
+    t="$(_cpu_run_ms "$1")" || return 1
     if [ -z "$best" ] || [ "$t" -lt "$best" ]; then best="$t"; fi
   done
   printf '%d' "$best"
@@ -370,29 +383,34 @@ _write_payload() {              # _write_payload <file> <prompt-bytes>
   _assert_absent 'xxxxxxxxxx' "$EVENTS_FILE"
 }
 
-# ADR-6: `IFS= read -r -d ''` costs ~120+ ms more CPU at 200 KB than `$(cat)`,
-# which is why this adapter must not copy that line from log_skill.sh. An
-# absolute bound cannot see that, so the cost is measured as a DIFFERENCE of
-# CPU time: best-of-5 at 200 KB minus best-of-5 at ~1 KB, same payload shape.
-# Measured on macOS: $(cat) delta 40-50 ms; the `read -d ''` mutant 180 ms.
-# 110 ms (x TCS_PERF_SLACK) leaves margin on both sides.
-@test "expansion: reading 200 KB costs at most 110 ms more CPU than reading 1 KB (no read -d)" {
+# ADR-6: `IFS= read -r -d ''` takes one byte per syscall from a pipe, which is
+# why this adapter must not copy that line from log_skill.sh. An absolute bound
+# cannot see that, so the cost is measured as a DIFFERENCE of child CPU time:
+# best-of-5 at 200 KB minus best-of-5 at ~1 KB, same payload shape, fed through
+# a pipe like the real hook. Measured deltas (10 ms resolution):
+#   macOS bash 3.2:  $(cat) 50-60 ms   read -d '' mutant 120-130 ms
+#   Linux bash 5.2:  $(cat) 30-50 ms   read -d '' mutant  90-100 ms
+# The bound is FIXED at 75 ms, deliberately not scaled by TCS_PERF_SLACK: CPU
+# time is low-noise, and scaling it (x4 in CI) would put the bound above the
+# mutant and let the regression through.
+@test "expansion: reading 200 KB through a pipe costs at most 75 ms more CPU than 1 KB (no read -d)" {
   if ! command -v perl >/dev/null 2>&1; then
-    skip "perl not available for a sub-second clock"
+    skip "perl not available for a CPU clock"
   fi
   local big="$TEST_DIR/big.json" small="$TEST_DIR/small.json"
   _write_payload "$big" 204800
   _write_payload "$small" 1000
 
-  local big_ms small_ms delta budget
+  local big_ms small_ms delta bound=75
   big_ms="$(_best_cpu_ms "$big")"
   small_ms="$(_best_cpu_ms "$small")"
   delta=$((big_ms - small_ms))
-  budget="$(_perf_budget_ms 110)"
-  if [ "$delta" -gt "$budget" ]; then
+  if [ "$delta" -gt "$bound" ]; then
     printf 'READ COST: 200KB %s ms - 1KB %s ms = %s ms CPU over a %s ms bound\n' \
-      "$big_ms" "$small_ms" "$delta" "$budget" >&2
+      "$big_ms" "$small_ms" "$delta" "$bound" >&2
     return 1
   fi
-  [ -f "$EVENTS_FILE" ]
+  # 5 runs per size, one record each: proves the adapter really ran.
+  run wc -l < "$EVENTS_FILE"
+  [ "${output// /}" = "10" ]
 }
