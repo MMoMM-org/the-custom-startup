@@ -735,6 +735,32 @@ _UNDO_HINT="bash $_SETUP_LIB_DIR/setup.sh remove --target $REPO_ROOT --yes"
 # is where the run ends, having written nothing.
 # ---------------------------------------------------------------------------
 
+# _tighten_record_modes -- spec 021 ADR-4 / F6 AC2. The writer creates new
+# directories 0700 and files 0600; records an older bundle wrote are brought
+# to the same modes here. Confined to the target's data dir, its
+# observability/ directory and events.jsonl* (rotations included): nothing
+# else is chmod-ed. The data dir is resolved by the writer's own
+# _observability_data_dir, under the same HOME override `status` uses.
+# A path that cannot be changed (not owned, immutable) is a WARN, never an
+# abort. Nothing is created: an absent path is skipped.
+_tighten_record_modes() {
+  local data_dir="" events_dir path
+  if [ -n "$_LOGWRITE_SH" ]; then
+    data_dir="$(HOME="$RESOLVED_HOME"; _observability_data_dir "$REPO_ROOT")" || data_dir=""
+  fi
+  [ -n "$data_dir" ] || return 0
+  events_dir="$data_dir/observability"
+  for path in "$data_dir" "$events_dir"; do
+    [ -d "$path" ] || continue
+    chmod 700 "$path" 2>/dev/null || _emit "WARN" "could not restrict $path to owner-only (0700); left as is."
+  done
+  for path in "$events_dir"/events.jsonl "$events_dir"/events.jsonl.*; do
+    [ -f "$path" ] || continue
+    chmod 600 "$path" 2>/dev/null || _emit "WARN" "could not restrict $path to owner-only (0600); left as is."
+  done
+  return 0
+}
+
 if [ "$VERB" = "install" ]; then
   _emit "PLAN" "would install the observability bundle into $BUNDLE_DIR"
   if [ "$IS_LEGACY" -eq 1 ]; then
@@ -837,6 +863,8 @@ if [ "$VERB" = "install" ]; then
     _emit "ABORT" "the bundle install failed, so the registration was not touched."
     exit 1
   fi
+
+  _tighten_record_modes
 
   if [ "$IS_LEGACY" -eq 1 ]; then
     # Ruling (s): ONE operation, so recording is never simultaneously double

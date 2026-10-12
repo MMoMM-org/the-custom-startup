@@ -31,7 +31,7 @@ setup() {
   REPO_ROOT="$(git -C "$BATS_TEST_DIRNAME" rev-parse --show-toplevel)"
   HELPER="$REPO_ROOT/plugins/tcs-helper/skills/observability-setup/lib/drift_check.sh"
   MARKER_NAME="tcs-helper-observability-version"
-  EXPECTED_VERSION="h1"
+  EXPECTED_VERSION="h2"
 
   local tmpbase="${TMPDIR:-/tmp}"
   while [ "$tmpbase" != "/" ] && [ "${tmpbase%/}" != "$tmpbase" ]; do
@@ -60,7 +60,7 @@ teardown() {
 
 @test "OK: an installed marker matching the expected version reports OK" {
   mkdir -p "$TARGET_DIR"
-  printf 'h1\n' > "$TARGET_DIR/$MARKER_NAME"
+  printf 'h2\n' > "$TARGET_DIR/$MARKER_NAME"
 
   run bash -c ". '$HELPER' && _drift_check_observability_bundle '$EXPECTED_VERSION'"
   [ "$status" -eq 0 ]
@@ -153,7 +153,7 @@ teardown() {
 
 @test "default path: resolves the installed marker via _bundle_install_target_dir(), not a hardcoded path" {
   mkdir -p "$TARGET_DIR"
-  printf 'h1\n' > "$TARGET_DIR/$MARKER_NAME"
+  printf 'h2\n' > "$TARGET_DIR/$MARKER_NAME"
 
   run bash -c ". '$HELPER' && _bundle_install_target_dir"
   [ "$status" -eq 0 ]
@@ -166,7 +166,7 @@ teardown() {
 
 @test "explicit marker_path argument overrides the default resolution" {
   local other_marker="$TEST_DIR/elsewhere-version"
-  printf 'h1\n' > "$other_marker"
+  printf 'h2\n' > "$other_marker"
 
   # Nothing at the default location at all.
   run bash -c ". '$HELPER' && _drift_check_observability_bundle '$EXPECTED_VERSION' '$other_marker'"
@@ -182,7 +182,7 @@ teardown() {
 
 @test "read-only: succeeds against a valid marker inside a write-protected directory, and writes nothing" {
   mkdir -p "$TARGET_DIR"
-  printf 'h1\n' > "$TARGET_DIR/$MARKER_NAME"
+  printf 'h2\n' > "$TARGET_DIR/$MARKER_NAME"
 
   local before_listing
   before_listing="$(ls -la "$TARGET_DIR")"
@@ -243,7 +243,7 @@ teardown() {
 
   # OK
   mkdir -p "$TARGET_DIR"
-  printf 'h1\n' > "$TARGET_DIR/$MARKER_NAME"
+  printf 'h2\n' > "$TARGET_DIR/$MARKER_NAME"
   run bash -c ". '$HELPER' && _drift_check_observability_bundle '$EXPECTED_VERSION'"
   [ "$status" -eq 0 ]
 

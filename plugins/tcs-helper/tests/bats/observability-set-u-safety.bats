@@ -55,7 +55,7 @@ teardown() {
 @test "set -u: _read_observability_bundle_version with no argument succeeds and resolves the template marker" {
   run bash -c "set -u; . '$VERSION_HELPER'; _read_observability_bundle_version"
   [ "$status" -eq 0 ]
-  [ "$output" = "h1" ]
+  [ "$output" = "h2" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -64,16 +64,16 @@ teardown() {
 # ---------------------------------------------------------------------------
 
 @test "set -u: _drift_check_observability_bundle with marker path omitted succeeds (MISSING, nothing installed)" {
-  run bash -c "set -u; . '$DRIFT_HELPER'; _drift_check_observability_bundle 'h1'"
+  run bash -c "set -u; . '$DRIFT_HELPER'; _drift_check_observability_bundle 'h2'"
   [ "$status" -eq 0 ]
   [ "$output" = "MISSING" ]
 }
 
 @test "set -u: _drift_check_observability_bundle with marker path omitted succeeds (OK, matching marker installed)" {
   mkdir -p "$HOME/.claude/observability"
-  printf 'h1\n' > "$HOME/.claude/observability/tcs-helper-observability-version"
+  printf 'h2\n' > "$HOME/.claude/observability/tcs-helper-observability-version"
 
-  run bash -c "set -u; . '$DRIFT_HELPER'; _drift_check_observability_bundle 'h1'"
+  run bash -c "set -u; . '$DRIFT_HELPER'; _drift_check_observability_bundle 'h2'"
   [ "$status" -eq 0 ]
   [ "$output" = "OK" ]
 }

@@ -32,7 +32,7 @@ setup() {
   # Ground truth: the repo's current bundle version (see
   # observability-bundle-version.bats, which pins this same value against
   # the marker file directly).
-  CURRENT_VERSION="h1"
+  CURRENT_VERSION="h2"
 
   local tmpbase="${TMPDIR:-/tmp}"
   while [ "$tmpbase" != "/" ] && [ "${tmpbase%/}" != "$tmpbase" ]; do
@@ -81,6 +81,7 @@ teardown() {
 _bundle_files() {
   printf '%s\n' \
     logwrite.sh log_agent.sh log_instructions.sh log_skill.sh \
+    log_tool.sh git_ops.sh log_expansion.sh \
     selfcheck.sh timed-wrapper.sh README.md
 }
 
@@ -176,6 +177,28 @@ _install() {
   grep -qF '"session":"sess-installed"' "$events_file"
   grep -qF '"agent_type":"Explore"' "$events_file"
   grep -qF '"agent_id":"agent-9001"' "$events_file"
+}
+
+# spec 021 F5: an h1 registration points at the old log_skill.sh path. The h2
+# bundle keeps that file, so recording continues until setup re-runs.
+@test "an h1 registration's old log_skill.sh path still records against the h2 bundle" {
+  _install
+  [ "$status" -eq 0 ]
+  [ -x "$TARGET_DIR/log_skill.sh" ]
+
+  local data_dir="$TEST_DIR/data-h1"
+  local payload='{"session_id":"sess-h1","cwd":"'"$FIXTURE_REPO"'","tool_name":"Skill","tool_input":{"skill":"tcs-helper:context-bridge"}}'
+
+  run bash -c '
+    data_dir="$1"; payload="$2"; adapter="$3"
+    cd "'"$FIXTURE_REPO"'" || exit 90
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    printf "%s" "$payload" | "$adapter"
+  ' _ "$data_dir" "$payload" "$HOME/.claude/observability/log_skill.sh"
+  [ "$status" -eq 0 ]
+  grep -qF '"kind":"skill"' "$data_dir/observability/events.jsonl"
+  grep -qF '"skill":"tcs-helper:context-bridge"' "$data_dir/observability/events.jsonl"
 }
 
 @test "a bundle missing logwrite.sh breaks the copied adapter silently (exit 0, no record) -- the defect the adapter-execution case exists to catch" {

@@ -2184,3 +2184,98 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   _lacks "$output" "OURS-OLD"
   _lacks "$output" "no bundle marker is installed"
 }
+
+# ---------------------------------------------------------------------------
+# spec 021 T3.2 / F6 AC2 -- install tightens existing record modes
+# ---------------------------------------------------------------------------
+
+# _mode <path> -- octal permission bits. GNU stat first: BSD stat rejects -c,
+# and GNU stat on macOS-style `-f` means --file-system, so order matters.
+_mode() {
+  stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
+}
+
+# _seed_loose_records <data-dir> -- 0755 dirs, 0644 events.jsonl plus a
+# rotated generation, and sibling files that must never be touched.
+_seed_loose_records() {
+  local data="$1"
+  mkdir -p "$data/observability"
+  printf '{"kind":"skill"}\n' > "$data/observability/events.jsonl"
+  printf '{"kind":"skill"}\n' > "$data/observability/events.jsonl.1"
+  printf 'keep\n' > "$data/observability/notes.txt"
+  printf 'keep\n' > "$data/sibling.txt"
+  chmod 755 "$data" "$data/observability"
+  chmod 644 "$data/observability/events.jsonl" "$data/observability/events.jsonl.1" \
+    "$data/observability/notes.txt" "$data/sibling.txt"
+}
+
+@test "install tightens a 0644 events.jsonl and its rotation to 0600 and 0755 dirs to 0700, and nothing else" {
+  local home dir data
+  home="$(_new_home tighten)"
+  dir="$(_copy_fixture absent tighten)"
+  data="$WORK_PARENT/tighten.data"
+  _seed_loose_records "$data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  [ "$(_mode "$data")" = "700" ]
+  [ "$(_mode "$data/observability")" = "700" ]
+  [ "$(_mode "$data/observability/events.jsonl")" = "600" ]
+  [ "$(_mode "$data/observability/events.jsonl.1")" = "600" ]
+  # Confined to the record files: a neighbour keeps its mode.
+  [ "$(_mode "$data/observability/notes.txt")" = "644" ]
+  [ "$(_mode "$data/sibling.txt")" = "644" ]
+}
+
+@test "install resolves the data dir as the writer does, with no override: HOME/.claude/plugins/data/observability-<repo>" {
+  local home dir data
+  home="$(_new_home tighten-default)"
+  dir="$(_copy_fixture absent tighten-default)"
+  data="$home/.claude/plugins/data/observability-tighten-default"
+  _seed_loose_records "$data"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  [ "$(_mode "$data/observability")" = "700" ]
+  [ "$(_mode "$data/observability/events.jsonl")" = "600" ]
+  [ "$(_mode "$data/observability/events.jsonl.1")" = "600" ]
+}
+
+@test "install with no records yet creates nothing in the data dir" {
+  local home dir data
+  home="$(_new_home tighten-none)"
+  dir="$(_copy_fixture absent tighten-none)"
+  data="$WORK_PARENT/tighten-none.data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  [ ! -e "$data" ]
+}
+
+@test "a chmod that fails produces a WARN naming the file and the install still completes" {
+  local home dir data stub realchmod
+  home="$(_new_home tighten-warn)"
+  dir="$(_copy_fixture absent tighten-warn)"
+  data="$WORK_PARENT/tighten-warn.data"
+  _seed_loose_records "$data"
+
+  # A file owned by someone else cannot be built unprivileged, so the same
+  # failure (chmod exits non-zero on one path) is injected through PATH.
+  realchmod="$(command -v chmod)"
+  stub="$WORK_PARENT/tighten-warn.bin"
+  mkdir -p "$stub"
+  printf '#!/bin/sh\nfor a in "$@"; do case "$a" in */events.jsonl) exit 1;; esac; done\nexec %s "$@"\n' \
+    "$realchmod" > "$stub/chmod"
+  "$realchmod" +x "$stub/chmod"
+
+  run env HOME="$home" PATH="$stub:$PATH" CLAUDE_OBSERVABILITY_DATA="$data" \
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.excludesFile GIT_CONFIG_VALUE_0=/dev/null \
+    bash "$SETUP_SH" install --target "$dir" --yes
+  [ "$status" -eq 0 ]
+  _has "$output" "] WARN: "
+  _has "$output" "$data/observability/events.jsonl"
+  _lacks "$output" "ABORT"
+  # The install went on: registration written, the other file tightened.
+  [ -f "$dir/.claude/settings.local.json" ]
+  [ "$(_mode "$data/observability/events.jsonl.1")" = "600" ]
+}

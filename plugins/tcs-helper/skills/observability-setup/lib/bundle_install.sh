@@ -115,7 +115,8 @@ _bundle_install_target_dir() {
 
 # The executable scripts in the bundle (gated by T1.4's CI check; README is
 # installed but not gated, so a prose fix does not force a version bump).
-_BUNDLE_INSTALL_SCRIPTS="logwrite.sh log_agent.sh log_instructions.sh log_skill.sh selfcheck.sh timed-wrapper.sh"
+# log_skill.sh stays: an h1 registration still points at it until setup re-runs.
+_BUNDLE_INSTALL_SCRIPTS="logwrite.sh log_agent.sh log_instructions.sh log_skill.sh log_tool.sh git_ops.sh log_expansion.sh selfcheck.sh timed-wrapper.sh"
 
 # The complete install set. Order does not matter (each file is copied
 # independently) but logwrite.sh is listed first as documentation of the

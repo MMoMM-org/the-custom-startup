@@ -89,7 +89,7 @@ _MARKER_FILE="$_PLUGIN_ROOT/templates/observability/tcs-helper-observability-ver
 if [ -f "$_MARKER_FILE" ]; then
   CURRENT_BUNDLE_VERSION="$(cat "$_MARKER_FILE")"
 else
-  CURRENT_BUNDLE_VERSION="h1"
+  CURRENT_BUNDLE_VERSION="h2"
 fi
 # Deliberately hardcoded, not "current minus one": h0 sorts below any real
 # h<N> marker this bundle will ever ship (mirrors build_with_tcs_older's
