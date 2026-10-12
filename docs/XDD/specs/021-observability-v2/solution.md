@@ -495,7 +495,7 @@ If the key is absent the expansion leaves the payload unchanged, which also fall
 
 #### Example: decoding `tool_input.command` (gotcha found in design)
 
-**Why this example:** `_observability_field` stops at the first `"` byte (`logwrite.sh:448-466`). In
+**Why this example:** `_observability_field` stops at the first `"` byte (`logwrite.sh` `_observability_field`). In
 the JSON payload every quote inside a command is `\"`, and every newline is `\n`. Using it would cut
 `git commit -m "x" && git reset --hard` at `-m ` and hide every heredoc. `git_ops.sh` therefore owns
 a decoder:
@@ -920,9 +920,14 @@ Also recorded, not an ADR of this spec: **018/019 Won't Have "no Bash recording"
 
 ### Known Technical Issues
 
-- `_observability_field` cannot read strings containing `\"` (`logwrite.sh:448-466`); `git_ops.sh`
+- `_observability_field` cannot read strings containing `\"` (`logwrite.sh` `_observability_field`); `git_ops.sh`
   owns its own decoder rather than changing the shared helper (other adapters rely on its
   never-returns-the-whole-payload property).
+- `_observability_field` was quadratic in the text before the key (`${p#*"key":"}`: ~37 s for a key behind
+  200 KB, ~0.5 s behind 20 KB). Phase 2 replaced it with a fork-free bisect under `local LC_ALL=C`
+  (91 ms at 200 KB on bash 3.2), pinned by a differential test against the old function. The writer
+  also gained a fork-free path for printable-ASCII values ≤ 256 bytes (11-field record 18.9 → 5.4 ms),
+  pinned against a frozen copy of the pre-change writer (`tests/bats/fixtures/logwrite-pre-fastpath.sh`).
 - `args` (the Skill tool's free-text input) is not on the 018 deny list. `log_skill.sh` never emits
   it, so nothing leaks today; the gap is the backstop (018 solution.md § Complex Logic). Closed by
   AC 6.3.
