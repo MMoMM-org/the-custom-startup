@@ -779,15 +779,15 @@ def _combine_inventories(inventories: Sequence[InstructionInventory]) -> Instruc
 # instead: a confident 0% coverage figure that would be pure artifact, not a
 # finding.
 #
-# Which form a REAL record carries has not been directly measured for a
-# plugin-dispatched skill or agent as of this task -- T3.6 does that, against
-# a live session. A real measured `kind: agent` record so far only proves a
+# A record may carry either form. Spec 018 T3.6 (2026-09-08, a live session)
+# measured plugin-dispatched records carrying the qualified name
+# (`tcs-workflow:verify`, `tcs-workflow:code-quality-reviewer`), while a
 # BUILT-IN agent's `agent_type` is bare (`"Explore"`). So every inventory
 # entry below carries both its `qualified` name (always derivable from the
 # file's own path, always unambiguous) and its `bare` name (the frontmatter
 # `name:`, or -- when that is absent -- the file/directory's own name), and
-# `firing_coverage` accepts a match on EITHER rather than guessing which one
-# is real and silently discarding the other.
+# `firing_coverage` accepts a match on EITHER rather than silently
+# discarding one form.
 #
 # Two different entries of the SAME kind can legitimately share a bare name
 # (two plugins each shipping a "testing" skill, say). The qualified name is
@@ -1280,8 +1280,8 @@ def firing_coverage(
     from being credited. A collision WITHIN one kind (two skills, or two
     agents, sharing a bare name) is still real and still marks neither
     fired. See the module comment above `InventoryEntry` for why both the
-    qualified and bare forms must be accepted at all: which form a real
-    record carries is confirmed at T3.6.
+    qualified and bare forms must be accepted at all: a record may carry
+    either, and the join accepts both under the uniqueness rule above.
 
     `route_counts` (`firing_route_counts` over the same records; spec-021
     T4.1) is optional so a caller without routes keeps the pre-h2 join.
@@ -1328,7 +1328,8 @@ def firing_coverage(
 # ---------------------------------------------------------------------------
 
 _GIT_TEXT_FIELDS = (
-    "subcommand", "action", "flags", "overrides", "override_first", "caller", "caller_agent_type", "caller_agent_id"
+    "subcommand", "action", "flags", "overrides", "override_first",
+    "caller", "caller_agent_type", "caller_agent_id",
 )
 
 
@@ -1369,8 +1370,10 @@ def git_operation(record: object) -> GitOperation | None:
     if not isinstance(record, dict) or record.get("kind") != "git":
         return None
     fields = _git_text_fields(record)
-    caller = _git_caller(fields) if fields is not None else None
-    if fields is None or caller is None or not fields["subcommand"]:
+    if fields is None:
+        return None
+    caller = _git_caller(fields)
+    if caller is None or not fields["subcommand"]:
         return None
     return GitOperation(
         _session_of(record), caller, fields["subcommand"], fields["action"], fields["flags"],
@@ -1711,11 +1714,11 @@ def _render_firing_coverage(inventory: SkillAgentInventory, coverage: FiringCove
         "name (<plugin>:<path under skills/ or agents/>) or its bare name (a skill's directory "
         "name, or an agent's frontmatter `name:`) -- but a bare name is only ever used to credit "
         "an entry when that bare name is unique across the whole inventory; two entries sharing "
-        "one bare name are never both marked fired by an ambiguous bare-name record. Which form a "
-        "real record actually carries is confirmed at T3.6 against a live session -- this join "
-        "accepts either deliberately until then. A typed skill record (a slash command) credits an "
-        "entry only by its exact qualified name: a project or personal command such as `/test` "
-        "arrives as a bare name and never counts. An agent is credited by a dispatch's "
+        "one bare name are never both marked fired by an ambiguous bare-name record. A record may "
+        "carry either form; this join accepts both under that uniqueness rule. A typed skill "
+        "record (a slash command) credits an entry only by its exact qualified name: a project or "
+        "personal command such as `/test` arrives as a bare name and never counts (listed as not "
+        "in the inventory). An agent is credited by a dispatch's "
         "`subagent_type`; a SubagentStart record naming that dispatch's spawn name adds nothing.",
         f"Coverage: {coverage.numerator}/{coverage.denominator} fired.",
         "",

@@ -3800,3 +3800,15 @@ def test_only_kind_git_records_enter_the_git_section():
 
     assert "no git activity was recorded" in text
     assert "push" not in text
+
+
+def test_truncated_marker_requires_the_boolean_true_not_a_truthy_string():
+    as_bool = _git_record("commit", flags="-a")
+    as_bool["truncated"] = True
+    as_string = _git_record("push", flags="-f")
+    as_string["truncated"] = "true"
+
+    text = _git_text([as_bool, as_string])
+
+    assert "      commit -- flags: -a [truncated]\n" in text
+    assert "      push -- flags: -f\n" in text
