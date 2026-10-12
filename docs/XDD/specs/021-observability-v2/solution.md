@@ -98,7 +98,9 @@ Inherited unchanged from 018 and 019 unless stated:
 - **CON-6 — no new runtime dependency** (018 CON-6, 019 CON-3). No `jq` in any hook path.
 - **CON-7 — hook-path cost** (018 CON-7, **restated**). 018's ≤ 1 ms was never met on macOS and cannot
   be: a registered hook costs 3–5 ms per matching event whether or not it records (019 CON-5). This
-  spec budgets: non-git `Bash` calls ≤ 5 ms added at p50 on macOS; a git record ≤ 15 ms; `Skill`,
+  spec budgets: non-git `Bash` calls ≤ 5 ms added at p50 on macOS; a git record ≤ 30 ms added over the
+  non-git path (revised 2026-10-12: `git rev-parse` alone costs ~12 ms through the macOS xcrun shim, and the
+  hook runs in parallel with the guard, which takes longer); `Skill`,
   `Agent` and `UserPromptExpansion` stay within the existing adapter cost (~13–30 ms).
 - **CON-8 — repo-local, opt-in** (018 CON-8, 019 ADR-1). Registration only in the target's untracked
   `.claude/settings.local.json`.
@@ -692,7 +694,7 @@ one pass, runs are consumed in bulk, and the copied `_strip_quoted` / `_strip_he
 linear in the guard and recopied (T1.5), so parity still holds. Linear is not cheap in bash: measured
 on macOS bash 3.2 under load, a 4 KB command costs ~55 ms as prose, ~180 ms with dense quoting and
 ~390 ms when a shell special occurs every few bytes; a typical command of a few hundred bytes stays
-in the CON-7 budget. The cap bounds the worst case; the 15 ms git-record budget holds for typical
+in the CON-7 budget. The cap bounds the worst case; the 30 ms git-record budget holds for typical
 commands only.
 
 **Report shape.** `fired_names` returns `set[(kind, name)]` with no session or route, and feeds
@@ -857,7 +859,7 @@ Also recorded, not an ADR of this spec: **018/019 Won't Have "no Bash recording"
 
 - **Performance:** measured as wall time of one hook invocation fed a realistic payload (a `cwd`
   without "git"), median of 20 runs after one warm-up run, on macOS: non-git Bash ≤ 5 ms; a git record
-  ≤ 15 ms; guard non-git ≤ 5 ms (F7). Linux runs the same cases. The bats perf cases run in every
+  ≤ 30 ms added; guard non-git ≤ 5 ms (F7). Linux runs the same cases. The bats perf cases run in every
   bats run, CI included, with the bound multiplied by `TCS_PERF_SLACK` (4 in CI); each suite carries
   its own copy of `_perf_budget_ms`/`_now_ms` (tcs-helper suites are standalone), tcs-git-helpers
   uses `_perf_budget` from `tests/bats/lib/helpers.bash`.

@@ -390,7 +390,7 @@ attempted and by whom, and nothing of what the command was applied to.
   - 0 records contain a flag value, positional argument, assignment value or URL credential (checked
     by scanning the record).
   - The added cost on a non-git command is at most 5 ms at the median on macOS; a git record adds at
-    most 15 ms.
+    most 30 ms (revised 2026-10-12, see README Decisions Log).
 - **Business Impact:** the next destructive git operation by an agent can be attributed to a
   session and agent from the record alone; the maintainer can quote per-repository coverage in a
   keep/drop decision without a manual correction.

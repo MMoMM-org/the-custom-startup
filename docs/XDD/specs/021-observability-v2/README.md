@@ -47,6 +47,7 @@
 | 2026-10-12 | The guard's quadratic `_strip_quoted` is fixed in this spec (T1.5), both copies | Measured 3.2 s at 10 KB in the production guard. Chosen by Marcus over a separate issue; parity keeps the two copies equal. |
 | 2026-10-12 | Parse cap 4096 bytes | Measured after T1.3/T1.5 made every step linear: a 15 KB command still cost up to ~1.3 s with dense shell syntax. At 4 KB the worst case is ~0.4 s and typical commands stay far below. Chosen by Marcus over 16 KB and 8 KB. |
 | 2026-10-12 | T1.2 extracted the guard's inline executor test into `_has_shell_executor` (pattern_match.sh) | A pure refactor so the parity test can call both sides; behaviour unchanged, guard suite green. Recorded as Extra by the Phase 1 drift check. |
+| 2026-10-12 | Git record budget 30 ms added (was 15 ms); fork-free writer fast path | T2.2 measured 42 ms added on macOS: ~20 ms writer forks (`_observability_prepare_field`), ~12 ms `git rev-parse` via the xcrun shim, ~6 ms source and parse. Chosen by Marcus: a fork-free writer path for short printable-ASCII values (helps every adapter) and a 30 ms budget, because the recorder runs in parallel with the guard. `rev-parse` stays (no builtin repo walk). |
 
 ## Context
 

@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Adapters"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 2
 ---
@@ -33,7 +33,7 @@ phase: 2
 
 Delivers the three recording paths: tool-route skills and dispatches, git commands with their caller, and typed skills.
 
-- [ ] **T2.1 `log_tool.sh`: dispatch, fast path, skill and dispatch records** `[activity: backend]`
+- [x] **T2.1 `log_tool.sh`: dispatch, fast path, skill and dispatch records** `[activity: backend]`
 
   1. Prime: fast-path example, data models, measured Agent payload (`subagent_type`, `name`, `description`, `prompt`, `tool_use_id`; `agent_id`/`agent_type` inside a subagent) `[ref: SDD/Implementation Examples]` `[ref: SDD/ADR-1, ADR-6, ADR-8]`
   2. Test: Skill payload → `skill` record with `route: tool`; Agent payload, named and unnamed → `dispatch` with `subagent_type`, `name` (empty when unnamed), `tool_use_id`, `caller`; inside a subagent → `caller: subagent` with `caller_agent_type`/`caller_agent_id`; a canary in `prompt` never appears; `description` appears only with detail on; non-git Bash payload → no record and no `source` (assert via a stub that would record being sourced), also when `cwd` contains `github`; disabled → no record, stdin drained; malformed, empty and 200 KB payloads → exit 0, empty stdout/stderr; other tool names → nothing; a perf case for the non-git path within `_perf_budget_ms` (copy `_perf_budget_ms`/`_now_ms` into this suite as the other observability suites do; warm the fixture in `setup()`; realistic `cwd`)
@@ -46,10 +46,10 @@ Delivers the three recording paths: tool-route skills and dispatches, git comman
   1. Prime: primary flow and error handling `[ref: SDD/Runtime View]`; T1.3's parse output; `_observability_toplevel=` usage in `log_instructions.sh`
   2. Test: `git reset --hard` from the main session → one `git` record with `subcommand: reset`, `flags: --hard`, `caller: main`, `tool_use_id`; same inside a subagent → `caller: subagent` plus both caller fields; `CLAUDE_ALLOW_RESET_HARD=1 git reset --hard` → `overrides`, `override_first: CLAUDE_ALLOW_RESET_HARD`, value absent; a compound command with three git calls (one read-only) → two records; `git status` alone → nothing; no git → nothing; `git stash pop` → `action: pop`; a guard-denied `git reset --hard` with no override (guard registered alongside, as in a real session) is recorded; `git_ops.sh` missing → no git record, exit 0, skill/dispatch paths unaffected; the T1.3 secrets corpus end to end leaves no value in `events.jsonl` in reduced and detail mode; `git rev-parse` runs at most once per payload (count via a PATH stub)
   3. Implement: in `log_tool.sh`'s Bash branch, `source git_ops.sh` (guarded), decode, parse, resolve the toplevel once, one `_observability_write kind=git …` per parsed line
-  4. Validate: `observability-git.bats` end-to-end cases green; perf case for one git record within 15 ms × slack; shellcheck clean
+  4. Validate: `observability-git.bats` end-to-end cases green; perf case for one git record within 30 ms added × slack (revised 2026-10-12); shellcheck clean
   5. Success: `[ref: PRD/F3 AC1, AC2, AC3, AC4, AC5, AC10]`; end to end `[ref: PRD/F3 AC6, AC7, AC8, AC9]`; `[ref: SDD/Acceptance Criteria/F3]`
 
-- [ ] **T2.3 `log_expansion.sh`: typed skills** `[activity: backend]` `[parallel: true]`
+- [x] **T2.3 `log_expansion.sh`: typed skills** `[activity: backend]` `[parallel: true]`
 
   1. Prime: measured `UserPromptExpansion` payloads (`command_name` qualified for plugins: `tcs-issues:issue`; `command_source: plugin`/`projectSettings`) `[ref: README/Context]` `[ref: SDD/ADR-7]`
   2. Test: `slash_command` with args → `skill` record, `route: typed`, `skill` = `command_name`, `args_present: yes`, `source` recorded, no `command_args` or `prompt` text in reduced or detail mode (canary); without args → `args_present: no`; `expansion_type: mcp_prompt` → nothing; missing `command_name` → nothing; a 200 KB expanded prompt stays within the adapter budget; disabled, malformed, empty → exit 0, silent
