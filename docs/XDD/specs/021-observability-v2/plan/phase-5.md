@@ -30,7 +30,7 @@ phase: 5
 
 Removes the guard's per-call cost on non-git commands, then proves the whole feature against a real Claude Code session.
 
-- [ ] **T5.1 Guard fast path** `[activity: backend]` `[parallel: true]` `[component: tcs-git-helpers]`
+- [x] **T5.1 Guard fast path** `[activity: backend]` `[parallel: true]` `[component: tcs-git-helpers]`
 
   1. Prime: guard entry (:57-61), every `PATTERN_*` constant (all require `git` or `gh`) `[ref: SDD/ADR-6]` `[ref: SDD/Acceptance Criteria/F7]`
   2. Test (in `plugins/tcs-git-helpers/tests/bats/block-bad-git-ops.bats`): a non-git, non-gh command allows with no `jq` invocation (PATH stub counting calls), also with a `cwd` containing `github`; every existing deny test still denies; `gh api … DELETE` still denies; a perf case for the non-git path ≤ 5 ms at the median via `_perf_budget` (tcs-git-helpers `lib/helpers.bash`; warm in `setup()`)
