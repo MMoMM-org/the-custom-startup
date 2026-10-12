@@ -215,10 +215,10 @@ OUR_NAMESPACE = "$HOME/.claude/observability/"
 
 # The events this feature registers, and therefore the only events under
 # which a foreign hook is a conflict. SDD-AC-4 and PRD F1 both say "a
-# foreign entry under one of the three event names" (four since spec 021); this used to be tested
-# by discarding the event name entirely, which refused targets whose hooks
-# did not overlap ours at all (measured during T4.2 on a target carrying only
-# PostToolUse and SessionStart -- neither of them ours).
+# foreign entry under one of the three event names" (four since spec 021);
+# this used to be tested by discarding the event name entirely, which refused
+# targets whose hooks did not overlap ours at all (measured during T4.2 on a
+# target carrying only PostToolUse and SessionStart -- neither of them ours).
 #
 # WHY THE TEST IS AT EVENT LEVEL AND NOT MATCHER LEVEL (ruling (aa)). Three of
 # the four are registered with matcher "" which the harness documents as
@@ -391,7 +391,8 @@ def legacy_events(shared_data):
 
 
 def entry_is_ours(entry):
-    """registration.py's entry_is_ours, over an already shape-checked entry."""
+    """registration.py's entry_is_ours. Call only after hook_commands(strict=True)
+    has accepted the document: it assumes every entry is an object."""
     return any(
         isinstance(one, dict)
         and isinstance(one.get("command"), str)

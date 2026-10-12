@@ -903,9 +903,17 @@ _write_h1_local() {
     "Stop": [{ "matcher": "", "hooks": [
       { "type": "command", "command": "/opt/foreign-audit/on-stop.sh" }]}]'
 
+  # The plan and the report say the registration is brought forward, not
+  # added beside the old one.
+  _run_setup "$home" install "$dir"
+  [ "$status" -eq 0 ]
+  _has "$output" "PLAN: would bring hooks InstructionsLoaded, PreToolUse, SubagentStart, UserPromptExpansion and env CLAUDE_OBSERVABILITY_ENABLED up to date in"
+  _lacks "$output" "would add hooks"
+
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
   _has "$output" "OURS-INCOMPLETE"
+  _has "$output" "updating the older registration of ours in place"
   _lacks "$output" "STOP"
   run _count_our_hooks "$target"
   [ "$output" -eq 4 ]

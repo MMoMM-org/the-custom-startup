@@ -742,6 +742,9 @@ if [ "$VERB" = "install" ]; then
     _emit "PLAN" "would add hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH to $LOCAL_SETTINGS"
   elif [ "$DETECT_LABEL" = "OURS-CURRENT" ]; then
     _emit "PLAN" "would leave $LOCAL_SETTINGS unchanged -- its registration is already current"
+  elif [ "$DETECT_LABEL" = "OURS-OLD" ] || [ "$DETECT_LABEL" = "OURS-INCOMPLETE" ]; then
+    # Ours already: entries are rewritten in place, not added beside the old.
+    _emit "PLAN" "would bring hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH up to date in $LOCAL_SETTINGS"
   else
     _emit "PLAN" "would add hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH to $LOCAL_SETTINGS"
   fi
@@ -780,12 +783,17 @@ fi
 # the same treatment everywhere rather than a patch at the one site.
 # ---------------------------------------------------------------------------
 
-# _report_local_add <registration output> -- name the three entries only when
-# the local half actually changed something.
+# _report_local_add <registration output> -- name the four entries only when
+# the local half actually changed something. The label stays ADDED either way
+# (SKILL.md's label set); the message says when an older registration of ours
+# was rewritten in place rather than added.
 _report_local_add() {
   case "$1" in
     *"already configured"*)
       _emit "INFO" "already configured -- nothing was changed in $LOCAL_SETTINGS."
+      ;;
+    *"updated observability registration"*)
+      _emit "ADDED" "hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH in $LOCAL_SETTINGS, updating the older registration of ours in place"
       ;;
     *)
       _emit "ADDED" "hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH in $LOCAL_SETTINGS"
