@@ -363,7 +363,7 @@ a foreign hook to it, and `install` stops rather than touch it.
 
 **Why `$CLAUDE_PROJECT_DIR`, not `$CLAUDE_PLUGIN_ROOT`.** A hook registered by a *plugin's own*
 `hooks.json` gets `$CLAUDE_PLUGIN_ROOT` set for it automatically. A hook registered in a
-*repository's own* `.claude/settings.local.json` — which is what these three are — does **not**; that
+*repository's own* `.claude/settings.local.json` — which is what these four are — does **not**; that
 variable simply isn't set at invocation time for this kind of registration. `$CLAUDE_PROJECT_DIR`
 (or a plain absolute path) is what actually resolves regardless of the current working directory at
 the moment the hook fires.
