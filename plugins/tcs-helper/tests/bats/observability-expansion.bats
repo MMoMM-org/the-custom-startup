@@ -312,8 +312,8 @@ _time_run_ms() {
   printf '%d' $((end - start))
 }
 
-# CPU milliseconds (user+sys of the adapter child only) for one run fed
-# payload file $1 THROUGH A PIPE. A pipe, not a redirected file: the real hook
+# CPU milliseconds (user+sys of the script child only) for one run of script
+# $1 fed payload file $2 THROUGH A PIPE. A pipe, not a redirected file: the real hook
 # reads a pipe, where bash's read builtin takes one byte per syscall (ADR-6);
 # from a seekable file it reads in chunks and the cost vanishes. The perl
 # parent is the pipe's writer; its own CPU is excluded because times() splits
@@ -341,17 +341,25 @@ _cpu_run_ms() {
                waitpid($pid, 0);
                exit(($? >> 8) || 1) if $? != 0;
                my @t = times();
-               printf q{%d}, ($t[2] + $t[3]) * 1000' "$ADAPTER" "$1" )
+               printf q{%d}, ($t[2] + $t[3]) * 1000' "$1" "$2" )
 }
 
-# Best of five CPU runs: the minimum discards scheduling noise.
-_best_cpu_ms() {
-  local best="" t _
+# Interleaved best-of-5 CPU for two scripts over two payloads. Alternating the
+# runs exposes all four cells to the same machine load, and the minimum drops
+# scheduling noise. Sets REAL_BIG REAL_SMALL MUT_BIG MUT_SMALL (ms).
+_best_cpu_quad() {      # _best_cpu_quad <real> <mutant> <big-file> <small-file>
+  local t _
+  REAL_BIG="" REAL_SMALL="" MUT_BIG="" MUT_SMALL=""
   for _ in 1 2 3 4 5; do
-    t="$(_cpu_run_ms "$1")" || return 1
-    if [ -z "$best" ] || [ "$t" -lt "$best" ]; then best="$t"; fi
+    t="$(_cpu_run_ms "$1" "$3")" || return 1
+    if [ -z "$REAL_BIG" ] || [ "$t" -lt "$REAL_BIG" ]; then REAL_BIG="$t"; fi
+    t="$(_cpu_run_ms "$1" "$4")" || return 1
+    if [ -z "$REAL_SMALL" ] || [ "$t" -lt "$REAL_SMALL" ]; then REAL_SMALL="$t"; fi
+    t="$(_cpu_run_ms "$2" "$3")" || return 1
+    if [ -z "$MUT_BIG" ] || [ "$t" -lt "$MUT_BIG" ]; then MUT_BIG="$t"; fi
+    t="$(_cpu_run_ms "$2" "$4")" || return 1
+    if [ -z "$MUT_SMALL" ] || [ "$t" -lt "$MUT_SMALL" ]; then MUT_SMALL="$t"; fi
   done
-  printf '%d' "$best"
 }
 
 # Same payload shape at a chosen prompt size; command fields first, the big
@@ -384,16 +392,20 @@ _write_payload() {              # _write_payload <file> <prompt-bytes>
 }
 
 # ADR-6: `IFS= read -r -d ''` takes one byte per syscall from a pipe, which is
-# why this adapter must not copy that line from log_skill.sh. An absolute bound
-# cannot see that, so the cost is measured as a DIFFERENCE of child CPU time:
-# best-of-5 at 200 KB minus best-of-5 at ~1 KB, same payload shape, fed through
-# a pipe like the real hook. Measured deltas (10 ms resolution):
-#   macOS bash 3.2:  $(cat) 50-60 ms   read -d '' mutant 120-130 ms
-#   Linux bash 5.2:  $(cat) 30-50 ms   read -d '' mutant  90-100 ms
-# The bound is FIXED at 75 ms, deliberately not scaled by TCS_PERF_SLACK: CPU
-# time is low-noise, and scaling it (x4 in CI) would put the bound above the
-# mutant and let the regression through.
-@test "expansion: reading 200 KB through a pipe costs at most 75 ms more CPU than 1 KB (no read -d)" {
+# why this adapter must not copy that line from log_skill.sh. The cost is
+# measured as a DIFFERENCE of child CPU time (200 KB minus ~1 KB, same payload
+# shape, fed through a pipe like the real hook) and compared to a MUTANT: a copy
+# of this very adapter with only the read line swapped for `read -d ''`,
+# measured interleaved with it in the same run. A fixed millisecond bound was
+# tried and does not hold: CPU time inflates on a loaded host (macOS bash 3.2,
+# load average ~300: the correct reader's delta went from 50 to 100 ms), so
+# any fixed number either flakes or passes the mutant. A scaled one (x4 in CI)
+# is above the mutant. Measured on an idle-ish host (10 ms resolution), the
+# mutant's delta exceeds the adapter's by:
+#   macOS bash 3.2:  60-80 ms     Linux bash 5.2:  30-50 ms
+# so the adapter must undercut its mutant by at least 15 ms of CPU. If the
+# adapter ever reads with `read -d ''` the gap is <= 0 (measured on both) and this fails.
+@test "expansion: reading 200 KB through a pipe costs at least 15 ms less CPU than the read -d mutant" {
   if ! command -v perl >/dev/null 2>&1; then
     skip "perl not available for a CPU clock"
   fi
@@ -401,16 +413,29 @@ _write_payload() {              # _write_payload <file> <prompt-bytes>
   _write_payload "$big" 204800
   _write_payload "$small" 1000
 
-  local big_ms small_ms delta bound=75
-  big_ms="$(_best_cpu_ms "$big")"
-  small_ms="$(_best_cpu_ms "$small")"
-  delta=$((big_ms - small_ms))
-  if [ "$delta" -gt "$bound" ]; then
-    printf 'READ COST: 200KB %s ms - 1KB %s ms = %s ms CPU over a %s ms bound\n' \
-      "$big_ms" "$small_ms" "$delta" "$bound" >&2
+  # The mutant: same adapter, same sibling writer, only the read line swapped.
+  local mdir="$TEST_DIR/mutant"
+  mkdir -p "$mdir"
+  cp "$(dirname "$ADAPTER")/logwrite.sh" "$mdir/logwrite.sh"
+  # Matches the cat form AND an already-mutated read form, so a regressed
+  # adapter yields a mutant identical to it (gap ~0) rather than a no-op swap.
+  perl -pe 's/^(?:_payload="\$\(cat.*|IFS= read -r -d .*)$/IFS= read -r -d \x27\x27 _payload || true/' \
+    "$ADAPTER" > "$mdir/log_expansion.sh"
+  chmod +x "$mdir/log_expansion.sh"
+  # The swap must have landed, or the comparison below compares nothing.
+  _assert_present "IFS= read -r -d '' _payload || true" "$mdir/log_expansion.sh"
+
+  _best_cpu_quad "$ADAPTER" "$mdir/log_expansion.sh" "$big" "$small"
+  local real_delta mut_delta gap
+  real_delta=$((REAL_BIG - REAL_SMALL))
+  mut_delta=$((MUT_BIG - MUT_SMALL))
+  gap=$((mut_delta - real_delta))
+  if [ "$gap" -lt 15 ]; then
+    printf 'READ COST: adapter delta %s ms (%s-%s), read -d mutant delta %s ms (%s-%s), gap %s ms < 15\n' \
+      "$real_delta" "$REAL_BIG" "$REAL_SMALL" "$mut_delta" "$MUT_BIG" "$MUT_SMALL" "$gap" >&2
     return 1
   fi
   # 5 runs per size, one record each: proves the adapter really ran.
   run wc -l < "$EVENTS_FILE"
-  [ "${output// /}" = "10" ]
+  [ "${output// /}" = "20" ]
 }
