@@ -420,9 +420,14 @@ DRIVER_EOF
 #   Steps stop at the first one over budget, so quadratic code fails at 2 KB
 #   or 20 KB instead of running 200 KB for twenty minutes. Requires:
 #     - 2 KB and 20 KB each under <budget-ms> (times TCS_PERF_SLACK);
-#     - 200 KB at most 15x the 20 KB time (linear growth, with a 25 ms floor
+#     - 200 KB at most 20x the 20 KB time (linear growth, with a 25 ms floor
 #       so a tiny baseline cannot make the ratio meaningless: the prose
 #       command takes 14-48 ms at 20 KB, within reach of the timer's noise).
+#       The linear code measures 9-15x. The pre-T1.5 code: _strip_quoted
+#       58x from 2 KB to 20 KB alone; _strip_heredocs 55-68x on the dense
+#       command but only 17-50x on prose, whose quadratic part (copying
+#       the result per line) is small. So 20x leaves headroom for a loaded
+#       CI runner, and the dense tests are the ones that pin the growth.
 #   Units:
 #     prose -- what a 20 KB command is in practice: a PR body or commit
 #              message, a cut every ~40 bytes, heredoc lines of ~65 bytes.
@@ -484,8 +489,8 @@ DRIVER_EOF
   [ -n "$t2" ] && [ "$t2" -lt "$budget" ] || { echo "2 KB took ${t2}ms (budget ${budget}ms)" >&2; return 1; }
   [ -n "$t20" ] && [ "$t20" -lt "$budget" ] || { echo "20 KB took ${t20}ms (budget ${budget}ms)" >&2; return 1; }
   [ "$t20" -ge "$floor" ] || t20="$floor"
-  [ -n "$t200" ] && [ "$t200" -le $((t20 * 15)) ] \
-    || { echo "200 KB took ${t200}ms, more than 15x the 20 KB ${t20}ms" >&2; return 1; }
+  [ -n "$t200" ] && [ "$t200" -le $((t20 * 20)) ] \
+    || { echo "200 KB took ${t200}ms, more than 20x the 20 KB ${t20}ms" >&2; return 1; }
 }
 
 @test "scale: _strip_quoted, prose, under 100 ms at 20 KB and linear to 200 KB (C locale)" {
