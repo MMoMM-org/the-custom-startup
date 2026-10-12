@@ -1156,18 +1156,19 @@ _git_ops_parse() {
   fi
 
   local NL=$'\n' h q text mode="normal" first="" scan
-  local cd_re='^[[:space:]]*(cd|pushd)[[:space:]]+[^&;]*(&&|;)[[:space:]]*'
-  local ovr_re='^(CLAUDE_ALLOW_[ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]+)=1[[:space:]]'
-
   # The guard's first-token rule (lib/override.sh), on the command as typed:
   # newlines read as `;`, one leading cd/pushd clause stripped, then the
   # override must be the very first word. The guard then applies it to the
   # whole command, so override_first goes on every record of the command,
-  # while `overrides` stays per clause. Only the first 4096 bytes are
-  # scanned: `${s//x/y}` costs O(length) per match in bash, and a leading
-  # cd path plus override never come near that length.
-  scan="${cmd:0:4096}"
-  scan="${scan//$NL/;}"
+  # while `overrides` stays per clause.
+  # The guard rewrites newlines to `;` first; the regexes below read a newline
+  # as that `;` instead (sp: whitespace other than newline, which after the
+  # rewrite is no longer whitespace). Same matches, without `${cmd//$NL/;}`,
+  # which costs O(length) per newline in bash (0.6 s for 4 KB of newlines).
+  local sp=$' \t\r\v\f'
+  local cd_re="^[${sp}]*(cd|pushd)[${sp}]+[^&;${NL}]*(&&|;|${NL})[${sp}]*"
+  local ovr_re="^(CLAUDE_ALLOW_[ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]+)=1[${sp}]"
+  scan="$cmd"
   if [[ "$scan" =~ $cd_re ]]; then scan="${scan:${#BASH_REMATCH[0]}}"; fi
   if [[ "$scan" =~ $ovr_re ]]; then first="${BASH_REMATCH[1]}"; fi
 

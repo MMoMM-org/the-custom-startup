@@ -655,6 +655,14 @@ expect_decode() {
   expect_parse "cd /x${NL}CLAUDE_ALLOW_RESET_HARD=1 git reset --hard" "$want"
 }
 
+@test "overrides: a newline reads as the guard's ; (not as whitespace)" {
+  expect_parse "CLAUDE_ALLOW_RESET_HARD=1${NL}git reset --hard" "$(rec reset '' '--hard' '' '')" || return 1
+  expect_parse "cd /x &&${NL}CLAUDE_ALLOW_RESET_HARD=1 git reset --hard" \
+    "$(rec reset '' '--hard' CLAUDE_ALLOW_RESET_HARD '')" || return 1
+  expect_parse "cd${NL}/x; CLAUDE_ALLOW_RESET_HARD=1 git reset --hard" \
+    "$(rec reset '' '--hard' CLAUDE_ALLOW_RESET_HARD '')"
+}
+
 @test "overrides: two leading cd clauses lose first position" {
   expect_parse 'cd /a && cd /b && CLAUDE_ALLOW_RESET_HARD=1 git reset --hard' \
     "$(rec reset '' '--hard' CLAUDE_ALLOW_RESET_HARD '')"
@@ -986,8 +994,9 @@ _linear_ok() {
   fi
 }
 
-# _scale <budget ms> <floor ms> <script>  runs <script> in bash 3.2 with the
-#   library sourced, _rep and _best_of_3 defined and LC_ALL=C (the locale
+# _scale <budget ms> <floor ms> <script>  runs <script> in a new `bash` (the
+#   first on PATH: 3.2 on macOS, 5.x in CI's Linux leg) with the library
+#   sourced, _rep and _best_of_3 defined and LC_ALL=C (the locale
 #   _git_ops_parse runs its helpers under); the script prints "<t1> <t10>".
 _scale() {
   run bash -c 'export LC_ALL=C; source "$1"; eval "$2"; eval "$3"' _ \
