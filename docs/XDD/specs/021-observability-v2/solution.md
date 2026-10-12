@@ -423,7 +423,8 @@ ENTITY: Event (MODIFIED)
                              # else "?" (unknown, alias, undeterminable); never any other word (2026-10-12)
     action:        string    # sub-verb from the closed ACTIONS list for this subcommand, else "" (never free text)
     flags:         string    # space-separated names: --long (no =value), -x (first letter, ADR-3), "--" kept as a name;
-                             # "(executor)" when parsed through the executor fallback; "" if none;
+                             # "(executor)" when parsed through the executor fallback; "(oversize)" when the
+                             # command exceeded the parse cap (one record, subcommand "?"); "" if none;
                              # longer than 256 bytes → cut, record carries truncated: true
     overrides:     string    # space-separated CLAUDE_ALLOW_* names assigned =1 (other values are not overrides); "" if none
     override_first: string   # the override name that stands in first position of the whole command as the guard
@@ -683,6 +684,14 @@ or `[a-z]`, which match `é` in a UTF-8 locale on bash 3.2. In executor mode a s
 unrecognised word after a value cut, with a `git` word later in the clause, records `?`: the record
 is kept, the name is lost.
 
+**Size cap (2026-10-12).** A decoded command above a fixed byte cap (`_GIT_OPS_MAX_BYTES`, set in
+`git_ops.sh` from measurement so the worst case stays within the git-record budget) is not parsed.
+If it contains a free-standing word `git`, exactly one record `?`, `""`, `(oversize)` is written
+(no value, fail-closed, like `(executor)`); otherwise nothing. Below the cap every step is linear in
+the input: the decoder makes one pass, quoted runs are consumed in bulk, and the copied
+`_strip_quoted` / `_strip_heredocs` were made linear in the guard and recopied (T1.5), so parity
+still holds.
+
 **Report shape.** `fired_names` returns `set[(kind, name)]` with no session or route, and feeds
 `union_fired_names` and the multi-source path. A new `firing_events(records)` yields one normalised
 firing per record — `(kind, name, route, session)` — after dedupe; `fired_names` becomes a set
@@ -913,6 +922,8 @@ Also recorded, not an ADR of this spec: **018/019 Won't Have "no Bash recording"
   it, so nothing leaks today; the gap is the backstop (018 solution.md § Complex Logic). Closed by
   AC 6.3.
 - The guard spends ~60 ms on every Bash call before any check (F7).
+- The guard's `_strip_quoted` was quadratic: 157 ms at 2 KB, 3.2 s at 10 KB of command text, on every
+  git call (measured 2026-10-12, bash 3.2). Fixed in both copies in T1.5.
 
 ### Technical Debt
 

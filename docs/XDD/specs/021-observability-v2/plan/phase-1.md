@@ -57,6 +57,14 @@ Establishes the two pieces every new adapter stands on: a writer that creates ow
   4. Validate: `plugins/tcs-helper/tests/bats/observability-git.bats` green; mutate the read-only list (drop `status`), the short-flag reduction, the ACTIONS list and the executor fallback — each fails a named test; shellcheck clean
   5. Success: parsing meets every F3 rule on names, scope and edge cases `[ref: PRD/F3 AC6, AC7, AC8, AC9]` `[ref: PRD/Detailed Feature Specifications/Business Rules 2, 3, 4, 6]` `[ref: SDD/Acceptance Criteria/F3]`
 
+- [ ] **T1.5 Linear clause stripping in the guard and its copy** `[activity: backend]`
+
+  1. Prime: `plugins/tcs-git-helpers/scripts/lib/pattern_match.sh` `_strip_quoted`, `_strip_heredocs`; the measurement in SDD Known Technical Issues; `observability-git-parity.bats` `[ref: SDD/Complex Logic/Size cap]` `[ref: SDD/ADR-2]`
+  2. Test: a differential test feeds a corpus plus generated inputs (random mixes of quotes, `$(`, backticks, backslashes, heredocs, separators) through the old and the new implementation and requires byte-identical output; a scale test bounds `_strip_quoted` and `_strip_heredocs` at 20 KB and 200 KB (linear growth: 10x input ≤ ~15x time); the full guard suite stays green
+  3. Implement: rewrite both functions in `pattern_match.sh` to consume runs in bulk instead of one byte per iteration with re-slicing; recopy into `git_ops.sh` under `_git_ops_` names (parity suite green)
+  4. Validate: guard bats (all), parity, git bats; bash 3.2 and 5.2; mutate one branch of the new code and the differential test fails
+  5. Success: the guard and the recorder strip a 20 KB command in well under 100 ms; output unchanged for every input `[ref: SDD/Known Technical Issues]`
+
 - [ ] **T1.4 Phase Validation** `[activity: validate]`
 
   - Run the writer, parity and git suites plus all existing observability suites; shellcheck every touched script. Check against SDD CON-13 and ADR-2/3/4/9.

@@ -43,6 +43,8 @@
 | 2026-10-11 | Executor fallback: a separate-value global option makes the subcommand `?` | T1.3: quote removal split `-C 'my dir'` and put `dir` in subcommand position, a value leak (CON-13). |
 | 2026-10-11 | Executor fallback: subcommand only from a closed list of git command names, else `?` | T1.3: a separator inside a nested quote (`bash -c "git commit -m 'wip; git tok'"`) made a fake clause and put `tok` in the record. Chosen by Marcus over parsing the payload recursively: provably closed, same principle as `action`; costs `?` for aliases behind `bash -c` and a possible false-positive `?` record. |
 | 2026-10-12 | Subcommand only from the closed list of git command names in both modes, else `?` | T1.3's fourth review round still found value fragments in the subcommand slot (`git -C my\ dir push` recorded `dir`). Chosen by Marcus over tokenizer fixes alone: the field is provably closed whatever syntax is missed. Costs alias names (`git co` records `?`). Tokenizer fixes (`\ `, `${…}`, `<( )`) ship too, so records and flags stay correct. |
+| 2026-10-12 | Parse cap with an `(oversize)` marker record | T1.3 code review measured the decoder at 105 s for an 87 KB payload and the parse at 25 s for a 20 KB quoted message. Above the cap one value-free `? (oversize)` record is written when a free-standing `git` word is present. Chosen by Marcus over a silent cap and no cap. |
+| 2026-10-12 | The guard's quadratic `_strip_quoted` is fixed in this spec (T1.5), both copies | Measured 3.2 s at 10 KB in the production guard. Chosen by Marcus over a separate issue; parity keeps the two copies equal. |
 
 ## Context
 

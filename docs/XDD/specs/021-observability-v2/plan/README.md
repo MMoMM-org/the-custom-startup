@@ -171,7 +171,7 @@ Dependencies: 1 → 2 → 3; 4 needs 2 (record shapes); 5's T5.1 is independent 
 | F1 AC5 | T4.1 |
 | F2 AC1, AC2, AC4 | T2.1 |
 | F2 AC3 | T4.1 |
-| F3 AC6, AC7, AC8, AC9 | T1.3 (parsing), T2.2 (records, end to end) |
+| F3 AC6, AC7, AC8, AC9 | T1.3 (parsing), T1.5 (linear stripping), T2.2 (records, end to end) |
 | F3 AC1, AC2, AC3, AC4, AC5, AC10 | T2.2 |
 | F4 AC1, AC2, AC4 | T4.1 |
 | F4 AC3, AC5 | T4.2 |
