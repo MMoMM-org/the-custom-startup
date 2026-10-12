@@ -627,6 +627,15 @@ esac
 # status — read-only, and the only verb that answers PRD F5's three states.
 # ---------------------------------------------------------------------------
 
+# The record data dir, resolved ONCE for status, the install plan and the mode
+# tightening. In a subshell so the HOME override cannot leak: a status that
+# took the bundle from one home and the records from another would be a mixed
+# answer presented as a single one.
+_RECORD_DATA_DIR=""
+if [ -n "$_LOGWRITE_SH" ]; then
+  _RECORD_DATA_DIR="$(HOME="$RESOLVED_HOME"; _observability_data_dir "$REPO_ROOT")" || _RECORD_DATA_DIR=""
+fi
+
 if [ "$VERB" = "status" ]; then
   # The drift comparator does NOT fetch the expected version itself (T1.3):
   # the two-line pattern below is bundle_install.sh:167 and is followed
@@ -664,13 +673,7 @@ if [ "$VERB" = "status" ]; then
   # about records and nothing about registrations. Neither alone can tell
   # "configured but produced nothing" from "never configured".
   RECORD_PRESENT=0
-  DATA_DIR=""
-  if [ -n "$_LOGWRITE_SH" ]; then
-    # In a subshell so the override cannot leak: a status that took the
-    # bundle from one home and the records from another would be a mixed
-    # answer presented as a single one.
-    DATA_DIR="$(HOME="$RESOLVED_HOME"; _observability_data_dir "$REPO_ROOT")" || DATA_DIR=""
-  fi
+  DATA_DIR="$_RECORD_DATA_DIR"
   if [ -n "$DATA_DIR" ]; then
     RECORD_BASE="$DATA_DIR/observability/events.jsonl"
     # A record counts as present if the base file OR any rotated generation
@@ -735,51 +738,60 @@ _UNDO_HINT="bash $_SETUP_LIB_DIR/setup.sh remove --target $REPO_ROOT --yes"
 # is where the run ends, having written nothing.
 # ---------------------------------------------------------------------------
 
-# _tighten_record_modes -- spec 021 ADR-4 / F6 AC2. The writer creates new
-# directories 0700 and files 0600; records an older bundle wrote are brought
-# to the same modes here. Confined to the target's data dir, its
-# observability/ directory and events.jsonl* (rotations included): nothing
-# else is chmod-ed. The data dir is resolved ONCE, below, by the writer's own
-# _observability_data_dir under the same HOME override `status` uses.
-# A path that cannot be changed (not owned, immutable) is a WARN, never an
-# abort. Nothing is created: an absent path is skipped.
-_RECORD_DATA_DIR=""
-if [ -n "$_LOGWRITE_SH" ]; then
-  _RECORD_DATA_DIR="$(HOME="$RESOLVED_HOME"; _observability_data_dir "$REPO_ROOT")" || _RECORD_DATA_DIR=""
-fi
-
-_tighten_record_modes() {
-  local events_dir path
+# _record_paths -- the record path set, one per line: the data dir, its
+# observability/ directory ("d <path>"), then events.jsonl and the
+# generations the writer's rotation produces (.1 to .3, the same view
+# `status` uses) ("f <path>"). Only paths that exist, symlinks included.
+# The single list both functions below walk, so they cannot drift.
+_record_paths() {
+  local events_dir="$_RECORD_DATA_DIR/observability" path suffix
   [ -n "$_RECORD_DATA_DIR" ] || return 0
-  events_dir="$_RECORD_DATA_DIR/observability"
   for path in "$_RECORD_DATA_DIR" "$events_dir"; do
-    [ -d "$path" ] || continue
-    chmod 700 "$path" 2>/dev/null || _emit "WARN" "could not restrict $path to owner-only (0700); left as is."
+    if [ -e "$path" ] || [ -L "$path" ]; then printf 'd %s\n' "$path"; fi
   done
-  for path in "$events_dir"/events.jsonl "$events_dir"/events.jsonl.*; do
-    [ -f "$path" ] || continue
-    chmod 600 "$path" 2>/dev/null || _emit "WARN" "could not restrict $path to owner-only (0600); left as is."
+  for suffix in "" ".1" ".2" ".3"; do
+    path="$events_dir/events.jsonl$suffix"
+    if [ -e "$path" ] || [ -L "$path" ]; then printf 'f %s\n' "$path"; fi
   done
   return 0
 }
 
-# _records_need_tightening -- true when an existing record path under
-# $_RECORD_DATA_DIR has a mode other than the owner-only one. Same path set
-# as _tighten_record_modes. GNU stat first (BSD stat rejects -c).
+# _tighten_record_modes -- spec 021 ADR-4 / F6 AC2. The writer creates new
+# directories 0700 and files 0600; records an older bundle wrote are brought
+# to the same modes here. Confined to _record_paths: nothing else is chmod-ed,
+# and a symbolic link is skipped with a WARN (chmod would follow it out of the
+# data dir). A path that cannot be changed (not owned, immutable) is a WARN,
+# never an abort. Nothing is created.
+_tighten_record_modes() {
+  local kind path
+  while read -r kind path; do
+    if [ -L "$path" ]; then
+      _emit "WARN" "$path is a symbolic link; not restricted (only real record files and directories are changed)."
+    elif [ "$kind" = "d" ]; then
+      [ -d "$path" ] || continue
+      chmod 700 "$path" 2>/dev/null || _emit "WARN" "could not restrict $path to owner-only (0700); left as is."
+    else
+      [ -f "$path" ] || continue
+      chmod 600 "$path" 2>/dev/null || _emit "WARN" "could not restrict $path to owner-only (0600); left as is."
+    fi
+  done <<EOF_PATHS
+$(_record_paths)
+EOF_PATHS
+  return 0
+}
+
+# _records_need_tightening -- true when an existing, non-symlink record path
+# has a mode other than the owner-only one. GNU stat first (BSD rejects -c).
 _records_need_tightening() {
-  local events_dir path mode
-  [ -n "$_RECORD_DATA_DIR" ] || return 1
-  events_dir="$_RECORD_DATA_DIR/observability"
-  for path in "$_RECORD_DATA_DIR" "$events_dir"; do
-    [ -d "$path" ] || continue
+  local kind path mode want
+  while read -r kind path; do
+    [ -L "$path" ] && continue
+    if [ "$kind" = "d" ]; then want=700; [ -d "$path" ] || continue; else want=600; [ -f "$path" ] || continue; fi
     mode="$(stat -c %a "$path" 2>/dev/null || stat -f %Lp "$path" 2>/dev/null)" || mode=""
-    [ "$mode" = "700" ] || return 0
-  done
-  for path in "$events_dir"/events.jsonl "$events_dir"/events.jsonl.*; do
-    [ -f "$path" ] || continue
-    mode="$(stat -c %a "$path" 2>/dev/null || stat -f %Lp "$path" 2>/dev/null)" || mode=""
-    [ "$mode" = "600" ] || return 0
-  done
+    [ "$mode" = "$want" ] || return 0
+  done <<EOF_PATHS
+$(_record_paths)
+EOF_PATHS
   return 1
 }
 

@@ -2264,16 +2264,17 @@ _seed_loose_records() {
   realchmod="$(command -v chmod)"
   stub="$WORK_PARENT/tighten-warn.bin"
   mkdir -p "$stub"
-  printf '#!/bin/sh\nfor a in "$@"; do case "$a" in */events.jsonl) exit 1;; esac; done\nexec %s "$@"\n' \
-    "$realchmod" > "$stub/chmod"
+  printf '#!/bin/sh\nfor a in "$@"; do case "$a" in */events.jsonl|%s) exit 1;; esac; done\nexec %s "$@"\n' \
+    "$data" "$realchmod" > "$stub/chmod"
   "$realchmod" +x "$stub/chmod"
 
   run env HOME="$home" PATH="$stub:$PATH" CLAUDE_OBSERVABILITY_DATA="$data" \
     GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.excludesFile GIT_CONFIG_VALUE_0=/dev/null \
     bash "$SETUP_SH" install --target "$dir" --yes
   [ "$status" -eq 0 ]
-  _has "$output" "] WARN: "
-  _has "$output" "$data/observability/events.jsonl"
+  _has "$output" "[tcs-helper:observability-setup] WARN: could not restrict $data to owner-only (0700); left as is."
+  _has "$output" "[tcs-helper:observability-setup] WARN: could not restrict $data/observability/events.jsonl to owner-only (0600); left as is."
+  [ "$(_mode "$data/observability")" = "700" ]
   _lacks "$output" "ABORT"
   # The install went on: registration written, the other file tightened.
   [ -f "$dir/.claude/settings.local.json" ]
@@ -2312,4 +2313,42 @@ _seed_loose_records() {
   _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir"
   [ "$status" -eq 0 ]
   _lacks "$output" "would restrict"
+}
+
+@test "a symlinked events.jsonl is skipped with a WARN, its target keeps its mode, and the plan stays quiet" {
+  local home dir data outside
+  home="$(_new_home tighten-link)"
+  dir="$(_copy_fixture absent tighten-link)"
+  data="$WORK_PARENT/tighten-link.data"
+  outside="$WORK_PARENT/tighten-link.outside"
+  _seed_loose_records "$data"
+  printf 'x\n' > "$outside"
+  chmod 644 "$outside"
+  rm "$data/observability/events.jsonl"
+  ln -s "$outside" "$data/observability/events.jsonl"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _has "$output" "WARN: $data/observability/events.jsonl is a symbolic link; not restricted"
+  [ "$(_mode "$outside")" = "644" ]
+  [ "$(_mode "$data/observability/events.jsonl.1")" = "600" ]
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir"
+  [ "$status" -eq 0 ]
+  _lacks "$output" "would restrict"
+}
+
+@test "a symlinked data dir is skipped: its target keeps its mode" {
+  local home dir data real
+  home="$(_new_home tighten-dirlink)"
+  dir="$(_copy_fixture absent tighten-dirlink)"
+  real="$WORK_PARENT/tighten-dirlink.real"
+  data="$WORK_PARENT/tighten-dirlink.data"
+  _seed_loose_records "$real"
+  ln -s "$real" "$data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _has "$output" "WARN: $data is a symbolic link; not restricted"
+  [ "$(_mode "$real")" = "755" ]
 }
