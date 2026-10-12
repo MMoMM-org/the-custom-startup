@@ -311,3 +311,27 @@ def test_help_prints_the_usage_and_exit_paragraphs():
     assert result.stdout.startswith("Usage:")
     assert "PROBE_MODEL" in result.stdout and "NEEDS_CONTEXT" in result.stdout
     assert "WHAT IT NEVER TOUCHES" not in result.stdout
+
+
+def _run_cleanup(tmp_path: Path, keep: str, calls: int) -> subprocess.CompletedProcess:
+    """Source the probe, point it at a scratch dir and run its cleanup `calls` times."""
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    script = f'source "{PROBE}"; KEEP={keep}; SCRATCH="{scratch}"; ' + "_cleanup; " * calls
+    return subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=30)
+
+
+def test_keep_prints_the_scratch_path_once(tmp_path):
+    # --keep printed the path twice in a live run. The cleanup must not depend
+    # on being reached once, so a second call has to stay silent.
+    result = _run_cleanup(tmp_path, keep="1", calls=2)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.count("Scratch kept at:") == 1, result.stdout
+    assert (tmp_path / "scratch").is_dir()
+
+
+def test_without_keep_the_cleanup_removes_the_scratch_dir_silently(tmp_path):
+    result = _run_cleanup(tmp_path, keep="0", calls=2)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert not (tmp_path / "scratch").exists()

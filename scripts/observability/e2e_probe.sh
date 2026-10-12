@@ -101,8 +101,12 @@ _preflight() {
   [ -r "$_REPORT_PY" ] || _die 2 "cannot read $_REPORT_PY"
 }
 
+# Idempotent: it can be reached from more than one exit path, and the kept
+# path must be printed once.
 _cleanup() {
   [ -n "${SCRATCH:-}" ] && [ -d "$SCRATCH" ] || return 0
+  [ -z "${_CLEANED:-}" ] || return 0
+  _CLEANED=1
   if [ "$KEEP" = "1" ]; then _say "Scratch kept at: $SCRATCH"; return 0; fi
   rm -rf "$SCRATCH"
 }
