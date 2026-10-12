@@ -1,8 +1,9 @@
 # Observability of what loads and fires
 
-This is a small, off-by-default recorder for three things Claude Code does that are otherwise
-invisible from inside a session: which instruction files get loaded, which skills fire, and which
-subagents get dispatched. It exists so a later question — "is anyone actually using this memory
+This is a small, off-by-default recorder for four things Claude Code does that are otherwise
+invisible from inside a session: which instruction files get loaded, which skills fire (called by
+the model or typed as a slash command), which subagents get dispatched, and which git operations
+that are not read-only run. It exists so a later question — "is anyone actually using this memory
 file / skill / agent?" — has real data to answer from, instead of a guess.
 
 It writes nothing anywhere unless you turn it on.
@@ -73,9 +74,12 @@ its early-exit check earlier both changed nothing measurable. The cost is macOS 
 code-signature check on every `exec`, before the script's own body ever runs at all — a script
 whose entire body is `exec "$@"` already pays it, and Linux does not pay it at all. This design
 cannot reduce that floor; it can only decide where to spend it, which is why "Registering the
-hooks" (below) wires up only the three events this recorder actually needs, and why the report of
+hooks" (below) wires up only the four events this recorder actually needs, and why the report of
 which repositories to register it in (see "Setting this up automatically", below) names them
 explicitly rather than matching everything.
+
+`PreToolUse` matches `Skill|Agent|Bash`, so that floor is paid on every Bash call. A Bash call whose
+command does not contain `git` leaves `log_tool.sh` after one `cat`, before any library is loaded.
 
 ## Where the record lives
 
@@ -139,7 +143,7 @@ jq 'select(.kind == "skill")' "$HOME/.claude/plugins/data/observability-the-cust
 ```
 
 Every line carries four fields no matter what kind of event it is — `ts` (UTC timestamp), `kind`
-(what happened — `instruction`, `skill`, `agent`, or `state`), `session` (the session it happened
+(what happened — `instruction`, `skill`, `dispatch`, `agent`, `git`, `state`, or `hook`), `session` (the session it happened
 in), and `repo` (this repo's name, never an absolute path) — plus a handful of fields specific to
 that `kind`. A line may also carry `"truncated":true` if one of its fields was cut down to the
 256-byte-per-field limit.
@@ -147,14 +151,15 @@ that `kind`. A line may also carry `"truncated":true` if one of its fields was c
 ### The fields each kind carries
 
 The wrapper's `kind: hook` record is enumerated separately, under "Privacy: what is, and is not, in
-that record". These are the other four. Each was checked against a record this repository actually
-produced, not read off the source:
+that record". These are the others:
 
 | `kind` | Fields beyond the four common ones |
 |---|---|
 | `instruction` | `path` (relative to this repo, or a bare filename when the file lives outside it), `scope` (the payload's `memory_type` — `Project` or `User`), `reason` (`session_start`, `include`, `nested_traversal` or `path_glob_match`), and `bytes` (the loaded file's size as a quoted string, absent when it could not be measured). Plus exactly one of `parent` (when `reason` is `include`) or `trigger` (when it is `path_glob_match`) — never both, and neither on any other reason. |
-| `skill` | `skill` — the skill's qualified name, e.g. `tcs-workflow:verify`. |
+| `skill` | `skill` — the skill's name, e.g. `tcs-workflow:verify` — and `route`: `tool` (a `Skill` tool call) or `typed` (a slash command; `skill` is then the command name). A typed record also carries `args_present` (`yes`/`no` — never the arguments) and `source` (the command's source, e.g. `plugin`). A record written before spec 021 has no `route` and is read as `tool`. |
+| `dispatch` | One per `Agent` tool call: `subagent_type` (the agent's type), `name` (the spawn name, `""` when none was given), `tool_use_id`, and `caller` — `main`, or `subagent` with `caller_agent_type` and `caller_agent_id`. Never the prompt; the description only as `detail:description`, with `DETAIL` on. |
 | `agent` | `agent_type` (the subagent type, qualified, e.g. `tcs-workflow:code-quality-reviewer`; for a caller-named ad-hoc agent it is that caller-supplied name, which matches no shipped entry on purpose) and `agent_id` (the harness's identifier for that one dispatch). |
+| `git` | One per git invocation that is not read-only: `subcommand` (a git command name, or `?` when unknown, an alias or undeterminable), `action` (a sub-verb from a closed list, e.g. `stash drop`, else `""`), `flags` (flag names only — `-mX` is `-m`, `--o=X` is `--o`; `(executor)` when the command ran through `bash -c` or `eval`; `(oversize)`, with subcommand `?`, when the command was longer than the 4096-byte parse cap), `overrides` (the `CLAUDE_ALLOW_*` names assigned `=1` in that clause), `override_first` (the override in first position of the whole command, so every record of that command carries it), the same caller fields as `dispatch`, and `tool_use_id`. Never values, paths, messages, URLs or the command line. Among the invocations not recognised, and so not recorded: git behind `xargs`, `find -exec`, a script file, or a wrapper other than `env sudo time nice timeout nohup exec command`. |
 | `state` | `enabled` and `detail` (each switch as it stood at that moment) and `note`, which carries the self-check's probe nonce — that nonce is the whole mechanism by which the check confirms *this* run's write landed rather than some earlier one's. |
 
 Every one of those is a name, a reason, a size or a switch position. None of them is a file's
@@ -183,25 +188,30 @@ not an accident.
 
 ## How to read the coverage figure
 
-`report.py` ends with a line like `Coverage: 13/84 fired.` and a list headed *"Never fired -- unused,
-not missing"*. Both are narrower claims than they look, in three specific ways. None is a defect;
-all three are properties of where the record comes from.
+`report.py` prints a line like `Coverage: 13/84 fired.` and a list headed *"Never fired -- unused,
+not missing"*. Both are narrower claims than they look. None of the points below is a defect; each
+is a property of where the record comes from.
 
-**It counts model-chosen skill invocations, not typed ones.** The `PreToolUse` hook matches on the
-`Skill` *tool*. Typing `/plugin:skill-name` makes no tool call, so nothing observes it. Measured
-across this repository's whole record: after the rollout day, every `Skill` tool call produced a
-record and **none of eight typed invocations did**. Most skills here carry `user-invocable: true`
-and exist to be typed, so for those, "never fired" cannot tell *unused* apart from *only ever
-typed*.
+**Typed skills count only from spec 021's registration on.** A typed `/plugin:skill-name` makes no
+tool call; it is recorded through `UserPromptExpansion` as a `skill` record with `route: typed`.
+Both routes count toward the skill, and the report shows the split under *"Fired skills by route
+(record counts; tool = Skill tool call, typed = slash command)"*, one line per fired skill such as
+`tcs-issues:issue [skill]: tool=2, typed=1`. A typed record credits an entry only by its exact
+qualified name: a project or personal command such as `/test` arrives as the bare `test`, never
+counts, and is listed as not in the inventory. Records from before the repository's registration
+was brought forward (see "Setting this up automatically") hold no typed route, so for that period
+"never fired" still cannot tell *unused* apart from *only ever typed*.
 
-**A subagent given a `name:` is unattributable.** `SubagentStart`'s `agent_type` field carries the
-agent's *name*, not its type — the hooks documentation defines it as "Agent name (for example,
-`Explore` or `security-reviewer`)" — and the payload has no other field. A dispatch named
-`impl-t41` records `impl-t41`, which matches no inventory entry. The report pools these separately
-rather than dropping them (`N record(s) named a skill/agent not found in this inventory`), so they
-are visible, but they cannot be credited. Cross-referencing the session transcripts resolves them
-— they carry both `name` and `subagent_type` — but that is an offline join this tooling does not
-perform.
+**A subagent given a `name:` is credited through its dispatch.** `SubagentStart`'s `agent_type`
+carries the agent's *name* when one was given, not its type. The `dispatch` record written for the
+same `Agent` tool call carries both, so the report credits the dispatch's `subagent_type`, and an
+`agent` record naming that dispatch's spawn name in the same session adds nothing. An `agent`
+record that names neither an inventory entry, a built-in agent type (`general-purpose`, `Explore`,
+`Plan`, `statusline-setup`, `claude-code-guide`, `fork`) nor a dispatched type is listed under
+*"N agent record(s) named neither an inventory entry, a built-in agent type nor a dispatched type
+-- uncreditable (may be a spawn name); not counted"*. These are typically records written before
+dispatch recording, or a spawn whose dispatch record is missing. Built-in types are listed with
+the names *"not found in this inventory at all"*, not as uncreditable.
 
 **A per-source gap is an absence of records.** The per-source detail says an entry is *absent from
 that source's records*, never that it did not run there. Both effects above hit the per-source
@@ -211,11 +221,34 @@ its own name.
 What the figure *does* support, stated the way it should be quoted:
 
 > Of 84 shipped skills and agents, 13 left a record naming them, across four repositories over the
-> collection period. The other 71 left none — which for a user-invocable skill may mean it was
-> never used, or only ever typed.
+> collection period. The other 71 left none.
 
-What it does not support is "71 of our skills are unused". Getting from one to the other needs the
-typed route observed as well, which would take a second adapter on a different hook event.
+What it does not support is "71 of our skills are unused": a record missing is not a run missing.
+For any part of the period before the typed route was recorded, a user-invocable skill with no
+record may still have been typed.
+
+## How to read the git section
+
+Each source's section lists its `git` records under *"Git operations (N record(s), grouped by
+session, then caller)"*: per session, per caller (`main`, or the subagent's
+`<caller_agent_type> <caller_agent_id>`), one line per distinct operation, e.g.
+
+```
+  session 058f9767-…:
+    main:
+      push -- flags: --force; overrides: CLAUDE_ALLOW_FORCE_PUSH (first position)
+      commit -- flags: -m (3 records)
+```
+
+The subcommand is followed by the action when there is one (`stash drop`). `(executor)` and
+`(oversize)` are shown as they were recorded, and `[truncated]` marks a record with a field cut at
+256 bytes. An override that stands in first position of the whole command but was set on another
+clause is shown as `(first position, on another clause)`. With several sources, each keeps its own
+list; git records are never pooled across sources.
+
+A source with no git records says *"no git activity was recorded. That is not proof none
+happened"*: read-only commands are never recorded, some invocations are not recognised, and a
+session whose `PreToolUse` registration does not cover `Bash` records none.
 
 ## What is recorded, and what is deliberately not
 
@@ -224,7 +257,8 @@ fired, and roughly what it was — never its content:
 
 - **Kept:** which instruction file loaded and why, which skill or agent ran, file paths (made
   relative to this repo, or reduced to just a filename if outside it), the size of a loaded file,
-  and — for a Bash tool call — only the program name (e.g. `git`, `npm`), never its arguments.
+  and — for a git operation — only names: subcommand, action, flag names and override names, never
+  values or the command line. Other Bash calls are not recorded at all.
 - **Dropped:** command-line arguments, file contents, the full text of any Write/Edit change,
   `transcript_path`, your absolute home-directory path, and any prompt or response text.
 
@@ -257,7 +291,7 @@ the checks a hand edit cannot perform on itself, like whether version control ac
 what it is about to write. Read this section anyway if you want to understand what that skill is
 doing, or if you're registering somewhere the skill can't reach.
 
-The recorder only sees anything once the three hooks below are registered in **this repository's
+The recorder only sees anything once the four hooks below are registered in **this repository's
 own** `.claude/settings.local.json` (not a plugin's `hooks.json`, and not the shared
 `.claude/settings.json` — see the caveat right after the snippet for why `$CLAUDE_PROJECT_DIR`
 matters, and "Where to put the switch," above, for why the *local* layer specifically). Merge this
@@ -279,11 +313,11 @@ into the `"hooks"` object of that file, alongside anything already there for the
     ],
     "PreToolUse": [
       {
-        "matcher": "Skill",
+        "matcher": "Skill|Agent|Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/log_skill.sh\""
+            "command": "\"$CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/log_tool.sh\""
           }
         ]
       }
@@ -298,6 +332,17 @@ into the `"hooks"` object of that file, alongside anything already there for the
           }
         ]
       }
+    ],
+    "UserPromptExpansion": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/plugins/tcs-helper/scripts/observability/log_expansion.sh\""
+          }
+        ]
+      }
     ]
   }
 }
@@ -306,8 +351,15 @@ into the `"hooks"` object of that file, alongside anything already there for the
 `InstructionsLoaded`'s matcher is not a tool name — for this event, the *load reason*
 (`session_start`, `compact`, `include`, and so on) doubles as the matcher, so an empty string here
 means "every load, regardless of reason," which is what this recorder wants. `PreToolUse`'s matcher
-of `Skill` means this hook only fires for `Skill` tool calls, not every tool call. `SubagentStart`
-has no equivalent filter, hence the empty matcher there too.
+of `Skill|Agent|Bash` means this hook fires for those three tools only; `log_tool.sh` records a
+`Skill` call as `skill`, an `Agent` call as `dispatch`, and a Bash call only when it runs git.
+`SubagentStart` and `UserPromptExpansion` take no matcher here, hence the empty string; for
+`UserPromptExpansion`, `log_expansion.sh` records only slash commands.
+
+The `observability-setup` skill writes the same four entries with the command
+`"$HOME/.claude/observability/<script>"` instead, pointing at the bundle it installs. It recognises
+only that path as its own: a hand-made entry under one of these event names that points elsewhere is
+a foreign hook to it, and `install` stops rather than touch it.
 
 **Why `$CLAUDE_PROJECT_DIR`, not `$CLAUDE_PLUGIN_ROOT`.** A hook registered by a *plugin's own*
 `hooks.json` gets `$CLAUDE_PLUGIN_ROOT` set for it automatically. A hook registered in a
@@ -330,13 +382,16 @@ to turn recording on.
 There's a companion skill, `observability-setup`, backed by a dispatcher script at
 `plugins/tcs-helper/skills/observability-setup/lib/setup.sh`. It does everything "Registering the
 hooks" (above) walks through by hand, plus one thing a hand edit cannot check for itself: whether
-version control actually ignores what it is about to write.
+version control actually ignores what it is about to write. `install` also restricts existing
+record files to owner-only (directories `0700`, `events.jsonl*` `0600`). When
+`CLAUDE_OBSERVABILITY_DATA` is set in the environment `install` runs in, the directory it names is
+the record directory, so that directory itself is set to `0700`.
 
 Three verbs, each taking `--target <path>` (the repository, or a subdirectory of one, to act on):
 
 | Verb | Does |
 |---|---|
-| `install` | registers the three hooks and the `CLAUDE_OBSERVABILITY_ENABLED` switch in the target's `.claude/settings.local.json` |
+| `install` | installs the script bundle into `$HOME/.claude/observability/` and registers the four hooks and the `CLAUDE_OBSERVABILITY_ENABLED` switch in the target's `.claude/settings.local.json` |
 | `remove` | takes this feature's own entries back out of that file |
 | `status` | reports whether the target is recording, configured but silent, or not configured at all — plus whether the installed script bundle is current |
 
@@ -347,10 +402,12 @@ script shows the plan and waits for an explicit `y`/`yes` before it ever passes 
 
 A few things worth knowing before running it:
 
-- **A target with a foreign hook under one of these three event names is stopped, not failed.** If
-  something else already owns an entry under `InstructionsLoaded`, `PreToolUse`, or `SubagentStart`
-  in the target's local settings — regardless of that entry's own matcher — `install` exits `0`,
-  changes nothing, and says so. A foreign hook under any *other* event name is not a conflict at all
+- **A target with a foreign hook under one of these four event names is stopped, not failed.** If
+  something else already owns an entry under `InstructionsLoaded`, `PreToolUse`, `SubagentStart` or
+  `UserPromptExpansion` in the target's local settings — regardless of that entry's own matcher —
+  `install` exits `0`, changes nothing, and says so. In a target this feature already registered, a
+  foreign hook does not stop `install`; one under an event whose entry is missing or outdated is
+  named in the `OURS-INCOMPLETE` line. A foreign hook under any *other* event name is not a conflict at all
   and does not stop anything. Either way, this feature will never overwrite another tool's
   registration or merge into it by force.
 - **A target whose version control does not ignore every path this feature would write is
@@ -361,6 +418,13 @@ A few things worth knowing before running it:
   Stopping recording and discarding what was already recorded are two separate acts; `remove` only
   ever performs the first. Use "How to delete it" (above) if discarding records is what you
   actually want.
+- **After updating the plugin, re-run `install` in every registered repository.** The bundle under
+  `$HOME` is shared, so the first repository updated makes the bundle current for all of them, but
+  each repository's own entries stay as they were. `status` then reports `OURS-INCOMPLETE`, naming
+  each `<event> (missing)` or `<event> (outdated)`. A registration from before spec 021 shows
+  `PreToolUse (outdated), UserPromptExpansion (missing)` and records no typed skills, dispatches or
+  git operations until `install` runs there. One run replaces the outdated
+  entry, adds the missing one, and leaves the other entries and any foreign ones alone.
 
 ## Watching several repositories at once: the locations config
 
@@ -415,7 +479,7 @@ split.
 
 ## Investigating one slow hook: `timed-wrapper.sh`
 
-The three adapters above answer "did X load/fire" questions. They cannot answer "which specific hook
+The adapters above answer "did X load/fire" questions. They cannot answer "which specific hook
 is slow" — and neither can the harness's own telemetry. The spec's README (its T1.4 section) measured
 six hook configurations directly and found per-hook duration is not recoverable from configuration
 alone: hooks sharing one `(event, matcher)` pair collapse into a single measurement group no matter
@@ -461,7 +525,7 @@ the wrapped command an empty payload for as long as the wrapper stayed installed
 `--` is the real hook command, run exactly as it would have run directly, with its own stdin, stdout,
 stderr and exit status passed through unchanged.
 
-Recording also needs `CLAUDE_OBSERVABILITY_ENABLED=1` set, the same switch the three adapters use —
+Recording also needs `CLAUDE_OBSERVABILITY_ENABLED=1` set, the same switch the adapters use —
 without it, the wrapper runs the real hook command transparently and writes nothing.
 
 ### What it records, and where
@@ -516,7 +580,7 @@ not a daemon, it installs nothing outside that one registration line, and it lea
 process or cached state behind. Once the registration is reverted, nothing of it remains anywhere in
 the hook execution path. The only trace left behind is the records it already wrote while it was
 installed — ordinary `kind: hook` lines in `events.jsonl`, no different in kind from the records the
-three adapters above write, and removed the same way (see "How to delete it").
+adapters above write, and removed the same way (see "How to delete it").
 
 ### Caveats, stated plainly
 
