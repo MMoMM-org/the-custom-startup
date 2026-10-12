@@ -3616,3 +3616,187 @@ def test_cli_multi_source_firing_figures_equal_hand_derived_values(tmp_path):
     detail = _section(result.stdout, "Per-source firing detail:")
     assert "  source-a: 1/4 of the shipped inventory fired here." in detail
     assert "  source-b: 2/4 of the shipped inventory fired here." in detail
+
+
+# ---------------------------------------------------------------------------
+# spec-021 T4.2: the git section (PRD F4 AC3/AC5, SDD/Acceptance Criteria/F4
+# 4.3 and 4.5, SDD/Application Data Models kind = git).
+#
+# Every expected line below is a hand-written literal -- never built with
+# report.py's own helpers.
+# ---------------------------------------------------------------------------
+
+
+def _git_record(
+    subcommand: str,
+    *,
+    action: str = "",
+    flags: str = "",
+    overrides: str = "",
+    override_first: str = "",
+    session: str = "s1",
+    caller: tuple[str, str] | None = None,
+) -> dict:
+    """A `kind: git` record, shaped as log_tool.sh writes it: every field is
+    present (empty as ""), caller=main unless `caller` gives the subagent's
+    (agent_type, agent_id)."""
+    record = {
+        "ts": "2026-10-12T09:00:00Z", "kind": "git", "session": session, "repo": "the-custom-startup",
+        "subcommand": subcommand, "action": action, "flags": flags, "overrides": overrides,
+        "override_first": override_first, "caller": "main", "tool_use_id": "toolu_1",
+    }
+    if caller is not None:
+        record["caller"] = "subagent"
+        record["caller_agent_type"], record["caller_agent_id"] = caller
+    return record
+
+
+def _git_text(records: list) -> str:
+    return report.build_load_report({}, [], git_ops=report.git_operations(records))
+
+
+def test_git_records_render_grouped_by_session_then_caller():
+    records = [
+        _git_record("push", flags="--force", overrides="CLAUDE_ALLOW_FORCE_PUSH", override_first="CLAUDE_ALLOW_FORCE_PUSH"),
+        _git_record("commit", flags="-m", caller=("tcs-team:the-developer:build-feature", "a1b2")),
+        _git_record("commit", flags="-m"),
+        _git_record("stash", action="drop", session="s2"),
+    ]
+
+    text = _git_text(records)
+
+    assert (
+        "Git operations (4 record(s), grouped by session, then caller):\n"
+        "  session s1:\n"
+        "    main:\n"
+        "      push -- flags: --force; overrides: CLAUDE_ALLOW_FORCE_PUSH (first position)\n"
+        "      commit -- flags: -m\n"
+        "    tcs-team:the-developer:build-feature a1b2:\n"
+        "      commit -- flags: -m\n"
+        "  session s2:\n"
+        "    main:\n"
+        "      stash drop\n"
+    ) in text
+
+
+def test_git_action_is_rendered_only_when_non_empty():
+    text = _git_text([_git_record("remote", action="add"), _git_record("remote")])
+
+    assert "      remote add\n" in text
+    assert "      remote\n" in text
+
+
+def test_git_overrides_mark_override_first_and_name_one_set_on_another_clause():
+    text = _git_text(
+        [
+            _git_record("reset", flags="--hard", overrides="CLAUDE_ALLOW_A CLAUDE_ALLOW_B", override_first="CLAUDE_ALLOW_B"),
+            _git_record("push", override_first="CLAUDE_ALLOW_C"),
+            _git_record("rebase", overrides="CLAUDE_ALLOW_D"),
+        ]
+    )
+
+    assert "      reset -- flags: --hard; overrides: CLAUDE_ALLOW_A, CLAUDE_ALLOW_B (first position)\n" in text
+    assert "      push -- overrides: CLAUDE_ALLOW_C (first position, on another clause)\n" in text
+    assert "      rebase -- overrides: CLAUDE_ALLOW_D\n" in text
+
+
+def test_git_markers_executor_oversize_and_truncated_render_as_is():
+    truncated = _git_record("commit", flags="-a -b -c")
+    truncated["truncated"] = True
+
+    text = _git_text([_git_record("reset", flags="(executor)"), _git_record("?", flags="(oversize)"), truncated])
+
+    assert "      reset -- flags: (executor)\n" in text
+    assert "      ? -- flags: (oversize)\n" in text
+    assert "      commit -- flags: -a -b -c [truncated]\n" in text
+
+
+def test_identical_git_operations_of_one_caller_collapse_with_a_count():
+    text = _git_text([_git_record("commit", flags="-m"), _git_record("push"), _git_record("commit", flags="-m")])
+
+    assert "    main:\n      commit -- flags: -m (2 records)\n      push\n" in text
+    assert "Git operations (3 record(s)," in text
+
+
+def test_source_without_git_records_says_none_recorded_and_that_this_is_not_proof():
+    """PRD F4 AC5 / 018 F4 AC4: absence of records is never absence of activity."""
+    text = _git_text([_skill_record("tcs-issues:issue")])
+
+    git_line = next(line for line in text.splitlines() if line.startswith("Git operations"))
+    assert "no git activity was recorded" in git_line
+    assert "not proof none happened" in git_line
+    assert "record(s)" not in git_line
+
+
+def test_build_load_report_without_git_ops_omits_the_git_section():
+    assert "Git operations" not in report.build_load_report({}, [])
+
+
+def test_malformed_git_records_are_dropped_without_exception():
+    good = _git_record("push")
+    bad_records = []
+    for field, value in (
+        ("subcommand", ["push"]), ("subcommand", ""), ("action", {"a": 1}), ("flags", 3),
+        ("overrides", None), ("override_first", ["x"]), ("caller", {"main": 1}), ("caller", "bogus"),
+    ):
+        record = _git_record("reset")
+        record[field] = value
+        bad_records.append(record)
+    no_subcommand = _git_record("reset")
+    del no_subcommand["subcommand"]
+    bad_subagent = _git_record("reset", caller=("x", "1"))
+    bad_subagent["caller_agent_type"] = ["x"]
+
+    text = _git_text([*bad_records, no_subcommand, bad_subagent, ["not", "a", "dict"], "text", good])
+
+    assert "Git operations (1 record(s), grouped by session, then caller):" in text
+    assert "      push\n" in text
+    assert "reset" not in text
+
+
+def test_git_section_never_renders_a_field_outside_the_documented_names():
+    record = _git_record("commit", flags="-m")
+    record["command"] = "git commit -m SECRET-MESSAGE"
+    record["message"] = "SECRET-MESSAGE"
+    record["path"] = "/Users/someone/secret.txt"
+
+    text = _git_text([record])
+
+    assert "SECRET" not in text
+    assert "/Users/someone" not in text
+    assert "      commit -- flags: -m\n" in text
+
+
+def test_git_subagent_caller_with_empty_type_or_id_says_unknown():
+    text = _git_text([_git_record("push", caller=("", "a1")), _git_record("push", caller=("Explore", ""))])
+
+    assert "    (unknown type) a1:\n" in text
+    assert "    Explore (unknown id):\n" in text
+
+
+def test_git_record_with_empty_session_is_grouped_under_no_session():
+    text = _git_text([_git_record("push", session="")])
+
+    assert "  session (none recorded):\n" in text
+
+
+def test_cli_single_source_renders_git_section(tmp_path):
+    events = tmp_path / "events.jsonl"
+    _write_jsonl(events, [_git_record("push", flags="-u"), _skill_record("tcs-issues:issue")])
+
+    result = _run_report_cli(["--events", str(events), "--repo-root", str(tmp_path), "--home", str(tmp_path / "home")])
+
+    assert result.returncode == 0, result.stderr
+    assert "Git operations (1 record(s), grouped by session, then caller):\n  session s1:\n    main:\n      push -- flags: -u\n" in result.stdout
+
+
+def test_only_kind_git_records_enter_the_git_section():
+    """A `dispatch` record also carries `caller: main`; a stray `subcommand`
+    on it must not make it a git operation."""
+    dispatch = _dispatch_record("Explore")
+    dispatch["subcommand"] = "push"
+
+    text = _git_text([dispatch])
+
+    assert "no git activity was recorded" in text
+    assert "push" not in text

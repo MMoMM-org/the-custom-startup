@@ -1313,6 +1313,78 @@ def firing_coverage(
 
 
 # ---------------------------------------------------------------------------
+# Git operations (spec-021 T4.2, PRD F4 AC3/AC5, SDD/Application Data Models
+# kind = git, ADR-9).
+#
+# A `kind: git` record holds names only (CON-13): `subcommand` (a git command
+# name or `?`), `action` (a closed sub-verb list, or ""), `flags`, `overrides`
+# and `override_first` (space-separated names), plus the caller. The writer's
+# markers -- `(executor)` and `(oversize)` in `flags`, `truncated: true` on
+# the record -- are passed through, never interpreted. Only the fields named
+# in `_GIT_TEXT_FIELDS` ever reach the output, so a record carrying anything
+# else (a `command` written by a drifted producer) cannot leak it. A field of
+# the wrong type, or a missing subcommand or caller, drops the record -- the
+# same posture `_named_event` takes for a malformed firing.
+# ---------------------------------------------------------------------------
+
+_GIT_TEXT_FIELDS = (
+    "subcommand", "action", "flags", "overrides", "override_first", "caller", "caller_agent_type", "caller_agent_id"
+)
+
+
+class GitOperation(NamedTuple):
+    """One `kind: git` record, reduced to the documented name fields.
+    `caller` is `main` or `<caller_agent_type> <caller_agent_id>`."""
+
+    session: str
+    caller: str
+    subcommand: str
+    action: str
+    flags: str
+    overrides: str
+    override_first: str
+    truncated: bool
+
+
+def _git_text_fields(record: dict) -> dict[str, str] | None:
+    """Every documented text field, absent read as ""; None if any is not a string."""
+    fields = {name: record.get(name, "") for name in _GIT_TEXT_FIELDS}
+    if all(isinstance(value, str) for value in fields.values()):
+        return fields
+    return None
+
+
+def _git_caller(fields: dict[str, str]) -> str | None:
+    if fields["caller"] == "main":
+        return "main"
+    if fields["caller"] != "subagent":
+        return None
+    agent_type = fields["caller_agent_type"] or "(unknown type)"
+    agent_id = fields["caller_agent_id"] or "(unknown id)"
+    return f"{agent_type} {agent_id}"
+
+
+def git_operation(record: object) -> GitOperation | None:
+    """The record as a `GitOperation`, or None when it is not a well-formed git record."""
+    if not isinstance(record, dict) or record.get("kind") != "git":
+        return None
+    fields = _git_text_fields(record)
+    caller = _git_caller(fields) if fields is not None else None
+    if fields is None or caller is None or not fields["subcommand"]:
+        return None
+    return GitOperation(
+        _session_of(record), caller, fields["subcommand"], fields["action"], fields["flags"],
+        fields["overrides"], fields["override_first"], record.get("truncated") is True,
+    )
+
+
+def git_operations(records: Iterable[object]) -> list[GitOperation]:
+    """Every well-formed git record, in record order."""
+    operations = (git_operation(record) for record in records)
+    return [operation for operation in operations if operation is not None]
+
+
+# ---------------------------------------------------------------------------
 # Hook durations: wrapper-sourced, single-invocation-scoped (T3.4, SDD-AC-17).
 # ---------------------------------------------------------------------------
 #
@@ -1702,6 +1774,65 @@ def _render_uncreditable_agents(names: Sequence[str]) -> list[str]:
     return lines
 
 
+def _render_git_overrides(operation: GitOperation) -> str:
+    """The clause's overrides, the first-position one marked. `override_first`
+    belongs to the whole command, so it can name an override set on another
+    clause; it is then listed after this clause's own."""
+    names = operation.overrides.split()
+    first = operation.override_first
+    rendered = [f"{name} (first position)" if name == first else name for name in names]
+    if first and first not in names:
+        rendered.append(f"{first} (first position, on another clause)")
+    return ", ".join(rendered)
+
+
+def _render_git_operation(operation: GitOperation, count: int) -> str:
+    line = " ".join(part for part in (operation.subcommand, operation.action) if part)
+    details = []
+    if operation.flags:
+        details.append(f"flags: {operation.flags}")
+    overrides = _render_git_overrides(operation)
+    if overrides:
+        details.append(f"overrides: {overrides}")
+    if details:
+        line += " -- " + "; ".join(details)
+    if operation.truncated:
+        line += " [truncated]"
+    if count > 1:
+        line += f" ({count} records)"
+    return line
+
+
+def _group_git_operations(operations: Sequence[GitOperation]) -> dict[str, dict[str, Counter]]:
+    """session -> caller -> operation counts, each level in first-seen order."""
+    groups: dict[str, dict[str, Counter]] = {}
+    for operation in operations:
+        by_caller = groups.setdefault(operation.session, {})
+        by_caller.setdefault(operation.caller, Counter())[operation] += 1
+    return groups
+
+
+def _render_git_operations(operations: Sequence[GitOperation]) -> list[str]:
+    """PRD F4 AC3/AC5: git records by session, then caller -- or, with none,
+    that none were recorded, which is not evidence that git was not used."""
+    if not operations:
+        return [
+            "Git operations: no git activity was recorded. That is not proof none happened -- "
+            "read-only git commands are never recorded, some invocations are not recognised "
+            "(git behind xargs, find -exec or a script file), and a session whose PreToolUse "
+            "registration does not cover Bash records none.",
+            "",
+        ]
+    lines = [f"Git operations ({len(operations)} record(s), grouped by session, then caller):"]
+    for session, by_caller in _group_git_operations(operations).items():
+        lines.append(f"  session {session or '(none recorded)'}:")
+        for caller, counts in by_caller.items():
+            lines.append(f"    {caller}:")
+            lines.extend(f"      {_render_git_operation(op, count)}" for op, count in counts.items())
+    lines.append("")
+    return lines
+
+
 def _format_ms(value: float) -> str:
     """Render one hook duration's `ms` value for display.
 
@@ -1799,6 +1930,9 @@ def build_load_report(
     # This function still renders exactly ONE source's content; the loop
     # over several sources lives in `build_multi_source_report`, not here.
     section_title: str | None = None,
+    # spec-021 T4.2: same optional-parameter posture -- `None` omits the git
+    # section, so every pre-existing caller/test keeps working unchanged.
+    git_ops: Sequence[GitOperation] | None = None,
 ) -> str:
     """Render the load report: per-file counts and reasons, and what never loaded.
 
@@ -1847,6 +1981,10 @@ def build_load_report(
     chose to tell sources apart, the basename is only how the data itself is
     keyed). This function still renders exactly one source's content and
     never branches on how many sources exist -- looping is the caller's job.
+
+    `git_ops` is optional (spec-021 T4.2, same posture): when given, a section
+    lists this source's git records by session, then caller, or says none
+    were recorded and that this is not proof none happened (PRD F4 AC3/AC5).
     """
     lines: list[str] = []
 
@@ -1901,6 +2039,10 @@ def build_load_report(
     if skill_agent_inventory is not None and firing is not None:
         lines.append("")
         lines.extend(_render_firing_coverage(skill_agent_inventory, firing))
+
+    if git_ops is not None:
+        lines.append("")
+        lines.extend(_render_git_operations(git_ops))
 
     if hooks is not None:
         lines.append("")
@@ -2004,6 +2146,8 @@ def _build_source_report(source: sources.Source, now: datetime) -> tuple[str, li
         firing=None,
         hooks=hooks,
         section_title=source.label,
+        # Per source like hook timing, never unioned (019 ADR-7).
+        git_ops=git_operations(records),
     )
     return text, records
 
@@ -2272,6 +2416,7 @@ def _print_single_record_report(events_path: Path, args: argparse.Namespace) -> 
             skill_agent_inventory=skill_agent_inventory,
             firing=firing,
             hooks=hooks,
+            git_ops=git_operations(records),
         )
     )
     return 0

@@ -35,6 +35,9 @@ Unreachable skill files -- found on disk but the harness cannot discover them at
   plugins/pluginA/skills/nested/inner/SKILL.md
 
 
+Git operations: no git activity was recorded. That is not proof none happened -- read-only git commands are never recorded, some invocations are not recognised (git behind xargs, find -exec or a script file), and a session whose PreToolUse registration does not cover Bash records none.
+
+
 Hook durations (timed-wrapper.sh, scope_note: single only):
   PreToolUse / Skill (1 invocation(s)):
     120 ms (exit 0)
