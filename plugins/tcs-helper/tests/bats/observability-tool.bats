@@ -216,18 +216,25 @@ _assert_silent() {
 # ---------------------------------------------------------------------------
 
 @test "disabled: no record, stdin drained, exit 0, silent" {
+  # Drain proof: a producer writing more than a pipe buffer (64 KB) is killed
+  # by SIGPIPE (status 141) if the adapter exits without reading. The shell
+  # gets /dev/null as its own stdin so nothing here can block on an inherited
+  # terminal or pipe.
+  local big
+  big="$(printf 'x%.0s' $(seq 1 200000))"
+  _hook Skill "{\"skill\":\"x\",\"args\":\"$big\"}" > "$TEST_DIR/drain.json"
   run --separate-stderr env -u CLAUDE_OBSERVABILITY_ENABLED CLAUDE_OBSERVABILITY_DATA="$DATA" \
-    bash -c 'cd "$1" && printf "%s" "$2" | "$3"; echo "left:$(cat 2>/dev/null | wc -c | tr -d " ")"' \
-    _ "$REPO" "$(_hook Skill '{"skill":"x"}')" "$ADAPTER"
+    bash -c 'cd "$1" && cat "$2" | "$3"; echo "producer:${PIPESTATUS[0]} adapter:${PIPESTATUS[1]}"' \
+    _ "$REPO" "$TEST_DIR/drain.json" "$ADAPTER" < /dev/null
   [ "$status" -eq 0 ]
-  [ "$output" = "left:0" ]
+  [ "$output" = "producer:0 adapter:0" ]
   [ -z "$stderr" ]
   [ ! -e "$EVENTS" ]
 }
 
 @test "disabled: a stub is not sourced" {
   run --separate-stderr env -u CLAUDE_OBSERVABILITY_ENABLED CLAUDE_OBSERVABILITY_DATA="$DATA" \
-    bash -c 'cd "$1" && printf "%s" "$2" | "$3"' _ "$REPO" "$(_hook Skill '{"skill":"x"}')" "$STUB/log_tool.sh"
+    bash -c 'cd "$1" && printf "%s" "$2" | "$3"' _ "$REPO" "$(_hook Skill '{"skill":"x"}')" "$STUB/log_tool.sh" < /dev/null
   _assert_silent
   [ ! -e "$MARKER" ]
 }
@@ -252,7 +259,8 @@ _assert_silent() {
   _assert_present '"subagent_type":"Explore"' "$EVENTS"
   _assert_present '"tool_use_id":"toolu_01ABC"' "$EVENTS"
   # Keys sit behind a 200 KB prompt; a quadratic extractor took 41 s each.
-  [ $((t1 - t0)) -le "$(_perf_budget_ms 3000)" ]
+  printf "200KB Agent dispatch: %s ms\n" "$((t1 - t0))" >&3
+  [ $((t1 - t0)) -le "$(_perf_budget_ms 1000)" ]
   _hook Bash "{\"command\":\"echo $big\"}" > "$TEST_DIR/big2.json"
   _run_file "$ADAPTER" "$TEST_DIR/big2.json"
   _assert_silent
