@@ -1283,6 +1283,17 @@ _forbid_line() {
   done
 }
 
+# _expect_exact <line> <JSON after the ts field>  the whole record line must
+#   be {"ts":"<UTC timestamp>",<rest>: field order, no extra or duplicate
+#   field. Only the timestamp is matched as a pattern.
+_expect_exact() {
+  case "$1" in
+    '{"ts":"'[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'",'"$2") return 0 ;;
+  esac
+  printf 'expected: {"ts":"…",%s\nactual:   %s\n' "$2" "$1"
+  return 1
+}
+
 @test "e2e: git reset --hard from the main session writes one git record" {
   _e2e_setup || return 1
   _record_git 'git reset --hard' || return 1
@@ -1295,19 +1306,14 @@ _forbid_line() {
   # The main session says so: no agent fields to leave ambiguous (F3 AC3).
   _forbid_line "$line" caller_agent_type caller_agent_id || return 1
   # Field order: the SDD data model's, after the four frozen fields.
-  case "$line" in
-    '{"ts":"'*'","kind":"git","session":"sess-g","repo":"myrepo","subcommand":"reset","action":"","flags":"--hard","overrides":"","override_first":"","caller":"main","tool_use_id":"toolu_01GIT"}') ;;
-    *) echo "shape: $line"; return 1 ;;
-  esac
+  _expect_exact "$line" '"kind":"git","session":"sess-g","repo":"myrepo","subcommand":"reset","action":"","flags":"--hard","overrides":"","override_first":"","caller":"main","tool_use_id":"toolu_01GIT"}'
 }
 
 @test "e2e: inside a subagent the record names caller subagent, its type and id" {
   _e2e_setup || return 1
   _record_git 'git reset --hard' ',"agent_id":"ag-77","agent_type":"general-purpose"' || return 1
   [ "$(_git_count)" = "1" ] || { cat "$EVENTS"; return 1; }
-  _expect_line "$(_git_lines)" '"subcommand":"reset"' '"flags":"--hard"' \
-    '"caller":"subagent"' '"caller_agent_type":"general-purpose"' \
-    '"caller_agent_id":"ag-77"' '"tool_use_id":"toolu_01GIT"'
+  _expect_exact "$(_git_lines)" '"kind":"git","session":"sess-g","repo":"myrepo","subcommand":"reset","action":"","flags":"--hard","overrides":"","override_first":"","caller":"subagent","caller_agent_type":"general-purpose","caller_agent_id":"ag-77","tool_use_id":"toolu_01GIT"}'
 }
 
 @test "e2e: a command that quotes agent_id keys cannot forge a subagent caller" {
@@ -1324,10 +1330,8 @@ _forbid_line() {
   [ "$(_git_count)" = "1" ] || { cat "$EVENTS"; return 1; }
   local line
   line="$(_git_lines)"
-  _expect_line "$line" '"subcommand":"reset"' '"flags":"--hard"' \
-    '"overrides":"CLAUDE_ALLOW_RESET_HARD"' \
-    '"override_first":"CLAUDE_ALLOW_RESET_HARD"' || return 1
-  _forbid_line "$line" 'CLAUDE_ALLOW_RESET_HARD=' '"1"'
+  # The exact line leaves no room for the value (`=1`) anywhere.
+  _expect_exact "$line" '"kind":"git","session":"sess-g","repo":"myrepo","subcommand":"reset","action":"","flags":"--hard","overrides":"CLAUDE_ALLOW_RESET_HARD","override_first":"CLAUDE_ALLOW_RESET_HARD","caller":"main","tool_use_id":"toolu_01GIT"}'
 }
 
 @test "e2e: a compound command with three git calls, one read-only, writes two records" {
@@ -1337,9 +1341,8 @@ _forbid_line() {
   local first second
   first="$(_git_lines | sed -n 1p)"
   second="$(_git_lines | sed -n 2p)"
-  _expect_line "$first" '"subcommand":"add"' '"flags":"-A"' '"tool_use_id":"toolu_01GIT"' || return 1
-  _expect_line "$second" '"subcommand":"commit"' '"flags":"-m"' '"tool_use_id":"toolu_01GIT"' || return 1
-  _forbid_line "$(cat "$EVENTS")" '"subcommand":"status"' wip
+  _expect_exact "$first" '"kind":"git","session":"sess-g","repo":"myrepo","subcommand":"add","action":"","flags":"-A","overrides":"","override_first":"","caller":"main","tool_use_id":"toolu_01GIT"}' || return 1
+  _expect_exact "$second" '"kind":"git","session":"sess-g","repo":"myrepo","subcommand":"commit","action":"","flags":"-m","overrides":"","override_first":"","caller":"main","tool_use_id":"toolu_01GIT"}'
 }
 
 @test "e2e: git status alone writes nothing" {
@@ -1361,7 +1364,14 @@ _forbid_line() {
   _e2e_setup || return 1
   _record_git 'git stash pop' || return 1
   [ "$(_git_count)" = "1" ] || { cat "$EVENTS"; return 1; }
-  _expect_line "$(_git_lines)" '"subcommand":"stash"' '"action":"pop"' '"flags":""'
+  _expect_exact "$(_git_lines)" '"kind":"git","session":"sess-g","repo":"myrepo","subcommand":"stash","action":"pop","flags":"","overrides":"","override_first":"","caller":"main","tool_use_id":"toolu_01GIT"}'
+}
+
+@test "e2e: an unknown subcommand is recorded as ? with its flags" {
+  _e2e_setup || return 1
+  _record_git 'git frobnicate --x' || return 1
+  [ "$(_git_count)" = "1" ] || { cat "$EVENTS"; return 1; }
+  _expect_exact "$(_git_lines)" '"kind":"git","session":"sess-g","repo":"myrepo","subcommand":"?","action":"","flags":"--x","overrides":"","override_first":"","caller":"main","tool_use_id":"toolu_01GIT"}'
 }
 
 @test "e2e: an oversize command writes the one value-free marker record" {
