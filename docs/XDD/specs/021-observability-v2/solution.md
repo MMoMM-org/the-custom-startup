@@ -684,13 +684,16 @@ or `[a-z]`, which match `é` in a UTF-8 locale on bash 3.2. In executor mode a s
 unrecognised word after a value cut, with a `git` word later in the clause, records `?`: the record
 is kept, the name is lost.
 
-**Size cap (2026-10-12).** A decoded command above a fixed byte cap (`_GIT_OPS_MAX_BYTES`, set in
-`git_ops.sh` from measurement so the worst case stays within the git-record budget) is not parsed.
-If it contains a free-standing word `git`, exactly one record `?`, `""`, `(oversize)` is written
-(no value, fail-closed, like `(executor)`); otherwise nothing. Below the cap every step is linear in
-the input: the decoder makes one pass, quoted runs are consumed in bulk, and the copied
-`_strip_quoted` / `_strip_heredocs` were made linear in the guard and recopied (T1.5), so parity
-still holds.
+**Size cap (2026-10-12).** A decoded command above 4096 bytes (`_GIT_OPS_MAX_BYTES` in
+`git_ops.sh`; the parser counts bytes under `LC_ALL=C`) is not parsed. If it contains a free-standing
+word `git`, exactly one record `?`, `""`, `(oversize)` is written (no value, fail-closed, like
+`(executor)`); otherwise nothing. Below the cap every step is linear in the input: the decoder makes
+one pass, runs are consumed in bulk, and the copied `_strip_quoted` / `_strip_heredocs` were made
+linear in the guard and recopied (T1.5), so parity still holds. Linear is not cheap in bash: measured
+on macOS bash 3.2 under load, a 4 KB command costs ~55 ms as prose, ~180 ms with dense quoting and
+~390 ms when a shell special occurs every few bytes; a typical command of a few hundred bytes stays
+in the CON-7 budget. The cap bounds the worst case; the 15 ms git-record budget holds for typical
+commands only.
 
 **Report shape.** `fired_names` returns `set[(kind, name)]` with no session or route, and feeds
 `union_fired_names` and the multi-source path. A new `firing_events(records)` yields one normalised
