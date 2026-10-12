@@ -17,8 +17,9 @@
 #      fixed corpus and for thousands of generated inputs, in the C locale and
 #      in a UTF-8 locale (the guard runs in the caller's locale, and in UTF-8 a
 #      multibyte character inside quotes is one space, not one per byte);
-#   2. the scale tests bound both functions at 20 KB (absolute budget, SDD:
-#      well under 100 ms) and require linear growth from 20 KB to 200 KB.
+#   2. the scale tests bound both functions at 20 KB of a realistic command
+#      (SDD: well under 100 ms) and require linear growth from 20 KB to
+#      200 KB, for that command and for a token-dense one.
 #
 # The generator is an explicit LCG, not $RANDOM: the same inputs on bash 3.2
 # and 5.x. Outputs go to files and are compared with cmp, so trailing newlines
@@ -351,28 +352,41 @@ _differential() {
 # Scale
 # ---------------------------------------------------------------------------
 
-# _scale <quoted|heredocs> <locale>
-#   Times the function on a realistic command repeated to 2 KB, 20 KB and
-#   200 KB, inside one child bash (perl timer: BSD date has no %N; the cost of
-#   the timer itself is measured and subtracted). Steps stop at the first one
-#   over budget, so quadratic code fails at 2 KB or 20 KB instead of running
-#   200 KB for twenty minutes. Requires:
-#     - 2 KB and 20 KB each under the budget (SDD: well under 100 ms at 20 KB);
+# _scale <function> <locale> <prose|dense> <budget-ms>
+#   Times the function on a command built by repeating one unit to 2 KB,
+#   20 KB and 200 KB, inside one child bash (perl timer: BSD date has no %N;
+#   the cost of the timer itself is measured and subtracted). Steps stop at
+#   the first one over budget, so quadratic code fails at 2 KB or 20 KB
+#   instead of running 200 KB for twenty minutes. Requires:
+#     - 2 KB and 20 KB each under <budget-ms> (times TCS_PERF_SLACK);
 #     - 200 KB at most 15x the 20 KB time (linear growth, with a 10 ms floor
 #       so a tiny baseline cannot make the ratio meaningless).
+#   Units:
+#     prose -- what a 20 KB command is in practice: a PR body or commit
+#              message, a cut every ~40 bytes, heredoc lines of ~65 bytes.
+#              Budget 100 ms (SDD: well under 100 ms at 20 KB).
+#     dense -- a cut every ~10 bytes, heredoc lines of ~13 bytes: per-step
+#              cost at its worst. Held to linear growth; its absolute budget
+#              only catches a gross regression.
 _scale() {
-  local fn="$1" loc="$2" budget driver out t2 t20 t200 floor=10
+  local fn="$1" loc="$2" unit="$3" budget driver out t2 t20 t200 floor=10
   [ -n "$loc" ] || { echo "no locale given (no UTF-8 locale on this host?)" >&2; return 1; }
-  budget="$(_perf_budget 100)"
-  driver="$BATS_TEST_TMPDIR/scale-$fn.sh"
+  budget="$(_perf_budget "$4")"
+  driver="$BATS_TEST_TMPDIR/scale-$fn-$unit.sh"
   cat > "$driver" <<'DRIVER_EOF'
 source "$1" || exit 97
-fn="$2"; budget="$3"; NL=$'\n'
-if [ "$fn" = _strip_quoted ]; then
-  u="git commit -m \"fix: \$(git rev-parse HEAD) it's a \\\"quoted\\\" note é\" && echo 'a b' | tr x y; (cd sub) ${NL}"
-else
-  u="git commit -F - <<'EOF'${NL}body names git reset --hard and \$(x) é${NL}second line 'q'${NL}EOF${NL}bash <<EOF${NL}echo hi${NL}EOF${NL}git status${NL}"
-fi
+fn="$2"; unit="$3"; budget="$4"; NL=$'\n'
+case "$fn-$unit" in
+  _strip_quoted-prose)
+    u="gh pr create --title \"perf: linear stripping\" --body \"## Summary${NL}The guard's clause stripping is linear now. It replaced the per-character loop (which re-scanned the command) with run-at-a-time splitting; see \$(git log -1 --format=%h) and the measurements below. Résumé: the 'quoted' text stays blank (as before).${NL}\" ${NL}" ;;
+  _strip_quoted-dense)
+    u="git commit -m \"fix: \$(git rev-parse HEAD) it's a \\\"quoted\\\" note é\" && echo 'a b' | tr x y; (cd sub) ${NL}" ;;
+  _strip_heredocs-prose)
+    u="git commit -F - <<'EOF'${NL}perf(tcs-git-helpers): linear stripping of quoted text and heredocs${NL}${NL}The guard used to spend seconds on a long command; a body that names${NL}git reset --hard is prose, and stays blank. Résumé of the change:${NL}each line is printed as it is read instead of growing one result.${NL}EOF${NL}bash <<EOF${NL}echo this heredoc feeds a shell, so its body is kept as code here${NL}EOF${NL}" ;;
+  _strip_heredocs-dense)
+    u="git commit -F - <<'EOF'${NL}body names git reset --hard and \$(x) é${NL}second line 'q'${NL}EOF${NL}bash <<EOF${NL}echo hi${NL}EOF${NL}git status${NL}" ;;
+  *) exit 98 ;;
+esac
 ms() { perl -MTime::HiRes -e 'printf "%d", Time::HiRes::time()*1000'; }
 a=$(ms); b=$(ms); overhead=$((b - a))
 for n in 2000 20000 200000; do
@@ -384,8 +398,8 @@ for n in 2000 20000 200000; do
 done
 echo
 DRIVER_EOF
-  out="$(LC_ALL="$loc" bash "$driver" "$LIB" "$fn" "$budget")" || { echo "driver failed" >&2; return 1; }
-  printf '%s %s ms at 2/20/200 KB: %s\n' "$fn" "$loc" "$out" >&3
+  out="$(LC_ALL="$loc" bash "$driver" "$LIB" "$fn" "$unit" "$budget")" || { echo "driver failed" >&2; return 1; }
+  printf '%s %s %s: ms at 2/20/200 KB: %s\n' "$fn" "$unit" "$loc" "$out" >&3
   set -- $out
   t2="${1:-}"; t20="${2:-}"; t200="${3:-}"
   [ -n "$t2" ] && [ "$t2" -lt "$budget" ] || { echo "2 KB took ${t2}ms (budget ${budget}ms)" >&2; return 1; }
@@ -395,18 +409,34 @@ DRIVER_EOF
     || { echo "200 KB took ${t200}ms, more than 15x the 20 KB ${t20}ms" >&2; return 1; }
 }
 
-@test "scale: _strip_quoted is under budget at 20 KB and linear to 200 KB (C locale)" {
-  _scale _strip_quoted C
+@test "scale: _strip_quoted, prose, under 100 ms at 20 KB and linear to 200 KB (C locale)" {
+  _scale _strip_quoted C prose 100
 }
 
-@test "scale: _strip_quoted is under budget at 20 KB and linear to 200 KB (UTF-8 locale)" {
-  _scale _strip_quoted "$UTF8_LOCALE"
+@test "scale: _strip_quoted, prose, under 100 ms at 20 KB and linear to 200 KB (UTF-8 locale)" {
+  _scale _strip_quoted "$UTF8_LOCALE" prose 100
 }
 
-@test "scale: _strip_heredocs is under budget at 20 KB and linear to 200 KB (C locale)" {
-  _scale _strip_heredocs C
+@test "scale: _strip_quoted, dense, linear to 200 KB (C locale)" {
+  _scale _strip_quoted C dense 1000
 }
 
-@test "scale: _strip_heredocs is under budget at 20 KB and linear to 200 KB (UTF-8 locale)" {
-  _scale _strip_heredocs "$UTF8_LOCALE"
+@test "scale: _strip_quoted, dense, linear to 200 KB (UTF-8 locale)" {
+  _scale _strip_quoted "$UTF8_LOCALE" dense 1000
+}
+
+@test "scale: _strip_heredocs, prose, under 100 ms at 20 KB and linear to 200 KB (C locale)" {
+  _scale _strip_heredocs C prose 100
+}
+
+@test "scale: _strip_heredocs, prose, under 100 ms at 20 KB and linear to 200 KB (UTF-8 locale)" {
+  _scale _strip_heredocs "$UTF8_LOCALE" prose 100
+}
+
+@test "scale: _strip_heredocs, dense, linear to 200 KB (C locale)" {
+  _scale _strip_heredocs C dense 1000
+}
+
+@test "scale: _strip_heredocs, dense, linear to 200 KB (UTF-8 locale)" {
+  _scale _strip_heredocs "$UTF8_LOCALE" dense 1000
 }

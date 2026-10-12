@@ -379,68 +379,100 @@ _git_dash_c_dir() {
 #       outer `"..."` contains no inner `"` characters.
 #     - Backslash-escaping inside double quotes is honored (`\"` does not
 #       close the dq). Single quotes follow POSIX — no escapes inside.
+#       Only the ONE character before the `"` is looked at: `"\\"` stays open.
 #
-#   bash 3.2 compatible: pure parameter expansion, no associative arrays,
-#   no mapfile.
+#   Linear (spec 021 T1.5). The scanner used to step one character at a time
+#   with `${cmd:$i:1}`, which re-walks the string from its start on every
+#   step (character offsets, in a UTF-8 locale), and appended to a growing
+#   result: quadratic, 3.2 s at 10 KB. It now cuts the command at the four
+#   characters that can change state — ' " $ ) — with four nested word
+#   splits (one linear pass each; never a per-step re-slice, never `${s//}`,
+#   which is quadratic in bash 3.2), and handles each run between two cuts
+#   as one step, printed as soon as it is decided: kept verbatim in code,
+#   one space per character inside quotes. Character for character the same
+#   as the stepping scanner, in any locale (tests/bats/lib_strip_linear.bats
+#   holds it to a frozen copy of it).
+#
+#   One step is <cut> <run>: the cut character before the run ("" at the
+#   start) and the text up to the next cut, which contains none of the four.
+#     S: everything is blanked; `'` returns to N.
+#     D: everything is blanked; `"` returns to N unless the character before
+#        it is `\`.
+#        $( ... ) inside a double-quoted string is still CODE. Enter it in
+#        normal state so its command is matched, and remember to come back
+#        to D — otherwise the substitution's own quotes desync the outer one.
+#     N: runs are kept; `'` and `"` open a quote; `$(` opens a substitution
+#        (saving the state to return to); `)` closes the innermost one, or
+#        is kept when none is open. Quote and substitution characters are
+#        blanked; a `$` without `(` is kept.
+#   Whether a cut `$` is `$(` is read off the run after it.
+#   `for p in $text$cut` (cut appended, unquoted) yields exactly one piece
+#   more than <text> has cuts: word splitting drops one trailing empty field,
+#   and this way that field is the appended one. The pieces are expanded
+#   before the loop runs, so an inner loop's IFS does not disturb an outer
+#   one.
+#
+#   bash 3.2 compatible: word splitting and parameter expansion, no
+#   associative arrays, no mapfile, no function call per step (each one
+#   costs more than the step). Globbing is off while it splits and restored
+#   afterwards.
 _strip_quoted() {
-  local cmd="$1"
-  local out=""
-  local i=0
-  local len=${#cmd}
   local state="N"        # N=normal (code), S=single-quoted, D=double-quoted
   local stack=""         # one saved state char per open $( — innermost first
-  local ch prev="" nxt
-  while [ "$i" -lt "$len" ]; do
-    ch="${cmd:$i:1}"
-    nxt="${cmd:$((i + 1)):1}"
-    case "$state" in
-      S)
-        if [ "$ch" = "'" ]; then state="N"; fi
-        out="${out} "
-        ;;
-      D)
-        # $( ... ) inside a double-quoted string is still CODE. Enter it in
-        # normal state so its command is matched, and remember to come back
-        # to D — otherwise the substitution's own quotes desync the outer one.
-        if [ "$ch" = '$' ] && [ "$nxt" = "(" ]; then
-          stack="D${stack}"
-          state="N"
-          out="${out}  "
-          prev="("
-          i=$((i + 2))
-          continue
-        fi
-        if [ "$ch" = '"' ] && [ "$prev" != "\\" ]; then state="N"; fi
-        out="${out} "
-        ;;
-      N)
-        if [ "$ch" = '$' ] && [ "$nxt" = "(" ]; then
-          stack="N${stack}"
-          out="${out}  "
-          prev="("
-          i=$((i + 2))
-          continue
-        fi
-        case "$ch" in
-          "'") state="S"; out="${out} " ;;
-          '"') state="D"; out="${out} " ;;
-          ')')
-            if [ -n "$stack" ]; then
-              state="${stack:0:1}"
-              stack="${stack:1}"
-              out="${out} "
-            else
-              out="${out}${ch}"
-            fi
-            ;;
-          *) out="${out}${ch}" ;;
-        esac
-        ;;
-    esac
-    prev="$ch"
-    i=$((i + 1))
+  local bs=0             # 1: the last run ended in `\`
+  local c1="'" c2='"' c3='$' c4=')' p1 p2 p3 run d1 d2 d3 d cut
+  local noglob=1 IFS
+  case "$-" in *f*) ;; *) noglob=0; set -f ;; esac
+  IFS="$c1"; d1=""
+  for p1 in $1$c1; do
+    IFS="$c2"; d2="$d1"
+    for p2 in $p1$c2; do
+      IFS="$c3"; d3="$d2"
+      for p3 in $p2$c3; do
+        IFS="$c4"; d="$d3"
+        for run in $p3$c4; do
+          cut=" "
+          case "$state$d" in
+            N|S|D) cut="" ;;
+            S\') state="N" ;;
+            D\") [ "$bs" -eq 1 ] || state="N" ;;
+            N\') state="S" ;;
+            N\") state="D" ;;
+            N\$|D\$)
+              case "$run" in
+                "("*)
+                  stack="${state}${stack}"
+                  state="N"
+                  cut="  "
+                  run="${run#?}"
+                  ;;
+                *) [ "$state" = "D" ] || cut='$' ;;
+              esac
+              ;;
+            N\))
+              if [ -n "$stack" ]; then
+                state="${stack:0:1}"
+                stack="${stack:1}"
+              else
+                cut=")"
+              fi
+              ;;
+          esac
+          if [ "$state" = "N" ]; then
+            printf '%s%s' "$cut" "$run"
+          else
+            printf '%s%*s' "$cut" "${#run}" ''
+          fi
+          case "$run" in *\\) bs=1 ;; *) bs=0 ;; esac
+          d="$c4"
+        done
+        d3="$c3"
+      done
+      d2="$c2"
+    done
+    d1="$c1"
   done
-  printf '%s' "$out"
+  [ "$noglob" -eq 1 ] || set +f
 }
 
 # _strip_heredocs <command>
@@ -458,21 +490,23 @@ _strip_quoted() {
 #   Not stripped: `<<<` here-strings — those are single-line and _strip_quoted
 #   already handles their quoting.
 #
+#   Linear (spec 021 T1.5): each line is printed as it is read instead of
+#   being appended to a growing result, which copied the whole result on
+#   every line.
+#
 #   bash 3.2 compatible: read loop, no mapfile.
 _strip_heredocs() {
-  local cmd="$1"
-  local out="" NL line rest delim="" trimmed
-  NL=$'\n'
+  local line rest delim="" trimmed
   while IFS= read -r line; do
     if [ -n "$delim" ]; then
       trimmed="${line#"${line%%[![:space:]]*}"}"
       if [ "$line" = "$delim" ] || [ "$trimmed" = "$delim" ]; then
         delim=""
       fi
-      out="${out}${NL}"
+      printf '\n'
       continue
     fi
-    out="${out}${line}${NL}"
+    printf '%s\n' "$line"
     case "$line" in
       *"<<"*)
         rest="${line#*<<}"
@@ -494,8 +528,7 @@ _strip_heredocs() {
         delim="${delim//\"/}"
         ;;
     esac
-  done <<< "$cmd"
-  printf '%s' "$out"
+  done <<< "$1"
 }
 
 # _has_shell_executor <stripped-command>
@@ -519,8 +552,8 @@ _has_shell_executor() {
 #        so their content stays in scope and only their quoting is stripped;
 #     2. shell separators (&&, ||, |, ;, &) normalized to newlines so an
 #        unbounded `.*` in a pattern cannot bridge across into a sibling command.
-#   Compute ONCE per hook invocation and reuse across patterns (the char-by-char
-#   _strip_quoted is the only O(n) step; do it once, not per pattern — CON-2).
+#   Compute ONCE per hook invocation and reuse across patterns (the stripping is the
+#   only step that walks the whole command; do it once, not per pattern — CON-2).
 #
 #   Separator order matters: two-char operators (&&, ||) FIRST, else `&`/`|`
 #   would half-consume them. bash 3.2 compatible.
