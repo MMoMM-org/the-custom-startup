@@ -1065,14 +1065,14 @@ def _firing_event(record: dict, dispatch_names: dict[str, set[str]]) -> FiringEv
     session = _session_of(record)
     if kind == "skill":
         route = record.get("route", "tool")
-        if route not in _SKILL_ROUTES:
+        if not isinstance(route, str) or route not in _SKILL_ROUTES:
             return None
         return _named_event("skill", record.get("skill"), route, session)
     if kind == "dispatch":
         return _named_event("agent", record.get("subagent_type"), "dispatch", session)
     if kind == "agent":
         agent_type = record.get("agent_type")
-        if agent_type in dispatch_names.get(session, ()):
+        if isinstance(agent_type, str) and agent_type in dispatch_names.get(session, ()):
             return None
         return _named_event("agent", agent_type, "start", session)
     return None
@@ -1179,7 +1179,7 @@ def _exact_only_pairs(route_counts: RouteCounts | None) -> set[tuple[str, str]]:
     F1 AC5) -- a custom command `/test` arrives as `test`."""
     if route_counts is None:
         return set()
-    return {pair for pair, counts in route_counts.items() if set(+counts) == {"typed"}}
+    return {pair for pair, counts in route_counts.items() if set(counts) == {"typed"}}
 
 
 def _uncreditable_pairs(
@@ -1195,7 +1195,7 @@ def _uncreditable_pairs(
         for kind, name in unresolved
         if kind == "agent"
         and name not in BUILTIN_AGENT_TYPES
-        and set(+route_counts.get((kind, name), Counter())) == {"start"}
+        and set(route_counts.get((kind, name), {})) == {"start"}
     }
 
 
@@ -1223,6 +1223,16 @@ def _matching_keys(
     return keys
 
 
+def _credited_counts(entry: InventoryEntry, key: tuple[str, str], route_counts: RouteCounts) -> Counter:
+    """What `key` contributes to `entry`'s route split. Only the qualified key
+    carries typed counts: a typed record naming the bare form never counts
+    (ADR-7), so a bare key credited by a tool record yields its tool count."""
+    counts = route_counts.get(key, Counter())
+    if key == (entry.kind, entry.qualified):
+        return counts
+    return Counter({"tool": counts["tool"]})
+
+
 def _skill_route_rows(
     keys_by_entry: Sequence[tuple[InventoryEntry, list[tuple[str, str]]]], route_counts: RouteCounts | None
 ) -> tuple[tuple[str, tuple[tuple[str, int], ...]], ...]:
@@ -1233,7 +1243,7 @@ def _skill_route_rows(
     for entry, keys in sorted(keys_by_entry, key=lambda item: item[0].qualified):
         if entry.kind != "skill" or not keys:
             continue
-        total = sum((route_counts.get(key, Counter()) for key in keys), Counter())
+        total = sum((_credited_counts(entry, key, route_counts) for key in keys), Counter())
         rows.append((entry.qualified, tuple((route, total[route]) for route in ("tool", "typed"))))
     return tuple(rows)
 

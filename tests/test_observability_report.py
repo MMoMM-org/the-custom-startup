@@ -3378,6 +3378,36 @@ def test_tool_record_keeps_the_bare_name_fallback_when_a_typed_record_shares_the
     assert coverage.unmatched_record_names == []
 
 
+def test_typed_count_of_a_bare_name_is_not_credited_beside_a_tool_record():
+    """ADR-7: a typed record whose skill is not the qualified name never
+    counts -- not even in the route split of an entry a tool record credits
+    through the bare-name fallback."""
+    test_skill = report.InventoryEntry(qualified="tcs-workflow:test", bare="test", kind="skill")
+    records = [_routed_skill_record("test", "typed"), _routed_skill_record("test", "tool")]
+
+    coverage = report.firing_coverage(
+        [test_skill], report.fired_names(records), report.firing_route_counts(report.firing_events(records))
+    )
+
+    assert coverage.skill_routes == (("tcs-workflow:test", (("tool", 1), ("typed", 0))),)
+
+
+def test_unhashable_route_on_a_skill_record_yields_no_firing():
+    record = _routed_skill_record("tcs-workflow:test", "tool")
+    record["route"] = ["tool"]
+
+    assert report.firing_events([record]) == []
+
+
+def test_unhashable_agent_type_beside_a_dispatch_name_yields_no_firing():
+    start = _agent_record("worker")
+    start["agent_type"] = ["worker"]
+
+    assert report.firing_events([_dispatch_record("general-purpose", name="worker"), start]) == [
+        report.FiringEvent("agent", "general-purpose", "dispatch", "s1")
+    ]
+
+
 def test_typed_bare_name_shared_by_two_entries_is_not_in_inventory_rather_than_ambiguous():
     """A typed bare name cannot be attributed by bare name at all, so it is
     not an ambiguous inventory name either -- it is not in the inventory."""
