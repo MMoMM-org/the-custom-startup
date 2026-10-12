@@ -33,7 +33,7 @@ NONCE = "n1234567x99"
 
 RECORD_CHECKS = (
     "_check_typed _check_tool_skill _check_dispatch _check_subagent_git "
-    "_check_reset _check_stash _check_unknown _check_privacy _check_isolation"
+    "_check_reset _check_stash _check_main_git _check_unknown _check_privacy _check_isolation"
 )
 
 
@@ -148,6 +148,9 @@ MUTANTS = {
     "reset override_first lost": (
         lambda rs: _edit(rs, SID_R3, {"subcommand": "reset"}, override_first=""), "S4 reset"),
     "reset by a subagent": (lambda rs: _edit(rs, SID_R3, {"subcommand": "reset"}, caller="subagent"), "S4 reset"),
+    "main session ran an unexpected git subcommand": (
+        lambda rs: _edit(rs, SID_R3, {"subcommand": "stash", "action": ""}, subcommand="checkout"),
+        "S5a main-session git"),
     "stash pop lost its action": (lambda rs: _edit(rs, SID_R3, {"action": "pop"}, action=""), "S5 stash"),
     "unknown command recorded": (_typed_in_unknown_session, "S6 /nonexistent-skill"),
     "nonce leaked": (_leak(f"-m {NONCE}"), "S7 privacy"),

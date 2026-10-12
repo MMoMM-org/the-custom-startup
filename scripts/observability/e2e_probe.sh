@@ -276,6 +276,14 @@ _check_stash() {
   rc=$?; _check "S5 stash: plain stash with empty action, then action pop" "$rc" "$recs"
 }
 
+_check_main_git() {
+  local recs bad
+  recs="$(_recs "$SID_R3" '.kind == "git"')"
+  bad="$(_recs "$SID_R3" '.kind == "git" and .subcommand != "stash" and .subcommand != "reset"')"
+  [ -n "$recs" ] && [ -z "$bad" ]
+  rc=$?; _check "S5a main-session git: only stash or reset" "$rc" "$bad"
+}
+
 _check_unknown() {
   local recs
   recs="$(_recs "$SID_R2" '.kind == "skill"')"
@@ -353,20 +361,33 @@ _check_no_leftovers() {
 }
 
 _manual_step() {
-  cat <<'EOF'
+  if [ "$KEEP" != "1" ]; then
+    _say ""
+    _say "MANUAL STEP (interactive subagent name) needs the scratch repo: re-run with --keep."
+    return 0
+  fi
+  cat <<EOF
 
 MANUAL STEP (not automated; record the result in the PR):
-  1. In a repository registered with `observability-setup install`, start an
-     INTERACTIVE `claude` session (not -p) and ask it to dispatch one named
-     subagent, e.g.: "Use the Agent tool with subagent_type general-purpose
-     and name probe-166 to run `git status` and reply done."
-  2. In that repo's events.jsonl, look for the session's two new records:
+  The scratch repo is registered with the NEW (h2) bundle. A repository on the
+  older registration (matcher Skill / log_skill.sh) records no dispatch, so
+  do this here, not in your own repository.
+  1. Start an INTERACTIVE \`claude\` (not -p) in the kept scratch repo:
+       cd "$REPO" && CLAUDE_OBSERVABILITY_DATA="$DATA" claude
+     and ask it: "Use the Agent tool with subagent_type general-purpose and
+     name probe-166 to run \`git status\` and reply done."
+  2. In $EVENTS
+     look for the session's two new records:
        kind: dispatch  subagent_type general-purpose, name probe-166
        kind: agent     agent_type probe-166  (SubagentStart carries the SPAWN
                        NAME interactively; headless runs carry the type)
-  3. Run scripts/observability/report.py: general-purpose is credited through
-     the dispatch, and probe-166 must NOT appear under "uncreditable" -- the
-     report dedupes the agent record against the dispatch name.
+  3. Run:
+       python3 scripts/observability/report.py --events "$EVENTS" --repo-root "$_REPO_ROOT"
+     general-purpose must be credited through the dispatch, and probe-166 must
+     NOT appear under "uncreditable" (the report dedupes the agent record
+     against the dispatch name).
+  4. Remove the scratch dir afterwards:
+       rm -rf "$SCRATCH"
 EOF
 }
 
@@ -382,7 +403,7 @@ main() {
   _run_all
   [ -s "$EVENTS" ] || _die 1 "no events.jsonl was written at all -- the registration did not fire"
   _check_typed; _check_tool_skill; _check_dispatch; _check_subagent_git
-  _check_reset; _check_stash; _check_unknown; _check_privacy; _check_isolation
+  _check_reset; _check_stash; _check_main_git; _check_unknown; _check_privacy; _check_isolation
   _check_report; _check_no_leftovers
   _say ""
   _say "claude runs: $RUNS (model $MODEL); failures: $FAILURES"
