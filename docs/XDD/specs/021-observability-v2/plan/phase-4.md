@@ -32,7 +32,7 @@ phase: 4
 
 Makes the report credit every route and dispatch correctly and show git activity by caller.
 
-- [ ] **T4.1 Firings: routes, dispatches, dedupe, legacy caveat** `[activity: backend]`
+- [x] **T4.1 Firings: routes, dispatches, dedupe, legacy caveat** `[activity: backend]`
 
   1. Prime: report shape and dedupe trace `[ref: SDD/Runtime View/Complex Logic]`; current `fired_names` and its callers
   2. Test: `firing_events` on the SDD's traced session yields exactly the table's outcomes; tool and typed records for one skill both count and the route counts render; a pre-h2 `skill` record without `route` counts as `tool`; a typed `test` (bare) is not a skill firing while a typed `tcs-issues:issue` is; a dispatch with empty `subagent_type` yields nothing; a named dispatch credits its `subagent_type` and its SubagentStart record adds nothing; an agent record with a spawn-shaped name and no dispatch is listed as uncreditable and not counted; built-ins are not called uncreditable; single- and multi-source coverage figures for a fixture equal hand-derived values; `union_fired_names` unchanged for records without new kinds (existing tests stay green)
