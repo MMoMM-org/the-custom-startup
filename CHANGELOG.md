@@ -22,8 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `observability-setup` calls a repository with only some of the hooks `OURS-INCOMPLETE`.
   **What to do:** after updating tcs-helper, run `/tcs-helper:observability-setup install` in
   every repository that records; nothing new is recorded there until you do.
-  Not covered: git calls made through `xargs`, `find -exec` or a script file are not recognised,
-  and an interactive spawn name is recorded once, not twice.
+  Not covered: git calls made through `xargs`, `find -exec` or a script file are not recognised.
+  An interactively named subagent is credited once, through its dispatch; the report dedupes the
+  spawn-name record.
 
 ### Changed
 

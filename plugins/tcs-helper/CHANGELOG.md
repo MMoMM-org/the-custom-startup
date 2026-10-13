@@ -35,8 +35,9 @@
 ### Changed
 
 - **The record file is now owner-only: directories `0700`, `events.jsonl` `0600`.** Recording
-  commands raises how sensitive the file is, so the writer tightens modes on every write, including
-  on a file an earlier version created.
+  commands raises how sensitive the file is. The writer creates missing directories and files
+  owner-only and appends to existing ones; `observability-setup install` tightens ones an earlier
+  version created.
 - **`args` is on the reduced-mode deny list.** It was an open spec-018 recommendation.
 - **The observability bundle marker moves to `h2`** (a different marker from the rule-enforcer
   one below). Installs from before this release read as outdated.
