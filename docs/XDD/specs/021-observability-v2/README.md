@@ -5,9 +5,9 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-10-11 |
-| **Current Phase** | Ready |
+| **Current Phase** | Implemented |
 | **Decomposition tier** | Incremental |
-| **Last Updated** | 2026-10-12 |
+| **Last Updated** | 2026-10-13 |
 
 ## Documents
 
@@ -61,6 +61,7 @@
 | 2026-10-12 | T5.1 validation: the `*git*`-only mutant is caught by "a gh command still reaches jq", not by the `gh api` deny test | Every `gh api` deny pattern contains `git/refs`, so that test cannot fail under the mutant. Perf warm-up runs inside the test (run 0 discarded), not in `setup()`, matching the SDD's "median of 20 after one warm-up". |
 | 2026-10-12 | E2E probe (`scripts/observability/e2e_probe.sh`) commits with `probe-msg-<nonce>`, not `x` | A one-letter message cannot be searched for in the privacy scan. Probe passed 19/19 live three times; the interactive named dispatch (manual step, Marcus) recorded `dispatch name=probe-166` and `agent agent_type=probe-166`, deduped by the report. |
 | 2026-10-12 | Release: tcs-helper 4.4.0 (feature), tcs-git-helpers 2.2.39 (patch); `plugin.json` left to the auto-bump on merge | Versions come from the top CHANGELOG heading (`auto-bump-versions.sh`). `origin/main` merged into the branch (Marcus) so the changelog-sync gate sees the bot's 2.2.38. |
+| 2026-10-13 | Implementation complete | PR #218 squash-merged as `fa152c8`; auto-bump `64a143a` released tcs-helper 4.4.0 and tcs-git-helpers 2.2.39; closed #165, #166, #172. |
 
 ## Context
 
