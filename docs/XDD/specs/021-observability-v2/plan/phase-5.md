@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Guard fast path and end-to-end validation"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 5
 ---
@@ -54,6 +54,6 @@ Removes the guard's per-call cost on non-git commands, then proves the whole fea
   4. Validate: all green locally; CI green on the PR
   5. Success: every PRD acceptance criterion of F1–F7 is checked off in requirements.md with the task that proved it (F8 deferred); the Adoption, Engagement and Business Impact metrics are post-release and manual — noted in the PR, not gated
 
-- [ ] **T5.4 Phase Validation** `[activity: validate]`
+- [x] **T5.4 Phase Validation** `[activity: validate]`
 
   - Confirm the plan's traceability table holds against the merged tests; run xdd-meta finalize after merge.

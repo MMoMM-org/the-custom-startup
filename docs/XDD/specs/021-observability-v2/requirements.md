@@ -194,20 +194,20 @@ again be unattributable.
   model chose, so that "never fired" means never fired.
 - **Acceptance Criteria:**
   - [x] Given recording is on, When the user types `/<plugin>:<skill>` and it resolves to a skill,
-    - Proven by T2.3: `plugins/tcs-helper/tests/bats/observability-expansion.bats::expansion: slash_command with args yields one typed skill record`
     Then one skill record is written naming that skill and the route `typed`
+    - Proven by T2.3: `plugins/tcs-helper/tests/bats/observability-expansion.bats::expansion: slash_command with args yields one typed skill record`
   - [x] Given recording is on, When the model invokes a skill through the skill tool, Then its
-    - Proven by T2.1: `plugins/tcs-helper/tests/bats/observability-tool.bats::Skill payload writes one skill record with route tool`
     record carries the route `tool`
+    - Proven by T2.1: `plugins/tcs-helper/tests/bats/observability-tool.bats::Skill payload writes one skill record with route tool`
   - [x] Given a typed invocation with arguments, When it is recorded, Then the record says that
-    - Proven by T2.3: `plugins/tcs-helper/tests/bats/observability-expansion.bats::expansion: args and prompt text never reach the record in reduced mode`; `plugins/tcs-helper/tests/bats/observability-expansion.bats::expansion: args and prompt text never reach the record in detail mode`
     arguments were present and never contains their text, in reduced and in detail mode
+    - Proven by T2.3: `plugins/tcs-helper/tests/bats/observability-expansion.bats::expansion: args and prompt text never reach the record in reduced mode`; `plugins/tcs-helper/tests/bats/observability-expansion.bats::expansion: args and prompt text never reach the record in detail mode`
   - [x] Given a typed command that does not resolve to anything, When it is submitted, Then no
-    - Proven by T2.3: `plugins/tcs-helper/tests/bats/observability-expansion.bats::expansion: a missing or empty command_name records nothing (control does)`; `plugins/tcs-helper/tests/bats/observability-expansion.bats::expansion: an unknown expansion_type or a missing one records nothing`
     skill record is written
+    - Proven by T2.3: `plugins/tcs-helper/tests/bats/observability-expansion.bats::expansion: a missing or empty command_name records nothing (control does)`; `plugins/tcs-helper/tests/bats/observability-expansion.bats::expansion: an unknown expansion_type or a missing one records nothing`
   - [x] Given a typed command that resolves to something other than a skill (a custom command, an
-    - Proven by T4.1: `tests/test_observability_report.py::test_typed_bare_name_is_not_a_skill_firing_while_typed_qualified_name_is`; `plugins/tcs-helper/tests/bats/observability-expansion.bats::expansion: mcp_prompt records nothing (a slash_command control does)`
     MCP prompt), When it runs, Then it is not counted as a skill firing
+    - Proven by T4.1: `tests/test_observability_report.py::test_typed_bare_name_is_not_a_skill_firing_while_typed_qualified_name_is`; `plugins/tcs-helper/tests/bats/observability-expansion.bats::expansion: mcp_prompt records nothing (a slash_command control does)`
 
 #### Feature 2: Subagent dispatches are recorded with their type (#166)
 
@@ -215,18 +215,18 @@ again be unattributable.
   type that ran, so that a named dispatch counts for the agent it actually was.
 - **Acceptance Criteria:**
   - [x] Given recording is on, When a subagent is dispatched with a name in an interactive session,
-    - Proven by T2.1: `plugins/tcs-helper/tests/bats/observability-tool.bats::named Agent payload writes a dispatch record from the main session`
     Then a dispatch record names both the type and the given name
+    - Proven by T2.1: `plugins/tcs-helper/tests/bats/observability-tool.bats::named Agent payload writes a dispatch record from the main session`
   - [x] Given recording is on, When a subagent is dispatched without a name, Then the dispatch
-    - Proven by T2.1: `plugins/tcs-helper/tests/bats/observability-tool.bats::unnamed Agent payload writes name as empty string`
     record names its type
+    - Proven by T2.1: `plugins/tcs-helper/tests/bats/observability-tool.bats::unnamed Agent payload writes name as empty string`
   - [x] Given a dispatch record and the later subagent-start record for the same subagent, When the
-    - Proven by T4.1: `tests/test_observability_report.py::test_named_dispatch_credits_its_subagent_type_and_its_subagent_start_adds_nothing`
     report reads them, Then it counts one firing for the type, not one for the type and one for the
     name
+    - Proven by T4.1: `tests/test_observability_report.py::test_named_dispatch_credits_its_subagent_type_and_its_subagent_start_adds_nothing`
   - [x] Given a dispatch, When it is recorded, Then the task prompt is never recorded and the
-    - Proven by T2.1: `plugins/tcs-helper/tests/bats/observability-tool.bats::description appears only with detail on, prompt never`
     description is recorded only in detail mode
+    - Proven by T2.1: `plugins/tcs-helper/tests/bats/observability-tool.bats::description appears only with detail on, prompt never`
 
 #### Feature 3: Git commands that change a repository are attributed (#172)
 
@@ -234,32 +234,32 @@ again be unattributable.
   repository recorded with who attempted it, so that a destructive operation names its actor.
 - **Acceptance Criteria:**
   - [x] Given recording is on, When a session runs a git command that is not on the read-only list,
-    - Proven by T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: git reset --hard from the main session writes one git record`
     Then one record names the git subcommand, the flag names used and the session
-  - [x] Given the command runs inside a subagent, When it is recorded, Then the record also names
-    - Proven by T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: inside a subagent the record names caller subagent, its type and id`
-    the agent's type and identity
-  - [x] Given the command runs in the main session, When it is recorded, Then the record says so
     - Proven by T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: git reset --hard from the main session writes one git record`
+  - [x] Given the command runs inside a subagent, When it is recorded, Then the record also names
+    the agent's type and identity
+    - Proven by T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: inside a subagent the record names caller subagent, its type and id`
+  - [x] Given the command runs in the main session, When it is recorded, Then the record says so
     rather than leaving the agent fields ambiguous
+    - Proven by T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: git reset --hard from the main session writes one git record`
   - [x] Given a command carrying a guard override token, When it is recorded, Then the record
-    - Proven by T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: an override is named, first position recorded, value never`
     names each override and whether it stood in first position, and never records its value
+    - Proven by T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: an override is named, first position recorded, value never`
   - [x] Given a command a guard then refuses, When it was attempted, Then it is still recorded
     - Proven by T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: a guard-denied git reset --hard is still recorded (hooks run side by side)`
   - [x] Given a read-only git command (`status`, `log`, `diff`, `show`, and the rest of the list),
-    - Proven by T1.3, T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::read-only: every always-read-only subcommand records nothing, with any flags`; `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: git status alone writes nothing`
     When it runs, Then nothing is recorded
+    - Proven by T1.3, T1.5, T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::read-only: every always-read-only subcommand records nothing, with any flags`; `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: git status alone writes nothing`
   - [x] Given a git subcommand not on the read-only list, including one nobody anticipated, When it
-    - Proven by T1.3, T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::unknown subcommand is recorded as ? (fail closed, closed list)`; `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: an unknown subcommand is recorded as ? with its flags`
     runs, Then it is recorded
+    - Proven by T1.3, T1.5, T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::unknown subcommand is recorded as ? (fail closed, closed list)`; `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: an unknown subcommand is recorded as ? with its flags`
   - [x] Given a command line with values (tokens in assignments, credentials in URLs, header values,
-    - Proven by T1.3, T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::secrets corpus: no value reaches any record`; `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: the secrets corpus leaves no value in events.jsonl, reduced or detail`
     messages, paths), When it is recorded, Then none of those values appear in the record, in
     reduced or detail mode
+    - Proven by T1.3, T1.5, T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::secrets corpus: no value reaches any record`; `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: the secrets corpus leaves no value in events.jsonl, reduced or detail`
   - [x] Given a compound command with several git invocations, When it runs, Then each one that is
-    - Proven by T1.3, T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: a compound command with three git calls, one read-only, writes two records`
     not read-only is recorded
+    - Proven by T1.3, T1.5, T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: a compound command with three git calls, one read-only, writes two records`
   - [x] Given a non-git command, When it runs, Then nothing is recorded
     - Proven by T2.2: `plugins/tcs-helper/tests/bats/observability-git.bats::e2e: a command naming git without running it writes nothing`; `plugins/tcs-helper/tests/bats/observability-tool.bats::non-git Bash payload writes nothing and sources nothing`
 
@@ -270,20 +270,20 @@ again be unattributable.
   correction.
 - **Acceptance Criteria:**
   - [x] Given typed and tool-route skill records, When coverage is computed, Then both count toward
-    - Proven by T4.1: `tests/test_observability_report.py::test_tool_and_typed_records_for_one_skill_both_count_and_route_counts_render`
     the skill and the report can show the route split
+    - Proven by T4.1: `tests/test_observability_report.py::test_tool_and_typed_records_for_one_skill_both_count_and_route_counts_render`
   - [x] Given a named dispatch, When coverage is computed, Then it counts for its type
     - Proven by T4.1: `tests/test_observability_report.py::test_named_dispatch_credits_its_subagent_type_and_its_subagent_start_adds_nothing`
   - [x] Given git records, When the report runs, Then it lists them by session and agent, with the
-    - Proven by T4.2: `tests/test_observability_report.py::test_git_records_render_grouped_by_session_then_caller`; `tests/test_observability_report.py::test_git_overrides_mark_override_first_and_name_one_set_on_another_clause`
     subcommand and any overrides
+    - Proven by T4.2: `tests/test_observability_report.py::test_git_records_render_grouped_by_session_then_caller`; `tests/test_observability_report.py::test_git_overrides_mark_override_first_and_name_one_set_on_another_clause`
   - [x] Given records written before this change (no route, spawn names in place of types), When
-    - Proven by T4.1: `tests/test_observability_report.py::test_spawn_name_agent_record_without_dispatch_is_listed_uncreditable_and_not_counted`
     the report runs, Then it states that those records cannot be credited by type rather than
     inventing an attribution
+    - Proven by T4.1: `tests/test_observability_report.py::test_spawn_name_agent_record_without_dispatch_is_listed_uncreditable_and_not_counted`
   - [x] Given a repository with no git records, When the report runs, Then it says no git activity
-    - Proven by T4.2: `tests/test_observability_report.py::test_source_without_git_records_says_none_recorded_and_that_this_is_not_proof`
     was recorded and does not imply none happened
+    - Proven by T4.2: `tests/test_observability_report.py::test_source_without_git_records_says_none_recorded_and_that_this_is_not_proof`
 
 #### Feature 5: Registered repositories update without losing recording
 
@@ -292,20 +292,20 @@ again be unattributable.
   the old registration.
 - **Acceptance Criteria:**
   - [x] Given a repository registered by the previous version, When setup runs, Then the new hooks
-    - Proven by T3.2: `tests/tcs-helper/test_observability_registration.py::test_an_h1_registration_is_updated_in_place_and_the_new_event_added`; `plugins/tcs-helper/tests/bats/observability-registration-matrix.bats::an h1 registration: setup rewrites PreToolUse in place and adds UserPromptExpansion; a second run changes nothing; removal takes all four`
     are added and every existing hook keeps working
+    - Proven by T3.2: `tests/tcs-helper/test_observability_registration.py::test_an_h1_registration_is_updated_in_place_and_the_new_event_added`; `plugins/tcs-helper/tests/bats/observability-registration-matrix.bats::an h1 registration: setup rewrites PreToolUse in place and adds UserPromptExpansion; a second run changes nothing; removal takes all four`
   - [x] Given setup has already run, When it runs again, Then exactly one entry of ours remains per
-    - Proven by T3.1, T3.2: `tests/tcs-helper/test_observability_registration.py::test_a_second_run_over_an_updated_h1_registration_changes_nothing`; `plugins/tcs-helper/tests/bats/observability-setup.bats::install over an h1 registration updates it in place; a second install changes nothing`
     registered event, none duplicated, and every foreign entry is untouched
+    - Proven by T3.1, T3.2: `tests/tcs-helper/test_observability_registration.py::test_a_second_run_over_an_updated_h1_registration_changes_nothing`; `plugins/tcs-helper/tests/bats/observability-setup.bats::install over an h1 registration updates it in place; a second install changes nothing`
   - [x] Given the shared bundle is current but a repository's registration lacks a new hook, When
-    - Proven by T3.1: `plugins/tcs-helper/tests/bats/observability-detect.bats::an h1 registration with the bundle marker current: OURS-INCOMPLETE, exit 4, naming each outdated and missing entry`; `plugins/tcs-helper/tests/bats/observability-setup.bats::status shows an h1 registration under a current bundle as ours and outdated, never not configured`
     the status is checked for that repository, Then it reports the repository as outdated and names
     what is missing
+    - Proven by T3.1: `plugins/tcs-helper/tests/bats/observability-detect.bats::an h1 registration with the bundle marker current: OURS-INCOMPLETE, exit 4, naming each outdated and missing entry`; `plugins/tcs-helper/tests/bats/observability-setup.bats::status shows an h1 registration under a current bundle as ours and outdated, never not configured`
   - [x] Given a foreign hook on the same event, When setup runs, Then it is left untouched
     - Proven by T3.1, T3.2: `tests/tcs-helper/test_observability_registration.py::test_foreign_entries_survive_both_runs_over_an_h1_registration`; `plugins/tcs-helper/tests/bats/observability-setup.bats::a foreign UserPromptExpansion hook beside an h1 registration does not stop install, and survives it`
   - [x] Given setup is removed from a repository, When removal runs, Then every hook of ours is
-    - Proven by T3.2: `tests/tcs-helper/test_observability_registration.py::test_removal_takes_every_entry_of_ours_across_all_four_events`; `plugins/tcs-helper/tests/bats/observability-setup.bats::remove never deletes existing records`
     removed and recorded data is kept
+    - Proven by T3.2: `tests/tcs-helper/test_observability_registration.py::test_removal_takes_every_entry_of_ours_across_all_four_events`; `plugins/tcs-helper/tests/bats/observability-setup.bats::remove never deletes existing records`
 
 #### Feature 6: The record is protected at rest
 
@@ -313,14 +313,14 @@ again be unattributable.
   free of argument text, so that recording commands does not create a new exposure.
 - **Acceptance Criteria:**
   - [x] Given recording writes for the first time in a repository, When the file and its directory
-    - Proven by T1.1: `plugins/tcs-helper/tests/bats/observability-writer.bats::owner-only: a fresh data dir is created 0700 and events.jsonl 0600, even under umask 022`
     are created, Then only the owning user can read them
+    - Proven by T1.1: `plugins/tcs-helper/tests/bats/observability-writer.bats::owner-only: a fresh data dir is created 0700 and events.jsonl 0600, even under umask 022`
   - [x] Given an existing record file readable by others, When setup next runs for the repository,
-    - Proven by T3.2: `plugins/tcs-helper/tests/bats/observability-setup.bats::install tightens a 0644 events.jsonl and its rotation to 0600 and 0755 dirs to 0700, and nothing else`
     Then its permissions and its directory's are tightened to owner-only
+    - Proven by T3.2: `plugins/tcs-helper/tests/bats/observability-setup.bats::install tightens a 0644 events.jsonl and its rotation to 0600 and 0755 dirs to 0700, and nothing else`
   - [x] Given a skill invoked through the tool with arguments, When it is recorded in reduced mode,
-    - Proven by T1.1: `plugins/tcs-helper/tests/bats/observability-writer.bats::deny list: args, command_args, description, tool_input and command are dropped in reduced mode, record still written`; `plugins/tcs-helper/tests/bats/observability-tool.bats::Skill payload writes one skill record with route tool`
     Then the arguments are not in the record
+    - Proven by T1.1: `plugins/tcs-helper/tests/bats/observability-writer.bats::deny list: args, command_args, description, tool_input and command are dropped in reduced mode, record still written`; `plugins/tcs-helper/tests/bats/observability-tool.bats::Skill payload writes one skill record with route tool`
 
 ### Should Have Features
 
@@ -331,8 +331,8 @@ again be unattributable.
   make sessions slower than today.
 - **Acceptance Criteria:**
   - [x] Given a non-git command, When the guard runs, Then it allows it and adds at most 5 ms at the
-    - Proven by T5.1: `plugins/tcs-git-helpers/tests/bats/block-bad-git-ops.bats::perf: non-git fast path median under 5ms over 20 runs after warm-up`; `plugins/tcs-git-helpers/tests/bats/block-bad-git-ops.bats::fast path: non-git command allows with zero jq calls`
     median on macOS
+    - Proven by T5.1: `plugins/tcs-git-helpers/tests/bats/block-bad-git-ops.bats::perf: non-git fast path median under 5ms over 20 runs after warm-up`; `plugins/tcs-git-helpers/tests/bats/block-bad-git-ops.bats::fast path: non-git command allows with zero jq calls`
   - [x] Given any command the guard denies today, When it runs, Then the guard still denies it
     - Proven by T5.1: `plugins/tcs-git-helpers/tests/bats/block-bad-git-ops.bats::fast path: a git command still reaches jq and denies`; `plugins/tcs-git-helpers/tests/bats/block-bad-git-ops.bats::fast path: gh api ref DELETE in a real payload still denies`
 
