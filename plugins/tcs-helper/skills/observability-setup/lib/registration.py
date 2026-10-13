@@ -89,19 +89,30 @@ TEMP_SUFFIX = '.tcs-observability.tmp'
 # only ever created while this process holds the lock.
 
 
-# event -> (matcher, script). PreToolUse is matched to Skill alone; the other
-# two carry no matcher because their events fire once, not per tool.
-# PAIRED DEFINITION: detect.sh's OUR_EVENTS is these same three keys, and it
-# is what scopes a CONFLICT. Adding a fourth event HERE without adding it
-# there fails in the permissive direction -- a genuine collision under the new
-# event would classify CLEAN and setup would install beside a hook that fires
-# alongside ours. tests/tcs-helper/test_observability_cross_file_agreement.py
-# asserts the two sets are equal, so the drift is caught even by someone who
-# never reads this comment.
+# event -> (matcher, script). PreToolUse carries ONE entry for three tools,
+# dispatched by log_tool.sh (spec 021 ADR-1): add_registration below keeps
+# one entry of ours per event, so a second PreToolUse entry would be collapsed
+# into the first on every run. The other three carry no matcher because their
+# events fire once, not per tool. An h1 registration (PreToolUse "Skill" ->
+# log_skill.sh, no UserPromptExpansion) is brought forward by the ordinary
+# update path: the stale entry is replaced in place, the missing one appended.
+#
+# PAIRED DEFINITIONS in detect.sh, both pinned by
+# tests/tcs-helper/test_observability_cross_file_agreement.py:
+#   * OUR_EVENTS is these same keys, and it is what scopes a CONFLICT. Adding
+#     an event HERE without adding it there fails in the permissive direction
+#     -- a genuine collision under the new event would classify CLEAN and
+#     setup would install beside a hook that fires alongside ours.
+#   * EXPECTED is this whole mapping, and it is what a repository's own
+#     entries are judged against for OURS-INCOMPLETE (spec 021 ADR-5). If the
+#     two differ, every repository setup has just updated reads as incomplete.
+# Kept in alphabetical order: detect.sh names incomplete events in EXPECTED's
+# order, so both read the same way.
 REGISTRATION = {
     'InstructionsLoaded': ('', 'log_instructions.sh'),
-    'PreToolUse': ('Skill', 'log_skill.sh'),
+    'PreToolUse': ('Skill|Agent|Bash', 'log_tool.sh'),
     'SubagentStart': ('', 'log_agent.sh'),
+    'UserPromptExpansion': ('', 'log_expansion.sh'),
 }
 
 
@@ -121,7 +132,7 @@ def is_ours(command):
     file we do not own may carry a non-string "command", and `NAMESPACE in
     123` raises TypeError -- which no caller catches, so it reached the user
     as a traceback instead of the diagnosis this module's docstring promises.
-    remove_registration walks EVERY event, not only the three we register, so
+    remove_registration walks EVERY event, not only the four we register, so
     the guard has to live here rather than in a per-event validator. A
     non-string command is not ours; that is the whole answer.
     """
@@ -271,7 +282,7 @@ def add_registration(data):
     own event name -- stays exactly where it is.
     """
     # Same checks a caller may already have run through
-    # validate_registration_shape(); re-running them costs a walk of three
+    # validate_registration_shape(); re-running them costs a walk of four
     # event lists and keeps this function safe to call on its own.
     validate_registration_shape(data)
 
@@ -403,6 +414,13 @@ def remove_registration(data):
 # name we register AND the adapter script name we ship, and does NOT already
 # point at the $HOME bundle. Anything else in that file, including a foreign
 # entry under one of our event names, is left exactly where it is.
+#
+# FROZEN, NOT KEPT IN STEP WITH REGISTRATION. It describes a hand-made shape
+# that predates the $HOME bundle, so it names the scripts that shape used --
+# log_skill.sh, not log_tool.sh -- and no UserPromptExpansion, which it never
+# had. Its events stay a subset of REGISTRATION's (pinned by the cross-file
+# agreement test): a migration removes legacy entries only under events it
+# then registers.
 LEGACY_SCRIPTS = {
     'InstructionsLoaded': 'log_instructions.sh',
     'PreToolUse': 'log_skill.sh',

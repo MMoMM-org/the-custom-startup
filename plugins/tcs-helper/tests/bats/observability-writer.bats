@@ -8,6 +8,8 @@
 # later task in the same plan; this suite must not assume they exist yet.
 
 bats_require_minimum_version 1.5.0
+
+load 'lib/assert'
 #
 # The resolver under test lives in .claude/observability/logwrite.sh, which is
 # untracked by design: `.claude/` is gitignored wholesale in this repo (see
@@ -1899,4 +1901,396 @@ with open('$out', 'w') as f:
     printf 'without: %s\nwith:    %s\n' "$a" "$b" >&2
     return 1
   fi
+}
+
+# ---------------------------------------------------------------------------
+# 27. Spec 021 F6 — owner-only creation and deny-list backstop
+# ---------------------------------------------------------------------------
+
+# Octal mode of $1, on both BSD (macOS) and GNU (ubuntu) stat. GNU first:
+# GNU `stat -f` means --file-system and prints junk on stdout before failing.
+_mode_of() {
+  stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
+}
+
+# One write, with the caller's umask set to $2; prints "<umask before>
+# <umask after>". $3 optionally names extra fields; $4 sets DETAIL.
+_write_under_umask() {
+  local data_dir="$1" mask="$2"
+  bash -c '
+    data_dir="$1"; repo="$2"; writer="$3"; mask="$4"
+    cd "$repo" || exit 90
+    . "$writer" || exit 91
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    umask "$mask"
+    before="$(umask)"
+    _observability_write kind=hook session=sess-mode
+    printf "%s %s\n" "$before" "$(umask)"
+  ' _ "$data_dir" "$REPO" "$WRITER" "$mask"
+}
+
+@test "owner-only: a fresh data dir is created 0700 and events.jsonl 0600, even under umask 022" {
+  local data_dir="$TEST_DIR/f6_modes/deep"
+  run _write_under_umask "$data_dir" 022
+  [ "$status" -eq 0 ]
+  [ "$(_mode_of "$data_dir/observability")" = "700" ] || return 1
+  [ "$(_mode_of "$data_dir/observability/events.jsonl")" = "600" ] || return 1
+}
+
+@test "owner-only: the caller's umask is unchanged after a write" {
+  run _write_under_umask "$TEST_DIR/f6_umask" 022
+  [ "$status" -eq 0 ]
+  [ "$output" = "0022 0022" ] || [ "$output" = "022 022" ] || return 1
+}
+
+@test "owner-only: the caller's umask is restored when mkdir fails" {
+  # root ignores chmod 500, so mkdir would succeed and nothing is exercised.
+  [ "$(id -u)" -ne 0 ] || skip "root bypasses directory permissions"
+  local parent="$TEST_DIR/f6_umask_fail"
+  mkdir -p "$parent"
+  chmod 500 "$parent"
+  run _write_under_umask "$parent/child" 022
+  chmod 700 "$parent"
+  [ "$status" -eq 0 ]
+  [ "$output" = "0022 0022" ] || [ "$output" = "022 022" ] || return 1
+}
+
+# Writes args/command_args/description/tool_input (plus a named control),
+# with DETAIL=$2, and prints the record.
+_write_backstop() {
+  local data_dir="$1" detail="$2"
+  bash -c '
+    data_dir="$1"; repo="$2"; writer="$3"; detail="$4"
+    cd "$repo" || exit 90
+    . "$writer" || exit 91
+    export CLAUDE_OBSERVABILITY_ENABLED=1
+    export CLAUDE_OBSERVABILITY_DATA="$data_dir"
+    [ "$detail" = "1" ] && export CLAUDE_OBSERVABILITY_DETAIL=1
+    # Unprefixed description is the backstop case, so it is only sent in
+    # reduced mode; with detail on, only the prefixed one is under test.
+    extra=description=DESCCANARY
+    [ "$detail" = "1" ] && extra=detail:description=DETAILDESC
+    _observability_write kind=hook session=sess-bs args=ARGSCANARY \
+      command_args=CMDARGSCANARY "$extra" \
+      tool_input=TOOLINPUTCANARY command=COMMANDCANARY tool=Bash
+  ' _ "$data_dir" "$REPO" "$WRITER" "$detail"
+  cat "$data_dir/observability/events.jsonl"
+}
+
+@test "deny list: args, command_args, description, tool_input and command are dropped in reduced mode, record still written" {
+  run _write_backstop "$TEST_DIR/f6_reduced" 0
+  [ "$status" -eq 0 ]
+  local canary
+  for canary in ARGSCANARY CMDARGSCANARY DESCCANARY TOOLINPUTCANARY COMMANDCANARY DETAILDESC; do
+    case "$output" in
+      *"$canary"*) printf 'leaked: %s\n%s\n' "$canary" "$output" >&2; return 1 ;;
+    esac
+  done
+  case "$output" in
+    *'"tool":"Bash"'*) : ;;
+    *) printf 'record missing control field: %s\n' "$output" >&2; return 1 ;;
+  esac
+}
+
+@test "deny list: with detail on, detail:description survives" {
+  run _write_backstop "$TEST_DIR/f6_detail" 1
+  [ "$status" -eq 0 ]
+  case "$output" in
+    *'"description":"DETAILDESC"'*) : ;;
+    *) printf 'detail:description missing: %s\n' "$output" >&2; return 1 ;;
+  esac
+}
+
+@test "owner-only: the events.jsonl a rotation leaves to be recreated is 0600" {
+  local data_dir="$TEST_DIR/f6_rot"
+  local dir="$data_dir/observability"
+  mkdir -p "$dir"
+  dd if=/dev/zero of="$dir/events.jsonl" bs=1024 count=1000 status=none
+  chmod 644 "$dir/events.jsonl"
+
+  run _write_under_umask "$data_dir" 022
+  [ "$status" -eq 0 ]
+  [ -f "$dir/events.jsonl.1" ] || return 1
+  [ "$(_mode_of "$dir/events.jsonl")" = "600" ] || return 1
+  [ "$output" = "0022 0022" ] || [ "$output" = "022 022" ] || return 1
+}
+
+@test "owner-only: a write to an existing dir and file leaves the caller's umask alone" {
+  local data_dir="$TEST_DIR/f6_steady"
+  run _write_under_umask "$data_dir" 022
+  [ "$status" -eq 0 ]
+  run _write_under_umask "$data_dir" 027
+  [ "$status" -eq 0 ]
+  [ "$output" = "0027 0027" ] || [ "$output" = "027 027" ] || return 1
+}
+
+# ---------------------------------------------------------------------------
+# `_observability_field`: linear search (spec 021 T2.1).
+#
+# The old form, `${payload#*"key":"}`, is quadratic in the text in front of
+# the key: 36 s for `tool_use_id` behind a 200 KB Agent prompt. The new form
+# bisects with the `case` glob. Semantics must not move: first occurrence,
+# value up to the first quote, empty when absent, never the whole payload.
+# ---------------------------------------------------------------------------
+
+# Differential harness: the FROZEN old function (verbatim from before the
+# change) against the live one, over a corpus. Prints "<cases> <mismatches>"
+# then one line per mismatch.
+_field_differential() {
+  bash -c '
+    . "$1" || exit 91
+    _old_field() {
+      local payload="${1:-}" key="${2:-}"
+      [ -n "$key" ] || { printf "" || true; return 0; }
+      case "$payload" in
+        *"\"$key\":\""*) ;;
+        *) printf "" || true; return 0 ;;
+      esac
+      local body="${payload#*"\"$key\":\""}"
+      if [ "$body" = "$payload" ]; then printf "" || true; return 0; fi
+      printf "%s" "${body%%\"*}" || true
+      return 0
+    }
+    # Multibyte text in front of the key, in a UTF-8 locale (set AFTER
+    # sourcing, as a hostile caller would). A locale that is not installed
+    # would make this test pass vacuously, so refuse to run without one.
+    for l in $(locale -a 2>/dev/null); do
+      case "$l" in en_US.UTF-8|en_US.utf8|C.UTF-8|C.utf8) export LC_ALL="$l"; break ;; esac
+    done
+    [ "$(printf "\303\251" | wc -m | tr -d " ")" = "1" ] || { echo "NO-UTF8-LOCALE"; exit 92; }
+    mb=$(printf "\303\244\303\266\342\202\254\360\237\230\200")
+    bad=$(printf "\377\376")
+    big=$(printf "z%.0s" $(seq 1 3000))
+    Q=\"
+    payloads=(
+      "{\"k\":\"v\"}"
+      "{\"k\":\"v\",\"other\":\"w\"}"
+      "{\"a\":\"1\",\"k\":\"mid\",\"b\":\"2\"}"
+      "{\"a\":\"1\",\"b\":\"2\",\"k\":\"end\"}"
+      "{\"a\":\"1\"}"
+      "{\"tool_name\":\"Bash\",\"name\":\"n\"}"
+      "{\"tool_name\":\"Bash\"}"
+      "{\"subagent_type\":\"x\",\"agent_type\":\"y\"}"
+      "{\"subagent_type\":\"x\"}"
+      "{\"k\":\"\"}"
+      "{\"k\":\"\",\"k\":\"second\"}"
+      "{\"k\":\"first\",\"k\":\"second\"}"
+      "{\"p\":\"a \\\"k\\\":\\\"fake\\\" b\",\"k\":\"real\"}"
+      "{\"k\":\"va\\\"lue\",\"z\":\"1\"}"
+      "{\"p\":\"$mb\",\"k\":\"after-mb\"}"
+      "{\"p\":\"$mb$mb$mb$mb\",\"x\":\"1\"}"
+      "{\"p\":\"$bad\",\"k\":\"after-bad\"}"
+      "{\"p\":\"$big\",\"k\":\"after-big\"}"
+      "{\"k\":\"before-big\",\"p\":\"$big\"}"
+      "no quote at all k"
+      "k\":\"loose\""
+      "\"k\":\"only\""
+      "\"k\":\""
+      "{\"k\":\"unterminated"
+      ""
+      "{\"k\":\"line1
+line2\"}"
+    )
+    keys=(k name tool_name agent_type subagent_type absent "k\":\"" "a b" "")
+    n=0
+    for p in "${payloads[@]}"; do
+      for key in "${keys[@]}"; do
+        n=$((n + 1))
+        o="$(_old_field "$p" "$key"; printf x)"
+        w="$(_observability_field "$p" "$key"; printf x)"
+        if [ "$o" != "$w" ]; then
+          printf "MISMATCH key=%s payload=%s old=%s new=%s\n" "$key" "${p:0:60}" "${o:0:40}" "${w:0:40}"
+        fi
+      done
+    done
+    printf "cases=%d expected=%d\n" "$n" "$(( ${#payloads[@]} * ${#keys[@]} ))"
+  ' _ "$WRITER"
+}
+
+@test "field: linear search agrees byte-for-byte with the frozen quadratic version over a corpus" {
+  run _field_differential
+  [ "$status" -eq 0 ]
+  _lacks "$output" "MISMATCH"
+  local cases expected
+  cases="${output##*cases=}"; cases="${cases%% *}"
+  expected="${output##*expected=}"
+  [ "$cases" -gt 0 ]
+  [ "$cases" = "$expected" ]
+}
+
+# Time `_observability_field` for a key behind N bytes of text; prints ms.
+_time_field_behind() {
+  local n="$1" utf8="${2:-}"
+  bash -c '
+    . "$1" || exit 91
+    # Optional hostile caller: a UTF-8 locale exported AFTER sourcing. The
+    # function must still be fast (its local LC_ALL=C wins) and correct.
+    if [ -n "$3" ]; then
+      for l in $(locale -a 2>/dev/null); do
+        case "$l" in en_US.UTF-8|en_US.utf8|C.UTF-8|C.utf8) export LC_ALL="$l"; break ;; esac
+      done
+      [ "$(printf "\303\251" | wc -m | tr -d " ")" = "1" ] || { echo "NO-UTF8-LOCALE"; exit 92; }
+    fi
+    big="$(printf "x%.0s" $(seq 1 "$2"))"
+    p="{\"description\":\"d\",\"prompt\":\"$big\",\"tool_use_id\":\"toolu_01ABC\"}"
+    v="$(_observability_field "$p" tool_use_id)"
+    s="$(perl -MTime::HiRes=time -e "printf q{%d}, time()*1000")"
+    v="$(_observability_field "$p" tool_use_id)"
+    e="$(perl -MTime::HiRes=time -e "printf q{%d}, time()*1000")"
+    printf "%d %s\n" "$((e - s))" "$v"
+  ' _ "$WRITER" "$n" "$utf8"
+}
+
+@test "field: a key behind 200 KB costs at most 20x the same key behind 20 KB, and stays under budget" {
+  if ! command -v perl >/dev/null 2>&1; then skip "perl not available for a sub-second clock"; fi
+  local r20 r200 t20 t200 allowed
+  r20="$(_time_field_behind 20000)"
+  r200="$(_time_field_behind 200000)"
+  t20="${r20%% *}"
+  t200="${r200%% *}"
+  [ "${r20#* }" = "toolu_01ABC" ]
+  [ "${r200#* }" = "toolu_01ABC" ]
+  printf 'field behind 20KB: %s ms, behind 200KB: %s ms\n' "$t20" "$t200" >&3
+  # The old form took ~0.4 s and ~36 s; the floor keeps timer noise at 20 KB
+  # from making the ratio meaningless.
+  allowed=$((t20 * 20))
+  if [ "$allowed" -lt 100 ]; then allowed=100; fi
+  [ "$t200" -le "$(_perf_budget_ms "$allowed")" ]
+  [ "$t200" -le "$(_perf_budget_ms 300)" ]
+}
+
+@test "field: a UTF-8 locale exported after sourcing neither slows the search nor changes the answer" {
+  if ! command -v perl >/dev/null 2>&1; then skip "perl not available for a sub-second clock"; fi
+  local r
+  r="$(_time_field_behind 200000 utf8)"
+  [ "${r#* }" = "toolu_01ABC" ]
+  printf 'field behind 200KB, UTF-8 caller: %s ms\n' "${r%% *}" >&3
+  [ "${r%% *}" -le "$(_perf_budget_ms 300)" ]
+}
+
+# ---------------------------------------------------------------------------
+# Fast path (spec 021 T2.2, CON-7): a printable-ASCII value of at most 256
+# bytes is escaped inline instead of through _observability_prepare_field's
+# three subshells. Records must not move by a byte: the live writer is run
+# against a FROZEN copy of the writer from before the change
+# (fixtures/logwrite-pre-fastpath.sh, verbatim from 621bf45) over a corpus,
+# each in its own process, and the two event files are compared with only the
+# timestamp normalised.
+#
+# The oracle pins only the fast-path change: it is the writer as it stood
+# before it. When the writer changes on purpose, refresh the fixture from
+# the new tip or retire the differential test.
+# ---------------------------------------------------------------------------
+
+# _printable_ascii  prints the 95 printable ASCII bytes 0x20..0x7E in order,
+#   each built from its octal code, never from the writer's constant.
+_printable_ascii() {
+  local i out="" c
+  for ((i = 32; i <= 126; i++)); do
+    printf -v c "\\%03o" "$i"
+    printf -v c "$c"
+    out="$out$c"
+  done
+  printf '%s' "$out"
+}
+
+@test "fast path: the printable-ASCII list is exactly the bytes 0x20..0x7E" {
+  local want got
+  want="$(_printable_ascii)"
+  [ "${#want}" -eq 95 ]
+  got="$(bash -c '. "$1"; printf "%s" "$_OBSERVABILITY_PRINTABLE_ASCII"' _ "$WRITER")"
+  [ "$got" = "$want" ] || { printf 'want [%s]\ngot  [%s]\n' "$want" "$got"; return 1; }
+}
+
+# _writer_corpus <writer file> <data dir> <locale: C|utf8> <detail: 0|1>
+#   Sources <writer> in a fresh bash, then writes one record per corpus value
+#   (as an ordinary field, a `detail:` field and a deny-listed field) plus one
+#   record carrying every value at once.
+_writer_corpus() {
+  bash -c '
+    . "$1" || exit 91
+    eval "$5"
+    if [ "$3" = utf8 ]; then
+      for l in $(locale -a 2>/dev/null); do
+        case "$l" in en_US.UTF-8|en_US.utf8|C.UTF-8|C.utf8) export LC_ALL="$l"; break ;; esac
+      done
+      [ "$(printf "\303\251" | wc -m | tr -d " ")" = "1" ] || { echo "NO-UTF8-LOCALE"; exit 92; }
+    fi
+    export CLAUDE_OBSERVABILITY_ENABLED=1 CLAUDE_OBSERVABILITY_DATA="$2" CLAUDE_OBSERVABILITY_DETAIL="$4"
+    x255=$(printf "x%.0s" $(seq 1 255))
+    x256="${x255}x"
+    x257="${x256}x"
+    q256="\"${x255}"
+    b300="$(printf "\\\\%.0s" $(seq 1 300))"
+    values=(
+      "push" "--hard -m --no-verify" "" " " "a\"b" "a\\b" "\\\"" "${x255}\""
+      "a]b[c" "!^-~\`$(printf "\047")" "{}|<>&;*?" "$(printf "a\tb")" "$(printf "a\nb")"
+      "$(printf "a\rb")" "$(printf "\001\037")" "$(printf "x\177y")"
+      "$(printf "\303\251\346\274\242")" "$(printf "\377\376ok")" "$(printf "\303")"
+      "$x255" "$x256" "$x257" "$q256" "${x255}$(printf "\303\251")" "$b300"
+      "$(printf "%0300d" 0)" "$(_printable_ascii)"
+    )
+    all=()
+    i=0
+    for v in "${values[@]}"; do
+      _observability_write kind=k session=s _observability_toplevel=/r/myrepo "f=$v" "detail:d=$v" "command=$v"
+      all[${#all[@]}]="f$i=$v"
+      i=$((i + 1))
+    done
+    _observability_write kind=k session=s _observability_toplevel=/r/myrepo "${all[@]}" "detail:description=x" "cwd=/abs"
+    echo "values=${#values[@]}"
+  ' _ "$@" "$(declare -f _printable_ascii)"
+}
+
+_normalised_events() {
+  sed 's/^{"ts":"[^"]*"/{"ts":"T"/' "$1/observability/events.jsonl"
+}
+
+@test "fast path: records are byte-identical to the pre-fast-path writer over a corpus" {
+  local frozen="$BATS_TEST_DIRNAME/fixtures/logwrite-pre-fastpath.sh" loc detail out n
+  [ -f "$frozen" ]
+  for loc in C utf8; do
+    for detail in 0 1; do
+      out="$(_writer_corpus "$frozen" "$TEST_DIR/old-$loc-$detail" "$loc" "$detail")" || { echo "$out"; return 1; }
+      out="$(_writer_corpus "$WRITER" "$TEST_DIR/new-$loc-$detail" "$loc" "$detail")" || { echo "$out"; return 1; }
+      n="${out#values=}"
+      _normalised_events "$TEST_DIR/old-$loc-$detail" > "$TEST_DIR/old.txt"
+      _normalised_events "$TEST_DIR/new-$loc-$detail" > "$TEST_DIR/new.txt"
+      # One record per value plus the combined one: nothing was skipped.
+      [ "$(wc -l < "$TEST_DIR/new.txt" | tr -d ' ')" = "$((n + 1))" ] || { echo "$loc/$detail: line count"; return 1; }
+      cmp -s "$TEST_DIR/old.txt" "$TEST_DIR/new.txt" || {
+        echo "$loc detail=$detail differs:"; diff "$TEST_DIR/old.txt" "$TEST_DIR/new.txt" | head -20; return 1; }
+    done
+  done
+  # The corpus does reach the cap, the marker and the escapes.
+  grep -qF '"truncated":true' "$TEST_DIR/new.txt"
+}
+
+# _prepare_calls <field value ...>  writes one record with these values as
+#   fields f0..fN through the live writer, with _observability_prepare_field
+#   (the subshell path) wrapped to count its calls; prints the count.
+_prepare_calls() {
+  bash -c '
+    . "$1" || exit 91
+    count="$2"; shift 2
+    eval "_counted_prepare() $(declare -f _observability_prepare_field | tail -n +2)"
+    _observability_prepare_field() { printf x >> "$count"; _counted_prepare "$@"; }
+    : > "$count"
+    export CLAUDE_OBSERVABILITY_ENABLED=1 CLAUDE_OBSERVABILITY_DATA="$(dirname "$count")/data"
+    fields=(); i=0
+    for v in "$@"; do fields[${#fields[@]}]="f$i=$v"; i=$((i + 1)); done
+    _observability_write kind=git session=sess-1 _observability_toplevel=/r/myrepo "${fields[@]}"
+    wc -c < "$count" | tr -d " "
+  ' _ "$WRITER" "$TEST_DIR/prepare.count" "$@"
+}
+
+@test "fast path: an all-ASCII 11-field record takes no subshell to prepare its fields" {
+  run _prepare_calls reset "" --hard "" "" main "$(_printable_ascii)"
+  [ "$status" -eq 0 ]
+  [ "$output" = "0" ]
+  # Positive control: the counter does see the slow path.
+  run _prepare_calls reset "$(printf '\303\251')" "$(printf 'a\tb')"
+  [ "$status" -eq 0 ]
+  [ "$output" = "2" ]
 }

@@ -10,7 +10,7 @@ reviewer rather than by a test, which is the signal to mechanise:
      that restates strings owned elsewhere will keep going stale; this file
      makes that mechanical instead of observational.
 
-  2. Four constants are defined once in `detect.sh` (inside a python heredoc
+  2. Five constants are defined once in `detect.sh` (inside a python heredoc
      a shell script wraps) and again in `registration.py`. They carry
      "must change together" comments, which only work on a reader who looks.
      The failure direction is permissive: someone adding a fourth registered
@@ -27,6 +27,7 @@ catches the same drift at CI time and adds no runtime coupling. The comments
 stay as well -- the test says you drifted, the comment says so before you do.
 """
 import ast
+import copy
 import os
 import re
 import sys
@@ -76,7 +77,7 @@ def _detect_constant(name):
 
 
 # ---------------------------------------------------------------------------
-# The four constants defined on both sides of the shell/python boundary.
+# The five constants defined on both sides of the shell/python boundary.
 # ---------------------------------------------------------------------------
 
 def test_our_events_matches_the_events_registration_actually_registers():
@@ -103,11 +104,19 @@ def test_legacy_namespace_matches():
     assert _detect_constant("LEGACY_NAMESPACE") == registration.LEGACY_NAMESPACE
 
 
-def test_the_legacy_shape_is_keyed_on_the_events_we_register():
-    """The two sets are the same three names today, and the legacy shape is
-    defined per registered event. Pinned so a fourth event added to one is
-    not silently absent from the other."""
-    assert set(registration.LEGACY_SCRIPTS) == set(registration.REGISTRATION)
+def test_the_legacy_shape_is_keyed_on_events_we_register():
+    """The legacy shape is defined per registered event, so every event it
+    names must still be one we register. A subset, not equality, since spec
+    021: UserPromptExpansion is registered and has no legacy form."""
+    assert set(registration.LEGACY_SCRIPTS) <= set(registration.REGISTRATION)
+
+
+def test_expected_registration_matches_registration():
+    """spec 021 ADR-5. detect.sh judges a repository's own entries against
+    EXPECTED to report OURS-INCOMPLETE; registration.py writes REGISTRATION.
+    If the two differ, every repository setup has just updated reads as
+    incomplete -- or an outdated one reads as current."""
+    assert _detect_constant("EXPECTED") == registration.REGISTRATION
 
 
 # ---------------------------------------------------------------------------
@@ -160,3 +169,84 @@ def test_every_message_the_table_quotes_still_exists_in_the_code(label, fragment
         f"SKILL.md's outcome table quotes {label}: {fragment!r}, which no longer appears in "
         "setup.sh or detect.sh. The message moved and the table did not follow."
     )
+
+
+# ---------------------------------------------------------------------------
+# The "outdated" rule exists twice: detect.sh's incomplete_events() and
+# registration.py's add_registration(). If they disagree, OURS-INCOMPLETE
+# either survives a setup run (setup sees nothing to change) or never appears
+# for an entry setup would rewrite. Both are run over the same documents.
+# ---------------------------------------------------------------------------
+
+def _detect_classifier():
+    """detect.sh's embedded python, executed up to (not including) its
+    top-level main() call, so its functions can be called directly."""
+    source = _read(DETECT_SH)
+    match = re.search(r"<<'PY'\n(.*?)^try:\n    main\(\)", source, re.DOTALL | re.MULTILINE)
+    assert match, "detect.sh's classifier heredoc or its trailing main() call moved"
+    namespace = {"__name__": "detect_classifier"}
+    exec(compile(match.group(1), DETECT_SH, "exec"), namespace)  # noqa: S102 -- our own file
+    return namespace
+
+
+def _ours(matcher, script, **extra_hook):
+    hook = {"type": "command", "command": registration.command_for(script)}
+    hook.update(extra_hook)
+    return {"matcher": matcher, "hooks": [hook]}
+
+
+def _complete():
+    return {event: [_ours(m, s)] for event, (m, s) in registration.REGISTRATION.items()}
+
+
+def _with(event, entries):
+    hooks = _complete()
+    hooks[event] = entries
+    return hooks
+
+
+_FOREIGN_HOOK = {"type": "command", "command": "/opt/other/hook.sh"}
+_NO_MATCHER = {"hooks": [{"type": "command", "command": registration.command_for("log_tool.sh")}]}
+_EXTRA_KEY = dict(_ours("Skill|Agent|Bash", "log_tool.sh"), timeout=5)
+_FOREIGN_INSIDE = {"matcher": "Skill|Agent|Bash", "hooks": [
+    {"type": "command", "command": registration.command_for("log_tool.sh")}, _FOREIGN_HOOK]}
+
+_VARIANTS = {
+    "complete": _complete(),
+    "matcher-only drift": _with("PreToolUse", [_ours("Skill", "log_tool.sh")]),
+    "matcher whitespace": _with("PreToolUse", [_ours(" Skill|Agent|Bash", "log_tool.sh")]),
+    "reordered matcher": _with("PreToolUse", [_ours("Bash|Agent|Skill", "log_tool.sh")]),
+    "extra entry key": _with("PreToolUse", [_EXTRA_KEY]),
+    "extra hook key": _with("PreToolUse", [_ours("Skill|Agent|Bash", "log_tool.sh", timeout=30)]),
+    "duplicate entry": _with("InstructionsLoaded", [_ours("", "log_instructions.sh")] * 2),
+    "foreign hook inside our entry": _with("PreToolUse", [_FOREIGN_INSIDE]),
+    "missing matcher key": _with("PreToolUse", [_NO_MATCHER]),
+    "empty event list": _with("UserPromptExpansion", []),
+    "ours only under a non-registered event": {"Stop": [_ours("", "log_agent.sh")]},
+    "empty hooks": {},
+    "h1": _with("PreToolUse", [_ours("Skill", "log_skill.sh")]),
+}
+
+
+@pytest.mark.parametrize("variant", sorted(_VARIANTS))
+def test_detect_calls_an_event_incomplete_exactly_when_setup_would_rewrite_it(variant):
+    hooks = _VARIANTS[variant]
+    incomplete = dict(_detect_classifier()["incomplete_events"](copy.deepcopy(hooks)))
+
+    data = {"env": {"CLAUDE_OBSERVABILITY_ENABLED": "1"}, "hooks": copy.deepcopy(hooks)}
+    registration.add_registration(data)
+
+    for event in registration.REGISTRATION:
+        setup_rewrites = data["hooks"][event] != hooks.get(event)
+        assert bool(incomplete.get(event)) == setup_rewrites, (
+            f"{variant}: detect says {incomplete.get(event)!r} for {event}, "
+            f"setup {'rewrites' if setup_rewrites else 'leaves'} it"
+        )
+
+
+def test_the_variant_table_exercises_both_verdicts():
+    """Guards the guard: a table where detect calls nothing incomplete (or
+    everything) would pass the agreement test with a constant function."""
+    classify = _detect_classifier()["incomplete_events"]
+    verdicts = {bool(classify(hooks)) for hooks in _VARIANTS.values()}
+    assert verdicts == {True, False}

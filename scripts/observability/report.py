@@ -58,6 +58,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -778,15 +779,15 @@ def _combine_inventories(inventories: Sequence[InstructionInventory]) -> Instruc
 # instead: a confident 0% coverage figure that would be pure artifact, not a
 # finding.
 #
-# Which form a REAL record carries has not been directly measured for a
-# plugin-dispatched skill or agent as of this task -- T3.6 does that, against
-# a live session. A real measured `kind: agent` record so far only proves a
+# A record may carry either form. Spec 018 T3.6 (2026-09-08, a live session)
+# measured plugin-dispatched records carrying the qualified name
+# (`tcs-workflow:verify`, `tcs-workflow:code-quality-reviewer`), while a
 # BUILT-IN agent's `agent_type` is bare (`"Explore"`). So every inventory
 # entry below carries both its `qualified` name (always derivable from the
 # file's own path, always unambiguous) and its `bare` name (the frontmatter
 # `name:`, or -- when that is absent -- the file/directory's own name), and
-# `firing_coverage` accepts a match on EITHER rather than guessing which one
-# is real and silently discarding the other.
+# `firing_coverage` accepts a match on EITHER rather than silently
+# discarding one form.
 #
 # Two different entries of the SAME kind can legitimately share a bare name
 # (two plugins each shipping a "testing" skill, say). The qualified name is
@@ -1003,9 +1004,108 @@ def walk_skill_agent_inventory(repo_root: Path) -> SkillAgentInventory:
     )
 
 
+# ---------------------------------------------------------------------------
+# Firings: routes, dispatches, dedupe (spec-021 T4.1, SDD/Runtime View/
+# Complex Logic, ADR-7, ADR-8).
+#
+# A `kind: skill` record arrives by one of two routes: `tool` (a Skill tool
+# call, PreToolUse:Skill) or `typed` (a slash command, UserPromptExpansion).
+# A pre-h2 record carries no `route` at all and is read as `tool` -- the only
+# route PreToolUse:Skill could ever see. A `kind: dispatch` record (the Agent
+# tool call) carries both the agent's TYPE (`subagent_type`) and its spawn
+# `name`; SubagentStart's `agent_type` is the spawn name when one was given,
+# so within one session an `agent` record naming a dispatch's `name` adds
+# nothing -- the dispatch already credited the type (ADR-8).
+# ---------------------------------------------------------------------------
+
+# Agent types Claude Code ships itself: never in the plugin inventory, never
+# a spawn name. Extended when a probe shows a new one.
+BUILTIN_AGENT_TYPES = frozenset(
+    {"general-purpose", "Explore", "Plan", "statusline-setup", "claude-code-guide", "fork"}
+)
+
+_SKILL_ROUTES = frozenset({"tool", "typed"})
+
+
+class FiringEvent(NamedTuple):
+    """One normalised firing: `route` is `tool`/`typed` for a skill,
+    `dispatch` (Agent tool call) or `start` (SubagentStart) for an agent."""
+
+    kind: str
+    name: str
+    route: str
+    session: str
+
+
+def _session_of(record: dict) -> str:
+    session = record.get("session")
+    return session if isinstance(session, str) else ""
+
+
+def _dispatch_names_by_session(records: Sequence[dict]) -> dict[str, set[str]]:
+    """Per session, every non-empty dispatch `name` (ADR-8's dedupe set)."""
+    names: dict[str, set[str]] = {}
+    for rec in records:
+        name = rec.get("name")
+        if rec.get("kind") == "dispatch" and isinstance(name, str) and name:
+            names.setdefault(_session_of(rec), set()).add(name)
+    return names
+
+
+def _named_event(kind: str, name: object, route: str, session: str) -> FiringEvent | None:
+    """An empty or non-string name is unknown and yields no firing -- the
+    same posture T3.1 took for an empty `reason` (module docstring)."""
+    if isinstance(name, str) and name:
+        return FiringEvent(kind, name, route, session)
+    return None
+
+
+def _firing_event(record: dict, dispatch_names: dict[str, set[str]]) -> FiringEvent | None:
+    kind = record.get("kind")
+    session = _session_of(record)
+    if kind == "skill":
+        route = record.get("route", "tool")
+        if not isinstance(route, str) or route not in _SKILL_ROUTES:
+            return None
+        return _named_event("skill", record.get("skill"), route, session)
+    if kind == "dispatch":
+        return _named_event("agent", record.get("subagent_type"), "dispatch", session)
+    if kind == "agent":
+        agent_type = record.get("agent_type")
+        if isinstance(agent_type, str) and agent_type in dispatch_names.get(session, ()):
+            return None
+        return _named_event("agent", agent_type, "start", session)
+    return None
+
+
+def firing_events(records: Iterable[dict]) -> list[FiringEvent]:
+    """One normalised firing per record, in record order, after the ADR-8
+    dedupe. Whether an `agent` start names an inventory entry, a built-in
+    type or nothing creditable is decided at the inventory join
+    (`firing_coverage`), which is the only place the inventory is known.
+    """
+    records = list(records)
+    dispatch_names = _dispatch_names_by_session(records)
+    events = (_firing_event(rec, dispatch_names) for rec in records)
+    return [event for event in events if event is not None]
+
+
+def _fired_pairs(events: Iterable[FiringEvent]) -> set[tuple[str, str]]:
+    return {(event.kind, event.name) for event in events}
+
+
+def firing_route_counts(events: Iterable[FiringEvent]) -> dict[tuple[str, str], Counter]:
+    """Per `(kind, name)`, how many firings arrived by each route."""
+    counts: dict[tuple[str, str], Counter] = {}
+    for event in events:
+        counts.setdefault((event.kind, event.name), Counter())[event.route] += 1
+    return counts
+
+
 def fired_names(records: Iterable[dict]) -> set[tuple[str, str]]:
-    """Distinct `(kind, name)` pairs named by `kind: skill` / `kind: agent`
-    records -- the numerator PRD F8's coverage fraction needs.
+    """Distinct `(kind, name)` pairs -- the numerator PRD F8's coverage
+    fraction needs: a set projection of `firing_events`, so it carries no
+    session or route (spec-021 T4.1).
 
     Carries `kind` alongside the name (rather than the bare name alone, as
     an earlier version did) so `firing_coverage` can join on `(kind, name)`
@@ -1018,18 +1118,7 @@ def fired_names(records: Iterable[dict]) -> set[tuple[str, str]]:
     into a named entry -- the same posture T3.1 took for an empty `reason`
     and T3.2 took for an unmeasurable `bytes` (module docstring points 1-2).
     """
-    names: set[tuple[str, str]] = set()
-    for rec in records:
-        kind = rec.get("kind")
-        if kind == "skill":
-            value = rec.get("skill")
-        elif kind == "agent":
-            value = rec.get("agent_type")
-        else:
-            continue
-        if isinstance(value, str) and value:
-            names.add((kind, value))
-    return names
+    return _fired_pairs(firing_events(records))
 
 
 class FiringCoverage(NamedTuple):
@@ -1055,12 +1144,22 @@ class FiringCoverage(NamedTuple):
     skill and agent are two distinct findings and must render as two lines,
     never collapsed into one bare name that discards which inventory each
     came from.
+
+    `uncreditable_record_names` (spec-021 T4.1, PRD F4 AC4) holds `agent`
+    start names that are neither an inventory name, a built-in type
+    (`BUILTIN_AGENT_TYPES`) nor a type any dispatch named -- possibly a spawn
+    name from a record without its dispatch; never counted, and never also
+    listed as unmatched. `skill_routes` holds, per fired skill entry, its
+    `(route, count)` pairs for `tool` and `typed` (PRD F4 AC1). Both stay
+    empty unless `firing_coverage` is given route counts.
     """
 
     fired: list[InventoryEntry]
     unused: list[InventoryEntry]
     unmatched_record_names: list[str]
     ambiguous_record_names: list[str]
+    uncreditable_record_names: Sequence[str] = ()
+    skill_routes: Sequence[tuple[str, tuple[tuple[str, int], ...]]] = ()
 
     @property
     def numerator(self) -> int:
@@ -1071,8 +1170,98 @@ class FiringCoverage(NamedTuple):
         return len(self.fired) + len(self.unused)
 
 
+RouteCounts = dict[tuple[str, str], Counter]
+
+
+def _exact_only_pairs(route_counts: RouteCounts | None) -> set[tuple[str, str]]:
+    """Pairs that arrived ONLY by the typed route: these credit an entry by
+    its exact qualified name, never by the bare-name fallback (ADR-7, PRD
+    F1 AC5) -- a custom command `/test` arrives as `test`."""
+    if route_counts is None:
+        return set()
+    return {pair for pair, counts in route_counts.items() if set(counts) == {"typed"}}
+
+
+def _uncreditable_pairs(
+    unresolved: set[tuple[str, str]], route_counts: RouteCounts | None
+) -> set[tuple[str, str]]:
+    """Unresolved `agent` names that only a SubagentStart record carried --
+    no dispatch named them as a type -- and that are not built-in: possibly
+    a spawn name (ADR-8, PRD F4 AC4)."""
+    if route_counts is None:
+        return set()
+    return {
+        (kind, name)
+        for kind, name in unresolved
+        if kind == "agent"
+        and name not in BUILTIN_AGENT_TYPES
+        and set(route_counts.get((kind, name), {})) == {"start"}
+    }
+
+
+def _matching_keys(
+    entry: InventoryEntry,
+    fired: set[tuple[str, str]],
+    bare_counts: Counter,
+    exact_only: set[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """Every fired pair that credits `entry`: its qualified pair, and its
+    bare pair when that bare name is unique within its kind and not
+    typed-only. Both can hold at once (a tool record naming the bare form
+    beside a typed record naming the qualified one); both are credited to
+    the entry, so neither is left behind as unmatched."""
+    qualified_key = (entry.kind, entry.qualified)
+    bare_key = (entry.kind, entry.bare)
+    keys = [qualified_key] if qualified_key in fired else []
+    if (
+        bare_key != qualified_key
+        and bare_counts[bare_key] == 1
+        and bare_key in fired
+        and bare_key not in exact_only
+    ):
+        keys.append(bare_key)
+    return keys
+
+
+def _credited_counts(entry: InventoryEntry, key: tuple[str, str], route_counts: RouteCounts) -> Counter:
+    """What `key` contributes to `entry`'s route split. Only the qualified key
+    carries typed counts: a typed record naming the bare form never counts
+    (ADR-7), so a bare key credited by a tool record yields its tool count."""
+    counts = route_counts.get(key, Counter())
+    if key == (entry.kind, entry.qualified):
+        return counts
+    return Counter({"tool": counts["tool"]})
+
+
+def _skill_route_rows(
+    keys_by_entry: Sequence[tuple[InventoryEntry, list[tuple[str, str]]]], route_counts: RouteCounts | None
+) -> tuple[tuple[str, tuple[tuple[str, int], ...]], ...]:
+    """Per fired skill entry, its tool/typed record counts (PRD F4 AC1)."""
+    if route_counts is None:
+        return ()
+    rows = []
+    for entry, keys in sorted(keys_by_entry, key=lambda item: item[0].qualified):
+        if entry.kind != "skill" or not keys:
+            continue
+        total = sum((_credited_counts(entry, key, route_counts) for key in keys), Counter())
+        rows.append((entry.qualified, tuple((route, total[route]) for route in ("tool", "typed"))))
+    return tuple(rows)
+
+
+def _render_pairs(pairs: set[tuple[str, str]]) -> list[str]:
+    """`kind` is carried all the way to the rendered string -- see the
+    FiringCoverage docstring above `unmatched_record_names` -- so a
+    same-named skill and agent render as two distinct lines, never collapsed
+    into one bare name (fourth amendment, T3.3 code review round 2, finding
+    1). Sorted by name first so same-named pairs across kinds land next to
+    each other in the rendered output."""
+    return [f"{name} [{kind}]" for kind, name in sorted(pairs, key=lambda pair: (pair[1], pair[0]))]
+
+
 def firing_coverage(
-    entries: Sequence[InventoryEntry], fired: set[tuple[str, str]]
+    entries: Sequence[InventoryEntry],
+    fired: set[tuple[str, str]],
+    route_counts: RouteCounts | None = None,
 ) -> FiringCoverage:
     """Join `entries` against `fired` (the `(kind, name)` pairs `fired_names`
     extracted -- see its docstring).
@@ -1091,51 +1280,111 @@ def firing_coverage(
     from being credited. A collision WITHIN one kind (two skills, or two
     agents, sharing a bare name) is still real and still marks neither
     fired. See the module comment above `InventoryEntry` for why both the
-    qualified and bare forms must be accepted at all: which form a real
-    record carries is confirmed at T3.6.
+    qualified and bare forms must be accepted at all: a record may carry
+    either, and the join accepts both under the uniqueness rule above.
+
+    `route_counts` (`firing_route_counts` over the same records; spec-021
+    T4.1) is optional so a caller without routes keeps the pre-h2 join.
+    When given, a typed-only pair matches on the exact qualified name alone
+    and, unattributable by bare name, is reported as not in the inventory
+    rather than ambiguous; uncreditable agent names are split out of the
+    unmatched list; and per-route counts are attached to fired skills.
     """
-    bare_counts: dict[tuple[str, str], int] = {}
-    for entry in entries:
-        key = (entry.kind, entry.bare)
-        bare_counts[key] = bare_counts.get(key, 0) + 1
+    bare_counts = Counter((entry.kind, entry.bare) for entry in entries)
+    exact_only = _exact_only_pairs(route_counts)
+    keys_by_entry = [(entry, _matching_keys(entry, fired, bare_counts, exact_only)) for entry in entries]
+    fired_entries = [entry for entry, keys in keys_by_entry if keys]
+    unused_entries = [entry for entry, keys in keys_by_entry if not keys]
 
-    fired_entries: list[InventoryEntry] = []
-    unused_entries: list[InventoryEntry] = []
-    matched: set[tuple[str, str]] = set()
-
-    for entry in entries:
-        qualified_key = (entry.kind, entry.qualified)
-        bare_key = (entry.kind, entry.bare)
-        if qualified_key in fired:
-            fired_entries.append(entry)
-            matched.add(qualified_key)
-        elif bare_counts[bare_key] == 1 and bare_key in fired:
-            fired_entries.append(entry)
-            matched.add(bare_key)
-        else:
-            unused_entries.append(entry)
-
-    unresolved = fired - matched
-    ambiguous_bare_keys = {key for key, count in bare_counts.items() if count > 1}
-
-    unmatched_pairs = {pair for pair in unresolved if pair not in ambiguous_bare_keys}
-    ambiguous_pairs = {pair for pair in unresolved if pair in ambiguous_bare_keys}
-
-    # `kind` is carried all the way to the rendered string -- see the
-    # FiringCoverage docstring above `unmatched_record_names` -- so a
-    # same-named skill and agent render as two distinct lines, never
-    # collapsed into one bare name (fourth amendment, T3.3 code review
-    # round 2, finding 1). Sort by name first so same-named pairs across
-    # kinds land next to each other in the rendered output.
-    def _render_pairs(pairs: set[tuple[str, str]]) -> list[str]:
-        return [f"{name} [{kind}]" for kind, name in sorted(pairs, key=lambda pair: (pair[1], pair[0]))]
+    unresolved = fired - {key for _, keys in keys_by_entry for key in keys}
+    ambiguous_bare_keys = {key for key, count in bare_counts.items() if count > 1} - exact_only
+    ambiguous_pairs = unresolved & ambiguous_bare_keys
+    uncreditable_pairs = _uncreditable_pairs(unresolved - ambiguous_pairs, route_counts)
+    unmatched_pairs = unresolved - ambiguous_pairs - uncreditable_pairs
 
     return FiringCoverage(
         fired=sorted(fired_entries, key=lambda e: e.qualified),
         unused=sorted(unused_entries, key=lambda e: e.qualified),
         unmatched_record_names=_render_pairs(unmatched_pairs),
         ambiguous_record_names=_render_pairs(ambiguous_pairs),
+        uncreditable_record_names=_render_pairs(uncreditable_pairs),
+        skill_routes=_skill_route_rows(keys_by_entry, route_counts),
     )
+
+
+# ---------------------------------------------------------------------------
+# Git operations (spec-021 T4.2, PRD F4 AC3/AC5, SDD/Application Data Models
+# kind = git, ADR-9).
+#
+# A `kind: git` record holds names only (CON-13): `subcommand` (a git command
+# name or `?`), `action` (a closed sub-verb list, or ""), `flags`, `overrides`
+# and `override_first` (space-separated names), plus the caller. The writer's
+# markers -- `(executor)` and `(oversize)` in `flags`, `truncated: true` on
+# the record -- are passed through, never interpreted. Only the fields named
+# in `_GIT_TEXT_FIELDS` ever reach the output, so a record carrying anything
+# else (a `command` written by a drifted producer) cannot leak it. A field of
+# the wrong type, or a missing subcommand or caller, drops the record -- the
+# same posture `_named_event` takes for a malformed firing.
+# ---------------------------------------------------------------------------
+
+_GIT_TEXT_FIELDS = (
+    "subcommand", "action", "flags", "overrides", "override_first",
+    "caller", "caller_agent_type", "caller_agent_id",
+)
+
+
+class GitOperation(NamedTuple):
+    """One `kind: git` record, reduced to the documented name fields.
+    `caller` is `main` or `<caller_agent_type> <caller_agent_id>`."""
+
+    session: str
+    caller: str
+    subcommand: str
+    action: str
+    flags: str
+    overrides: str
+    override_first: str
+    truncated: bool
+
+
+def _git_text_fields(record: dict) -> dict[str, str] | None:
+    """Every documented text field, absent read as ""; None if any is not a string."""
+    fields = {name: record.get(name, "") for name in _GIT_TEXT_FIELDS}
+    if all(isinstance(value, str) for value in fields.values()):
+        return fields
+    return None
+
+
+def _git_caller(fields: dict[str, str]) -> str | None:
+    if fields["caller"] == "main":
+        return "main"
+    if fields["caller"] != "subagent":
+        return None
+    agent_type = fields["caller_agent_type"] or "(unknown type)"
+    agent_id = fields["caller_agent_id"] or "(unknown id)"
+    return f"{agent_type} {agent_id}"
+
+
+def git_operation(record: object) -> GitOperation | None:
+    """The record as a `GitOperation`, or None when it is not a well-formed git record."""
+    if not isinstance(record, dict) or record.get("kind") != "git":
+        return None
+    fields = _git_text_fields(record)
+    if fields is None:
+        return None
+    caller = _git_caller(fields)
+    if caller is None or not fields["subcommand"]:
+        return None
+    return GitOperation(
+        _session_of(record), caller, fields["subcommand"], fields["action"], fields["flags"],
+        fields["overrides"], fields["override_first"], record.get("truncated") is True,
+    )
+
+
+def git_operations(records: Iterable[object]) -> list[GitOperation]:
+    """Every well-formed git record, in record order."""
+    operations = (git_operation(record) for record in records)
+    return [operation for operation in operations if operation is not None]
 
 
 # ---------------------------------------------------------------------------
@@ -1465,13 +1714,17 @@ def _render_firing_coverage(inventory: SkillAgentInventory, coverage: FiringCove
         "name (<plugin>:<path under skills/ or agents/>) or its bare name (a skill's directory "
         "name, or an agent's frontmatter `name:`) -- but a bare name is only ever used to credit "
         "an entry when that bare name is unique across the whole inventory; two entries sharing "
-        "one bare name are never both marked fired by an ambiguous bare-name record. Which form a "
-        "real record actually carries is confirmed at T3.6 against a live session -- this join "
-        "accepts either deliberately until then.",
+        "one bare name are never both marked fired by an ambiguous bare-name record. A record may "
+        "carry either form; this join accepts both under that uniqueness rule. A typed skill "
+        "record (a slash command) credits an entry only by its exact qualified name: a project or "
+        "personal command such as `/test` arrives as a bare name and never counts (listed as not "
+        "in the inventory). An agent is credited by a dispatch's "
+        "`subagent_type`; a SubagentStart record naming that dispatch's spawn name adds nothing.",
         f"Coverage: {coverage.numerator}/{coverage.denominator} fired.",
         "",
-        f"Never fired -- unused, not missing ({len(coverage.unused)}):",
     ]
+    lines.extend(_render_skill_routes(coverage.skill_routes))
+    lines.append(f"Never fired -- unused, not missing ({len(coverage.unused)}):")
     for entry in coverage.unused:
         lines.append(f"  {entry.qualified} [{entry.kind}]")
     if coverage.ambiguous_record_names:
@@ -1490,8 +1743,96 @@ def _render_firing_coverage(inventory: SkillAgentInventory, coverage: FiringCove
         )
         for name in coverage.unmatched_record_names:
             lines.append(f"  {name}")
+    lines.extend(_render_uncreditable_agents(coverage.uncreditable_record_names))
     lines.append("")
     lines.extend(_render_unreachable_skills(inventory.unreachable))
+    return lines
+
+
+def _render_skill_routes(skill_routes: Sequence[tuple[str, tuple[tuple[str, int], ...]]]) -> list[str]:
+    """Per fired skill, its record counts by route (PRD F4 AC1): `tool` is a
+    Skill tool call, `typed` a slash command. Both routes count toward the
+    one skill; the split only shows how it was reached."""
+    if not skill_routes:
+        return []
+    lines = ["Fired skills by route (record counts; tool = Skill tool call, typed = slash command):"]
+    for qualified, counts in skill_routes:
+        rendered = ", ".join(f"{route}={count}" for route, count in counts)
+        lines.append(f"  {qualified} [skill]: {rendered}")
+    lines.append("")
+    return lines
+
+
+def _render_uncreditable_agents(names: Sequence[str]) -> list[str]:
+    """PRD F4 AC4: agent records that name neither an inventory entry, a
+    built-in agent type nor a dispatched type -- not counted anywhere."""
+    if not names:
+        return []
+    lines = [
+        "",
+        f"{len(names)} agent record(s) named neither an inventory entry, a built-in agent type nor "
+        "a dispatched type -- uncreditable (may be a spawn name); not counted:",
+    ]
+    lines.extend(f"  {name}" for name in names)
+    return lines
+
+
+def _render_git_overrides(operation: GitOperation) -> str:
+    """The clause's overrides, the first-position one marked. `override_first`
+    belongs to the whole command, so it can name an override set on another
+    clause; it is then listed after this clause's own."""
+    names = operation.overrides.split()
+    first = operation.override_first
+    rendered = [f"{name} (first position)" if name == first else name for name in names]
+    if first and first not in names:
+        rendered.append(f"{first} (first position, on another clause)")
+    return ", ".join(rendered)
+
+
+def _render_git_operation(operation: GitOperation, count: int) -> str:
+    line = " ".join(part for part in (operation.subcommand, operation.action) if part)
+    details = []
+    if operation.flags:
+        details.append(f"flags: {operation.flags}")
+    overrides = _render_git_overrides(operation)
+    if overrides:
+        details.append(f"overrides: {overrides}")
+    if details:
+        line += " -- " + "; ".join(details)
+    if operation.truncated:
+        line += " [truncated]"
+    if count > 1:
+        line += f" ({count} records)"
+    return line
+
+
+def _group_git_operations(operations: Sequence[GitOperation]) -> dict[str, dict[str, Counter]]:
+    """session -> caller -> operation counts, each level in first-seen order."""
+    groups: dict[str, dict[str, Counter]] = {}
+    for operation in operations:
+        by_caller = groups.setdefault(operation.session, {})
+        by_caller.setdefault(operation.caller, Counter())[operation] += 1
+    return groups
+
+
+def _render_git_operations(operations: Sequence[GitOperation]) -> list[str]:
+    """PRD F4 AC3/AC5: git records by session, then caller -- or, with none,
+    that none were recorded, which is not evidence that git was not used."""
+    if not operations:
+        return [
+            "Git operations: no git activity was recorded. That is not proof none happened -- "
+            "read-only git commands are never recorded, some invocations are not recognised "
+            "(git behind xargs, find -exec or a script file), and a session whose PreToolUse "
+            "registration does not cover Bash records none.",
+            "",
+        ]
+    lines = [f"Git operations ({len(operations)} record(s), grouped by session, then caller):"]
+    for session, by_caller in _group_git_operations(operations).items():
+        lines.append(f"  session {session or '(none recorded)'}:")
+        for caller, counts in by_caller.items():
+            lines.append(f"    {caller}:")
+            lines.extend(f"      {_render_git_operation(op, count)}" for op, count in counts.items())
+    lines.append("")
     return lines
 
 
@@ -1592,6 +1933,9 @@ def build_load_report(
     # This function still renders exactly ONE source's content; the loop
     # over several sources lives in `build_multi_source_report`, not here.
     section_title: str | None = None,
+    # spec-021 T4.2: same optional-parameter posture -- `None` omits the git
+    # section, so every pre-existing caller/test keeps working unchanged.
+    git_ops: Sequence[GitOperation] | None = None,
 ) -> str:
     """Render the load report: per-file counts and reasons, and what never loaded.
 
@@ -1640,6 +1984,10 @@ def build_load_report(
     chose to tell sources apart, the basename is only how the data itself is
     keyed). This function still renders exactly one source's content and
     never branches on how many sources exist -- looping is the caller's job.
+
+    `git_ops` is optional (spec-021 T4.2, same posture): when given, a section
+    lists this source's git records by session, then caller, or says none
+    were recorded and that this is not proof none happened (PRD F4 AC3/AC5).
     """
     lines: list[str] = []
 
@@ -1694,6 +2042,10 @@ def build_load_report(
     if skill_agent_inventory is not None and firing is not None:
         lines.append("")
         lines.extend(_render_firing_coverage(skill_agent_inventory, firing))
+
+    if git_ops is not None:
+        lines.append("")
+        lines.extend(_render_git_operations(git_ops))
 
     if hooks is not None:
         lines.append("")
@@ -1797,6 +2149,8 @@ def _build_source_report(source: sources.Source, now: datetime) -> tuple[str, li
         firing=None,
         hooks=hooks,
         section_title=source.label,
+        # Per source like hook timing, never unioned (019 ADR-7).
+        git_ops=git_operations(records),
     )
     return text, records
 
@@ -1893,6 +2247,7 @@ def _render_firing_coverage_union(
 def _render_per_source_firing_detail(
     inventory: SkillAgentInventory,
     fired_by_source: Sequence[tuple[str, set[tuple[str, str]]]],
+    route_counts_by_source: dict[str, RouteCounts] | None = None,
 ) -> list[str]:
     """Per-source coverage detail beside the union figure (ruling (p)): for
     each source, how many of the shipped inventory fired there, and which
@@ -1910,18 +2265,26 @@ def _render_per_source_firing_detail(
     2026-09-22: this section listed two reviewer agents as absent from the
     shipping repository while the transcripts showed 23 and 15 runs there.
     The counts were right; the sentence around them was not, so the sentence
-    is what changed.
+    is what changed. Since spec-021 a `dispatch` record credits the type, so
+    that blindness is scoped to records written before dispatch recording.
+
+    `route_counts_by_source` (per label, from `firing_route_counts`; spec-021
+    T4.1) applies the same typed exact-match rule per source as the union
+    does; without it a source keeps the pre-h2 join.
     """
     denominator = len(inventory.entries)
+    route_counts_by_source = route_counts_by_source or {}
     fired_entries_by_label = {
-        label: firing_coverage(inventory.entries, fired).fired for label, fired in fired_by_source
+        label: firing_coverage(inventory.entries, fired, route_counts_by_source.get(label)).fired
+        for label, fired in fired_by_source
     }
     lines = [
         "Per-source firing detail:",
         "  An entry listed below is absent from this source's RECORDS -- it is not shown to be",
-        "  absent from this source. A subagent dispatched with a `name:` records that name in",
-        "  `agent_type` (the payload carries the agent's name, not its type), so a named dispatch",
-        "  leaves no trace under its own entry.",
+        "  absent from this source. In records written before dispatch recording, a subagent",
+        "  dispatched with a `name:` records only that name in `agent_type` (the payload carries",
+        "  the agent's name, not its type), so it leaves no trace under its own entry;",
+        "  a `dispatch` record credits its `subagent_type`.",
     ]
     for label, _ in fired_by_source:
         fired_here = fired_entries_by_label[label]
@@ -2010,13 +2373,17 @@ def main(argv: list[str] | None = None) -> int:
     # repository -- never from any `Source.repo_root`, which are targets
     # (ruling (l)): a target's own local agents must never enter it.
     inventory = walk_skill_agent_inventory(args.repo_root)
-    fired_by_source = [(source.label, fired_names(records)) for source, records in source_records]
+    events_by_source = [(source.label, firing_events(records)) for source, records in source_records]
+    fired_by_source = [(label, _fired_pairs(events)) for label, events in events_by_source]
     union_coverage = firing_coverage(
-        inventory.entries, union_fired_names(fired for _, fired in fired_by_source)
+        inventory.entries,
+        union_fired_names(fired for _, fired in fired_by_source),
+        firing_route_counts(event for _, events in events_by_source for event in events),
     )
+    route_counts_by_source = {label: firing_route_counts(events) for label, events in events_by_source}
     print()
     print("\n".join(_render_firing_coverage_union(inventory, union_coverage)))
-    print("\n".join(_render_per_source_firing_detail(inventory, fired_by_source)))
+    print("\n".join(_render_per_source_firing_detail(inventory, fired_by_source, route_counts_by_source)))
     return 0
 
 
@@ -2038,7 +2405,8 @@ def _print_single_record_report(events_path: Path, args: argparse.Namespace) -> 
     byte_stats = byte_accounting(records)
     recording = recording_status(records, datetime.now(timezone.utc))
     skill_agent_inventory = walk_skill_agent_inventory(args.repo_root)
-    firing = firing_coverage(skill_agent_inventory.entries, fired_names(records))
+    events = firing_events(records)
+    firing = firing_coverage(skill_agent_inventory.entries, _fired_pairs(events), firing_route_counts(events))
     hooks = hook_duration_stats(records)
     print(
         build_load_report(
@@ -2051,6 +2419,7 @@ def _print_single_record_report(events_path: Path, args: argparse.Namespace) -> 
             skill_agent_inventory=skill_agent_inventory,
             firing=firing,
             hooks=hooks,
+            git_ops=git_operations(records),
         )
     )
     return 0

@@ -49,6 +49,7 @@
 #   exit 0  clean                    CLEAN            0   proceed
 #   exit 0  ours, current bundle     OURS-CURRENT     0   already configured
 #   exit 4  ours, older bundle       OURS-OLD         0   proceed (refresh)
+#   exit 4  ours, entries outdated   OURS-INCOMPLETE  0   proceed (update)
 #   exit 4  legacy in-repo shape     LEGACY           0   proceed (migrate)
 #   exit 3  foreign entries          CONFLICT         0   STOP, change nothing
 #   exit 2  unparseable              ABORT            1   refuse
@@ -598,7 +599,7 @@ printf '%s\n' "$DETECT_OUTPUT"
 # The LABEL is the state channel detect.sh documents; the message after it is
 # prose this dispatcher never branches on.
 DETECT_LABEL="$(printf '%s\n' "$DETECT_OUTPUT" \
-  | grep -E '^\[tcs-helper:observability-setup\] (CLEAN|CONFLICT|LEGACY|OURS-CURRENT|OURS-OLD|ABORT):' \
+  | grep -E '^\[tcs-helper:observability-setup\] (CLEAN|CONFLICT|LEGACY|OURS-CURRENT|OURS-OLD|OURS-INCOMPLETE|ABORT):' \
   | tail -n 1 \
   | sed -e 's/^\[tcs-helper:observability-setup\] //' -e 's/:.*$//')" || DETECT_LABEL=""
 
@@ -613,14 +614,27 @@ case "$DETECT_STATUS" in
     ;;
 esac
 
+# OURS-INCOMPLETE (spec 021 ADR-5) is ours: a repository registered under an
+# older bundle whose own entries setup has not brought forward yet. Leaving it
+# out of this list reports such a repository as "not configured" -- the one
+# answer that is certainly wrong, since it still records the older kinds.
 IS_OURS=0
 case "$DETECT_LABEL" in
-  OURS-CURRENT|OURS-OLD|LEGACY) IS_OURS=1 ;;
+  OURS-CURRENT|OURS-OLD|OURS-INCOMPLETE|LEGACY) IS_OURS=1 ;;
 esac
 
 # ---------------------------------------------------------------------------
 # status — read-only, and the only verb that answers PRD F5's three states.
 # ---------------------------------------------------------------------------
+
+# The record data dir, resolved ONCE for status, the install plan and the mode
+# tightening. In a subshell so the HOME override cannot leak: a status that
+# took the bundle from one home and the records from another would be a mixed
+# answer presented as a single one.
+_RECORD_DATA_DIR=""
+if [ -n "$_LOGWRITE_SH" ]; then
+  _RECORD_DATA_DIR="$(HOME="$RESOLVED_HOME"; _observability_data_dir "$REPO_ROOT")" || _RECORD_DATA_DIR=""
+fi
 
 if [ "$VERB" = "status" ]; then
   # The drift comparator does NOT fetch the expected version itself (T1.3):
@@ -659,13 +673,7 @@ if [ "$VERB" = "status" ]; then
   # about records and nothing about registrations. Neither alone can tell
   # "configured but produced nothing" from "never configured".
   RECORD_PRESENT=0
-  DATA_DIR=""
-  if [ -n "$_LOGWRITE_SH" ]; then
-    # In a subshell so the override cannot leak: a status that took the
-    # bundle from one home and the records from another would be a mixed
-    # answer presented as a single one.
-    DATA_DIR="$(HOME="$RESOLVED_HOME"; _observability_data_dir "$REPO_ROOT")" || DATA_DIR=""
-  fi
+  DATA_DIR="$_RECORD_DATA_DIR"
   if [ -n "$DATA_DIR" ]; then
     RECORD_BASE="$DATA_DIR/observability/events.jsonl"
     # A record counts as present if the base file OR any rotated generation
@@ -680,6 +688,10 @@ if [ "$VERB" = "status" ]; then
     _emit "RECORDS" "$RECORD_BASE"
   else
     _emit "RECORDS" "could not resolve a record location for this target."
+  fi
+
+  if [ "$DETECT_LABEL" = "OURS-INCOMPLETE" ]; then
+    _emit "REGISTRATION" "outdated in $LOCAL_SETTINGS -- the OURS-INCOMPLETE line above names each entry. Run: install --target $REPO_ROOT --yes$_HOME_HINT"
   fi
 
   if [ "$IS_OURS" -eq 0 ]; then
@@ -716,7 +728,8 @@ if [ "$IS_LEGACY" -eq 1 ]; then
   fi
 fi
 
-_REGISTERED_EVENTS="InstructionsLoaded, PreToolUse, SubagentStart"
+# PAIRED with registration.py's REGISTRATION keys; prose only, never parsed.
+_REGISTERED_EVENTS="InstructionsLoaded, PreToolUse, SubagentStart, UserPromptExpansion"
 _ENV_SWITCH="CLAUDE_OBSERVABILITY_ENABLED"
 _UNDO_HINT="bash $_SETUP_LIB_DIR/setup.sh remove --target $REPO_ROOT --yes"
 
@@ -725,13 +738,76 @@ _UNDO_HINT="bash $_SETUP_LIB_DIR/setup.sh remove --target $REPO_ROOT --yes"
 # is where the run ends, having written nothing.
 # ---------------------------------------------------------------------------
 
+# _record_paths -- the record path set, one per line: the data dir, its
+# observability/ directory ("d <path>"), then events.jsonl and the
+# generations the writer's rotation produces (.1 to .3, the same view
+# `status` uses) ("f <path>"). Only paths that exist, symlinks included.
+# The single list both functions below walk, so they cannot drift.
+_record_paths() {
+  local events_dir="$_RECORD_DATA_DIR/observability" path suffix
+  [ -n "$_RECORD_DATA_DIR" ] || return 0
+  for path in "$_RECORD_DATA_DIR" "$events_dir"; do
+    if [ -e "$path" ] || [ -L "$path" ]; then printf 'd %s\n' "$path"; fi
+  done
+  for suffix in "" ".1" ".2" ".3"; do
+    path="$events_dir/events.jsonl$suffix"
+    if [ -e "$path" ] || [ -L "$path" ]; then printf 'f %s\n' "$path"; fi
+  done
+  return 0
+}
+
+# _tighten_record_modes -- spec 021 ADR-4 / F6 AC2. The writer creates new
+# directories 0700 and files 0600; records an older bundle wrote are brought
+# to the same modes here. Confined to _record_paths: nothing else is chmod-ed,
+# and a symbolic link is skipped with a WARN (chmod would follow it out of the
+# data dir). A path that cannot be changed (not owned, immutable) is a WARN,
+# never an abort. Nothing is created.
+_tighten_record_modes() {
+  local kind path
+  while read -r kind path; do
+    if [ -L "$path" ]; then
+      _emit "WARN" "$path is a symbolic link; not restricted (only real record files and directories are changed)."
+    elif [ "$kind" = "d" ]; then
+      [ -d "$path" ] || continue
+      chmod 700 "$path" 2>/dev/null || _emit "WARN" "could not restrict $path to owner-only (0700); left as is."
+    else
+      [ -f "$path" ] || continue
+      chmod 600 "$path" 2>/dev/null || _emit "WARN" "could not restrict $path to owner-only (0600); left as is."
+    fi
+  done <<EOF_PATHS
+$(_record_paths)
+EOF_PATHS
+  return 0
+}
+
+# _records_need_tightening -- true when an existing, non-symlink record path
+# has a mode other than the owner-only one. GNU stat first (BSD rejects -c).
+_records_need_tightening() {
+  local kind path mode want
+  while read -r kind path; do
+    [ -L "$path" ] && continue
+    if [ "$kind" = "d" ]; then want=700; [ -d "$path" ] || continue; else want=600; [ -f "$path" ] || continue; fi
+    mode="$(stat -c %a "$path" 2>/dev/null || stat -f %Lp "$path" 2>/dev/null)" || mode=""
+    [ "$mode" = "$want" ] || return 0
+  done <<EOF_PATHS
+$(_record_paths)
+EOF_PATHS
+  return 1
+}
+
 if [ "$VERB" = "install" ]; then
   _emit "PLAN" "would install the observability bundle into $BUNDLE_DIR"
+  if _records_need_tightening; then
+    _emit "PLAN" "would restrict existing record files under $_RECORD_DATA_DIR to owner-only (dirs 0700, events.jsonl* 0600)"
+  fi
   if [ "$IS_LEGACY" -eq 1 ]; then
     _emit "PLAN" "would remove the legacy in-repo registration from $SHARED_SETTINGS"
     _emit "PLAN" "would add hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH to $LOCAL_SETTINGS"
   elif [ "$DETECT_LABEL" = "OURS-CURRENT" ]; then
     _emit "PLAN" "would leave $LOCAL_SETTINGS unchanged -- its registration is already current"
+  elif [ "$DETECT_LABEL" = "OURS-OLD" ] || [ "$DETECT_LABEL" = "OURS-INCOMPLETE" ]; then
+    # Ours already: entries are rewritten in place, not added beside the old.
+    _emit "PLAN" "would bring hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH up to date in $LOCAL_SETTINGS"
   else
     _emit "PLAN" "would add hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH to $LOCAL_SETTINGS"
   fi
@@ -770,12 +846,17 @@ fi
 # the same treatment everywhere rather than a patch at the one site.
 # ---------------------------------------------------------------------------
 
-# _report_local_add <registration output> -- name the three entries only when
-# the local half actually changed something.
+# _report_local_add <registration output> -- name the four entries only when
+# the local half actually changed something. The label stays ADDED either way
+# (SKILL.md's label set); the message says when an older registration of ours
+# was rewritten in place rather than added.
 _report_local_add() {
   case "$1" in
     *"already configured"*)
       _emit "INFO" "already configured -- nothing was changed in $LOCAL_SETTINGS."
+      ;;
+    *"updated observability registration"*)
+      _emit "ADDED" "hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH in $LOCAL_SETTINGS, updating the older registration of ours in place"
       ;;
     *)
       _emit "ADDED" "hooks $_REGISTERED_EVENTS and env $_ENV_SWITCH in $LOCAL_SETTINGS"
@@ -819,6 +900,8 @@ if [ "$VERB" = "install" ]; then
     _emit "ABORT" "the bundle install failed, so the registration was not touched."
     exit 1
   fi
+
+  _tighten_record_modes
 
   if [ "$IS_LEGACY" -eq 1 ]; then
     # Ruling (s): ONE operation, so recording is never simultaneously double

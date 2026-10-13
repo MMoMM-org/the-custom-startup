@@ -67,7 +67,7 @@ _assert_ascii_digit_bytes() {
   return 0
 }
 
-@test "marker: the template version file exists and contains a single h<N> line, starting at h1" {
+@test "marker: the template version file exists and contains a single h<N> line, currently h2" {
   [ -f "$MARKER" ]
 
   run wc -l < "$MARKER"
@@ -79,7 +79,7 @@ _assert_ascii_digit_bytes() {
     h[[:digit:]]*) : ;;
     *) echo "marker is not of the form h<N>: $content" >&2; return 1 ;;
   esac
-  [ "$content" = "h1" ]
+  [ "$content" = "h2" ]
 }
 
 @test "marker: byte format matches the tcs-git-helpers-version convention exactly (h<N> + trailing newline, nothing else)" {
@@ -117,13 +117,13 @@ _assert_ascii_digit_bytes() {
 @test "helper: reads the marker and returns its version verbatim on stdout, exit 0" {
   run bash -c ". '$HELPER' && _read_observability_bundle_version '$MARKER'"
   [ "$status" -eq 0 ]
-  [ "$output" = "h1" ]
+  [ "$output" = "h2" ]
 }
 
 @test "helper: with no argument, resolves the bundle's own template marker by default" {
   run bash -c ". '$HELPER' && _read_observability_bundle_version"
   [ "$status" -eq 0 ]
-  [ "$output" = "h1" ]
+  [ "$output" = "h2" ]
 }
 
 # ---------------------------------------------------------------------------

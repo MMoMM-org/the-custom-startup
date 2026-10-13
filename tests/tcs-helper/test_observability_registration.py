@@ -49,7 +49,20 @@ from lock import LOCK_GRACE, LOCK_TIMEOUT_ENV, LOCK_TTL_ENV  # noqa: E402
 
 OUR_NAMESPACE = '$HOME/.claude/observability/'
 
+# Spelled out rather than read from registration.REGISTRATION: an expected
+# value taken from the code under test cannot catch a wrong change to it.
+# spec 021 ADR-1: one PreToolUse entry for Skill, Agent and Bash, dispatched
+# by log_tool.sh, plus the typed-skill route under UserPromptExpansion.
 EXPECTED_EVENTS = {
+    'InstructionsLoaded': ('', 'log_instructions.sh'),
+    'PreToolUse': ('Skill|Agent|Bash', 'log_tool.sh'),
+    'SubagentStart': ('', 'log_agent.sh'),
+    'UserPromptExpansion': ('', 'log_expansion.sh'),
+}
+
+# The registration bundle h1 wrote (spec 019), byte for byte. A repository
+# that ran setup before spec 021 carries exactly this.
+H1_REGISTRATION = {
     'InstructionsLoaded': ('', 'log_instructions.sh'),
     'PreToolUse': ('Skill', 'log_skill.sh'),
     'SubagentStart': ('', 'log_agent.sh'),
@@ -109,10 +122,10 @@ def test_absent_settings_file_is_created_with_only_our_entries(tmp_path):
     data = json.loads(settings.read_text(encoding='utf-8'))
     assert set(data) == {'env', 'hooks'}
     assert set(data['hooks']) == set(EXPECTED_EVENTS)
-    assert len(our_commands(settings.read_text(encoding='utf-8'))) == 3
+    assert len(our_commands(settings.read_text(encoding='utf-8'))) == len(EXPECTED_EVENTS)
 
 
-def test_the_three_hook_entries_and_the_env_switch_are_all_present(tmp_path):
+def test_every_hook_entry_and_the_env_switch_are_all_present(tmp_path):
     """Each event carries its own script under its own matcher."""
     settings = tmp_path / 'settings.local.json'
 
@@ -128,6 +141,125 @@ def test_the_three_hook_entries_and_the_env_switch_are_all_present(tmp_path):
         assert len(ours) == 1, f'{event} should carry exactly one entry of ours'
         assert ours[0]['matcher'] == matcher
         assert script in ours[0]['hooks'][0]['command']
+
+
+# ---------------------------------------------------------------------------
+# spec 021 F5: an h1 registration is brought forward in place
+# ---------------------------------------------------------------------------
+
+def _h1_entry(event):
+    matcher, script = H1_REGISTRATION[event]
+    return {'matcher': matcher, 'hooks': [{'type': 'command', 'command': command_for(script)}]}
+
+
+def _h1_document_with_foreign_neighbours():
+    """An h1 registration with a foreign entry beside ours under three events,
+    one of them the event h1 never registered, plus one under a foreign event."""
+    return {
+        'env': {'CLAUDE_OBSERVABILITY_ENABLED': '1'},
+        'hooks': {
+            'InstructionsLoaded': [_h1_entry('InstructionsLoaded')],
+            'PreToolUse': [
+                {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': '/opt/guard/pre.sh'}]},
+                _h1_entry('PreToolUse'),
+            ],
+            'SubagentStart': [_h1_entry('SubagentStart')],
+            'UserPromptExpansion': [
+                {'matcher': '', 'hooks': [{'type': 'command', 'command': '/opt/other/expand.sh'}]},
+            ],
+            'Stop': [{'matcher': '', 'hooks': [{'type': 'command', 'command': '/opt/other/stop.sh'}]}],
+        },
+    }
+
+
+def test_an_h1_registration_is_updated_in_place_and_the_new_event_added(tmp_path):
+    """AC 5.1: PreToolUse is replaced where it stood, UserPromptExpansion is
+    added, and InstructionsLoaded and SubagentStart are left exactly as they were."""
+    settings = tmp_path / 'settings.local.json'
+    before = _h1_document_with_foreign_neighbours()
+    write_settings(settings, before)
+
+    result = run_registration(settings)
+
+    assert result.returncode == 0, result.stderr
+    assert 'updated observability registration in' in result.stdout
+    data = json.loads(settings.read_text(encoding='utf-8'))
+    hooks = data['hooks']
+    # In place: the foreign entry keeps index 0, ours keeps index 1.
+    assert hooks['PreToolUse'] == [
+        before['hooks']['PreToolUse'][0],
+        {'matcher': 'Skill|Agent|Bash',
+         'hooks': [{'type': 'command', 'command': '"$HOME/.claude/observability/log_tool.sh"'}]},
+    ]
+    assert hooks['UserPromptExpansion'] == [
+        before['hooks']['UserPromptExpansion'][0],
+        {'matcher': '',
+         'hooks': [{'type': 'command', 'command': '"$HOME/.claude/observability/log_expansion.sh"'}]},
+    ]
+    assert hooks['InstructionsLoaded'] == before['hooks']['InstructionsLoaded']
+    assert hooks['SubagentStart'] == before['hooks']['SubagentStart']
+    assert 'log_skill.sh' not in settings.read_text(encoding='utf-8')
+
+
+def test_a_second_run_over_an_updated_h1_registration_changes_nothing(tmp_path):
+    """AC 5.2: one entry of ours per registered event, and no further write."""
+    settings = tmp_path / 'settings.local.json'
+    write_settings(settings, _h1_document_with_foreign_neighbours())
+    assert run_registration(settings).returncode == 0
+    after_first = settings.read_bytes()
+
+    second = run_registration(settings)
+
+    assert second.returncode == 0, second.stderr
+    assert 'already configured' in second.stdout
+    assert settings.read_bytes() == after_first
+    data = json.loads(after_first)
+    for event in EXPECTED_EVENTS:
+        ours = [e for e in data['hooks'][event] if entry_is_ours(e)]
+        assert len(ours) == 1, f'{event} carries {len(ours)} entries of ours'
+
+
+def test_foreign_entries_survive_both_runs_over_an_h1_registration(tmp_path):
+    """AC 5.4: every foreign entry is still there, unchanged, after the update
+    and after the no-op second run."""
+    settings = tmp_path / 'settings.local.json'
+    before = _h1_document_with_foreign_neighbours()
+    write_settings(settings, before)
+    foreign = [
+        (event, entry)
+        for event, entries in before['hooks'].items()
+        for entry in entries
+        if not entry_is_ours(entry)
+    ]
+    assert len(foreign) == 3
+
+    for _ in range(2):
+        assert run_registration(settings).returncode == 0
+        data = json.loads(settings.read_text(encoding='utf-8'))
+        for event, entry in foreign:
+            assert entry in data['hooks'][event], f'foreign {event} entry lost'
+
+
+def test_removal_takes_every_entry_of_ours_across_all_four_events(tmp_path):
+    """AC 5.5: after an h1 update, remove leaves no entry of ours under any
+    event -- including UserPromptExpansion, which h1 never wrote -- and keeps
+    every foreign one."""
+    settings = tmp_path / 'settings.local.json'
+    before = _h1_document_with_foreign_neighbours()
+    write_settings(settings, before)
+    assert run_registration(settings).returncode == 0
+
+    result = run_registration(settings, '--remove')
+
+    assert result.returncode == 0, result.stderr
+    text = settings.read_text(encoding='utf-8')
+    assert our_commands(text) == []
+    data = json.loads(text)
+    assert data['hooks'] == {
+        'PreToolUse': [before['hooks']['PreToolUse'][0]],
+        'UserPromptExpansion': before['hooks']['UserPromptExpansion'],
+        'Stop': before['hooks']['Stop'],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +365,7 @@ def test_running_twice_changes_nothing(tmp_path):
     after_second = settings.read_text(encoding='utf-8')
 
     assert after_second == after_first
-    assert len(our_commands(after_second)) == 3
+    assert len(our_commands(after_second)) == len(EXPECTED_EVENTS)
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +387,7 @@ def test_settings_override_is_the_only_file_touched(tmp_path):
     assert run_registration(settings).returncode == 0
 
     assert settings.exists(), '--settings path was not written'
-    assert len(our_commands(settings.read_text(encoding='utf-8'))) == 3
+    assert len(our_commands(settings.read_text(encoding='utf-8'))) == len(EXPECTED_EVENTS)
     assert decoy.read_text(encoding='utf-8') == '{}\n', 'a file outside --settings was touched'
 
 
@@ -305,7 +437,7 @@ def test_zero_byte_settings_file_is_treated_as_empty_document(tmp_path):
     data = json.loads(settings.read_text(encoding='utf-8'))
     assert set(data) == {'env', 'hooks'}
     assert set(data['hooks']) == set(EXPECTED_EVENTS)
-    assert len(our_commands(settings.read_text(encoding='utf-8'))) == 3
+    assert len(our_commands(settings.read_text(encoding='utf-8'))) == len(EXPECTED_EVENTS)
 
 
 # ---------------------------------------------------------------------------
@@ -1141,7 +1273,7 @@ def test_two_concurrent_runs_serialize_and_neither_observes_a_partial_file(tmp_p
 
     data = json.loads(settings.read_text(encoding='utf-8'))
     assert data['model'] == 'claude-opus-5'
-    assert len(our_commands(settings.read_text(encoding='utf-8'))) == 3, (
+    assert len(our_commands(settings.read_text(encoding='utf-8'))) == len(EXPECTED_EVENTS), (
         'the two runs did not serialize -- entries were doubled')
 
 

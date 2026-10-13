@@ -31,7 +31,7 @@ _lacks() {
 _run_hook_with_cmd() {
   local cmd="$1"
   local input
-  input=$(jq -n --arg c "$cmd" '{tool_name:"Bash", tool_input:{command:$c}}')
+  input=$(jq -nc --arg c "$cmd" '{tool_name:"Bash", tool_input:{command:$c}}')
   printf '%s' "$input" | bash "$HOOK"
 }
 

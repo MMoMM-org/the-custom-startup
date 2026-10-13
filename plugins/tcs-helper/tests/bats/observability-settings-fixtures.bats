@@ -123,7 +123,7 @@ _assert_json_invalid() {
 # 4/5. foreign-plus-ours-current / foreign-plus-ours-older
 #
 # ADR-5 keeps the registration command opaque to bundle version, so both
-# fixtures ship the SAME registration JSON (foreign entry + our three hook
+# fixtures ship the SAME registration JSON (foreign entry + our four hook
 # entries + env switch). What actually distinguishes "current" from "older"
 # is the bundle version marker in the paired $HOME fixture, read from
 # $HOME/.claude/observability/tcs-helper-observability-version -- so these
@@ -131,7 +131,7 @@ _assert_json_invalid() {
 # marker is the one that makes this scenario "current" vs "older".
 # ---------------------------------------------------------------------------
 
-@test "fixture: foreign-plus-ours-current has foreign + all 3 ours entries, and a home bundle at the current version" {
+@test "fixture: foreign-plus-ours-current has foreign + all 4 ours entries, and a home bundle at the current version" {
   local repo="$FIXTURES_DIR/foreign-plus-ours-current"
   local home="$FIXTURES_DIR/foreign-plus-ours-current.home"
   local file="$repo/.claude/settings.local.json"
@@ -142,7 +142,7 @@ _assert_json_invalid() {
   [ "$status" -eq 0 ]
 
   run grep -c -F '$HOME/.claude/observability/' "$file"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
 
   local marker="$home/.claude/observability/tcs-helper-observability-version"
   [ -f "$marker" ]
@@ -151,7 +151,7 @@ _assert_json_invalid() {
   [ "$(cat "$marker")" = "$expected" ]
 }
 
-@test "fixture: foreign-plus-ours-older has foreign + all 3 ours entries, and a home bundle at an older version" {
+@test "fixture: foreign-plus-ours-older has foreign + all 4 ours entries, and a home bundle at an older version" {
   local repo="$FIXTURES_DIR/foreign-plus-ours-older"
   local home="$FIXTURES_DIR/foreign-plus-ours-older.home"
   local file="$repo/.claude/settings.local.json"
@@ -162,7 +162,7 @@ _assert_json_invalid() {
   [ "$status" -eq 0 ]
 
   run grep -c -F '$HOME/.claude/observability/' "$file"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
 
   local marker="$home/.claude/observability/tcs-helper-observability-version"
   [ -f "$marker" ]

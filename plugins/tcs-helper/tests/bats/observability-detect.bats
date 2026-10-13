@@ -110,10 +110,10 @@ _mtime() {
   printf '%s' "$m"
 }
 
-# _count_state_lines <text> -- number of lines matching one of the six
+# _count_state_lines <text> -- number of lines matching one of the seven
 # labelled state lines this script ever emits (never INFO).
 _count_state_lines() {
-  printf '%s\n' "$1" | grep -cE '^\[tcs-helper:observability-setup\] (CLEAN|CONFLICT|LEGACY|OURS-CURRENT|OURS-OLD|ABORT):'
+  printf '%s\n' "$1" | grep -cE '^\[tcs-helper:observability-setup\] (CLEAN|CONFLICT|LEGACY|OURS-CURRENT|OURS-OLD|OURS-INCOMPLETE|ABORT):'
 }
 
 # ---------------------------------------------------------------------------
@@ -261,6 +261,159 @@ PY
   _run_detect "$repo" "_BUNDLE_INSTALL_TARGET_DIR=$older_home/.claude/observability"
   [ "$status" -eq 4 ]
   _has "$output" "OURS-OLD"
+}
+
+# ---------------------------------------------------------------------------
+# OURS-INCOMPLETE -- spec 021 ADR-5. The bundle marker is global, so the
+# first repository updated makes every other one read OURS-CURRENT; each
+# repository's own entries are now judged against EXPECTED as well.
+# ---------------------------------------------------------------------------
+
+# _current_home -- the detect override naming a home whose bundle marker is current.
+_current_home() {
+  printf '%s' "_BUNDLE_INSTALL_TARGET_DIR=$FIXTURES_DIR/foreign-plus-ours-current.home/.claude/observability"
+}
+
+# _ours <matcher> <script> -- one hook entry of ours, as JSON.
+_ours() {
+  printf '{"matcher": "%s", "hooks": [{"type": "command", "command": "\\"$HOME/.claude/observability/%s\\""}]}' "$1" "$2"
+}
+
+# _foreign <command> -- one foreign hook entry, as JSON.
+_foreign() {
+  printf '{"matcher": "", "hooks": [{"type": "command", "command": "%s"}]}' "$1"
+}
+
+# _target_with <work-name> <InstructionsLoaded> <PreToolUse> <SubagentStart>
+#              <UserPromptExpansion>
+# A repository whose local settings carry exactly these four entry lists
+# (each a JSON array body, "" for an absent event). The current registration
+# is `_target_with x "$IL" "$PTU" "$SS" "$UPE"` with the variables below.
+_target_with() {
+  local repo="$FIXTURES_PARENT/$1" body="" event list
+  rm -rf "$repo"
+  cp -pR "$FIXTURES_DIR/empty-object" "$repo"
+  for event in InstructionsLoaded PreToolUse SubagentStart UserPromptExpansion; do
+    shift
+    list="$1"
+    if [ -z "$list" ]; then continue; fi
+    if [ -n "$body" ]; then body="$body, "; fi
+    body="$body\"$event\": [$list]"
+  done
+  printf '{"env": {"CLAUDE_OBSERVABILITY_ENABLED": "1"}, "hooks": {%s}}\n' "$body" \
+    > "$repo/.claude/settings.local.json"
+  printf '%s\n' "$repo"
+}
+
+IL="$(_ours "" log_instructions.sh)"
+PTU="$(_ours "Skill|Agent|Bash" log_tool.sh)"
+SS="$(_ours "" log_agent.sh)"
+UPE="$(_ours "" log_expansion.sh)"
+PTU_H1="$(_ours "Skill" log_skill.sh)"
+FOREIGN_BASH='{"matcher": "Bash", "hooks": [{"type": "command", "command": "/opt/foreign-audit/hook.sh"}]}'
+
+@test "the current registration, built by the same helper, is OURS-CURRENT (the helper itself is sound)" {
+  local repo
+  repo="$(_target_with helper-current "$IL" "$FOREIGN_BASH, $PTU" "$SS" "$UPE")"
+  _run_detect "$repo" "$(_current_home)"
+  [ "$status" -eq 0 ]
+  _has "$output" "] OURS-CURRENT: "
+}
+
+@test "an h1 registration with the bundle marker current: OURS-INCOMPLETE, exit 4, naming each outdated and missing entry" {
+  local repo
+  repo="$(_target_with h1-current-marker "$IL" "$FOREIGN_BASH, $PTU_H1" "$SS" "")"
+  _run_detect "$repo" "$(_current_home)"
+  [ "$status" -eq 4 ]
+  _has "$output" "] OURS-INCOMPLETE: "
+  _has "$output" "PreToolUse (outdated), UserPromptExpansion (missing)"
+  _lacks "$output" "InstructionsLoaded ("
+  _lacks "$output" "SubagentStart ("
+  _lacks "$output" "OURS-CURRENT"
+  _lacks "$output" "CONFLICT"
+  [ "$(_count_state_lines "$output")" -eq 1 ]
+}
+
+@test "an h1 registration against an OLDER bundle marker stays OURS-OLD -- the bundle is the first thing to fix" {
+  local repo
+  repo="$(_target_with h1-older-marker "$IL" "$FOREIGN_BASH, $PTU_H1" "$SS" "")"
+  _run_detect "$repo" "_BUNDLE_INSTALL_TARGET_DIR=$FIXTURES_DIR/foreign-plus-ours-older.home/.claude/observability"
+  [ "$status" -eq 4 ]
+  _has "$output" "] OURS-OLD: "
+  _lacks "$output" "OURS-INCOMPLETE"
+}
+
+@test "a second entry of ours under one event reads as outdated, as setup would collapse it" {
+  local repo
+  repo="$(_target_with duplicate-ours "$IL, $IL" "$PTU" "$SS" "$UPE")"
+  _run_detect "$repo" "$(_current_home)"
+  [ "$status" -eq 4 ]
+  _has "$output" "InstructionsLoaded (outdated)"
+  _lacks "$output" "PreToolUse ("
+  _lacks "$output" "UserPromptExpansion ("
+}
+
+@test "a PreToolUse entry with the right script but a different matcher reads as outdated" {
+  local repo matcher
+  for matcher in "Skill" " Skill|Agent|Bash"; do
+    repo="$(_target_with matcher-drift "$IL" "$(_ours "$matcher" log_tool.sh)" "$SS" "$UPE")"
+    _run_detect "$repo" "$(_current_home)"
+    [ "$status" -eq 4 ]
+    _has "$output" "] OURS-INCOMPLETE: "
+    _has "$output" "PreToolUse (outdated)"
+  done
+}
+
+@test "a command that merely contains the expected script name reads as outdated" {
+  local repo
+  repo="$(_target_with script-substring "$IL" "$(_ours "Skill|Agent|Bash" v1/log_tool.sh)" "$SS" "$UPE")"
+  _run_detect "$repo" "$(_current_home)"
+  [ "$status" -eq 4 ]
+  _has "$output" "PreToolUse (outdated)"
+}
+
+@test "incomplete events are named in registration order, not in the order found" {
+  # Non-adjacent in that order, and an outdated one before two missing ones.
+  local repo
+  repo="$(_target_with ordering "$(_ours "Skill" log_instructions.sh)" "$PTU" "" "")"
+  _run_detect "$repo" "$(_current_home)"
+  [ "$status" -eq 4 ]
+  _has "$output" "is not: InstructionsLoaded (outdated), SubagentStart (missing), UserPromptExpansion (missing). Re-run"
+}
+
+@test "a foreign UserPromptExpansion hook in a CLEAN repository is a CONFLICT" {
+  local repo="$FIXTURES_PARENT/foreign-expansion-clean"
+  rm -rf "$repo"
+  cp -pR "$FIXTURES_DIR/empty-object" "$repo"
+  printf '{"hooks": {"UserPromptExpansion": [%s]}}\n' "$(_foreign /opt/other/expand.sh)" \
+    > "$repo/.claude/settings.local.json"
+
+  _run_detect "$repo"
+  [ "$status" -eq 3 ]
+  _has "$output" "] CONFLICT: "
+  _has "$output" "UserPromptExpansion -> /opt/other/expand.sh"
+}
+
+@test "a foreign UserPromptExpansion hook in an OURS repository is named in the OURS-INCOMPLETE message, not a CONFLICT" {
+  local repo
+  repo="$(_target_with foreign-expansion-ours "$IL" "$PTU_H1" "$SS" "$(_foreign /opt/other/expand.sh)")"
+  _run_detect "$repo" "$(_current_home)"
+  [ "$status" -eq 4 ]
+  _has "$output" "] OURS-INCOMPLETE: "
+  _has "$output" "UserPromptExpansion (missing)"
+  _has "$output" "UserPromptExpansion -> /opt/other/expand.sh"
+  _lacks "$output" "CONFLICT"
+}
+
+@test "a foreign hook under a COMPLETE event is not named, though another event is incomplete" {
+  local repo
+  repo="$(_target_with foreign-beside-complete "$(_foreign /opt/other/on-load.sh), $IL" "$FOREIGN_BASH, $PTU" "$SS" "")"
+  _run_detect "$repo" "$(_current_home)"
+  [ "$status" -eq 4 ]
+  _has "$output" "UserPromptExpansion (missing)"
+  _lacks "$output" "/opt/other/on-load.sh"
+  _lacks "$output" "/opt/foreign-audit/hook.sh"
+  _lacks "$output" "foreign hook entries"
 }
 
 # ---------------------------------------------------------------------------

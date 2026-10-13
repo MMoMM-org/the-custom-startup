@@ -251,11 +251,12 @@ _make_record() {
   _has "$output" "InstructionsLoaded"
   _has "$output" "PreToolUse"
   _has "$output" "SubagentStart"
+  _has "$output" "UserPromptExpansion"
   _has "$output" "CLAUDE_OBSERVABILITY_ENABLED"
 
   [ -f "$target" ]
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
 }
 
 @test "install writes the bundle and its version marker into the resolved HOME" {
@@ -663,6 +664,7 @@ PY
   _has "$output" "InstructionsLoaded"
   _has "$output" "PreToolUse"
   _has "$output" "SubagentStart"
+  _has "$output" "UserPromptExpansion"
   run _count_our_hooks "$target"
   [ "$output" -eq 0 ]
 }
@@ -853,6 +855,103 @@ PY
 }
 
 # ---------------------------------------------------------------------------
+# spec 021 F5 -- a repository setup registered under h1. The bundle marker is
+# global, so the first repository updated makes it current for every other
+# one; the repository's own entries are what still say "outdated".
+# ---------------------------------------------------------------------------
+
+# _write_h1_local <repo> [<extra hooks json, comma-led>] -- the registration
+# spec 019's setup wrote (bundle h1): PreToolUse matcher "Skill" ->
+# log_skill.sh, and no UserPromptExpansion.
+_write_h1_local() {
+  _write_local "$1" '{
+  "env": { "CLAUDE_OBSERVABILITY_ENABLED": "1" },
+  "hooks": {
+    "InstructionsLoaded": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_instructions.sh\"" }]}],
+    "PreToolUse": [{ "matcher": "Skill", "hooks": [
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_skill.sh\"" }]}],
+    "SubagentStart": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_agent.sh\"" }]}]'"${2:-}"'
+  }
+}'
+}
+
+@test "status shows an h1 registration under a current bundle as ours and outdated, never not configured" {
+  local home dir data
+  home="$(_home_with_bundle_version status-h1 "$CURRENT_BUNDLE_VERSION")"
+  dir="$(_copy_fixture absent status-h1)"
+  data="$WORK_PARENT/status-h1.data"
+  mkdir -p "$data"
+  _write_h1_local "$dir"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" status "$dir"
+  [ "$status" -eq 0 ]
+  _has "$output" "] OURS-INCOMPLETE: "
+  _has "$output" "PreToolUse (outdated), UserPromptExpansion (missing)"
+  _has "$output" "] REGISTRATION: outdated"
+  _has "$output" "STATUS: configured but silent"
+  _lacks "$output" "not configured"
+}
+
+@test "install over an h1 registration updates it in place; a second install changes nothing" {
+  local home dir target before
+  home="$(_home_with_bundle_version install-h1 "$CURRENT_BUNDLE_VERSION")"
+  dir="$(_copy_fixture absent install-h1)"
+  target="$dir/.claude/settings.local.json"
+  _write_h1_local "$dir" ',
+    "Stop": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "/opt/foreign-audit/on-stop.sh" }]}]'
+
+  # The plan and the report say the registration is brought forward, not
+  # added beside the old one.
+  _run_setup "$home" install "$dir"
+  [ "$status" -eq 0 ]
+  _has "$output" "PLAN: would bring hooks InstructionsLoaded, PreToolUse, SubagentStart, UserPromptExpansion and env CLAUDE_OBSERVABILITY_ENABLED up to date in"
+  _lacks "$output" "would add hooks"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _has "$output" "OURS-INCOMPLETE"
+  _has "$output" "updating the older registration of ours in place"
+  _lacks "$output" "STOP"
+  run _count_our_hooks "$target"
+  [ "$output" -eq 4 ]
+  _has "$(cat "$target")" '\"$HOME/.claude/observability/log_tool.sh\"'
+  _has "$(cat "$target")" '\"$HOME/.claude/observability/log_expansion.sh\"'
+  _has "$(cat "$target")" '"Skill|Agent|Bash"'
+  _lacks "$(cat "$target")" "log_skill.sh"
+  _has "$(cat "$target")" "/opt/foreign-audit/on-stop.sh"
+
+  before="$WORK_PARENT/install-h1.after-first"
+  cp -p "$target" "$before"
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _has "$output" "OURS-CURRENT"
+  _has "$output" "already configured"
+  _assert_bytes_equal "$before" "$target"
+}
+
+@test "a foreign UserPromptExpansion hook beside an h1 registration does not stop install, and survives it" {
+  local home dir target
+  home="$(_home_with_bundle_version install-h1-foreign-upe "$CURRENT_BUNDLE_VERSION")"
+  dir="$(_copy_fixture absent install-h1-foreign-upe)"
+  target="$dir/.claude/settings.local.json"
+  _write_h1_local "$dir" ',
+    "UserPromptExpansion": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "/opt/other/expand.sh" }]}]'
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _has "$output" "UserPromptExpansion -> /opt/other/expand.sh"
+  _lacks "$output" "STOP"
+  _lacks "$output" "CONFLICT"
+  run _count_our_hooks "$target"
+  [ "$output" -eq 4 ]
+  _has "$(cat "$target")" "/opt/other/expand.sh"
+}
+
+# ---------------------------------------------------------------------------
 # SDD-AC-15 -- drift reaches the verb a person actually runs.
 # ---------------------------------------------------------------------------
 
@@ -913,7 +1012,7 @@ PY
   _lacks "$output" "STOP"
 
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
 
   # The half worth keeping: the foreign entry survives a run that actually
   # wrote, which is a real preservation assertion rather than one made true
@@ -921,7 +1020,7 @@ PY
   _has "$(cat "$target")" "/opt/Café-Tools/notify.sh"
   _has "$(cat "$target")" "Équipe-Café-日本語"
   total="$(grep -c -F '"type": "command"' "$target" || true)"
-  [ "$total" -eq 4 ]
+  [ "$total" -eq 5 ]
   _assert_no_lock "$dir"
 }
 
@@ -965,7 +1064,7 @@ PY
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   # json.dump defaults to ensure_ascii=True, which would rewrite these bytes
   # as backslash-u escapes: the document would still parse equal while the
   # operator bytes had changed (SDD-AC-10).
@@ -979,7 +1078,7 @@ PY
 # is never simultaneously double and never silently off.
 # ---------------------------------------------------------------------------
 
-@test "install on a legacy target migrates it: three hooks fire afterwards, not six" {
+@test "install on a legacy target migrates it: four hooks fire afterwards, not seven" {
   local home dir legacy target total
   home="$(_new_home legacy-migrate)"
   dir="$(_copy_fixture already-configured-observability legacy-migrate)"
@@ -993,11 +1092,11 @@ PY
   _run_setup "$home" install "$dir" --yes
   [ "$status" -eq 0 ]
 
-  # After: exactly three command hooks across BOTH files, all of them ours.
+  # After: exactly four command hooks across BOTH files, all of them ours.
   total="$(cat "$legacy" "$target" | grep -c -F '"type": "command"' || true)"
-  [ "$total" -eq 3 ]
+  [ "$total" -eq 4 ]
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
   [ "$status" -ne 0 ]
 }
@@ -1049,7 +1148,7 @@ PY
   _has "$(cat "$legacy")" "/opt/foreign-audit/hook.sh"
   _has "$(cat "$legacy")" "Bash(git:*)"
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   # The foreign entry is the ONLY command hook left in the shared file: the
   # three legacy ones are gone. Without this, "the foreign entry survives"
   # would also be true of a run that did nothing at all.
@@ -1402,7 +1501,7 @@ PY
   [ "$status" -ne 0 ]
   _has "$(cat "$legacy")" '"command": 123'
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   _assert_no_lock "$dir"
 }
 
@@ -1442,7 +1541,7 @@ PY
   run grep -c -F 'plugins/tcs-helper/scripts/observability' "$legacy"
   [ "$status" -ne 0 ]
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   _assert_no_lock "$dir"
 }
 
@@ -1523,7 +1622,7 @@ PY
   _lacks "$output" "MIGRATED"
   _has "$output" "ADDED"
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   run cat "$legacy"
   [ "$output" = "{}" ]
   _assert_no_lock "$dir"
@@ -1849,7 +1948,7 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   [ "$observations" -gt 0 ]
 
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   _assert_no_lock "$dir"
 }
 
@@ -1912,11 +2011,11 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   # would destroy exactly the property --home exists to serve, and would do
   # it invisibly -- the file would look right and work only on one machine.
   run _count_our_hooks "$target"
-  [ "$output" -eq 3 ]
+  [ "$output" -eq 4 ]
   _lacks "$(cat "$target")" "$other/.claude/observability"
   # The bytes as JSON actually holds them: the inner quotes are escaped, and
   # $HOME is a literal four characters, not an expansion.
-  _has "$(cat "$target")" '\"$HOME/.claude/observability/log_skill.sh\"'
+  _has "$(cat "$target")" '\"$HOME/.claude/observability/log_tool.sh\"'
 }
 
 @test "status --home reports the named home's bundle, not the running one" {
@@ -2084,4 +2183,172 @@ json.load(open(sys.argv[1], encoding='utf-8'))
   _has "$output" "OURS-CURRENT"
   _lacks "$output" "OURS-OLD"
   _lacks "$output" "no bundle marker is installed"
+}
+
+# ---------------------------------------------------------------------------
+# spec 021 T3.2 / F6 AC2 -- install tightens existing record modes
+# ---------------------------------------------------------------------------
+
+# _mode <path> -- octal permission bits. GNU stat first: BSD stat rejects -c,
+# and GNU stat on macOS-style `-f` means --file-system, so order matters.
+_mode() {
+  stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
+}
+
+# _seed_loose_records <data-dir> -- 0755 dirs, 0644 events.jsonl plus a
+# rotated generation, and sibling files that must never be touched.
+_seed_loose_records() {
+  local data="$1"
+  mkdir -p "$data/observability"
+  printf '{"kind":"skill"}\n' > "$data/observability/events.jsonl"
+  printf '{"kind":"skill"}\n' > "$data/observability/events.jsonl.1"
+  printf 'keep\n' > "$data/observability/notes.txt"
+  printf 'keep\n' > "$data/sibling.txt"
+  chmod 755 "$data" "$data/observability"
+  chmod 644 "$data/observability/events.jsonl" "$data/observability/events.jsonl.1" \
+    "$data/observability/notes.txt" "$data/sibling.txt"
+}
+
+@test "install tightens a 0644 events.jsonl and its rotation to 0600 and 0755 dirs to 0700, and nothing else" {
+  local home dir data
+  home="$(_new_home tighten)"
+  dir="$(_copy_fixture absent tighten)"
+  data="$WORK_PARENT/tighten.data"
+  _seed_loose_records "$data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  [ "$(_mode "$data")" = "700" ]
+  [ "$(_mode "$data/observability")" = "700" ]
+  [ "$(_mode "$data/observability/events.jsonl")" = "600" ]
+  [ "$(_mode "$data/observability/events.jsonl.1")" = "600" ]
+  # Confined to the record files: a neighbour keeps its mode.
+  [ "$(_mode "$data/observability/notes.txt")" = "644" ]
+  [ "$(_mode "$data/sibling.txt")" = "644" ]
+}
+
+@test "install resolves the data dir as the writer does, with no override: HOME/.claude/plugins/data/observability-<repo>" {
+  local home dir data
+  home="$(_new_home tighten-default)"
+  dir="$(_copy_fixture absent tighten-default)"
+  data="$home/.claude/plugins/data/observability-tighten-default"
+  _seed_loose_records "$data"
+
+  _run_setup "$home" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  [ "$(_mode "$data/observability")" = "700" ]
+  [ "$(_mode "$data/observability/events.jsonl")" = "600" ]
+  [ "$(_mode "$data/observability/events.jsonl.1")" = "600" ]
+}
+
+@test "install with no records yet creates nothing in the data dir" {
+  local home dir data
+  home="$(_new_home tighten-none)"
+  dir="$(_copy_fixture absent tighten-none)"
+  data="$WORK_PARENT/tighten-none.data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  [ ! -e "$data" ]
+}
+
+@test "a chmod that fails produces a WARN naming the file and the install still completes" {
+  local home dir data stub realchmod
+  home="$(_new_home tighten-warn)"
+  dir="$(_copy_fixture absent tighten-warn)"
+  data="$WORK_PARENT/tighten-warn.data"
+  _seed_loose_records "$data"
+
+  # A file owned by someone else cannot be built unprivileged, so the same
+  # failure (chmod exits non-zero on one path) is injected through PATH.
+  realchmod="$(command -v chmod)"
+  stub="$WORK_PARENT/tighten-warn.bin"
+  mkdir -p "$stub"
+  printf '#!/bin/sh\nfor a in "$@"; do case "$a" in */events.jsonl|%s) exit 1;; esac; done\nexec %s "$@"\n' \
+    "$data" "$realchmod" > "$stub/chmod"
+  "$realchmod" +x "$stub/chmod"
+
+  run env HOME="$home" PATH="$stub:$PATH" CLAUDE_OBSERVABILITY_DATA="$data" \
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.excludesFile GIT_CONFIG_VALUE_0=/dev/null \
+    bash "$SETUP_SH" install --target "$dir" --yes
+  [ "$status" -eq 0 ]
+  _has "$output" "[tcs-helper:observability-setup] WARN: could not restrict $data to owner-only (0700); left as is."
+  _has "$output" "[tcs-helper:observability-setup] WARN: could not restrict $data/observability/events.jsonl to owner-only (0600); left as is."
+  [ "$(_mode "$data/observability")" = "700" ]
+  _lacks "$output" "ABORT"
+  # The install went on: registration written, the other file tightened.
+  [ -f "$dir/.claude/settings.local.json" ]
+  [ "$(_mode "$data/observability/events.jsonl.1")" = "600" ]
+}
+
+@test "dry run with loose existing records announces the tightening and changes no mode" {
+  local home dir data
+  home="$(_new_home plan-loose)"
+  dir="$(_copy_fixture absent plan-loose)"
+  data="$WORK_PARENT/plan-loose.data"
+  _seed_loose_records "$data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir"
+  [ "$status" -eq 0 ]
+  _has "$output" "PLAN: would restrict existing record files under $data to owner-only (dirs 0700, events.jsonl* 0600)"
+  [ "$(_mode "$data")" = "755" ]
+  [ "$(_mode "$data/observability")" = "755" ]
+  [ "$(_mode "$data/observability/events.jsonl")" = "644" ]
+  [ "$(_mode "$data/observability/events.jsonl.1")" = "644" ]
+}
+
+@test "dry run with no records, or records already owner-only, has no tightening PLAN line" {
+  local home dir data
+  home="$(_new_home plan-quiet)"
+  dir="$(_copy_fixture absent plan-quiet)"
+  data="$WORK_PARENT/plan-quiet.data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir"
+  [ "$status" -eq 0 ]
+  _lacks "$output" "would restrict"
+
+  _seed_loose_records "$data"
+  chmod 700 "$data" "$data/observability"
+  chmod 600 "$data/observability/events.jsonl" "$data/observability/events.jsonl.1"
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir"
+  [ "$status" -eq 0 ]
+  _lacks "$output" "would restrict"
+}
+
+@test "a symlinked events.jsonl is skipped with a WARN, its target keeps its mode, and the plan stays quiet" {
+  local home dir data outside
+  home="$(_new_home tighten-link)"
+  dir="$(_copy_fixture absent tighten-link)"
+  data="$WORK_PARENT/tighten-link.data"
+  outside="$WORK_PARENT/tighten-link.outside"
+  _seed_loose_records "$data"
+  printf 'x\n' > "$outside"
+  chmod 644 "$outside"
+  rm "$data/observability/events.jsonl"
+  ln -s "$outside" "$data/observability/events.jsonl"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _has "$output" "WARN: $data/observability/events.jsonl is a symbolic link; not restricted"
+  [ "$(_mode "$outside")" = "644" ]
+  [ "$(_mode "$data/observability/events.jsonl.1")" = "600" ]
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir"
+  [ "$status" -eq 0 ]
+  _lacks "$output" "would restrict"
+}
+
+@test "a symlinked data dir is skipped: its target keeps its mode" {
+  local home dir data real
+  home="$(_new_home tighten-dirlink)"
+  dir="$(_copy_fixture absent tighten-dirlink)"
+  real="$WORK_PARENT/tighten-dirlink.real"
+  data="$WORK_PARENT/tighten-dirlink.data"
+  _seed_loose_records "$real"
+  ln -s "$real" "$data"
+
+  _run_setup_env "$home" "CLAUDE_OBSERVABILITY_DATA=$data" install "$dir" --yes
+  [ "$status" -eq 0 ]
+  _has "$output" "WARN: $data is a symbolic link; not restricted"
+  [ "$(_mode "$real")" = "755" ]
 }

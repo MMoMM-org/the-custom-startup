@@ -27,6 +27,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -549,3 +550,89 @@ def test_record_path_formula_matches_report_py(tmp_path):
     home = tmp_path / "some-home"
 
     assert sources._record_base_path(repo_root, home) == report._resolve_events_path(None, repo_root, home)
+
+
+# ---------------------------------------------------------------------------
+# spec-021 T4.2: the git section stays per repository (019 ADR-7). Git
+# records are never unioned across sources: each source's section lists only
+# what its own record holds, and a source with none says so even when a
+# sibling has some (PRD F4 AC3/AC5). Expected lines are hand-written literals.
+# ---------------------------------------------------------------------------
+
+
+def _git_line(subcommand: str, flags: str = "", session: str = "s1") -> str:
+    return json.dumps(
+        {
+            "ts": "2026-10-12T09:00:00Z", "kind": "git", "session": session, "repo": "r",
+            "subcommand": subcommand, "action": "", "flags": flags, "overrides": "",
+            "override_first": "", "caller": "main", "tool_use_id": "toolu_1",
+        }
+    )
+
+
+def _write_lines(repo_root: Path, home: Path, lines: list[str]) -> None:
+    path = _events_path(repo_root, home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _one_home_source(tmp_path: Path, label: str, lines: list[str]) -> sources.Source:
+    repo_root = _mkdir(tmp_path / f"{label}-repo")
+    home = _mkdir(tmp_path / f"{label}-home")
+    _write_lines(repo_root, home, lines)
+    return sources.Source(label=label, repo_root=repo_root, homes=[sources.HomeStatus(home=home, state=sources.RECORDING)])
+
+
+def _source_section(text: str, label: str) -> str:
+    start = text.index(f"=== {label} ===")
+    end = text.find("=== ", start + 1)
+    return text[start:] if end == -1 else text[start:end]
+
+
+def test_multi_source_git_section_is_per_source_never_unioned(tmp_path):
+    source_a = _one_home_source(tmp_path, "source-a", [_git_line("push", flags="--force")])
+    source_b = _one_home_source(tmp_path, "source-b", [_git_line("rebase", flags="-i", session="s9")])
+
+    text, _ = report.build_multi_source_report([source_a, source_b], datetime(2026, 10, 12, tzinfo=timezone.utc))
+
+    section_a = _source_section(text, "source-a")
+    section_b = _source_section(text, "source-b")
+    assert (
+        "Git operations (1 record(s), grouped by session, then caller):\n"
+        "  session s1:\n    main:\n      push -- flags: --force\n"
+    ) in section_a
+    assert "rebase" not in section_a
+    assert (
+        "Git operations (1 record(s), grouped by session, then caller):\n"
+        "  session s9:\n    main:\n      rebase -- flags: -i\n"
+    ) in section_b
+    assert "push" not in section_b
+
+
+def test_multi_source_source_without_git_records_says_so_beside_one_that_has_them(tmp_path):
+    source_a = _one_home_source(tmp_path, "source-a", [_git_line("push")])
+    source_b = _one_home_source(
+        tmp_path, "source-b", [json.dumps({"ts": "2026-10-12T09:00:00Z", "kind": "skill", "session": "s1", "skill": "x"})]
+    )
+
+    text, _ = report.build_multi_source_report([source_a, source_b], datetime(2026, 10, 12, tzinfo=timezone.utc))
+
+    section_b = _source_section(text, "source-b")
+    git_line = next(line for line in section_b.splitlines() if line.startswith("Git operations"))
+    assert "no git activity was recorded" in git_line
+    assert "not proof none happened" in git_line
+    assert "push" not in section_b
+
+
+def test_multi_source_malformed_git_record_is_dropped_without_exception(tmp_path):
+    malformed = json.loads(_git_line("reset"))
+    malformed["flags"] = ["--hard"]
+    unhashable = json.loads(_git_line("clean"))
+    unhashable["subcommand"] = {"clean": 1}
+    source = _one_home_source(tmp_path, "source-a", [json.dumps(malformed), json.dumps(unhashable), _git_line("push")])
+
+    text, _ = report.build_multi_source_report([source], datetime(2026, 10, 12, tzinfo=timezone.utc))
+
+    assert "Git operations (1 record(s), grouped by session, then caller):" in text
+    assert "reset" not in text
+    assert "clean" not in text

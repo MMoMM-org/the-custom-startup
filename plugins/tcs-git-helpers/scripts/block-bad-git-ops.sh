@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # scripts/block-bad-git-ops.sh — PreToolUse:Bash dispatcher
 #
 # Reads the PreToolUse:Bash hook envelope from stdin, regex-matches the
@@ -55,6 +55,17 @@ set -uo pipefail
 # what we want for a defensive matcher.
 
 INPUT=$(cat)
+
+# Fast path (spec 021 F7, ADR-6): every PATTERN_* needs `git` or `gh`, so a
+# command containing neither cannot match. Test everything after the first
+# `"command":"` through the END of the payload, never up to the next `"`: an
+# escaped quote (`echo \"x\" && git reset --hard`) would end the value early and
+# wave a destructive command through. Later fields (description, tool_use_id)
+# only cost speed, never safety. No `"command":"` match (e.g. a space after the
+# colon) leaves the whole payload, which falls through to the full path.
+_cmd_tail="${INPUT#*\"command\":\"}"
+case "$_cmd_tail" in *git*|*gh*) ;; *) exit 0 ;; esac
+
 TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null || true)
 [ "$TOOL" = "Bash" ] || exit 0
 

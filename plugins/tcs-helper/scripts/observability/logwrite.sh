@@ -380,19 +380,34 @@ _observability_repo_field() {
 # writer forks no stream editor or JSON parser" can be checked statically);
 # this costs ~0 ms, because it forks nothing (ADR-5, CON-7).
 #
-#   local body="${1#*\"$2\":\"}"   everything after the literal  "key":"
-#   [ "$body" = "$1" ] -> absent   parameter expansion that finds NO match
-#                                  returns the string UNCHANGED
-#   printf '%s' "${body%%\"*}"     up to the closing quote
+# MECHANISM (no fork, three steps):
+#   1. Presence: `case "$payload" in *"$needle"*)` where needle is `"key":"`.
+#      Absent -> print nothing and return. This is the redaction-critical
+#      step: an absent key returns BEFORE any slice is taken, so the payload
+#      can never come back as a "value" (on a Bash PreToolUse that would be
+#      the full command line, credentials included). Its test is
+#      tests/bats/observability-writer.bats, "a payload missing the
+#      requested key yields empty, never the whole payload", which scans the
+#      raw record bytes for a token-shaped canary rather than looking up a
+#      field: a `field == ""` check alone would stay green while the payload
+#      leaked into some other field.
+#   2. Bisect to the end of the FIRST occurrence: the shortest prefix of the
+#      payload that still matches `*"$needle"*` ends exactly where the first
+#      `"key":"` ends. About 18 glob tests at 200 KB.
+#   3. Value: everything after that point, up to the first `"` BYTE
+#      (`${rest%%\"*}`).
 #
-# THE SECOND LINE IS THE REDACTION-CRITICAL LINE OF THE WHOLE DESIGN. Without
-# it, a request for an absent key returns the ENTIRE payload — which, on a
-# Bash PreToolUse, is the full command line, credentials included. It has its
-# own test (tests/bats/observability-writer.bats, "a payload missing the
-# requested key yields empty, never the whole payload"), which scans the raw
-# record bytes for a token-shaped canary rather than looking up a field: a
-# check of `field == ""` alone would stay green while the payload leaked into
-# some other field.
+# WHY BISECT. The obvious `${p#*"needle"}` is quadratic in the text in front
+# of the key: 0.4 s behind 20 KB, 36 s behind 200 KB (an Agent `prompt` sits
+# in front of `tool_use_id`). `${p%%"needle"*}` is linear but ~4 us per byte
+# (0.9 s at 200 KB). The `case` glob is the fast primitive (~1 ms at 150 KB),
+# so the search is built from it: ~50-90 ms at 200 KB, flat per byte.
+#
+# LC_ALL=C is LOCAL to the function, as a guard: callers may change LC_ALL
+# after sourcing this file. It makes ${#s} and ${s:n:m} count bytes; in a
+# UTF-8 locale the same search measured ~5x slower (0.149 s against 0.028 s at
+# 200 KB). Slower, not quadratic, and the answer is identical; the scale test
+# runs it both ways.
 #
 # The opening quote in the pattern is load-bearing too, in a quieter way: the
 # search is for `"key":"`, not `key":"`, so a short key cannot match inside a
@@ -403,7 +418,7 @@ _observability_repo_field() {
 # Known limits, both accepted (SDD/Known Technical Issues — "a string
 # operation, not a JSON parser"):
 #   - A value containing an escaped quote (\") is cut at that quote, because
-#     `${body%%\"*}` stops at the first `"` BYTE. The extractor therefore
+#     `${rest%%\"*}` stops at the first `"` BYTE. The extractor therefore
 #     UNDER-captures. It never over-captures, which is the direction that
 #     would leak; the escaper downstream keeps the resulting dangling
 #     backslash legal JSON. Both directions are tested.
@@ -411,23 +426,17 @@ _observability_repo_field() {
 #     result is still a value from within the payload, never the payload
 #     itself, so the redaction guarantee holds; the field could be wrong.
 #
-# THE PRESENCE PRE-CHECK — a cost fix, not a semantic one. Prefix removal that
-# finds NO match is quadratic in bash: it tries every split point in the
-# payload before concluding there is none. Measured on this function with the
-# key ABSENT: 197 ms at 25 KB, 771 ms at 50 KB, 3377 ms at 100 KB, 6630 ms at
-# 150 KB — against CON-7's 1 ms-per-hook-invocation budget. log_agent.sh asks
-# for a parent key that is absent on every non-nested dispatch, i.e. the
-# COMMON case paid the WORST case, and a hook stalling for seconds blocks the
-# session. A `case` glob test short-circuits on the first attempt: 1 ms at
-# 150 KB, the identical answer roughly 6600x faster. (A bash `=~` regex also
-# measured 1 ms; scanning only the first 4 KB measured 9 ms but changes what
-# the function finds, so it was rejected.) The `[ "$body" = "$payload" ]`
-# guard below is KEPT as a backstop — the pre-check is now the first line of
-# the redaction defence, not its replacement.
+# WHY THE PRESENCE CHECK COMES FIRST AND ALONE. A prefix removal that finds NO
+# match is quadratic in bash (it tries every split point): measured with the
+# key ABSENT, 197 ms at 25 KB, 771 ms at 50 KB, 3377 ms at 100 KB, 6630 ms at
+# 150 KB, against CON-7's 1 ms-per-hook budget. A `case` glob short-circuits:
+# 1 ms at 150 KB, the identical answer roughly 6600x faster. (A bash `=~`
+# regex also measured 1 ms; scanning only the first 4 KB measured 9 ms but
+# changes what the function finds, so it was rejected.)
 #
 # KEYS ARE LITERAL, NOT PATTERNS — a deliberate BEHAVIOUR CHANGE that came
-# with the pre-check. Both the `case` test and the prefix removal now quote
-# "$key", so a key is matched byte for byte. Previously the removal's `$key`
+# with the pre-check. The `case` test and every glob test of the bisect use the
+# one quoted needle, so a key is matched byte for byte. Previously the removal's `$key`
 # was UNQUOTED inside the pattern, so glob metacharacters in a KEY acted as
 # wildcards. A quoted `case` and an unquoted removal disagree on exactly
 # these inputs (all measured):
@@ -446,22 +455,32 @@ _observability_repo_field() {
 # tests/bats/observability-writer.bats, "a key containing glob metacharacters
 # is matched literally, not as a pattern".
 _observability_field() {
-  local payload="${1:-}" key="${2:-}"
+  # LC_ALL=C (local, a guard against callers that change it after sourcing):
+  # ${#s}, ${s:n:m} and the glob below count BYTES. UTF-8 would work but run
+  # ~5x slower (0.149 s against 0.028 s at 200 KB).
+  local payload="${1:-}" key="${2:-}" LC_ALL=C
   # An empty key would make the pattern `*"":"`, which matches unrelated
   # text. Nothing legitimately asks for it.
   [ -n "$key" ] || { printf '' || true; return 0; }
-  # Presence first. The quoted `"\"$key\":\""` is matched literally; the
-  # bare `*` on either side are the only wildcards in the pattern.
+  local needle="\"$key\":\""
+  # Presence first. The quoted needle is matched literally; the bare `*` on
+  # either side are the only wildcards in the pattern.
   case "$payload" in
-    *"\"$key\":\""*) ;;                 # present — the fast path below
-    *) printf '' || true; return 0 ;;   # absent — same answer, no O(n^2) scan
+    *"$needle"*) ;;                     # present — the search below
+    *) printf '' || true; return 0 ;;   # absent — same answer, no scan
   esac
-  local body="${payload#*"\"$key\":\""}"
-  if [ "$body" = "$payload" ]; then   # key absent — NOT the whole payload
-    printf '' || true
-    return 0
-  fi
-  printf '%s' "${body%%\"*}" || true
+  # Bisect with the same glob: the shortest prefix still containing the
+  # needle ends exactly where the first occurrence ends (see MECHANISM above).
+  local lo=${#needle} hi=${#payload} mid
+  while [ "$lo" -lt "$hi" ]; do
+    mid=$(((lo + hi) / 2))
+    case "${payload:0:mid}" in
+      *"$needle"*) hi=$mid ;;
+      *) lo=$((mid + 1)) ;;
+    esac
+  done
+  local rest="${payload:$lo}"
+  printf '%s' "${rest%%\"*}" || true
   return 0
 }
 
@@ -550,11 +569,13 @@ _observability_redact_path() {
 # "this field is sensitive"; this list is what happens when an adapter forgets
 # to say it. Every name here is a category the keep/drop table drops outright:
 # Bash arguments and hook command strings, file contents, transcript_path,
-# absolute cwd, and any prompt or response text.
+# absolute cwd, and any prompt or response text. `args`, `command_args`,
+# `description` and `tool_input` are the tool-route argument carriers (spec 021
+# F6): an adapter must say `detail:` to emit them.
 #
 # A space-delimited string rather than an array: bash 3.2 has no associative
 # arrays (CON-1), and membership is one glob test with no loop and no fork.
-_OBSERVABILITY_DETAIL_ONLY_FIELDS=" command full_command hook_command content file_content transcript_path cwd prompt prompt_text response response_text "
+_OBSERVABILITY_DETAIL_ONLY_FIELDS=" command full_command hook_command content file_content transcript_path cwd prompt prompt_text response response_text args command_args description tool_input "
 
 # Is this field name emitted only in detail mode? Returns 0 if so. An empty
 # name is not — the membership pattern below would otherwise match on the
@@ -566,6 +587,17 @@ _observability_field_is_detail_only() {
     *" $name "*) return 0 ;;
   esac
   return 1
+}
+
+# The 95 printable ASCII bytes, 0x20-0x7E, spelled out for the writer's fast
+# path (a bracket range would follow the caller's collation, see there).
+_OBSERVABILITY_PRINTABLE_ASCII=' !"#$%&'"'"'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+
+# Put back a umask read earlier; a no-op for an empty value. Always returns 0
+# so a `set -e` caller never sees the restore fail.
+_observability_restore_umask() {
+  [ -z "${1:-}" ] || umask "$1" 2>/dev/null || true
+  return 0
 }
 
 # Append one JSON-object line to this repo's observability event log.
@@ -640,7 +672,21 @@ _observability_write() {
   local events_dir="$data_dir/observability"
   local events_file="$events_dir/events.jsonl"
 
-  mkdir -p "$events_dir" 2>/dev/null || return 0
+  # Owner-only at creation (spec 021 ADR-4, F6): a directory or file this
+  # call CREATES is made under umask 077, so no later chmod is needed. The
+  # caller's umask is read (`$(umask)` is a command-substitution fork) only
+  # when something is about to be created; the steady state, where both
+  # already exist, forks nothing (CON-7). The umask is restored before every return.
+  local prev_umask=""
+  if [ ! -d "$events_dir" ]; then
+    prev_umask="$(umask)" || prev_umask=""
+    umask 077 2>/dev/null || true
+    if ! mkdir -p "$events_dir" 2>/dev/null; then
+      _observability_restore_umask "$prev_umask"
+      return 0
+    fi
+    _observability_restore_umask "$prev_umask"
+  fi
 
   _observability_rotate_if_oversized "$events_file" || true
 
@@ -704,9 +750,34 @@ _observability_write() {
   done
 
   local json="{" first=1 any_truncated=0
-  local n=${#field_names[@]} idx prepared trunc_flag escaped
+  local n=${#field_names[@]} idx prepared trunc_flag escaped fval
   for ((idx = 0; idx < n; idx++)); do
-    prepared="$(_observability_prepare_field "${field_values[$idx]}")" || prepared=""
+    fval="${field_values[$idx]}"
+    # Fast path (spec 021 CON-7): a value of printable ASCII only, at most
+    # 256 bytes, is what _observability_prepare_field would return after
+    # escaping just `\` and `"` -- sanitizing changes no byte of it, the cap
+    # does not cut it, and the other escapes are for bytes it does not hold.
+    # Done inline, it costs no subshell; the slow path forks three per field.
+    # The character list is explicit, not a range: a range follows the
+    # caller's collation, and a caller may change LC_ALL after sourcing.
+    # With every byte on the list, ${#fval} counts bytes in any locale.
+    # Pinned byte for byte against the pre-fast-path writer by
+    # tests/bats/observability-writer.bats ("fast path: ...").
+    case "$fval" in
+      *[!"$_OBSERVABILITY_PRINTABLE_ASCII"]*) prepared="" ;;
+      *)
+        if [ "${#fval}" -le 256 ]; then
+          escaped="${fval//\\/\\\\}"
+          escaped="${escaped//\"/\\\"}"
+          prepared="0"$'\37'"$escaped"
+        else
+          prepared=""
+        fi
+        ;;
+    esac
+    if [ -z "$prepared" ]; then
+      prepared="$(_observability_prepare_field "$fval")" || prepared=""
+    fi
     trunc_flag="${prepared%%$'\37'*}"
     escaped="${prepared#*$'\37'}"
     [ "$trunc_flag" = "1" ] && any_truncated=1
@@ -724,6 +795,15 @@ _observability_write() {
   # reported by the shell itself, before the command ever runs, so a
   # trailing `2>/dev/null` placed after it is too late to suppress that
   # message (CON-5 — this must stay silent on stderr too).
-  printf '%s\n' "$json" 2>/dev/null >>"$events_file" || true
+  if [ -e "$events_file" ]; then
+    printf '%s\n' "$json" 2>/dev/null >>"$events_file" || true
+  else
+    # First record, or rotation just moved the file away: this append creates
+    # it, so create it owner-only.
+    prev_umask="$(umask)" || prev_umask=""
+    umask 077 2>/dev/null || true
+    printf '%s\n' "$json" 2>/dev/null >>"$events_file" || true
+    _observability_restore_umask "$prev_umask"
+  fi
   return 0
 }

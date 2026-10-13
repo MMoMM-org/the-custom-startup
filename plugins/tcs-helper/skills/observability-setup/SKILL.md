@@ -19,13 +19,14 @@ confirmation before anything is written, and the narration of what changed.
 ## Interface
 
 Verb {
-  install    // install the bundle and register three hooks plus the env switch
+  install    // install the bundle and register four hooks plus the env switch:
+             // InstructionsLoaded, PreToolUse (Skill|Agent|Bash), SubagentStart, UserPromptExpansion
   remove     // take this feature's own entries back out; never deletes a record
   status     // report recording / configured but silent / not configured, and bundle drift
 }
 
 Outcome {
-  label: TARGET | PLAN | ADDED | REMOVED | MIGRATED | UNDO | BUNDLE | RECORDS | STATUS | STOP | ABORT | INFO
+  label: TARGET | HOME | PLAN | ADDED | REMOVED | MIGRATED | UNDO | BUNDLE | RECORDS | REGISTRATION | STATUS | WARN | STOP | ABORT | INFO
   message: String
 }
 
@@ -46,6 +47,7 @@ State {
 - Relay the dispatcher's labelled lines verbatim, including the reason in any `STOP` or `ABORT`.
 - Pass the `UNDO` line on unchanged, so the user can paste it.
 - Present a `STOP` as a normal outcome, not an error.
+- Relay every `WARN` line: a record file or directory was left with its old mode, so it stayed readable.
 
 **Never:**
 - Run `--yes` against a repository the user did not name in this conversation.
@@ -84,7 +86,7 @@ No `--yes`, so nothing is written. Surface every line of the output.
 | Line | Meaning | Next |
 |---|---|---|
 | `STOP: Target is not inside a git repository` | Nothing written | Report and stop |
-| `STOP: Another tool already hooks event names this feature registers…` | Another tool owns one or more of our three events | Report and stop; do not force. The `CONFLICT` line above it names each event and command |
+| `STOP: Another tool already hooks event names this feature registers…` | Another tool owns one or more of our four events | Report and stop; do not force. The `CONFLICT` line above it names each event and command |
 | `ABORT: …is not valid JSON…` | A settings file this feature did not author is unreadable | Report it; leave the file alone |
 | `ABORT: …has an unexpected shape…` | That file parses, but a key this feature merges into is the wrong type | Report the key it names; leave the file alone |
 | `ABORT: Detection refused this target…` | Carries the status for the detection line printed above it | Report the line above it, which holds the reason |
@@ -114,6 +116,12 @@ If the user declines, stop and say that nothing was written.
 Relay the `ADDED`/`REMOVED`/`MIGRATED` lines, then the `UNDO` line. An `INFO: already configured`
 in place of `ADDED` means nothing was written; say that rather than reporting a change.
 
+`install` also restricts existing record files to owner-only (directories 0700, `events.jsonl*`
+0600). With `CLAUDE_OBSERVABILITY_DATA` set in its environment, the directory that variable names is
+the record directory and is itself set to 0700 — say so when the user has that override. A `WARN`
+line names a path that kept its old mode (a symbolic link, or a chmod that failed): the install still
+completed, but that record stayed readable to whoever could read it before. Relay it verbatim.
+
 If this step aborts instead, relay the dispatcher's lines rather than summarising them — they
 state what was and was not written. A `PARTIAL MIGRATION` block means the shared settings file
 changed and the local one did not, so **the target is not recording**: pass on the `cp` command it
@@ -129,3 +137,11 @@ nothing behind.
 A freshly installed target reports **configured but silent** until a session in it produces a
 record. Say so — that is the expected first reading, and it is the state `status` exists to
 distinguish from **not configured**.
+
+An `OURS-INCOMPLETE` line, followed by `REGISTRATION: outdated in …`, means the bundle is current
+but this repository's own entries are not; it names each `<event> (missing)` or `<event> (outdated)`.
+The bundle is shared across repositories: after a plugin update, once `install` has refreshed it
+from one repository, every other repository registered earlier reads this way (before that, they
+read `OURS-OLD`) until `install` runs in it — one registered before spec 021 shows
+`PreToolUse (outdated), UserPromptExpansion (missing)` and records no typed skills, dispatches or git
+operations. Relay the line and offer to re-run `install` from step 2; one run fixes it.

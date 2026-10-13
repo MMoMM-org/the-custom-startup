@@ -89,7 +89,7 @@ _MARKER_FILE="$_PLUGIN_ROOT/templates/observability/tcs-helper-observability-ver
 if [ -f "$_MARKER_FILE" ]; then
   CURRENT_BUNDLE_VERSION="$(cat "$_MARKER_FILE")"
 else
-  CURRENT_BUNDLE_VERSION="h1"
+  CURRENT_BUNDLE_VERSION="h2"
 fi
 # Deliberately hardcoded, not "current minus one": h0 sorts below any real
 # h<N> marker this bundle will ever ship (mirrors build_with_tcs_older's
@@ -130,8 +130,9 @@ _init_scenario() {
 }
 
 # The canonical "ours" registration this feature would write (SDD's
-# Runtime View example, byte-for-byte): three hook entries plus the env
-# switch, commands pointing into $HOME/.claude/observability/. This string
+# Runtime View example, byte-for-byte, as spec 021 ADR-1 revised it): four
+# hook entries plus the env switch, commands pointing into
+# $HOME/.claude/observability/. This string
 # is IDENTICAL regardless of which bundle version is installed there --
 # ADR-5 deliberately keeps the command opaque to version, so
 # foreign-plus-ours-current and foreign-plus-ours-older below ship this
@@ -142,10 +143,12 @@ _ours_hooks_json() {
   "hooks": {
     "InstructionsLoaded": [{ "matcher": "", "hooks": [
       { "type": "command", "command": "\"$HOME/.claude/observability/log_instructions.sh\"" }]}],
-    "PreToolUse": [{ "matcher": "Skill", "hooks": [
-      { "type": "command", "command": "\"$HOME/.claude/observability/log_skill.sh\"" }]}],
+    "PreToolUse": [{ "matcher": "Skill|Agent|Bash", "hooks": [
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_tool.sh\"" }]}],
     "SubagentStart": [{ "matcher": "", "hooks": [
-      { "type": "command", "command": "\"$HOME/.claude/observability/log_agent.sh\"" }]}]
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_agent.sh\"" }]}],
+    "UserPromptExpansion": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_expansion.sh\"" }]}]
   }
 EOF
 }
@@ -184,7 +187,7 @@ EOF
 # resolves last-wins -- silently dropping the foreign entry these fixtures
 # exist to model. This helper merges the two into ONE "hooks" object, same
 # shape as _foreign_hooks_same_events_json: the foreign entry sits in
-# PreToolUse alongside ours (Bash matcher next to Skill), following how
+# PreToolUse alongside ours (Bash matcher next to Skill|Agent|Bash), following how
 # same-event-names-populated already models two entries under one event
 # name. Used by foreign-plus-ours-current/-older, which ship this exact
 # same JSON (ADR-5 keeps the command opaque to bundle version) and differ
@@ -198,11 +201,13 @@ _foreign_plus_ours_hooks_json() {
     "PreToolUse": [
       { "matcher": "Bash", "hooks": [
         { "type": "command", "command": "/opt/foreign-audit/hook.sh" }]},
-      { "matcher": "Skill", "hooks": [
-        { "type": "command", "command": "\"$HOME/.claude/observability/log_skill.sh\"" }]}
+      { "matcher": "Skill|Agent|Bash", "hooks": [
+        { "type": "command", "command": "\"$HOME/.claude/observability/log_tool.sh\"" }]}
     ],
     "SubagentStart": [{ "matcher": "", "hooks": [
-      { "type": "command", "command": "\"$HOME/.claude/observability/log_agent.sh\"" }]}]
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_agent.sh\"" }]}],
+    "UserPromptExpansion": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "\"$HOME/.claude/observability/log_expansion.sh\"" }]}]
   }
 EOF
 }
