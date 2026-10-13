@@ -38,7 +38,7 @@ Removes the guard's per-call cost on non-git commands, then proves the whole fea
   4. Validate: `bats --recursive plugins/tcs-git-helpers/tests/bats` green with plan count checked; shellcheck clean; mutate the case to `*git*` only and the `gh api` test fails
   5. Success: `[ref: PRD/F7 AC1, AC2]`
 
-- [ ] **T5.2 End-to-end probe in a real session** `[activity: validate]`
+- [x] **T5.2 End-to-end probe in a real session** `[activity: validate]`
 
   1. Prime: probe method (`claude -p --settings` in a scratch repo) and README § Context
   2. Test: install the bundle into a scratch home, register a scratch repo, enable recording; in headless runs: type a plugin skill with args, let the model call a skill, dispatch a named and an unnamed subagent that each run `git status` and `git commit --allow-empty -m "x"`, run `CLAUDE_ALLOW_RESET_HARD=1 git reset --hard` from the main session; type an unresolved `/nonexistent-skill` (expect no record, F1 AC4); then, manually, in one interactive session dispatch a named subagent (this step cannot be scripted; record the result in the PR). Expected: typed and tool `skill` records with routes; `dispatch` records with type and name; `git` records only for `commit` and `reset`, each with the right caller; `override_first: CLAUDE_ALLOW_RESET_HARD`; `git stash pop` (if exercised) with `action: pop`; the interactive SubagentStart record (spawn name) deduped by the report; a scan of `events.jsonl` finds none of the message, the paths or any value
@@ -46,7 +46,7 @@ Removes the guard's per-call cost on non-git commands, then proves the whole fea
   4. Validate: the probe passes twice from a clean scratch state; the report over the probe's records shows the expected coverage and git section
   5. Success: `[ref: PRD/Success Metrics/Quality]`; `[ref: SDD/Quality Requirements]`
 
-- [ ] **T5.3 Release readiness** `[activity: validate]`
+- [x] **T5.3 Release readiness** `[activity: validate]`
 
   1. Prime: CHANGELOG conventions (root `[Unreleased]`, per-plugin next version), docs-sync map
   2. Test: full pytest; full bats for every plugin with the TAP plan check; perf suite; the three CI gates
