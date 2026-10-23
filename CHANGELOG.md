@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`/xdd` counts components by unit, not by function (#161).** Two new helper functions no
   longer count as two components when the classifier picks the Direct or Incremental tier.
+- **`/xdd-sdd` flags a new unit missing from the Building Block View (#223).** One named only
+  in an example, interface or data model is now a validation finding.
 
 ### Fixed
 
