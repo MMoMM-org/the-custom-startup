@@ -9,7 +9,8 @@
 #   0  No conflicts; safe to install (clean repo OR existing matching version)
 #   2  ABORT — Husky/lefthook/pre-commit/simple-git-hooks/custom-hooksPath
 #   3  CONFLICT — existing .githooks/ without a tcs-git-helpers marker, or
-#      older marker (skill should run per-file diff / --update flow)
+#      older marker (skill should run per-file diff / --update flow), or
+#      NEWER marker (plugin is stale; skill must not install — #221)
 #   4  WARN — non-.sample files in .git/hooks/, submodules, or other soft
 #      conditions; setup may proceed after user confirmation
 #
@@ -56,6 +57,16 @@ _read_plugin_version() {
     | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/'
 }
 WANT_VERSION="v$(_read_plugin_version)"
+
+# Version ordering, shared with the SessionStart drift hint (#221). Fail-open:
+# without the lib, every mismatch reads as OUTDATED, as before.
+_VERSION_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/scripts/lib/version.sh"
+if [ -f "$_VERSION_LIB" ]; then
+  # shellcheck disable=SC1090
+  . "$_VERSION_LIB"
+else
+  _version_newer() { return 1; }
+fi
 
 # Most severe exit so far. The exit codes are NOT ordered by severity
 # (ABORT=2 < CONFLICT=3 < WARN=4), so a numeric max let a later CONFLICT or
@@ -203,6 +214,10 @@ if [ -n "$_githooks_has_real_content" ]; then
     if [ "$found_version_norm" = "$want_version_norm" ]; then
       _emit "OK" "Existing .githooks/ already at matching version $WANT_VERSION (up to date)."
       # status stays 0 (or whatever was set by other checks)
+    elif _version_newer "$found_version_norm" "$want_version_norm"; then
+      # The plugin is the stale side; --update would downgrade the hooks (#221).
+      _emit "NEWER" "Existing .githooks/ at $found_version_raw is newer than this plugin ($WANT_VERSION); update the tcs-git-helpers plugin instead of running --update."
+      _bump 3
     else
       _emit "OUTDATED" "Existing .githooks/ at $found_version_raw (does not match expected $WANT_VERSION); update mode recommended."
       _bump 3

@@ -107,12 +107,12 @@ Branch on the exit code:
 |------|---------|--------|
 | 0 | clean OR matching version | Continue to step 4 (or skip if up-to-date noop) |
 | 2 | Husky / lefthook / pre-commit / simple-git-hooks / non-`.githooks` `core.hooksPath` | **Abort.** Cite `references/migrating-from-husky.md`. Release lock, exit 2. |
-| 3 | Existing `.githooks/` no marker, OR older version marker | Conflict / per-file diff flow. With `--update`: show diff and prompt before overwrite. Without: prompt before continuing. |
+| 3 | Existing `.githooks/` no marker, OR older version marker, OR newer version marker (`NEWER`) | Conflict / per-file diff flow. With `--update`: show diff and prompt before overwrite. Without: prompt before continuing. **On a `NEWER` line, do not install** — the plugin is the stale side and installing would downgrade the hooks. Release the lock and tell the user to update the plugin (`/plugin`, then `/reload-plugins`). |
 | 4 | Non-`.sample` `.git/hooks/*` files OR other soft warning | Warn. Confirm interactively before proceeding (existing files won't fire under `core.hooksPath` but are visible noise). |
 
 When several conditions fire, the exit code is the most severe one, not the highest number: ABORT (2) > CONFLICT (3) > WARN (4). An ABORT is never masked by a later CONFLICT or WARN.
 
-The detector's stdout includes one line per condition with severity tag (`ABORT`, `CONFLICT`, `OUTDATED`, `WARN`, `INFO`, `OK`, `REF`). Surface all of it to the user.
+The detector's stdout includes one line per condition with severity tag (`ABORT`, `CONFLICT`, `OUTDATED`, `NEWER`, `WARN`, `INFO`, `OK`, `REF`). Surface all of it to the user.
 
 ### 3. User confirmation
 
@@ -188,6 +188,7 @@ Release the lock on EVERY exit path — success, abort (exit 2), conflict that t
 | Existing `.githooks/`, no marker | No `# tcs-git-helpers: vX.Y.Z` line on lines 1–3 of any standard hook | **CONFLICT** | Per-file diff prompt |
 | Existing `.githooks/`, matching version | Marker `v1.0.0` present | **OK** | Up-to-date noop; skip step 4 |
 | Existing `.githooks/`, older version | Marker `vX.Y.Z` < `v1.0.0` | **OUTDATED** | Use `--update` to refresh |
+| Existing `.githooks/`, newer version | Marker `vX.Y.Z` > plugin version (dotted numerics only; anything else reads as OUTDATED) | **NEWER** | Do not install; update the plugin (#221) |
 | `.git/hooks/*` non-`.sample` | At least one non-`.sample` file under `.git/hooks/` | **WARN** | Confirm; existing files won't fire under `core.hooksPath` |
 | Submodules present | `.gitmodules` exists | **INFO** | List submodules in summary; do NOT recurse |
 

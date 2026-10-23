@@ -237,6 +237,24 @@ _run_hook() {
   printf '%s' "$output" | grep -q "run /tcs-git-helpers:git-setup --update"
 }
 
+# #221: hooks newer than the plugin mean the plugin is stale; --update would
+# downgrade them, so the hint must point at the plugin instead.
+@test "drift hint for hooks newer than the plugin advises a plugin update, not --update" {
+  _install_githooks_at "99.0.0"
+  local now_iso
+  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  _write_test_cache "$now_iso"
+
+  _run_hook
+
+  [ "$status" -eq 0 ]
+  local msg
+  msg="$(_ssb_sysmsg)"
+  _ssb_has "$msg" "hooks v99.0.0 newer than plugin v"
+  _ssb_has "$msg" "update the tcs-git-helpers plugin"
+  _ssb_lacks "$msg" "git-setup --update"
+}
+
 # ----------------------------------------------------------------------
 # Test 5: Setup hint surfaces when .githooks/ absent
 # ----------------------------------------------------------------------
