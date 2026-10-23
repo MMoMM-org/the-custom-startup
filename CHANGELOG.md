@@ -37,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The SessionStart hint no longer tells you to downgrade your hooks (#221).** When a repo's
+  hooks were newer than the installed plugin, it still said to run `git-setup --update`, which
+  would copy the older hooks over them. It now tells you to update the plugin, and git-setup
+  refuses to install in that case.
+
 - **`/tcs-git-helpers:git-audit --cleanup` works from a Claude session again (#216).** The
   sandbox blocks the cache the cleanup writes, and the script crashed on that instead of going
   on. It now warns and lists the merged branches it just looked up.
