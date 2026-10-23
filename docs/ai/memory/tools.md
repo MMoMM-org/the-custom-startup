@@ -52,3 +52,32 @@
 - **`$TMPDIR` differs between sandboxed and unsandboxed Bash calls** — a file one call writes is absent for the other, and a count over it reads empty, not zero. → Pass the scratchpad's absolute path between calls, never `$TMPDIR`.
 - **A baseline worktree for before/after test runs must be on a branch** — the guard hooks bypass on a detached HEAD, so `git worktree add --detach` yields dozens of false deny failures. → Run `git switch -c tmp/<name>` inside it first.
 - **A squash-merged PR's branch commits are reachable from no ref once the branch is deleted** — no clone fetches them, `fetch-depth: 0` included, so a test reading one skips everywhere. → Inline the data the test needs.
+
+<!-- 2026-10-23 -->
+- **The Edit tool drops a whitespace-only `new_string`** — it reports success and inserts nothing, so a six-space anchor became `^`, matching every line. → Use `perl -pi` or `sed` for literal-space replacements; check with `cat -vet`.
+- **A local test run is one CI leg, never both** — a red `bats (ubuntu-latest)` can sit behind a green macOS run for several commits. → Read each matrix leg's result before saying CI is green.
+- **`cmd | tail` reports tail's exit status** — a failing bats run reads as exit 0, and the last `ok N` is a test number, not a count. → `set -o pipefail` or `${PIPESTATUS[0]}`; count against the TAP plan.
+- **bash 3.2 `${s:n}`, `${s:k:n}`, `+=` and `${s//}` are O(n) per call** — and in a UTF-8 locale offsets count characters, so a per-byte loop is O(n²). → `local LC_ALL=C`, and slice a bounded buffer, not the whole string.
+- **bats does not run test bodies under `set -u`** — a lib reading an optional argument as bare `"$1"` passes every test and aborts for a real `set -u` caller. → Write `${1:-}`; run one real invocation per entry point.
+- **`run diff <(a) <(b)` fails inside bats** with `Operation not permitted` on `/dev/fd/N`. → Write both sides to files in the test's tmpdir and diff those.
+- **A test that fails only inside the Bash sandbox is not a code failure** — `mktemp -d` and other writes outside the allowed dirs fail there. → Re-run unsandboxed before treating a red test as real.
+- **The Bash sandbox denies writes to `.git/config`, so some git commands half-complete** — `checkout -b` rewrites the tree but leaves HEAD behind; `push -u` pushes but sets no upstream. → Run branch-creating git unsandboxed.
+- **`cp -n` skipping a file exits 1 on BSD and 0 on GNU** — a `cp -p` → `cp -n -p` mutant is a silent no-op only on Linux, so on macOS it fails both tests and proves nothing. → Mutate to an early `return 0`.
+- **A plugin can ship themes** — every `themes/<slug>.json` in an enabled plugin is auto-discovered into `/theme` (Claude Code ≥ 2.1.118), with no `plugin.json` entry. → User-global themes go in `~/.claude/themes/`.
+- **`claude -p --output-format json` wraps the model's output** — the payload is a JSON string under `.result`. → `jq -c 'try (.result | fromjson) catch empty'`; a test stub must emit the same envelope.
+- **`claude plugin eval` reads `evals/**/case.yaml`** (or `prompt.md` + `graders/`), not `evals.json`; `eval init` needs a TTY; the report publishes to claude.ai by default. → `init --bare`, always `--no-publish`.
+- **A fixture directory inside the repo still answers to the repo's `.gitignore`** — `git check-ignore` there never fails with "not a git repository", so that branch goes untested. → Build such fixtures in the test's tmpdir.
+- **`GIT_CONFIG_GLOBAL=/dev/null` does not isolate ignore rules** — `~/.config/git/ignore` still applies to `check-ignore`. → Add `-c core.excludesFile=/dev/null` in fixtures that assert ignore status.
+- **A pre-push hook gets remote sha `000…0` for a new branch** — `git rev-list $local --not $remote` fails, and `|| true` turns that into "nothing to check". → Use the empty tree, `4b825dc642cb6eb9a060e54bf8d69288fbee4904`.
+- **Editing a hook's `command` in `.claude/settings.json` can take effect in the running session.** → Make the change and watch for the hook to fire before telling anyone to restart.
+- **Each shell exec in the hook path costs ~2.4 ms on macOS, ~0.2 ms on Linux**, `#!/usr/bin/env bash` adds another exec, and a new file's first exec costs 150-290 ms once. → Warm fresh fixtures with a throwaway exec before timing.
+- **`--plugin-dir` loads a plugin whose skills never reach the model's skill listing** — a prompt-cost measurement built on it measures nothing. → Measure with `claude -p --settings <file>` and a raised `skillListingBudgetFraction`.
+- **`$TMPDIR` can be on another device than the repo** — `mktemp` + `mv` is then copy-and-unlink, and Python's `shutil.move` fallback truncates the target. → Create the temp file in the target's own directory and `os.replace()`.
+- **A plugin updated mid-session runs its old version until `/reload-plugins`** — the skill preamble's base directory names the version that actually loaded. → Reload, then check that path before running an installer skill.
+- **In project rules `paths:` is the conditional key; `globs:` loads the rule always** (Claude Code 2.1.296). A path rule rides the Read result and agents mostly ignore it; `Explore` gets no always-loaded rules. → Use `paths:`.
+- **A CLI flag named `--force` cannot be run by Claude here** — the security pre-check hook blocks any `--force*` token, not only `git push --force`. → Name flags by what they do (`--discard-edits`).
+- **Test tooling is not on PATH in the dev container** — `bats: command not found`. → `./scripts/dev/test.sh` provisions pytest and bats into `.venv/` and runs both; call `.venv/bin/bats` directly for one file.
+- **`timeout` does not exist on macOS or `macos-latest` runners** — `run timeout 5 …` exits 127 there, so the hang guard never runs. → Copy `_timeout` from `observability-timed-wrapper.bats` (perl fallback that forks).
+- **A `!` in a commit subject reaches git as `\!` under the Bash tool's zsh**, and the commit-msg hook rejects `feat\!:`. → Mark a breaking change with a `BREAKING CHANGE:` footer, not the `!` subject form.
+- **`json.dump` escapes non-ASCII by default** — a script that changes one field rewrites every line holding `ä` or `→` as `\uXXXX`. → Pass `ensure_ascii=False` and write a trailing newline.
+- **The skill listing is budgeted, so every skill added truncates every description** — sessions warn `N skills, X chars > 30000 budget`; each description is capped by `skillListingMaxDescChars`. → Count the listing's chars before adding a skill.

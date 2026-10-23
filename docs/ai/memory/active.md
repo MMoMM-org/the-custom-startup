@@ -5,7 +5,7 @@
 <!-- plugins/tcs-helper/skills/memory-add/reference/category-formats.md § Active layer -->
 
 <!-- 2026-09-01 -->
-- **bash 3.2 breaks two regex forms in `[[ =~ ]]`** — PCRE `\s`/`\b` never match; bounded `^.{m,n}$` returns false on matching input. Hooks that match commands then silently never fire. → Use `[[:space:]]`, `[[:<:]]`, `${#var}` checks.
+- **bash 3.2 breaks two regex forms in `[[ =~ ]]`** — PCRE `\s`/`\b` never match; bounded `^.{m,n}$` returns false on matching input. Hooks that match commands then silently never fire. → Use `[[:space:]]`, `([^[:alnum:]_]|$)`, `${#var}` checks; BSD `[[:<:]]` fails open on Linux.
 - **Non-final `[[ ]]` (bash 3.2) and `! cmd` (any bash) cannot fail a bats test** — ubuntu's bash 5 enforces `[[ ]]`, so only local/macOS runs are blind. → Use `_has`/`_lacks` (`tests/bats/lib/`); `tests/test_bats_blind_assertions.py` rejects both.
 - **jq under `set -e` makes a hook fail closed** — a non-zero exit on malformed JSON reads to Claude Code as "deny tool call". → Append `2>/dev/null || true` to every jq command substitution in a hook meant to fail open.
 - **A failed `git init` in a bats fixture leaks commits onto the parent branch** — git falls back to the parent `.git/`. Tell: stray fixture commits on your branch. → Use `git -C "$tmpdir"` plus `GIT_CONFIG_GLOBAL=/dev/null`.
@@ -15,5 +15,5 @@
 <!-- 2026-09-04 -->
 - **A `|| fallback` inside `$( )` appends to partial output, not replaces it** — a command that writes and *then* fails leaves both: `printf '%.0f' 23.5` in a comma locale yields `230`. → Assign whole values: `x=$(cmd) || x=0`.
 
-<!-- 2026-10-02 -->
-- **The skill listing is budgeted, so every skill added truncates every description** — sessions warn `N skills, X chars > 30000 budget`; each description is capped by `skillListingMaxDescChars`. → Count the listing's chars before adding a skill.
+<!-- 2026-10-23 -->
+- **A fixed file name under `$TMPDIR` is shared by every session** — a failed write leaves another session's file in place, and `git commit -F` commits its message. → Write message and scratch files to the session scratchpad.

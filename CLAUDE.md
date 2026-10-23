@@ -15,6 +15,7 @@ need to locate a plugin, skill or agent, not on every session.
 ## Routing Rules
 <!-- Run /memory-add to capture learnings. Routing reference: docs/ai/memory/routing-reference.md -->
 - Personal/workflow corrections → global (~/.claude/includes/)
+- A gotcha any agent can hit → the bank, never user auto-memory (`~/.claude/projects/…/memory/`): no subagent ever sees auto-memory
 - Repo conventions/style → docs/ai/memory/general.md
 - Tool/CI/build knowledge → docs/ai/memory/tools.md
 - Domain/business rules → docs/ai/memory/domain.md
@@ -29,6 +30,13 @@ need to locate a plugin, skill or agent, not on every session.
 
 ## Testing Skills During Development
 
+Two separate paths — never mix them:
+
+- **Testing an unpushed change locally:** copy into the plugin cache and marketplace (below), then
+  run `/reload-plugins`. These copies are throwaway; the next plugin update overwrites them.
+- **Releasing:** never by copying. Merge to `main`; the auto-bump workflow sets the version. Then
+  `/plugin` → update and `/reload-plugins`.
+
 When developing new skills in `plugins/tcs-helper/skills/`, they are not automatically available in Claude Code sessions. To make a skill available for testing:
 
 1. Copy the skill directory to **both** locations:
@@ -41,7 +49,7 @@ When developing new skills in `plugins/tcs-helper/skills/`, they are not automat
    cp -r plugins/tcs-helper/skills/<skill-name> \
      ~/.claude/plugins/marketplaces/the-custom-startup/plugins/tcs-helper/skills/
    ```
-2. Start a **new Claude Code session** — skills are indexed at startup.
+2. Run `/reload-plugins`. If the skill still does not appear, start a new session.
 3. The skill should appear in the `/` menu and be invocable.
 
 Both locations are required. Cache-only does not work — Claude Code validates against the marketplace source.
