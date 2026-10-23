@@ -393,6 +393,20 @@ _make_clean_repo() {
   echo "$output" | grep -qiE 'older|outdated|update|v0\.'
 }
 
+@test "C18a detect_conflicts flags hooks newer than the plugin as NEWER, not OUTDATED (#221)" {
+  cd "$(_use_fixture with-tcs-current)"
+  local h
+  for h in pre-commit pre-push commit-msg post-merge; do
+    [ -f ".githooks/$h" ] || continue
+    sed -i.bak -E 's/^(#[[:space:]]*tcs-git-helpers:[[:space:]]*).*/\1v99.0.0/' ".githooks/$h"
+    rm -f ".githooks/$h.bak"
+  done
+  run "$LIB_DIR/detect_conflicts.sh"
+  [ "$status" -eq 3 ]
+  printf '%s\n' "$output" | grep -q 'NEWER'
+  [ "$(printf '%s\n' "$output" | grep -c 'OUTDATED')" -eq 0 ]
+}
+
 @test "C19 detect_conflicts on with-non-sample-hooks emits warn" {
   cd "$(_use_fixture with-non-sample-hooks)"
   run "$LIB_DIR/detect_conflicts.sh"

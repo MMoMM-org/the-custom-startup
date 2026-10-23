@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.2.40] - 2026-10-23
+
+### Fixed
+
+- **The hook-version drift hint no longer recommends a downgrade (#221).** When a repo's
+  `.githooks/` were newer than the installed plugin, the SessionStart brief still said
+  `hooks vX → vY; run /tcs-git-helpers:git-setup --update`, and git-setup's conflict detector
+  flagged them `OUTDATED` — so following either would copy the older plugin's hooks over the
+  newer ones. Both now compare versions instead of testing for inequality: the brief says
+  `hooks vX newer than plugin vY; update the tcs-git-helpers plugin`, and the detector emits
+  `NEWER`, on which git-setup does not install. Versions that are not plain dotted numerics
+  keep the old advice. **What to do:** update the plugin (`/plugin`); nothing to re-install.
+
 ## [2.2.39] - 2026-10-12
 
 ### Changed

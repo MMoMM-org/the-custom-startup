@@ -70,6 +70,16 @@ else
   _read_stale_cache_tsv() { return 0; }
 fi
 
+# Version ordering for the drift hint. Fail-open: without the lib, every
+# mismatch reads as "hooks older" — the pre-#221 advice.
+# shellcheck source=lib/version.sh
+if [ -f "$_SCRIPT_DIR/lib/version.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$_SCRIPT_DIR/lib/version.sh"
+else
+  _version_newer() { return 1; }
+fi
+
 # Fail-open wrapper: any unexpected error exits 0 with no output.
 trap 'exit 0' ERR
 
@@ -180,9 +190,15 @@ if [ -n "$repo_top" ] && [ -d "$repo_top/.githooks" ]; then
       fi
     done
 
+    # Hooks newer than the plugin means the plugin is stale: --update would
+    # copy the older templates over them (#221).
     if [ -n "$want_version" ] && [ -n "$found_version" ] \
        && [ "$found_version" != "$want_version" ]; then
-      drift_seg=" • hooks v${found_version} → v${want_version}; run /tcs-git-helpers:git-setup --update"
+      if _version_newer "$found_version" "$want_version"; then
+        drift_seg=" • hooks v${found_version} newer than plugin v${want_version}; update the tcs-git-helpers plugin, then /reload-plugins"
+      else
+        drift_seg=" • hooks v${found_version} → v${want_version}; run /tcs-git-helpers:git-setup --update"
+      fi
     fi
   fi
 fi
