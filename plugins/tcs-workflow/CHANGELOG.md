@@ -8,6 +8,16 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [4.4.11] - 2026-10-23
+
+### Changed
+
+- **The xdd complexity classifier now says what a component is (#161).** A module, skill,
+  agent, hook, service or script counts; a single function is part of the unit it lives in. A
+  run had counted two helper functions as two components, which is enough on its own to force
+  the Incremental tier. New code that appears only in an implementation example, not in the
+  Building Block View, is still not counted, and is now named in the rationale.
+
 ## [4.4.10] - 2026-10-11
 
 ### Fixed

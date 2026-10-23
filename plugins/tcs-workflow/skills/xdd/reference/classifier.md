@@ -28,6 +28,10 @@ Five signals, all derivable from the two documents:
 | `component_count` | solution.md | Distinct components in the Building Block View. **Modifying an existing component does not increment this** — only new surface counts. |
 | `parallel_markers` | solution.md | True when the design explicitly calls out parallel work, concurrent execution, or independent work streams. |
 
+**What counts as a component.** A unit with its own interface and responsibility — a module, skill, agent, hook, service or script. A single function or helper is part of the component that contains it, not a component of its own: counting functions makes the `>= 2` threshold fire on changes that are one unit wide. When the Building Block View lists functions, group them by the unit they live in and count the units.
+
+**New surface named only outside the Building Block View** — in an implementation example, say — is not counted. Name it in the rationale ("`foo` appears only in an example; not counted"), so the user can see that the solution.md is incomplete there and override if it matters (#161).
+
 **When a signal cannot be determined**, use its most conservative value (`component_count = 0`, `parallel_markers = false`), say so in the rationale, and continue. Never block on a missing signal — a spec thin enough to lack a Building Block View is Direct-shaped anyway.
 
 ---
