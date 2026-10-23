@@ -8,6 +8,15 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [4.4.12] - 2026-10-23
+
+### Changed
+
+- **SDD validation now checks that the Building Block View lists every new unit (#223).** A
+  module, skill or script named only in an implementation example, interface or data model is
+  flagged before the plan step. The xdd classifier counts components from the view alone, so
+  such a unit was invisible to tier selection.
+
 ## [4.4.11] - 2026-10-23
 
 ### Changed

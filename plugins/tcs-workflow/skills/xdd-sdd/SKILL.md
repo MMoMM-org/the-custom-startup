@@ -152,6 +152,7 @@ Overlap detection:
 Coverage analysis:
 - PRD coverage — all requirements addressed?
 - Component completeness — UI, business logic, data, integration?
+- Surface outside the view — a new unit named only in an example, interface or data model?
 - Cross-cutting concerns — security, error handling, logging, performance?
 
 Boundary validation:

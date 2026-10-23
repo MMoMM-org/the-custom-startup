@@ -26,6 +26,7 @@ Use this checklist to validate SDD completeness before proceeding to Implementat
 
 - [ ] **Every component has directory mapping** - Where code will live
 - [ ] **Every component in diagram** - No orphan components
+- [ ] **No surface outside the Building Block View** - Every new unit (module, skill, agent, hook, service, script) named in an implementation example, interface spec or data model also appears in the Building Block View. A new function inside a listed unit is fine. The xdd classifier counts components from the view alone, so a unit missing there is invisible to tier selection (granularity: `xdd/reference/classifier.md`, "What counts as a component")
 - [ ] **Component names consistent** - Same names across diagrams, text, and directory structure
 - [ ] **Responsibilities clear** - What each component does (single responsibility)
 - [ ] **No component overlap** - No duplicate responsibilities
