@@ -170,6 +170,15 @@ def test_classifier_reference_states_the_ordered_rules():
     assert "ac_count <= 2" in text
 
 
+def test_classifier_reference_defines_component_granularity():
+    """#161. Without a granularity, two helper functions read as two
+    components and rule 1's breadth veto fires on a one-unit change."""
+    text = _classifier_text()
+    assert "What counts as a component" in text
+    assert "single function or helper is part of the component" in text
+    assert "only outside the Building Block View" in text
+
+
 def test_classifier_reference_marks_factory_reserved_and_unbuilt():
     """ADR-3. A classifier that could recommend Factory would route work to a
     loop that does not exist."""

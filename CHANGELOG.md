@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — tcs-git-helpers setup and pre-push fixes
 
+### Changed
+
+- **`/xdd` counts components by unit, not by function (#161).** Two new helper functions no
+  longer count as two components when the classifier picks the Direct or Incremental tier.
+
 ### Fixed
 
 - **The SessionStart hint no longer tells you to downgrade your hooks (#221).** When a repo's
