@@ -6,7 +6,7 @@
 
 ## `_write_pr_state_cache` replaces the branch entry rather than merging — Status: resolved
 <!-- 2026-05-23 -->
-Standing caveat, not just a past bug: any partial write silently drops the fields it omits. → Every caller must read the existing entry and pass all fields back in, until the writer merges instead of replacing. [cache.sh:263]
+Standing caveat, not just a past bug: any partial write silently drops the fields it omits. → Every caller must read the existing entry and pass all fields back in, until the writer merges instead of replacing. [cache.sh:247]
 
 ## A Bash call run from directory D creates `D/.claude/` — Status: open
 <!-- 2026-10-23 -->

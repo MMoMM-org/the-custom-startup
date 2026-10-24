@@ -21,4 +21,4 @@
 - ADR-7 (Marcus): Auto-bump derives what is owed from main's history (one bump per commit touching a plugin since its last version raise), not from the push range. → A lost push event otherwise drops its bump for good and reddens every later run.
 
 <!-- 2026-10-23 -->
-- ADR-7: A template installed into consumer repos carries a version marker, bumped by hand when the template changes. → A drift check compares installed against plugin, and CI rejects a template change without a bump.
+- ADR-8: A template installed into consumer repos carries a version marker, bumped by hand when the template changes. → A drift check compares installed against plugin, and CI rejects a template change without a bump.

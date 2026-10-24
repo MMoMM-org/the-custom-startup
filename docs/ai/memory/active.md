@@ -5,8 +5,8 @@
 <!-- plugins/tcs-helper/skills/memory-add/reference/category-formats.md § Active layer -->
 
 <!-- 2026-09-01 -->
-- **bash 3.2 breaks two regex forms in `[[ =~ ]]`** — PCRE `\s`/`\b` never match; bounded `^.{m,n}$` returns false on matching input. Hooks that match commands then silently never fire. → Use `[[:space:]]`, `([^[:alnum:]_]|$)`, `${#var}` checks; BSD `[[:<:]]` fails open on Linux.
-- **Non-final `[[ ]]` (bash 3.2) and `! cmd` (any bash) cannot fail a bats test** — ubuntu's bash 5 enforces `[[ ]]`, so only local/macOS runs are blind. → Use `_has`/`_lacks` (`tests/bats/lib/`); `tests/test_bats_blind_assertions.py` rejects both.
+- **bash 3.2 breaks two regex forms in `[[ =~ ]]`** — PCRE `\s`/`\b` never match; bounded `^.{m,n}$` fails on matching input, so hooks silently never fire. → `[[:space:]]`, `([^[:alnum:]_]|$)`, `${#var}`; BSD `[[:<:]]` fails open on Linux.
+- **Non-final `[[ ]]` (bash 3.2) and `! cmd` (any bash) cannot fail a bats test** — ubuntu's bash 5 enforces `[[ ]]`, so only local/macOS runs are blind. → Use `_has`/`_lacks` (`tests/bats/lib/`); `test_bats_blind_assertions.py` rejects both.
 - **jq under `set -e` makes a hook fail closed** — a non-zero exit on malformed JSON reads to Claude Code as "deny tool call". → Append `2>/dev/null || true` to every jq command substitution in a hook meant to fail open.
 - **A failed `git init` in a bats fixture leaks commits onto the parent branch** — git falls back to the parent `.git/`. Tell: stray fixture commits on your branch. → Use `git -C "$tmpdir"` plus `GIT_CONFIG_GLOBAL=/dev/null`.
 - **`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` reach only harness-spawned plugin code** — not git-spawned hooks (`core.hooksPath`), not Bash-tool subprocesses. `CLAUDECODE=1` does propagate. → Git-hook code must self-derive its paths.
