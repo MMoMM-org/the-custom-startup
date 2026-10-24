@@ -21,6 +21,23 @@
 
 ---
 
+## What each store actually reaches
+
+Measured with the `InstructionsLoaded` log and subagent probes (#153), Claude Code 2.1.296:
+
+| Store | Main session | `general-purpose` subagent | `Explore` |
+|---|---|---|---|
+| `CLAUDE.md` chain + `active.md` | every session | yes | **no** |
+| Category files (`tools.md`, …) | only when read on purpose — 0 of 37 sessions | same | same |
+| Path-scoped rule (`paths:`) | on a matching Read, attached to the tool result — mostly ignored as tool output | same | same |
+| User auto-memory (`~/.claude/projects/…/memory/`) | yes | **never** | **never** |
+
+So a gotcha an agent can hit belongs in the bank: `active.md` if it passes the admission test,
+else its category file. Auto-memory keeps only what is about the user, this machine, or how the
+main session coordinates agents.
+
+---
+
 ## Agent memory — the fourth store, and when it is the right one
 
 A subagent with `memory: user\|project\|local` gets a directory that persists across
