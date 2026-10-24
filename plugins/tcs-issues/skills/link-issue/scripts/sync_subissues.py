@@ -194,8 +194,8 @@ def main():
     print_preview(plan, anomalies)
 
     out = args.out or os.path.join(os.environ.get("TMPDIR", "/tmp"), "subissue-plan.json")
-    with open(out, "w") as handle:
-        json.dump({"plan": plan, "anomalies": anomalies}, handle, indent=2)
+    with open(out, "w", encoding="utf-8") as handle:
+        json.dump({"plan": plan, "anomalies": anomalies}, handle, indent=2, ensure_ascii=False)
     print("\nplan: %s" % out)
 
 

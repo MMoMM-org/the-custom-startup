@@ -43,8 +43,8 @@ def main():
         queue.append(item)
 
         if queue_override:
-            with open(queue_override, 'w') as f:
-                json.dump(queue, f, indent=2)
+            with open(queue_override, 'w', encoding='utf-8') as f:
+                json.dump(queue, f, indent=2, ensure_ascii=False)
         else:
             save_queue(project_path, queue)
 

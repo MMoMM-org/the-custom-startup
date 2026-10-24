@@ -32,8 +32,8 @@ def main():
         os.makedirs(backup_dir, exist_ok=True)
         timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
         backup_path = os.path.join(backup_dir, f'pre-compact-{timestamp}.json')
-        with open(backup_path, 'w') as f:
-            json.dump(queue, f, indent=2)
+        with open(backup_path, 'w', encoding='utf-8') as f:
+            json.dump(queue, f, indent=2, ensure_ascii=False)
     except Exception:
         pass
     sys.exit(0)

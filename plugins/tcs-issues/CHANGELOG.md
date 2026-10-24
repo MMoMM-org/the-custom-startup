@@ -8,6 +8,13 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [1.0.4] - 2026-10-24
+
+### Fixed
+
+- **`/link-issue sync` writes issue titles readably into its plan file (#226).** Non-ASCII
+  characters were escaped as `\uXXXX`; the file is now UTF-8 text.
+
 ## [1.0.2] - 2026-09-03
 
 Changelog started at the version the plugin already carried. Nothing is
