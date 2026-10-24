@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.4.1] - 2026-10-24
+
+### Fixed
+
+- **`observability-setup` finds its installed dispatcher.** Step 1's `find -path` pattern omitted
+  the cache's `<version>/` directory, so it never matched and the skill fell back to a repo
+  checkout. It now matches every installed version and picks the highest with `sort -V`.
+
 ## [4.4.0] - 2026-10-12
 
 ### Added

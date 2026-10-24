@@ -64,7 +64,7 @@ State {
 subprocess, so resolve the path instead of interpolating the variable:
 
 ```bash
-find "$HOME/.claude/plugins/cache" -path '*/tcs-helper/skills/observability-setup/lib/setup.sh' -type f 2>/dev/null | sort | tail -1
+find "$HOME/.claude/plugins/cache" -path '*/tcs-helper/*/skills/observability-setup/lib/setup.sh' -type f 2>/dev/null | sort -V | tail -1
 ```
 
 If that prints nothing, use `<repo toplevel>/plugins/tcs-helper/skills/observability-setup/lib/setup.sh`.
