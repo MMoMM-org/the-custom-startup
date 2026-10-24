@@ -44,6 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`/tcs-helper:observability-setup` finds its installed dispatcher again.** Its lookup pattern
+  left out the plugin cache's version directory, so it never matched and the skill fell back to a
+  repo checkout. It also sorted versions as text, which would rank 4.9 above 4.10.
+
 - **The SessionStart hint no longer tells you to downgrade your hooks (#221).** When a repo's
   hooks were newer than the installed plugin, it still said to run `git-setup --update`, which
   would copy the older hooks over them. It now tells you to update the plugin, and git-setup
