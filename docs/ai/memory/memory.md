@@ -7,11 +7,11 @@
 <!-- active.md is @-imported directly from CLAUDE.md, not reached through this index. -->
 <!-- routing-reference.md is /memory-add's routing table, not session content — deliberately unlisted. -->
 - [general.md](general.md) — conventions, style, naming [updated: 2026-10-08]
-- [tools.md](tools.md) — CI, build, local dev [updated: 2026-10-23]
+- [tools.md](tools.md) — CI, build, local dev [updated: 2026-10-24]
 - [domain.md](domain.md) — business rules, data models [updated: YYYY-MM-DD]
-- [decisions.md](decisions.md) — architecture choices [updated: 2026-10-23]
+- [decisions.md](decisions.md) — architecture choices [updated: 2026-10-24]
 - [context.md](context.md) — current focus [updated: 2026-10-08]
-- [troubleshooting.md](troubleshooting.md) — known issues [updated: 2026-10-23]
+- [troubleshooting.md](troubleshooting.md) — known issues [updated: 2026-10-24]
 - [declined.md](declined.md) — what we decided NOT to do, and the condition that reopens it [updated: 2026-09-05]
 
 ## Archive

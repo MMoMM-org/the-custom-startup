@@ -40,7 +40,7 @@
 - **`stat -f` is a format string on BSD and means *filesystem* on GNU** — on Linux `stat -f %m` prints a filesystem report and fails, so a `||` fallback appends to it. → `m="$(stat -c %Y "$f" 2>/dev/null)" || m="$(stat -f %m "$f")"`.
 
 <!-- 2026-09-04 -->
-- **Perf test p95 exceeds 100ms cap (2x the 50ms target) under load** — 124.8/156.4ms parallel-agent, 193.5ms alone; max 269ms = macOS's 151-286ms first-exec cost, warmup can't absorb. → `perf`-marked, deselected by default; run `pytest -m perf`.
+- **Perf tests exceed their 100 ms p95 cap under parallel load** — macOS's 150-290 ms first-exec cost outlasts warmup, so a busy machine reads as a regression. → `perf`-marked, deselected by default; run `pytest -m perf` on an idle machine.
 
 <!-- 2026-09-08 -->
 - **A `<<'PY'` heredoc inside `$(...)` breaks on bash 3.2 if its body holds `\'`** — "unexpected EOF while looking for matching `''`"; a quoted `"$(...)"` breaks on any apostrophe. → Assign via unquoted `VAR=$(...)`; no `\'` in the body.
@@ -66,7 +66,6 @@
 - **A plugin can ship themes** — every `themes/<slug>.json` in an enabled plugin is auto-discovered into `/theme` (Claude Code ≥ 2.1.118), with no `plugin.json` entry. → User-global themes go in `~/.claude/themes/`.
 - **`claude -p --output-format json` wraps the model's output** — the payload is a JSON string under `.result`. → `jq -c 'try (.result | fromjson) catch empty'`; a test stub must emit the same envelope.
 - **`claude plugin eval` reads `evals/**/case.yaml`** (or `prompt.md` + `graders/`), not `evals.json`; `eval init` needs a TTY; the report publishes to claude.ai by default. → `init --bare`, always `--no-publish`.
-- **A fixture directory inside the repo still answers to the repo's `.gitignore`** — `git check-ignore` there never fails with "not a git repository", so that branch goes untested. → Build such fixtures in the test's tmpdir.
 - **`GIT_CONFIG_GLOBAL=/dev/null` does not isolate ignore rules** — `~/.config/git/ignore` still applies to `check-ignore`. → Add `-c core.excludesFile=/dev/null` in fixtures that assert ignore status.
 - **A pre-push hook gets remote sha `000…0` for a new branch** — `git rev-list $local --not $remote` fails, and `|| true` turns that into "nothing to check". → Use the empty tree, `4b825dc642cb6eb9a060e54bf8d69288fbee4904`.
 - **Editing a hook's `command` in `.claude/settings.json` can take effect in the running session.** → Make the change and watch for the hook to fire before telling anyone to restart.
