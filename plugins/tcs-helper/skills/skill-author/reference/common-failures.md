@@ -117,6 +117,34 @@ Skills and agents are **imperative instructions for an LLM**, not documentation 
 
 ---
 
+## Failure: Backend Waits for a TTY
+
+**Symptom:** A script the skill runs lists candidates and stops, or hangs, and never acts
+
+Claude's Bash tool gives every subprocess a piped stdin, never a TTY, on host and in containers alike. A backend that confirms with `input()` or gates on `isatty()` cannot be driven by an agent.
+
+**Fix:**
+- Give the backend a non-interactive path: `--yes` to act on everything listed, or flags that select items.
+- The skill shows the list, takes the user's explicit approval in chat, then re-runs with the flag. That approval replaces the TTY prompt.
+- Without a TTY and without the flag, print how to proceed. A silent no-op reads as success.
+- Keep the interactive prompt for a human at a real terminal, or the `!` prefix in a Claude prompt.
+
+---
+
+## Failure: Display Label Reused as a Lookup Key
+
+**Symptom:** Routing silently falls through for some answers, with no error
+
+An `AskUserQuestion` option label carries a parenthetical for the user — `Before Claude calls a tool (e.g. block pip installs)` — and the captured answer is later matched exactly against a heading such as `## Q3 = Before Claude calls a tool`. Every answer with a parenthetical misses.
+
+**Fix, one of:**
+- **Strip on capture** when the value stays internal: save the bare label, dropping everything from ` (e.g.` onward.
+- **Prefix-match on dispatch** when the value is shown to the user again: match `starting with "Before Claude calls a tool"`.
+
+**Detect:** any label that appears both as an option and as a key in a reference file. Search for `(e.g.` in option labels near `## … = ` headings.
+
+---
+
 ## Anti-Patterns
 
 | Anti-Pattern | Why It Fails | Instead |

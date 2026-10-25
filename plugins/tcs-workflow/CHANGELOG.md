@@ -8,6 +8,15 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [4.4.13] - 2026-10-25
+
+### Changed
+
+- **`receive-review` judges a finding and its proposed fix separately (#227).** Before applying an
+  accepted fix it checks whether the fix still matches the current contract, reaches the path,
+  exists on every supported platform and fits what it lands among. When it substitutes another
+  fix, it says why.
+
 ## [4.4.12] - 2026-10-23
 
 ### Changed
