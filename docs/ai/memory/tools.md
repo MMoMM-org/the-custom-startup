@@ -66,6 +66,9 @@
 - **A plugin can ship themes** — every `themes/<slug>.json` in an enabled plugin is auto-discovered into `/theme` (Claude Code ≥ 2.1.118), with no `plugin.json` entry. → User-global themes go in `~/.claude/themes/`.
 - **`claude -p --output-format json` wraps the model's output** — the payload is a JSON string under `.result`. → `jq -c 'try (.result | fromjson) catch empty'`; a test stub must emit the same envelope.
 - **`claude plugin eval` reads `evals/**/case.yaml`** (or `prompt.md` + `graders/`), not `evals.json`; `eval init` needs a TTY; the report publishes to claude.ai by default. → `init --bare`, always `--no-publish`.
+- **A plugin eval run starts in an empty dir, with Write/Edit removed** — case `allowed_tools` cannot grant them, and `add_dirs` fixtures went unseen. → Inline inputs in the prompt; pass `--allow-tools Write Edit`.
+- **A typed `/plugin:skill` in an eval prompt records no `Skill` tool call** — `tool_used: Skill` then reads 0 though the skill ran. → Use that grader only for unprompted-trigger cases.
+- **The eval `llm` judge misgrades on the full trace** — it failed a correct run 3 of 3. → `focus: last_message`, and grade writes with `regex` on `target: trace`.
 - **`GIT_CONFIG_GLOBAL=/dev/null` does not isolate ignore rules** — `~/.config/git/ignore` still applies to `check-ignore`. → Add `-c core.excludesFile=/dev/null` in fixtures that assert ignore status.
 - **A pre-push hook gets remote sha `000…0` for a new branch** — `git rev-list $local --not $remote` fails, and `|| true` turns that into "nothing to check". → Use the empty tree, `4b825dc642cb6eb9a060e54bf8d69288fbee4904`.
 - **Editing a hook's `command` in `.claude/settings.json` can take effect in the running session.** → Make the change and watch for the hook to fire before telling anyone to restart.

@@ -8,6 +8,15 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [4.4.14] - 2026-10-25
+
+### Added
+
+- **Eval suite under `evals/` (#84).** Four `claude plugin eval` cases: `xdd-tdd` holding test-first
+  under deadline pressure (typed, and unprompted), and `review` leading with a breaking change and
+  returning REQUEST CHANGES. Each case was run against a weakened copy of its rule and scored
+  lower. Run locally; see `evals/README.md` for the command, scores and cost.
+
 ## [4.4.13] - 2026-10-25
 
 ### Changed
