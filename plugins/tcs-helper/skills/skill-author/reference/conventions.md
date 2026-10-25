@@ -288,6 +288,9 @@ The process:
 
 See `reference/testing-with-subagents.md` for pressure scenario methodology.
 
+For a plugin skill, write the scenario as a `claude plugin eval` case in the plugin's `evals/`
+directory, so it runs again after every edit. See `reference/plugin-evals.md`.
+
 ### Discipline-Enforcing Skills Need Extra Work
 
 Skills that enforce rules (TDD, verification-before-completion) need rationalization-proofing:

@@ -46,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/test_shell_portability_lints.py` checks every tracked shell file; a deliberate use
   carries `# lint-ok: <name>`.
 
+- **tcs-workflow has its first eval suite, and skill-author asks new plugin skills for one (#84).**
+  `plugins/tcs-workflow/evals/` holds four `claude plugin eval` cases for `xdd-tdd` and `review`, each
+  shown to score lower when the rule it defends is weakened. They run locally only;
+  `evals/README.md` lists the command, the scores and the cost (about $5 for the suite). The
+  `xdd-tdd` trigger case scores 0: the skill does not fire unless it is typed.
 - **The testing and mutation-testing patterns name the checks that pass while code is wrong (#227).**
   `testing` gains `reference/expectation-sources.md` (expectations that come from the code under
   test, agreement and partition tests, stubs, parser fixtures); `mutation-testing` gains

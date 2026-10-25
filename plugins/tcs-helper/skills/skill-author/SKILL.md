@@ -35,6 +35,7 @@ State {
 - Search for duplicates before creating any new skill.
 - Follow the gold-standard conventions in reference/conventions.md.
 - Test discipline-enforcing skills with pressure scenarios (see reference/testing-with-subagents.md).
+- Ship a new plugin skill with at least one eval case in its plugin's `evals/`, shown to fail when the rule it defends is weakened (see reference/plugin-evals.md).
 
 **Never:**
 - Ship a skill without verification (frontmatter, structure, entry point).
@@ -62,6 +63,7 @@ If you catch yourself thinking any of these, STOP and follow the full workflow:
 - reference/common-failures.md — failure patterns, anti-patterns, fixes
 - reference/output-format.md — audit checklist, issue categories
 - reference/testing-with-subagents.md — pressure scenarios for discipline-enforcing skills
+- reference/plugin-evals.md — writing a `claude plugin eval` case, graders, proving signal
 - reference/persuasion-principles.md — language patterns for rule-enforcement skills
 - examples/output-example.md — concrete output example
 - examples/canonical-skill.md — annotated skill demonstrating all conventions

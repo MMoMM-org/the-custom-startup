@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.4.5] - 2026-10-25
+
+### Added
+
+- **`skill-author` asks a new plugin skill to ship with an eval case (#84).** The new
+  `reference/plugin-evals.md` covers the case layout, putting inputs in the prompt, triggering
+  versus discipline cases, which graders to trust, and proving the case fails when its rule is
+  weakened.
+
 ## [4.4.4] - 2026-10-25
 
 ### Changed

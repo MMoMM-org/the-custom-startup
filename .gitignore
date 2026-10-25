@@ -43,3 +43,6 @@ origin.git/
 /claude-docker/
 /claude-docker-home/
 /begin-code.sh
+
+# claude plugin eval output
+plugins/*/evals/results/
