@@ -8,6 +8,15 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [4.4.15] - 2026-10-25
+
+### Fixed
+
+- **`xdd-tdd` triggers before production code is written (#238).** The description now names the
+  situations a request contains (a new function, module, feature or bug fix) instead of "the start
+  of each implementation task". New eval cases: `xdd-tdd-plain` (fires 3/3, was 0/3) and
+  `xdd-tdd-no-trigger` (stays out of a documentation-only request, 3/3).
+
 ## [4.4.14] - 2026-10-25
 
 ### Added

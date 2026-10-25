@@ -1,6 +1,6 @@
 ---
 name: xdd-tdd
-description: "Use at the start of each implementation task — enforces the RED-GREEN-REFACTOR cycle and blocks production code until a failing test exists."
+description: "Use PROACTIVELY before writing or changing production code — a new function, module, feature or bug fix — even when the user asks for the code only or says tests can wait. MUST BE USED whenever a request would create or edit implementation files. Blocks production code until a failing test exists."
 user-invocable: true
 argument-hint: "[task description] [--sdd-ref SDD/Section-X.Y]"
 allowed-tools: Read, Bash, AskUserQuestion

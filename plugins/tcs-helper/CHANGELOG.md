@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.4.6] - 2026-10-25
+
+### Changed
+
+- **`skill-author`'s eval guide says how to measure triggering (#238):** with a neutral request, because
+  an explicit user waiver beats any description, and paired with a request the skill must stay out of.
+
 ## [4.4.5] - 2026-10-25
 
 ### Added

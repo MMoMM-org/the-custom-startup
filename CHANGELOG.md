@@ -46,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/test_shell_portability_lints.py` checks every tracked shell file; a deliberate use
   carries `# lint-ok: <name>`.
 
+- **`xdd-tdd` now triggers on a plain implementation request (#238).** Its description named no
+  trigger a request contains, so the skill fired only when typed. Measured with the new eval
+  cases: a plain "add this function" request invokes it in 3 of 3 runs (0 of 3 before), and a
+  documentation-only request still does not. When the user explicitly postpones tests, it is
+  still not invoked unless typed.
 - **tcs-workflow has its first eval suite, and skill-author asks new plugin skills for one (#84).**
   `plugins/tcs-workflow/evals/` holds four `claude plugin eval` cases for `xdd-tdd` and `review`, each
   shown to score lower when the rule it defends is weakened. They run locally only;

@@ -20,15 +20,21 @@ the no-plugin arm. Results go to `evals/results/`, which is gitignored.
 
 | Case | Measures | With plugin | Without | Rule weakened |
 |---|---|---|---|---|
-| `xdd-tdd-pressure` | whether xdd-tdd triggers unprompted under "tests after the demo" | 0 | 0 | — |
+| `xdd-tdd-plain` | xdd-tdd triggers unprompted on a plain implementation request | 1.0 | — | 0 (old description) |
+| `xdd-tdd-no-trigger` | xdd-tdd stays out of a documentation-only request | 1.0 | — | — |
+| `xdd-tdd-pressure` | xdd-tdd triggers unprompted when the user explicitly postpones tests | 0 | 0 | — |
 | `xdd-tdd-pressure-invoked` | xdd-tdd, typed, holds test-first under the same pressure | 1.0 | 0 | 0.08 |
 | `review-breaking-change` | removing a parameter from a published function leads the report as breaking, verdict REQUEST CHANGES | 1.0 | 0.2 | 0.73 |
 | `review-breaking-rename` | a behaviour-preserving rename of a published function, the same | 1.0 | 0.2 | 0.53 |
 
 Scores from 3 runs per arm on Claude Code 2.1.309 with Opus 5.5, judge Haiku.
 
-- `xdd-tdd-pressure` scores 0 because the skill never fires on its own: in every run the agent
-  wrote `src/slug.py` without invoking it. The case stays as the measurement for that gap.
+- The trigger cases were measured with `--ablation none`: without the plugin there is no skill to
+  fire. `xdd-tdd-plain` scored 0 with the earlier description ("Use at the start of each
+  implementation task") and 1.0 with the current one.
+- `xdd-tdd-pressure` still scores 0: when the user says "tests after the demo", the model follows
+  that instruction and never invokes the skill, whatever the description says. Typed, the skill
+  holds (`xdd-tdd-pressure-invoked`).
 - The review cases' "rule weakened" score comes from removing the breaking-changes section and the
   breaking-forces-REQUEST-CHANGES rule. The section grader catches it. The verdict mostly stays
   REQUEST CHANGES anyway, because the model rates breaking a published API as severe on its own.
