@@ -75,3 +75,12 @@ def test_cwd_fallback_when_not_in_payload(tmp_path):
     assert len(queue) == 1
     # project field should be the process cwd, not empty
     assert queue[0]['project'] != ''
+
+
+def test_queue_keeps_non_ascii_text_readable(tmp_path):
+    """A German prompt must reach the queue file as `ä`, not as `\\u00e4` (#226)."""
+    queue_file = tmp_path / 'queue.json'
+    result = run_hook('remember: Umlaute bleiben ä', '/test/proj',
+                      queue_path_override=str(queue_file))
+    assert result.returncode == 0
+    assert 'Umlaute bleiben ä' in queue_file.read_text(encoding='utf-8')

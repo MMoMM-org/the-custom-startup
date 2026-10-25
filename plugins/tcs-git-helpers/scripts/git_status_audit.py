@@ -431,7 +431,7 @@ def _write_stale_cache_files(
             for e in entries
         ],
     }
-    json_tmp.write_text(json.dumps(json_data, indent=2))
+    json_tmp.write_text(json.dumps(json_data, indent=2))  # json-ascii: machine-read
 
     # TSV tmp
     lines = [
@@ -795,7 +795,7 @@ def cmd_json(*, cache_dir: Path, repo_path: str) -> None:
     """
     _drift_gate(repo_path, silent=False)
     data = _read_stale_cache(cache_dir, repo_path)
-    print(json.dumps(data, indent=2))
+    print(json.dumps(data, indent=2))  # json-ascii: machine-read
 
 
 # ---------------------------------------------------------------------------

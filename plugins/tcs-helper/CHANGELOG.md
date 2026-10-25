@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.4.2] - 2026-10-24
+
+### Fixed
+
+- **The pre-compact learnings backup keeps umlauts readable (#226).** `check_learnings.py` wrote
+  `ä` as `\u00e4`; it now writes UTF-8 text, as the queue itself already did. The
+  `TCS_QUEUE_OVERRIDE` path of `capture_learning.py` does the same.
+
 ## [4.4.1] - 2026-10-24
 
 ### Fixed

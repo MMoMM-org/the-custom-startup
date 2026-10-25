@@ -64,7 +64,7 @@ def _save_counters(counters):
     path = _counter_path()
     try:
         with open(path, 'w', encoding='utf-8') as f:
-            json.dump(counters, f)
+            json.dump(counters, f)  # json-ascii: machine-read
     except Exception:
         pass
 
@@ -89,7 +89,7 @@ def _handle_git_commit(command):
                 ),
             }
         }
-        print(json.dumps(output))
+        print(json.dumps(output))  # json-ascii: machine-read
 
 
 def _handle_tool_error(tool_output, project_path):

@@ -186,3 +186,24 @@ def test_backup_contains_original_queue_contents(monkeypatch, tmp_path, sample_q
         backed_up = json.load(f)
 
     assert backed_up == sample_queue_items
+
+
+def test_backup_keeps_non_ascii_text_readable(monkeypatch, tmp_path):
+    """A German learning must reach the backup as `ä`, not as `\\u00e4` (#226)."""
+    fake_claude_dir = str(tmp_path / 'fake-claude')
+    queue_file = tmp_path / 'queue.json'
+    queue_file.write_text(
+        json.dumps([{'message': 'Umlaute bleiben ä → ü'}], ensure_ascii=False),
+        encoding='utf-8',
+    )
+    monkeypatch.setenv('TCS_QUEUE_OVERRIDE', str(queue_file))
+
+    main = load_main_with_patched_claude_dir(monkeypatch, fake_claude_dir)
+    with pytest.raises(SystemExit):
+        main()
+
+    backup_dir = os.path.join(fake_claude_dir, 'learnings-backups')
+    (backup,) = os.listdir(backup_dir)
+    with open(os.path.join(backup_dir, backup), encoding='utf-8') as handle:
+        text = handle.read()
+    assert 'Umlaute bleiben ä → ü' in text
