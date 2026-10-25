@@ -28,7 +28,10 @@ plugins/<plugin>/evals/
    - Discipline: start the prompt with the typed command (`/tcs-workflow:xdd-tdd …`). The skill
      loads inline, and no `Skill` tool call is recorded.
    - Triggering: phrase it the way a user would, without naming the skill, and add a `tool_used`
-     grader with `tool: Skill`. It is reported as an indicator, not scored.
+     grader with `tool: Skill`. It is reported as an indicator, not scored. Use a neutral request:
+     when the user explicitly waives what the skill enforces ("tests after the demo"), the model
+     follows the user and no description makes it invoke the skill. Pair it with a request the
+     skill must stay out of, graded `min: 0, max: 0`, `arm: both`.
 3. **Apply the pressure the skill exists to resist** — deadline, "it's trivial", "tests later".
 4. **Grade behaviour with deterministic graders first:**
    - `regex` with `target: trace` and `match: not_contains` for "this was never written"; match the
