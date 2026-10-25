@@ -41,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer count as two components when the classifier picks the Direct or Incremental tier.
 - **`/xdd-sdd` flags a new unit missing from the Building Block View (#223).** One named only
   in an example, interface or data model is now a validation finding.
+- **Two shell constructs that break on one CI leg are now rejected by a test (#226).** BSD-only
+  `[[:<:]]`/`[[:>:]]` fail open under glibc, and a bare `timeout` in bats exits 127 on macOS.
+  `tests/test_shell_portability_lints.py` checks every tracked shell file; a deliberate use
+  carries `# lint-ok: <name>`.
 
 ### Fixed
 
