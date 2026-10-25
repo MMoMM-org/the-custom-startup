@@ -51,6 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   test, agreement and partition tests, stubs, parser fixtures); `mutation-testing` gains
   `reference/verdict-pitfalls.md` (fixtures that miss the gap, vacuous digests, stale `.pyc`).
   Both patterns are now version 2: run `/tcs-patterns:patterns-setup update` where installed.
+- **`/receive-review` checks a reviewer's proposed fix before applying it (#227).** A correct
+  finding is no evidence that its remedy works: the Accept path now tests the fix against the
+  current contract, its reach, platform facts and its surroundings, and says which half it took.
+- **`/skill-author` knows two more failures (#227):** a backend that waits for a TTY an agent
+  never has, and a display label with a parenthetical reused as an exact lookup key.
 
 ### Fixed
 

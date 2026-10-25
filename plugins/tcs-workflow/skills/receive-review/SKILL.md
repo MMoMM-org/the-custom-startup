@@ -45,6 +45,7 @@ State {
 **Always:**
 - Parse all review items before acting on any.
 - Classify every item before applying a fix or writing a response.
+- Judge the concern and the proposed fix separately. A correct finding is no evidence that its remedy works.
 - Push Back responses must cite a specific `file:line` or spec reference. "I prefer X" is not a valid reason.
 - Accept path: apply fix first, then invoke `Skill(tcs-workflow:verify)` before marking resolved.
 - Defer: record the item in `docs/ai/memory/context.md` under `## Deferred Review Items` with the reason.
@@ -117,10 +118,17 @@ Process each item according to its classification:
 #### Accept
 
 1. Read the relevant file(s) to understand context.
-2. Apply the fix using Edit or Bash as appropriate.
-3. Invoke `Skill(tcs-workflow:verify)` to confirm the fix does not break anything.
-4. On verify pass: mark `status = resolved`.
-5. On verify fail: halt that item, set `status = pending`, note the failure in the summary.
+2. Check the proposed fix as a hypothesis before applying it. A reviewer sees the defect from where it sits and tends to miss:
+   - state that changed since it last read the code — does the fix still match the current contract?
+   - reach — does the proposed fixture or mechanism actually exercise that path?
+   - platform facts — does the command or API exist on every supported platform?
+   - surroundings — what else does the change land among (another numbered list, a sibling caller)?
+
+   If the fix fails a check, address the concern with a fix that passes. Say which half you took: "the finding holds; the proposed fix would have caused X, so I did Y instead."
+3. Apply the fix using Edit or Bash as appropriate.
+4. Invoke `Skill(tcs-workflow:verify)` to confirm the fix does not break anything.
+5. On verify pass: mark `status = resolved`.
+6. On verify fail: halt that item, set `status = pending`, note the failure in the summary.
 
 #### Push Back
 

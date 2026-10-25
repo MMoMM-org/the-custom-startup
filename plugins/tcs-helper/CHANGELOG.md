@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.4.4] - 2026-10-25
+
+### Changed
+
+- **`skill-author` lists two more common failures (#227):** a skill backend that confirms through
+  `input()` or `isatty()`, which an agent can never drive (give it `--yes` after the user approves
+  in chat), and an `AskUserQuestion` label with a parenthetical reused as an exact-match key (strip
+  on capture, or prefix-match on dispatch).
+
 ## [4.4.3] - 2026-10-25
 
 ### Added
