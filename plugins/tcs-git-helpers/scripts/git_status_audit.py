@@ -274,24 +274,58 @@ def _get_local_branches(repo_path: str) -> list[str]:
     return [b for b in out.splitlines() if b]
 
 
-def _get_worktree_branches(repo_path: str) -> set[str]:
+# An `isolation: "worktree"` agent works in .claude/worktrees/agent-<id>, on a
+# worktree-agent-<id> base branch it usually leaves for a feature branch.
+AGENT_WORKTREE_PREFIX = "agent-"
+AGENT_BASE_BRANCH_PREFIX = "worktree-agent-"
+
+
+def _get_worktrees(repo_path: str) -> list[dict]:
     """
-    Return the set of branch names currently checked out in any worktree.
-    Parses `git worktree list --porcelain` output.
+    Return every worktree as {"path": str, "branch": str | None}, parsed from
+    `git worktree list --porcelain`. A detached worktree has branch None.
     """
     rc, out, _ = _run_git(["worktree", "list", "--porcelain"], cwd=repo_path)
     if rc != 0 or not out:
-        return set()
-    branches: set[str] = set()
+        return []
+    worktrees: list[dict] = []
     for line in out.splitlines():
-        if line.startswith("branch "):
-            ref = line[len("branch "):]
-            # refs/heads/feat/foo -> feat/foo
-            if ref.startswith("refs/heads/"):
-                branches.add(ref[len("refs/heads/"):])
-            else:
-                branches.add(ref)
-    return branches
+        if line.startswith("worktree "):
+            worktrees.append({"path": line[len("worktree "):], "branch": None})
+        elif line.startswith("branch refs/heads/") and worktrees:
+            worktrees[-1]["branch"] = line[len("branch refs/heads/"):]
+    return worktrees
+
+
+def _is_agent_worktree(path: str) -> bool:
+    """True for <repo>/.claude/worktrees/agent-<id>, the harness's layout."""
+    p = Path(path)
+    return (
+        p.name.startswith(AGENT_WORKTREE_PREFIX)
+        and p.parent.name == "worktrees"
+        and p.parent.parent.name == ".claude"
+    )
+
+
+def _worktree_is_clean(path: str) -> bool:
+    rc, out, _ = _run_git(["status", "--porcelain"], cwd=path)
+    return rc == 0 and not out
+
+
+def _is_ancestor(branch: str, target: str, repo_path: str) -> bool:
+    """True if branch is contained in target or in origin/<target>."""
+    for ref in (target, f"origin/{target}"):
+        rc, _, _ = _run_git(["merge-base", "--is-ancestor", branch, ref], cwd=repo_path)
+        if rc == 0:
+            return True
+    return False
+
+
+def _display_path(path: str, repo_path: str) -> str:
+    try:
+        return str(Path(path).relative_to(repo_path))
+    except ValueError:
+        return path
 
 
 def _get_cache_age_hours(tsv_path: Path) -> float | None:
@@ -667,6 +701,29 @@ def _delete_stale_branch(branch_name: str, repo_path: str) -> bool:
     return False
 
 
+def _remove_agent_worktree(worktree: dict, repo_path: str) -> bool:
+    """`git worktree remove` without force: git itself refuses a dirty tree."""
+    shown = _display_path(worktree["path"], repo_path)
+    rc, _, err = _run_git(["worktree", "remove", worktree["path"]], cwd=repo_path)
+    if rc == 0:
+        print(f"  Removed worktree {shown}")
+        return True
+    print(
+        f"  [tcs-git-helpers] ERROR: could not remove worktree {shown}: {err}",
+        file=sys.stderr,
+    )
+    return False
+
+
+def _approve(question: str, assume_yes: bool) -> bool:
+    if assume_yes:
+        return True
+    try:
+        return input(f"{question} [y/N] ").strip().lower() == "y"
+    except EOFError:
+        return False
+
+
 def cmd_cleanup(
     *,
     cache_dir: Path,
@@ -685,7 +742,9 @@ def cmd_cleanup(
       - interactive=True (real TTY): per-branch y/N prompt (human at a terminal).
       - neither: list only, then explain how to delete (--yes or manual git).
 
-    M6 AC3: branches checked out in a worktree are excluded.
+    M6 AC3: branches checked out in a worktree are excluded, except a clean
+    agent worktree (.claude/worktrees/agent-*) of a merged PR, which is removed
+    first (#226); its worktree-agent-* base branch goes once merged.
     T2.3: drift gate first; live refresh before cache read (PRD/AC-F2.1).
     T2.4: refactored to use _drift_gate for consistency with other modes.
     """
@@ -721,64 +780,122 @@ def cmd_cleanup(
     else:
         stale_entries = _read_stale_cache(cache_dir, repo_path).get("stale_branches", [])
 
-    # Build exclusion set: branches checked out in any worktree
-    worktree_branches = _get_worktree_branches(repo_path)
+    stale_names = {e["name"] for e in stale_entries}
+    worktrees = _get_worktrees(repo_path)
+
+    # Agent worktrees whose branch belongs to a merged PR. A clean one is
+    # removed and frees its branch; a dirty one is only reported. Every other
+    # worktree keeps its branch out of the candidates (M6 AC3).
+    merged_agent_wts = [
+        w for w in worktrees
+        if _is_agent_worktree(w["path"]) and w["branch"] in stale_names
+    ]
+    removable_wts = [w for w in merged_agent_wts if _worktree_is_clean(w["path"])]
+    dirty_wts = [w for w in merged_agent_wts if w not in removable_wts]
+    removable_paths = {w["path"] for w in removable_wts}
+    worktree_branches = {
+        w["branch"] for w in worktrees
+        if w["branch"] and w["path"] not in removable_paths
+    }
 
     # Also get local branches to verify stale entries still exist locally
-    local_branches = set(_get_local_branches(repo_path))
+    local_branches = _get_local_branches(repo_path)
+    local_set = set(local_branches)
 
     candidates = [
         e
         for e in stale_entries
-        if e["name"] not in worktree_branches and e["name"] in local_branches
+        if e["name"] not in worktree_branches and e["name"] in local_set
     ]
 
-    if not candidates:
+    # A worktree-agent-<id> base branch has no PR. It goes once the default
+    # branch contains it and no agent-<id> worktree remains to need it.
+    agent_dirs = {
+        Path(w["path"]).name: w["path"]
+        for w in worktrees
+        if _is_agent_worktree(w["path"]) and w["path"] not in removable_paths
+    }
+    base_candidates = [
+        b for b in local_branches
+        if b.startswith(AGENT_BASE_BRANCH_PREFIX)
+        and b not in worktree_branches
+        and b[len("worktree-"):] not in agent_dirs
+        and _is_ancestor(b, default_branch, repo_path)
+    ]
+
+    if not (candidates or merged_agent_wts or base_candidates):
         print("[tcs-git-helpers] No stale-merged branches to clean up.")
         return
 
-    print(f"[tcs-git-helpers] Stale-merged branches ({len(candidates)}):")
-    for e in candidates:
-        pr_num = e.get("pr_number", 0)
-        merged_at = e.get("merged_at", "unknown")
-        # Trim to date only for readability
-        merged_date = merged_at[:10] if merged_at else "unknown"
-        print(f"  {e['name']:<40}  PR #{pr_num}  merged {merged_date}")
+    if merged_agent_wts:
+        print(f"[tcs-git-helpers] Agent worktrees of merged PRs ({len(merged_agent_wts)}):")
+        pr_of = {e["name"]: e.get("pr_number", 0) for e in stale_entries}
+        for w in merged_agent_wts:
+            note = "" if w in removable_wts else "  (uncommitted changes: left alone)"
+            print(
+                f"  {_display_path(w['path'], repo_path):<40}  {w['branch']}"
+                f"  PR #{pr_of[w['branch']]}{note}"
+            )
 
-    deleted: list[str] = []
-
-    # Non-interactive bulk delete (--yes): the only path available to agents/CI.
-    if assume_yes:
-        print()
+    if candidates:
+        print(f"[tcs-git-helpers] Stale-merged branches ({len(candidates)}):")
         for e in candidates:
-            if _delete_stale_branch(e["name"], repo_path):
-                deleted.append(e["name"])
-        if deleted:
-            print(f"\n[tcs-git-helpers] Deleted {len(deleted)} branch(es).")
+            pr_num = e.get("pr_number", 0)
+            merged_at = e.get("merged_at", "unknown")
+            # Trim to date only for readability
+            merged_date = merged_at[:10] if merged_at else "unknown"
+            print(f"  {e['name']:<40}  PR #{pr_num}  merged {merged_date}")
+
+    if base_candidates:
+        print(f"[tcs-git-helpers] Merged agent base branches ({len(base_candidates)}):")
+        for b in base_candidates:
+            print(f"  {b}")
+
+    if not (candidates or removable_wts or base_candidates):
         return
 
     # No TTY and no --yes: cannot prompt. Explain how to proceed instead of
     # silently listing and exiting (the old behavior looked like a no-op).
-    if not interactive:
+    if not assume_yes and not interactive:
         print()
         print(
             "[tcs-git-helpers] No TTY for per-branch prompts. Re-run with "
-            "--yes to delete all listed branches, or delete individually with "
+            "--yes to remove everything listed, or delete individually with "
             "'git branch -d <name>'."
         )
         return
 
-    # Interactive: per-branch y/N prompt for a human at a real terminal.
+    # --yes deletes everything listed (the only path for agents/CI, which
+    # never get a TTY); at a real terminal each item gets a y/N prompt.
+    # Worktrees go first: git refuses to delete a branch still checked out.
     print()
+    kept_wt_branches: set[str] = set()
+    for w in removable_wts:
+        shown = _display_path(w["path"], repo_path)
+        if not (
+            _approve(f"Remove worktree {shown!r} ({w['branch']})?", assume_yes)
+            and _remove_agent_worktree(w, repo_path)
+        ):
+            kept_wt_branches.add(w["branch"])
+            agent_dirs[Path(w["path"]).name] = w["path"]
+
+    deleted: list[str] = []
     for e in candidates:
         branch_name = e["name"]
-        try:
-            answer = input(f"Delete {branch_name!r}? [y/N] ").strip().lower()
-        except EOFError:
-            break
-        if answer == "y":
+        if branch_name in kept_wt_branches:
+            continue
+        if _approve(f"Delete {branch_name!r}?", assume_yes):
             if _delete_stale_branch(branch_name, repo_path):
                 deleted.append(branch_name)
+
+    # Contained in the default branch (checked above), so the -D fallback in
+    # _delete_stale_branch only covers `-d` judging against another HEAD.
+    for b in base_candidates:
+        if b[len("worktree-"):] in agent_dirs:
+            continue
+        if _approve(f"Delete {b!r}?", assume_yes):
+            if _delete_stale_branch(b, repo_path):
+                deleted.append(b)
 
     if deleted:
         print(f"\n[tcs-git-helpers] Deleted {len(deleted)} branch(es).")

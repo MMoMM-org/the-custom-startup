@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.2.42] - 2026-10-25
+
+### Changed
+
+- **`git-audit --cleanup` cleans up after worktree agents (#226).** An agent run with
+  `isolation: "worktree"` that commits leaves `.claude/worktrees/agent-<id>`, still checking out
+  its feature branch, and a `worktree-agent-<id>` base branch. `--cleanup` skipped all of it.
+  Now a clean agent worktree whose branch belongs to a merged PR is listed and, with `--yes` or
+  a `y` at the prompt, removed (`git worktree remove`, never forced) before its branch is
+  deleted. A dirty one is listed and left alone. A `worktree-agent-*` branch goes once the
+  default branch contains it and its worktree is gone. Your own worktrees are still never
+  touched.
+
 ## [2.2.40] - 2026-10-23
 
 ### Fixed

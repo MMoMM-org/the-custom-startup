@@ -42,13 +42,13 @@ Spec refs:
 - Pipe the script's stdout to the user verbatim — do not rewrite, summarize, or reformat.
 - Surface stderr on non-zero exit; do not swallow errors.
 - Surface the `(cache Nh old)` warning verbatim when mtime exceeds the 24h stale-branch TTL.
-- For `--cleanup`: the per-branch `y/N` prompt only runs at a real TTY. Claude's Bash tool always gets a piped stdin (no TTY, in any environment), so for Claude the bare `--cleanup` only lists candidates. To actually delete, FIRST show the candidate list and get the user's explicit go-ahead, THEN re-run with `--cleanup --yes` (deletes all listed branches). The script consults `git worktree list` and EXCLUDES branches checked out in any worktree.
+- For `--cleanup`: the per-branch `y/N` prompt only runs at a real TTY. Claude's Bash tool always gets a piped stdin (no TTY, in any environment), so for Claude the bare `--cleanup` only lists candidates. To actually delete, FIRST show the candidate list and get the user's explicit go-ahead, THEN re-run with `--cleanup --yes` (removes everything listed). The script consults `git worktree list` and EXCLUDES branches checked out in any worktree, with one exception: a clean agent worktree (`.claude/worktrees/agent-*`) whose branch belongs to a merged PR is listed under "Agent worktrees of merged PRs" and removed before its branch. A dirty one is listed as left alone. A `worktree-agent-*` base branch is listed under "Merged agent base branches" once the default branch contains it and its agent worktree is gone.
 - When the script reports `tcs-git-helpers not installed in this repo`, surface the message and suggest the user run `/tcs-git-helpers:git-setup`. The git/PR state still renders; only the post-merge cache refresh is missing.
 
 **Never:**
 - Re-implement git state queries (`git rev-parse`, `git status`, `gh pr list`, etc.) inline — the markdown body is intentionally state-free.
 - Delete a stale branch without explicit user confirmation. `--cleanup --yes` is permitted ONLY after the user has seen the candidate list and approved (their approval is the confirmation that replaces the TTY prompt). Never pass `--yes` on the first, unprompted invocation.
-- Operate on branches currently checked out in any worktree.
+- Operate on branches currently checked out in any worktree, other than a clean agent worktree of a merged PR that the script itself lists.
 - Strip or suppress the cache-staleness warning marker.
 
 **Mode reference:**
@@ -57,7 +57,7 @@ Spec refs:
 |------|--------|-------|
 | (none) | Multi-section structured report | branch / PR state / stale branches / plugin version / recent overrides / suggestions — see SDD §Status output structure |
 | `--brief` | Single line, ≤80 chars | `[tcs-git-helpers] <branch> • <state> • <ahead/behind> • <stale-count>` |
-| `--cleanup` | List candidates; interactive purge at a TTY | Worktree-checked-out branches excluded. Under Claude (no TTY) lists only — add `--yes` to delete all after user approval |
+| `--cleanup` | List candidates; interactive purge at a TTY | Worktree-checked-out branches excluded, except clean agent worktrees of merged PRs. Under Claude (no TTY) lists only — add `--yes` to delete all after user approval |
 | `--cleanup --yes` | Non-interactive: delete ALL listed candidates | For agents/CI (no TTY). Use only after the user approves the listed candidates |
 | `--json` | Stale-branch cache JSON | Tooling-consumable |
 | `--overrides` | Audit-log tail | Default last 7 days; pass `--limit N` for last N events |
