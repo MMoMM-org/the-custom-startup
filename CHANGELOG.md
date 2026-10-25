@@ -46,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/test_shell_portability_lints.py` checks every tracked shell file; a deliberate use
   carries `# lint-ok: <name>`.
 
+- **The testing and mutation-testing patterns name the checks that pass while code is wrong (#227).**
+  `testing` gains `reference/expectation-sources.md` (expectations that come from the code under
+  test, agreement and partition tests, stubs, parser fixtures); `mutation-testing` gains
+  `reference/verdict-pitfalls.md` (fixtures that miss the gap, vacuous digests, stale `.pyc`).
+  Both patterns are now version 2: run `/tcs-patterns:patterns-setup update` where installed.
+
 ### Fixed
 
 - **JSON files people read keep their umlauts (#226).** The learnings backup and the

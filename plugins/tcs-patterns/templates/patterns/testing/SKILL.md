@@ -58,6 +58,7 @@ State {
 - reference/public-api-testing.md — public-API examples, extraction rule, file layout
 - reference/test-factories.md — factory pattern, composition, anti-patterns
 - reference/coverage-theater.md — patterns that fake 100% coverage
+- reference/expectation-sources.md — expectations that share the code's logic, agreement and partition tests, stubs and fixtures
 
 ## Workflow
 
@@ -74,6 +75,8 @@ Write or reuse a factory for each entity the behavior needs. Read reference/test
 ### 3. Write the Assertion
 
 Assert the complete returned value in one `toEqual`. Add a case for each error branch the behavior can take.
+
+Ask where each expected value came from. If the code under test produced it, or a copy of its logic did, read reference/expectation-sources.md.
 
 ### 4. Audit an Existing Suite
 

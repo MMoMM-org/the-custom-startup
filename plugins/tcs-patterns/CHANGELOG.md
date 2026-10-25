@@ -8,6 +8,18 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [2.0.4] - 2026-10-25
+
+### Added
+
+- **`testing` and `mutation-testing` reach version 2 (#227).** `testing/reference/expectation-sources.md`
+  covers expectations that share the code's logic or output, agreement tests, partition invariants,
+  properties of the changed element, stub wire formats and parser fixtures.
+  `mutation-testing/reference/verdict-pitfalls.md` covers fixtures that never reach the gap,
+  digests a same-bytes write cannot fail, comments that justify a weaker check, and a stale
+  `.pyc` that keeps a mutant running. Both `SKILL.md` files point at them;
+  `mutation-operators.md` is now listed too.
+
 ## [2.0.2] - 2026-10-08
 
 ### Fixed
