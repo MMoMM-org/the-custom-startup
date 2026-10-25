@@ -52,6 +52,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/link-issue sync` plan wrote `ä` as `\u00e4`. A new test requires every `json.dump` in
   shipped code to set `ensure_ascii` or mark its output machine-read.
 
+- **`/tcs-git-helpers:git-audit --cleanup` removes what worktree agents leave behind (#226).**
+  A clean `.claude/worktrees/agent-*` worktree of a merged PR, its branch, and the merged
+  `worktree-agent-*` base branch are now listed and cleaned. Dirty agent worktrees and your own
+  worktrees are left alone. Update tcs-git-helpers.
+
 - **`/tcs-helper:observability-setup` finds its installed dispatcher again.** Its lookup pattern
   left out the plugin cache's version directory, so it never matched and the skill fell back to a
   repo checkout. It also sorted versions as text, which would rank 4.9 above 4.10.
