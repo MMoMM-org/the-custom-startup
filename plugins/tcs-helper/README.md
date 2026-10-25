@@ -66,6 +66,7 @@ Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the pl
 | `SessionStart` | `session_start_context_bridge.py` | Restore `/context-bridge` checkpoint when `source` is `clear` or `compact` |
 | `PreCompact` | `check_learnings.py` | Back up queue before context compaction |
 | `PostToolUse(Bash)` | `post_commit_reminder.py` | Remind to run `/memory-add` after git commit; capture persistent tool errors |
+| `PostToolUse(Write\|Edit\|MultiEdit)` | `authoring_reminder.py` | Point at `/tcs-helper:skill-author` after a `SKILL.md` is written, `/tcs-helper:agent-author` after an `agents/**.md` |
 
 ### Pattern Detection
 

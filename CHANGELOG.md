@@ -52,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/link-issue sync` plan wrote `ä` as `\u00e4`. A new test requires every `json.dump` in
   shipped code to set `ensure_ascii` or mark its output machine-read.
 
+- **tcs-helper reminds you to audit a skill or agent you just wrote (#226).** After a `SKILL.md`
+  or an `agents/**.md` is written, a hook points at `/tcs-helper:skill-author` or
+  `/tcs-helper:agent-author`. Remove any personal `~/.claude` hook that does the same.
+
 - **`/tcs-git-helpers:git-audit --cleanup` removes what worktree agents leave behind (#226).**
   A clean `.claude/worktrees/agent-*` worktree of a merged PR, its branch, and the merged
   `worktree-agent-*` base branch are now listed and cleaned. Dirty agent worktrees and your own

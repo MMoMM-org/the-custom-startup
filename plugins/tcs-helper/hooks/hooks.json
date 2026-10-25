@@ -25,6 +25,11 @@
       "matcher": "Bash",
       "hooks": [{"type": "command",
         "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/post_commit_reminder.py\""}]
+    },
+    {
+      "matcher": "Write|Edit|MultiEdit",
+      "hooks": [{"type": "command",
+        "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/authoring_reminder.py\""}]
     }]
   }
 }
