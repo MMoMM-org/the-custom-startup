@@ -1,11 +1,11 @@
 # Written by /tcs-patterns:patterns-setup. Reviewed and committed like any other file.
 schema = 1
-bundle = "2.0.1"
+bundle = "2.0.4"
 
 [patterns.mutation-testing]
-version = "1"
+version = "2"
 installed_as = "tcs-mutation-testing"
-sha256 = "5eab4d309b07c0339ba9c2921518402369da3c92a8fc31a05dc0718833d20481"
+sha256 = "0a3fb7b4738a806dac9857ea1e424a01c0cb822c7f7b68c2f65a7ca88bc56219"
 
 [patterns.observability]
 version = "1"
@@ -23,6 +23,6 @@ installed_as = "tcs-test-design-reviewer"
 sha256 = "9f1f1589365d07e476126e55adfcd6d4d15ccbed7111f22af1abda2930deb22c"
 
 [patterns.testing]
-version = "1"
+version = "2"
 installed_as = "tcs-testing"
-sha256 = "3a80691de54766bf71a8b67bbb1911e93ba98edb5d6c8aa4d12256e24964936d"
+sha256 = "b4774bfafc1b88012a700a54e7f64918fc9a481625539957b852cf961ebfa296"
