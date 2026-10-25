@@ -63,11 +63,17 @@ State {
 - For each surviving mutant: read the mutant, understand what it changes, add an assertion that would catch it.
 - Run mutation testing on the most critical domain logic first.
 - Document timeout mutants — they may indicate missing test boundaries.
+- Confirm each new killing test fails against the mutant it was written for, and only that test.
 
 **Never:**
 - Accept surviving mutants in domain core logic without explicit justification.
 - Write tests purely to increase mutation score — test real behavior, not mutants.
 - Run mutation testing on generated or framework code — scope to your business logic.
+
+## Reference Materials
+
+- reference/mutation-operators.md — operators, mutant states, and fixes for survivors
+- reference/verdict-pitfalls.md — fixtures that miss the gap, vacuous digests, self-justifying comments, stale bytecode
 
 ## Workflow
 
@@ -100,6 +106,8 @@ For each surviving mutant:
 1. Show the mutation (original → mutated)
 2. Explain what behavior the test suite missed
 3. Propose the specific assertion needed to kill it
+
+Read reference/verdict-pitfalls.md before trusting a verdict or a new killing fixture.
 
 ### 4. Report
 
