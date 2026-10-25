@@ -71,7 +71,7 @@ _no_match() {
   # rejects the class and bash returns 2 — which reads as "no match" to every
   # caller, so a destructive command sails through. On BSD it compiles and
   # matches, hence the platform split.
-  run bash -c 'cmd="git reset --hard"; pat="--hard[[:>:]]"; [[ "$cmd" =~ $pat ]]'
+  run bash -c 'cmd="git reset --hard"; pat="--hard[[:>:]]"; [[ "$cmd" =~ $pat ]]'  # lint-ok: bsd-word-boundary
   case "$(uname -s)" in
     Darwin) [ "$status" -eq 0 ] ;;
     *)      [ "$status" -eq 2 ] ;;
@@ -97,7 +97,7 @@ _no_match() {
   for name in $(grep -Eo '^PATTERN_[A-Z_]+' "${PLUGIN_ROOT}/scripts/lib/pattern_match.sh"); do
     eval "pat=\"\${${name}}\""
     case "$pat" in
-      *'[[:<:]]'*|*'[[:>:]]'*)
+      *'[[:<:]]'*|*'[[:>:]]'*)  # lint-ok: bsd-word-boundary
         printf 'PATTERN %s uses a BSD-only word boundary: %s\n' "$name" "$pat" >&2
         return 1
         ;;
