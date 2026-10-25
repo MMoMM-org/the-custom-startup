@@ -91,6 +91,7 @@ Optional. Provides skill authoring tools, the **[Memory Bank](../about/concepts.
 | `SessionStart` | `session_start_reminder.py` | Show pending queue count at session open |
 | `PreCompact` | `check_learnings.py` | Back up queue before context compaction |
 | `PostToolUse(Bash)` | `post_commit_reminder.py` | Remind to run `/memory-add` after git commit; capture persistent tool errors |
+| `PostToolUse(Write\|Edit\|MultiEdit)` | `authoring_reminder.py` | Point at `/tcs-helper:skill-author` after a `SKILL.md` is written, `/tcs-helper:agent-author` after an `agents/**.md` |
 
 **Themes (auto-discovered from `themes/` when plugin is enabled):**
 

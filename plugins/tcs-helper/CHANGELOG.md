@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.4.3] - 2026-10-25
+
+### Added
+
+- **Writing a skill or agent definition now points at its authoring skill (#226).** A new
+  `PostToolUse(Write|Edit|MultiEdit)` hook adds a one-line reminder to run
+  `/tcs-helper:skill-author` after any `SKILL.md` is written, or `/tcs-helper:agent-author`
+  after an `agents/**.md`. This is ADR-4's first enforcement layer. It used to live only in a
+  personal `~/.claude` hook, which a per-repo container never saw.
+  **What to do:** if you have such a hook in `~/.claude/settings.json`, remove it, or the
+  reminder appears twice.
+
 ## [4.4.2] - 2026-10-24
 
 ### Fixed
