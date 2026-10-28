@@ -31,6 +31,7 @@
 | 2026-10-28 | SDD approved: ADR-1 to ADR-7 confirmed | Model tier as second classifier axis in one step-6 call; depth signals high_risks/novel_pattern/adr_count; one ladder in implement/reference/model-ladder.md; escalation on evidence; spike first on observing the model that ran |
 | 2026-10-28 | Decomposition tier: Incremental | Classifier recommended Incremental (6 Must-Have features, 25 acceptance criteria, 1 new component; rule 1 via feature_count >= 2). Accepted. |
 | 2026-10-28 | Spec validation: 6 FAIL, 21 WARN; fixes applied | Ladder moved to `xdd/reference/model-ladder.md` (dispatcher at its line budget, owns no references); step-6 model question in prose (CON-8 test counts the tool name, already used by the Finalize gate); fable failure: planned task → opus@max, escalated task → BLOCKED, fable off for the run; consecutive review-failure count resets on escalation and caps at the highest reachable rung (bounds the 4f/4g loop); absent tier keeps today's selection, escalation follows the ladder; override reason from free text; AC numbering, test files per task, bats path dropped |
+| 2026-10-28 | T1.1 gains question (d): Remote Control | The Fable consent prompt is shown only in the local terminal, never forwarded to a Remote Control device; the spike checks whether an unanswered prompt matches the dismissed-consent row |
 
 ## Context
 
