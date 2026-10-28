@@ -164,3 +164,15 @@ would plausibly re-propose it, leave it out.
   need to diverge in how they treat a malformed file — today both swallow a `TOMLDecodeError` and
   return the same "nothing found" pair, and the moment one of them needs to distinguish "absent"
   from "unparseable" the single return becomes a genuine obstacle rather than a tax.
+
+### 2026-10-28 — a mod that holds guarded git ops for a Proceed/Cancel button
+
+- **Proposed:** turn the tcs-git-helpers guards (`git branch -D`, `git stash drop`, …) into a
+  Claude Code mod that holds the Bash call and shows Proceed/Cancel in a pane, as the
+  `blast-radius` sample mod does, instead of denying with a `CLAUDE_ALLOW_…=1` override.
+- **Decision:** rejected
+- **Why:** Marcus — "würde nur Sinn machen wenn das llm weiter agieren kann". A held call blocks
+  the turn until a person answers. Today's deny returns a reason the model acts on and keeps
+  working. Subagents and `claude -p` have no pane at all, so the bash guard stays either way.
+- **Revisit if:** mods gain a way to hold a call without stalling the turn, such as asking in the
+  background while the model continues.
