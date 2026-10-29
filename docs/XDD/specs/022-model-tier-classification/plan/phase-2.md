@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Model ladder and plan tag"
-status: pending
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -32,7 +32,7 @@ phase: 2
 
 Establishes the one definition of "stronger model" that every consumer reads, and the per-task annotation that selects a tier.
 
-- [ ] **T2.1 `xdd/reference/model-ladder.md`** `[activity: domain-modeling]`
+- [x] **T2.1 `xdd/reference/model-ladder.md`** `[activity: domain-modeling]`
 
   1. Prime: Read the starting-rung table, escalation pseudocode, error table and log row formats `[ref: SDD/Runtime View; Complex Logic]` `[ref: SDD/Implementation Examples; Escalation]`; read T1.1's findings.
   2. Test: Write `tests/test_model_ladder.py` —
@@ -51,7 +51,7 @@ Establishes the one definition of "stronger model" that every consumer reads, an
      - [ ] Escalation, cap and consent rules defined `[ref: PRD/AC-5.1]` … `[ref: PRD/AC-5.7]` `[ref: PRD/AC-3.3]`
      - [ ] Substitution rules defined `[ref: PRD/AC-6.1]` … `[ref: PRD/AC-6.4]`
 
-- [ ] **T2.2 `[model: tier]` plan annotation** `[activity: domain-modeling]` `[parallel: true]`
+- [x] **T2.2 `[model: tier]` plan annotation** `[activity: domain-modeling]` `[parallel: true]`
 
   1. Prime: Read `plugins/tcs-workflow/skills/xdd-plan/reference/task-structure.md` (Metadata table, lines 81-86), the Task interface in `xdd-plan/SKILL.md` (lines 16-25) and the Metadata Reference in `xdd-plan/template.md` (lines 78-83) `[ref: SDD/Building Block View; Directory Map]`.
   2. Test: Write `tests/test_plan_model_tag.py` — the metadata table has a `[model: routine|hard|frontier]` row stating it overrides the spec's model tier; the xdd-plan Task interface has `model?`; the plan manifest template's Metadata Reference lists it.
@@ -59,6 +59,6 @@ Establishes the one definition of "stronger model" that every consumer reads, an
   4. Validate: Tests pass; skill-author audit of `xdd-plan/SKILL.md` clean.
   5. Success: `[ref: PRD/AC-3.1]`; `[ref: PRD/AC-3.2]`
 
-- [ ] **T2.3 Phase Validation** `[activity: validate]`
+- [x] **T2.3 Phase Validation** `[activity: validate]`
 
   - Gate task. Run the full Python suite. Read `model-ladder.md` against ADR-3 to ADR-6 once more; confirm no other file restates the rungs.

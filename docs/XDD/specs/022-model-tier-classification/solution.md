@@ -461,9 +461,11 @@ on reviewer FAIL (4f or 4g) for task T:
 
 escalate(T):
   T.failures_at_rung = 0
-  next = rung after T.rung
   if T.rung == fable or (T.rung == opus@max and run.fable_unavailable)
-                                    → report BLOCKED to user; stop   # caps every review loop
+                                    → log "highest reachable rung"; report BLOCKED to user; stop
+                                      # caps every review loop
+  next = opus if T.rung is unset (Direct, absent tier: no model parameter)
+         else rung after T.rung
   if next != fable                  → T.rung = next; log escalation; re-dispatch
   if nobody can be asked            → log "fable not reached: no one to ask"; report BLOCKED at opus@max
                                       # also the cap for unattended runs
@@ -536,6 +538,7 @@ sequenceDiagram
 | Silent substitution by Claude Code (served model differs from the requested alias) | Detected by comparing the requested alias with `message.model` in the subagent transcript; logged as a substitution with the served model. A fable dispatch served by another model is a fable failure |
 | Task at its highest reachable rung fails review twice in a row or blocks on complexity | Report BLOCKED to the user; no further rung, no further retry |
 | Fable needed and nobody can be asked | Never dispatched; BLOCKED at opus@max with a log row |
+| Subagent transcript unreadable for the served-model check | Check skipped for that dispatch; the run continues |
 
 ### Complex Logic
 
@@ -591,6 +594,7 @@ fable consent question. Both carry the same cost sentence from `model-ladder.md`
   - `| <date> | Fable consent: T2.1 | Asked at escalation; user agreed |`
   - `| <date> | Model substitution: T2.1 | Requested fable, ran opus@max: dispatch error <reason> |`
   - `| <date> | Model substitution: T2.1 | Requested fable, served <model> (message.model) |`
+  - `| <date> | Model escalation: T2.1 blocked | highest reachable rung |`
 - **Security / cost**: fable is reached only with consent given at classification (planned) or
   at the time (escalation or a frontier tag in a non-frontier spec).
 
