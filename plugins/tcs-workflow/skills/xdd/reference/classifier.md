@@ -121,7 +121,7 @@ A second recommendation, computed in the **same step-6 pass** from the same two 
 
 The classifier **recommends** a model tier. It never applies one: the user sees the rationale and confirms or overrides before anything is recorded.
 
-What each tier means is owned by [model-ladder.md](model-ladder.md) — routine is today's selection, hard starts at a stronger model, frontier at the strongest. Rungs, dispatch parameters and the cost sentence live there and nowhere else; the confirmation question takes the cost sentence from that file.
+What each tier means is owned by [model-ladder.md](model-ladder.md) — routine is the existing selection, hard starts at a stronger model, frontier at the strongest. Rungs, dispatch parameters and the cost sentence live there and nowhere else; the confirmation question takes the cost sentence from that file.
 
 ### Inputs
 
@@ -131,7 +131,7 @@ Four signals. `change_type` is shared with the decomposition tier; the others co
 |--------|--------|----------------|
 | `change_type` | as for the decomposition tier | Shared; computed once. |
 | `high_risks` | requirements.md, Risks and Mitigations table | Rows whose Impact cell is `High`. |
-| `novel_pattern` | solution.md, Pattern Documentation | True when "New patterns created" lists at least one entry. |
+| `novel_pattern` | solution.md, Pattern Documentation | True when "New patterns created" lists at least one entry; an entry reading "None" or "N/A" counts as empty. |
 | `adr_count` | solution.md, Architecture Decisions | Number of ADR entries. |
 
 **When a signal cannot be determined**, lower it: `high_risks = 0`, `novel_pattern = false`, `adr_count = 0`. Name each lowered signal in the rationale and continue. Never block on a missing signal.

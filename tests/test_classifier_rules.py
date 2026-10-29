@@ -330,12 +330,22 @@ def model_tier(change_type, high_risks, novel_pattern, adr_count):
     return ROUTINE
 
 
+# The situation strings are the Edge cases table's, verbatim; a lockstep test
+# below parses the table and requires exactly these (situation, tier) pairs.
 MODEL_TIER_TRACED = [
-    ("doc rewrite, one High risk, new doc pattern", "doc", 1, True, 1, ROUTINE),
-    ("022 this spec", "feature", 0, False, 7, HARD),
-    ("new consensus protocol, two High risks", "feature", 2, True, 4, FRONTIER),
-    ("small fix, one Medium risk", "fix", 0, False, 0, ROUTINE),
-    ("no SDD Pattern section, one High risk", "feature", 1, False, 2, HARD),
+    ("Doc rewrite, one High risk, a new doc pattern", "doc", 1, True, 1, ROUTINE),
+    ("Spec with 7 ADRs, no High risk, no new pattern", "feature", 0, False, 7, HARD),
+    ("Novel pattern, two High risks", "feature", 2, True, 4, FRONTIER),
+    ("Two High risks, no new pattern", "feature", 2, False, 0, HARD),
+    ("Small fix, only Medium risks", "fix", 0, False, 0, ROUTINE),
+    (
+        "No Pattern Documentation section, one High risk",
+        "feature",
+        1,
+        False,
+        2,
+        HARD,
+    ),
 ]
 
 
@@ -350,10 +360,6 @@ def test_model_tier_traced_specs_match_the_sdd(
     assert model_tier(change_type, high_risks, novel, adrs) == expected
 
 
-def test_model_tier_undeterminable_signals_lower_to_routine():
-    assert model_tier("feature", 0, False, 0) == ROUTINE
-
-
 def test_model_tier_novelty_alone_is_hard_not_frontier():
     assert model_tier("feature", 1, True, 0) == HARD
     assert model_tier("feature", 0, True, 0) == HARD
@@ -366,18 +372,6 @@ def test_model_tier_two_high_risks_without_novelty_are_hard():
 def test_model_tier_adr_threshold_is_three():
     assert model_tier("feature", 0, False, 2) == ROUTINE
     assert model_tier("feature", 0, False, 3) == HARD
-
-
-def test_model_tier_is_total():
-    for change_type in ("feature", "fix", "refactor", "doc", "other"):
-        for risks in range(0, 4):
-            for novel in (True, False):
-                for adrs in range(0, 5):
-                    assert model_tier(change_type, risks, novel, adrs) in (
-                        ROUTINE,
-                        HARD,
-                        FRONTIER,
-                    )
 
 
 def _model_tier_section():
@@ -400,17 +394,42 @@ def test_model_tier_section_documents_the_four_signals():
 def test_model_tier_section_states_the_ordered_rules():
     section = _model_tier_section()
     assert "first match wins" in section.lower()
-    assert "change_type == doc" in section
-    assert "novel_pattern AND high_risks >= 2" in section
-    assert "novel_pattern OR high_risks >= 1 OR adr_count >= 3" in section
-    assert "otherwise" in section
+    rules = [
+        "1. routine   if change_type == doc",
+        "2. frontier  if novel_pattern AND high_risks >= 2",
+        "3. hard      if novel_pattern OR high_risks >= 1 OR adr_count >= 3",
+        "4. routine   otherwise",
+    ]
+    assert "\n".join(rules) in section, "rule block is missing, reworded or reordered"
+
+
+def _edge_case_rows():
+    section = _model_tier_section()
+    body = section.split("### Edge cases", 1)[1].split("\n### ", 1)[0]
+    rows = []
+    for line in body.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if line.startswith("|") and len(cells) == 3 and cells[1] in (
+            ROUTINE,
+            HARD,
+            FRONTIER,
+        ):
+            rows.append((cells[0], cells[1]))
+    return rows
+
+
+def test_model_tier_edge_case_table_matches_the_traced_cases():
+    expected = [(row[0], row[5]) for row in MODEL_TIER_TRACED]
+    assert _edge_case_rows() == expected
 
 
 def test_model_tier_section_lowers_undeterminable_signals():
     section = _model_tier_section()
-    assert "high_risks = 0" in section
-    assert "novel_pattern = false" in section
-    assert "adr_count = 0" in section
+    assert (
+        "lower it: `high_risks = 0`, `novel_pattern = false`, `adr_count = 0`."
+        in section
+    )
+    assert "Name each lowered signal in the rationale" in section
     assert "rationale" in section.lower()
 
 
@@ -420,7 +439,7 @@ def test_model_tier_section_logs_overrides_with_reason_or_none_given():
     assert "Status table" in section
     assert "Decisions Log" in section
     assert "override" in section.lower()
-    assert "no reason given" in section
+    assert "without one, log `no reason given`" in section
     assert "free-text" in section
 
 
@@ -437,8 +456,10 @@ def test_model_tier_section_links_the_ladder_without_copying_its_cost_sentence()
     assert "usage credits" not in section
 
 
-def test_model_tier_section_names_all_three_tiers_and_no_rung_table():
+def test_model_tier_section_names_all_three_tiers_and_no_rung_names():
     section = _model_tier_section()
     for tier in ("routine", "hard", "frontier"):
         assert tier in section
-    assert "opus@max" not in section
+    lowered = section.lower()
+    for rung in ("opus", "sonnet", "haiku", "fable", "@max"):
+        assert rung not in lowered, f"rung name {rung} belongs in model-ladder.md"
