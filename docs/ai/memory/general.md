@@ -30,3 +30,7 @@
 
 <!-- 2026-10-08 -->
 - **A fixture file matched by `.gitignore` is tested nowhere** — absent from every clone, and pruned locally by the detect walk's git-ignore check, so a mutant survives both. → Re-include its directory with a `!path/` line and track it.
+
+<!-- 2026-10-29 -->
+- **Pin skill pseudocode as whole lines, in order** — a prefix pin still matches after `or true` is appended, a bare pin is met by another line with the same text, and presence ignores swapped steps. → Match full lines; assert their index order.
+- **A subagent's reported test count is a claim** — an implementer's "N passed" can be wrong by hundreds. → At every gate, run the full suite yourself and report your own number.
