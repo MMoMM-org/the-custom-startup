@@ -214,26 +214,43 @@ def _pseudocode():
     return _section("Escalation").split("```")[1]
 
 
+def _lines(block):
+    """Each non-blank line, stripped and with runs of spaces collapsed."""
+    return [re.sub(r"[ \t]+", " ", l).strip() for l in block.splitlines() if l.strip()]
+
+
+PASS_RESETS_THE_COUNT = "on reviewer PASS for task T: T.failures_at_rung = 0"
+
+
+def _assert_escalate_starts_by_resetting_the_count(lines):
+    assert "escalate(T):" in lines, "pseudocode lost: escalate(T):"
+    first = lines[lines.index("escalate(T):") + 1]
+    assert first == "T.failures_at_rung = 0", f"escalate no longer resets first: {first}"
+
+
 def _assert_pseudocode_matches_the_reference_model(block):
-    flat = re.sub(r"[ \t]+", " ", block)
+    # Whole-line pins: a substring pin is satisfied by a longer or different line.
+    lines = _lines(block)
     for line in (
         "BLOCKED(complexity) -> escalate(T)",
+        "BLOCKED(other reason) -> today's handling, no escalation",
+        PASS_RESETS_THE_COUNT,
         "T.failures_at_rung += 1",
         "if T.failures_at_rung == 2 -> escalate(T) and re-dispatch with the fix list",
-        "T.failures_at_rung = 0",
+        "else -> re-dispatch at R with the fix list",
         "if T.rung == fable or (T.rung == opus@max and run.fable_unavailable)",
-        'log "highest reachable rung"; report BLOCKED to the user; stop',
+        '-> log "highest reachable rung"; report BLOCKED to the user; stop',
         "if T.rung is the session model -> next = opus",
         "else -> next = rung after T.rung",
         "if next != fable -> T.rung = next; log escalation; re-dispatch",
-        "if nobody can be asked",
-        'log "fable not reached: no one to ask"; report BLOCKED at opus@max',
-        "T.rung = fable; T.fable_consent = true; log consent and escalation; re-dispatch",
+        'if nobody can be asked -> log "fable not reached: no one to ask"; report BLOCKED at opus@max',
+        "ask the user (Consent):",
+        "yes -> T.rung = fable; T.fable_consent = true; log consent and escalation; re-dispatch",
         "no -> log declined; report BLOCKED at opus@max",
     ):
-        assert line in flat, f"pseudocode lost: {line}"
-    assert "BLOCKED(other reason) -> today's handling, no escalation" in flat
-    assert "BLOCKED(other reason) -> escalate" not in flat
+        assert line in lines, f"pseudocode lost: {line}"
+    assert not any(l.startswith("BLOCKED(other reason) -> escalate") for l in lines)
+    _assert_escalate_starts_by_resetting_the_count(lines)
 
 
 def test_escalation_pseudocode_matches_the_reference_model():
@@ -314,7 +331,9 @@ def test_three_non_escalating_blocked_reasons_are_named():
 def test_escalation_resets_count_and_moves_one_rung():
     body = _section("Escalation")
     assert "One rung at a time" in body
-    assert "T.failures_at_rung = 0" in body
+    lines = _lines(_pseudocode())
+    assert PASS_RESETS_THE_COUNT in lines
+    _assert_escalate_starts_by_resetting_the_count(lines)
     assert "starts again at 0" in body
 
 
