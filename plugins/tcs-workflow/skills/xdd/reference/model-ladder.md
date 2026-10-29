@@ -90,7 +90,7 @@ Every dispatch to `fable` needs a person's consent, except a planned task in a s
 - at escalation from `opus@max` to `fable`;
 - for a `frontier` task tag in a spec whose tier is not `frontier`.
 
-Ask in one question that carries the cost sentence (see Cost Sentence). Answer yes: dispatch on `fable`, log the consent. Answer no: log the decline and stay at the capped rung.
+Ask in one question that carries the cost sentence (see Cost Sentence). Answer yes: dispatch on `fable`, log the consent. Answer no: log the decline. An escalation is reported BLOCKED at `opus@max`; a `frontier` tag runs at the `hard` rung.
 
 **Nobody can be asked** means: `YOLO=true`, or the question returns no answer or an error (`claude -p`, Agent SDK). Then fable is never dispatched: an escalation is reported BLOCKED at `opus@max` with a log row, and a `frontier` tag runs at the `hard` rung.
 

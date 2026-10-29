@@ -284,6 +284,14 @@ def test_consent_precedes_every_fable_dispatch_not_covered_by_a_confirmed_tier()
     assert "frontier` task tag in a spec whose tier is not `frontier`" in body
 
 
+def test_declined_consent_outcome_depends_on_the_trigger():
+    body = _section("Consent")
+    line = next(l for l in body.splitlines() if "Answer no:" in l)
+    assert "stay at the capped rung" not in line
+    assert "An escalation is reported BLOCKED at `opus@max`" in line
+    assert "a `frontier` tag runs at the `hard` rung" in line
+
+
 def test_nobody_can_be_asked_is_defined():
     body = _section("Consent")
     assert "`YOLO=true`" in body
