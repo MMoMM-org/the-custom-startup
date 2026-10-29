@@ -34,6 +34,7 @@
 | 2026-10-28 | T1.1 gains question (d): Remote Control | The Fable consent prompt is shown only in the local terminal, never forwarded to a Remote Control device; the spike checks whether an unanswered prompt matches the dismissed-consent row |
 | 2026-10-29 | ADR-6 amended after T1.1 spike | The served model is observable (`message.model` in the subagent transcript); the orchestrator compares it with the requested alias and logs a mismatch as a substitution. `effort: max` on opus confirmed. Consent paths not testable: Fable is included in the maintainer's plan, so no prompt appears. User chose to compare the served model on every dispatch and log a mismatch as a substitution. |
 | 2026-10-29 | SDD aligned with model-ladder.md after phase-2 drift check | Escalation pseudocode: an unset rung (Direct, absent tier) escalates to opus; the cap branch logs "highest reachable rung". Error Handling: an unreadable transcript skips the served-model check. The ladder's former "is the session model" condition was a latent bug (a task at opus in an opus session would not reach opus@max) and is fixed. |
+| 2026-10-29 | Phase 3 drift acknowledged: F2, F3 | Both loops keep `effort: max` and "no `model` parameter when absent" at the dispatch site (reviewed twice as needed for a clear dispatch, pinned by tests); the unknown `[model:]` value report stays only in model-ladder.md, which 4b links. F4 and F5 fixed. |
 
 ## Context
 
