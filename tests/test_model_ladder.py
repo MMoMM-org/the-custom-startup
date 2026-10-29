@@ -6,12 +6,16 @@ break, and this module pins both, as test_classifier_rules.py does for the
 classifier.
 
 1. **The rules give wrong answers.** An independent reference implementation of
-   the escalation function is asserted against the traced cases in the solution
-   design. If the rules and the traces disagree, one of them is wrong.
+   the escalation function is asserted against traced cases. It is not derived
+   from the Markdown, so it only guards the rules as the test author understood
+   them.
 
 2. **The document drifts from the rules.** Lockstep tests slice the file by `##`
    heading, so each assertion checks its own section and cannot be satisfied by
-   a literal that happens to appear elsewhere.
+   a literal that happens to appear elsewhere. The escalation pseudocode is
+   pinned line by line for the lines the reference implementation encodes
+   (`test_escalation_pseudocode_matches_the_reference_model`); a change to one of
+   those lines fails there.
 """
 
 import re
@@ -47,6 +51,7 @@ class Run:
         self.fable_unavailable = False
 
 
+SESSION = None  # a Direct task with no tier: no model parameter, session model
 CONTINUE = "continue"
 BLOCKED = "BLOCKED"
 
@@ -55,8 +60,9 @@ def escalate(task, run):
     """Returns CONTINUE (re-dispatch at task.rung) or BLOCKED."""
     task.failures = 0
     if task.rung == "fable" or (task.rung == "opus@max" and run.fable_unavailable):
+        task.log.append("highest reachable rung")
         return BLOCKED
-    nxt = RUNGS[RUNGS.index(task.rung) + 1]
+    nxt = "opus" if task.rung == SESSION else RUNGS[RUNGS.index(task.rung) + 1]
     if nxt != "fable":
         task.log.append(f"escalation {task.rung} -> {nxt}")
         task.rung = nxt
@@ -169,6 +175,18 @@ def test_fable_is_capped_at_opus_max_once_unavailable():
     assert on_blocked(task, run, "complexity") == BLOCKED
 
 
+def test_session_model_task_first_escalates_to_opus():
+    task, run = Task(SESSION), Run(can_ask=False)
+    assert escalate(task, run) == CONTINUE
+    assert task.rung == "opus"
+
+
+def test_capped_escalation_logs_the_highest_reachable_rung():
+    task, run = Task("fable"), Run()
+    assert escalate(task, run) == BLOCKED
+    assert "highest reachable rung" in task.log
+
+
 def test_escalation_moves_exactly_one_rung_at_a_time():
     task, run = Task("haiku"), Run(can_ask=False)
     seen = [task.rung]
@@ -190,6 +208,36 @@ def _section(name):
     match = re.search(rf"^## {re.escape(name)}\n(.*?)(?=^## |\Z)", text, re.M | re.S)
     assert match, f"model-ladder.md has no '## {name}' section"
     return match.group(1)
+
+
+def _pseudocode():
+    return _section("Escalation").split("```")[1]
+
+
+def _assert_pseudocode_matches_the_reference_model(block):
+    flat = re.sub(r"[ \t]+", " ", block)
+    for line in (
+        "BLOCKED(complexity) -> escalate(T)",
+        "T.failures_at_rung += 1",
+        "if T.failures_at_rung == 2 -> escalate(T) and re-dispatch with the fix list",
+        "T.failures_at_rung = 0",
+        "if T.rung == fable or (T.rung == opus@max and run.fable_unavailable)",
+        'log "highest reachable rung"; report BLOCKED to the user; stop',
+        "if T.rung is the session model -> next = opus",
+        "else -> next = rung after T.rung",
+        "if next != fable -> T.rung = next; log escalation; re-dispatch",
+        "if nobody can be asked",
+        'log "fable not reached: no one to ask"; report BLOCKED at opus@max',
+        "T.rung = fable; T.fable_consent = true; log consent and escalation; re-dispatch",
+        "no -> log declined; report BLOCKED at opus@max",
+    ):
+        assert line in flat, f"pseudocode lost: {line}"
+    assert "BLOCKED(other reason) -> today's handling, no escalation" in flat
+    assert "BLOCKED(other reason) -> escalate" not in flat
+
+
+def test_escalation_pseudocode_matches_the_reference_model():
+    _assert_pseudocode_matches_the_reference_model(_pseudocode())
 
 
 def test_ladder_lists_the_five_rungs_in_order():
@@ -242,11 +290,11 @@ def test_task_tag_overrides_spec_tier_and_unknown_tag_falls_back():
     assert "unknown tag value falls back to the spec tier" in body
 
 
-def test_frontier_tag_in_a_non_frontier_spec_is_consented_or_runs_at_hard():
+def test_frontier_tag_in_a_non_frontier_spec_defers_its_outcomes_to_consent():
     body = _section("Starting Rung")
-    assert "needs consent first" in body
-    assert "counts as planned" in body
-    assert "run at the `hard` rung" in body
+    assert "needs consent first (see Consent)" in body
+    assert "counts as planned" not in body
+    assert "`hard` rung" not in body
 
 
 def test_escalation_names_exactly_two_triggers():
@@ -272,8 +320,9 @@ def test_escalation_resets_count_and_moves_one_rung():
 
 def test_escalation_caps_at_the_highest_reachable_rung():
     body = _section("Escalation")
-    assert "The cap" in body
-    assert "report **BLOCKED** to the user instead of retrying" in body
+    assert "**The cap.**" in body
+    assert "highest reachable rung" in body
+    assert "instead of retrying" not in body
     assert "no question is asked for any rung below `fable`" in body.lower()
 
 
@@ -288,39 +337,42 @@ def test_declined_consent_outcome_depends_on_the_trigger():
     body = _section("Consent")
     line = next(l for l in body.splitlines() if "Answer no:" in l)
     assert "stay at the capped rung" not in line
+    assert "Answer yes: dispatch on `fable`, log the consent" in body
+    assert "counts as planned" in body
     assert "An escalation is reported BLOCKED at `opus@max`" in line
     assert "a `frontier` tag runs at the `hard` rung" in line
 
 
 def test_nobody_can_be_asked_is_defined():
     body = _section("Consent")
-    assert "`YOLO=true`" in body
-    assert "no answer or an error" in body
-    assert "BLOCKED at `opus@max`" in body
-    assert "runs at the `hard` rung" in body
+    line = next(l for l in body.splitlines() if "**Nobody can be asked**" in l)
+    assert "`YOLO=true`" in line
+    assert "no answer, an error or a dismissed question" in line
+    assert "treat it as no" in line.lower()
+    assert "fable not reached: no one to ask" in line
+    assert "BLOCKED" not in line and "`hard` rung" not in line
 
 
 def test_fable_failure_rules():
     body = _section("Fable Failure")
-    assert "dismissed or unanswered" in body
+    assert "Claude Code's own usage-credits consent prompt is dismissed or unanswered" in body
     assert "off for the rest of the run" in body
-    assert "**planned** task" in body and "`opus@max`" in body and "continue" in body
-    assert "**escalated** task" in body and "report BLOCKED" in body
+    assert "re-dispatch at `opus@max`, log the substitution, continue" in body
+    assert "log the substitution as refused and report BLOCKED" in body
 
 
 def test_served_model_check_reads_only_message_model():
     body = _section("Served Model")
     assert "`output_file`" in body
     assert "select(.type == \"assistant\") | .message.model" in body
-    assert "only" in body.lower()
+    assert "Read **only** the `message.model` field" in body
     assert "never against a hard-coded full model ID" in body
     assert "naming the served model" in body
     assert "served by another model is a fable failure" in body
 
 
 def test_cost_sentence_appears_exactly_once_in_the_file():
-    assert _text().count(COST_SENTENCE) == 1
-    assert COST_SENTENCE in _section("Cost Sentence")
+    assert _text().count(COST_SENTENCE) == _section("Cost Sentence").count(COST_SENTENCE) == 1
 
 
 def test_cost_sentence_states_ratio_and_billing_route_not_prices():

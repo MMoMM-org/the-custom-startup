@@ -22,7 +22,6 @@ Five rungs, lowest to highest:
 - `opus@max` is not a model. It is `opus` with per-dispatch `effort: max`, and needs Claude Code 2.1.292 or later.
 - If the Agent tool rejects `effort` (older Claude Code), re-dispatch at `opus` without effort and log a substitution with the reason "effort unsupported".
 - A `CLAUDE_CODE_EFFORT_LEVEL` in the user's environment overrides the per-dispatch effort. `opus@max` then runs at that level.
-- Escalation never goes down and never skips a rung.
 
 ---
 
@@ -37,7 +36,7 @@ The task's tier is its `[model: …]` tag when the value is recognised (`routine
 | `hard` | `opus` | `opus` |
 | `frontier` | `fable` | `fable` |
 
-A `frontier` tag in a spec whose tier is not `frontier` needs consent first (see Consent). Yes: start on `fable`, and the task counts as planned. No, a dismissed prompt, or nobody to ask: run at the `hard` rung.
+A `frontier` tag in a spec whose tier is not `frontier` needs consent first (see Consent).
 
 A spec whose tier is `frontier` and was confirmed by the user needs no further consent for its planned tasks.
 
@@ -64,9 +63,10 @@ on reviewer FAIL for task T:
 
 escalate(T):
   T.failures_at_rung = 0
-  next = rung after T.rung
   if T.rung == fable or (T.rung == opus@max and run.fable_unavailable)
-                             -> report BLOCKED to the user; stop
+                             -> log "highest reachable rung"; report BLOCKED to the user; stop
+  if T.rung is the session model -> next = opus
+  else                       -> next = rung after T.rung
   if next != fable           -> T.rung = next; log escalation; re-dispatch
   if nobody can be asked     -> log "fable not reached: no one to ask"; report BLOCKED at opus@max
   ask the user (Consent):
@@ -76,9 +76,9 @@ escalate(T):
 
 Rules the pseudocode encodes:
 
-- **One rung at a time.** The count starts again at 0 after every escalation; a PASS also resets it. A FAIL, a PASS, then a FAIL is not two in a row.
+- **One rung at a time, never down.** The count starts again at 0 after every escalation; a PASS also resets it. A FAIL, a PASS, then a FAIL is not two in a row.
 - **Automatic up to `opus@max`.** No question is asked for any rung below `fable`.
-- **The cap.** At the highest rung a task may reach, the same triggers report **BLOCKED** to the user instead of retrying. This bounds every review loop. The highest reachable rung is `fable` after consent, and `opus@max` when fable is unavailable, declined, or nobody can be asked.
+- **The cap.** The BLOCKED report in `escalate` bounds every review loop. The highest reachable rung is `fable` after consent, and `opus@max` when fable is unavailable, declined, or nobody can be asked.
 - **Log every escalation** (see Decisions Log).
 
 ---
@@ -90,15 +90,15 @@ Every dispatch to `fable` needs a person's consent, except a planned task in a s
 - at escalation from `opus@max` to `fable`;
 - for a `frontier` task tag in a spec whose tier is not `frontier`.
 
-Ask in one question that carries the cost sentence (see Cost Sentence). Answer yes: dispatch on `fable`, log the consent. Answer no: log the decline. An escalation is reported BLOCKED at `opus@max`; a `frontier` tag runs at the `hard` rung.
+Ask in one question that carries the cost sentence (see Cost Sentence). Answer yes: dispatch on `fable`, log the consent; a `frontier` tag's task then counts as planned. Answer no: log the decline. An escalation is reported BLOCKED at `opus@max`; a `frontier` tag runs at the `hard` rung.
 
-**Nobody can be asked** means: `YOLO=true`, or the question returns no answer or an error (`claude -p`, Agent SDK). Then fable is never dispatched: an escalation is reported BLOCKED at `opus@max` with a log row, and a `frontier` tag runs at the `hard` rung.
+**Nobody can be asked** means: `YOLO=true`, or the question returns no answer, an error or a dismissed question (`claude -p`, Agent SDK). Treat it as no, and log "fable not reached: no one to ask" instead of a decline.
 
 ---
 
 ## Fable Failure
 
-A fable dispatch fails when it returns an error (not entitled, refused), when its Claude Code consent prompt is dismissed or unanswered, or when it is served by another model (see Served Model). Then:
+A fable dispatch fails when it returns an error (not entitled, refused), when Claude Code's own usage-credits consent prompt is dismissed or unanswered, or when it is served by another model (see Served Model). Then:
 
 - fable is **off for the rest of the run**; never try it again;
 - a **planned** task (frontier tier confirmed, or consent given for a frontier tag): re-dispatch at `opus@max`, log the substitution, continue;
@@ -143,6 +143,6 @@ Escalations, consents and substitutions are Decisions Log rows, written through 
 | <date> | Model substitution: T2.1 | Requested fable, served <model> (message.model) |
 ```
 
-The escalation row names the task, the rung before and after, and the trigger (`second review FAIL` or `complexity BLOCKED`). A decline, "fable not reached: no one to ask", and a refused substitution use the same two-cell shape: what happened for the task, then why.
+The escalation row names the task, the rung before and after, and the trigger (`second review FAIL` or `complexity BLOCKED`). A decline, "fable not reached: no one to ask", "highest reachable rung", and a refused substitution use the same two-cell shape: what happened for the task, then why.
 
 The spec's own `Model tier` row is written by the classifier step, not here.
