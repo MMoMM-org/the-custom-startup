@@ -84,6 +84,7 @@ Use these annotations in the plan:
 | `[component: name]` | For multi-component features |
 | `[ref: doc/section; lines: X-Y]` | Links to specifications |
 | `[activity: type]` | Hint for specialist selection |
+| `[model: routine|hard|frontier]` | Overrides the spec's model tier for this task; an unknown value is ignored and the spec tier applies |
 
 ---
 
