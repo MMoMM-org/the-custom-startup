@@ -25,9 +25,10 @@ enforces that on every merge.
 
 ### Changed
 
-- **The implement review loop is bounded (#158).** `implement-incremental` and `implement-direct`
-  no longer repeat implement and review until PASS. Review failures are counted per task, and the
-  count drives escalation or a BLOCKED report.
+- **The implement-incremental review loop is bounded (#158).** `implement-incremental` no longer
+  repeats implement and review until PASS. `implement-incremental` counts review failures per task, and the count
+  drives escalation or a BLOCKED report. `implement-direct` has no review chain; its complexity
+  escalation follows the ladder and is capped.
 
 ## [4.4.15] - 2026-10-25
 
