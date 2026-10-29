@@ -35,9 +35,10 @@ def test_task_structure_metadata_lists_model_tag():
 
     assert len(rows) == 1, "the Metadata table needs exactly one [model:] row"
     row = rows[0]
-    assert MODEL_TAG in row
+    assert MODEL_TAG.replace("|", "\\|") in row
+    assert row.replace("\\|", "").count("|") == 3, "the row must have exactly two cells"
     assert "override" in row.lower()
-    assert "spec" in row.lower()
+    assert "spec's model tier" in row.lower()
 
 
 def test_xdd_plan_task_interface_has_model():
