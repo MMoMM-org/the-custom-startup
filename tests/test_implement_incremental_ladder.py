@@ -80,29 +80,30 @@ def test_4e_escalates_on_complexity_only():
         "Plan is wrong → escalate to user",
     ):
         assert other in step
-    assert "do not escalate" in step
+    assert step.count("per the ladder") == 1
 
 
-def _review_steps():
-    return {"f": _step("f"), "g": _step("g")}
+def test_4f_holds_the_full_counter_rule():
+    step = _step("f")
+    fail_line = next(l for l in step.splitlines() if "❌ FAIL" in l)
+    assert "across 4f and 4g" in fail_line
+    assert "a PASS resets it" in fail_line
+    assert "second in a row" in fail_line
+    assert "escalate per the ladder" in fail_line
+    assert "the count resets" in fail_line
+    assert "highest reachable rung" in fail_line
+    assert "BLOCKED" in fail_line
+    assert "no further retry" in fail_line
+    assert "repeat until PASS" not in step
 
 
-def test_4f_and_4g_count_consecutive_fails_and_escalate_on_second():
-    for letter, step in _review_steps().items():
-        fail_line = next(l for l in step.splitlines() if "❌ FAIL" in l)
-        assert "second" in step, letter
-        assert "escalate per the ladder" in step, letter
-        assert "PASS" in step and "reset" in step, letter
-        assert "repeat until PASS" not in step, letter
-        assert "across 4f and 4g" in step, letter
-        assert fail_line, letter
-
-
-def test_4f_and_4g_report_blocked_at_highest_reachable_rung():
-    for letter, step in _review_steps().items():
-        assert "highest reachable rung" in step, letter
-        assert "BLOCKED" in step, letter
-        assert "no further retry" in step, letter
+def test_4g_points_to_4f_instead_of_restating_the_rule():
+    step = _step("g")
+    fail_line = next(l for l in step.splitlines() if "❌ FAIL" in l)
+    assert "as in 4f" in fail_line
+    assert "across 4f and 4g" in fail_line
+    assert "repeat until PASS" not in step
+    assert "BLOCKED" not in fail_line
 
 
 def test_4f_still_precedes_4g_and_4c_is_untouched():

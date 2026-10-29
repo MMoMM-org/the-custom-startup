@@ -216,8 +216,6 @@ BLOCKED             → assess blocker:
                        - Plan is wrong → escalate to user with explanation
 ```
 
-Only a complexity problem escalates; the other three reasons do not escalate.
-
 **Never** silently ignore a BLOCKED or NEEDS_CONTEXT status.
 
 > **Re-dispatch by mode.** "Re-dispatch" does NOT mean the prior subagent resumes with its memory intact — what it means depends on the mode chosen in step 2:
@@ -250,7 +248,7 @@ Dispatch the `code-quality-reviewer` agent (Agent tool, `subagent_type: code-qua
 
 Agent verdict (PASS or FAIL with fix list, scoped to BASE_SHA..HEAD_SHA):
 - ✅ PASS → proceed to 4h
-- ❌ FAIL → one counter across 4f and 4g (a PASS resets it): the second consecutive FAIL: escalate per the ladder; at the highest reachable rung the ladder reports BLOCKED: no further retry. Otherwise re-dispatch implementer with the fix list (see "Re-dispatch by mode" in 4e) → re-dispatch `code-quality-reviewer`
+- ❌ FAIL → count and escalate as in 4f (one counter across 4f and 4g); otherwise re-dispatch implementer with the fix list (see "Re-dispatch by mode" in 4e) → re-dispatch `code-quality-reviewer`
 
 **Spec compliance review (4f) must pass before code quality review (4g) begins.**
 
@@ -266,7 +264,7 @@ After all tasks in phase: announce "Phase [N] complete. Run `/verify` then `/rev
 
 YOLO mode `[ "${YOLO:-false}" = "true" ]`:
 - Skip confirmation prompts at 4a (task validation)
-- YOLO=true means nobody can be asked (ladder Consent): fable is not reached, escalation stops at opus@max
+- YOLO=true: nobody can be asked (ladder Consent)
 - tdd-guardian BLOCK → log to `docs/ai/memory/yolo-review.md`, proceed
 - Proceed through 4f and 4g automatically without user confirmation between reviews
 
