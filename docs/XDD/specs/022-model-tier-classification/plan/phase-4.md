@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Release and end-to-end validation"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 4
 ---
@@ -30,7 +30,7 @@ phase: 4
 
 Ships the feature and proves the workflow end to end.
 
-- [ ] **T4.1 Documentation and release notes** `[activity: documentation]`
+- [x] **T4.1 Documentation and release notes** `[activity: documentation]`
 
   1. Prime: Read `plugins/tcs-workflow/README.md` and both CHANGELOGs `[ref: SDD/Deployment View]`.
   2. Test: `bash scripts/ci/check-changelog-version-sync.sh --allow-ahead 1` fails before the entries exist.
@@ -38,7 +38,7 @@ Ships the feature and proves the workflow end to end.
   4. Validate: Changelog sync check passes; docs-sync CI passes.
   5. Success: `[ref: SDD/Constraints; CON-6]`; `[ref: SDD/ADR-6]`
 
-- [ ] **T4.2 Walkthrough of both journeys** `[activity: validate]`
+- [x] **T4.2 Walkthrough of both journeys** `[activity: validate]`
 
   1. Prime: Read the PRD journeys `[ref: PRD/User Journey Maps]`.
   2. Test: Walk xdd step 6 on spec 022 itself (expected: Incremental, `hard` via `adr_count >= 3`) and on a doc-only stub (expected: routine). Walk implement-incremental on paper: two FAILs in a row at sonnet → opus with the count reset; complexity BLOCKED at opus@max → fable consent question; YOLO → BLOCKED at opus@max; a planned frontier task whose fable dispatch errors → opus@max and the run continues; a task failing twice at its highest rung → BLOCKED, no further retry.

@@ -539,6 +539,10 @@ sequenceDiagram
 | Task at its highest reachable rung fails review twice in a row or blocks on complexity | Report BLOCKED to the user; no further rung, no further retry |
 | Fable needed and nobody can be asked | Never dispatched; BLOCKED at opus@max with a log row |
 | Subagent transcript unreadable for the served-model check | Check skipped for that dispatch; the run continues |
+| Dispatch without a `model` parameter (Direct, absent tier) | No requested alias, so the served-model check is skipped |
+| Planned frontier task after fable went off for the run | Starts at opus@max; substitution logged with reason "fable off for this run" |
+| `[model: frontier]` tag in a non-frontier spec after fable went off | No consent question; starts at `hard`; substitution logged with reason "fable off for this run" |
+| Any task reported BLOCKED | The run halts at that task, also under YOLO; no further task is dispatched; the plan stays resumable |
 
 ### Complex Logic
 
