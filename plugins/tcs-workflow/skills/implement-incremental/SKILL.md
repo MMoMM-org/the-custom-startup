@@ -80,7 +80,7 @@ State {
 
 ### 1. Initialize
 
-Invoke Skill(tcs-workflow:xdd-meta) to read the spec.
+Invoke Skill(tcs-workflow:xdd-meta) to read the spec. Its status read (`spec.py <id> --read`) prints `model_tier`; keep it for step 4b.
 
 Discover the plan structure:
 
@@ -165,12 +165,14 @@ If missing: AskUserQuestion "Task [name] has no SDD ref or TDD structure. Add be
 
 #### 4b. Model Selection
 
-Select model based on task complexity:
+Tier: the task's `[model: …]` tag if recognised, else the spec's `model_tier` (printed by xdd-meta in step 1). `hard` or `frontier` start at the Starting Rung of [model-ladder.md](../xdd/reference/model-ladder.md), which owns rungs, Consent, Fable Failure and the Decisions Log rows. If absent or `routine`, select by task complexity:
 - **haiku** — 1-2 files, complete spec, mechanical (isolated function, config, file rename)
 - **sonnet** — multi-file integration, cross-concern coordination, pattern matching
 - **opus** — design judgment required, broad codebase understanding, debugging complex state
 
 Signals in task text: `[parallel: true]` → haiku unless integration; `[activity: domain-modeling]` or `[activity: data-architecture]` → sonnet; no ref + complex → opus.
+
+Every implementer dispatch passes the rung's alias (plus `effort: max` for opus@max); fable consent is asked before its dispatch. After each dispatch run the ladder's Served Model check. Log escalations, consents and substitutions through `Skill(tcs-workflow:xdd-meta)` step 4 (Log Decision) in the ladder's Decisions Log formats. Model selection needs no confirmation.
 
 #### 4c. tdd-guardian Dispatch
 
@@ -209,7 +211,7 @@ DONE_WITH_CONCERNS  → read concerns carefully; if about correctness/scope → 
 NEEDS_CONTEXT       → provide the missing context, re-dispatch with same model (see "Re-dispatch by mode" below)
 BLOCKED             → assess blocker:
                        - Context problem → provide context, re-dispatch with same model
-                       - Complexity problem → re-dispatch with upgraded model
+                       - Complexity problem → escalate per the ladder (one rung)
                        - Task too large → break into sub-tasks, create new TodoWrite entries
                        - Plan is wrong → escalate to user with explanation
 ```
@@ -238,7 +240,7 @@ Dispatch the `spec-compliance-reviewer` agent (Agent tool, `subagent_type: spec-
 
 Agent verdict (PASS or FAIL with fix list):
 - ✅ PASS → proceed to 4g
-- ❌ FAIL → re-dispatch implementer with the fix list (see "Re-dispatch by mode" in 4e) → re-dispatch `spec-compliance-reviewer` (repeat until PASS)
+- ❌ FAIL → count the task's consecutive FAILs at the current rung across 4f and 4g (a PASS resets it). The second in a row: escalate per the ladder; the count resets. Re-dispatch implementer with the fix list (see "Re-dispatch by mode" in 4e) → re-dispatch `spec-compliance-reviewer`. At the highest reachable rung the ladder reports BLOCKED and the run halts per the ladder's Stop rule: no further retry.
 
 #### 4g. Code Quality Review
 
@@ -246,7 +248,7 @@ Dispatch the `code-quality-reviewer` agent (Agent tool, `subagent_type: code-qua
 
 Agent verdict (PASS or FAIL with fix list, scoped to BASE_SHA..HEAD_SHA):
 - ✅ PASS → proceed to 4h
-- ❌ FAIL → re-dispatch implementer with the fix list (see "Re-dispatch by mode" in 4e) → re-dispatch `code-quality-reviewer` (repeat until PASS)
+- ❌ FAIL → count and escalate as in 4f (one counter across 4f and 4g); otherwise re-dispatch implementer with the fix list (see "Re-dispatch by mode" in 4e) → re-dispatch `code-quality-reviewer`
 
 **Spec compliance review (4f) must pass before code quality review (4g) begins.**
 
@@ -261,7 +263,8 @@ After all tasks in phase: announce "Phase [N] complete. Run `/verify` then `/rev
 ---
 
 YOLO mode `[ "${YOLO:-false}" = "true" ]`:
-- Skip confirmation prompts at 4a (task validation) and 4b (model selection confirmation)
+- Skip confirmation prompts at 4a (task validation)
+- YOLO=true: nobody can be asked (ladder Consent)
 - tdd-guardian BLOCK → log to `docs/ai/memory/yolo-review.md`, proceed
 - Proceed through 4f and 4g automatically without user confirmation between reviews
 

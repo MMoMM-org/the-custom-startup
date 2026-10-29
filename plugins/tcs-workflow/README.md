@@ -11,6 +11,7 @@ The `start` plugin provides eleven user-invocable workflow skills, five autonomo
 ## Table of Contents
 
 - [User-Invocable Skills](#user-invocable-skills) — pickup, specify, implement, validate, test, review, document, analyze, refactor, debug, constitution
+- [Model Tiers](#model-tiers) — routine, hard, frontier; escalation and consent
 - [Autonomous Skills](#autonomous-skills) — 5 context-activated skills
 - [Documentation Structure](#documentation-structure) — specs, domain, patterns, interfaces
 - [Output Styles](#output-styles) — The Startup, The ScaleUp
@@ -589,6 +590,21 @@ curl -fsSL https://raw.githubusercontent.com/rsmdt/the-startup/main/install.sh |
 - `--help` - Show usage information
 
 **Note:** Output styles are available immediately via `/output-style` - no additional setup required.
+
+---
+
+## Model Tiers
+
+`/xdd` classifies how hard a spec's implementation is and records it as the spec's **model tier**: `routine`, `hard` or `frontier`. Step 6 asks for it in the same question round as the decomposition tier, and you can override it per task with a `[model: routine|hard|frontier]` tag in the plan. `/implement` then dispatches each task on the model the tier maps to, and moves a task to a stronger model when it needs one.
+
+- **Escalation and a bounded review loop.** A task moves up one rung when it is BLOCKED for complexity, and the climb is capped. `implement-incremental` also counts review failures per task, which makes its review loop bounded instead of repeating until PASS. `implement-direct` has no review chain and escalates only on a complexity BLOCKED. Triggers, cap and rungs: [Escalation](skills/xdd/reference/model-ladder.md#escalation).
+- **Consent.** Fable can bill usage credits instead of your plan's limits, so it is never reached without your consent. Where nobody can be asked (YOLO, `claude -p`, the SDK), an escalation to it is not made and the task is reported BLOCKED. Who is asked, when, and the wording: [Consent](skills/xdd/reference/model-ladder.md#consent).
+- **Claude Code 2.1.292 or later** for `opus@max` (Opus with `effort: max`). On an older version the dispatch falls back to `opus` and logs the substitution.
+- **`CLAUDE_CODE_EFFORT_LEVEL`.** If it is set in your environment, it overrides the per-dispatch effort, so `opus@max` runs at that level.
+- **Served model.** After each dispatch the workflow reads the model that actually answered from the subagent transcript (the `message.model` field only) and logs a substitution when it differs from the one requested.
+- **Unverified consent paths.** The paths that depend on Claude Code's own usage-credit consent prompt could not be tested; they are tracked in [#242](https://github.com/MMoMM-org/the-custom-startup/issues/242).
+
+The rules (rungs, starting rung per tier, escalation, consent, the cost sentence) are defined once, in [`skills/xdd/reference/model-ladder.md`](skills/xdd/reference/model-ladder.md).
 
 ---
 

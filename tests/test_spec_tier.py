@@ -46,11 +46,13 @@ README_TEMPLATE = """# Specification: {spec_id}-{name}
 """
 
 
-def _make_spec(tmp_path, spec_id="042", name="scratch", tier=None):
-    """Build a spec directory that looks like a real one, with or without a tier row."""
+def _make_spec(tmp_path, spec_id="042", name="scratch", tier=None, model_tier=None):
+    """Build a spec directory that looks like a real one, with or without tier rows."""
     spec_dir = tmp_path / "docs" / "XDD" / "specs" / f"{spec_id}-{name}"
     spec_dir.mkdir(parents=True)
     tier_row = f"| **Decomposition tier** | {tier} |\n" if tier is not None else ""
+    if model_tier is not None:
+        tier_row += f"| **Model tier** | {model_tier} |\n"
     (spec_dir / "README.md").write_text(
         README_TEMPLATE.format(spec_id=spec_id, name=name, tier_row=tier_row),
         encoding="utf-8",
@@ -303,3 +305,119 @@ def test_read_ignores_an_empty_plan_directory(tmp_path):
     assert code == 0
     assert "plan_dir" not in out, "an empty plan/ was reported as a plan artifact"
     assert "plan = " not in out
+
+
+# --- The model tier: a second Status row, read by the same reader ---
+#
+# Spec 022 (#158) classifies each spec's model tier (routine | hard | frontier)
+# in the same Status table as the decomposition tier. `--read` reports it as a
+# top-level key, directly after decomposition_tier, with the same fail-open rule.
+
+
+def _model_tier_of(stdout):
+    for line in stdout.splitlines():
+        if line.startswith("model_tier"):
+            return line.split("=", 1)[1].strip().strip('"')
+    return None
+
+
+@pytest.mark.parametrize(
+    "written,expected",
+    [
+        ("Routine", "routine"),
+        ("HARD", "hard"),
+        ("frontier", "frontier"),
+        ("Hard", "hard"),
+    ],
+)
+def test_model_tier_case_insensitive(tmp_path, written, expected):
+    _make_spec(tmp_path, tier="Direct", model_tier=written)
+    code, out = _read(tmp_path)
+    assert code == 0
+    assert _model_tier_of(out) == expected
+
+
+def test_model_tier_absent_row_emits_empty(tmp_path):
+    """A spec with no Model tier row still gets the key, valued empty, exit 0."""
+    _make_spec(tmp_path, tier="Direct", model_tier=None)
+    code, out = _read(tmp_path)
+    assert code == 0
+    assert _model_tier_of(out) == ""
+
+
+def test_model_tier_unknown_value_emits_empty(tmp_path):
+    _make_spec(tmp_path, tier="Direct", model_tier="Bananas")
+    code, out = _read(tmp_path)
+    assert code == 0
+    assert _model_tier_of(out) == ""
+
+
+def test_model_tier_placeholder_emits_empty(tmp_path):
+    """An unclassified spec carries the template placeholder, which reads as absent."""
+    _make_spec(tmp_path, tier="Direct", model_tier="{{MODEL_TIER}}")
+    code, out = _read(tmp_path)
+    assert code == 0
+    assert _model_tier_of(out) == ""
+
+
+def test_model_tier_printed_directly_after_decomposition_tier(tmp_path):
+    _make_spec(tmp_path, tier="Incremental", model_tier="Hard")
+    code, out = _read(tmp_path)
+    assert code == 0
+    lines = out.splitlines()
+    idx = next(i for i, line in enumerate(lines) if line.startswith("decomposition_tier"))
+    assert lines[idx + 1].startswith("model_tier")
+
+
+@pytest.mark.parametrize("model_tier", [None, "Hard", "Bananas", "{{MODEL_TIER}}"])
+def test_decomposition_tier_unchanged_by_model_row(tmp_path, model_tier):
+    """The model row must neither shadow nor alter the decomposition tier."""
+    _make_spec(tmp_path, tier="Incremental", model_tier=model_tier)
+    code, out = _read(tmp_path)
+    assert code == 0
+    assert _tier_of(out) == "incremental"
+
+
+# --- T1.3 (#158, ADR-7): the template and xdd-meta carry the model tier ---
+
+
+def test_template_carries_the_model_tier_row():
+    template = (XDD_META / "template.md").read_text(encoding="utf-8")
+    assert "| **Model tier** | {{MODEL_TIER}} |" in template
+
+
+def test_template_legend_names_the_three_model_tiers():
+    template = (XDD_META / "template.md").read_text(encoding="utf-8")
+    legend = next(
+        line for line in template.splitlines() if line.startswith("**Model tier**:")
+    )
+    for value in ("routine", "hard", "frontier"):
+        assert value in legend.lower()
+
+
+def test_scaffolded_template_reads_model_tier_empty(tmp_path):
+    """A spec scaffolded from template.md carries the placeholder and reads as no tier."""
+    template = (XDD_META / "template.md").read_text(encoding="utf-8")
+    readme = template.replace("{{SPEC_ID}}", "042").replace("{{SPEC_NAME}}", "scratch")
+    spec_dir = tmp_path / "docs" / "XDD" / "specs" / "042-scratch"
+    spec_dir.mkdir(parents=True)
+    assert "| **Model tier** | {{MODEL_TIER}} |" in readme
+    (spec_dir / "README.md").write_text(readme, encoding="utf-8")
+    code, out = _read(tmp_path)
+    assert code == 0, out
+    assert _model_tier_of(out) == ""
+
+
+def test_xdd_meta_declares_the_model_tier_in_its_interface():
+    skill = (XDD_META / "SKILL.md").read_text(encoding="utf-8")
+    assert "model_tier: Routine | Hard | Frontier | None" in skill
+    assert "modelTier: Routine | Hard | Frontier | None" in skill
+
+
+def test_xdd_meta_writes_a_model_tier_decision_to_both_places():
+    skill = (XDD_META / "SKILL.md").read_text(encoding="utf-8")
+    rule = next(
+        line for line in skill.splitlines() if "to **both** the Status table row and the Decisions Log" in line
+    )
+    assert "model" in rule.lower()
+    assert "decomposition" in rule.lower()

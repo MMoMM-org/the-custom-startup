@@ -23,6 +23,10 @@ SpecStatus {
     tier:   Direct | Incremental | None
     status: Complete | Incomplete | Skipped
   }
+  model: {
+    tier:   Routine | Hard | Frontier | None
+    status: Complete | Incomplete | Skipped
+  }
   readiness: HIGH | MEDIUM | LOW
 }
 
@@ -32,6 +36,7 @@ State {
   perspectives = []
   mode: Standard | Agent Team
   tier: Direct | Incremental     // from reference/classifier.md, confirmed by the user
+  modelTier: Routine | Hard | Frontier   // from reference/classifier.md, confirmed by the user
   status: SpecStatus
 }
 
@@ -42,7 +47,7 @@ State {
 - Display ALL agent responses to user — complete findings, not summaries.
 - Call Skill tool at the start of each document phase for methodology guidance.
 - Run phases sequentially — PRD, SDD, Decomposition (user can skip phases).
-- Classify the decomposition tier from the documents, never from the raw request — the classifier runs only after PRD and SDD exist.
+- Classify the decomposition tier and the model tier from the documents, never from the raw request — the classifier runs only after PRD and SDD exist.
 - Wait for user confirmation between each document phase.
 - Track decisions in specification README via reference/output-format.md.
 - Git integration is optional — offer branch/commit as an option.
@@ -57,7 +62,8 @@ State {
 ## Reference Materials
 
 - [Perspectives](reference/perspectives.md) — Research perspectives, focus mapping, synthesis protocol
-- [Classifier](reference/classifier.md) — Signals, ordered rules, rationale format, override handling, decision logging
+- [Classifier](reference/classifier.md) — Decomposition and model-tier signals, ordered rules, rationale format, override handling, decision logging
+- [Model Ladder](reference/model-ladder.md) — Rungs, consent, the frontier cost sentence, Decisions Log formats
 - [Output Format](reference/output-format.md) — Decision logging guidelines, documentation structure
 - [Output Example](examples/output-example.md) — Concrete example of expected output format
 
@@ -117,18 +123,20 @@ AskUserQuestion: Continue to Decomposition (recommended) | Finalize SDD
 
 Read `reference/classifier.md` and apply the ordered rules to `requirements.md` and `solution.md`.
 
-1. **Extract** the five signals — `change_type`, `feature_count`, `ac_count`, `component_count`, `parallel_markers`. Read only; ask the user nothing. A signal you cannot determine takes its conservative value and is named as such in the rationale.
-2. **Recommend** one tier by applying the rules top to bottom, first match wins.
-3. **Surface** the recommendation with the signals that produced it, so the user can check them against their own documents.
-4. **Ask** the user to choose (under header "Decompose"):
+1. **Extract** the five decomposition signals — `change_type`, `feature_count`, `ac_count`, `component_count`, `parallel_markers` — and the model-tier signals — `high_risks`, `novel_pattern`, `adr_count` (the `## Model Tier` section). Read only; ask the user nothing. A signal you cannot determine takes the fallback value the classifier defines and is named as such in the rationale.
+2. **Recommend** one decomposition tier and one model tier, each by applying its rules top to bottom, first match wins.
+3. **Surface** both recommendations with the signals that produced them, so the user can check them against their own documents.
+4. **Ask** the user to choose, in one question round with two questions. Under header "Decompose":
    - **Direct** — implement straight from PRD + SDD. No plan artifact. Recommended for fixes, refactors, doc changes, and single-criterion features.
    - **Incremental** — a phase plan with TDD tasks and the per-task review chain. Recommended for anything with real breadth.
 
-   Highlight the classifier's recommendation. The user may override freely.
-5. **Record** the choice via `Skill(tcs-workflow:xdd-meta)` — the README Status table `Decomposition tier` row **and** a Decisions Log row carrying the recommendation, the choice, and the rationale.
+   Under header "Model": routine | hard | frontier. The `frontier` option carries the cost sentence, which you read from `reference/model-ladder.md` and copy into the option text.
+
+   Highlight each recommendation. The user may override freely. An override reason comes from the free-text answer; without one, log "no reason given".
+5. **Record** both choices via `Skill(tcs-workflow:xdd-meta)` — the README Status table `Decomposition tier` and `Model tier` rows **and** a Decisions Log row per tier carrying the recommendation, the choice, and the rationale.
 6. **Route**:
 
-match (chosen tier) {
+match (chosen decomposition tier) {
   Direct      => write no decomposition artifact; mark the README Documents
                  table's `plan/` row `skipped`, noting the tier; go to step 7.
   Incremental => Invoke `Skill(tcs-workflow:xdd-plan)`.

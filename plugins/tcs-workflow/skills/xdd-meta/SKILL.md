@@ -20,6 +20,7 @@ SpecStatus {
   directory: string         // resolved via Path Resolution priority chain
   phase: Initialization | PRD | SDD | PLAN | Ready | Implemented
   decomposition_tier: Direct | Incremental | None   // None = spec predates tiers, or not yet classified
+  model_tier: Routine | Hard | Frontier | None       // None = not yet classified
   documents: {
     name: string
     status: pending | in_progress | completed | skipped
@@ -31,6 +32,7 @@ State {
   specId = ""
   currentPhase: Initialization | PRD | SDD | PLAN | Ready | Implemented
   decompositionTier: Direct | Incremental | None
+  modelTier: Routine | Hard | Frontier | None
   documents: []
 }
 
@@ -68,7 +70,7 @@ TCS_IDEAS_DIR="${TCS_DOCS_BASE}/ideas"
 - Use spec.py (co-located with this SKILL.md) for all directory operations.
 - Create README.md from template.md when scaffolding new specs.
 - Log all significant decisions with date, decision, and rationale.
-- Write a tier decision to **both** the Status table row and the Decisions Log. The Status row is what `spec.py --read` parses; the log is the audit trail.
+- Write a tier decision (decomposition or model) to **both** the Status table row and the Decisions Log. The Status row is what `spec.py --read` parses; the log is the audit trail.
 - Confirm next steps with user before phase transitions.
 - Treat Finalize as idempotent — re-finalizing an already-Implemented spec is a no-op, not an error.
 

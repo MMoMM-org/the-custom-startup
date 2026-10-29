@@ -8,6 +8,30 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [4.4.16] - 2026-10-29
+
+### Added
+
+- **Model tiers and an escalation ladder (#158, spec 022).** `/xdd` step 6 now classifies a spec as
+  `routine`, `hard` or `frontier` (from four signals in `reference/classifier.md`) and confirms it
+  together with the decomposition tier; `xdd-meta` records it as a `Model tier` row and
+  `spec.py --read` prints `model_tier`; `xdd-plan` accepts a `[model: …]` task tag that overrides
+  the spec tier. `/implement` dispatches each task at the rung its tier maps to and escalates
+  haiku, sonnet, opus, opus with `effort: max`, fable on a complexity BLOCKED or two review
+  failures in a row. Fable is never used without consent, and the served model is checked from the
+  subagent transcript after each dispatch. Rules live in `skills/xdd/reference/model-ladder.md`.
+  `opus@max` needs Claude Code 2.1.292 or later, and `CLAUDE_CODE_EFFORT_LEVEL` in your
+  environment overrides it. The fable usage-credit consent paths could not be tested (#242).
+
+### Changed
+
+- **The implement-incremental review loop is bounded (#158).** `implement-incremental` no longer
+  repeats implement and review until PASS: it counts review failures per task, and the count
+  drives escalation or a BLOCKED report. `implement-direct` has no review chain; its complexity
+  escalation follows the ladder and is capped. A BLOCKED report halts the run at that task; re-run
+  `/implement` after resolving it. A `frontier` task tag runs at the `hard` rung, without asking,
+  once fable is off for the run.
+
 ## [4.4.15] - 2026-10-25
 
 ### Fixed

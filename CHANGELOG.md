@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — model tiers
+
+### Added
+
+- **`/xdd` classifies a spec's model tier and `/implement` escalates by a ladder (#158, spec 022).**
+  A spec is `routine`, `hard` or `frontier`, confirmed with you at step 6. `/implement` dispatches
+  each task on the model that tier maps to and moves it up (haiku, sonnet, opus, opus with max
+  effort, fable) after a complexity BLOCKED or two review failures in a row. Fable is never used
+  without your consent, because it can bill usage credits. **What to know:** max effort needs
+  Claude Code 2.1.292 or later, and `CLAUDE_CODE_EFFORT_LEVEL` in your environment overrides it.
+  The implement-incremental review loop is now bounded instead of repeating until PASS. Not
+  covered: the fable usage-credit consent paths could not be tested (#242). Update tcs-workflow.
+  See `plugins/tcs-workflow/README.md`, section Model Tiers.
+
 ## [Unreleased] — observability v2
 
 ### Added

@@ -19,6 +19,7 @@ Task {
   ref?: string             // SDD/Section + line range
   activity?: string        // domain-modeling, backend-api, frontend-ui, ...
   parallel?: boolean
+  model?: routine | hard | frontier   // overrides the spec's model tier for this task
   prime: string            // what to read before starting
   test: string             // what to test (red)
   implement: string        // what to build (green)

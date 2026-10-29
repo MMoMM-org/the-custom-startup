@@ -81,6 +81,7 @@ When implementation requires changes from the specification:
 - `[component: component-name]` - For multi-component features
 - `[ref: document/section; lines: 1, 2-3]` - Links to specifications, patterns, or interfaces and (if applicable) line(s)
 - `[activity: type]` - Activity hint for specialist agent selection
+- `[model: routine|hard|frontier]` - Overrides the spec's model tier for this task
 
 ### Success Criteria
 
