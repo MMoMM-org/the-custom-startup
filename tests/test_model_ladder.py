@@ -513,9 +513,27 @@ def test_consent_skips_the_question_for_a_frontier_tag_once_fable_is_off():
     assert "`fable off for this run`" in line
 
 
-def test_fable_failure_and_consent_agree_on_the_frontier_tag_after_fable_is_off():
+def test_fable_failure_points_to_consent_for_the_frontier_tag_instead_of_restating_it():
     assert "`hard` rung" in _section("Consent")
-    assert "`frontier` tag in a non-frontier spec starts at `hard`" in _section("Fable Failure")
+    failure = _section("Fable Failure")
+    assert "`frontier` tag" in failure
+    assert "see Consent" in failure
+    assert "starts at `hard`" not in failure
+
+
+def test_starting_rung_points_to_the_fable_off_cases():
+    body = _section("Starting Rung")
+    line = next(l for l in body.splitlines() if "fable is off" in l)
+    assert "Fable Failure" in line
+    assert "Consent" in line
+
+
+def test_intro_does_not_claim_that_nothing_halts_a_run():
+    intro = _text().split("\n---\n")[0]
+    assert "no model problem halts a run" not in intro
+    assert "instead of stopping" not in intro
+    assert "BLOCKED" in intro
+    assert "Escalation" in intro
 
 
 def test_blocked_halts_the_run_at_the_blocked_task():
@@ -529,8 +547,16 @@ def test_blocked_halts_the_run_at_the_blocked_task():
     assert "/implement" in line
 
 
-def test_implement_loops_do_not_continue_past_a_blocked_task():
+def test_stop_covers_every_blocked_report_from_escalate_and_fable_failure():
+    line = next(l for l in _section("Escalation").splitlines() if "**Stop**" in l)
+    assert "any BLOCKED report" in line
+    assert "`escalate`" in line
+    assert "Fable Failure" in line
+
+
+def test_implement_loops_link_the_ladder_and_do_not_continue_past_a_blocked_task():
     skills = REPO_ROOT / "plugins" / "tcs-workflow" / "skills"
     for name in ("implement-incremental", "implement-direct"):
         text = (skills / name / "SKILL.md").read_text()
+        assert "xdd/reference/model-ladder.md" in text
         assert not re.search(r"BLOCKED[^\n]*(next task|continue with)", text, re.I)

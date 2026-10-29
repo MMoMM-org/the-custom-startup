@@ -2,7 +2,7 @@
 
 The one definition of "a stronger model" for the workflow. The classifier (xdd step 6) and both implement loops link this file and never restate a rung.
 
-Everything here degrades instead of stopping: no model problem halts a run. A rung that cannot be used is skipped or capped, and the step is logged.
+A model problem degrades a rung and is logged: a rung that cannot be used is skipped or capped. The one stop is a task reported BLOCKED (see Escalation → Stop).
 
 ---
 
@@ -37,6 +37,8 @@ The task's tier is its `[model: …]` tag when the value is recognised (`routine
 | `frontier` | `fable` | `fable` |
 
 A `frontier` tag in a spec whose tier is not `frontier` needs consent first (see Consent).
+
+Once fable is off for the run, see Fable Failure (planned tasks) and Consent (a `frontier` tag).
 
 A spec whose tier is `frontier` and was confirmed by the user needs no further consent for its planned tasks.
 
@@ -80,7 +82,7 @@ Rules the pseudocode encodes:
 - **Automatic up to `opus@max`.** No question is asked for any rung below `fable`.
 - **The cap.** The BLOCKED report in `escalate` bounds every review loop. The highest reachable rung is `fable` after consent, and `opus@max` when fable is unavailable, declined, or nobody can be asked.
 - **Log every escalation** (see Decisions Log).
-- **Stop** halts the run at the blocked task: no further task is dispatched, also under `YOLO=true`, so no dependent task runs on an unfinished state. The plan stays resumable: re-run `/implement` after resolving the block.
+- **Stop**: any BLOCKED report, from `escalate` or from Fable Failure, halts the run at the blocked task: no further task is dispatched, also under `YOLO=true`, so no dependent task runs on an unfinished state. The plan stays resumable: re-run `/implement` after resolving the block.
 
 ---
 
@@ -103,7 +105,7 @@ When fable is already off for the run (see Fable Failure), a `frontier` tag in a
 
 A fable dispatch fails when it returns an error (not entitled, refused), when Claude Code's own usage-credits consent prompt is dismissed or unanswered, or when it is served by another model (see Served Model). Then:
 
-- fable is **off for the rest of the run** (`run.fable_unavailable`); never try it again. A later planned task that would start on `fable` starts at `opus@max` instead and logs a substitution with the reason `fable off for this run`. A `frontier` tag in a non-frontier spec starts at `hard` instead (see Consent);
+- fable is **off for the rest of the run** (`run.fable_unavailable`); never try it again. A later planned task that would start on `fable` starts at `opus@max` instead and logs a substitution with the reason `fable off for this run`. For a `frontier` tag in a non-frontier spec, see Consent;
 - a **planned** task (frontier tier confirmed, or consent given for a frontier tag): re-dispatch at `opus@max`, log the substitution, continue;
 - an **escalated** task: log the substitution as refused and report BLOCKED. `opus@max` has already failed it.
 
