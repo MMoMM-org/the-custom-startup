@@ -122,7 +122,7 @@ AskUserQuestion: Continue to Decomposition (recommended) | Finalize SDD
 
 Read `reference/classifier.md` and apply the ordered rules to `requirements.md` and `solution.md`.
 
-1. **Extract** the five decomposition signals — `change_type`, `feature_count`, `ac_count`, `component_count`, `parallel_markers` — and the model-tier signals — `high_risks`, `novel_pattern`, `adr_count` (the `## Model Tier` section). Read only; ask the user nothing. A signal you cannot determine takes its conservative value and is named as such in the rationale.
+1. **Extract** the five decomposition signals — `change_type`, `feature_count`, `ac_count`, `component_count`, `parallel_markers` — and the model-tier signals — `high_risks`, `novel_pattern`, `adr_count` (the `## Model Tier` section). Read only; ask the user nothing. A signal you cannot determine takes the fallback value the classifier defines and is named as such in the rationale.
 2. **Recommend** one decomposition tier and one model tier, each by applying its rules top to bottom, first match wins.
 3. **Surface** both recommendations with the signals that produced them, so the user can check them against their own documents.
 4. **Ask** the user to choose, in one question round with two questions. Under header "Decompose":
@@ -135,7 +135,7 @@ Read `reference/classifier.md` and apply the ordered rules to `requirements.md` 
 5. **Record** both choices via `Skill(tcs-workflow:xdd-meta)` — the README Status table `Decomposition tier` and `Model tier` rows **and** a Decisions Log row per tier carrying the recommendation, the choice, and the rationale.
 6. **Route**:
 
-match (chosen tier) {
+match (chosen decomposition tier) {
   Direct      => write no decomposition artifact; mark the README Documents
                  table's `plan/` row `skipped`, noting the tier; go to step 7.
   Incremental => Invoke `Skill(tcs-workflow:xdd-plan)`.

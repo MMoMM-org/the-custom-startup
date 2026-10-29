@@ -482,9 +482,16 @@ def test_xdd_extracts_the_model_tier_signals_without_asking():
 def test_xdd_asks_both_tiers_in_one_round_under_named_headers():
     step = _step_six()
     assert "**Ask** the user to choose" in step
+    assert "in one question round with two questions" in step
     assert 'header "Decompose"' in step
     assert 'header "Model"' in step
     assert "routine | hard | frontier" in step
+
+
+def test_xdd_undeterminable_signal_takes_the_classifier_fallback_not_a_cautious_value():
+    step = _step_six()
+    assert "takes the fallback value the classifier defines" in step
+    assert "conservative" not in step
 
 
 def test_xdd_frontier_option_takes_its_cost_sentence_from_the_ladder():
