@@ -116,16 +116,18 @@ def resolve_doc_path(spec_dir: Path, new_name: str, legacy_name: str) -> Optiona
 # absent here: reporting it would let the dispatcher route work to a loop that
 # does not exist.
 KNOWN_TIERS = ("direct", "incremental")
+# Model tiers the dispatcher can route to (spec 022, #158).
+KNOWN_MODEL_TIERS = ("routine", "hard", "frontier")
 
 
-def read_decomposition_tier(spec_dir: Path) -> str:
-    """Return the tier recorded in the spec README's Status table, or "".
+def read_status_row(spec_dir: Path, label: str, known: tuple[str, ...]) -> str:
+    """Return the value recorded for `label` in the spec README's Status table, or "".
 
     Reads the Status table row, never the Decisions Log (spec 017, ADR-6): the
     log records history, including superseded and overridden tiers, so parsing
     it would report whatever was decided last rather than what is in force.
 
-    Fails open. A spec with no README, no tier row, a template placeholder, or
+    Fails open. A spec with no README, no such row, a template placeholder, or
     an unrecognised value all read as absent — sixteen specs predate the field
     entirely and must keep working (CON-5).
     """
@@ -144,11 +146,21 @@ def read_decomposition_tier(spec_dir: Path) -> str:
         cells = [cell.strip().strip("*").strip() for cell in line.strip().strip("|").split("|")]
         if len(cells) < 2:
             continue
-        if cells[0].lower() == "decomposition tier":
+        if cells[0].lower() == label:
             value = cells[1].lower()
-            return value if value in KNOWN_TIERS else ""
+            return value if value in known else ""
 
     return ""
+
+
+def read_decomposition_tier(spec_dir: Path) -> str:
+    """Return the decomposition tier recorded in the Status table, or ""."""
+    return read_status_row(spec_dir, "decomposition tier", KNOWN_TIERS)
+
+
+def read_model_tier(spec_dir: Path) -> str:
+    """Return the model tier recorded in the Status table, or ""."""
+    return read_status_row(spec_dir, "model tier", KNOWN_MODEL_TIERS)
 
 
 def read_spec(spec_id: str) -> None:
@@ -167,6 +179,7 @@ def read_spec(spec_id: str) -> None:
     print(f'name = "{name}"')
     print(f'dir = "{spec_dir}"')
     print(f'decomposition_tier = "{read_decomposition_tier(spec_dir)}"')
+    print(f'model_tier = "{read_model_tier(spec_dir)}"')
 
     # List spec documents (check new names first, then legacy)
     print()
