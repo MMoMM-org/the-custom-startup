@@ -591,7 +591,7 @@ fable consent question. Both carry the same cost sentence from `model-ladder.md`
 
 ### System-Wide Patterns
 
-- **Error handling**: no model problem ever stops a run; it degrades a rung and logs it.
+- **Error handling**: a model problem degrades a rung and is logged; the one stop is a task reported BLOCKED, which halts the run at that task.
 - **Logging**: Decisions Log rows only, through xdd-meta step 4. Formats:
   - `| <date> | Model tier: hard | Classifier recommended hard (adr_count=7). Accepted. |`
   - `| <date> | Model escalation: T2.1 opus → opus@max | Trigger: second review FAIL |`
