@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.4.7] - 2026-10-29
+
+### Changed
+
+- **`skill-author` describes building one SKILL.md across several plan tasks:** scaffold one
+  `<!-- T2.3 will populate -->` marker per task and count the markers left to track RED → GREEN.
+
 ## [4.4.6] - 2026-10-25
 
 ### Changed
