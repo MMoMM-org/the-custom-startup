@@ -299,3 +299,146 @@ def test_classifier_reference_says_what_the_plan_row_reads_on_direct():
 def test_xdd_direct_branch_marks_the_plan_row_skipped():
     step = _step_six()
     assert "`plan/` row `skipped`" in step
+
+
+# --- Model tier: the second section of the classifier (spec 022, ADR-1/ADR-2) ---
+#
+# Same shape as the decomposition tests above: an independent reference
+# implementation of the ordered rules asserted against the SDD's traced
+# walkthroughs, then lockstep tests that the document still states the rules.
+# The lockstep tests slice the "Model Tier" section by heading so they can never
+# be satisfied by the decomposition section.
+
+ROUTINE = "routine"
+HARD = "hard"
+FRONTIER = "frontier"
+
+
+def model_tier(change_type, high_risks, novel_pattern, adr_count):
+    """Reference implementation of the model-tier rules in classifier.md.
+
+    Top to bottom, first match wins. Rule 1 first: a doc change is routine
+    whatever its risks. Rule 2 before rule 3: the frontier test is the strict
+    case of the hard test.
+    """
+    if change_type == "doc":
+        return ROUTINE
+    if novel_pattern and high_risks >= 2:
+        return FRONTIER
+    if novel_pattern or high_risks >= 1 or adr_count >= 3:
+        return HARD
+    return ROUTINE
+
+
+MODEL_TIER_TRACED = [
+    ("doc rewrite, one High risk, new doc pattern", "doc", 1, True, 1, ROUTINE),
+    ("022 this spec", "feature", 0, False, 7, HARD),
+    ("new consensus protocol, two High risks", "feature", 2, True, 4, FRONTIER),
+    ("small fix, one Medium risk", "fix", 0, False, 0, ROUTINE),
+    ("no SDD Pattern section, one High risk", "feature", 1, False, 2, HARD),
+]
+
+
+@pytest.mark.parametrize(
+    "name,change_type,high_risks,novel,adrs,expected",
+    MODEL_TIER_TRACED,
+    ids=[row[0] for row in MODEL_TIER_TRACED],
+)
+def test_model_tier_traced_specs_match_the_sdd(
+    name, change_type, high_risks, novel, adrs, expected
+):
+    assert model_tier(change_type, high_risks, novel, adrs) == expected
+
+
+def test_model_tier_undeterminable_signals_lower_to_routine():
+    assert model_tier("feature", 0, False, 0) == ROUTINE
+
+
+def test_model_tier_novelty_alone_is_hard_not_frontier():
+    assert model_tier("feature", 1, True, 0) == HARD
+    assert model_tier("feature", 0, True, 0) == HARD
+
+
+def test_model_tier_two_high_risks_without_novelty_are_hard():
+    assert model_tier("feature", 2, False, 0) == HARD
+
+
+def test_model_tier_adr_threshold_is_three():
+    assert model_tier("feature", 0, False, 2) == ROUTINE
+    assert model_tier("feature", 0, False, 3) == HARD
+
+
+def test_model_tier_is_total():
+    for change_type in ("feature", "fix", "refactor", "doc", "other"):
+        for risks in range(0, 4):
+            for novel in (True, False):
+                for adrs in range(0, 5):
+                    assert model_tier(change_type, risks, novel, adrs) in (
+                        ROUTINE,
+                        HARD,
+                        FRONTIER,
+                    )
+
+
+def _model_tier_section():
+    text = _classifier_text()
+    assert "\n## Model Tier\n" in text, "classifier.md has no '## Model Tier' section"
+    start = text.index("\n## Model Tier\n") + 1
+    nxt = text.find("\n## ", start + 1)
+    return text[start:] if nxt == -1 else text[start:nxt]
+
+
+def test_model_tier_section_documents_the_four_signals():
+    section = _model_tier_section()
+    for signal in ("change_type", "high_risks", "novel_pattern", "adr_count"):
+        assert signal in section, f"Model Tier section does not document {signal}"
+    assert "Risks and Mitigations" in section
+    assert "Pattern Documentation" in section
+    assert "Architecture Decisions" in section
+
+
+def test_model_tier_section_states_the_ordered_rules():
+    section = _model_tier_section()
+    assert "first match wins" in section.lower()
+    assert "change_type == doc" in section
+    assert "novel_pattern AND high_risks >= 2" in section
+    assert "novel_pattern OR high_risks >= 1 OR adr_count >= 3" in section
+    assert "otherwise" in section
+
+
+def test_model_tier_section_lowers_undeterminable_signals():
+    section = _model_tier_section()
+    assert "high_risks = 0" in section
+    assert "novel_pattern = false" in section
+    assert "adr_count = 0" in section
+    assert "rationale" in section.lower()
+
+
+def test_model_tier_section_logs_overrides_with_reason_or_none_given():
+    section = _model_tier_section()
+    assert "Model tier" in section
+    assert "Status table" in section
+    assert "Decisions Log" in section
+    assert "override" in section.lower()
+    assert "no reason given" in section
+    assert "free-text" in section
+
+
+def test_model_tier_section_recommends_and_never_applies():
+    lowered = _model_tier_section().lower()
+    assert "recommend" in lowered
+    assert "never" in lowered and "apply" in lowered
+
+
+def test_model_tier_section_links_the_ladder_without_copying_its_cost_sentence():
+    section = _model_tier_section()
+    assert "model-ladder.md" in section
+    assert "2.5" not in section
+    assert "usage credits" not in section
+
+
+def test_model_tier_section_names_all_three_tiers_and_no_rung_table():
+    section = _model_tier_section()
+    for tier in ("routine", "hard", "frontier"):
+        assert tier in section
+    assert "opus@max" not in section

@@ -112,3 +112,75 @@ Whatever tier is chosen — recommendation accepted or overridden — record it 
 ```
 
 The log makes the choice auditable; the Status row makes it executable. A tier recorded only in the log is a tier the dispatcher cannot see.
+
+---
+
+## Model Tier
+
+A second recommendation, computed in the **same step-6 pass** from the same two documents and confirmed in the **same round** as the decomposition tier. It picks how strong a model the implement loops start with: **routine**, **hard** or **frontier**.
+
+The classifier **recommends** a model tier. It never applies one: the user sees the rationale and confirms or overrides before anything is recorded.
+
+What each tier means is owned by [model-ladder.md](model-ladder.md) — routine is today's selection, hard starts at a stronger model, frontier at the strongest. Rungs, dispatch parameters and the cost sentence live there and nowhere else; the confirmation question takes the cost sentence from that file.
+
+### Inputs
+
+Four signals. `change_type` is shared with the decomposition tier; the others come from the same two documents.
+
+| Signal | Source | How to compute |
+|--------|--------|----------------|
+| `change_type` | as for the decomposition tier | Shared; computed once. |
+| `high_risks` | requirements.md, Risks and Mitigations table | Rows whose Impact cell is `High`. |
+| `novel_pattern` | solution.md, Pattern Documentation | True when "New patterns created" lists at least one entry. |
+| `adr_count` | solution.md, Architecture Decisions | Number of ADR entries. |
+
+**When a signal cannot be determined**, lower it: `high_risks = 0`, `novel_pattern = false`, `adr_count = 0`. Name each lowered signal in the rationale and continue. Never block on a missing signal.
+
+### Classification
+
+Apply top to bottom, **first match wins**:
+
+```
+1. routine   if change_type == doc
+2. frontier  if novel_pattern AND high_risks >= 2
+3. hard      if novel_pattern OR high_risks >= 1 OR adr_count >= 3
+4. routine   otherwise
+```
+
+**Why rule 1 comes first.** A doc change cannot break behaviour, so risk and novelty in its subject matter do not make the work harder to execute. **Why rule 2 comes before rule 3.** The frontier test is the strict case of the hard test; ordering it first keeps rule 3 from absorbing it.
+
+### Edge cases
+
+| Situation | Tier | Why |
+|---|---|---|
+| Doc rewrite, one High risk, a new doc pattern | routine | Rule 1 fires first |
+| Spec with 7 ADRs, no High risk, no new pattern | hard | Rule 3: `adr_count >= 3` |
+| Novel pattern, two High risks | frontier | Rule 2 |
+| Two High risks, no new pattern | hard | Rule 2 needs both conditions; rule 3 catches the risks |
+| Small fix, only Medium risks | routine | Rule 4 |
+| No Pattern Documentation section, one High risk | hard | `novel_pattern = false` (undeterminable), rule 3 on `high_risks >= 1` |
+
+### Rationale examples
+
+> Model tier **hard** — adr_count=7 (>= 3); no High risks; no new patterns.
+
+> Model tier **frontier** — novel_pattern=true (consensus protocol); high_risks=2.
+
+> Model tier **routine** — change_type=fix; no High risks; no new patterns; adr_count=0.
+
+> Model tier **hard** — novel_pattern=false (no Pattern Documentation section; undeterminable); high_risks=1.
+
+### Decision Logging
+
+Whatever tier is chosen — accepted or overridden — record it in **both** places, as for the decomposition tier:
+
+1. **The spec README Status table**, `Model tier` row.
+2. **The spec README Decisions Log**, one row with the date, the chosen tier, the recommendation and the rationale.
+
+On an override, the reason is the user's **free-text** answer; without one, log `no reason given`.
+
+```
+| 2026-10-29 | Model tier: hard | Classifier recommended hard (adr_count=7). Accepted. |
+| 2026-10-29 | Model tier: frontier (override) | Classifier recommended hard (adr_count=7). User chose frontier because the protocol is novel to the team. |
+| 2026-10-29 | Model tier: routine (override) | Classifier recommended hard (adr_count=7). User chose routine (no reason given). |
+```
