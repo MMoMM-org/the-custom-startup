@@ -135,7 +135,7 @@ BLOCKED             → assess: context problem → re-dispatch with more contex
                               specification is wrong → escalate to the user
 ```
 
-**Complexity escalation** follows [the model ladder](../xdd/reference/model-ladder.md): one rung up, automatic below `fable`. The cap, the consent and nobody-to-ask rules, and the fable-failure rule apply as written there. Direct has no review chain, so only a complexity BLOCKED escalates. Log each escalation, consent and substitution through `Skill(tcs-workflow:xdd-meta)` step 4 (Log Decision), in the ladder's row formats.
+**Complexity escalation** follows [the model ladder](../xdd/reference/model-ladder.md): one rung up, automatic below `fable`. The cap, the consent and nobody-to-ask rules, and the fable-failure rule apply as written there. Direct has no review chain, so only a complexity BLOCKED escalates. Any BLOCKED report halts the run per the ladder's Stop rule. Log each escalation, consent and substitution through `Skill(tcs-workflow:xdd-meta)` step 4 (Log Decision), in the ladder's row formats.
 
 Never silently drop a BLOCKED or NEEDS_CONTEXT result. In Standard mode a re-dispatch is a fresh stateless subagent — it remembers nothing, so re-supply the context.
 

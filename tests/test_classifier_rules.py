@@ -534,3 +534,12 @@ def test_xdd_always_rule_classifies_both_tiers_from_documents():
     line = next(row for row in always.splitlines() if "never from the raw request" in row)
     assert "decomposition tier" in line
     assert "model tier" in line
+
+
+def test_xdd_interface_model_status_includes_skipped():
+    # Final gate (spec 022 #158): model.status must offer Skipped, as
+    # decomposition.status does, for a run where the model step is skipped.
+    text = _xdd_text()
+    interface = text[text.index("## Interface") : text.index("State {")]
+    model_block = interface[interface.index("model: {") : interface.index("readiness:")]
+    assert "status: Complete | Incomplete | Skipped" in model_block

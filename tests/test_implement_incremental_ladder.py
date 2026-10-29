@@ -145,3 +145,11 @@ def _step_one():
 
 def test_step_one_names_model_tier_from_the_status_read():
     assert "model_tier" in _step_one()
+
+
+def test_4f_blocked_points_at_the_ladder_stop_rule():
+    # Final gate (spec 022 #158): the BLOCKED report must name the ladder's Stop
+    # rule, so the loop halts at the blocked task instead of retrying or moving on.
+    fail_line = next(l for l in _step("f").splitlines() if "❌ FAIL" in l)
+    assert "BLOCKED" in fail_line
+    assert "the run halts per the ladder's Stop rule" in fail_line

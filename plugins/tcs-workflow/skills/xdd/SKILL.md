@@ -25,7 +25,7 @@ SpecStatus {
   }
   model: {
     tier:   Routine | Hard | Frontier | None
-    status: Complete | Incomplete
+    status: Complete | Incomplete | Skipped
   }
   readiness: HIGH | MEDIUM | LOW
 }

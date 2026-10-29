@@ -118,3 +118,12 @@ def test_3b_routes_a_failed_fable_dispatch_to_the_fable_failure_rule():
     # complexity-escalation paragraph of 3c, but a planned fable dispatch fails at 3b.
     s = _step("3b")
     assert "Fable Failure" in s
+
+
+def test_3c_blocked_complexity_halts_per_the_ladder_stop_rule():
+    # Final gate (spec 022 #158): a BLOCKED report halts the run per the ladder's
+    # Stop rule, so the escalation paragraph must say so, not leave it implicit.
+    p = _escalation_paragraph()
+    assert "BLOCKED" in p
+    assert "halts the run" in p
+    assert "ladder's Stop rule" in p

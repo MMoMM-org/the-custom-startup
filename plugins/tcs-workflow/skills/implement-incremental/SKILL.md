@@ -240,7 +240,7 @@ Dispatch the `spec-compliance-reviewer` agent (Agent tool, `subagent_type: spec-
 
 Agent verdict (PASS or FAIL with fix list):
 - ✅ PASS → proceed to 4g
-- ❌ FAIL → count the task's consecutive FAILs at the current rung across 4f and 4g (a PASS resets it). The second in a row: escalate per the ladder; the count resets. Re-dispatch implementer with the fix list (see "Re-dispatch by mode" in 4e) → re-dispatch `spec-compliance-reviewer`. At the highest reachable rung the ladder reports BLOCKED: no further retry.
+- ❌ FAIL → count the task's consecutive FAILs at the current rung across 4f and 4g (a PASS resets it). The second in a row: escalate per the ladder; the count resets. Re-dispatch implementer with the fix list (see "Re-dispatch by mode" in 4e) → re-dispatch `spec-compliance-reviewer`. At the highest reachable rung the ladder reports BLOCKED and the run halts per the ladder's Stop rule: no further retry.
 
 #### 4g. Code Quality Review
 
