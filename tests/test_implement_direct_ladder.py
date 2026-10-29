@@ -31,7 +31,7 @@ def test_3b_links_ladder_and_reads_model_tier():
     s = _step("3b")
     assert LINK in s
     assert "model_tier" in s
-    assert "Direct" in s
+    assert "Direct column" in s
 
 
 def test_3b_dispatch_details():
@@ -50,21 +50,47 @@ def test_3b_does_not_restate_the_mapping_table():
     assert not re.search(r"frontier\s*(→|->|=)\s*fable", s)
 
 
+def _escalation_paragraph() -> str:
+    m = re.search(r"^\*\*Complexity escalation\*\*.*?(?=\n\s*\n|\Z)", _step("3c"), re.S | re.M)
+    assert m
+    return m.group(0)
+
+
 def test_3c_complexity_escalates_one_rung_by_reference():
     s = _step("3c")
     assert "stronger model" not in s
-    assert LINK in s
-    assert "one rung" in s
-    for rule in ("cap", "consent", "fable"):
-        assert rule in s.lower()
+    p = _escalation_paragraph()
+    assert LINK in p
+    for phrase in ("one rung up", "consent and nobody-to-ask rules", "fable-failure rule"):
+        assert phrase in p
+    assert "the cap" in p.lower()
 
 
 def test_3c_logs_through_xdd_meta():
-    s = _step("3c") + _step("3b")
+    p = _escalation_paragraph()
+    assert "Skill(tcs-workflow:xdd-meta)" in p
+    assert "Log Decision" in p
+    assert "in the ladder's row formats" in p
+    for what in ("escalation", "consent", "substitution"):
+        assert what in p.lower()
+
+
+def test_3b_logs_substitution_through_xdd_meta():
+    s = _step("3b")
     assert "Skill(tcs-workflow:xdd-meta)" in s
     assert "Log Decision" in s
-    for what in ("escalation", "consent", "substitution"):
-        assert what in s.lower()
+    assert "substitution" in s.lower()
+
+
+def test_step_1_names_model_tier_and_absent_rule():
+    text = SKILL.read_text()
+    m = re.search(r"^### 1\. .*?(?=^### )", text, re.S | re.M)
+    assert m
+    s = m.group(0)
+    assert "model_tier" in s
+    assert "--read" in s
+    assert "absent" in s
+    assert "empty" in s
 
 
 def test_3c_has_no_review_failure_trigger():

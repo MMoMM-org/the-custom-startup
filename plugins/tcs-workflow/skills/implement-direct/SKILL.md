@@ -70,7 +70,7 @@ State {
 
 ### 1. Initialize
 
-Invoke `Skill(tcs-workflow:xdd-meta)` to resolve the spec directory when `$ARGUMENTS` is a spec ID. When it is a file path or a freeform brief, treat that as the primary context document and skip resolution.
+Invoke `Skill(tcs-workflow:xdd-meta)` to resolve the spec directory when `$ARGUMENTS` is a spec ID. Its status read (`spec.py <id> --read`) prints `model_tier`; keep it for step 3b. When `$ARGUMENTS` is a file path or a freeform brief, treat that as the primary context document and skip resolution; there is no spec, so the tier is absent, as it is when the value is empty.
 
 Discover the available context:
 - `requirements.md` and `solution.md` from the spec directory
@@ -113,7 +113,7 @@ Dispatch `tdd-guardian` with the unit's text, its specification references, and 
 
 #### 3b. Implementer
 
-Dispatch a fresh subagent at the starting rung in the Direct column of [the model ladder](../xdd/reference/model-ladder.md) for the spec's `model_tier` (read in step 1). Pass the rung's alias, plus `effort: max` for `opus@max`; when the tier is absent pass no `model` parameter. Direct has no plan, so there is no `[model:]` tag. After the dispatch run the ladder's served-model check, and log any substitution through `Skill(tcs-workflow:xdd-meta)` step 4 (Log Decision). The subagent receives only:
+Dispatch a fresh subagent at the starting rung in the Direct column of [the model ladder](../xdd/reference/model-ladder.md) for the `model_tier` from step 1. Pass the rung's alias, plus `effort: max` for `opus@max`; when the tier is absent pass no `model` parameter. Direct has no plan, so there is no `[model:]` tag. After the dispatch run the ladder's served-model check, and log any substitution through `Skill(tcs-workflow:xdd-meta)` step 4 (Log Decision). The subagent receives only:
 1. The unit's text, verbatim.
 2. The relevant requirements and solution sections, read and included in full.
 3. Scene-setting in a few lines: spec name and ID, repository layout at top level, current branch.
