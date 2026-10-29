@@ -376,3 +376,48 @@ def test_decomposition_tier_unchanged_by_model_row(tmp_path, model_tier):
     code, out = _read(tmp_path)
     assert code == 0
     assert _tier_of(out) == "incremental"
+
+
+# --- T1.3 (#158, ADR-7): the template and xdd-meta carry the model tier ---
+
+
+def test_template_carries_the_model_tier_row():
+    template = (XDD_META / "template.md").read_text(encoding="utf-8")
+    assert "| **Model tier** | {{MODEL_TIER}} |" in template
+
+
+def test_template_legend_names_the_three_model_tiers():
+    template = (XDD_META / "template.md").read_text(encoding="utf-8")
+    legend = next(
+        line for line in template.splitlines() if line.startswith("**Model tier**:")
+    )
+    for value in ("routine", "hard", "frontier"):
+        assert value in legend.lower()
+
+
+def test_scaffolded_template_reads_model_tier_empty(tmp_path):
+    """A spec scaffolded from template.md carries the placeholder and reads as no tier."""
+    template = (XDD_META / "template.md").read_text(encoding="utf-8")
+    readme = template.replace("{{SPEC_ID}}", "042").replace("{{SPEC_NAME}}", "scratch")
+    spec_dir = tmp_path / "docs" / "XDD" / "specs" / "042-scratch"
+    spec_dir.mkdir(parents=True)
+    assert "| **Model tier** | {{MODEL_TIER}} |" in readme
+    (spec_dir / "README.md").write_text(readme, encoding="utf-8")
+    code, out = _read(tmp_path)
+    assert code == 0, out
+    assert _model_tier_of(out) == ""
+
+
+def test_xdd_meta_declares_the_model_tier_in_its_interface():
+    skill = (XDD_META / "SKILL.md").read_text(encoding="utf-8")
+    assert "model_tier: Routine | Hard | Frontier | None" in skill
+    assert "modelTier: Routine | Hard | Frontier | None" in skill
+
+
+def test_xdd_meta_writes_a_model_tier_decision_to_both_places():
+    skill = (XDD_META / "SKILL.md").read_text(encoding="utf-8")
+    rule = next(
+        line for line in skill.splitlines() if "to **both** the Status table row and the Decisions Log" in line
+    )
+    assert "model" in rule.lower()
+    assert "decomposition" in rule.lower()
