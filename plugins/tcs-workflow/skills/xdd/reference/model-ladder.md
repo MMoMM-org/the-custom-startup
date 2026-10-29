@@ -100,7 +100,7 @@ Ask in one question that carries the cost sentence (see Cost Sentence). Answer y
 
 A fable dispatch fails when it returns an error (not entitled, refused), when Claude Code's own usage-credits consent prompt is dismissed or unanswered, or when it is served by another model (see Served Model). Then:
 
-- fable is **off for the rest of the run**; never try it again;
+- fable is **off for the rest of the run** (`run.fable_unavailable`); never try it again. A later planned task that would start on `fable` starts at `opus@max` instead and logs a substitution with the reason `fable off for this run`;
 - a **planned** task (frontier tier confirmed, or consent given for a frontier tag): re-dispatch at `opus@max`, log the substitution, continue;
 - an **escalated** task: log the substitution as refused and report BLOCKED. `opus@max` has already failed it.
 
@@ -118,7 +118,7 @@ jq -r 'select(.type == "assistant") | .message.model' <output_file> | sort -u
 
 The dispatch matches when every served model belongs to the family of the requested alias. Compare by the alias name (`opus` within the served ID), never against a hard-coded full model ID. A mismatch is logged as a substitution naming the served model. A `fable` dispatch served by another model is a fable failure.
 
-Read no other part of the transcript. If the file cannot be read, skip the check; a missing check never blocks a dispatch.
+Read no other part of the transcript. If the file cannot be read, skip the check; a missing check never blocks a dispatch. A dispatch sent without a `model` parameter requested no alias: there is nothing to compare, so skip the check.
 
 ---
 
@@ -143,6 +143,6 @@ Escalations, consents and substitutions are Decisions Log rows, written through 
 | <date> | Model substitution: T2.1 | Requested fable, served <model> (message.model) |
 ```
 
-The escalation row names the task, the rung before and after, and the trigger (`second review FAIL` or `complexity BLOCKED`). A decline, "fable not reached: no one to ask", "highest reachable rung", and a refused substitution use the same two-cell shape: what happened for the task, then why.
+The escalation row names the task, the rung before and after, and the trigger (`second review FAIL` or `complexity BLOCKED`). A task dispatched without a `model` parameter has the rung before `inherited`. In implement-direct the task is named by its delivery unit's title. A decline, "fable not reached: no one to ask", "highest reachable rung", and a refused substitution use the same two-cell shape: what happened for the task, then why.
 
 The spec's own `Model tier` row is written by the classifier step, not here.

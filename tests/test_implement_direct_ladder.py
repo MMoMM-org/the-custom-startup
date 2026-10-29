@@ -111,3 +111,10 @@ def test_skill_does_not_restate_ladder_content():
     assert "2.5×" not in text
     assert "Fable costs" not in text
     assert not re.search(r"haiku\W+sonnet\W+opus", text)
+
+
+def test_3b_routes_a_failed_fable_dispatch_to_the_fable_failure_rule():
+    # Walkthrough finding (spec 022 T4.2): the rule was named only in the
+    # complexity-escalation paragraph of 3c, but a planned fable dispatch fails at 3b.
+    s = _step("3b")
+    assert "Fable Failure" in s

@@ -442,3 +442,38 @@ def test_decisions_log_rows_have_the_four_formats():
 def test_instruction_text_carries_no_spec_or_issue_provenance():
     text = _text()
     assert not re.search(r"\bADR-\d|\bAC-\d|#\d{2,}|spec \d{3}", text)
+
+
+# --- Walkthrough findings (spec 022 T4.2) ---
+
+
+def start_rung(planned_rung, run):
+    """Starting rung for a planned task once the run may have lost fable."""
+    if planned_rung == "fable" and run.fable_unavailable:
+        return "opus@max"
+    return planned_rung
+
+
+def test_a_later_planned_frontier_task_starts_at_opus_max_once_fable_is_off():
+    first, run = Task("fable", planned=True), Run()
+    on_fable_failure(first, run)
+    assert start_rung("fable", run) == "opus@max"
+    assert start_rung("opus", run) == "opus"
+
+
+def test_fable_failure_names_the_run_flag_and_the_start_rung_of_later_planned_tasks():
+    body = _section("Fable Failure")
+    assert "`run.fable_unavailable`" in body
+    assert "A later planned task that would start on `fable` starts at `opus@max` instead" in body
+    assert "`fable off for this run`" in body
+
+
+def test_served_model_check_is_skipped_for_a_dispatch_without_a_model_parameter():
+    body = _section("Served Model")
+    assert "without a `model` parameter requested no alias" in body
+
+
+def test_escalation_row_names_an_unset_rung_and_a_direct_unit():
+    body = _section("Decisions Log")
+    assert "`inherited`" in body
+    assert "delivery unit's title" in body

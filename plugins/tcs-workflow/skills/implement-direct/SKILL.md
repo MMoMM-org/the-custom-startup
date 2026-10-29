@@ -113,7 +113,7 @@ Dispatch `tdd-guardian` with the unit's text, its specification references, and 
 
 #### 3b. Implementer
 
-Dispatch a fresh subagent at the starting rung in the Direct column of [the model ladder](../xdd/reference/model-ladder.md) for the `model_tier` from step 1. Pass the rung's alias, plus `effort: max` for `opus@max`; when the tier is absent pass no `model` parameter. Direct has no plan, so there is no `[model:]` tag. After the dispatch run the ladder's served-model check, and log any substitution through `Skill(tcs-workflow:xdd-meta)` step 4 (Log Decision). The subagent receives only:
+Dispatch a fresh subagent at the starting rung in the Direct column of [the model ladder](../xdd/reference/model-ladder.md) for the `model_tier` from step 1. Pass the rung's alias, plus `effort: max` for `opus@max`; when the tier is absent pass no `model` parameter. Direct has no plan, so there is no `[model:]` tag. After the dispatch run the ladder's served-model check, and log any substitution through `Skill(tcs-workflow:xdd-meta)` step 4 (Log Decision). A `fable` dispatch that fails follows the ladder's Fable Failure section. The subagent receives only:
 1. The unit's text, verbatim.
 2. The relevant requirements and solution sections, read and included in full.
 3. Scene-setting in a few lines: spec name and ID, repository layout at top level, current branch.
