@@ -297,6 +297,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — memory
 
+### Changed
+
+- **`skill-author` describes how to build one SKILL.md across several plan tasks.** The
+  placeholder-per-task technique moved there from the memory bank, which keeps rules, not recipes.
+  Update tcs-helper.
+
 ### Added
 
 - **`docs/ai/memory/declined.md` — a journal of what was ruled out, and the condition that reopens

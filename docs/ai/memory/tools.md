@@ -1,5 +1,5 @@
 # Tools — the-custom-startup
-<!-- CI, build pipeline, API clients, local dev setup. Updated: 2026-09-01 -->
+<!-- CI, build pipeline, API clients, local dev setup. Updated: 2026-10-29 -->
 <!-- What goes here: commands that are non-obvious, tool quirks, CI gotchas, env var names -->
 <!-- What does NOT go here: domain rules (→ domain.md), code style (→ general.md) -->
 <!-- Form: one rule + its tell, ≤ 250 chars, no spec refs. See memory-add/reference/category-formats.md -->
@@ -83,3 +83,6 @@
 - **A `!` in a commit subject reaches git as `\!` under the Bash tool's zsh**, and the commit-msg hook rejects `feat\!:`. → Mark a breaking change with a `BREAKING CHANGE:` footer, not the `!` subject form.
 - **`json.dump` escapes non-ASCII by default** — a script that changes one field rewrites every line holding `ä` or `→` as `\uXXXX`. → Pass `ensure_ascii=False` and write a trailing newline.
 - **The skill listing is budgeted, so every skill added truncates every description** — sessions warn `N skills, X chars > 30000 budget`; each description is capped by `skillListingMaxDescChars`. → Count the listing's chars before adding a skill.
+
+<!-- 2026-10-29 -->
+- **`_write_pr_state_cache` replaces a branch's entry, never merges** — a caller that omits a field silently drops it. → Read the existing entry and pass every field back in.

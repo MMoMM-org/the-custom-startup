@@ -291,6 +291,13 @@ See `reference/testing-with-subagents.md` for pressure scenario methodology.
 For a plugin skill, write the scenario as a `claude plugin eval` case in the plugin's `evals/`
 directory, so it runs again after every edit. See `reference/plugin-evals.md`.
 
+### Building a Skill Across Several Plan Tasks
+
+When several plan tasks each fill one part of the same SKILL.md, scaffold it first with one
+placeholder per task, such as `<!-- T2.3 will populate -->`. Each task replaces only its own
+marker, so siblings stay untouched, and `grep -c 'will populate'` tracks RED → GREEN: zero
+markers left means the skill is complete.
+
 ### Discipline-Enforcing Skills Need Extra Work
 
 Skills that enforce rules (TDD, verification-before-completion) need rationalization-proofing:
