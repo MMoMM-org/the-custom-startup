@@ -477,3 +477,60 @@ def test_escalation_row_names_an_unset_rung_and_a_direct_unit():
     body = _section("Decisions Log")
     assert "`inherited`" in body
     assert "delivery unit's title" in body
+
+
+# --- Maintainer decisions O1 and O2 (spec 022 walkthrough) ---
+
+
+def frontier_tag_start(spec_tier_confirmed_frontier, run):
+    """Returns (start rung, whether consent is asked) for a `frontier` task tag."""
+    if spec_tier_confirmed_frontier:
+        return ("opus@max" if run.fable_unavailable else "fable"), False
+    if run.fable_unavailable:
+        return "opus", False  # the `hard` rung, no consent asked
+    if not run.can_ask or not run.consent:
+        return "opus", True
+    return "fable", True
+
+
+def test_a_frontier_tag_runs_at_hard_without_consent_once_fable_is_off():
+    run = Run()
+    on_fable_failure(Task("fable", planned=True), run)
+    assert frontier_tag_start(False, run) == ("opus", False)
+
+
+def test_a_frontier_tag_still_asks_while_fable_is_available():
+    assert frontier_tag_start(False, Run()) == ("fable", True)
+    assert frontier_tag_start(False, Run(consent=False)) == ("opus", True)
+
+
+def test_consent_skips_the_question_for_a_frontier_tag_once_fable_is_off():
+    body = _section("Consent")
+    line = next(l for l in body.splitlines() if "fable is already off" in l)
+    assert "frontier` tag" in line
+    assert "do not ask" in line
+    assert "`hard` rung" in line
+    assert "`fable off for this run`" in line
+
+
+def test_fable_failure_and_consent_agree_on_the_frontier_tag_after_fable_is_off():
+    assert "`hard` rung" in _section("Consent")
+    assert "`frontier` tag in a non-frontier spec starts at `hard`" in _section("Fable Failure")
+
+
+def test_blocked_halts_the_run_at_the_blocked_task():
+    body = _section("Escalation")
+    line = next(l for l in body.splitlines() if "**Stop**" in l)
+    assert "halts the run" in line
+    assert "no further task is dispatched" in line
+    assert "also under `YOLO=true`" in line
+    assert "dependent" in line
+    assert "resum" in line
+    assert "/implement" in line
+
+
+def test_implement_loops_do_not_continue_past_a_blocked_task():
+    skills = REPO_ROOT / "plugins" / "tcs-workflow" / "skills"
+    for name in ("implement-incremental", "implement-direct"):
+        text = (skills / name / "SKILL.md").read_text()
+        assert not re.search(r"BLOCKED[^\n]*(next task|continue with)", text, re.I)

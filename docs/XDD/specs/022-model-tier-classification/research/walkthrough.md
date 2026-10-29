@@ -14,7 +14,7 @@ contradicts another file; fixed here), **OPEN** (needs a design decision; not de
 | C. implement-incremental, five cases | 19 | 17 | 1 | 1 |
 | D. implement-direct, two cases | 8 | 5 | 3 | 0 |
 
-Plus one OPEN item found off the walked path (O2).
+Plus one item found off the walked path (O2), now DECIDED.
 
 ---
 
@@ -77,7 +77,7 @@ Paths: `implement-incremental/SKILL.md` = **II**, `xdd/reference/model-ladder.md
 |---|---|---|---|
 | C3.1 | `YOLO=true` means nobody can be asked | II:267; L:95 | OK |
 | C3.2 | Escalation from opus@max: next = fable → nobody can be asked → log "fable not reached: no one to ask", report BLOCKED at opus@max; no fable dispatch | L:71 | OK — AC-5.4 holds |
-| C3.3 | After the BLOCKED report: does the **run** halt, or does the loop move to the next task? `stop` (L:67) and "report BLOCKED" (L:71, L:74) do not say; II's 4e has no rule for it either | — | **OPEN (O1)** |
+| C3.3 | After the BLOCKED report: does the **run** halt, or does the loop move to the next task? `stop` (L:67) and "report BLOCKED" (L:71, L:74) do not say; II's 4e has no rule for it either | — | **DECIDED (O1)** |
 
 ### C4. Planned frontier task, fable dispatch errors → opus@max, run continues
 
@@ -134,15 +134,19 @@ Each fix: failing test first (run red), minimal text change, run green.
 `implement-incremental/SKILL.md` was not changed (stays at 306 lines). Rules stay in
 `model-ladder.md`; implement-direct only points to them.
 
-## OPEN
+## Decided (formerly open)
 
-- **O1 — what "BLOCKED … stop" stops.** L:67, L:71, L:74 end a task's escalation with "report
+- **O1 — what "BLOCKED … stop" stops. DECIDED (2026-10-29, maintainer):** the run halts at the
+  blocked task, also under YOLO; no dependent task runs; the plan stays resumable via `/implement`.
+  Implemented at `model-ladder.md:83`. Original question: L:67, L:71, L:74 end a task's escalation with "report
   BLOCKED (to the user); stop". Neither the ladder nor II/ID says whether the run halts there or
   the loop moves on to the next task (and what happens to tasks that depend on the blocked one).
   It matters most in YOLO, where nobody reads the report until the run ends. Today's BLOCKED
   handling ("Plan is wrong → escalate to user") is equally silent. AC-5.4 and AC-5.7 hold either
   way; choosing halt-run vs skip-task is a design decision.
-- **O2 — a `[model: frontier]` tag in a non-frontier spec once fable is off.** Consent (L:88-93)
+- **O2 — a `[model: frontier]` tag in a non-frontier spec once fable is off. DECIDED (2026-10-29,
+  maintainer):** no consent is asked; the task starts at the `hard` rung and logs a substitution
+  "fable off for this run". Implemented at `model-ladder.md:96` and `:105`. Original question: Consent (L:88-93)
   asks before the dispatch; Fable Failure (L:103) now covers planned tasks only. Asking consent
   for a model already known unavailable is pointless, but whether the task then runs at the `hard`
   rung (as on a decline) or at `opus@max` (as a consented planned task would) is a design decision.

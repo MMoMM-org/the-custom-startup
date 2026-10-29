@@ -80,6 +80,7 @@ Rules the pseudocode encodes:
 - **Automatic up to `opus@max`.** No question is asked for any rung below `fable`.
 - **The cap.** The BLOCKED report in `escalate` bounds every review loop. The highest reachable rung is `fable` after consent, and `opus@max` when fable is unavailable, declined, or nobody can be asked.
 - **Log every escalation** (see Decisions Log).
+- **Stop** halts the run at the blocked task: no further task is dispatched, also under `YOLO=true`, so no dependent task runs on an unfinished state. The plan stays resumable: re-run `/implement` after resolving the block.
 
 ---
 
@@ -92,6 +93,8 @@ Every dispatch to `fable` needs a person's consent, except a planned task in a s
 
 Ask in one question that carries the cost sentence (see Cost Sentence). Answer yes: dispatch on `fable`, log the consent; a `frontier` tag's task then counts as planned. Answer no: log the decline. An escalation is reported BLOCKED at `opus@max`; a `frontier` tag runs at the `hard` rung.
 
+When fable is already off for the run (see Fable Failure), a `frontier` tag in a spec whose tier is not `frontier`: do not ask consent. The task starts at the `hard` rung and logs a substitution with the reason `fable off for this run`.
+
 **Nobody can be asked** means: `YOLO=true`, or the question returns no answer, an error or a dismissed question (`claude -p`, Agent SDK). Treat it as no, and log "fable not reached: no one to ask" instead of a decline.
 
 ---
@@ -100,7 +103,7 @@ Ask in one question that carries the cost sentence (see Cost Sentence). Answer y
 
 A fable dispatch fails when it returns an error (not entitled, refused), when Claude Code's own usage-credits consent prompt is dismissed or unanswered, or when it is served by another model (see Served Model). Then:
 
-- fable is **off for the rest of the run** (`run.fable_unavailable`); never try it again. A later planned task that would start on `fable` starts at `opus@max` instead and logs a substitution with the reason `fable off for this run`;
+- fable is **off for the rest of the run** (`run.fable_unavailable`); never try it again. A later planned task that would start on `fable` starts at `opus@max` instead and logs a substitution with the reason `fable off for this run`. A `frontier` tag in a non-frontier spec starts at `hard` instead (see Consent);
 - a **planned** task (frontier tier confirmed, or consent given for a frontier tag): re-dispatch at `opus@max`, log the substitution, continue;
 - an **escalated** task: log the substitution as refused and report BLOCKED. `opus@max` has already failed it.
 

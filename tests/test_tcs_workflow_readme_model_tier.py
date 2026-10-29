@@ -89,3 +89,9 @@ def test_section_does_not_restate_escalation_mechanics():
     assert "twice in a row" not in section
     assert "model-ladder.md#escalation" in section
     assert "model-ladder.md#consent" in section
+    ladder = (
+        Path(__file__).resolve().parents[1]
+        / "plugins/tcs-workflow/skills/xdd/reference/model-ladder.md"
+    ).read_text()
+    assert re.search(r"^## Escalation$", ladder, re.M)
+    assert re.search(r"^## Consent$", ladder, re.M)

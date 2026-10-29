@@ -17,8 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   effort, fable) after a complexity BLOCKED or two review failures in a row. Fable is never used
   without your consent, because it can bill usage credits. **What to know:** max effort needs
   Claude Code 2.1.292 or later, and `CLAUDE_CODE_EFFORT_LEVEL` in your environment overrides it.
-  The implement-incremental review loop is now bounded instead of repeating until PASS. Not covered: the
-  fable usage-credit consent paths could not be tested (#242). Update tcs-workflow.
+  The implement-incremental review loop is now bounded instead of repeating until PASS. Not
+  covered: the fable usage-credit consent paths could not be tested (#242). Update tcs-workflow.
   See `plugins/tcs-workflow/README.md`, section Model Tiers.
 
 ## [Unreleased] — observability v2

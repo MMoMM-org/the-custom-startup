@@ -26,9 +26,11 @@ enforces that on every merge.
 ### Changed
 
 - **The implement-incremental review loop is bounded (#158).** `implement-incremental` no longer
-  repeats implement and review until PASS. `implement-incremental` counts review failures per task, and the count
+  repeats implement and review until PASS: it counts review failures per task, and the count
   drives escalation or a BLOCKED report. `implement-direct` has no review chain; its complexity
-  escalation follows the ladder and is capped.
+  escalation follows the ladder and is capped. A BLOCKED report halts the run at that task; re-run
+  `/implement` after resolving it. A `frontier` task tag runs at the `hard` rung, without asking,
+  once fable is off for the run.
 
 ## [4.4.15] - 2026-10-25
 
