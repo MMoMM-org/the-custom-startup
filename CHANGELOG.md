@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — observability v2
 
+### Fixed
+
+- **`report.py` no longer counts a record twice when two configured homes are one directory
+  (#245).** Inside a dev container, `~` is the bind-mounted `claude-docker-home`, so a sources
+  config listing both doubled every figure for that repository. Each physical home is now read
+  once; both still get their status line.
+
 ### Added
 
 - **The observability recorder now records a typed `/plugin:skill`, a named subagent dispatch and

@@ -2062,6 +2062,16 @@ def build_load_report(
 # ---------------------------------------------------------------------------
 
 
+def _home_identity(home: Path) -> object:
+    """The physical directory behind `home`: device and inode when it exists,
+    so a bind mount and its mount point compare equal; else its resolved path."""
+    try:
+        st = home.stat()
+    except OSError:
+        return home.resolve()
+    return (st.st_dev, st.st_ino)
+
+
 def _build_source_report(source: sources.Source, now: datetime) -> tuple[str, list[dict]]:
     """One source's section: its own records, own inventory, own honesty
     verdicts -- never pooled with any other source's.
@@ -2117,12 +2127,19 @@ def _build_source_report(source: sources.Source, now: datetime) -> tuple[str, li
     # so a stale or missing second home can never borrow a healthy sibling's
     # timestamp in the sub-line `_render_home_statuses` renders for it.
     home_statuses: list[tuple[sources.HomeStatus, str | None]] = []
+    # #245: two configured homes can be one directory (in a dev container `~`
+    # is the bind-mounted `claude-docker-home`). Each physical record is read
+    # once; every configured home still gets its own sub-line.
+    seen_homes: set[object] = set()
 
     for home_status in source.homes:
         events_path = _resolve_events_path(None, source.repo_root, home_status.home)
         home_records, home_unparseable = read_events(events_path)
-        records.extend(home_records)
-        unparseable_total += home_unparseable
+        home_key = _home_identity(home_status.home)
+        if home_key not in seen_homes:
+            seen_homes.add(home_key)
+            records.extend(home_records)
+            unparseable_total += home_unparseable
         home_inventories.append(walk_instruction_inventory(source.repo_root, home_status.home))
         home_statuses.append((home_status, newest_ts(home_records)))
 
