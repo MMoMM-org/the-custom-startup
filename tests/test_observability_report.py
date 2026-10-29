@@ -2795,6 +2795,41 @@ def test_build_multi_source_report_single_home_source_has_no_sublines(tmp_path):
     assert str(home) not in text
 
 
+def test_build_multi_source_report_reads_two_homes_that_are_one_directory_once(tmp_path):
+    """#245: inside a dev container, `~` and the repo's `claude-docker-home`
+    are one bind mount, so a config listing both names one record file twice.
+    Reading it per configured home doubled every count. A home is read once
+    per physical directory; both configured homes still get their sub-line."""
+    now = datetime(2026, 9, 10, 8, 30, tzinfo=timezone.utc)
+    root = tmp_path / "repo"
+    root.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    alias = tmp_path / "home-alias"
+    alias.symlink_to(home, target_is_directory=True)
+    records = [
+        _state(enabled="1", ts="2026-09-10T08:12:00Z"),
+        _skill_record("tcs-workflow:verify", ts="2026-09-10T08:13:00Z"),
+    ]
+    _write_source_events(root, home, records)
+    single = sources.Source(label="repo", repo_root=root, homes=[sources.HomeStatus(home=home, state=sources.RECORDING)])
+    aliased = sources.Source(
+        label="repo",
+        repo_root=root,
+        homes=[
+            sources.HomeStatus(home=home, state=sources.RECORDING),
+            sources.HomeStatus(home=alias, state=sources.RECORDING),
+        ],
+    )
+
+    _, [(_, single_records)] = report.build_multi_source_report([single], now)
+    text, [(_, aliased_records)] = report.build_multi_source_report([aliased], now)
+
+    assert aliased_records == single_records
+    assert str(home) in text
+    assert str(alias) in text
+
+
 def test_cli_absent_config_and_empty_config_both_fall_back_to_single_record(tmp_path):
     """spec-019 T3.3 ruling (h): an absent config file and a config with
     zero `[[source]]` entries both fall back to the single-record path
