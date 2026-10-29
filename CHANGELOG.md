@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — observability v2
 
+### Fixed
+
+- **A session now says when it records nothing because the observability bundle is missing from
+  its `$HOME` (#246).** A repository whose hooks were installed on the host recorded nothing
+  inside its dev container, and the reverse, with no error anywhere. **What to do:** update
+  tcs-helper; if a session warns, run `/tcs-helper:observability-setup install` in that
+  environment.
+
 ### Added
 
 - **The observability recorder now records a typed `/plugin:skill`, a named subagent dispatch and

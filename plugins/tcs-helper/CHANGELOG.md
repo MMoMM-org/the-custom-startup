@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.4.8] - 2026-10-29
+
+### Fixed
+
+- **A session warns when observability hooks call a bundle this `$HOME` lacks (#246).** The hooks
+  sit in the repository's `.claude/settings.local.json`, which a host and a dev container share,
+  but the bundle lives under each environment's own `$HOME`. Installed from one side, the other
+  recorded nothing for weeks without any sign. A new SessionStart hook names the missing scripts
+  and says to run `/tcs-helper:observability-setup install` there.
+
 ## [4.4.7] - 2026-10-29
 
 ### Changed
