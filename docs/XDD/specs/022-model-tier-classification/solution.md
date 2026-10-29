@@ -533,7 +533,7 @@ sequenceDiagram
 | Unknown `[model:]` tag value | Spec tier applies; the orchestrator reports the unknown value once for that task |
 | Agent tool rejects `effort` (Claude Code < 2.1.292) | Re-dispatch at `opus` without effort; log the substitution with reason "effort unsupported" |
 | Fable dispatch returns an error (not entitled, refused) or its consent prompt is dismissed | Fable marked unavailable for the run. Planned frontier task: re-dispatch at opus@max, log the substitution, continue. Escalated task: log it, report BLOCKED |
-| Silent substitution by Claude Code | Recorded only if the spike (plan task 1) finds an observable signal; otherwise the log row says "requested" and README documents the limit |
+| Silent substitution by Claude Code (served model differs from the requested alias) | Detected by comparing the requested alias with `message.model` in the subagent transcript; logged as a substitution with the served model. A fable dispatch served by another model is a fable failure |
 | Task at its highest reachable rung fails review twice in a row or blocks on complexity | Report BLOCKED to the user; no further rung, no further retry |
 | Fable needed and nobody can be asked | Never dispatched; BLOCKED at opus@max with a log row |
 
@@ -636,11 +636,14 @@ fable consent question. Both carry the same cost sentence from `model-ladder.md`
   - User confirmed: 2026-10-28
 
 - [x] ADR-6 Escalations, consents and substitutions are Decisions Log rows written through
-  xdd-meta step 4. The plan's first task is a spike on observing the model that actually ran;
-  until it finds a signal, rows record the requested rung and the README documents the limit.
+  xdd-meta step 4. After every dispatch the orchestrator compares the alias it requested with
+  `message.model` in the subagent transcript (the `output_file` the Agent tool returns), reading
+  that field only; a mismatch is logged as a substitution naming the model that served, and a
+  fable dispatch served by another model falls under the fable-failure rule.
   - Rationale: one audit trail per spec; no new telemetry.
-  - Trade-offs: silent substitutions may go unrecorded.
-  - User confirmed: 2026-10-28
+  - Trade-offs: one `jq` read per dispatch; relies on the transcript format of Claude Code 2.1.309.
+  - User confirmed: 2026-10-28; amended 2026-10-29 after the spike
+    (`research/spike-model-observation.md`)
 
 - [x] ADR-7 `spec.py` generalises its reader to `read_status_row(spec_dir, label, known)`, adds
   `KNOWN_MODEL_TIERS` and prints `model_tier`; the template gains the `Model tier` row.
@@ -704,9 +707,11 @@ fable consent question. Both carry the same cost sentence from `model-ladder.md`
 
 ### Known Technical Issues
 
-- Silent substitution (overload fallback, allowlist) is not observable from SubagentStop input;
-  whether the subagent transcript carries the model is unconfirmed (spike).
-- Consent behaviour of a fable subagent inside an interactive session is undocumented (spike).
+- Silent substitution is not observable from SubagentStop input, but the subagent transcript
+  carries the served model in `message.model` (spike, 2026-10-29).
+- Consent behaviour of a credit-billed fable subagent is undocumented and could not be tested on
+  an account where Fable is included in the plan (spike). The nobody-can-be-asked rule still
+  prevents unattended fable dispatch.
 - `CLAUDE_CODE_NO_MODEL_FALLBACK` is undocumented; this design does not rely on it.
 
 ### Technical Debt

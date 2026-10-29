@@ -34,7 +34,7 @@ Ships the feature and proves the workflow end to end.
 
   1. Prime: Read `plugins/tcs-workflow/README.md` and both CHANGELOGs `[ref: SDD/Deployment View]`.
   2. Test: `bash scripts/ci/check-changelog-version-sync.sh --allow-ahead 1` fails before the entries exist.
-  3. Implement: README section on the model tier, the ladder, consent and its cost, the bounded review loop, the 2.1.292 minimum, the `CLAUDE_CODE_EFFORT_LEVEL` override, and (if T1.1 found no signal) the "requested, not verified" limit; CHANGELOG entries.
+  3. Implement: README section on the model tier, the ladder, consent and its cost, the bounded review loop, the 2.1.292 minimum, the `CLAUDE_CODE_EFFORT_LEVEL` override, and that the served model is read from the subagent transcript (T1.1); CHANGELOG entries.
   4. Validate: Changelog sync check passes; docs-sync CI passes.
   5. Success: `[ref: SDD/Constraints; CON-6]`; `[ref: SDD/ADR-6]`
 

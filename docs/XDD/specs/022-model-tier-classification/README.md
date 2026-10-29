@@ -32,6 +32,7 @@
 | 2026-10-28 | Decomposition tier: Incremental | Classifier recommended Incremental (6 Must-Have features, 25 acceptance criteria, 1 new component; rule 1 via feature_count >= 2). Accepted. |
 | 2026-10-28 | Spec validation: 6 FAIL, 21 WARN; fixes applied | Ladder moved to `xdd/reference/model-ladder.md` (dispatcher at its line budget, owns no references); step-6 model question in prose (CON-8 test counts the tool name, already used by the Finalize gate); fable failure: planned task → opus@max, escalated task → BLOCKED, fable off for the run; consecutive review-failure count resets on escalation and caps at the highest reachable rung (bounds the 4f/4g loop); absent tier keeps today's selection, escalation follows the ladder; override reason from free text; AC numbering, test files per task, bats path dropped |
 | 2026-10-28 | T1.1 gains question (d): Remote Control | The Fable consent prompt is shown only in the local terminal, never forwarded to a Remote Control device; the spike checks whether an unanswered prompt matches the dismissed-consent row |
+| 2026-10-29 | ADR-6 amended after T1.1 spike | The served model is observable (`message.model` in the subagent transcript); the orchestrator compares it with the requested alias and logs a mismatch as a substitution. `effort: max` on opus confirmed. Consent paths not testable: Fable is included in the maintainer's plan, so no prompt appears. User chose to log the served model for every dispatch. |
 
 ## Context
 

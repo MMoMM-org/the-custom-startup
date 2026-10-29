@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Spike and metadata foundation"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 1
 ---
@@ -12,7 +12,7 @@ phase: 1
 **GATE**: Read all referenced files before starting this phase.
 
 **Specification References**:
-- `[ref: SDD/Architecture Decisions; ADR-6]` — spike first; "requested" until a signal is proven
+- `[ref: SDD/Architecture Decisions; ADR-6]` — spike first; amended after it: the served model is read from the subagent transcript
 - `[ref: SDD/Risks and Technical Debt; Known Technical Issues]` — what the spike must answer
 - `[ref: SDD/Architecture Decisions; ADR-7]` and `[ref: SDD/Interface Specifications; Internal API Changes]` — `read_status_row`, `KNOWN_MODEL_TIERS`, `model_tier`
 - `[ref: SDD/Constraints; CON-3]` — every existing spec must still read cleanly
@@ -30,7 +30,7 @@ phase: 1
 
 Establishes what Claude Code lets the orchestrator observe about a subagent's model, and makes the model tier a readable spec field.
 
-- [ ] **T1.1 Spike: observe the model a subagent actually ran on** `[activity: research]`
+- [x] **T1.1 Spike: observe the model a subagent actually ran on** `[activity: research]`
 
   1. Prime: Read the unconfirmed items `[ref: SDD/Risks and Technical Debt; Known Technical Issues]` and the error table `[ref: SDD/Runtime View; Error Handling]`.
   2. Test: Define the questions before probing — (a) does the Agent tool result, or the subagent transcript under `~/.claude/projects/<repo>/…/subagents/`, carry the model that served it; (b) what the orchestrator sees when `model: fable` is dispatched on an account without consent or entitlement, and when the consent prompt is dismissed (error vs. silent substitution); (c) whether `effort: max` is accepted on `opus` in Claude Code 2.1.309; (d) what the orchestrator sees when a `fable` subagent is dispatched in a Remote Control session — the Remote Control docs state the Fable usage-credits consent prompt is shown only in the local terminal, never forwarded, and an unanswered prompt ends the turn without sending the request — and whether that matches the dismissed-consent row (planned → opus@max, escalated → BLOCKED).

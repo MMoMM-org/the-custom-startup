@@ -244,7 +244,7 @@ automatic. The step to Fable always needs a person.
 - A task already at fable fails again → Expected: reported blocked to the user; no further rung (Rule 7).
 - Fable consent given for one task → Expected: applies to that task only; the next escalation to fable asks again.
 - A `frontier` spec run in YOLO mode → Expected: planned frontier tasks run on fable (consent was given at classification); escalations to fable do not happen.
-- Fable dispatch substituted silently by Claude Code → Expected: recorded if the Should-Have verification can observe it; otherwise the log shows the requested rung only, and this limitation is documented.
+- Fable dispatch substituted silently by Claude Code → Expected: recorded; the spike showed the served model is observable.
 - A haiku task fails twice in a row → Expected: it climbs to sonnet, not straight to opus; two more failures there climb it to opus.
 - A spec with no model tier escalates → Expected: from the rung the task ran on; in Direct, where the session's model was inherited, the first step is opus.
 
@@ -301,7 +301,7 @@ All four are rows in the spec's Decisions Log; no separate telemetry is required
 - [x] Where the cost disclosure lives → in the classifier's confirmation question
 - [x] Automatic escalation → automatic up to opus at maximum effort; fable always asks
 - [x] Which depth signals, and their thresholds → SDD ADR-2
-- [ ] How the orchestrator observes the model that actually ran → spike in the plan
+- [x] How the orchestrator observes the model that actually ran → `message.model` in the subagent transcript (spike, 2026-10-29)
 
 ---
 
