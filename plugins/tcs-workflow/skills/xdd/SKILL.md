@@ -23,6 +23,10 @@ SpecStatus {
     tier:   Direct | Incremental | None
     status: Complete | Incomplete | Skipped
   }
+  model: {
+    tier:   Routine | Hard | Frontier | None
+    status: Complete | Incomplete
+  }
   readiness: HIGH | MEDIUM | LOW
 }
 
@@ -32,6 +36,7 @@ State {
   perspectives = []
   mode: Standard | Agent Team
   tier: Direct | Incremental     // from reference/classifier.md, confirmed by the user
+  modelTier: Routine | Hard | Frontier   // from reference/classifier.md, confirmed by the user
   status: SpecStatus
 }
 
@@ -117,15 +122,17 @@ AskUserQuestion: Continue to Decomposition (recommended) | Finalize SDD
 
 Read `reference/classifier.md` and apply the ordered rules to `requirements.md` and `solution.md`.
 
-1. **Extract** the five signals — `change_type`, `feature_count`, `ac_count`, `component_count`, `parallel_markers`. Read only; ask the user nothing. A signal you cannot determine takes its conservative value and is named as such in the rationale.
-2. **Recommend** one tier by applying the rules top to bottom, first match wins.
-3. **Surface** the recommendation with the signals that produced it, so the user can check them against their own documents.
-4. **Ask** the user to choose (under header "Decompose"):
+1. **Extract** the five decomposition signals — `change_type`, `feature_count`, `ac_count`, `component_count`, `parallel_markers` — and the model-tier signals — `high_risks`, `novel_pattern`, `adr_count` (the `## Model Tier` section). Read only; ask the user nothing. A signal you cannot determine takes its conservative value and is named as such in the rationale.
+2. **Recommend** one decomposition tier and one model tier, each by applying its rules top to bottom, first match wins.
+3. **Surface** both recommendations with the signals that produced them, so the user can check them against their own documents.
+4. **Ask** the user to choose, in one question round with two questions. Under header "Decompose":
    - **Direct** — implement straight from PRD + SDD. No plan artifact. Recommended for fixes, refactors, doc changes, and single-criterion features.
    - **Incremental** — a phase plan with TDD tasks and the per-task review chain. Recommended for anything with real breadth.
 
-   Highlight the classifier's recommendation. The user may override freely.
-5. **Record** the choice via `Skill(tcs-workflow:xdd-meta)` — the README Status table `Decomposition tier` row **and** a Decisions Log row carrying the recommendation, the choice, and the rationale.
+   Under header "Model": routine | hard | frontier. The `frontier` option carries the cost sentence, which you read from `reference/model-ladder.md` and copy into the option text.
+
+   Highlight each recommendation. The user may override freely. An override reason comes from the free-text answer; without one, log "no reason given".
+5. **Record** both choices via `Skill(tcs-workflow:xdd-meta)` — the README Status table `Decomposition tier` and `Model tier` rows **and** a Decisions Log row per tier carrying the recommendation, the choice, and the rationale.
 6. **Route**:
 
 match (chosen tier) {

@@ -463,3 +463,53 @@ def test_model_tier_section_names_all_three_tiers_and_no_rung_names():
     lowered = section.lower()
     for rung in ("opus", "sonnet", "haiku", "fable", "@max"):
         assert rung not in lowered, f"rung name {rung} belongs in model-ladder.md"
+
+
+# --- Step 6 confirms both tiers in one round (spec 022, T3.2) ---
+#
+# The model tier rides on the existing "Ask the user to choose" bullet as a
+# second question. The tool name stays out of step 6 beyond the one finalize
+# gate, so the CON-8 count test above holds unchanged.
+
+
+def test_xdd_extracts_the_model_tier_signals_without_asking():
+    step = _step_six()
+    for signal in ("high_risks", "novel_pattern", "adr_count"):
+        assert signal in step, f"step 6 does not name {signal}"
+    assert "ask the user nothing" in step
+
+
+def test_xdd_asks_both_tiers_in_one_round_under_named_headers():
+    step = _step_six()
+    assert "**Ask** the user to choose" in step
+    assert 'header "Decompose"' in step
+    assert 'header "Model"' in step
+    assert "routine | hard | frontier" in step
+
+
+def test_xdd_frontier_option_takes_its_cost_sentence_from_the_ladder():
+    step = _step_six()
+    assert "reference/model-ladder.md" in step
+    # The sentence is owned by model-ladder.md; restating it here would fork it.
+    assert "2.5×" not in step
+    assert "usage credits" not in step
+
+
+def test_xdd_takes_the_override_reason_from_free_text():
+    step = _step_six()
+    assert "free-text" in step
+    assert "no reason given" in step
+
+
+def test_xdd_records_both_tiers_in_status_and_decisions_log():
+    step = _step_six()
+    assert "`Decomposition tier`" in step
+    assert "`Model tier`" in step
+    assert "a Decisions Log row per tier" in step
+
+
+def test_xdd_state_and_interface_carry_the_model_tier():
+    text = _xdd_text()
+    head = text[: text.index("## Constraints")]
+    assert "modelTier: Routine | Hard | Frontier" in head
+    assert "model: {" in head
