@@ -20,7 +20,7 @@ SpecStatus {
   directory: string         // resolved via Path Resolution priority chain
   phase: Initialization | PRD | SDD | PLAN | Ready | Implemented
   decomposition_tier: Direct | Incremental | None   // None = spec predates tiers, or not yet classified
-  model_tier: Routine | Hard | Frontier | None       // None = not yet classified (ADR-7)
+  model_tier: Routine | Hard | Frontier | None       // None = not yet classified
   documents: {
     name: string
     status: pending | in_progress | completed | skipped
