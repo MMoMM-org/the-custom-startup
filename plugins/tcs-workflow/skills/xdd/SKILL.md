@@ -47,7 +47,7 @@ State {
 - Display ALL agent responses to user — complete findings, not summaries.
 - Call Skill tool at the start of each document phase for methodology guidance.
 - Run phases sequentially — PRD, SDD, Decomposition (user can skip phases).
-- Classify the decomposition tier from the documents, never from the raw request — the classifier runs only after PRD and SDD exist.
+- Classify the decomposition tier and the model tier from the documents, never from the raw request — the classifier runs only after PRD and SDD exist.
 - Wait for user confirmation between each document phase.
 - Track decisions in specification README via reference/output-format.md.
 - Git integration is optional — offer branch/commit as an option.
@@ -62,7 +62,8 @@ State {
 ## Reference Materials
 
 - [Perspectives](reference/perspectives.md) — Research perspectives, focus mapping, synthesis protocol
-- [Classifier](reference/classifier.md) — Signals, ordered rules, rationale format, override handling, decision logging
+- [Classifier](reference/classifier.md) — Decomposition and model-tier signals, ordered rules, rationale format, override handling, decision logging
+- [Model Ladder](reference/model-ladder.md) — Rungs, consent, the frontier cost sentence, Decisions Log formats
 - [Output Format](reference/output-format.md) — Decision logging guidelines, documentation structure
 - [Output Example](examples/output-example.md) — Concrete example of expected output format
 

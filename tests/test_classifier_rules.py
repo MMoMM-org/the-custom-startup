@@ -520,3 +520,17 @@ def test_xdd_state_and_interface_carry_the_model_tier():
     head = text[: text.index("## Constraints")]
     assert "modelTier: Routine | Hard | Frontier" in head
     assert "model: {" in head
+
+
+def test_xdd_lists_the_model_ladder_in_reference_materials():
+    text = _xdd_text()
+    materials = text[text.index("## Reference Materials") : text.index("## Workflow")]
+    assert "reference/model-ladder.md" in materials
+
+
+def test_xdd_always_rule_classifies_both_tiers_from_documents():
+    text = _xdd_text()
+    always = text[text.index("**Always:**") : text.index("**Never:**")]
+    line = next(row for row in always.splitlines() if "never from the raw request" in row)
+    assert "decomposition tier" in line
+    assert "model tier" in line

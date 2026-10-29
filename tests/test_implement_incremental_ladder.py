@@ -135,3 +135,13 @@ def test_skill_does_not_restate_the_ladder():
     assert "usage credits" not in text
     assert not re.search(r"haiku\W+sonnet\W+opus\W+opus@max\W+fable", text)
     assert not re.search(r"opus@max\W+(→|->|then)\W+fable", text)
+
+
+def _step_one():
+    text = _text()
+    start = text.index("### 1. Initialize")
+    return text[start : text.index("### 2. ", start)]
+
+
+def test_step_one_names_model_tier_from_the_status_read():
+    assert "model_tier" in _step_one()

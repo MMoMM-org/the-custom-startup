@@ -80,7 +80,7 @@ State {
 
 ### 1. Initialize
 
-Invoke Skill(tcs-workflow:xdd-meta) to read the spec.
+Invoke Skill(tcs-workflow:xdd-meta) to read the spec. Its status read (`spec.py <id> --read`) prints `model_tier`; keep it for step 4b.
 
 Discover the plan structure:
 
