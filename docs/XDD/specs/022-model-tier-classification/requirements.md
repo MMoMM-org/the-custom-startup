@@ -198,9 +198,9 @@ get it silently and at the user's cost.
 
 ### Should Have Features
 - **Verify the rung that actually ran.** After each dispatch, record the model that actually
-  served the task when Claude Code exposes it. This also covers silent substitutions (an allowlist
-  or overload fallback) that do not fail the dispatch. Whether the actual model can be observed
-  is unconfirmed; a spike decides it.
+  served the task. This also covers silent substitutions (an allowlist or overload fallback) that
+  do not fail the dispatch. The spike confirmed the served model is observable: `message.model`
+  in the subagent transcript.
 
 ### Could Have Features
 - **Main-session hint.** When a spec is classified `frontier`, the completion summary of `/xdd`
@@ -288,8 +288,8 @@ All four are rows in the spec's Decisions Log; no separate telemetry is required
 
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
-| Claude Code substitutes a model silently, so the log claims fable when opus ran | Medium | Medium | Should-Have verification spike; until then the log says "requested" and the limitation is documented |
-| Consent behaviour of a fable subagent inside an interactive session differs from the docs (unconfirmed) | Medium | Medium | Test it in the spike before relying on planned frontier dispatch |
+| Claude Code substitutes a model silently, so the log claims fable when opus ran | Medium | Medium | Mitigated: the orchestrator compares the requested alias with `message.model` in the subagent transcript and logs a mismatch (spike, 2026-10-29) |
+| Consent behaviour of a fable subagent inside an interactive session differs from the docs (unconfirmed) | Medium | Medium | Not testable on a plan that includes Fable (spike); parked in #242. The nobody-can-be-asked rule prevents unattended fable dispatch |
 | Depth signals mis-classify, sending routine specs to `hard` | Medium | Medium | Recommendation only; user confirms; override rate tracked |
 | Cost sentence goes stale as prices change | Low | Medium | State the ratio and billing route, not prices; one place to update |
 | Extra question text crowds the single confirmation round | Low | Low | Cost sentence appears once, on the `frontier` option only |

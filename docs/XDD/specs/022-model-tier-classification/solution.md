@@ -590,6 +590,7 @@ fable consent question. Both carry the same cost sentence from `model-ladder.md`
   - `| <date> | Model escalation: T2.1 opus → opus@max | Trigger: second review FAIL |`
   - `| <date> | Fable consent: T2.1 | Asked at escalation; user agreed |`
   - `| <date> | Model substitution: T2.1 | Requested fable, ran opus@max: dispatch error <reason> |`
+  - `| <date> | Model substitution: T2.1 | Requested fable, served <model> (message.model) |`
 - **Security / cost**: fable is reached only with consent given at classification (planned) or
   at the time (escalation or a frontier tag in a non-frontier spec).
 
@@ -711,7 +712,7 @@ fable consent question. Both carry the same cost sentence from `model-ladder.md`
   carries the served model in `message.model` (spike, 2026-10-29).
 - Consent behaviour of a credit-billed fable subagent is undocumented and could not be tested on
   an account where Fable is included in the plan (spike). The nobody-can-be-asked rule still
-  prevents unattended fable dispatch.
+  prevents unattended fable dispatch. Parked in #242.
 - `CLAUDE_CODE_NO_MODEL_FALLBACK` is undocumented; this design does not rely on it.
 
 ### Technical Debt

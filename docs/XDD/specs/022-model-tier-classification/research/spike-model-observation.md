@@ -97,3 +97,5 @@ Documented behaviour: the prompt is not forwarded to the Remote Control device; 
 3. A credit-billed Fable subagent's consent behaviour stays unverified; the "nobody can be asked"
    rule (YOLO, `-p`) still prevents an unattended Fable dispatch, so the open point cannot cause
    unapproved spend in those modes.
+
+The untested consent paths are parked in #242 until a run that bills usage credits gives feedback.
