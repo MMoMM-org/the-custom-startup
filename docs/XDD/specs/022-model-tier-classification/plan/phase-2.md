@@ -47,9 +47,9 @@ Establishes the one definition of "stronger model" that every consumer reads, an
   3. Implement: Write the reference file to satisfy the tests, in the style of `xdd/reference/classifier.md`.
   4. Validate: `pytest -q tests/test_model_ladder.py` passes; skill-author reference conventions respected.
   5. Success:
-     - [ ] Ladder and starting rungs defined `[ref: PRD/AC-4.1]` `[ref: PRD/AC-4.2]` `[ref: PRD/AC-4.3]` `[ref: PRD/AC-4.4]` `[ref: PRD/AC-4.5]`
-     - [ ] Escalation, cap and consent rules defined `[ref: PRD/AC-5.1]` … `[ref: PRD/AC-5.7]` `[ref: PRD/AC-3.3]`
-     - [ ] Substitution rules defined `[ref: PRD/AC-6.1]` … `[ref: PRD/AC-6.4]`
+     - [x] Ladder and starting rungs defined `[ref: PRD/AC-4.1]` `[ref: PRD/AC-4.2]` `[ref: PRD/AC-4.3]` `[ref: PRD/AC-4.4]` `[ref: PRD/AC-4.5]`
+     - [x] Escalation, cap and consent rules defined `[ref: PRD/AC-5.1]` … `[ref: PRD/AC-5.7]` `[ref: PRD/AC-3.3]`
+     - [x] Substitution rules defined `[ref: PRD/AC-6.1]` … `[ref: PRD/AC-6.4]`
 
 - [x] **T2.2 `[model: tier]` plan annotation** `[activity: domain-modeling]` `[parallel: true]`
 

@@ -141,7 +141,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 - [x] [Phase 1: Spike and metadata foundation](phase-1.md)
 - [x] [Phase 2: Model ladder and plan tag](phase-2.md)
 - [x] [Phase 3: Classifier and implement loops](phase-3.md)
-- [ ] [Phase 4: Release and end-to-end validation](phase-4.md)
+- [x] [Phase 4: Release and end-to-end validation](phase-4.md)
 
 ---
 

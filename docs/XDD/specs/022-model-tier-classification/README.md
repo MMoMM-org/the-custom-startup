@@ -5,9 +5,10 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-10-28 |
-| **Current Phase** | Ready |
+| **Current Phase** | Implemented |
 | **Decomposition tier** | Incremental |
-| **Last Updated** | 2026-10-28 |
+| **Model tier** | Hard |
+| **Last Updated** | 2026-10-29 |
 
 ## Documents
 
@@ -36,6 +37,9 @@
 | 2026-10-29 | SDD aligned with model-ladder.md after phase-2 drift check | Escalation pseudocode: an unset rung (Direct, absent tier) escalates to opus; the cap branch logs "highest reachable rung". Error Handling: an unreadable transcript skips the served-model check. The ladder's former "is the session model" condition was a latent bug (a task at opus in an opus session would not reach opus@max) and is fixed. |
 | 2026-10-29 | Phase 3 drift acknowledged: F2, F3 | Both loops keep `effort: max` and "no `model` parameter when absent" at the dispatch site (reviewed twice as needed for a clear dispatch, pinned by tests); the unknown `[model:]` value report stays only in model-ladder.md, which 4b links. F4 and F5 fixed. |
 | 2026-10-29 | T4.2 walkthrough: 4 gaps fixed, 2 open questions decided | Gaps: start rung of later planned frontier tasks once fable is off (opus@max); served-model check skipped without a requested alias; log row names an unset rung `inherited` and a Direct unit by title; implement-direct 3b routes a fable dispatch error to Fable Failure. Decided by user: a BLOCKED task halts the run (also under YOLO, plan resumable); a `[model: frontier]` tag in a non-frontier spec runs at `hard` without a question once fable is off. |
+| 2026-10-29 | Model tier: hard | Recorded retroactively once the reader existed (T4.3). Classifier would recommend hard (adr_count=7; high_risks=0; novel_pattern=false), confirmed by the walkthrough. |
+| 2026-10-29 | Could-have deferred: main-session `/model fable` hint | Not built; no plan task. Revisit if a frontier spec is run with the main session on a weaker model and the orchestration itself struggles. |
+| 2026-10-29 | Implementation complete | Branch spec/model-tier-158 (PR pending); tcs-workflow 4.4.16 on merge. Added xdd/reference/model-ladder.md, classifier Model Tier section, xdd step 6 two-tier round, spec.py model_tier, xdd-plan [model:] tag, both implement loops on the ladder; 1756 tests passing. Unverified Fable consent paths parked in #242. |
 
 ## Context
 

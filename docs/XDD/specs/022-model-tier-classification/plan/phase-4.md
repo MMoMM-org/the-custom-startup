@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Release and end-to-end validation"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 4
 ---
@@ -46,6 +46,6 @@ Ships the feature and proves the workflow end to end.
   4. Validate: Each walked step cites the skill line that produced it.
   5. Success: `[ref: PRD/AC-1.2]` `[ref: PRD/AC-5.3]` `[ref: PRD/AC-5.4]` `[ref: PRD/AC-5.7]` `[ref: PRD/AC-6.1]` hold in the skill text as written
 
-- [ ] **T4.3 Final validation** `[activity: validate]`
+- [x] **T4.3 Final validation** `[activity: validate]`
 
   - Gate task. Full Python suite (`rm -rf tests/__pycache__ && .venv/bin/python -m pytest -q tests`), changelog sync, `Skill(tcs-workflow:validate)` drift for spec 022, skill-author audit of every changed SKILL.md. Record `Model tier: hard` in spec 022's own README once the reader exists.
