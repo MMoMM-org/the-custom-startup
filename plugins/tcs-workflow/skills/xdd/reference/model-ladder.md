@@ -65,7 +65,7 @@ escalate(T):
   T.failures_at_rung = 0
   if T.rung == fable or (T.rung == opus@max and run.fable_unavailable)
                              -> log "highest reachable rung"; report BLOCKED to the user; stop
-  if T.rung is the session model -> next = opus
+  if T.rung is unset (no model parameter) -> next = opus
   else                       -> next = rung after T.rung
   if next != fable           -> T.rung = next; log escalation; re-dispatch
   if nobody can be asked     -> log "fable not reached: no one to ask"; report BLOCKED at opus@max

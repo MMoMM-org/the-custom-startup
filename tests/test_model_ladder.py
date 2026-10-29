@@ -51,7 +51,7 @@ class Run:
         self.fable_unavailable = False
 
 
-SESSION = None  # a Direct task with no tier: no model parameter, session model
+UNSET = None  # a Direct task with no tier: dispatched without a model parameter
 CONTINUE = "continue"
 BLOCKED = "BLOCKED"
 
@@ -62,7 +62,7 @@ def escalate(task, run):
     if task.rung == "fable" or (task.rung == "opus@max" and run.fable_unavailable):
         task.log.append("highest reachable rung")
         return BLOCKED
-    nxt = "opus" if task.rung == SESSION else RUNGS[RUNGS.index(task.rung) + 1]
+    nxt = "opus" if task.rung == UNSET else RUNGS[RUNGS.index(task.rung) + 1]
     if nxt != "fable":
         task.log.append(f"escalation {task.rung} -> {nxt}")
         task.rung = nxt
@@ -175,10 +175,18 @@ def test_fable_is_capped_at_opus_max_once_unavailable():
     assert on_blocked(task, run, "complexity") == BLOCKED
 
 
-def test_session_model_task_first_escalates_to_opus():
-    task, run = Task(SESSION), Run(can_ask=False)
+def test_unset_rung_task_first_escalates_to_opus():
+    task, run = Task(UNSET), Run(can_ask=False)
     assert escalate(task, run) == CONTINUE
     assert task.rung == "opus"
+
+
+def test_task_at_opus_escalates_to_opus_max_whatever_the_session_model_is():
+    # The session model is not an input to escalate(): only an unset rung maps to opus.
+    for _session_model in ("haiku", "sonnet", "opus", "fable"):
+        task, run = Task("opus"), Run(can_ask=False)
+        assert escalate(task, run) == CONTINUE
+        assert task.rung == "opus@max"
 
 
 def test_capped_escalation_logs_the_highest_reachable_rung():
@@ -219,6 +227,7 @@ def _lines(block):
     return [re.sub(r"[ \t]+", " ", l).strip() for l in block.splitlines() if l.strip()]
 
 
+UNSET_ESCALATES_TO_OPUS = "if T.rung is unset (no model parameter) -> next = opus"
 PASS_RESETS_THE_COUNT = "on reviewer PASS for task T: T.failures_at_rung = 0"
 
 
@@ -226,6 +235,21 @@ def _assert_escalate_starts_by_resetting_the_count(lines):
     assert "escalate(T):" in lines, "pseudocode lost: escalate(T):"
     first = lines[lines.index("escalate(T):") + 1]
     assert first == "T.failures_at_rung = 0", f"escalate no longer resets first: {first}"
+
+
+ESCALATE_BODY_IN_ORDER = [
+    "escalate(T):",
+    "T.failures_at_rung = 0",
+    "if T.rung == fable or (T.rung == opus@max and run.fable_unavailable)",
+    '-> log "highest reachable rung"; report BLOCKED to the user; stop',
+    UNSET_ESCALATES_TO_OPUS,
+    "else -> next = rung after T.rung",
+    "if next != fable -> T.rung = next; log escalation; re-dispatch",
+    'if nobody can be asked -> log "fable not reached: no one to ask"; report BLOCKED at opus@max',
+    "ask the user (Consent):",
+    "yes -> T.rung = fable; T.fable_consent = true; log consent and escalation; re-dispatch",
+    "no -> log declined; report BLOCKED at opus@max",
+]
 
 
 def _assert_pseudocode_matches_the_reference_model(block):
@@ -240,7 +264,7 @@ def _assert_pseudocode_matches_the_reference_model(block):
         "else -> re-dispatch at R with the fix list",
         "if T.rung == fable or (T.rung == opus@max and run.fable_unavailable)",
         '-> log "highest reachable rung"; report BLOCKED to the user; stop',
-        "if T.rung is the session model -> next = opus",
+        UNSET_ESCALATES_TO_OPUS,
         "else -> next = rung after T.rung",
         "if next != fable -> T.rung = next; log escalation; re-dispatch",
         'if nobody can be asked -> log "fable not reached: no one to ask"; report BLOCKED at opus@max',
@@ -251,6 +275,9 @@ def _assert_pseudocode_matches_the_reference_model(block):
         assert line in lines, f"pseudocode lost: {line}"
     assert not any(l.startswith("BLOCKED(other reason) -> escalate") for l in lines)
     _assert_escalate_starts_by_resetting_the_count(lines)
+    # Order matters: the cap check precedes the next-rung lines, the no-one-to-ask
+    # exit precedes the question.
+    assert lines[lines.index("escalate(T):"):] == ESCALATE_BODY_IN_ORDER, "escalate(T) lines out of order or changed"
 
 
 def test_escalation_pseudocode_matches_the_reference_model():
