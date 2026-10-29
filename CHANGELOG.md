@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`report.py` no longer counts a record twice when two configured homes are one directory
+  (#245).** Inside a dev container, `~` is the bind-mounted `claude-docker-home`, so a sources
+  config listing both doubled every figure for that repository. Each physical home is now read
+  once; both still get their status line.
+
 - **A session now says when it records nothing because the observability bundle is missing from
   its `$HOME` (#246).** A repository whose hooks were installed on the host recorded nothing
   inside its dev container, and the reverse, with no error anywhere. **What to do:** update
