@@ -113,7 +113,7 @@ Dispatch `tdd-guardian` with the unit's text, its specification references, and 
 
 #### 3b. Implementer
 
-Dispatch a fresh subagent with only:
+Dispatch a fresh subagent at the starting rung in the Direct column of [the model ladder](../xdd/reference/model-ladder.md) for the spec's `model_tier` (read in step 1). Pass the rung's alias, plus `effort: max` for `opus@max`; when the tier is absent pass no `model` parameter. Direct has no plan, so there is no `[model:]` tag. After the dispatch run the ladder's served-model check, and log any substitution through `Skill(tcs-workflow:xdd-meta)` step 4 (Log Decision). The subagent receives only:
 1. The unit's text, verbatim.
 2. The relevant requirements and solution sections, read and included in full.
 3. Scene-setting in a few lines: spec name and ID, repository layout at top level, current branch.
@@ -130,10 +130,12 @@ DONE                → next unit
 DONE_WITH_CONCERNS  → read them; correctness or scope concerns are addressed before moving on
 NEEDS_CONTEXT       → supply what is missing, re-dispatch a fresh subagent with the curated context
 BLOCKED             → assess: context problem → re-dispatch with more context
-                              complexity problem → re-dispatch with a stronger model
+                              complexity problem → escalate one rung (below)
                               unit too large → split it, and reconsider whether this tier still fits
                               specification is wrong → escalate to the user
 ```
+
+**Complexity escalation** follows [the model ladder](../xdd/reference/model-ladder.md): one rung up, automatic below `fable`. The cap, the consent and nobody-to-ask rules, and the fable-failure rule apply as written there. Direct has no review chain, so only a complexity BLOCKED escalates. Log each escalation, consent and substitution through `Skill(tcs-workflow:xdd-meta)` step 4 (Log Decision), in the ladder's row formats.
 
 Never silently drop a BLOCKED or NEEDS_CONTEXT result. In Standard mode a re-dispatch is a fresh stateless subagent — it remembers nothing, so re-supply the context.
 
