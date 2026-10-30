@@ -316,6 +316,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   placeholder-per-task technique moved there from the memory bank, which keeps rules, not recipes.
   Update tcs-helper.
 
+- **`skill-author`'s eval guide now holds the plugin-eval gotchas that sat in the memory bank:**
+  `init --bare`, the `case.yaml` layout and `--no-publish`. Three of the four bank entries were
+  already in the guide; all four left the bank, which only agents working on evals needed.
+  Update tcs-helper.
+
 ### Added
 
 - **`docs/ai/memory/declined.md` — a journal of what was ruled out, and the condition that reopens

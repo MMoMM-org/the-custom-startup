@@ -15,7 +15,11 @@ plugins/<plugin>/evals/
   <case>/graders/<name>.md       # one grader per file; frontmatter type + options, body = rubric
 ```
 
-`plugins/*/evals/results/` is gitignored. A case without graders is invalid.
+`plugins/*/evals/results/` is gitignored. A case without graders is invalid. The runner also
+accepts a single `case.yaml` per case; this repo uses `prompt.md` plus `graders/`.
+
+Scaffold a case with `claude plugin eval init --bare <name>`. Without `--bare`, `init` runs an
+authoring interview that needs an interactive terminal.
 
 `prompt.md` frontmatter: `description`, `tags`, `runs` (default 3), `max_turns`, `timeout_seconds`,
 `allowed_tools`, `expected_outcome`. Unknown keys are an error.
@@ -52,4 +56,5 @@ A suite that passes proves nothing until it has failed:
 3. Record both scores in the plugin's `evals/README.md`.
 
 Grant `Write`/`Edit` with `--allow-tools Write Edit` when a case needs them; `allowed_tools` in the
-case cannot grant them. Set `--max-cost-usd` on every run.
+case cannot grant them. Set `--max-cost-usd` on every run, and `--no-publish`: the report is
+published to claude.ai by default.

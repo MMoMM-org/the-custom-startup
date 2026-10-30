@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.4.9] - 2026-10-30
+
+### Changed
+
+- **`skill-author`'s eval guide covers scaffolding and publishing:** `claude plugin eval init --bare`
+  writes a blank case without the interactive interview, the runner also reads `case.yaml`, and
+  `--no-publish` keeps the report off claude.ai, where it goes by default.
+
 ## [4.4.8] - 2026-10-29
 
 ### Fixed
