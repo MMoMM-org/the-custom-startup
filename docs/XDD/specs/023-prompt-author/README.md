@@ -37,6 +37,8 @@
 | 2026-11-04 | Run the full Opus-vs-Sonnet experiment (5 tasks) BEFORE the PRD | User choice over the recommended small pilot; PRD targets measured differences. Est. $100-400, 1-2 days, via `claude -p` on subscription |
 | 2026-11-04 | Non-Claude targets: per-vendor porting profiles + lint; live eval only on local Ollama (reachable at host.docker.internal:11434); otherwise emit eval kit labelled "not evaluated on target". GEMINI_API_KEY must not be used | User: the Gemini key has little budget behind it; Ollama is available locally |
 | 2026-11-04 | Defects found by corpus research filed as separate GitHub issues, fixed outside spec 023 | User choice; they double as audit test cases for the skill |
+| 2026-11-04 | Defects filed as #250-#253, no project board | User: only org board is MiYo Tomo/Hashi, not TCS |
+| 2026-11-04 | Experiment plan approved (experiment/PLAN.md): pilot first, $400 hard ceiling, judge validated on ~20 user labels per semantic criterion | User approval |
 
 ## Context
 
