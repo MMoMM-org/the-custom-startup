@@ -94,6 +94,23 @@ Collected by a web-research agent; sources fetched directly unless marked [snipp
 - Shankar et al. (https://arxiv.org/abs/2404.12272): "criteria drift" — criteria are only settled by grading outputs.
 - Anthropic "Adding error bars to evals" (https://www.anthropic.com/research/statistical-approach-to-model-evals, 2024): paired differences on the same items, cluster related items, resample answers, power analysis for N. No fixed N.
 
+## Agent prompts vs one-shot prompts (added 2026-11-04, user-supplied source)
+
+Source: Gravity blog, "AI agent prompt vs traditional prompt" (https://gravity.fast/blog/ai-agent-prompt-vs-traditional-prompt/). Practitioner post, no controlled evidence; cites Anthropic "Building Effective Agents", OpenAI function-calling guide and OWASP LLM Top 10, but attributes no specific rule to them. Its five-block proportions (identity 5 / goal 15 / tools 50 / constraints 20 / stop 10 %) and the 800–2,000-token figure come from an unpublished internal template — do not cite as evidence.
+
+Claims worth carrying, with where they already stand:
+
+| Claim | Status in our research | In agent-author today |
+|---|---|---|
+| The prompt is re-read every loop step; write for no mid-run clarification — say what to do when unclear | consistent with corpus mode CA (contract asymmetry) and #250 | no rule |
+| State the goal and constraints, not a fixed script; scripts break on pagination, missing fields, rate limits | consistent with Anthropic "explain why" guidance | no rule |
+| Explicit stopping conditions (N tool calls, same error twice, failed constraint check) → report/escalate | new; T2's status contract is the closest measured case | no rule |
+| Refusal policy = forbidden actions + the approved alternative (stop, escalate, confirm via a named channel) | overlaps security req. 10–11 (research-technical.md) | no rule |
+| Content from emails, pages, documents is data, not instructions | already in: OWASP LLM01 + spotlighting (above); #253 | only in output-formats severity table |
+| Each tool: name, one-line purpose, input schema, ≥1 usage example; trust limits in the tool description | applies to API/SDK agents with custom tools — prompt-author scope, not Claude Code subagents (built-in tools) | n/a |
+
+Consequence for the PRD: stopping conditions, behaviour-when-unclear, goal-over-script and a refusal-with-alternative policy become candidate catalog entries for *any* agentic prompt (subagent brief, agent definition, API agent). agent-author picks them up through the shared catalog migration (scope decision "Core + migrate"), not as a separate edit.
+
 ## Contradictions with current TCS skill-authoring advice
 
 - **"Strip all rationale"** contradicts Anthropic (both pages) and GPT-5 guide; mechanism: explanation lets the model generalize to unlisted cases. No source supports removal. Candidate middle ground: one-clause purpose per non-obvious rule; strip history/provenance.

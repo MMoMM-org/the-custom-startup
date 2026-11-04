@@ -42,6 +42,7 @@
 | 2026-11-04 | T4 status quo = no CLAUDE.md (empty Q.md), not an experimenter-written baseline | A hand-written baseline would be a third, unblinded author |
 | 2026-11-04 | Pilot done (45 runs, $1.45); five grader defects fixed and regraded; criteria frozen (PLAN.md § Pilot outcome) | The pilot exists to catch instrument errors before the full run |
 | 2026-11-04 | Judge labels collected from a stratified sample of the full run, not from the pilot | The pilot yields only 9 outputs per semantic criterion, all judged PASS; ~20 labels need the full run's spread |
+| 2026-11-04 | Gravity agent-prompt article added to research-external.md; its agent rules (stopping conditions, behaviour when unclear, goal over script, refusal with alternative) go into the shared catalog, reaching agent-author via the migration | User-supplied source; agent-author has none of these rules today; a direct edit would bypass the catalog that is meant to be the single source |
 
 ## Context
 
