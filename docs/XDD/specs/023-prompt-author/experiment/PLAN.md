@@ -24,13 +24,15 @@ The authoring request states purpose, target environment and inputs, never the g
 | T2 | implementer subagent brief (corpus #13) | `claude -p --model sonnet` with Bash/Read/Edit/Write in a fixture git repo | 10 tasks (2 with a withheld SDD section) | script: final message contains a parseable status from the vocabulary; NEEDS_CONTEXT on the withheld cases; test commit precedes code commit; no file outside the task's scope changed |
 | T3 | code-review perspective brief (corpus #14) | `claude -p --model sonnet`, Read/Grep/Glob/Bash in a fixture repo | 10 diffs, each with one planted bug and one uncommitted "teammate" file | script: every finding has location+severity+confidence; `git status`/reflog unchanged; teammate file not flagged; judge: planted bug identified |
 | T4 | CLAUDE.md for a small fixture repo (corpus #6/#7) | `claude -p --model haiku` with tools in the fixture repo | 5 coding tasks | script: every path/command named in the CLAUDE.md exists/runs; documented test command used; size ≤ budget |
-| T5 | port the PRD interview prompt (corpus #3) to a local model | Ollama `qwen3.5:35b-a3b` via host.docker.internal:11434 | 10 scripted simulated-user sessions (simulated user: `claude -p --model haiku`) | script: one question per assistant turn, final doc has all 8 sections, no undefined markers (`[NEEDS …]`, Claude Code idioms); judge: no implementation detail ("HOW") in PRD |
+| T5 | port the PRD interview prompt (corpus #3) to a local model | Ollama `qwen3.5:35b-a3b` via host.docker.internal:11434 | 10 scripted simulated-user sessions (simulated user: `claude -p --model haiku`) | script: one question per assistant turn, final doc has all 8 sections, no `[NEEDS …]` marker outside Open Questions in the final doc, no Claude Code idioms on any turn; judge: no implementation detail ("HOW") in PRD |
 
-Status-quo prompts: T1 docs/templates/setup-perplexity-space.md system prompt; T2 implement-incremental 4d brief; T3 review SKILL.md brief + perspectives; T4 the fixture's hand-written CLAUDE.md baseline (none in repo fits — written by the experimenter, labelled); T5 docs/templates/prd-prompt.md.
+Status-quo prompts: T1 docs/templates/setup-perplexity-space.md system prompt; T2 implement-incremental 4d brief; T3 review SKILL.md brief + perspectives; T4 no CLAUDE.md at all (an experimenter-written baseline would be a third author; decided 2026-11-04); T5 docs/templates/prd-prompt.md.
 
 ## Judge
 
-Script graders wherever possible. Semantic criteria use a non-Claude judge — Ollama `qwen2.5:32b-instruct` — so neither author family grades its own output. Judge sees one output at a time, blind to arm, with a binary PASS/FAIL rubric; graded output wrapped in `<output>` tags. Before trusting it, the judge is checked against ~20 hand labels per semantic criterion from the user (~60 total; decided 2026-11-04). Agreement below 85% on a criterion → that criterion is reported as unvalidated, not dropped silently.
+Script graders wherever possible. Semantic criteria use a non-Claude judge — Ollama `qwen2.5:32b-instruct` — so neither author family grades its own output. Judge sees one output at a time, blind to arm, with a binary PASS/FAIL rubric; graded output wrapped in `<material>` tags. Before trusting it, the judge is checked against ~20 hand labels per semantic criterion from the user (~60 total; decided 2026-11-04). Agreement below 85% on a criterion → that criterion is reported as unvalidated, not dropped silently.
+
+Judge controls (2026-11-04): one planted FAIL and one PASS per criterion, hand-written; the judge called all five correctly. That shows it can say FAIL, not that it is calibrated on subtle cases — the labels decide that.
 
 ## Analysis
 
@@ -38,6 +40,20 @@ Script graders wherever possible. Semantic criteria use a non-Claude judge — O
 - Primary: paired O-vs-S difference in all-criteria pass rate per task, bootstrap 95% CI clustered by authored prompt; Q reported alongside.
 - Secondary: failure-mode tally of the authored prompts themselves (lint + manual against research-corpus.md codes), prompt token length.
 - Pilot first: 1 authoring per arm × 3 inputs per task → freeze criteria and graders, then full run. Criteria changes after the freeze are logged, not silently applied.
+
+## Pilot outcome and criteria freeze (2026-11-04)
+
+Pilot: O1, S1, Q x 3 cases x 5 tasks = 45 runs, $1.45. Grader defects found and fixed before the freeze, all re-graded from stored outputs (`run.py regrade`):
+
+| Task | Defect | Fix |
+|---|---|---|
+| T1 | `counterarguments_nonempty` missed labels like "The strongest arguments against X" — False for every arm | keyword match anywhere in a heading, bold-led or `Label:` line, ≥6 words of body |
+| T1 | URL check counted bot walls (401/403/405/429) as fabricated | those codes count as reachable; only 404/410/unreachable fail |
+| T4 | `claims_true` read a bare `.py`/`.sh` as a path claim | a path needs ≥1 char before the extension |
+| T5 | `no_undefined_markers` failed prompts that define `[NEEDS CLARIFICATION]` themselves and allow it in Open Questions | split into `markers_resolved` (final doc, outside Open Questions, backticked mentions ignored) and `no_claude_idioms` (all turns) |
+| T5 | `count_questions` counted `?` inside quoted persona speech | quoted `"…?"` spans removed before counting |
+
+Criteria are frozen from here; any later change is logged in this section with its regrade diff.
 
 ## Budget and safety
 

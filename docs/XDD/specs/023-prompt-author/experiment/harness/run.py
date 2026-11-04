@@ -229,6 +229,27 @@ def cmd_judge(args):
                                                       if k.startswith("judge:") and not k.endswith(":reason")})
 
 
+def cmd_regrade(args):
+    """Recompute script criteria from stored fixture + final text; keep judge verdicts."""
+    mod = load_task(args.task)
+    case_by_id = {c["id"]: c for c in cases(args.task)}
+    for grade_path in sorted((lib.RUNS_DIR / args.task / "runs").glob("*/*/grade.json")):
+        run_dir = grade_path.parent
+        old = lib.read_json(grade_path)
+        final_text = (run_dir / "final.txt").read_text()
+        try:
+            new = mod.grade(case_by_id[run_dir.name], str(run_dir / "fixture"), final_text)
+        except Exception as exc:
+            new = {"_grader_error": repr(exc)}
+        for k, v in old.items():
+            if k.startswith("judge:") or k == "_target_error":
+                new[k] = v
+        diff = {k: (old.get(k), v) for k, v in new.items() if old.get(k) != v}
+        lib.write_json(grade_path, new)
+        if diff:
+            print(run_dir.parent.name, run_dir.name, diff)
+
+
 def cmd_status(_args):
     print("spent ${:.2f} of ${:.2f} ceiling".format(lib.spent_usd(), lib.CEILING_USD))
     for task_dir in sorted((lib.RUNS_DIR).glob("T*/runs")):
@@ -253,9 +274,12 @@ def main():
     j = sub.add_parser("judge")
     j.add_argument("--task", required=True)
     j.add_argument("--force", action="store_true")
+    r = sub.add_parser("regrade")
+    r.add_argument("--task", required=True)
     sub.add_parser("status")
     args = ap.parse_args()
-    {"author": cmd_author, "target": cmd_target, "judge": cmd_judge, "status": cmd_status}[args.cmd](args)
+    {"author": cmd_author, "target": cmd_target, "judge": cmd_judge, "regrade": cmd_regrade,
+     "status": cmd_status}[args.cmd](args)
 
 
 if __name__ == "__main__":

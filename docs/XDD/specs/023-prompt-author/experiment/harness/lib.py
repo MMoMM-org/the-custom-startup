@@ -114,9 +114,11 @@ def claude_p(prompt, *, model, label, system_prompt=None, cwd=None,
 
 def ollama_chat(messages, *, model, label, timeout_s=900, temperature=None):
     """Chat with the local Ollama server; return (text, meta). Cost is 0."""
-    body = {"model": model, "messages": messages, "stream": False}
+    # Default Ollama context silently truncates a long system prompt over 8 turns.
+    options = {"num_ctx": 16384}
     if temperature is not None:
-        body["options"] = {"temperature": temperature}
+        options["temperature"] = temperature
+    body = {"model": model, "messages": messages, "stream": False, "options": options}
     req = urllib.request.Request(
         OLLAMA_URL + "/api/chat", data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json"})

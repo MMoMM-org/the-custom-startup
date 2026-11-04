@@ -39,6 +39,9 @@
 | 2026-11-04 | Defects found by corpus research filed as separate GitHub issues, fixed outside spec 023 | User choice; they double as audit test cases for the skill |
 | 2026-11-04 | Defects filed as #250-#253, no project board | User: only org board is MiYo Tomo/Hashi, not TCS |
 | 2026-11-04 | Experiment plan approved (experiment/PLAN.md): pilot first, $400 hard ceiling, judge validated on ~20 user labels per semantic criterion | User approval |
+| 2026-11-04 | T4 status quo = no CLAUDE.md (empty Q.md), not an experimenter-written baseline | A hand-written baseline would be a third, unblinded author |
+| 2026-11-04 | Pilot done (45 runs, $1.45); five grader defects fixed and regraded; criteria frozen (PLAN.md § Pilot outcome) | The pilot exists to catch instrument errors before the full run |
+| 2026-11-04 | Judge labels collected from a stratified sample of the full run, not from the pilot | The pilot yields only 9 outputs per semantic criterion, all judged PASS; ~20 labels need the full run's spread |
 
 ## Context
 

@@ -1,0 +1,22 @@
+[
+  {"id": "t1-01", "kind": "consensus", "question": "Should we store user passwords hashed with SHA-256, or use something like bcrypt or Argon2? We're a small team building a B2B SaaS login."},
+  {"id": "t1-02", "kind": "consensus", "question": "A junior dev asked why we insist on parameterized queries instead of escaping user input ourselves. What's the actual case for it?"},
+  {"id": "t1-03", "kind": "consensus", "question": "Should our backend store timestamps in UTC or in the user's local time zone? We have customers in 12 countries."},
+  {"id": "t1-04", "kind": "consensus", "question": "Is it worth committing lockfiles (package-lock.json, poetry.lock) for an application repo, or only for libraries?"},
+  {"id": "t1-05", "kind": "consensus", "question": "We're debating whether to run the full test suite on every pull request in CI or only nightly. What does the evidence say?"},
+  {"id": "t1-06", "kind": "consensus", "question": "One of our engineers wants to implement our own encryption scheme for stored API tokens. How should we respond?"},
+  {"id": "t1-07", "kind": "consensus", "question": "How should we handle feature flags that have been at 100% rollout for months? Is there a recommended practice?"},
+  {"id": "t1-08", "kind": "contested", "question": "We're a 10-person engineering team with one product. Would moving from our monolith to microservices improve our delivery speed?"},
+  {"id": "t1-09", "kind": "contested", "question": "Does test-driven development measurably reduce defects, or is that mostly anecdote? We want to decide whether to mandate it."},
+  {"id": "t1-10", "kind": "contested", "question": "Monorepo or polyrepo for a company with 4 services, 2 frontends and a shared component library?"},
+  {"id": "t1-11", "kind": "contested", "question": "Are ORMs worth it for a data-heavy reporting backend, or should we write SQL directly?"},
+  {"id": "t1-12", "kind": "contested", "question": "Our new public API: GraphQL or REST? Clients are mostly our own web and mobile apps plus a few partners."},
+  {"id": "t1-13", "kind": "contested", "question": "Is pair programming cost-effective for a remote team, compared with solo work plus code review?"},
+  {"id": "t1-14", "kind": "contested", "question": "How much do code reviews actually catch defects, versus mostly spreading knowledge? Should we keep requiring two approvals?"},
+  {"id": "t1-15", "kind": "recent", "question": "Is Python's free-threaded (no-GIL) build ready for production use in our CPU-heavy data pipeline right now?"},
+  {"id": "t1-16", "kind": "recent", "question": "Which is the better default for new Python projects today: uv or Poetry? How do their adoption and maintenance currently compare?"},
+  {"id": "t1-17", "kind": "recent", "question": "What does the EU Cyber Resilience Act currently require from us as a company shipping a commercial desktop app with open-source dependencies, and which deadlines already apply?"},
+  {"id": "t1-18", "kind": "recent", "question": "What changed in the latest PostgreSQL major release that we should care about before upgrading from version 15?"},
+  {"id": "t1-19", "kind": "recent", "question": "Is the Node.js permission model stable enough now to rely on it for sandboxing third-party plugins in our app?"},
+  {"id": "t1-20", "kind": "recent", "question": "What is the current state of passkey support across major browsers and password managers — can we drop passwords for our consumer app this year?"}
+]
