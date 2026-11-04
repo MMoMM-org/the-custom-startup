@@ -12,7 +12,9 @@ import urllib.request
 from pathlib import Path
 
 EXPERIMENT_DIR = Path(__file__).resolve().parent.parent
-RUNS_DIR = Path(os.environ.get("EXP_RUNS_DIR", EXPERIMENT_DIR / "runs"))
+# Outside the repo: fixtures are git repos, and a failed nested `git init`
+# would commit into the parent repo (docs/ai/memory/active.md).
+RUNS_DIR = Path(os.environ.get("EXP_RUNS_DIR", Path.home() / ".cache" / "spec023-runs"))
 LEDGER = RUNS_DIR / "ledger.jsonl"
 CEILING_USD = float(os.environ.get("EXP_CEILING_USD", "400"))
 OLLAMA_URL = os.environ.get("EXP_OLLAMA_URL", "http://host.docker.internal:11434")

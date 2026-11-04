@@ -43,8 +43,8 @@ Script graders wherever possible. Semantic criteria use a non-Claude judge — O
 
 - Every `claude -p` call carries `--max-budget-usd`; a run ledger sums `total_cost_usd`; the whole experiment stops at a ceiling of $400 (estimate $100-400).
 - No GEMINI_API_KEY, no external providers. Ollama local only.
-- All outputs under `experiment/runs/` (gitignored); only `results.md` and the authored prompts are committed.
-- Fixture repos live in the session scratchpad, built with `git -C` and `GIT_CONFIG_GLOBAL=/dev/null` (active.md).
+- Runs, fixtures, grades and the ledger live in `~/.cache/spec023-runs/` (outside the repo, survives the session); only `results.md` and the authored prompts (`prompts/`) are committed.
+- Fixture repos are built with `git -C` and `GIT_CONFIG_GLOBAL=/dev/null` (active.md).
 
 ## Confounds controlled / remaining
 

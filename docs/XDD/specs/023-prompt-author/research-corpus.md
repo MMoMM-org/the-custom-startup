@@ -1,6 +1,6 @@
 # Real-Prompt Corpus + Experiment Design — prompt-author (2026-11-04)
 
-Read-only research agent; line numbers from `cat -n`. Spot-checked by the orchestrator: AGENTS.md `the-meta-agent.md` (l.29, 37) absent from tree; implement-incremental 4d brief (l.189-205) never asks for the DONE/DONE_WITH_CONCERNS/NEEDS_CONTEXT/BLOCKED status the orchestrator branches on (l.209-219) — both confirmed.
+Read-only research agent; line numbers from `cat -n`. **Correction (orchestrator, 2026-11-04):** line ranges for items 2 and 3 are wrong — `setup-perplexity-space.md` has 59 lines (system prompt at l.22-34; portability claim l.58) and `prd-prompt.md` has 81 (no-HOW at l.11, 26, 32-37; ONE question l.21, 42, 81; `[NEEDS CLARIFICATION]` l.63). The findings themselves were confirmed against the files. Spot-checked by the orchestrator: AGENTS.md `the-meta-agent.md` (l.29, 37) absent from tree; implement-incremental 4d brief (l.189-205) never asks for the DONE/DONE_WITH_CONCERNS/NEEDS_CONTEXT/BLOCKED status the orchestrator branches on (l.209-219) — both confirmed.
 
 Scope: `/Volumes/Moon/Coding/` holds only this repo (no siblings). No API system prompt in code found in repo, `modules/satori` or `~/Kouzou` (rg system_prompt / messages.create / chat.completions). Closest: Perplexity Space / Claude.ai Project system prompts. `~/Kouzou` is not a git repo; its `multi-ai/templates/*` are byte-identical to `docs/templates/*` (co-authored Opus 4.6 + Sonnet 4.6: a8f76a8f, 40ff4da7).
 
