@@ -1,0 +1,96 @@
+---
+title: "Phase 4: Write-Time Nudge, Install Check and End-to-End Validation"
+status: pending
+version: "1.0"
+phase: 4
+---
+
+# Phase 4: Write-Time Nudge, Install Check and End-to-End Validation
+
+## Phase Context
+
+**GATE**: Read all referenced files before starting this phase.
+
+**Specification References**:
+- `[ref: SDD/Architecture Decisions ADR-8]`
+- `[ref: SDD/Implementation Gotchas]` — installed-layout verification
+- `[ref: SDD/Acceptance Criteria]` — the full list used in T4.4
+- `[ref: PRD/Success Metrics]`
+
+**Key Decisions**:
+- CLAUDE.md gets no reminder (ADR-8). The SKILL.md and agent reminders stay unchanged.
+- The install check runs against a scratch `CLAUDE_CONFIG_DIR`, never the user's real plugin cache.
+
+**Dependencies**:
+- Phases 1–3 complete.
+
+---
+
+## Tasks
+
+Closes the loop: users are nudged to the skill, the installed layout is proven, and the whole flow runs end to end on real prompts.
+
+- [ ] **T4.1 Write-time nudge** `[activity: backend-tooling]` `[component: C7]`
+
+  1. Prime: Read `plugins/tcs-helper/scripts/authoring_reminder.py`, `tests/tcs-helper/test_authoring_reminder.py` and ADR-8.
+  2. Test: Extend test_authoring_reminder.py:
+     - AGENTS.md, GEMINI.md, `x.prompt.md` and `prompts/a.md` each give exactly one reminder naming prompt-author;
+     - CLAUDE.md gives none;
+     - the SKILL.md and agent reminders are unchanged;
+     - malformed stdin gives exit 0 (fail open).
+  3. Implement: Add the PROMPT_FILE pattern and its reminder text.
+  4. Validate: The tests pass. The hook never blocks.
+  5. Success: The nudge fires on the four patterns without blocking `[ref: PRD/F9 AC1, AC2]`
+
+- [ ] **T4.2 Installed-layout verification** `[activity: validate]` `[parallel: true]`
+
+  1. Prime: Read the SDD Deployment View and the gotcha "Verify the installed layout once before release".
+  2. Test: Expected result: a consumer skill in an installed copy resolves `../prompt-author/reference/catalog/core.md`.
+  3. Implement:
+     - Install the branch's tcs-helper into a scratch `CLAUDE_CONFIG_DIR`.
+     - Start `claude -p` with the harness isolation flags but this plugin enabled, and ask it to open skill-author and quote PA-01 via its link.
+     - Remove the scratch dir afterwards.
+  4. Validate: The quote matches the catalog text. Record the command and the result in the spec README Decisions Log.
+  5. Success: The cross-skill links survive install `[ref: PRD/Constraints "must still work under local testing and after marketplace install"]`
+
+- [ ] **T4.3 End-to-end run on real prompts** `[activity: validate]`
+
+  1. Prime: Read PRD journeys J1–J4.
+  2. Test: The expected outcomes are the PRD acceptance criteria for F2, F3, F4 and F6, as listed in the traceability table below.
+  3. Implement: With the installed skill, run three journeys:
+     - **J2 + J4:** audit `docs/templates/setup-perplexity-space.md` (corpus #2), accept fixes, then build the kit and run before/after on `claude:haiku`.
+     - **J3 + J4:** port `docs/templates/prd-prompt.md` to `ollama:qwen3.5:35b-a3b`, then before/after on Ollama. This uses the T5 setup, so compare against experiment/results.md.
+     - **J1:** write a brief for a fixture orchestrator that parses a status.
+
+     Validate the judge on one criterion with ~20 labels from the user (T2.2 flow). Ask for consent before every run.
+  4. Validate: The reports exist, each with verdict, judge validation state and cost. The templates themselves are not committed changed unless the user approves (Technical Debt: docs/templates are out of scope).
+  5. Success: Every journey completes, with its labelled report or "not evaluated on target" kit `[ref: PRD/User Journey Maps J1-J4; PRD/F4 AC5]`
+
+- [ ] **T4.4 Final validation and release readiness** `[activity: validate]`
+
+  - Run `pytest -q -rs`, `prompt_lint.py --repo` and the full `plugins/tcs-helper/evals` suite (`--no-publish --max-cost-usd 10`). All pass.
+  - Run the skill-author audit on prompt-author once more.
+  - Update docs/ai/memory (tools.md: lint and runner commands; decisions.md: the catalog as single source) via /memory-add.
+  - Spec README: the Status table; finalize via xdd-meta after merge. Do not merge without the user's explicit OK.
+  - Check the traceability table below; every row ticked.
+
+## PRD → task traceability
+
+| PRD criterion | Task(s) |
+|---|---|
+| F1 entry fields; minimum entries; corrected rules; PA-50 contested | T1.1 |
+| F1 restated rule fails a test; read on demand, never imported | T1.4, T3.8 |
+| F2 intake and hand-off (AC1, AC6) | T2.4, T2.5 (handoff) |
+| F2 consumer contract, agentic, gate exit, delimiting (AC2–AC5) | T2.4, T2.5 (contract-first, port-gate-exit), T4.3 J1 |
+| F3 findings, set/pair, stale facts, data-not-instructions (AC1–AC5) | T2.4, T2.5 (audit-injection), T4.3 J2 |
+| F3 known defects #250–#253 (AC6) | T2.6 |
+| F4 profiles, idioms, small-local, unverified labels, delivery label | T1.2, T2.4, T4.3 J3 |
+| F5 all criteria | T1.3 |
+| F6 kit, report, judge rules, labels, consent, safety, no-difference | T2.1, T2.2, T2.4 (eval-loop.md), T4.3 |
+| F7 citations, measured corrections, overview, agentic, MUST BE USED unchanged | T3.1–T3.8, T1.4 (pin) |
+| F8 sizes and PA per added section; smaller on no difference | T2.4, T2.1 |
+| F9 nudge | T4.1 |
+| Constraint: works after install and under local testing | T4.2, T3.7 |
+| Success metric: audit recall ≥ 90% | T2.6 |
+| Success metric: lint ≤ 1 false alarm | T1.3 |
+| Success metric: zero duplicated rules | T3.8 |

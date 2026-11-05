@@ -52,6 +52,7 @@
 | 2026-11-05 | SDD approved; phase → PLAN | User approval |
 | 2026-11-05 | Decomposition tier: Incremental | Classifier recommended Incremental (7 components: catalog, skill, lint, eval runners, catalog test, migration, hook; 7 Must features; 46 ACs). Accepted. |
 | 2026-11-05 | Model tier: hard (override) | Classifier recommended frontier (novel_pattern=true: fingerprint-tested catalog entries; high_risks=4). User chose hard: the new pattern is a simple test and the High risks are covered by measurement, not by implementation difficulty. |
+| 2026-11-05 | Plan written: 4 phases, 24 tasks (catalog+lint+catalog test → skill+eval runners → measured migration per rule group → nudge, install check, E2E) | Deployment order from the SDD; each migration group measured before/after (ADR-4) |
 
 ## Context
 
