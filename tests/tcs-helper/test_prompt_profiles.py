@@ -11,7 +11,8 @@ import re
 import pytest
 
 from catalog_helpers import (
-    PA_TOKEN_RE, PROFILE_TARGETS, all_entries, fingerprints, grade, load_profile, profile_path,
+    EVIDENCE_GRADES, PA_TOKEN_RE, PROFILE_TARGETS, all_entries, cites_a_vendor, fingerprints, grade,
+    load_profile, profile_path, source_hosts,
 )
 
 PROFILE_TOPICS = ('Placement', 'Delimiters', 'Examples', 'Negatives', 'Emphasis', 'Literalness', 'Turn shape')
@@ -47,6 +48,24 @@ def test_profile_has_every_topic_with_guidance_source_date_and_evidence(target):
             problems.append(f"{where}: Date {fields['Date']!r} is not YYYY-MM-DD")
         if grade(fields.get('Evidence', '')) == 'vendor' and 'http' not in fields.get('Source', ''):
             problems.append(f'{where}: vendor-graded without a source URL')
+    assert not problems, '\n'.join(problems)
+
+
+@pytest.mark.parametrize('target', PROFILE_TARGETS)
+def test_profile_grades_follow_the_catalog_rule(target):
+    # Same enum and rule as catalog entries: vendor is a model vendor's own guidance, a study is research.
+    _, topics = load_profile(target)
+    problems = []
+    for topic, section in topics.items():
+        where = f'{target} / {topic}'
+        found = grade(section['fields'].get('Evidence', ''))
+        source = section['fields'].get('Source', '')
+        if found not in EVIDENCE_GRADES:
+            problems.append(f'{where}: {found!r} is not one of {sorted(EVIDENCE_GRADES)}')
+        if found == 'vendor' and not cites_a_vendor(source):
+            problems.append(f'{where}: graded vendor, Source cites no model vendor ({source_hosts(source)})')
+        if found == 'research' and 'http' not in source:
+            problems.append(f'{where}: research-graded without a source URL')
     assert not problems, '\n'.join(problems)
 
 

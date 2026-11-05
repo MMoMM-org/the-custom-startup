@@ -961,7 +961,7 @@ def lint_file(path, kind=None, display=None, anchor_cache=None, failures=None):
     for line, by_check in sorted(marks.items()):
         for check_id, reason in sorted(by_check.items()):
             if not reason:
-                findings.append(Finding(ctx.display, line, "E0", "lint-ok", "error", None,
+                findings.append(Finding(ctx.display, line, "E0", "lint-ok", "error", "uncatalogued",
                                         "lint-ok: {} has no reason, so it suppresses "
                                         "nothing".format(check_id)))
     for finding in findings:

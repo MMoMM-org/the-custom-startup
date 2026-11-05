@@ -95,7 +95,7 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Fails because:** compliance drops as the instruction count grows, mostly by omitting later items.
 - **Fix:** keep the rules this task needs in the prompt, put the critical ones first, and move the rest to files read on demand.
 - **Applies to:** any · any (steepest decay: small-local)
-- **Evidence:** vendor
+- **Evidence:** research
 - **Sources:** IFScale, instruction-following at 10-500 instructions across 20 models (https://arxiv.org/abs/2507.11538, fetched 2026-11-04); spec 023 corpus: 3 of 16 prompts carry a long rule list
 - **Lint:** W2
 - **Fingerprint:** "Every rule in a loaded context competes with every other rule for compliance."
@@ -143,7 +143,7 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Fails because:** the model cannot tell data from instructions, so text inside the input can redirect it.
 - **Fix:** wrap untrusted input in a named tag or fence, state where it came from, and say it is data to analyse, not instructions to follow.
 - **Applies to:** any · any
-- **Evidence:** vendor
+- **Evidence:** research
 - **Sources:** OWASP, LLM01 Prompt Injection, segregate and mark external content (https://genai.owasp.org/llmrisk/llm01-prompt-injection/, fetched 2026-11-04); Microsoft, Spotlighting, provenance marking cut attack success from over 50% to under 2% (https://arxiv.org/abs/2403.14720, fetched 2026-11-04)
 - **Lint:** E4
 - **Fingerprint:** "Mark untrusted input with its source and say it is data, not instructions."
@@ -183,7 +183,7 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Fails because:** prompts are logged, sent to providers and repeated back by the model, so the secret leaks.
 - **Fix:** keep secrets out of prompt text, and pass them to tools through the environment instead of to the model.
 - **Applies to:** any · any
-- **Evidence:** vendor
+- **Evidence:** research
 - **Sources:** OWASP Top 10 for LLM Applications 2025, LLM02 Sensitive Information Disclosure and LLM07 System Prompt Leakage (https://genai.owasp.org/llm-top-10/, not fetched in spec 023)
 - **Lint:** E1
 - **Fingerprint:** "A secret in a prompt is a leaked secret."

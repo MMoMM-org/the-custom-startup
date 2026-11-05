@@ -17,8 +17,8 @@ import pytest
 from catalog_helpers import (
     CATALOG_DIR, ENTRY_FILES, EVIDENCE_GRADES, EXPECTED, INDEX_LINK_RE, KINDS, LINT_CHECKS,
     PROFILE_TARGETS, REQUIRED_FIELDS, STATUSES, TARGETS,
-    all_entries, applies_to, fingerprints, github_slug, grade, index_rows, index_statuses,
-    profile_path, profile_topics,
+    all_entries, applies_to, cites_a_vendor, fingerprints, github_slug, grade, index_rows, index_statuses,
+    profile_path, profile_topics, source_hosts,
 )
 
 MAX_ENTRY_LINES = 12
@@ -249,3 +249,47 @@ def test_evidence_is_a_single_allowed_grade():
         if value and grade(value) not in EVIDENCE_GRADES
     ]
     assert not problems, '\n'.join(problems)
+
+
+def test_evidence_grades_are_the_five_from_solution_md():
+    # solution.md ENTITY: CatalogEntry, revised 2026-11-05: research split from vendor.
+    assert EVIDENCE_GRADES == {'vendor', 'research', 'measured', 'practitioner', 'unverified'}
+
+
+def test_each_entry_carries_the_grade_solution_md_gives_it():
+    entries = {e['id']: e for e in all_entries()}
+    problems = []
+    for entry_id, spec in sorted(EXPECTED.items()):
+        entry = entries.get(entry_id)
+        if not entry:
+            continue  # reported by test_entry_id_set_matches_initial_entries
+        found = grade(entry['fields'].get('Evidence', ''))
+        if spec['contested']:
+            # "contested" is a status, not a grade: the entry keeps its own grade and says so.
+            if entry['fields'].get('Status') != 'contested' or found not in EVIDENCE_GRADES:
+                problems.append(f'{entry_id}: contested row needs Status contested and one grade, has {found!r}')
+            continue
+        if found != spec['grade']:
+            problems.append(f"{entry['file']}:{entry['lineno']} {entry_id}: evidence {found!r}, solution.md {spec['grade']!r}")
+    assert not problems, '\n'.join(problems)
+
+
+def test_vendor_grade_means_a_model_vendor_source():
+    # A study or OWASP is research, however well it is cited; vendor is a model vendor's own guidance.
+    problems = [
+        f"{e['file']}:{e['lineno']} {e['id']}: graded vendor, Sources cite no model vendor ({source_hosts(e['fields'].get('Sources', ''))})"
+        for e in all_entries()
+        if grade(e['fields'].get('Evidence', '')) == 'vendor'
+        and not cites_a_vendor(e['fields'].get('Sources', ''))
+    ]
+    assert not problems, '\n'.join(problems)
+
+
+def test_research_graded_entries_cite_a_source_url():
+    uncited = [
+        f"{e['file']}:{e['lineno']} {e['id']}"
+        for e in all_entries()
+        if grade(e['fields'].get('Evidence', '')) == 'research'
+        and 'http' not in e['fields'].get('Sources', '')
+    ]
+    assert not uncited, f'research-graded entries without a Sources URL: {uncited}'

@@ -38,7 +38,7 @@ Entries for prompts an agent re-reads at every step of a loop: subagent briefs, 
 - **Fix:** apply PA-04, the general rule this entry specialises for agents: pair each forbidden action with an approved alternative such as stop and report.
 - **Applies to:** brief, agent, api-system · any
 - **Evidence:** practitioner
-- **Sources:** Gravity, "AI agent prompt vs traditional prompt" (https://gravity.fast/blog/ai-agent-prompt-vs-traditional-prompt/, fetched 2026-11-04); OWASP, LLM01 Prompt Injection, least privilege and human approval (https://genai.owasp.org/llmrisk/llm01-prompt-injection/, fetched 2026-11-04); graded practitioner, not vendor, because only Gravity states this entry's rule and OWASP backs human approval as an alternative, not the failure
+- **Sources:** Gravity, "AI agent prompt vs traditional prompt" (https://gravity.fast/blog/ai-agent-prompt-vs-traditional-prompt/, fetched 2026-11-04); OWASP, LLM01 Prompt Injection, least privilege and human approval (https://genai.owasp.org/llmrisk/llm01-prompt-injection/, fetched 2026-11-04); graded practitioner, not research, because only Gravity states this entry's rule and OWASP backs human approval as an alternative, not the failure
 - **Fingerprint:** "Give a blocked agent a sanctioned next step: stop and report, escalate, or ask."
 - **Status:** active
 

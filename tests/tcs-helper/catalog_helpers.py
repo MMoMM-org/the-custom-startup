@@ -4,8 +4,8 @@ The catalog, index and profile tests and the single-source scans all read the sa
 Markdown, so they parse it here once: a format change breaks one parser, not three
 copies that could drift apart and disagree about what the catalog contains.
 
-The expected ID set, the file each entry lives in, the lint check it names and its
-contested status are read from the INITIAL ENTRIES block of the spec's solution.md,
+The expected ID set, the file each entry lives in, the lint check it names, its
+evidence grade and its contested status are read from the INITIAL ENTRIES block of the spec's solution.md,
 so the tests are red on a missing or partial catalog instead of passing vacuously.
 """
 import re
@@ -21,7 +21,11 @@ ENTRY_FILES = ('core.md', 'agentic.md', 'instruction-files.md', 'porting.md', 'h
 
 KINDS = {'api-system', 'brief', 'chat-template', 'code', 'instruction-file', 'skill', 'agent', 'any'}
 TARGETS = {'claude', 'openai', 'google', 'small-local', 'any'}
-EVIDENCE_GRADES = {'vendor', 'measured', 'practitioner', 'unverified'}
+# solution.md ENTITY: CatalogEntry; vendor = a model vendor's own guidance, research = published research or a standards body.
+EVIDENCE_GRADES = {'vendor', 'research', 'measured', 'practitioner', 'unverified'}
+# Hosts of model vendors' own guidance; a vendor grade needs a source on one of them.
+VENDOR_HOSTS = ('anthropic.com', 'claude.com', 'openai.com', 'google.com', 'google.dev')
+URL_HOST_RE = re.compile(r'https?://([^/\s)]+)')
 STATUSES = {'active', 'contested', 'retired'}
 LINT_CHECKS = {'E1', 'E2', 'E3', 'E4', 'W1', 'W2', 'W3'}
 
@@ -42,7 +46,11 @@ PROFILE_TARGETS = ('anthropic', 'openai', 'google', 'small-local')
 # ---------------------------------------------------------------- expected set
 
 def initial_entries():
-    """Parse solution.md INITIAL ENTRIES into {id: {file, lint, contested}}."""
+    """Parse solution.md INITIAL ENTRIES into {id: {file, lint, grade, contested}}.
+
+    The grade is the first word of the row's last column (before any "Lint:"); a
+    contested row carries no expected grade, since "contested" is a status.
+    """
     text = SOLUTION_MD.read_text(encoding='utf-8')
     try:
         start = text.index('INITIAL ENTRIES')
@@ -67,10 +75,13 @@ def initial_entries():
                     f'{SOLUTION_MD}:{block_start + offset}: entry before any file heading: {line.strip()!r}'
                 )
             lint = re.search(r'Lint: (E\d|W\d)', line)
+            contested = bool(CONTESTED_RE.search(line))
+            grade_column = re.split(r'\s{2,}', line.split('Lint:')[0].strip())[-1]
             expected[entry_match.group(1)] = {
                 'file': current_file,
                 'lint': lint.group(1) if lint else None,
-                'contested': bool(CONTESTED_RE.search(line)),
+                'grade': None if contested else grade_column.split()[0],
+                'contested': contested,
             }
     return expected
 
@@ -135,6 +146,15 @@ def applies_to(value):
 def grade(value):
     """'measured (corpus: 3 of 16)' -> 'measured'; a compound such as 'vendor + measured' stays whole."""
     return ' '.join(strip_parentheticals(value).split())
+
+
+def source_hosts(value):
+    """Hosts of every URL in a Sources or Source value."""
+    return URL_HOST_RE.findall(value)
+
+
+def cites_a_vendor(value):
+    return any(host == v or host.endswith('.' + v) for host in source_hosts(value) for v in VENDOR_HOSTS)
 
 
 def all_entries():

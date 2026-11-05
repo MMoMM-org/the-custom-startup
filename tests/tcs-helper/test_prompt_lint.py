@@ -398,6 +398,18 @@ def test_json_output_shape():
     assert result.returncode == 1
 
 
+def test_every_finding_names_an_entry_or_uncatalogued():
+    # SDD Quality Requirements: a finding names its catalog entry; E0 has none, so it says "uncatalogued".
+    text = _run(FIXTURES / "suppression.md").stdout.splitlines()
+    data = json.loads(_run("--json", FIXTURES / "suppression.md").stdout)
+    e0_json = [f for f in data["findings"] if f["check"] == "E0"]
+    e0_text = [line for line in text if " E0 " in line]
+    assert e0_json and e0_text
+    assert all(f["entry"] == "uncatalogued" for f in e0_json)
+    assert all(line.endswith("[uncatalogued]") for line in e0_text)
+    assert all(f["entry"] for f in data["findings"])
+
+
 def test_kind_override_turns_markdown_checks_off_for_code(tmp_path):
     target = tmp_path / "notes.md"
     target.write_text("# Notes\n\n[x](gone.md)\n")
