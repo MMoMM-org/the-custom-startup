@@ -92,7 +92,7 @@ Consequence of not solving: the same defects keep being written. The user's assu
 **Catalog maintainer (TCS skill maintainer).** Same person in a different role, with a distinct goal.
 - **Demographics:** Maintains skill-author, agent-author, memory-claude-md-optimize and the docs in docs/about/.
 - **Goals:** Change a prompting rule once and have every authoring skill apply it. Know which rules are vendor-backed, measured, practitioner opinion or unverified.
-- **Pain Points:** Rules are duplicated across skills without sync. Contested rules (strip rationale, authority language) sit next to sound ones with nothing marking them. ADR-4 constrains one of them.
+- **Pain Points:** Rules are duplicated across skills without sync. Contested rules (strip rationale, authority language) sit next to sound ones with nothing marking them. repo ADR-4 constrains one of them.
 
 **Orchestrating agent (Claude in a workflow).** Not a human, but a real consumer.
 - **Demographics:** Claude running a TCS workflow (implement, review, parallel-agents, xdd) that writes subagent briefs at runtime.
@@ -159,7 +159,7 @@ Consequence of not solving: the same defects keep being written. The user's assu
     - no authority language, a restated terminal constraint allowed
     - 3–5 diverse examples, each behaviour also stated as a rule
     - Each corrected entry cites its vendor sources
-  - [ ] Given the description authority rule (`MUST BE USED`), When it appears in the catalog, Then it is marked contested with a pointer to ADR-4 and its wording is unchanged
+  - [ ] Given the description authority rule (`MUST BE USED`), When it appears in the catalog, Then it is marked contested with a pointer to repo ADR-4 and its wording is unchanged
   - [ ] Given any consuming skill, When the repo's tests run, Then a test fails if that skill restates a catalog rule instead of referring to the catalog
   - [ ] Given the catalog, When an agent loads it, Then it is read on demand, never imported into every context (declined.md 2026-09-05)
 
@@ -208,8 +208,8 @@ Consequence of not solving: the same defects keep being written. The user's assu
   - [ ] Given a prompt, When the lint runs, Then it reports as warnings: emphasis density above a threshold, instruction count above a threshold, and paragraphs made only of prohibitions
   - [ ] Given checks known for high false-alarm rates (history words, mirrored Always/Never pairs, contradictions, examples without a stated rule), When they are needed, Then they are routed to review or the judge, not reported by the lint
   - [ ] Given the repo's current prompt files, When the lint runs on all of them, Then its errors contain no more than one false alarm, and every error-level suppression is visible in the file it applies to
-  - [ ] Given frontmatter descriptions with `MUST BE USED`, When the lint runs, Then they are not flagged (ADR-4)
-  - [ ] Given the lint fails internally, When it runs from a hook, Then it reports the failure and does not block the write
+  - [ ] Given frontmatter descriptions with `MUST BE USED`, When the lint runs, Then they are not flagged (repo ADR-4)
+  - [ ] Given the lint fails internally, When it runs, Then it exits with a distinct code and the caller reports "lint failed" and continues; nothing is blocked *(amended 2026-11-05: no hook runs the lint)*
   - [ ] Given a file to lint, When the lint runs, Then it never executes the file's code
 
 #### Feature 6: Eval kit and local before/after run
@@ -248,7 +248,7 @@ Consequence of not solving: the same defects keep being written. The user's assu
 - **User Story:** As a prompt author, I want a reminder when I write a file of a known prompt kind, so that I use prompt-author without having to remember it.
 - **Acceptance Criteria:**
   - [ ] Given a write to an AGENTS.md, GEMINI.md, `*.prompt.md` or a `prompts/` file, When the write completes, Then a one-line reminder names prompt-author, and it does not block the write
-  - [ ] Given a write to a SKILL.md, agent file or CLAUDE.md, When the write completes, Then the existing reminders keep naming their own skills
+  - [ ] Given a write to a SKILL.md or agent file, When the write completes, Then the existing reminders keep naming their own skills; CLAUDE.md gets no reminder *(amended 2026-11-05: no CLAUDE.md reminder exists)*
 
 ### Could Have Features
 
@@ -258,7 +258,7 @@ Consequence of not solving: the same defects keep being written. The user's assu
 
 ### Won't Have (This Phase)
 
-- **No change to `MUST BE USED` or ADR-4.** Changing it needs its own measured trigger/overtrigger study and a superseding ADR.
+- **No change to `MUST BE USED` or repo ADR-4.** Changing it needs its own measured trigger/overtrigger study and a superseding ADR.
 - **No live runs against OpenAI or Gemini.** The Gemini key must not be used. OpenAI has no key. These targets get kits only.
 - **No automatic prompt optimisation loops** (OPRO/DSPy style). Research shows unguided LLM rewrites miss real error causes. The skill proposes and measures, the author decides.
 - **No authoring-model routing.** No measured difference between Opus and Sonnet authors, so the skill does not recommend switching models.
@@ -299,6 +299,7 @@ Consequence of not solving: the same defects keep being written. The user's assu
 
 - **Adoption:** Every new prompt outside skills, agents and CLAUDE.md written in this repo after release goes through prompt-author: a write or audit report exists for it. Within 30 days of release, all subagent brief templates in tcs-workflow are audited (Feature 12 if done, else one by one).
 - **Engagement:** Each audited prompt that receives an accepted behavioural fix gets an eval run in at least half the cases.
+- *Adoption and engagement are checked by a manual review 30 days after release (git log of prompt files vs. eval reports the maintainer kept); the skill keeps no usage log (amended 2026-11-05).*
 - **Quality:**
   - Audit recall: the documented defects of the corpus (16 prompts) and of #250–#253 are found in ≥ 90% of cases.
   - Lint precision: ≤ 1 false-alarm error across the repo's prompt files.
@@ -332,7 +333,7 @@ No runtime telemetry. All tracking comes from artefacts the skill and tests prod
 - `plugin eval` always runs with `--no-publish` and a cost ceiling; its default publishes reports, including prompts, to claude.ai.
 - The Gemini key must not be used. Live targets are Claude via the local CLI and Ollama on the host. Every external send needs per-run consent naming the provider.
 - The shared catalog is never `@`-imported into every context (declined 2026-09-05).
-- ADR-4 holds: `MUST BE USED` in descriptions is not changed.
+- repo ADR-4 holds: `MUST BE USED` in descriptions is not changed.
 - A new plugin skill ships with at least one eval shown to fail without it (skill-author Iron Law).
 - **Local testing copies single skill directories.** A shared catalog outside one skill directory must still work under local testing and after marketplace install. How is SDD scope; that it works is a requirement.
 - Bash 3.2 and BSD/GNU differences apply to any shell part (active.md).

@@ -13,19 +13,19 @@ phase: 3
 
 **Specification References**:
 - `[ref: SDD/Directory Map — C6 migration]`
-- `[ref: SDD/Architecture Decisions ADR-4]` — eval case first, proving signal, revert on regression
+- `[ref: SDD/Architecture Decisions SDD-ADR-4]` — eval case first, proving signal, revert on regression
 - `[ref: SDD/Acceptance Criteria PRD F7]`
 - `[ref: research-internal.md (A) rule inventory and (F) proposed changes]` — exact file:line of each copy
 - `[ref: Phase 1 T1.4 allow-list]` — pre-migration copies each task here must remove
 
 **Key Decisions**:
-- One rule group per task. Each task follows the same five beats:
+- One rule group per task, with at least 5 eval cases per group (varied tasks for the same rule), each run 3 times. Each task follows the same five beats:
   1. eval case, run on the current skill (before);
   2. proving signal;
   3. correction plus the switch to citations;
   4. run again (after);
   5. keep, or revert for that skill.
-- A drop beyond noise means the after score is lower and the paired CI (eval_compare) excludes 0. Then the correction is reverted for that skill. The catalog entry stays and records where it was reverted.
+- A drop beyond noise means `eval_compare.py` reports "a better" (before better) over ≥ 5 cases, i.e. the paired CI over cases lies below 0. "insufficient cases" is not a pass: add cases. Then the correction is reverted for that skill. The catalog entry stays and records where it was reverted.
 - The `MUST BE USED` text in agent-author is not touched (pinned by T1.4).
 - Testing a migrated skill locally needs prompt-author copied too.
 
@@ -44,7 +44,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   1. Prime: Read the 8 description-rule and 5 purity-rule copies `[ref: research-internal.md (A) rows "Description = triggers only", "Front-load trigger", "Strip rationale"]` and PA-50–PA-52.
   2. Test: Remove the description-rule entries from the T1.4 allow-list. The test fails on the copies.
   3. Implement: Replace each copy in skill-author and agent-author with a citation of PA-51/PA-52, and PA-50 where authority language is mentioned. The `MUST BE USED` sentences stay verbatim.
-  4. Validate: T1.4 passes for these entries. Run agent-author's `evals/pressure-scenarios.md` description scenarios once by hand and record the verdicts. The wording is unchanged in effect, so no eval delta is expected.
+  4. Validate: T1.4 passes for these entries; remove the strict-xfail markers for skill-author and agent-author in the per-consumer citation check. Run agent-author's `evals/pressure-scenarios.md` description scenarios once by hand and record the verdicts. The wording is unchanged in effect, so no eval delta is expected.
   5. Success: The description rules are stated once, in harness.md `[ref: PRD/F7 AC1; PRD/F7 AC5]`
 
 - [ ] **T3.2 Rationale rule group (PA-01, PA-02)** `[activity: skill-authoring]` `[component: C6]`
@@ -68,10 +68,10 @@ Makes the three authoring skills consume the shared catalog with the corrected r
 
      Run it before, prove the signal, and record the score.
   3. Implement: Merge conventions:301-307 and :311-318 into a citation of PA-03. In persuasion-principles.md, mark the Authority principle "unverified for current models" with the vendor counter-evidence. Keep the Red Flags tables.
-  4. Validate: Run after, compare, keep or revert, and record. Additionally run the tcs-workflow discipline evals (`xdd-tdd-pressure*`) once before and once after, because those skills were written under the old rule.
+  4. Validate: Run after, compare, keep or revert, and record. Additionally run the tcs-workflow discipline eval `xdd-tdd-pressure-invoked` once before and once after (`xdd-tdd-pressure` scores 0 in both arms, so it carries no signal), because those skills were written under the old rule.
   5. Success: The correction is measured, and discipline compliance is not regressed beyond noise `[ref: PRD/F7 AC2; PRD/Risks row 1]`
 
-- [ ] **T3.4 Examples rule group (PA-11)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]`
+- [ ] **T3.4 Examples rule group (PA-11)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]` — T3.4–T3.6 run in parallel, but their edits to `plugins/tcs-helper/evals/README.md` and the T1.4 allow-list are merged one at a time
 
   1. Prime: Read skill-author conventions:124 `[ref: research-internal.md (F)6]`.
   2. Test: Create `plugins/tcs-helper/evals/skill-author-diverse-examples/`:
@@ -93,14 +93,14 @@ Makes the three authoring skills consume the shared catalog with the corrected r
      Run it before, prove the signal, and record the score.
   3. Implement: Change the rubric to reward only what README and code lack, citing PA-31. The rationale scoring cites PA-01.
   4. Validate: Run after, compare, keep or revert, and record.
-  5. Success: The rubric no longer rewards a generic overview `[ref: PRD/F7 AC3]`
+  5. Success: The rubric no longer rewards a generic overview; the memory-claude-md-optimize strict-xfail marker is removed `[ref: PRD/F7 AC3]`
 
 - [ ] **T3.6 agent-author agentic entries (PA-20–PA-24)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]`
 
   1. Prime: Read the agent-author conventions and output-formats, and the Gravity table `[ref: research-external.md § Agent prompts vs one-shot prompts]`.
   2. Test: Create `plugins/tcs-helper/evals/agent-author-agentic-contract/`:
      - Task: write an agent for a multi-step job with a parsed return.
-     - Grader: an llm grader requires stated behaviour when unclear, stop conditions, the goal rather than a fixed script, and a refusal with an alternative.
+     - Grader: an llm grader requires stated behaviour when unclear, stop conditions, the goal rather than a fixed script, a refusal with an alternative, and a scope fence (PA-24).
 
      Run it before, prove the signal, and record the score.
   3. Implement: Add citations of PA-20–PA-24 where agent-author defines what an agent body contains. This is an addition, not a correction.
@@ -113,7 +113,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   2. Test: T1.4 already covers fingerprints in `docs/about/`. Remove the docs entries from the allow-list and watch it fail.
   3. Implement:
      - principles.md:146: remove the stale eval claim, pointing to `plugins/*/evals/`.
-     - principles.md:43: mark description authority language as contested, citing PA-50 and ADR-4.
+     - principles.md:43: mark description authority language as contested, citing PA-50 and repo ADR-4.
      - CLAUDE.md: add that testing skill-author, agent-author or memory-claude-md-optimize locally also needs prompt-author copied.
      - Update the tcs-helper README with the new skill.
   4. Validate: `pytest -q tests/test_docs_links.py tests/test_claude_md_imports.py tests/tcs-helper/test_prompt_catalog.py` passes.

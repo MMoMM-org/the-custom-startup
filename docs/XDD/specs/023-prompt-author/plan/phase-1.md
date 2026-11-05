@@ -15,7 +15,7 @@ phase: 1
 - `[ref: SDD/Application Data Models]` — CatalogEntry, the initial entries PA-01–PA-52, CatalogIndex, PortProfile
 - `[ref: SDD/Implementation Examples]` — entry format, fingerprint test trace, W1 trace, lint test examples
 - `[ref: SDD/Internal API Changes]` — prompt_lint.py CLI contract and exit codes
-- `[ref: SDD/Architecture Decisions]` — ADR-1, ADR-2, ADR-5, ADR-6
+- `[ref: SDD/Architecture Decisions]` — SDD-ADR-1, SDD-ADR-2, SDD-ADR-5, SDD-ADR-6
 - `[ref: research-internal.md (A)]` — sources of each migrating rule; `[ref: research-external.md §1-§5]` — evidence for entries and profiles
 - `[ref: research-technical.md §2]` — measured false-alarm rates
 
@@ -37,7 +37,7 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
 - [ ] **T1.1 Failure catalog and index** `[activity: technical-writing]` `[component: C1]`
 
   1. Prime: Read the entry format and the initial entry list `[ref: SDD/Application Data Models]`, then the rule inventory and its contradictions `[ref: research-internal.md (A), (F)]`. Read the vendor quotes for the corrected rules `[ref: research-external.md §1-§2]`, the measured modes `[ref: experiment/results.md]` and the corpus modes `[ref: research-corpus.md NEW failure modes]`.
-  2. Test: T1.4 is the executable check of this task (format fields, unique IDs, index ↔ sections agree). Write the parts of T1.4 that check format, IDs and the index *first* and see them fail on an empty catalog directory.
+  2. Test: T1.4 is the executable check of this task (format fields, unique IDs, index ↔ sections agree). Write the parts of T1.4 that check format, IDs and the index *first*. They assert the exact INITIAL ENTRIES ID set from solution.md, so they are red on an empty catalog rather than passing vacuously.
   3. Implement:
      - Create `catalog/index.md`, `core.md`, `agentic.md`, `instruction-files.md`, `porting.md` and `harness.md` under `plugins/tcs-helper/skills/prompt-author/reference/catalog/`, with entries PA-01–PA-52 as listed.
      - Each entry stays at or under 12 lines.
@@ -51,11 +51,11 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
   5. Success:
      - [ ] Every mode the PRD lists has an entry, with tell, failure, fix, scope and evidence grade `[ref: PRD/F1 "at least these entries"]`
      - [ ] The three contradicted rules appear only in corrected form with sources `[ref: PRD/F1 "stated in corrected form"]`
-     - [ ] PA-50 is contested, pointing to ADR-4, wording of the rule unchanged `[ref: PRD/F1 "marked contested"]`
+     - [ ] PA-50 is contested, pointing to repo ADR-4, wording of the rule unchanged `[ref: PRD/F1 "marked contested"]`
 
-- [ ] **T1.2 Port profiles** `[activity: technical-writing]` `[component: C1]` `[parallel: true]`
+- [ ] **T1.2 Port profiles** `[activity: technical-writing]` `[component: C1]` `[parallel: true]` — after T1.1 (profiles cite its IDs, and its checks extend the T1.4 test file); parallel with T1.3 only
 
-  1. Prime: Read the PortProfile model and ADR-6 `[ref: SDD/Application Data Models; SDD/Architecture Decisions ADR-6]`, the vendor guidance and divergences `[ref: research-external.md §1]`, and the T5 findings `[ref: experiment/results.md T5 rows, Observations 3]`.
+  1. Prime: Read the PortProfile model and SDD-ADR-6 `[ref: SDD/Application Data Models; SDD/Architecture Decisions SDD-ADR-6]`, the vendor guidance and divergences `[ref: research-external.md §1]`, and the T5 findings `[ref: experiment/results.md T5 rows, Observations 3]`.
   2. Test: Add to T1.4: every profile file has the topics placement, delimiters, examples, negatives, emphasis, literalness and turn shape, and every topic has source, date and evidence. Run it and see it fail before the profiles exist.
   3. Implement: Create `reference/profiles/{anthropic,openai,google,small-local}.md`.
      - small-local grades turn shape and gate exits as `measured` (T5). Everything else in small-local is `unverified`.
@@ -65,10 +65,13 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
 
 - [ ] **T1.3 Prompt lint** `[activity: backend-tooling]` `[component: C3]` `[parallel: true]`
 
-  1. Prime: Read the CLI contract `[ref: SDD/Internal API Changes]`, ADR-5, the W1 trace `[ref: SDD/Implementation Examples]` and the lint-as-test precedent `tests/test_shell_portability_lints.py`. Read the measured false-alarm table `[ref: research-technical.md §2]` and `plugins/tcs-helper/scripts/lib/semantic_detector.py:128-135`.
+  1. Prime: Read the CLI contract `[ref: SDD/Internal API Changes]`, SDD-ADR-5, the W1 trace `[ref: SDD/Implementation Examples]` and the lint-as-test precedent `tests/test_shell_portability_lints.py`. Read the measured false-alarm table `[ref: research-technical.md §2]` and `plugins/tcs-helper/scripts/lib/semantic_detector.py:128-135`.
   2. Test: Write `tests/tcs-helper/test_prompt_lint.py` with fixtures under `tests/tcs-helper/fixtures/prompt_lint/`:
      - one positive and one negative fixture per check E1–E4 and W1–W3;
-     - E4 flags semantic_detector.py within lines 128–135;
+     - E4 flags semantic_detector.py at the first line of both prompt literals: 128–136 (#253) and 94–98 (`_claude_contradiction`);
+     - E4 does not treat quotes as a delimiter, and does treat a `<tag>…</tag>` pair or a fence as one;
+     - E3: fixtures for `~`/URL/absolute targets (skipped) and for anchors with a dash, slash, backtick and a duplicate heading (GitHub slug rule);
+     - W1 does not count `CRITICAL`, inline code or enum listings;
      - frontmatter `MUST BE USED` is not flagged;
      - `lint-ok: <check> <reason>` suppresses on the same line and on the line above, and a suppression without a reason does not count;
      - fenced blocks are skipped except for E1;
@@ -84,34 +87,34 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
      - a check registry with levels;
      - kind inference from path patterns;
      - text and `--json` output;
-     - the W1/W2/W3 thresholds from ADR-5.
+     - the W1/W2/W3 thresholds from SDD-ADR-5.
 
-     Run `--repo` and resolve every error, either by a fix that is in scope or by a `lint-ok` with a reason. #253 is the exception: semantic_detector.py gets a `lint-ok: E4 tracked in #253` suppression, not a fix.
+     Run `--repo` over the prompt-file set defined in the SDD CLI contract (with its exclusions), and resolve every error, either by a fix that is in scope or by a `lint-ok` with a reason. semantic_detector.py is Must Not Touch: its two E4 findings go into a `KNOWN_OPEN` allow-list in test_prompt_lint_repo.py, keyed by path, check and issue number (#253 for 128–136; for 94–98 the issue the user decides on — extend #253 or a new issue, ask before writing to GitHub). Re-run the W1/W2 calibration on this set and record the numbers.
   4. Validate: Both test files pass on ubuntu and macOS (CI). `--repo` takes < 10 s. Error-level false alarms on the repo are ≤ 1, each one listed in the commit message.
   5. Success:
-     - [ ] E1–E4 are errors and W1–W3 are warnings, with thresholds as in ADR-5 `[ref: PRD/F5 AC1, AC2]`
+     - [ ] E1–E4 are errors and W1–W3 are warnings, with thresholds as in SDD-ADR-5 `[ref: PRD/F5 AC1, AC2]`
      - [ ] High false-alarm checks are absent from the registry `[ref: PRD/F5 "routed to review or the judge"]`
      - [ ] The repo run has ≤ 1 false alarm and every suppression is visible with its reason `[ref: PRD/F5 "no more than one false alarm"]`
-     - [ ] ADR-4 descriptions are not flagged, the lint fails open (exit 2) and never executes code `[ref: PRD/F5 AC5-AC7]`
+     - [ ] repo ADR-4 descriptions are not flagged, an internal failure exits 2 (the skill continues), and the lint never executes code `[ref: PRD/F5 AC5-AC7 (AC6 amended)]`
 
 - [ ] **T1.4 Catalog consistency test** `[activity: testing]` `[component: C5]`
 
-  1. Prime: Read the fingerprint trace `[ref: SDD/Implementation Examples]`, ADR-2, and the precedent `tests/test_model_ladder.py` (slicing by heading).
+  1. Prime: Read the fingerprint trace `[ref: SDD/Implementation Examples]`, SDD-ADR-2, and the precedent `tests/test_model_ladder.py` (slicing by heading).
   2. Test: Create `tests/tcs-helper/test_prompt_catalog.py` with these checks:
      - every `## PA-NN` section has all CatalogEntry fields;
      - IDs are unique and every index row matches a section, and vice versa;
      - no fingerprint occurs in any git-tracked `.md` under `plugins/` or `docs/about/` outside `catalog/`;
      - every `PA-NN` token outside the catalog resolves to an active entry;
      - no file contains an `@`-import of a catalog file;
-     - the documented `plugin eval` commands in prompt-author carry `--no-publish`;
+     - every `claude plugin eval` command in any `.md` under `plugins/tcs-helper/` (eval-loop.md, evals/README.md once they exist) carries `--no-publish` and `--output-dir`, and — from T2.4 on — eval-loop.md must exist (an `xfail(strict=True)` removed in T2.4);
      - the current `MUST BE USED` sentences in agent-author are pinned.
 
-     The "consumers cite an ID" check is written now and marked `xfail(strict=True)` with reason "Phase 3 migrates consumers". It must flip to pass in Phase 3. Seed the test with one deliberate copy and one dead ID in temporary fixture files and confirm both fail.
+     The "consumers cite an ID" check is parametrised per consumer (skill-author, agent-author, memory-claude-md-optimize), each marked `xfail(strict=True)`. Each marker is removed in the Phase 3 task that makes that consumer cite: skill-author and agent-author in T3.1, memory-claude-md-optimize in T3.5. Seed the test with one deliberate copy and one dead ID in temporary fixture files and confirm both fail.
   3. Implement: Fix catalog fingerprints that collide with existing text in the repo. A collision means the fingerprint is not distinctive or the rule is still copied. A copy found now is recorded for Phase 3 and allow-listed in the test with the Phase 3 task ID, never silently.
-  4. Validate: `pytest -q tests/tcs-helper/test_prompt_catalog.py` passes, with only the allow-listed pre-migration copies and the strict xfail. Runtime < 5 s.
+  4. Validate: `pytest -q tests/tcs-helper/test_prompt_catalog.py` passes, with only the allow-listed pre-migration copies and the per-consumer strict xfails. Runtime < 5 s.
   5. Success:
      - [ ] A copied fingerprint, a dead or retired ID, or an `@`-import fails the test with file:line `[ref: PRD/F1 AC5, AC6]`
-     - [ ] The allow-list of pre-migration copies is explicit and owned by Phase 3 tasks `[ref: SDD/ADR-2]`
+     - [ ] The allow-list of pre-migration copies is explicit and owned by Phase 3 tasks `[ref: SDD/SDD-ADR-2]`
 
 - [ ] **T1.5 Phase Validation** `[activity: validate]`
 
@@ -119,6 +122,6 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
   - Run `prompt_lint.py --repo`. Both pass.
   - Verify against the SDD:
     - the entry list matches `solution.md` § Application Data Models (INITIAL ENTRIES);
-    - the lint registry matches ADR-5;
-    - the profiles match ADR-6.
+    - the lint registry matches SDD-ADR-5;
+    - the profiles match SDD-ADR-6.
   - Commit after each task. Record the measured repo lint numbers (errors, suppressions, W1 hits) in this file under a "Phase 1 results" heading.

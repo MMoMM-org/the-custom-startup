@@ -12,13 +12,13 @@ phase: 4
 **GATE**: Read all referenced files before starting this phase.
 
 **Specification References**:
-- `[ref: SDD/Architecture Decisions ADR-8]`
+- `[ref: SDD/Architecture Decisions SDD-ADR-8]`
 - `[ref: SDD/Implementation Gotchas]` — installed-layout verification
 - `[ref: SDD/Acceptance Criteria]` — the full list used in T4.4
 - `[ref: PRD/Success Metrics]`
 
 **Key Decisions**:
-- CLAUDE.md gets no reminder (ADR-8). The SKILL.md and agent reminders stay unchanged.
+- CLAUDE.md gets no reminder (SDD-ADR-8). The SKILL.md and agent reminders stay unchanged.
 - The install check runs against a scratch `CLAUDE_CONFIG_DIR`, never the user's real plugin cache.
 
 **Dependencies**:
@@ -32,7 +32,7 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
 
 - [ ] **T4.1 Write-time nudge** `[activity: backend-tooling]` `[component: C7]`
 
-  1. Prime: Read `plugins/tcs-helper/scripts/authoring_reminder.py`, `tests/tcs-helper/test_authoring_reminder.py` and ADR-8.
+  1. Prime: Read `plugins/tcs-helper/scripts/authoring_reminder.py`, `tests/tcs-helper/test_authoring_reminder.py` and SDD-ADR-8.
   2. Test: Extend test_authoring_reminder.py:
      - AGENTS.md, GEMINI.md, `x.prompt.md` and `prompts/a.md` each give exactly one reminder naming prompt-author;
      - CLAUDE.md gives none;
@@ -47,10 +47,11 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
   1. Prime: Read the SDD Deployment View and the gotcha "Verify the installed layout once before release".
   2. Test: Expected result: a consumer skill in an installed copy resolves `../prompt-author/reference/catalog/core.md`.
   3. Implement:
-     - Install the branch's tcs-helper into a scratch `CLAUDE_CONFIG_DIR`.
-     - Start `claude -p` with the harness isolation flags but this plugin enabled, and ask it to open skill-author and quote PA-01 via its link.
+     - Build the installed layout in scratch: try `claude plugin` install from the local marketplace path into a scratch `CLAUDE_CONFIG_DIR`; if that needs a login, copy `plugins/tcs-helper/` to `<scratch>/plugins/cache/the-custom-startup/tcs-helper/<ver>/`, mirroring the cache.
+     - Resolve every `../prompt-author/` link of every consumer skill on disk inside that copy (a script, not a model).
+     - Optional model check: without `--disable-slash-commands` (it disables skills) and with the plugin enabled explicitly, ask for PA-01 via skill-author's link.
      - Remove the scratch dir afterwards.
-  4. Validate: The quote matches the catalog text. Record the command and the result in the spec README Decisions Log.
+  4. Validate: Every link resolves on disk. Record the commands and the result in the spec README Decisions Log.
   5. Success: The cross-skill links survive install `[ref: PRD/Constraints "must still work under local testing and after marketplace install"]`
 
 - [ ] **T4.3 End-to-end run on real prompts** `[activity: validate]`
@@ -60,7 +61,7 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
   3. Implement: With the installed skill, run three journeys:
      - **J2 + J4:** audit `docs/templates/setup-perplexity-space.md` (corpus #2), accept fixes, then build the kit and run before/after on `claude:haiku`.
      - **J3 + J4:** port `docs/templates/prd-prompt.md` to `ollama:qwen3.5:35b-a3b`, then before/after on Ollama. This uses the T5 setup, so compare against experiment/results.md.
-     - **J1:** write a brief for a fixture orchestrator that parses a status.
+     - **J1:** write a brief for a fixture orchestrator that parses a status, then run a T2-style contract kit of ≥ 10 cases on it (contract-coverage KPI ≥ 95%).
 
      Validate the judge on one criterion with ~20 labels from the user (T2.2 flow). Ask for consent before every run.
   4. Validate: The reports exist, each with verdict, judge validation state and cost. The templates themselves are not committed changed unless the user approves (Technical Debt: docs/templates are out of scope).
@@ -90,6 +91,7 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
 | F7 citations, measured corrections, overview, agentic, MUST BE USED unchanged | T3.1–T3.8, T1.4 (pin) |
 | F8 sizes and PA per added section; smaller on no difference | T2.4, T2.1 |
 | F9 nudge | T4.1 |
+| Success metric: contract coverage ≥ 95% | T4.3 J1 |
 | Constraint: works after install and under local testing | T4.2, T3.7 |
 | Success metric: audit recall ≥ 90% | T2.6 |
 | Success metric: lint ≤ 1 false alarm | T1.3 |

@@ -53,6 +53,10 @@
 | 2026-11-05 | Decomposition tier: Incremental | Classifier recommended Incremental (7 components: catalog, skill, lint, eval runners, catalog test, migration, hook; 7 Must features; 46 ACs). Accepted. |
 | 2026-11-05 | Model tier: hard (override) | Classifier recommended frontier (novel_pattern=true: fingerprint-tested catalog entries; high_risks=4). User chose hard: the new pattern is a simple test and the High risks are covered by measurement, not by implementation difficulty. |
 | 2026-11-05 | Plan written: 4 phases, 24 tasks (catalog+lint+catalog test → skill+eval runners → measured migration per rule group → nudge, install check, E2E) | Deployment order from the SDD; each migration group measured before/after (ADR-4) |
+| 2026-11-05 | Spec validated by 3 independent agents (consistency, alignment, coverage: 53 findings, overlapping); fixes applied to SDD, plan and PRD | Main changes: semantic_detector.py stays untouched (KNOWN_OPEN allow-list instead of lint-ok); second undelimited prompt at l.94-98 found (not in #253); E1-E4/W1-W3, the --repo file set, grader subset, error-run handling, judge hardening and repeatable consent defined; judge == author refused (PRD F6); `--max-cost-usd` required; eval_compare `run` hard-codes --no-publish/--output-dir; SDD ADRs renamed SDD-ADR-n vs repo ADR-4 |
+| 2026-11-05 | SDD-ADR-4 revised: ≥5 cases per migration rule group instead of 1 | With one case the paired CI is [d, d], so one flipped run would force a revert; est. cost rises to ~$40-60 |
+| 2026-11-05 | PRD amended: F5 AC6 (no hook runs the lint), F9 AC2 (no CLAUDE.md reminder exists), adoption/engagement measured by 30-day manual review | Validation found ACs with no deliverable; the design's behaviour is the intended one |
+| 2026-11-05 | Judge config for this machine goes into global ~/.claude/startup.toml, not the tracked repo file | A tracked qwen2.5 judge would make every contributor's runs exit 1 |
 
 ## Context
 
