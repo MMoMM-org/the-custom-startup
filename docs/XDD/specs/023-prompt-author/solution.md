@@ -275,7 +275,7 @@ Install: python3 -m pip install -r requirements-dev.txt   # test-only deps (pyte
 Dev:     cp -r plugins/tcs-helper/skills/<skill> ~/.claude/plugins/{cache,marketplaces}/...  # CLAUDE.md local-testing procedure; now also copy prompt-author
 Test:    pytest -q -rs            # CI; bats suites via the bats job
 Lint:    python3 plugins/tcs-helper/skills/prompt-author/scripts/prompt_lint.py --repo   # NEW
-Eval:    python3 plugins/tcs-helper/skills/prompt-author/scripts/eval_compare.py run --plugin plugins/tcs-helper --case '<glob>' --base main --runs 3 --max-cost-usd 10 --out <scratch>   # wraps claude plugin eval with --no-publish/--output-dir
+Eval:    python3 plugins/tcs-helper/skills/prompt-author/scripts/eval_compare.py run --plugin plugins/tcs-helper --case '<glob>' --base main --runs 3 --max-cost-usd 10 --out <scratch> --confirm-provider claude   # wraps claude plugin eval with --no-publish/--output-dir; --allow-tools optional
 Build:   none (merge to main; auto-bump workflow sets versions)
 ```
 
@@ -345,7 +345,8 @@ plugins/tcs-helper/skills/prompt-author/
 ├── scripts/
 │   ├── prompt_lint.py               # NEW C3
 │   ├── prompt_eval.py               # NEW C4: run | label | agree
-│   └── eval_compare.py              # NEW C4: diff two plugin-eval --json files
+│   ├── prompt_eval_stats.py         # NEW C4: statistics, report and label code shared by prompt_eval.py and eval_compare.py
+│   └── eval_compare.py              # NEW C4: run (plugin eval at base ref vs working tree, consent + E1 gated) | compare (diff two plugin-eval --json files)
 ```
 
 **Component**: C3/C4/C5 tests
