@@ -285,8 +285,8 @@ def _plugin_eval(plugin, cwd, args, out, side):
         raise Refused("plugin eval ({}) timed out after {}s; log: {}".format(
             side, PLUGIN_EVAL_TIMEOUT_S, log))
     result = out / (side + ".json")
-    # Exit 2 is taken to be plugin eval's cost-ceiling stop (assumed, not documented);
-    # compare() reads partial from the result file, not from this code.
+    # plugin eval exits 2 when --max-cost-usd stops it (its --help); compare()
+    # reads partial from the result file, not from this code.
     if code not in (EXIT_OK, EXIT_CEILING) or not result.is_file():
         raise Refused("plugin eval ({}) exited {} without a result; log: {}".format(
             side, code, log))
