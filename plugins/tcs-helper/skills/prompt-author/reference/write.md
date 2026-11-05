@@ -30,10 +30,6 @@ they will read.
 
 ## Draft
 
-Place the prompt by kind: for api-system, chat-template and instruction-file the text is the system
-prompt or the first message; for brief and code it is the user message, with case input appended in a
-delimited block.
-
 Give the reader everything the task needs, since the reader has none of the author's session
 ([PA-08](catalog/core.md#pa-08-assumed-absent-context)):
 paths, the purpose, prior results, the definition of every marker. Then apply each entry loaded in
