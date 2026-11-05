@@ -207,7 +207,7 @@ def _recommend(verdict, versions):
     return None
 
 
-def _fmt_rate(value):
+def fmt_rate(value):
     return "-" if value is None else "{:.0f}%".format(value * 100)
 
 
@@ -245,17 +245,17 @@ def render_markdown(report):
               "|---|---|" + "---|" * len(versions)]
     for name, entry in sorted(report["per_criterion"].items()):
         lines.append("| {} | {} | {} |".format(name, entry["kind"], " | ".join(
-            _fmt_rate(entry.get(v)) for v in versions)))
+            fmt_rate(entry.get(v)) for v in versions)))
     dropped = report.get("dropped_from_all_pass")
     if dropped:
         names = ", ".join(dropped)
         lines.append("| all pass (without {}) | - | {} |".format(names, " | ".join(
-            _fmt_rate(report["all_pass"].get(v)) for v in versions)))
+            fmt_rate(report["all_pass"].get(v)) for v in versions)))
         lines.append("| all pass (with {}) | - | {} |".format(names, " | ".join(
-            _fmt_rate(report["all_pass_including_dropped"].get(v)) for v in versions)))
+            fmt_rate(report["all_pass_including_dropped"].get(v)) for v in versions)))
     else:
         lines.append("| all pass | - | {} |".format(" | ".join(
-            _fmt_rate(report["all_pass"].get(v)) for v in versions)))
+            fmt_rate(report["all_pass"].get(v)) for v in versions)))
     lines.append("")
     for name, agreement in sorted((report.get("judge_agreement") or {}).items()):
         lines.append(agreement_line(name, agreement))
@@ -280,7 +280,7 @@ def render_markdown(report):
 
 def agreement_line(name, a):
     line = "Judge agreement {}: {} of {} decided labels agree ({}); {} unsure, {} unlabelled; " \
-           "{}.".format(name, a["agreed"], a["decided"], _fmt_rate(a["agreement"]), a["unsure"],
+           "{}.".format(name, a["agreed"], a["decided"], fmt_rate(a["agreement"]), a["unsure"],
                         a["unlabelled"], a["state"])
     if a["state"] == "not_validated":
         line += " Dropped from all pass."

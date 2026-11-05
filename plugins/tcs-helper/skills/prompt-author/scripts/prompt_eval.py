@@ -49,7 +49,7 @@ from prompt_eval_stats import (  # noqa: E402  (after the sys.path line above)
     DEFAULT_LABEL_N, DERIVED_FIELDS, LABEL_VALUES, SEED, agreement_line, build_report,
     decide_verdict, out_dir_problem, paired_stats, parse_labels, render_label_file,
     render_markdown, select_sample, sign_test, validation_state, write_no_follow, write_report,
-    _fmt_rate)
+    fmt_rate)
 
 EXIT_OK, EXIT_INVALID, EXIT_CEILING, EXIT_CONSENT, EXIT_SECRET = 0, 1, 2, 3, 4
 
@@ -768,7 +768,8 @@ def recorded_states(kit_dir, judge_id):
 
 def judge_validation(kit_dir, judge_id, cases):
     """Starting state per criterion: validated/not_validated/insufficient from
-    KIT/judge-validation.json for this judge; not_run for deterministic criteria."""
+    KIT/judge-validation.json for this judge, provisional for an llm criterion
+    never labelled, not_run for deterministic criteria."""
     recorded = recorded_states(kit_dir, judge_id)
     states = {}
     for case in cases:
@@ -776,13 +777,13 @@ def judge_validation(kit_dir, judge_id, cases):
             if grader["type"] != "llm":
                 states.setdefault(grader["name"], "not_run")
                 continue
-            states[grader["name"]] = recorded.get(grader["name"], "not_validated")
+            states[grader["name"]] = recorded.get(grader["name"], "provisional")
     return states
 
 
 def recorded_drops(kit_dir, judge_id, cases):
     """llm criteria whose recorded agreement failed (not_validated): they leave
-    all-pass. A criterion never labelled is not_validated too, but stays in."""
+    all-pass. A criterion never labelled is provisional and stays in."""
     llm = {g["name"] for c in cases for g in c["graders"] if g["type"] == "llm"}
     return {name for name, state in recorded_states(kit_dir, judge_id).items()
             if state == "not_validated" and name in llm}
@@ -969,6 +970,8 @@ def run_eval(args, ctx):
     notes = []
     if args.temperature is not None and parse_spec(ctx["target"])[0] == "claude":
         notes.append("--temperature applies to Ollama only; the claude CLI has no such flag")
+    if ctx["author"] is None:
+        notes.append("judge-vs-author check skipped: no --author given")
 
     results, partial = [], False
     try:
@@ -1283,8 +1286,8 @@ def agree_cmd(args):
     print(agreement_line(args.criterion, agreement))
     if agreement["state"] == "not_validated":
         print("All pass without {}: {}; with it: {}.".format(args.criterion, ", ".join(
-            "{} {}".format(v, _fmt_rate(r)) for v, r in sorted(new_report["all_pass"].items())),
-            ", ".join("{} {}".format(v, _fmt_rate(r)) for v, r in sorted(
+            "{} {}".format(v, fmt_rate(r)) for v, r in sorted(new_report["all_pass"].items())),
+            ", ".join("{} {}".format(v, fmt_rate(r)) for v, r in sorted(
                 new_report["all_pass_including_dropped"].items()))))
     if kit_path:
         print("Recorded in {}.".format(kit_path))

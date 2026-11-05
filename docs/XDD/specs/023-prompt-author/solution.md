@@ -529,7 +529,7 @@ Command: prompt_eval.py run
         worst_case_cap); a call that never started (Popen OSError) books 0; timeouts kill the child's process group; ledger and grade
         error fields carry short codes, never model or CLI output; stored outputs are capped at 1 000 000 characters; a reused --out
         loses only runs/ and report.*
-  As built (T2.2): never-labelled llm criteria stay not_validated and stay in all-pass; a criterion whose KIT/judge-validation.json
+  As built (T2.2, T2.10): never-labelled llm criteria are provisional and stay in all-pass; a criterion whose KIT/judge-validation.json
         record (same normalised judge) says not_validated is dropped from all-pass by later runs; agree adds judge_agreement[criterion]
         {state, decided, agreed, agreement, unsure, unlabelled, sampled, leniency_tested (the sample holds ≥ 1 judge FAIL)}, dropped_from_all_pass and
         all_pass_including_dropped to report.json; the kit record's n is the decided count; agree refuses when the judge or a sampled
@@ -679,7 +679,7 @@ ENTITY: EvalReport (NEW; report.json + report.md)
           verdict: "b better" | "a better" | "no measurable difference",
           judge: {id, source: cli | repo-config | global-config | default},
           errored_runs: {a, b}, judge_errors: {a, b},
-          judge_validation: {criterion: validated | not_validated | insufficient | not_run}   # not_run = kit has no llm graders,
+          judge_validation: {criterion: validated | not_validated | insufficient | provisional | not_run}   # not_run = kit has no llm graders,
           cost_usd, label: "evaluated on <target>" | "proxy: evaluated on <other>"
 ```
 
@@ -1010,7 +1010,7 @@ Not applicable: no UI. The skill's outputs are a finding table, a draft, a port 
   - The maintainer sets `prompt_eval_judge = "ollama:qwen2.5:32b-instruct-q4_K_M"` in the global `~/.claude/startup.toml`; the tracked repo file stays without it, so other contributors get the Claude default.
   - The report records the judge and which source chose it. The judge is refused when it equals the target or the author model (PRD F6), compared after alias normalisation.
   - Validation: sample every judge FAIL plus random PASS up to 20 per criterion (seed 2305), labelled in a Markdown file. ≥8 decided labels and ≥85% agreement → validated.
-  - A criterion that agree has measured as not_validated is dropped from all-pass, and the report shows the rate both ways. A criterion never labelled stays in all-pass, marked not_validated (dropping it would empty all-pass on every first run).
+  - A criterion that agree has measured as not_validated is dropped from all-pass, and the report shows the rate both ways. A criterion never labelled stays in all-pass, marked provisional (dropping it would empty all-pass on every first run).
   - Rationale: this is the experiment's working setup. The T1 lesson is that the judge passed its controls and still failed calibration, so validation must come from labels.
   - Trade-offs:
     - A Markdown label file instead of the artifact page used in the experiment, so it works offline and needs no runtime capabilities.

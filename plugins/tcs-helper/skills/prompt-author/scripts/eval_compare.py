@@ -29,10 +29,11 @@ paired difference over cases with its CI, the sign test, cost.
     score: they are left out and noted. A grader with scored false counts as
     no result for that run.
   - An llm grader whose verdict is missing is a judge error; llm graders stay
-    not_validated (labelling needs prompt_eval.py's per-run files).
+    provisional (labelling needs prompt_eval.py's per-run files).
 
 Exit: 0 done | 1 case sets differ, unreadable input, refused out dir or ref,
-plugin eval failed, error rate above 20% | 2 cost ceiling hit in either run
+no case matched, leftover worktree, git or plugin eval failed or timed out,
+error rate above 20% | 2 cost ceiling hit in either run
 (partial report) | 3 consent missing | 4 secret found or secret scan failed.
 Stdlib only, Python 3.8+.
 """
@@ -87,7 +88,34 @@ def load_result(path):
     if data.get("schemaVersion") != SCHEMA_VERSION:
         raise Refused("{}: schemaVersion {!r} is not supported (expected {})".format(
             path, data.get("schemaVersion"), SCHEMA_VERSION))
+    problem = _structure_problem(data["cases"])
+    if problem:
+        raise Refused("{} is not a plugin eval --json result ({})".format(path, problem))
     return data
+
+
+def _structure_problem(cases):
+    """What in CASES does not have plugin eval's shape, or None. Cases without
+    a name are skipped later, so only named cases are checked."""
+    for case in cases:
+        if not isinstance(case, dict) or not isinstance(case.get("name"), str):
+            continue
+        name = case["name"]
+        if not isinstance(case.get("graders") or [], list) or not all(
+                isinstance(g, dict) for g in case.get("graders") or []):
+            return "case {}: graders is not a list of objects".format(name)
+        arms = case.get("arms") or {}
+        if not isinstance(arms, dict):
+            return "case {}: arms is not an object".format(name)
+        for arm, runs in arms.items():
+            if not isinstance(runs, list) or not all(isinstance(r, dict) for r in runs):
+                return "case {}: arm {} is not a list of runs".format(name, arm)
+            for run in runs:
+                graders = run.get("graders") or []
+                if not isinstance(graders, list) or not all(isinstance(g, dict)
+                                                            for g in graders):
+                    return "case {}: a run's graders is not a list of objects".format(name)
+    return None
 
 
 def runs_of(data, version, ignored):
@@ -97,8 +125,7 @@ def runs_of(data, version, ignored):
     for case in data["cases"]:
         if not isinstance(case, dict) or not isinstance(case.get("name"), str):
             continue
-        types = {g.get("name"): g.get("type") for g in case.get("graders") or []
-                 if isinstance(g, dict)}
+        types = {g.get("name"): g.get("type") for g in case.get("graders") or []}
         arms = case.get("arms") or {}
         ignored["arms"].update(a for a in arms if a != "with")
         with_runs = arms.get("with") or []
@@ -111,7 +138,7 @@ def runs_of(data, version, ignored):
                     ignored["with_only"].add(name)
                     continue
                 kind = "judge" if types.get(name) == "llm" else "deterministic"
-                validation.setdefault(name, "not_validated" if kind == "judge" else "not_run")
+                validation.setdefault(name, "provisional" if kind == "judge" else "not_run")
                 passed = grader.get("passed")
                 decided = isinstance(passed, bool) and grader.get("scored", True) is not False
                 criteria[name] = {"kind": kind, "result": passed if decided else None,
@@ -201,9 +228,16 @@ def compare(before_path, after_path, out, max_cost_usd=None, refs=None):
 
 # ------------------------------------------------------------------ run
 
+GIT_TIMEOUT_S = 60
+
+
 def _git(root, *args):
-    return subprocess.run(["git", "-C", str(root)] + list(args), capture_output=True,
-                          encoding="utf-8", errors="replace", timeout=60)
+    """git -C ROOT ARGS; a timeout becomes Refused."""
+    try:
+        return subprocess.run(["git", "-C", str(root)] + list(args), capture_output=True,
+                              encoding="utf-8", errors="replace", timeout=GIT_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        raise Refused("git {} timed out after {}s".format(" ".join(args[:2]), GIT_TIMEOUT_S))
 
 
 def _run_logged(cmd, cwd, log_path, timeout_s=PLUGIN_EVAL_TIMEOUT_S):
@@ -251,6 +285,8 @@ def _plugin_eval(plugin, cwd, args, out, side):
         raise Refused("plugin eval ({}) timed out after {}s; log: {}".format(
             side, PLUGIN_EVAL_TIMEOUT_S, log))
     result = out / (side + ".json")
+    # Exit 2 is taken to be plugin eval's cost-ceiling stop (assumed, not documented);
+    # compare() reads partial from the result file, not from this code.
     if code not in (EXIT_OK, EXIT_CEILING) or not result.is_file():
         raise Refused("plugin eval ({}) exited {} without a result; log: {}".format(
             side, code, log))
@@ -267,9 +303,17 @@ def _clear_previous_run(out):
 
 
 def _remove_worktree(root, worktree):
-    if _git(root, "worktree", "remove", "--force", str(worktree)).returncode != 0:
+    """Remove WORKTREE; when git cannot, delete the directory and prune."""
+    try:
+        removed = _git(root, "worktree", "remove", "--force", str(worktree)).returncode == 0
+    except Refused:
+        removed = False
+    if not removed:
         shutil.rmtree(str(worktree), ignore_errors=True)
-    _git(root, "worktree", "prune")
+    try:
+        _git(root, "worktree", "prune")
+    except Refused:
+        pass
 
 
 def selected_cases(plugin, case_glob):
@@ -311,7 +355,7 @@ def check_secrets(plugin, case_glob, label):
 
 
 def check_consent(args, plugin):
-    if PROVIDER in (args.confirm_provider or []):
+    if PROVIDER in args.confirm_provider:
         return
     cases = [d.name for d in selected_cases(plugin, args.case)]
     raise Refused("\n".join([
@@ -349,6 +393,9 @@ def run(args):
         raise Refused("--base {} is not a commit in {}".format(args.base, root))
     check_secrets(plugin, args.case, "working tree")
     check_consent(args, plugin)
+    if not selected_cases(plugin, args.case):
+        raise Refused("--case {} matches no case directory under {}".format(
+            args.case, plugin / "evals"))
 
     out = Path(args.out).resolve()
     worktree = out / WORKTREE_DIR
@@ -362,7 +409,9 @@ def run(args):
         raise Refused("cannot prepare --out {} ({})".format(out, type(exc).__name__))
     added = _git(root, "worktree", "add", "--detach", "--quiet", str(worktree), args.base)
     if added.returncode != 0:
-        raise Refused("git worktree add failed for {}".format(args.base))
+        reason = (added.stderr or "").strip().splitlines()
+        raise Refused("git worktree add failed for {}{}".format(
+            args.base, ": " + reason[-1] if reason else ""))
     try:
         check_secrets(worktree / rel, args.case, "base " + args.base)
         before = _plugin_eval(worktree / rel, worktree, args, out, "before")
