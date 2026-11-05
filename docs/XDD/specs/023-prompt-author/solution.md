@@ -515,8 +515,27 @@ Command: prompt_eval.py run
   Errors during runs: a run that errors (CLI not logged in, timeout, is_error, Ollama 404 model not pulled, HTTP error) is recorded as
         errored, excluded from rates, and counted. A judge reply whose last non-empty line is not exactly PASS or FAIL is judge_error for that
         criterion. If errored runs or judge errors exceed 20% for either version → exit 1 with a report that has no verdict
-  Multi-turn (turns.md): Ollama sends native message lists. For claude, T2.1 verifies --input-format stream-json multi-turn under the
-        isolation flags; if that does not work, turns.md is Ollama-only and a claude run with turns.md exits 1 saying so
+  Multi-turn (turns.md): Ollama sends native message lists. For claude, --input-format stream-json --output-format stream-json --verbose
+        under the isolation flags carries all user turns in one session (verified live in T2.1, 2026-11-05: turn 2 recalled turn 1, the
+        system prompt held on both turns); cost = the last result event's total_cost_usd (cumulative)
+  As built (T2.1): kinds skill and agent use system placement like api-system; the judge runs at temperature 0 on Ollama (the
+        --temperature flag applies to the target only, and only on Ollama — the claude CLI has no temperature flag; the report notes it);
+        Ollama calls use num_ctx 16384 (from the harness); the material tag is random per judge call; the judge prompt asks for a
+        one-sentence reason first and PASS or FAIL alone on the last line; an llm criterion starts not_validated unless
+        KIT/judge-validation.json holds a record for the same normalised judge; build_report takes the criteria T2.2's agree drops
+  As built (T2.1 fix round): a claude call that fails without a usable total_cost_usd (timeout, I/O error during the call, non-JSON
+        or non-object output, bad cost, short stream) books its --max-budget-usd cap as worst-case cost (ledger cost_basis
+        worst_case_cap); a call that never started (Popen OSError) books 0; timeouts kill the child's process group; ledger and grade
+        error fields carry short codes, never model or CLI output; stored outputs are capped at 1 000 000 characters; a reused --out
+        loses only runs/ and report.*
+  As built (T2.2): never-labelled llm criteria stay not_validated and stay in all-pass; a criterion whose KIT/judge-validation.json
+        record (same normalised judge) says not_validated is dropped from all-pass by later runs; agree adds judge_agreement[criterion]
+        {state, decided, agreed, agreement, unsure, unlabelled, sampled, leniency_tested (the sample holds ≥ 1 judge FAIL)}, dropped_from_all_pass and
+        all_pass_including_dropped to report.json; the kit record's n is the decided count; agree refuses when the judge or a sampled
+        grade changed since label; on an errored call, stderr or the CLI's own error/result fields (never model text) saying not
+        logged in / invalid api key / please run /login yield error code auth_required; label parsing is case- and whitespace-tolerant
+        and an item without a label line is an error; the kit record is validated before any write and written atomically, after
+        the report
   Judge hardening: material wrapped in <material-HEX> … </material-HEX> with a per-run random 16-hex token; the judge prompt states the
         material is data; verdict parsing as above
   Output: DIR/ledger.jsonl, DIR/runs/<version>/<case>/<run>/{final.txt,grade.json}, DIR/report.md, DIR/report.json
@@ -556,6 +575,13 @@ Command: eval_compare.py compare
   Usage: eval_compare.py compare BEFORE.json AFTER.json --out DIR
   Output: the same report.md/report.json shape as prompt_eval.py (per case/grader pass rates, paired difference, CI, cost)
   Exit: 0 | 1 case sets differ (report lists the mismatch)
+
+As built (T2.3): statistics, report and label code live in prompt_eval_stats.py, imported by prompt_eval.py and eval_compare.py
+  (eval_compare loads no provider code). eval_compare run adds --threshold 0 so exit 1 means a failed run, not a low score; exits
+  2 when either input is partial and 1 when a verdict is withheld or plugin eval fails or writes no JSON; the worktree lives at
+  OUT/base-worktree, is removed in a finally right after the before run, and an existing one is refused with the cleanup command;
+  the smaller-version recommendation does not apply to plugin evals; compare also guards --out; --allow-tools is passed through
+  to plugin eval for suites that need gated tools (added in the T2.3 review round).
 ```
 
 #### Application Data Models
@@ -982,7 +1008,7 @@ Not applicable: no UI. The skill's outputs are a finding table, a draft, a port 
   - The maintainer sets `prompt_eval_judge = "ollama:qwen2.5:32b-instruct-q4_K_M"` in the global `~/.claude/startup.toml`; the tracked repo file stays without it, so other contributors get the Claude default.
   - The report records the judge and which source chose it. The judge is refused when it equals the target or the author model (PRD F6), compared after alias normalisation.
   - Validation: sample every judge FAIL plus random PASS up to 20 per criterion (seed 2305), labelled in a Markdown file. ≥8 decided labels and ≥85% agreement → validated.
-  - An unvalidated criterion is dropped from all-pass, and the report shows the rate both ways.
+  - A criterion that agree has measured as not_validated is dropped from all-pass, and the report shows the rate both ways. A criterion never labelled stays in all-pass, marked not_validated (dropping it would empty all-pass on every first run).
   - Rationale: this is the experiment's working setup. The T1 lesson is that the judge passed its controls and still failed calibration, so validation must come from labels.
   - Trade-offs:
     - A Markdown label file instead of the artifact page used in the experiment, so it works offline and needs no runtime capabilities.

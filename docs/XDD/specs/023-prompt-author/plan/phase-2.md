@@ -36,7 +36,7 @@ phase: 2
 
 Delivers the user-facing skill (write, audit, port modes) and the measurement tooling it calls.
 
-- [ ] **T2.1 Standalone eval runner `prompt_eval.py run`** `[activity: backend-tooling]` `[component: C4]`
+- [x] **T2.1 Standalone eval runner `prompt_eval.py run`** `[activity: backend-tooling]` `[component: C4]`
 
   1. Prime: Read the run contract and exit codes `[ref: SDD/Internal API Changes]`, the paired-comparison algorithm and traces `[ref: SDD/Complex Logic]`, and the security patterns `[ref: SDD/System-Wide Patterns]`. Read `experiment/harness/lib.py` and `run.py`.
   2. Test: Write `tests/tcs-helper/test_prompt_eval.py` with the provider calls stubbed. Cover:
@@ -72,7 +72,7 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
      - [ ] No send happens without consent; only claude and ollama are supported; ceiling, secret abort, out-dir guard and no key output all hold `[ref: PRD/F6 AC5, AC6]`
      - [ ] A CI spanning 0 gives "no measurable difference", and the smaller version is recommended `[ref: PRD/F6 AC7; PRD/F8 AC2]`
 
-- [ ] **T2.2 Judge labelling `prompt_eval.py label | agree`** `[activity: backend-tooling]` `[component: C4]`
+- [x] **T2.2 Judge labelling `prompt_eval.py label | agree`** `[activity: backend-tooling]` `[component: C4]`
 
   1. Prime: Read the judge-validation algorithm and its spec-023 trace `[ref: SDD/Complex Logic]`, SDD-ADR-7, and `experiment/harness/label_sample.py`.
   2. Test: Extend test_prompt_eval.py:
