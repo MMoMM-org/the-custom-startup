@@ -15,7 +15,7 @@ Use XML tags or Markdown to separate the parts of the prompt, and pick one of th
 - **Evidence:** vendor
 
 ## Examples
-Include few-shot examples in every prompt, formatted identically to each other. Keep them to a few diverse ones, because too many make the model overfit its response to the examples (PA-11). A zero-shot prompt ported from Claude or OpenAI needs examples added.
+Always include few-shot examples, and keep their formatting consistent across examples. Do not add too many: Google warns that the model may then overfit its response to the examples (PA-11). A zero-shot prompt ported from Claude or OpenAI needs examples added.
 - **Source:** Google, Gemini prompting strategies, "always include few-shot examples" and "overfit" (https://aistudio.google.com/docs/prompting-strategies)
 - **Date:** 2026-11-04
 - **Evidence:** vendor
@@ -27,16 +27,16 @@ Unverified: Google's guidance found in research gives no position on positive ve
 - **Evidence:** unverified
 
 ## Emphasis
-For Gemini 3, leave out unnecessary or overly persuasive language and write rules in sentence case (PA-03). The vendor evidence is mixed: Google's own prompt templates still write "must" in capitals, so a ported prompt that keeps one capitalised rule is within Google's practice, though not its stated advice.
-- **Source:** Google, Gemini prompting strategies, Gemini 3 "Avoid unnecessary or overly persuasive language" (https://aistudio.google.com/docs/prompting-strategies)
+For Gemini 3, leave out unnecessary or overly persuasive language (PA-03), and request the length and detail you want explicitly, such as "explain each step in two or three sentences", because Gemini 3 needs verbosity requested. The vendor evidence on emphasis is mixed: Google's own prompt templates still write "must" in capitals, so a ported prompt that keeps one capitalised rule is within Google's practice, though not its stated advice.
+- **Source:** Google, Gemini prompting strategies, Gemini 3 "Avoid unnecessary or overly persuasive language" and verbosity requested explicitly; Google prompt templates using "you MUST" (https://aistudio.google.com/docs/prompting-strategies)
 - **Date:** 2026-11-04
 - **Evidence:** vendor
 
 ## Literalness
-Gemini 3 answers briefly unless asked otherwise, so state the length and detail you want explicitly, such as "explain each step in two or three sentences". A Claude or OpenAI prompt that relies on the model's default verbosity needs that request added.
-- **Source:** Google, Gemini prompting strategies, Gemini 3 verbosity (https://aistudio.google.com/docs/prompting-strategies)
+Unverified: no Google position on rule literalness found (research-external.md §1). Apply the catalog defaults for reasons and conflicts (PA-01, PA-06) and check in the prompt's eval kit whether the target reads a rule more or less literally than intended (PA-41).
+- **Source:** none found; research-external.md §1 lists no Google position on rule literalness
 - **Date:** 2026-11-04
-- **Evidence:** vendor
+- **Evidence:** unverified
 
 ## Turn shape
 Unverified: no Google guidance on the shape of a chat turn was found. Since Gemini prompts carry few-shot examples, make each example turn match the shape you want exactly and state that shape as a rule (PA-11).

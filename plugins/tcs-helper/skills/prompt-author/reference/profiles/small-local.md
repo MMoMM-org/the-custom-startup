@@ -1,6 +1,6 @@
 # Port profile: small local models
 
-Apply this profile when the target of a port is a small model run locally, such as a 7-35B open-weights chat model. No vendor publishes prompting guidance for this class, so every topic except Turn shape and Gate exits is unverified: the guidance is a starting default to test on the target with the prompt's eval kit (PA-41), and a port report repeats the unverified label for each change it makes from these topics. Turn shape and Gate exits are measured in spec 023 experiment T5 (qwen3.5, local). The rule behind each topic is the cited catalog entry in `../catalog/`, which this profile does not repeat.
+Apply this profile when the target of a port is a small model run locally, such as an open-weights chat model. No vendor publishes prompting guidance for this class, so every topic except Turn shape and Gate exits is unverified: the guidance is a starting default to test on the target with the prompt's eval kit (PA-41), and a port report repeats the unverified label for each change it makes from these topics. Turn shape and Gate exits are measured in spec 023 experiment T5 (qwen3.5, local). The rule behind each topic is the cited catalog entry in `../catalog/`, which this profile does not repeat.
 
 ## Placement
 Unverified: no vendor guidance. Keep the prompt short and put the task the model must do in one plain sentence after the context. Small models lose instructions fastest as the rule count grows (PA-10), so move every rule this task does not need out of the prompt.
@@ -45,7 +45,7 @@ Show one complete assistant turn in exactly the shape you want, such as one ques
 - **Evidence:** measured
 
 ## Gate exits
-Give every approval or confirmation step its exit as PA-16 specifies, and phrase the exit in the words a user is likely to use, such as "write it now" or "just give me the document". In T5, Sonnet-authored prompts kept the section-approval gate after the simulated user asked for the result and delivered the final document in 53% of runs, against 77% for Opus-authored prompts and 90% for the status quo.
+Give every approval or confirmation step its exit as PA-16 specifies, and phrase the exit in the words a user is likely to use, such as "write it now" or "just give me the document". PA-16 carries the T5 figures for the gate that held after the user asked for the result.
 - **Source:** spec 023 experiment, docs/XDD/specs/023-prompt-author/experiment/results.md, T5 all_sections row and Observation 3
 - **Date:** 2026-11-05
 - **Evidence:** measured

@@ -15,13 +15,13 @@ Structure the prompt with Markdown headings and lists, and delimit documents wit
 - **Evidence:** vendor
 
 ## Examples
-Back each behaviour an example shows with a rule stated in the instructions, because GPT-4.1 follows a stated rule more reliably than a pattern it has to infer (PA-11). When porting from a Claude prompt whose examples carry unstated behaviour, write that behaviour out as a rule.
+Back each behaviour an example shows with a rule stated in the instructions (PA-11). When porting from a Claude prompt whose examples carry unstated behaviour, write that behaviour out as a rule.
 - **Source:** OpenAI, GPT-4.1 prompting guide, examples (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide)
 - **Date:** 2026-11-04
 - **Evidence:** vendor
 
 ## Negatives
-GPT-4.1 follows instructions literally, so keep an explicit don't next to the positive rule wherever the boundary matters, such as "Write prose paragraphs; do not use bullet lists" (PA-04). This differs from Anthropic, which recommends the positive form alone; when porting from a Claude prompt, add the don't at each boundary the target could cross.
+GPT-4.1 follows instructions literally, so keep an explicit don't next to the positive rule wherever the boundary matters, such as "Write prose paragraphs; do not use bullet lists" (PA-04). This differs from Anthropic, which advises telling the model what to do rather than what not to do; when porting from a Claude prompt, add the don't at each boundary the target could cross.
 - **Source:** OpenAI, GPT-4.1 prompting guide, literal instruction following (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide)
 - **Date:** 2026-11-04
 - **Evidence:** vendor

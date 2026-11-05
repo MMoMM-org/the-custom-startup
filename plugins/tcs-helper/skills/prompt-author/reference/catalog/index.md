@@ -15,7 +15,7 @@ Kinds: api-system, brief, chat-template, code, instruction-file, skill, agent. T
 | [PA-07](core.md#pa-07-cross-file-contradiction) | Cross-file contradiction | instruction-file, skill, agent | any | measured | active | core.md |
 | [PA-08](core.md#pa-08-assumed-absent-context) | Assumed absent context | any | any | measured | active | core.md |
 | [PA-09](core.md#pa-09-over-prescription--enumerated-edge-cases) | Over-prescription / enumerated edge cases | any | claude, openai, google | vendor + measured | active | core.md |
-| [PA-10](core.md#pa-10-long-instruction-list) | Long instruction list | any | any | measured | active | core.md |
+| [PA-10](core.md#pa-10-long-instruction-list) | Long instruction list | any | any | vendor + measured | active | core.md |
 | [PA-11](core.md#pa-11-example-over-anchoring) | Example over-anchoring | any | any | vendor | active | core.md |
 | [PA-12](core.md#pa-12-example-turn-shape-copied-by-small-models) | Example turn shape copied by small models | chat-template, api-system | small-local | measured | active | core.md |
 | [PA-13](core.md#pa-13-missing-output-contract) | Missing output contract | brief, agent, api-system, code | any | measured | active | core.md |

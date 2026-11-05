@@ -95,8 +95,8 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Fails because:** compliance drops as the instruction count grows, mostly by omitting later items.
 - **Fix:** keep the rules this task needs in the prompt, put the critical ones first, and move the rest to files read on demand.
 - **Applies to:** any · any (steepest decay: small-local)
-- **Evidence:** measured (spec 023 corpus: 3 of 16 prompts carry a long rule list)
-- **Sources:** IFScale, instruction-following at 10-500 instructions across 20 models (https://arxiv.org/abs/2507.11538, fetched 2026-11-04); third-party research, not vendor guidance, so the decay claim carries no vendor grade and `measured` covers only the corpus count
+- **Evidence:** vendor + measured (spec 023 corpus: 3 of 16 prompts carry a long rule list)
+- **Sources:** IFScale, instruction-following at 10-500 instructions across 20 models (https://arxiv.org/abs/2507.11538, fetched 2026-11-04), published research behind the `vendor` grade; spec 023 corpus count behind the `measured` grade
 - **Lint:** W2
 - **Fingerprint:** "Every rule in a loaded context competes with every other rule for compliance."
 - **Status:** active
