@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Catalog, Lint and Single-Source Test"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -126,7 +126,7 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
     - the profiles match SDD-ADR-6.
   - Commit after each task. Record the measured repo lint numbers (errors, suppressions, W1 hits) in this file under a "Phase 1 results" heading.
 
-- [ ] **T1.6 Evidence grade `research` and drift fixes** `[activity: technical-writing]` `[component: C1, C3]` — added after the phase 1 drift check (2026-11-05)
+- [x] **T1.6 Evidence grade `research` and drift fixes** `[activity: technical-writing]` `[component: C1, C3]` — added after the phase 1 drift check (2026-11-05)
 
   1. Prime: Read the revised evidence definition and INITIAL ENTRIES grades `[ref: SDD/Application Data Models]` and the "Further as-built details" lines `[ref: SDD/Internal API Changes]`; PRD F1 AC1 (five grades).
   2. Test: Extend the grade tests (tests/tcs-helper/test_prompt_catalog.py and test_prompt_profiles.py) to the five-grade enum and to the expected grade per entry from solution.md INITIAL ENTRIES (first word of the grade column); red on the current catalog. Add a lint test that the E0 finding's entry is "uncatalogued" in text and JSON; red.
@@ -141,5 +141,6 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
 - Catalog tests split: tests/tcs-helper/catalog_helpers.py + test_prompt_catalog.py, test_prompt_profiles.py, test_prompt_single_source.py.
 - Lint `--repo`: 258 files, ≈1.5 s; errors = 2 (both KNOWN_OPEN #253, semantic_detector.py:95 and :129); warnings W1 = 4, W3 = 4, W2 = 0; 0 suppressions; 0 error-level false alarms.
 - Pre-migration fingerprint copies: none (paraphrased copies tracked via research-internal.md (A); Phase 3 red steps adjusted).
+- T1.6: research grade added; PA-10/15/19/30/31 regraded; E0 entry "uncatalogued" (3223a66d, e4082b8c). Suite after phase 1: 2088 passed, 4 strict xfails.
 - Side fixes: `--output-dir` added to the documented plugin-eval runs in skill-author/reference/plugin-evals.md and tcs-workflow/evals/README.md (privacy check now covers all plugins/).
 

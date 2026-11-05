@@ -1133,7 +1133,7 @@ Each PRD feature has exactly one owner. Kit *authoring* (writing cases) is the s
 | Consumer | Whatever reads the prompt's output: orchestrator step, parser, user | Contract-first writing and PA-14 |
 | Contract asymmetry | The consumer reads a field or vocabulary the producer's prompt never requests | PA-14; #250, #251 |
 | Gate exit | What a confirmation step does when the user asks for the result directly | PA-16; T5 finding |
-| Evidence grade | vendor / measured / practitioner / unverified | Every catalog and profile entry |
+| Evidence grade | vendor / research / measured / practitioner / unverified | Every catalog and profile entry |
 | Fingerprint | Verbatim sentence identifying a rule, used to detect copies | SDD-ADR-2 |
 
 ### Technical Terms
