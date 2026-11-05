@@ -47,6 +47,7 @@
 | 2026-11-05 | Judge validation from 28 user labels: T5 no_implementation_detail validated (9/10); T1 no_unsupported_fact invalid (3/10, all 7 judge FAILs overturned) and dropped from the T1 headline; T3 planted_bug_identified supported but not validated (4/4 decided, 4 UNSURE) | Below the 85% threshold a criterion is reported unvalidated; the T1 judge demands per-claim hedges the rubric does not ask for. Dropping it changes no conclusion (T1 O 98% / S 100% / Q 95%). Lesson for the catalog: an LLM judge passing hand-built controls is not calibrated |
 | 2026-11-05 | PRD scope: lint = low-false-alarm checks as errors, rest warn/review; eval = kit + local runs (Claude CLI, Ollama), other vendors kit only; rule corrections applied in migration, measured per skill, reverted on regression | User choices; matches measured FP rates (research-technical.md) and the cheap local harness ($7.97 for 385 runs) |
 | 2026-11-05 | PRD approved; phase → SDD. CLAUDE.md stays owned by memory-claude-md-optimize (catalog consumer); prompt-author owns AGENTS.md/GEMINI.md and all non-skill, non-agent prompt kinds | User approval; avoids a second CLAUDE.md owner (skill-evaluate U1 overlap) |
+| 2026-11-05 | SDD ADR-1–4 confirmed: catalog inside prompt-author skill with ../ links; IDs + fingerprint test; two eval routes (plugin eval at two git states + standalone runner) with one kit format; eval case first, then each rule correction | User choices; model-ladder precedent shows cross-skill links survive install (whole plugin dir is installed) |
 
 ## Context
 
