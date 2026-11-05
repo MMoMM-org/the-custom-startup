@@ -549,23 +549,38 @@ EVAL_REQUIRED_FLAGS = ('--no-publish', '--output-dir')
 # fingerprint does not detect (SDD-ADR-2 trade-off); Phase 3 removes them by reading.
 PRE_MIGRATION_COPIES = {}
 
-# Documented eval runs that predate the --output-dir rule: {(file, missing flag): owning task}.
-EVAL_COMMAND_EXCEPTIONS = {
-    ('plugins/tcs-helper/skills/skill-author/reference/plugin-evals.md', '--output-dir'): 'T2.4',
-}
+AGENT_AUTHOR_REL = 'plugins/tcs-helper/skills/agent-author/'
+AUTHORITY_PHRASE = 'MUST BE USED'
 
 # Contested PA-50 (repo ADR-4): the description authority-language rule stays copied
-# verbatim in agent-author. Pinned by content so a rewording revisits the decision.
-PINNED_AUTHORITY_SENTENCES = {
-    'plugins/tcs-helper/skills/agent-author/reference/conventions.md': (
-        '- **Expect under-triggering.** Anthropic explicitly notes Claude tends to skip '
-        'skills/agents when it should invoke them. Use *"slightly pushy"* phrasing: '
-        '`Use PROACTIVELY when…` and `MUST BE USED when…`.'
-    ),
-    'plugins/tcs-helper/skills/agent-author/reference/description-patterns.md': (
-        '### 3. Use imperative phrasing — `Use PROACTIVELY when…` and `MUST BE USED when…`'
-    ),
-}
+# verbatim in agent-author. Every rule-bearing sentence carrying it (SKILL.md and
+# reference/, outside fenced sample descriptions) is pinned by content, so a rewording
+# revisits the decision. Line numbers may move; the text may not.
+PINNED_AUTHORITY_SENTENCES = (
+    ('SKILL.md',
+     '- Make every `description` action-oriented with `Use PROACTIVELY` or `MUST BE USED` '
+     '+ 2–5 concrete trigger phrases + 2–3 `<example>` blocks for high-value agents.'),
+    ('SKILL.md',
+     '   - `description`: `Use PROACTIVELY`/`MUST BE USED` + triggers + 2–3 `<example>` blocks; '
+     'trigger in first ~50 chars'),
+    ('SKILL.md',
+     '2. **Description quality** — first ~50 chars contain trigger; has `Use PROACTIVELY` or '
+     '`MUST BE USED`; has ≥2 trigger phrases; high-value agents have `<example>` blocks.'),
+    ('reference/conventions.md',
+     '- **Expect under-triggering.** Anthropic explicitly notes Claude tends to skip '
+     'skills/agents when it should invoke them. Use *"slightly pushy"* phrasing: '
+     '`Use PROACTIVELY when…` and `MUST BE USED when…`.'),
+    ('reference/description-patterns.md',
+     '### 3. Use imperative phrasing — `Use PROACTIVELY when…` and `MUST BE USED when…`'),
+    ('reference/description-patterns.md',
+     '1. **Action segment** with `Use PROACTIVELY` or `MUST BE USED`'),
+    ('reference/description-patterns.md',
+     '- [ ] Contains `Use PROACTIVELY` OR `MUST BE USED`'),
+    ('reference/output-formats.md',
+     '| | Contains `Use PROACTIVELY` or `MUST BE USED` | Yes |'),
+    ('reference/anti-patterns.md',
+     '- [ ] Description has no `Use PROACTIVELY` / `MUST BE USED`'),
+)
 
 CONSUMERS = {
     'skill-author': 'T3.1',
@@ -577,6 +592,42 @@ CONSUMERS = {
 def _normalise(text):
     """Lowercase, strip Markdown emphasis (*, _, `), collapse whitespace."""
     return ' '.join(re.sub(r'[*_`]', '', text.lower()).split())
+
+
+def _consumer_rule_files(files, skill_dir):
+    """The subset of files that are a skill's rules: SKILL.md and reference/*.md directly under it.
+
+    examples/, evals/ and change logs illustrate or record; a citation there is not
+    the skill applying the catalog.
+    """
+    rule_files = {skill_dir + 'SKILL.md'}
+    return {
+        rel: text for rel, text in files.items()
+        if rel in rule_files or re.fullmatch(re.escape(skill_dir) + r'reference/[^/]+\.md', rel)
+    }
+
+
+def _resolving_citations(files, statuses):
+    """['file:line PA-NN'] for each PA token that names an indexed entry that is not retired."""
+    return [
+        f'{rel}:{lineno} {token}'
+        for rel, text in files.items()
+        for lineno, line in enumerate(text.splitlines(), start=1)
+        for token in PA_TOKEN_RE.findall(line)
+        if statuses.get(token) not in (None, 'retired')
+    ]
+
+
+def _unfenced_lines(text):
+    """[(line, text)] for lines outside fenced code blocks."""
+    lines, fenced = [], False
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        if line.lstrip().startswith('```'):
+            fenced = not fenced
+            continue
+        if not fenced:
+            lines.append((lineno, line))
+    return lines
 
 
 def _tracked_markdown():
@@ -745,6 +796,18 @@ def test_copy_scan_catches_a_seeded_copy_with_file_and_line(tmp_path):
     assert ('plugins/demo/wrapped.md', 2, entry_id) in found
 
 
+def test_index_statuses_reads_every_catalog_entry_with_its_real_status():
+    statuses = _index_statuses()
+    assert set(statuses) == set(EXPECTED), (
+        f'index IDs differ from solution.md: missing {sorted(set(EXPECTED) - set(statuses))}, '
+        f'extra {sorted(set(statuses) - set(EXPECTED))}'
+    )
+    expected = {pa: 'contested' if spec['contested'] else 'active' for pa, spec in EXPECTED.items()}
+    assert statuses == expected
+    assert statuses['PA-50'] == 'contested'
+    assert {pa: e['fields'].get('Status') for pa, e in ((e['id'], e) for e in _all_entries())} == statuses
+
+
 def test_id_scan_catches_a_dead_and_a_retired_id_with_file_and_line(tmp_path):
     files, _ = _seeded_files(tmp_path)
     statuses = dict(_index_statuses(), **{'PA-01': 'retired'})
@@ -808,14 +871,13 @@ def test_no_file_at_imports_a_catalog_file():
 
 
 def test_documented_plugin_eval_runs_keep_the_report_private():
-    findings = _eval_flag_findings(_tcs_helper(_tracked_markdown()))
-    unlisted = [
+    files = _tcs_helper(_tracked_markdown())
+    assert any(_eval_commands(text) for text in files.values()), 'no documented `claude plugin eval` run found'
+    findings = [
         f'{rel}:{line}: `claude plugin eval` run lacks {flag}: {command}'
-        for rel, line, flag, command in findings
-        if (rel, flag) not in EVAL_COMMAND_EXCEPTIONS
+        for rel, line, flag, command in _eval_flag_findings(files)
     ]
-    stale = [key for key in EVAL_COMMAND_EXCEPTIONS if key not in {(r, f) for r, _, f, _ in findings}]
-    assert not unlisted and not stale, '\n'.join(unlisted + [f'{k}: fixed; remove the exception' for k in stale])
+    assert not findings, '\n'.join(findings)
 
 
 @pytest.mark.xfail(strict=True, reason='eval-loop.md is written in T2.4; remove this marker there')
@@ -823,10 +885,24 @@ def test_eval_loop_reference_exists():
     assert EVAL_LOOP.is_file(), f'missing {EVAL_LOOP.relative_to(REPO_ROOT)}'
 
 
-@pytest.mark.parametrize('rel, sentence', sorted(PINNED_AUTHORITY_SENTENCES.items()))
+@pytest.mark.parametrize('rel, sentence', PINNED_AUTHORITY_SENTENCES)
 def test_contested_authority_sentences_stay_verbatim(rel, sentence):
-    lines = (REPO_ROOT / rel).read_text(encoding='utf-8').splitlines()
-    assert sentence in lines, f'{rel}: pinned PA-50 sentence changed or moved out of its line: {sentence!r}'
+    text = (REPO_ROOT / AGENT_AUTHOR_REL / rel).read_text(encoding='utf-8')
+    assert sentence in text, f'{AGENT_AUTHOR_REL}{rel}: pinned PA-50 sentence changed: {sentence!r}'
+
+
+def test_every_rule_bearing_authority_sentence_is_pinned():
+    files = _consumer_rule_files(_tracked_markdown(), AGENT_AUTHOR_REL)
+    assert AGENT_AUTHOR_REL + 'SKILL.md' in files, 'agent-author SKILL.md not scanned'
+    pinned = {(AGENT_AUTHOR_REL + rel, sentence) for rel, sentence in PINNED_AUTHORITY_SENTENCES}
+    unpinned = [
+        f'{rel}:{lineno}: {line.strip()}'
+        for rel, text in sorted(files.items())
+        for lineno, line in _unfenced_lines(text)
+        if AUTHORITY_PHRASE in line
+        and not any(rel == pin_rel and sentence in line for pin_rel, sentence in pinned)
+    ]
+    assert not unpinned, 'pin these PA-50 sentences in PINNED_AUTHORITY_SENTENCES:\n' + '\n'.join(unpinned)
 
 
 @pytest.mark.parametrize('consumer', [
@@ -835,6 +911,35 @@ def test_contested_authority_sentences_stay_verbatim(rel, sentence):
 ])
 def test_consumer_cites_a_catalog_entry(consumer):
     skill_dir = f'plugins/tcs-helper/skills/{consumer}/'
-    files = {rel: text for rel, text in _tracked_markdown().items() if rel.startswith(skill_dir)}
-    assert files, f'no tracked Markdown under {skill_dir}'
-    assert any(PA_TOKEN_RE.search(text) for text in files.values()), f'{consumer} cites no PA entry'
+    files = _consumer_rule_files(_tracked_markdown(), skill_dir)
+    assert skill_dir + 'SKILL.md' in files, f'no tracked {skill_dir}SKILL.md'
+    assert _resolving_citations(files, _index_statuses()), (
+        f'{consumer}: neither SKILL.md nor reference/*.md cites an indexed, non-retired PA entry'
+    )
+
+
+def test_consumer_citation_counts_only_resolving_ids_in_rule_files(tmp_path):
+    skill_dir = 'plugins/tcs-helper/skills/demo/'
+    seeds = {
+        'SKILL.md': '# Demo\n\nNo citation here.\n',
+        'reference/rules.md': 'See PA-99 and PA-01.\n',
+        'examples/sample.md': 'Avoid PA-02.\n',
+        'evals/README.md': 'Checks PA-03.\n',
+        'CHANGELOG.md': 'Cites PA-04 now.\n',
+        'reference/nested/deep.md': 'PA-05.\n',
+    }
+    for rel, text in seeds.items():
+        path = tmp_path / skill_dir / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+    files = {skill_dir + rel: (tmp_path / skill_dir / rel).read_text(encoding='utf-8') for rel in seeds}
+    statuses = dict(_index_statuses(), **{'PA-01': 'retired'})
+
+    rule_files = _consumer_rule_files(files, skill_dir)
+    assert set(rule_files) == {skill_dir + 'SKILL.md', skill_dir + 'reference/rules.md'}
+    assert _resolving_citations(rule_files, statuses) == [], 'unknown PA-99 and retired PA-01 must not count'
+
+    files[skill_dir + 'SKILL.md'] += 'Applies PA-02.\n'
+    assert _resolving_citations(_consumer_rule_files(files, skill_dir), statuses) == [
+        f'{skill_dir}SKILL.md:4 PA-02'
+    ]
