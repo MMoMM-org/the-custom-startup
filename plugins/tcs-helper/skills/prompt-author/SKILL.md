@@ -36,15 +36,6 @@ Finding {
   scope: single | set | pair    // a report column only when scopes mix (audit.md § Finding format)
 }
 
-State {
-  request = $ARGUMENTS
-  intake: Intake
-  loadedEntries: string[]     // from the index rows that match kind and target
-  findings: Finding[]
-  lint: clean | findings | "lint failed"
-  evalLabel: "evaluated on <target>" | "proxy: evaluated on <other> for <target>" | "not evaluated on target"
-}
-
 **In scope:** prompts a model reads that no other authoring skill owns, and audits of co-loaded sets
 and producer/consumer pairs even when one file of the set is owned elsewhere.
 **Out of scope:** writing or auditing a single skill, agent definition or CLAUDE.md on its own; those
@@ -124,8 +115,8 @@ trigger descriptions (PA-51, PA-52). A set or pair audit that includes such a fi
 
 Read [reference/catalog/index.md](reference/catalog/index.md). Keep the rows whose Kinds and Targets
 match the intake (`any` matches everything), and read only the catalog files those rows point to. For
-port mode, also read the target's profile in `reference/profiles/`. Record the loaded IDs in
-`loadedEntries`; an audit that finds nothing reports them.
+port mode, also read the target's profile in `reference/profiles/`. Keep the list of loaded IDs;
+an audit that finds nothing reports them.
 
 An entry graded unverified, or a contested one, is applied with that label in whatever you report.
 PA-50 is contested and repo ADR-4 holds; leave `MUST BE USED` in descriptions as it is.
