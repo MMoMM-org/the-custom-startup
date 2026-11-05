@@ -14,7 +14,8 @@ claude plugin eval plugins/tcs-workflow --runs 3 -j 4 --allow-tools Write Edit \
 ```
 
 One case: add `--case <name>`. Against a deliberately weakened skill: add `--ablation none` to skip
-the no-plugin arm. Results go to `evals/results/`, which is gitignored.
+the no-plugin arm. Results go to the directory given by `--output-dir`; point it at a scratch directory
+outside the repository, so the report stays private and nothing is committed.
 
 ## Cases
 

@@ -97,7 +97,7 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
      - [ ] The repo run has ≤ 1 false alarm and every suppression is visible with its reason `[ref: PRD/F5 "no more than one false alarm"]`
      - [ ] repo ADR-4 descriptions are not flagged, an internal failure exits 2 (the skill continues), and the lint never executes code `[ref: PRD/F5 AC5-AC7 (AC6 amended)]`
 
-- [ ] **T1.4 Catalog consistency test** `[activity: testing]` `[component: C5]`
+- [x] **T1.4 Catalog consistency test** `[activity: testing]` `[component: C5]`
 
   1. Prime: Read the fingerprint trace `[ref: SDD/Implementation Examples]`, SDD-ADR-2, and the precedent `tests/test_model_ladder.py` (slicing by heading).
   2. Test: Create `tests/tcs-helper/test_prompt_catalog.py` with these checks:
@@ -116,7 +116,7 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
      - [ ] A copied fingerprint, a dead or retired ID, or an `@`-import fails the test with file:line `[ref: PRD/F1 AC5, AC6]`
      - [ ] The allow-list of pre-migration copies is explicit and owned by Phase 3 tasks `[ref: SDD/SDD-ADR-2]`
 
-- [ ] **T1.5 Phase Validation** `[activity: validate]`
+- [x] **T1.5 Phase Validation** `[activity: validate]`
 
   - Run `pytest -q -rs`; the full suite stays green.
   - Run `prompt_lint.py --repo`. Both pass.
@@ -125,3 +125,13 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
     - the lint registry matches SDD-ADR-5;
     - the profiles match SDD-ADR-6.
   - Commit after each task. Record the measured repo lint numbers (errors, suppressions, W1 hits) in this file under a "Phase 1 results" heading.
+
+## Phase 1 results
+
+- Commits: f8c4c183, fa272848 (T1.1); 28df8672, 3c27be38, 1fc6ccae (T1.2, escalated to opus@max after two review FAILs); ddb0f7df, 6393a844 (T1.3); bc075cbf, 69000545, ab94fb4a, 2b898499 (T1.4).
+- Tests: full suite 2053 passed, 2 skipped, 4 strict xfails (eval-loop.md → T2.4; consumer citations skill-author, agent-author → T3.1, memory-claude-md-optimize → T3.5), all in tests/tcs-helper/test_prompt_single_source.py.
+- Catalog tests split: tests/tcs-helper/catalog_helpers.py + test_prompt_catalog.py, test_prompt_profiles.py, test_prompt_single_source.py.
+- Lint `--repo`: 258 files, ≈1.5 s; errors = 2 (both KNOWN_OPEN #253, semantic_detector.py:95 and :129); warnings W1 = 4, W3 = 4, W2 = 0; 0 suppressions; 0 error-level false alarms.
+- Pre-migration fingerprint copies: none (paraphrased copies tracked via research-internal.md (A); Phase 3 red steps adjusted).
+- Side fixes: `--output-dir` added to the documented plugin-eval runs in skill-author/reference/plugin-evals.md and tcs-workflow/evals/README.md (privacy check now covers all plugins/).
+

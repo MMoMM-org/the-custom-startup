@@ -100,7 +100,7 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
 - [ ] **T2.4 prompt-author SKILL.md and mode references** `[activity: skill-authoring]` `[component: C2]`
 
   1. Prime: Read the runtime flow and the error handling `[ref: SDD/Runtime View]`, the Finding model, PRD F2–F4 and F8 with their detailed audit spec `[ref: PRD/Detailed Feature Specifications]`, and the catalog entries (not skill-author's current rule copies, which Phase 3 replaces).
-  2. Test: Do T2.5 steps 1–2 now: write the four Iron-Law cases, run them without the skill, and record the failing baseline. Then remove the eval-loop.md `xfail` in test_prompt_catalog.py.
+  2. Test: Do T2.5 steps 1–2 now: write the four Iron-Law cases, run them without the skill, and record the failing baseline. Then remove the eval-loop.md `xfail` in test_prompt_single_source.py.
   3. Implement: Create:
      - `SKILL.md`: intake, hand-off routing, mode dispatch, index-driven catalog loading, consent through AskUserQuestion naming the provider;
      - `reference/write.md`: contract first; agentic entries; gate exits; delimiting; cut test with sizes in bytes;
@@ -112,7 +112,7 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
   4. Validate:
      - SKILL.md is under 300 lines.
      - `prompt_lint.py` on the skill gives 0 errors.
-     - test_prompt_catalog.py stays green: the skill cites IDs and copies no fingerprint.
+     - test_prompt_catalog.py, test_prompt_profiles.py and test_prompt_single_source.py stay green: the skill cites IDs and copies no fingerprint.
      - The skill-author audit findings are resolved.
   5. Success:
      - [ ] Hand-off for skills, agents and CLAUDE.md; intake of kind, target, consumer and what the consumer does `[ref: PRD/F2 AC1, AC6]`
