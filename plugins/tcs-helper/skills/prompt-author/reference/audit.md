@@ -57,8 +57,7 @@ One example row:
   and a one-clause failure, so the gap stays visible instead of being filed under the nearest entry.
 - **Evidence:** the entry's grade from the index. A finding on an unverified or contested entry says so
   in the problem field.
-- **Fix:** the catalog entry's corrected form, written for this file. The fix for a bare prohibition is
-  the wanted behaviour with its reason (PA-04, PA-01); a louder restatement is never the fix.
+- **Fix:** the catalog entry's corrected form, written for this file.
 - **Scope:** add a Scope column when the report mixes scopes.
 
 Lint findings enter the same table with the entry the lint names; a lint error starts at blocking.
