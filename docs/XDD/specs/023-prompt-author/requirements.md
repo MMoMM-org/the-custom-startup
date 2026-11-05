@@ -301,7 +301,7 @@ Consequence of not solving: the same defects keep being written. The user's assu
 - **Engagement:** Each audited prompt that receives an accepted behavioural fix gets an eval run in at least half the cases.
 - *Adoption and engagement are checked by a manual review 30 days after release (git log of prompt files vs. eval reports the maintainer kept); the skill keeps no usage log (amended 2026-11-05).*
 - **Quality:**
-  - Audit recall: the documented defects of the corpus (16 prompts) and of #250–#253 are found in ≥ 90% of cases.
+  - Audit recall: the documented defects of the corpus (16 prompts) and of #250–#253 are found in ≥ 90% of cases. The denominator is the documented defects in prompts of the kinds prompt-author keeps; defects in the handed-off kinds (agent definitions, skills, CLAUDE.md) are measured by their owner skill (amended 2026-11-05, phase 2 drift).
   - Lint precision: ≤ 1 false-alarm error across the repo's prompt files.
   - Contract coverage: briefs written with the skill pass a T2/T3-style contract eval at ≥ 95%, against 0% for the status quo.
   - No regression beyond noise in the evals of the three migrated skills.
