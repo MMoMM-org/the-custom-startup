@@ -34,7 +34,8 @@ Place the prompt by kind: for api-system, chat-template and instruction-file the
 prompt or the first message; for brief and code it is the user message, with case input appended in a
 delimited block.
 
-Give the reader everything the task needs, since the reader has none of the author's session (PA-08):
+Give the reader everything the task needs, since the reader has none of the author's session
+([PA-08](catalog/core.md#pa-08-assumed-absent-context)):
 paths, the purpose, prior results, the definition of every marker. Then apply the entries that match
 the kind and target from the loaded catalog. The ones most drafts need:
 
@@ -56,7 +57,7 @@ small-local) to the draft.
 ## Agentic prompts
 
 A subagent brief, an agent prompt or an API agent with tools is re-read at every step of a loop, and
-nobody can answer its questions mid-run. Apply each entry of the agentic catalog to its draft:
+nobody can answer its questions mid-run. Apply each agentic entry the index loads for its kind:
 
 | Concern | Entry |
 |---|---|

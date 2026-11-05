@@ -33,7 +33,7 @@ Finding {
   evidence: vendor | research | measured | practitioner | unverified
   problem: string
   fix: string
-  scope: single | set | pair
+  scope: single | set | pair    // a report column only when scopes mix (audit.md § Finding format)
 }
 
 State {
@@ -94,10 +94,11 @@ Read the request and any files it names. Then settle each Intake field:
 | mode | the verb: write, draft, create → write; audit, review, check, "why does it fail" → audit; port, adapt, convert to another model → port |
 | kind | what the prompt text is and where it runs, not the file or directory that holds it: a `system=` or system-prompt file → api-system; text sent to a subagent → brief, also when it is stored in a skill's directory (`reference/*-prompt.md`); pasted into another chat tool, including a chat-tool project's instructions → chat-template; a string in source code → code; AGENTS.md, GEMINI.md or a rules file → instruction-file; skill-format text (a SKILL.md body or a skill's procedure) → skill |
 | target | the model named, the API called, or the tool the template is pasted into; Claude Code subagents and `claude -p` → claude |
-| consumer, consumerUse | the code or step that reads the output; search for it before asking (write.md § Contract first) |
+| consumer, consumerUse, consumerLocation | the code or step that reads the output and where you found it; search for it before asking (write.md § Contract first) |
 | replaces | an existing file at the same path, or the prompt the request says to rewrite |
 
-Collect every field you still lack into one AskUserQuestion call. When AskUserQuestion is unavailable
+Collect every field you still lack into one AskUserQuestion call (it takes at most four questions;
+ask the rest in a second call). When AskUserQuestion is unavailable
 or unanswered (a headless run), state the assumption you made for each missing field at the top of
 the reply and continue.
 
@@ -151,9 +152,9 @@ python3 -I "<dir>/scripts/prompt_lint.py" --json --kind <kind> <file>...
 
 For a draft that is not yet a file, write it to the session scratchpad first. Merge the findings into
 the report; each names its PA entry. Exit 1 means at least one error finding; exit 2 means the lint
-itself failed, so report "lint failed" with its stderr line and continue. The repository's lint test lists
-known open findings in `KNOWN_OPEN` (`tests/tcs-helper/test_prompt_lint_repo.py`); report a finding
-listed there as known rather than new.
+itself failed, so report "lint failed" with its stderr line and continue. In this repository, if
+present, `tests/tcs-helper/test_prompt_lint_repo.py` lists known open findings in `KNOWN_OPEN`; report a
+finding listed there as known rather than new.
 
 ### 6. Offer an eval
 
@@ -172,4 +173,4 @@ evaluated on target", and tell the author the command that would run it.
 | port | the port in a fence, the change list with profile topic and evidence grade, the eval label (port.md § Report) |
 
 Every delivery ends with the eval state: a report and its verdict, or the kit and "not evaluated on
-target", or "no eval offered" with the reason.
+target", or, outside port mode, "no eval offered" with the reason.

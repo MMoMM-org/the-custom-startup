@@ -2,8 +2,7 @@
 
 Measures whether a prompt change helped, on the target the prompt is for. Two runners share one kit
 format and one report: `scripts/prompt_eval.py` for standalone prompts, and `scripts/eval_compare.py`
-for skills and agents through `claude plugin eval`. Both scripts sit in this skill's base directory;
-until `eval_compare.py` exists there, use the by-hand procedure under § Skills and agents.
+for skills and agents through `claude plugin eval`. Both scripts sit in this skill's base directory.
 
 ## When to offer one
 
@@ -66,7 +65,7 @@ when the author asks for one, and its report says "proxy".
 
 ```bash
 python3 -I "<dir>/scripts/prompt_eval.py" run --kit KIT --a OLD --b NEW \
-  --target claude:sonnet --kind brief --runs 3 --max-cost-usd 2 \
+  --target claude:sonnet --kind brief --runs 3 --max-cost-usd 2 --author claude:opus \
   --out "<scratchpad>/eval-<name>" --confirm-provider claude
 ```
 
@@ -76,6 +75,7 @@ python3 -I "<dir>/scripts/prompt_eval.py" run --kit KIT --a OLD --b NEW \
 - `--kind` sets placement: api-system, chat-template and instruction-file go in the system prompt;
   brief and code go in the user message with the case input inside `<input>` tags.
 - `--author` is the model running this session; pass it so the runner can refuse a judge equal to it.
+  Without it the check is skipped and the report says so.
 - `--proxy-for TARGET` labels a proxy run.
 
 The judge resolves in this order: `--judge`, then `prompt_eval_judge` in the repository's
@@ -113,7 +113,9 @@ difference when the two hold different cases, since only matching cases pair.
 `run` asks consent the same way (§ Consent; the provider is claude, the judge is plugin eval's own).
 Before any send it scans the selected case directories, in the working tree and the base worktree,
 with lint E1: a secret or a failed scan exits 4. Without `--confirm-provider claude` it prints the
-plan and exits 3. Exits 3 and 4 are handled as in the table above.
+plan and exits 3. Exits 3 and 4 are handled as in the table above. It also exits 1 when `--case`
+matches no case directory, when git or plugin eval fails or times out, and when `--out` still holds a
+`base-worktree` from an aborted run (remove it with `git worktree remove --force`).
 
 When the script is not available, the same procedure by hand:
 
@@ -144,7 +146,7 @@ Its first lines give the verdict, the judge validation state and the cost.
 - **no verdict:** more than 20% of runs or judge replies errored; fix the cause and rerun.
 
 Relay the per-criterion rates for both versions and each judge criterion's state: validated,
-not_validated, insufficient or not_run.
+not_validated, insufficient, provisional (never labelled) or not_run.
 
 ## Validating a judge criterion
 
