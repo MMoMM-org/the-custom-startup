@@ -44,6 +44,7 @@
 | 2026-11-04 | Judge labels collected from a stratified sample of the full run, not from the pilot | The pilot yields only 9 outputs per semantic criterion, all judged PASS; ~20 labels need the full run's spread |
 | 2026-11-04 | Gravity agent-prompt article added to research-external.md; its agent rules (stopping conditions, behaviour when unclear, goal over script, refusal with alternative) go into the shared catalog, reaching agent-author via the migration | User-supplied source; agent-author has none of these rules today; a direct edit would bypass the catalog that is meant to be the single source |
 | 2026-11-05 | Full experiment run (385 runs, $7.97): no measurable Opus-vs-Sonnet difference; explicit authoring beats the repo's subagent briefs (T2/T3 Q 0%); see experiment/results.md | Answers the user's question 'would Sonnet write better prompts' — no; the gap is in the missing contracts, not the author model |
+| 2026-11-05 | Judge validation from 28 user labels: T5 no_implementation_detail validated (9/10); T1 no_unsupported_fact invalid (3/10, all 7 judge FAILs overturned) and dropped from the T1 headline; T3 planted_bug_identified supported but not validated (4/4 decided, 4 UNSURE) | Below the 85% threshold a criterion is reported unvalidated; the T1 judge demands per-claim hedges the rubric does not ask for. Dropping it changes no conclusion (T1 O 98% / S 100% / Q 95%). Lesson for the catalog: an LLM judge passing hand-built controls is not calibrated |
 
 ## Context
 

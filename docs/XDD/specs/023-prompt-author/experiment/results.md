@@ -2,7 +2,7 @@
 
 Run 2026-11-04/05. 30 authorings (3 per arm x 5 tasks, 2 arms) + 5 status-quo prompts, 385 target runs, $7.97 total. No target, grader or judge errors; every authoring returned a tagged prompt. Design: PLAN.md. Raw runs: `~/.cache/spec023-runs/` (not committed).
 
-**Judge criteria are not yet validated** (PLAN.md § Judge: ~20 user labels per criterion pending). Rows marked *judge* are provisional.
+**Judge validation** (§ Judge validation below): `no_implementation_detail` (T5) is validated; `no_unsupported_fact` (T1) is **invalid** (judge too strict) and is dropped from the T1 headline; `planted_bug_identified` (T3) is supported but not validated.
 
 ## Answer
 
@@ -12,7 +12,7 @@ Run 2026-11-04/05. 30 authorings (3 per arm x 5 tasks, 2 arms) + 5 status-quo pr
 
 | Task | Opus (O, n) | Sonnet (S, n) | Status quo (Q, n) | O-S, 95% CI (bootstrap, clustered by prompt) |
 |---|---|---|---|---|
-| T1 research system prompt, haiku | 90% (60) | 92% (60) | 90% (20) | -2% [-13, +10] |
+| T1 research system prompt, haiku (mechanical criteria only) | 98% (60) | 100% (60) | 95% (20) | -2% |
 | T2 implementer brief, sonnet agentic | 100% (30) | 100% (30) | **0%** (10) | 0 |
 | T3 review brief, sonnet agentic | 97% (30) | 100% (30) | **0%** (10) | -3% [-13, 0] |
 | T4 CLAUDE.md, haiku agentic | 100% (15) | 100% (15) | 60% (5) | 0 |
@@ -31,8 +31,8 @@ Per prompt (all-pass / cases): T1 O1 17/20, O2 18, O3 19, S1 19, S2 18, S3 18, Q
 | T5 | one_question_per_turn | 53 | 83 | 60 | Opus-authored prompts let the model bundle questions |
 | T5 | final doc delivered (all_sections) | 77 | 53 | 90 | Sonnet-authored prompts keep the section-approval gate after the user says "write it now" |
 | T5 | markers_resolved | 73 | 40 | 80 | follows from no final doc |
-| T1 | *judge* no_unsupported_fact | 90 | 92 | 95 | provisional |
-| T5 | *judge* no_implementation_detail | 97 | 93 | 100 | provisional |
+| T1 | *judge* no_unsupported_fact | 90 | 92 | 95 | invalid — judge demands a per-claim marker; every judge FAIL that was labelled is hedged at section or document level |
+| T5 | *judge* no_implementation_detail | 97 | 93 | 100 | validated (9/10) |
 
 T5 sensitivity — counting a follow-up that elaborates the same question ("For example, ...?", "Is it ...?") as one question: all-pass O 16/30, S 10/30, Q 5/10. Conclusion unchanged.
 
@@ -55,9 +55,27 @@ Pilot fixes (5) are in PLAN.md § Pilot outcome. Two changes after the freeze, b
 
 The T1 fix removed an apparent Opus deficit (O 77% → 90%): before it, the headline would have read "Sonnet writes better research prompts". It was a grader artefact.
 
+## Judge validation
+
+The user labelled 28 of the 60 blinded items (`harness/label_sample.py`; labels in the label artifact's `labels` collection, key in `~/.cache/spec023-runs/label_key.json`). Threshold: 85% agreement on decided labels.
+
+| Criterion | Labelled | Decided | Agree | Verdict |
+|---|---|---|---|---|
+| T1 no_unsupported_fact | 10 | 10 | 3 (30%) | **invalid**: all 7 judge FAILs overturned |
+| T3 planted_bug_identified | 8 | 4 | 4 (100%) | supported, not validated (4 UNSURE, no judge FAIL to test) |
+| T5 no_implementation_detail | 10 | 10 | 9 (90%) | validated |
+
+Second read of the disagreements (assistant, not blind — it had seen the key):
+
+- **T1, 7 overturned FAILs.** The judge named figures ("roughly 40–90%", CRA dates, PEP 779) as unmarked. Every one sits under a marker the rubric accepts, just not on the same line: "roughly", "(from memory; verify the figures)", "recalled approximately for the exact percentage ranges", a "Verify first: the three application dates" list. The labeller is right on 6. O2/t1-15 is borderline: PEP 779 / 3.14 sits in a "what is established" block with only a document-level caveat. Verdict unchanged: the judge applies a per-claim reading the rubric does not ask for. The checked dates and PEP facts are also correct.
+- **T3, 4 UNSURE.** Each points at the planted file and lines and names the defect (SQL injection via `str.format`; `open()` without `with`). A second finding next to it does not matter under the rubric ("at least one finding"). All four are PASS on a read.
+- **T5 Q/t5-10-garden** (judge PASS, label FAIL). There is no PRD in the material: the final turn refuses "write it now" and asks about a self-service portal vs email/SMS. `all_sections` already counts this as a failure. Whether a channel question is HOW is arguable, so this one is not a judge defect.
+
+Consequence for the headline: dropping the T1 judge criterion raises T1 to O 98% / S 100% / Q 95%. The answer does not change, and T1 is now a full ceiling.
+
 ## Limits
 
 - n = 3 authorings per arm; between-authoring variance is large (T5), so a small real difference would not be detected.
 - Target family = author family for T1-T4.
-- Judge criteria unvalidated until the labels are in; judge passed 5/5 hand-built controls (PLAN.md § Judge).
+- One labeller, 28 of 60 items. T3 has no judge FAIL in the sample, so judge leniency there is untested. The 5/5 hand-built controls (PLAN.md § Judge) did not reveal the T1 strictness: controls catch blatant cases, not calibration.
 - T5 uses a simulated user (haiku) with an 8-turn limit; the "write it now" request arrives at turn 7 for every arm.
