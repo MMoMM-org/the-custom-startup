@@ -117,22 +117,9 @@ plan and exits 3. Exits 3 and 4 are handled as in the table above. It also exits
 matches no case directory, when git or plugin eval fails or times out, and when `--out` still holds a
 `base-worktree` from an aborted run (remove it with `git worktree remove --force`).
 
-When the script is not available, the same procedure by hand:
-
-```bash
-git worktree add "<scratchpad>/base" main
-claude plugin eval "<scratchpad>/base/plugins/<plugin>" --case '<glob>' --runs 3 --ablation none \
-  --trust-plugin --no-publish --output-dir "<scratchpad>/before" --json "<scratchpad>/before.json" \
-  --max-cost-usd 2
-claude plugin eval plugins/<plugin> --case '<glob>' --runs 3 --ablation none \
-  --trust-plugin --no-publish --output-dir "<scratchpad>/after" --json "<scratchpad>/after.json" \
-  --max-cost-usd 2
-git worktree remove --force "<scratchpad>/base"
-```
-
-Keep `--no-publish` on every run, because plugin eval publishes its report to claude.ai by default,
-and keep `--output-dir` in the scratchpad so results stay out of the repository. Use `--trust-plugin`
-only on this repository's own plugins.
+A plugin eval run made without the script keeps `--no-publish`, because plugin eval publishes its
+report to claude.ai by default, and an `--output-dir` in the scratchpad. Use `--trust-plugin` only on
+this repository's own plugins.
 
 ## Reading the report
 

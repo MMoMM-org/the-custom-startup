@@ -66,7 +66,7 @@ go to their owners (step 2).
 - [reference/write.md](reference/write.md) — write mode: contract first, agentic entries, gates, delimiting, cut test
 - [reference/audit.md](reference/audit.md) — audit mode: single, set and pair scopes, finding format, severity, edge cases
 - [reference/port.md](reference/port.md) — port mode: profile application, idiom removal, small-local turn shape, labels
-- [reference/eval-loop.md](reference/eval-loop.md) — eval kits, both runners, consent, judge validation, worktree procedure
+- [reference/eval-loop.md](reference/eval-loop.md) — eval kits, both runners, consent, judge validation
 - `reference/profiles/` — one port profile per target: anthropic, openai, google, small-local
 
 ## Workflow
