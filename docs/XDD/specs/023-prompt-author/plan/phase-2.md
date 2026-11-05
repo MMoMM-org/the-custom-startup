@@ -85,7 +85,7 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
   4. Validate: The tests pass.
   5. Success: Agreement is computed and the validation rule applied (≥8 decided, ≥85%) `[ref: PRD/F6 AC4]`
 
-- [ ] **T2.3 Plugin-eval comparison `eval_compare.py`** `[activity: backend-tooling]` `[component: C4]` — after T2.2 (imports the report module from prompt_eval.py)
+- [x] **T2.3 Plugin-eval comparison `eval_compare.py`** `[activity: backend-tooling]` `[component: C4]` — after T2.2 (imports the report module from prompt_eval.py)
 
   1. Prime: Read the eval_compare contract `[ref: SDD/Internal API Changes]` and SDD-ADR-3. Capture one real `claude plugin eval --json` file from `plugins/tcs-workflow/evals` (one case, 1 run, `--no-publish --max-cost-usd 1`) as a fixture. Fetch one real response before porting a reader; do not guess the shape.
   2. Test: `tests/tcs-helper/test_eval_compare.py`:
@@ -97,7 +97,7 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
   4. Validate: The tests pass. One live `run` on a single tcs-workflow case (`--max-cost-usd 1`, with consent) confirms that results land in scratch and no observability record is written. The worktree procedure is documented in eval-loop.md by T2.4.
   5. Success: The skill before/after comparison produces the shared report `[ref: SDD/SDD-ADR-3; PRD/F7 AC2]`
 
-- [ ] **T2.4 prompt-author SKILL.md and mode references** `[activity: skill-authoring]` `[component: C2]`
+- [x] **T2.4 prompt-author SKILL.md and mode references** `[activity: skill-authoring]` `[component: C2]`
 
   1. Prime: Read the runtime flow and the error handling `[ref: SDD/Runtime View]`, the Finding model, PRD F2–F4 and F8 with their detailed audit spec `[ref: PRD/Detailed Feature Specifications]`, and the catalog entries (not skill-author's current rule copies, which Phase 3 replaces).
   2. Test: Do T2.5 steps 1–2 now: write the four Iron-Law cases, run them without the skill, and record the failing baseline. Then remove the eval-loop.md `xfail` in test_prompt_single_source.py.
@@ -121,7 +121,7 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
      - [ ] Port applies the profile, removes idioms, adds the small-local turn shape and labels the result `[ref: PRD/F4 AC1-AC5]`
      - [ ] The cut test reports sizes, and each added section names its PA ID `[ref: PRD/F8 AC1]`
 
-- [ ] **T2.5 Iron-Law eval cases for prompt-author** `[activity: testing]` `[component: C2]`
+- [x] **T2.5 Iron-Law eval cases for prompt-author** `[activity: testing]` `[component: C2]`
 
   1. Prime: Read the proving-signal procedure `[ref: plugin-evals.md § Proving Signal]` and the SDD acceptance criteria for F2/F3 `[ref: SDD/Acceptance Criteria]`.
   2. Test (done during T2.4 step 2): Create these cases in `plugins/tcs-helper/evals/`:
@@ -135,7 +135,7 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
   4. Validate: `claude plugin eval plugins/tcs-helper --case 'prompt-author-*' --runs 3 --trust-plugin --no-publish --max-cost-usd 5` passes. Record both scores and the cost in `plugins/tcs-helper/evals/README.md`.
   5. Success: Each case fails without the skill, or with its rule weakened, and passes with it `[ref: SDD/CON-2 Iron Law; PRD/F2 AC2; PRD/F3 AC5]`
 
-- [ ] **T2.6 Audit acceptance run on the known defects and the corpus** `[activity: validate]` `[component: C2]`
+- [x] **T2.6 Audit acceptance run on the known defects and the corpus** `[activity: validate]` `[component: C2]`
 
   1. Prime: Read research-corpus.md (16 items and their failures) and issues #250–#253.
   2. Test: The expected findings per prompt come from the corpus table and the SDD F3 criteria: PA-14 for #250, PA-14 + PA-24 for #251, PA-30 for #252, PA-15 for #253. Write the expected-findings list to `plugins/tcs-helper/evals/README.md` before running anything.
@@ -143,8 +143,19 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
   4. Validate: Recall ≥ 90% over the documented defects. On a miss, fix the catalog entry or audit.md, then re-run, and record both runs.
   5. Success: Each of #250–#253 is found, and corpus recall ≥ 90% is recorded `[ref: PRD/F3 AC6; PRD/Success Metrics Quality]`
 
-- [ ] **T2.7 Repo configuration and phase validation** `[activity: validate]`
+- [x] **T2.7 Repo configuration and phase validation** `[activity: validate]`
 
   - With the user's OK, add `prompt_eval_judge = "ollama:qwen2.5:32b-instruct-q4_K_M"` and `prompt_eval_ollama_host = "http://host.docker.internal:11434"` to the *global* `~/.claude/startup.toml` `[tcs]`, not the tracked repo file `[ref: SDD/Deployment View]`. Verify a run without `--judge` reports source `global-config`.
   - Run `pytest -q -rs`, `prompt_lint.py --repo` and the prompt-author eval cases. All pass.
   - Verify the error-handling list in the SDD Runtime View against the tests, one test per bullet.
+
+## Phase 2 results
+
+- Commits: 63174da3, 69c310df (T2.1); a104652f, 420c124b (T2.2 + review follow-ups, stats module split); f6aa32c9, 84a7cb52 (T2.3); 2deca3b6, fd62f522, 187c23a1, f5b8fdc1 (T2.4/T2.5); 8fa00240, 19a5cc9a, 2a37f9ce, 7f3a2cc8 (T2.6).
+- Tests: full suite 2261 passed, 2 skipped, 3 strict xfails (Phase 3 consumer citations). Lint `--repo`: 2 KNOWN_OPEN errors (#253), warnings only otherwise.
+- Live spend: T2.1 $0.007, T2.3 $0.63, T2.5 $9.04 + $10.81 (consented $10 + $12).
+- Iron-Law evals (plugins/tcs-helper/evals/README.md): handoff, audit-injection, port-gate-exit red without the plugin, 1.00 with it; contract-first green without the skill (regression guard). Weakening the skill's procedure text did not lower any score; removing catalog entry PA-15 did (1.00 → 0.78).
+- Audit acceptance: #250-#253 all found; corpus recall 43/49 (87.8%), 43/45 (95.6%) excluding the agent definition the skill hands off to agent-author.
+- T2.7: global ~/.claude/startup.toml holds prompt_eval_judge and prompt_eval_ollama_host; a plan-only run shows source global-config. The prompt-author eval suite was not re-run in T2.7 (measured in T2.5, $7.40 per full run).
+- Open for the phase boundary: skill cleanup list (scratchpad skill-cleanup-findings.md: ~6.7 KB cut candidates, minor consistency fixes, T2.3 test gaps); recall denominator decision; kind-table gaps found by T2.6 (chat-tool project instructions, brief inside a skill, files holding both a brief and a skill).
+
