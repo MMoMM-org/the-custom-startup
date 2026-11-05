@@ -21,7 +21,7 @@ Back each behaviour an example shows with a rule stated in the instructions (PA-
 - **Evidence:** vendor
 
 ## Negatives
-GPT-4.1 follows instructions literally and may need explicit don'ts, so keep a don't where PA-04 places one for a literal target, such as "Write prose paragraphs; do not use bullet lists". This differs from Anthropic, which advises telling the model what to do rather than what not to do; when porting from a Claude prompt, add the don't at each boundary the target could cross.
+State each boundary the target could cross as a rule plus its explicit don't, as PA-04 places one for a literal target, such as "Write prose paragraphs; do not use bullet lists". GPT-4.1 follows instructions more closely and more literally, and may need explicit don'ts. This differs from Anthropic, which advises telling the model what to do rather than what not to do. When porting from a Claude prompt, keep each positive rule and add its don't at each boundary the target could cross.
 - **Source:** OpenAI, GPT-4.1 prompting guide, literal instruction following (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide)
 - **Date:** 2026-11-04
 - **Evidence:** vendor

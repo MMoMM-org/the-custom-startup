@@ -41,6 +41,17 @@ QUOTED_RE = re.compile(r'"([^"]+)"')
 CONTESTED_RE = re.compile(r'— contested|contested —')
 INDEX_LINK_RE = re.compile(r'^\[(PA-\d{2})\]\(([^)#]+)#([^)]+)\)$')
 
+PROFILES_DIR = CATALOG_DIR.parent / 'profiles'
+PROFILE_TARGETS = ('anthropic', 'openai', 'google', 'small-local')
+PROFILE_TOPICS = ('Placement', 'Delimiters', 'Examples', 'Negatives', 'Emphasis', 'Literalness', 'Turn shape')
+PROFILE_FIELDS = ('Source', 'Date', 'Evidence')
+# SDD-ADR-6: only the T5 findings are measured for small-local; no vendor guidance exists for it.
+SMALL_LOCAL_MEASURED = ('Turn shape', 'Gate exits')
+# A topic whose guidance has no source says so in its first word, so a port report can repeat the label.
+UNVERIFIED_LEAD_IN = 'Unverified'
+DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+PA_REF_RE = re.compile(r'\bPA-\d{2}\b')
+
 
 # ---------------------------------------------------------------- expected set
 
@@ -172,6 +183,44 @@ def _github_slug(heading_text):
     return slug.replace(' ', '-')
 
 
+def _fingerprints(entry):
+    return QUOTED_RE.findall(entry['fields'].get('Fingerprint', ''))
+
+
+# ---------------------------------------------------------------- profile parse
+
+def _profile_path(target):
+    return PROFILES_DIR / f'{target}.md'
+
+
+def _profile_topics(path):
+    """Return {topic: {'guidance': [lines], 'fields': {name: value}}} for each '## ' section."""
+    topics = {}
+    current = None
+    for lineno, line in enumerate(path.read_text(encoding='utf-8').splitlines(), start=1):
+        if line.startswith('## '):
+            topic = line[3:].strip()
+            assert topic not in topics, f'{path.name}:{lineno}: duplicate "## {topic}" heading'
+            current = {'guidance': [], 'fields': {}}
+            topics[topic] = current
+            continue
+        if current is None or not line.strip():
+            continue
+        field = FIELD_RE.match(line)
+        if field:
+            current['fields'][field.group(1)] = field.group(2).strip()
+        else:
+            current['guidance'].append(line)
+    return topics
+
+
+def _load_profile(target):
+    """Return (text, topics) of a port profile; a missing profile fails the calling test."""
+    path = _profile_path(target)
+    assert path.is_file(), f'missing port profile {target}.md'
+    return path.read_text(encoding='utf-8'), _profile_topics(path)
+
+
 # ---------------------------------------------------------------- tests
 
 def test_initial_entries_block_parses():
@@ -294,10 +343,6 @@ def test_entries_stay_within_the_character_budget():
     assert not too_long, too_long
 
 
-def _fingerprints(entry):
-    return QUOTED_RE.findall(entry['fields'].get('Fingerprint', ''))
-
-
 def test_fingerprints_are_unique_across_entries():
     owners = {}
     for e in _all_entries():
@@ -354,39 +399,6 @@ def test_index_rows_and_sections_agree():
 
 # ---------------------------------------------------------------- port profiles
 
-PROFILES_DIR = CATALOG_DIR.parent / 'profiles'
-PROFILE_TARGETS = ('anthropic', 'openai', 'google', 'small-local')
-PROFILE_TOPICS = ('Placement', 'Delimiters', 'Examples', 'Negatives', 'Emphasis', 'Literalness', 'Turn shape')
-PROFILE_FIELDS = ('Source', 'Date', 'Evidence')
-# SDD-ADR-6: only the T5 findings are measured for small-local; no vendor guidance exists for it.
-SMALL_LOCAL_MEASURED = ('Turn shape', 'Gate exits')
-DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
-PA_REF_RE = re.compile(r'\bPA-\d{2}\b')
-
-
-def _profile_topics(path):
-    """Return {topic: {'guidance': [lines], 'fields': {name: value}}} for each '## ' section."""
-    topics = {}
-    current = None
-    for line in path.read_text(encoding='utf-8').splitlines():
-        if line.startswith('## '):
-            current = {'guidance': [], 'fields': {}}
-            topics[line[3:].strip()] = current
-            continue
-        if current is None or not line.strip():
-            continue
-        field = FIELD_RE.match(line)
-        if field:
-            current['fields'][field.group(1)] = field.group(2).strip()
-        else:
-            current['guidance'].append(line)
-    return topics
-
-
-def _profile_path(target):
-    return PROFILES_DIR / f'{target}.md'
-
-
 @pytest.mark.parametrize('target', PROFILE_TARGETS)
 def test_profile_exists(target):
     assert _profile_path(target).is_file(), f'missing port profile {target}.md'
@@ -394,9 +406,7 @@ def test_profile_exists(target):
 
 @pytest.mark.parametrize('target', PROFILE_TARGETS)
 def test_profile_has_every_topic_with_guidance_source_date_and_evidence(target):
-    path = _profile_path(target)
-    assert path.is_file(), f'missing port profile {target}.md'
-    topics = _profile_topics(path)
+    _, topics = _load_profile(target)
     problems = []
     for topic in PROFILE_TOPICS:
         if topic not in topics:
@@ -417,9 +427,7 @@ def test_profile_has_every_topic_with_guidance_source_date_and_evidence(target):
 
 
 def test_small_local_grades_only_the_t5_findings_as_measured():
-    path = _profile_path('small-local')
-    assert path.is_file(), 'missing port profile small-local.md'
-    topics = _profile_topics(path)
+    _, topics = _load_profile('small-local')
     problems = []
     for topic in SMALL_LOCAL_MEASURED:
         if topic not in topics:
@@ -432,11 +440,35 @@ def test_small_local_grades_only_the_t5_findings_as_measured():
     assert not problems, '\n'.join(problems)
 
 
+@pytest.mark.parametrize('target', [t for t in PROFILE_TARGETS if t != 'small-local'])
+def test_vendor_profiles_grade_no_topic_as_measured(target):
+    # SDD-ADR-6: the only measurements are the T5 runs on a small local model.
+    _, topics = _load_profile(target)
+    measured = [
+        topic for topic, section in topics.items()
+        if _grade(section['fields'].get('Evidence', '')) == 'measured'
+    ]
+    assert not measured, f'{target}: topics graded measured without a measurement: {measured}'
+
+
+@pytest.mark.parametrize('target', PROFILE_TARGETS)
+def test_unverified_lead_in_matches_the_grade(target):
+    _, topics = _load_profile(target)
+    problems = []
+    for topic, section in topics.items():
+        unverified = _grade(section['fields'].get('Evidence', '')) == 'unverified'
+        leads_in = bool(section['guidance']) and section['guidance'][0].startswith(UNVERIFIED_LEAD_IN)
+        if unverified and not leads_in:
+            problems.append(f'{target} / {topic}: graded unverified, guidance must start with "{UNVERIFIED_LEAD_IN}"')
+        if leads_in and not unverified:
+            problems.append(f'{target} / {topic}: guidance starts with "{UNVERIFIED_LEAD_IN}" but is graded otherwise')
+    assert not problems, '\n'.join(problems)
+
+
 @pytest.mark.parametrize('target', PROFILE_TARGETS)
 def test_profile_cites_only_catalogued_entries(target):
-    path = _profile_path(target)
-    assert path.is_file(), f'missing port profile {target}.md'
-    cited = set(PA_REF_RE.findall(path.read_text(encoding='utf-8')))
+    text, _ = _load_profile(target)
+    cited = set(PA_REF_RE.findall(text))
     known = {e['id'] for e in _all_entries()}
     assert cited, f'{target}.md cites no catalog entry; profiles cite PA IDs for the underlying rule'
     assert not cited - known, f'{target}.md cites unknown entries {sorted(cited - known)}'
@@ -444,9 +476,7 @@ def test_profile_cites_only_catalogued_entries(target):
 
 @pytest.mark.parametrize('target', PROFILE_TARGETS)
 def test_profile_does_not_restate_a_catalog_fingerprint(target):
-    path = _profile_path(target)
-    assert path.is_file(), f'missing port profile {target}.md'
-    text = path.read_text(encoding='utf-8')
+    text, _ = _load_profile(target)
     copied = [
         f"{e['id']}: {sentence}"
         for e in _all_entries()
