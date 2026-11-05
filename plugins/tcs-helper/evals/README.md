@@ -57,16 +57,13 @@ skill files were never changed.
   made (budget).
 - **audit-injection** drops only when the PA-15 entry itself is gone, and then to 0.78 (1 of 3 runs
   without the `PA-15` citation): the case defends the catalog entry more than the SKILL.md data rule.
-- The earlier 0.67 for port-gate-exit was a skipped llm grader under a $5 suite ceiling; at $4 for
-  the case alone every run was judged and scored 1.00.
 
 ## Cost
 
 The prompt-author suite at 3 runs per arm costs about $7.40 (with plugin about $2.05 per round of four
 cases, without about $0.41) and takes about 6 minutes with `-j 4`. Set `--max-cost-usd` to 10: the
 ceiling is checked before each run launches, so at 8 the last port-gate-exit runs can be cut off and
-their llm grader skipped. T2.4/T2.5 spent $9.04 before this round; the redesign and proving-signal
-round spent $10.81.
+their llm grader skipped.
 
 ## Audit acceptance (T2.6)
 
