@@ -36,19 +36,8 @@ delimited block.
 
 Give the reader everything the task needs, since the reader has none of the author's session
 ([PA-08](catalog/core.md#pa-08-assumed-absent-context)):
-paths, the purpose, prior results, the definition of every marker. Then apply the entries that match
-the kind and target from the loaded catalog. The ones most drafts need:
-
-| Concern | Entry |
-|---|---|
-| reason clauses | [PA-01](catalog/core.md#pa-01-reason-clause-for-non-obvious-rules) |
-| history and provenance | [PA-02](catalog/core.md#pa-02-history-and-provenance-noise) |
-| emphasis and restatement | [PA-03](catalog/core.md#pa-03-emphasis-and-authority-language), [PA-05](catalog/core.md#pa-05-redundant-restatement) |
-| prohibitions | [PA-04](catalog/core.md#pa-04-prohibition-only-instructions) |
-| enumerated cases | [PA-09](catalog/core.md#pa-09-over-prescription--enumerated-edge-cases) |
-| examples | [PA-11](catalog/core.md#pa-11-example-over-anchoring) |
-| delimiters | [PA-18](catalog/core.md#pa-18-unbalanced-or-inconsistent-delimiters) |
-| secrets | [PA-19](catalog/core.md#pa-19-secrets-in-prompts) |
+paths, the purpose, prior results, the definition of every marker. Then apply each entry loaded in
+SKILL.md step 3 whose Tell the draft shows.
 
 For a target other than Claude, read that target's profile in `profiles/` and apply each of its topics
 (Placement, Delimiters, Examples, Negatives, Emphasis, Literalness, Turn shape, and Gate exits for
@@ -57,16 +46,8 @@ small-local) to the draft.
 ## Agentic prompts
 
 A subagent brief, an agent prompt or an API agent with tools is re-read at every step of a loop, and
-nobody can answer its questions mid-run. Apply each agentic entry the index loads for its kind:
-
-| Concern | Entry |
-|---|---|
-| goal over script | [PA-22](catalog/agentic.md#pa-22-goal-and-constraints-over-a-fixed-script) |
-| missing or unclear input | [PA-20](catalog/agentic.md#pa-20-behaviour-when-information-is-missing-or-unclear) |
-| stopping and the report | [PA-21](catalog/agentic.md#pa-21-stopping-conditions) |
-| refusals | [PA-23](catalog/agentic.md#pa-23-refusal-with-an-approved-alternative) |
-| scope fence | [PA-24](catalog/agentic.md#pa-24-scope-fence-files-commit-range-read-only-git) |
-| reviewer verdict prior (unverified) | [PA-25](catalog/agentic.md#pa-25-verdict-prior-in-reviewer-briefs) |
+nobody can answer its questions mid-run. Apply each entry of [catalog/agentic.md](catalog/agentic.md)
+that the index loads for its kind.
 
 The status values the brief uses for the unclear and stop cases are part of the contract: they come
 from the consumer's list, or the note tells the author the consumer has no branch for them.
