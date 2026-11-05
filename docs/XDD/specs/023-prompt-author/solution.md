@@ -469,6 +469,46 @@ ENTITY: CatalogEntry (NEW; one "## PA-NN <name>" section in catalog/*.md)
     a contested entry states the conflicting source and the decision that holds (PA-50 → repo ADR-4)
     lint checks name the entry they implement; the entry names the check ("Lint: W1")
 
+INITIAL ENTRIES (release 1; IDs fixed from here on):
+  core.md
+    PA-01 Reason clause for non-obvious rules     corrected "strip rationale"   vendor
+    PA-02 History and provenance noise            kept from skill-author        measured (corpus)
+    PA-03 Emphasis and authority language         corrected "YOU MUST"; a restated terminal constraint is allowed   vendor   Lint: W1
+    PA-04 Prohibition-only instructions           target-dependent (OpenAI literalism)   vendor   Lint: W3
+    PA-05 Redundant restatement                   corpus mode RD                measured (corpus)
+    PA-06 In-file contradiction                                                 vendor
+    PA-07 Cross-file contradiction                                              measured (corpus)
+    PA-08 Assumed absent context                                                measured (corpus)
+    PA-09 Over-prescription / enumerated edge cases                             vendor
+    PA-10 Long instruction list                                                 vendor (IFScale)   Lint: W2
+    PA-11 Examples: 3-5 diverse, each behaviour also stated as a rule   corrected "one example"   vendor
+    PA-12 Example turn shape copied by small models                             measured (T5)
+    PA-13 Missing output contract                                               measured (T2/T3)
+    PA-14 Contract asymmetry (consumer reads what producer never requests)      measured (T2/T3)
+    PA-15 Untrusted input not delimited and marked as data                      vendor (OWASP, spotlighting)   Lint: E4
+    PA-16 Gate without an exit                                                  measured (T5)
+    PA-17 Length without stated purpose (cut test)                              measured (results obs. 2)
+    PA-18 Unbalanced or inconsistent delimiters                                 vendor   Lint: E2
+    PA-19 Secrets in prompts                                                    vendor (OWASP)   Lint: E1
+  agentic.md
+    PA-20 Behaviour when information is missing or unclear                      measured (T2 NEEDS_CONTEXT) + practitioner
+    PA-21 Stopping conditions                                                   practitioner
+    PA-22 Goal and constraints over a fixed script                              vendor
+    PA-23 Refusal with an approved alternative                                  practitioner + OWASP
+    PA-24 Scope fence (files, commit range, read-only git)                      measured (T3 teammate file)
+    PA-25 Verdict prior in reviewer briefs                                      unverified (1 corpus item)
+  instruction-files.md
+    PA-30 Stale facts (paths, commands, versions, counts)                       vendor (ETH AGENTS.md study) + corpus   Lint: E3 (links only)
+    PA-31 Overview the README or code already gives                             vendor (ETH)
+    PA-32 Scope mismatch (rule at the wrong load level)                         measured (corpus)
+  porting.md
+    PA-40 Port leakage (source-environment idioms)                              measured (corpus)
+    PA-41 Untested portability claim                                            measured (corpus)
+  harness.md
+    PA-50 Description authority language (MUST BE USED)                         contested — repo ADR-4 holds
+    PA-51 Description states triggers, not the workflow                         harness (replaces 8 copies)
+    PA-52 Front-loaded trigger, third person                                    harness
+
 ENTITY: CatalogIndex (NEW; catalog/index.md table)
   FIELDS: id | name | kinds | targets | evidence | status | file
   BEHAVIOR: the skill reads the index first and loads only the files whose rows match the prompt's kind and target
