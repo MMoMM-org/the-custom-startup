@@ -18,8 +18,10 @@ says to load, recursively, and listing the result before reviewing it.
 
 ## Procedure
 
-1. **Locate and classify.** Find each file, set its kind and target (SKILL.md step 1), and hand off a
-   lone skill, agent or CLAUDE.md (SKILL.md step 2).
+1. **Locate and classify.** Find each file and set its kind and target (SKILL.md step 1) from the
+   prompt text, not from the directory that holds it: a brief, template or chat prompt in a skill
+   directory is audited here. Hand off only a lone skill-format text, agent or CLAUDE.md (SKILL.md
+   step 2).
 2. **Lint** every file in scope (SKILL.md step 5) and keep its findings.
 3. **Review each file** against the loaded entries. Read the whole file first; judge each entry by its
    Tell, and cite it only when the Tell is present.

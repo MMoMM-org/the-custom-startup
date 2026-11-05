@@ -2,7 +2,7 @@
 """Before/after comparison of a plugin's eval suite (spec 023, C4, SDD-ADR-3).
 
   eval_compare.py run --plugin DIR --case GLOB --base REF --runs N --max-cost-usd X --out DIR
-                     [--allow-tools TOOL...]
+                     --confirm-provider claude [--allow-tools TOOL...]
   eval_compare.py compare BEFORE.json AFTER.json --out DIR
 
 `claude plugin eval` compares with- against without-plugin only, so a version
@@ -14,6 +14,11 @@ DIR (and --threshold 0, so exit 1 means a failed run, not a low score); these ar
 fixed here and cannot be overridden. The one flag passed through is --allow-tools
 (for suites that need gated tools), to both runs; a value that starts with "-" is
 refused. DIR must be outside any git work tree unless gitignored.
+
+Nothing is sent before two checks pass: lint E1 finds no secret in the case
+directories under PLUGIN/evals/ that GLOB selects, in the working tree and in
+REF's worktree (a hit or any scan failure exits 4, the value never shown), and
+--confirm-provider claude is given (without it the plan is printed, exit 3).
 
 `compare` reads two `plugin eval --json` files and writes report.md and
 report.json in prompt_eval.py's shape: per-grader pass rates, all-pass, the
@@ -28,9 +33,11 @@ paired difference over cases with its CI, the sign test, cost.
 
 Exit: 0 done | 1 case sets differ, unreadable input, refused out dir or ref,
 plugin eval failed, error rate above 20% | 2 cost ceiling hit in either run
-(partial report). Stdlib only, Python 3.8+.
+(partial report) | 3 consent missing | 4 secret found or secret scan failed.
+Stdlib only, Python 3.8+.
 """
 import argparse
+import fnmatch
 import json
 import os
 import shutil
@@ -46,7 +53,8 @@ if str(SCRIPT_DIR) not in sys.path:
 from prompt_eval_stats import (  # noqa: E402  (after the sys.path line above)
     build_report, out_dir_problem, render_markdown, write_report)
 
-EXIT_OK, EXIT_INVALID, EXIT_CEILING = 0, 1, 2
+EXIT_OK, EXIT_INVALID, EXIT_CEILING, EXIT_CONSENT, EXIT_SECRET = 0, 1, 2, 3, 4
+PROVIDER = "claude"
 SCHEMA_VERSION = 1
 SIDES = ("before", "after")
 WORKTREE_DIR = "base-worktree"
@@ -58,7 +66,11 @@ POSIX = os.name == "posix"
 
 
 class Refused(Exception):
-    pass
+    """A check failed; carries the exit code (1 unless stated)."""
+
+    def __init__(self, message, code=EXIT_INVALID):
+        Exception.__init__(self, message)
+        self.code = code
 
 
 # ------------------------------------------------------------------ compare
@@ -260,6 +272,59 @@ def _remove_worktree(root, worktree):
     _git(root, "worktree", "prune")
 
 
+def selected_cases(plugin, case_glob):
+    """The case directories under PLUGIN/evals/ that CASE_GLOB selects."""
+    evals = Path(plugin) / "evals"
+    if not evals.is_dir():
+        return []
+    return sorted(d for d in evals.iterdir()
+                  if d.is_dir() and fnmatch.fnmatchcase(d.name, case_glob))
+
+
+def case_files(plugin, case_glob):
+    return [f for d in selected_cases(plugin, case_glob) for f in sorted(d.rglob("*"))
+            if f.is_file()]
+
+
+def scan_secrets(paths):
+    """Lint E1 over PATHS, as prompt_eval.py does; [(path, line, message)], values never shown."""
+    import prompt_lint
+    hits = []
+    for path in paths:
+        ctx = prompt_lint.FileContext(str(path), str(path), prompt_lint._read_text(str(path)),
+                                      "brief")
+        hits += [(str(path), line, message) for line, message in prompt_lint.check_secret(ctx)]
+    return hits
+
+
+def check_secrets(plugin, case_glob, label):
+    """Exit 4 on a hit or on any scan failure (fail closed)."""
+    try:
+        hits = scan_secrets(case_files(plugin, case_glob))
+    except Exception as exc:  # any failure in the scan blocks the send
+        raise Refused("secret scan of the {} cases failed ({}); nothing was sent".format(
+            label, type(exc).__name__), EXIT_SECRET)
+    if hits:
+        raise Refused("possible secret in the {} cases; nothing was sent:\n  ".format(label)
+                      + "\n  ".join("{}:{}: {}".format(p, line, msg) for p, line, msg in hits),
+                      EXIT_SECRET)
+
+
+def check_consent(args, plugin):
+    if PROVIDER in (args.confirm_provider or []):
+        return
+    cases = [d.name for d in selected_cases(plugin, args.case)]
+    raise Refused("\n".join([
+        "Plan (nothing sent; consent missing: --confirm-provider {}):".format(PROVIDER),
+        "  provider: {} (claude plugin eval on your own credential)".format(PROVIDER),
+        "  cases: {} ({})".format(args.case, ", ".join(cases) or "none matched"),
+        "  runs: 2 sides (base {} and working tree) x {} runs per case".format(
+            args.base, args.runs),
+        "  ceiling: ${:.2f} (half per side)".format(args.max_cost_usd),
+        "  re-run with: --confirm-provider {}".format(PROVIDER),
+    ]), EXIT_CONSENT)
+
+
 def run(args):
     if args.max_cost_usd is None or args.max_cost_usd <= 0:
         raise Refused("--max-cost-usd must be positive")
@@ -282,6 +347,8 @@ def run(args):
     rel = os.path.relpath(os.path.realpath(str(plugin)), os.path.realpath(str(root)))
     if _git(root, "rev-parse", "--verify", "--quiet", args.base + "^{commit}").returncode != 0:
         raise Refused("--base {} is not a commit in {}".format(args.base, root))
+    check_secrets(plugin, args.case, "working tree")
+    check_consent(args, plugin)
 
     out = Path(args.out).resolve()
     worktree = out / WORKTREE_DIR
@@ -297,6 +364,7 @@ def run(args):
     if added.returncode != 0:
         raise Refused("git worktree add failed for {}".format(args.base))
     try:
+        check_secrets(worktree / rel, args.case, "base " + args.base)
         before = _plugin_eval(worktree / rel, worktree, args, out, "before")
     finally:
         _remove_worktree(root, worktree)
@@ -326,6 +394,8 @@ def _parse_args(argv):
     run_p.add_argument("--runs", type=int, default=3)
     run_p.add_argument("--max-cost-usd", type=float, required=True)
     run_p.add_argument("--out", required=True)
+    run_p.add_argument("--confirm-provider", action="append", default=[], metavar="claude",
+                       help="consent to send the cases to claude; without it the plan is printed")
     run_p.add_argument("--allow-tools", nargs="+", metavar="TOOL",
                        help="passed to both plugin eval runs as --allow-tools")
     cmp_p = sub.add_parser("compare", help="compare two plugin eval --json files")
@@ -344,9 +414,13 @@ def main(argv=None):
         if args.cmd == "compare":
             return compare(args.before, args.after, args.out)
         return run(args)
-    except (ArgumentError, Refused) as exc:
+    except ArgumentError as exc:
         print("eval_compare.py: {}".format(exc), file=sys.stderr)
         return EXIT_INVALID
+    except Refused as exc:
+        stream = sys.stdout if exc.code == EXIT_CONSENT else sys.stderr
+        print("eval_compare.py: {}".format(exc), file=stream)
+        return exc.code
 
 
 if __name__ == "__main__":

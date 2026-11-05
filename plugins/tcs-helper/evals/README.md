@@ -187,3 +187,27 @@ reads "the implementer's report" (PA-13) and does not say what to do when an inp
 the three gate agents), `:29` gives "13 activity + the-chief + the-meta-agent", `:44` "19" templates
 (PA-30); `research-prompt.md:4` claims standalone use untested (PA-41); `prd-prompt.md:22` approval
 gate without an exit (PA-16).
+
+### Item 5 re-check (T2.9)
+
+The run 2 fix (`19a5cc9a`) made PA-32 load for api-system. SKILL.md step 1 sends text pasted into
+another chat tool to chat-template, which PA-32 did not list, so the SC finding held only when the
+auditor read the project instructions as api-system. T2.9 has step 1 name a chat-tool project's
+instructions as chat-template and adds chat-template to PA-32's kinds (entry and index row).
+
+Re-checked offline (no model call) by reading `docs/templates/setup-claude-project.md` at this commit as
+chat-template, target claude, against the rows that load for it: every `any` row plus PA-16, PA-32,
+PA-40 and PA-41 (PA-12 is small-local only).
+
+- **SC → PA-32: found.** `:30` "General rules that apply in all sessions" puts phase rules at project
+  level: `:33` bans implementation detail "in PRD work" for brainstorm and constitution sessions too, and
+  `:32` puts an approval gate on every conversation, research questions included. The Tell's "a
+  chat-tool project's system prompt" names this file's case.
+- **RD → PA-05: found** in set scope (audit.md § Scopes, a chat-tool project's instructions with the
+  templates pasted into it; step 4): `:31` restates `brainstorm-prompt.md:17`, `prd-prompt.md:42` and
+  `constitution-prompt.md:22`; `:32` restates `brainstorm-prompt.md:23`, `prd-prompt.md:22` and
+  `constitution-prompt.md:28`; `:33` restates `prd-prompt.md:11,26`; `:34` restates
+  `brainstorm-prompt.md:22`. PA-05 loads for every kind, so this did not depend on the kind. Audited
+  single, as the corpus table scopes it, the restatement stays out of reach: PA-05's Tell is one prompt.
+
+Item 5 stays 2/2, now under either kind. Recall is unchanged: 43/49 (87.8%), 43/45 (95.6%).

@@ -100,7 +100,8 @@ A skill or agent is measured with its plugin's eval cases, before and after the 
 
 ```bash
 python3 -I "<dir>/scripts/eval_compare.py" run --plugin plugins/<plugin> --case '<glob>' \
-  --base main --runs 3 --max-cost-usd 4 --out "<scratchpad>/compare-<name>" [--allow-tools Write Edit]
+  --base main --runs 3 --max-cost-usd 4 --out "<scratchpad>/compare-<name>" \
+  --confirm-provider claude [--allow-tools Write Edit]
 ```
 
 It creates a git worktree of the base ref under `--out`, runs the cases there and on the working tree
@@ -108,6 +109,11 @@ with `--ablation none --no-publish --output-dir --json` fixed in the script, rem
 (also on failure), and writes the same report as `prompt_eval.py`. To compare two result files you
 already have: `eval_compare.py compare BEFORE.json AFTER.json --out DIR`; it exits 1 and lists the
 difference when the two hold different cases, since only matching cases pair.
+
+`run` asks consent the same way (§ Consent; the provider is claude, the judge is plugin eval's own).
+Before any send it scans the selected case directories, in the working tree and the base worktree,
+with lint E1: a secret or a failed scan exits 4. Without `--confirm-provider claude` it prints the
+plan and exits 3. Exits 3 and 4 are handled as in the table above.
 
 When the script is not available, the same procedure by hand:
 

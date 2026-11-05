@@ -92,7 +92,7 @@ Read the request and any files it names. Then settle each Intake field:
 | Field | Where it usually comes from |
 |---|---|
 | mode | the verb: write, draft, create → write; audit, review, check, "why does it fail" → audit; port, adapt, convert to another model → port |
-| kind | where the prompt runs: a `system=` or system-prompt file → api-system; text sent to a subagent → brief; pasted into another chat tool → chat-template; a string in source code → code; AGENTS.md, GEMINI.md or a rules file → instruction-file |
+| kind | what the prompt text is and where it runs, not the file or directory that holds it: a `system=` or system-prompt file → api-system; text sent to a subagent → brief, also when it is stored in a skill's directory (`reference/*-prompt.md`); pasted into another chat tool, including a chat-tool project's instructions → chat-template; a string in source code → code; AGENTS.md, GEMINI.md or a rules file → instruction-file; skill-format text (a SKILL.md body or a skill's procedure) → skill |
 | target | the model named, the API called, or the tool the template is pasted into; Claude Code subagents and `claude -p` → claude |
 | consumer, consumerUse | the code or step that reads the output; search for it before asking (write.md § Contract first) |
 | replaces | an existing file at the same path, or the prompt the request says to rewrite |
@@ -105,9 +105,13 @@ the reply and continue.
 
 | The prompt is | Owner | Command |
 |---|---|---|
-| a skill (SKILL.md or a skill's reference file) | skill-author | `/tcs-helper:skill-author` |
+| a skill: a SKILL.md body or a skill's procedure text | skill-author | `/tcs-helper:skill-author` |
 | a Claude Code agent definition (`agents/*.md`) | agent-author | `/tcs-helper:agent-author` |
 | a CLAUDE.md or one of its imported memory files | memory-claude-md-optimize | `/tcs-helper:memory-claude-md-optimize` |
+
+The kind follows the prompt text, not its file. A brief, template or chat prompt stored in a skill
+directory stays here; in a SKILL.md that embeds a brief, the brief stays here and the rest of the file
+is the skill's.
 
 When the request is to write, rewrite or audit one of these on its own, reply with the owner, the
 command to run, and the intake you gathered so the owner can start from it, then end this workflow
