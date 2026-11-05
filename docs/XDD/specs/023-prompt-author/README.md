@@ -59,6 +59,7 @@
 | 2026-11-05 | Judge config for this machine goes into global ~/.claude/startup.toml, not the tracked repo file | A tracked qwen2.5 judge would make every contributor's runs exit 1 |
 | 2026-11-05 | Spec finalized → Ready; ≥5 cases per migration rule group confirmed | User approval. Implementation via /implement 023 on its own branch |
 | 2026-11-05 | semantic_detector.py:94-98 (_claude_contradiction) recorded as an extension of #253 | User choice: same file, same defect class, same fix |
+| 2026-11-05 | Escalation T1.2: opus → opus@max | Two consecutive spec-compliance FAILs at opus (unsupported vendor attributions; compound evidence grade; restated PA-12 figures) |
 
 ## Context
 

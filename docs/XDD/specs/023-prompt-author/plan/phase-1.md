@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Catalog, Lint and Single-Source Test"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 1
 ---
@@ -34,7 +34,7 @@ phase: 1
 
 Establishes the shared, evidence-graded rule source and the mechanical checks that later phases and the skill build on.
 
-- [ ] **T1.1 Failure catalog and index** `[activity: technical-writing]` `[component: C1]`
+- [x] **T1.1 Failure catalog and index** `[activity: technical-writing]` `[component: C1]`
 
   1. Prime: Read the entry format and the initial entry list `[ref: SDD/Application Data Models]`, then the rule inventory and its contradictions `[ref: research-internal.md (A), (F)]`. Read the vendor quotes for the corrected rules `[ref: research-external.md §1-§2]`, the measured modes `[ref: experiment/results.md]` and the corpus modes `[ref: research-corpus.md NEW failure modes]`.
   2. Test: T1.4 is the executable check of this task (format fields, unique IDs, index ↔ sections agree). Write the parts of T1.4 that check format, IDs and the index *first*. They assert the exact INITIAL ENTRIES ID set from solution.md, so they are red on an empty catalog rather than passing vacuously.
@@ -53,7 +53,7 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
      - [ ] The three contradicted rules appear only in corrected form with sources `[ref: PRD/F1 "stated in corrected form"]`
      - [ ] PA-50 is contested, pointing to repo ADR-4, wording of the rule unchanged `[ref: PRD/F1 "marked contested"]`
 
-- [ ] **T1.2 Port profiles** `[activity: technical-writing]` `[component: C1]` `[parallel: true]` — after T1.1 (profiles cite its IDs, and its checks extend the T1.4 test file); parallel with T1.3 only
+- [x] **T1.2 Port profiles** `[activity: technical-writing]` `[component: C1]` `[parallel: true]` — after T1.1 (profiles cite its IDs, and its checks extend the T1.4 test file); parallel with T1.3 only
 
   1. Prime: Read the PortProfile model and SDD-ADR-6 `[ref: SDD/Application Data Models; SDD/Architecture Decisions SDD-ADR-6]`, the vendor guidance and divergences `[ref: research-external.md §1]`, and the T5 findings `[ref: experiment/results.md T5 rows, Observations 3]`.
   2. Test: Add to T1.4: every profile file has the topics placement, delimiters, examples, negatives, emphasis, literalness and turn shape, and every topic has source, date and evidence. Run it and see it fail before the profiles exist.
@@ -63,7 +63,7 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
   4. Validate: The profile checks in T1.4 pass. No profile restates a catalog entry; profiles cite PA IDs instead.
   5. Success: Four profiles exist, each topic sourced and dated, with unverified entries labelled `[ref: PRD/F4 "applies that target's profile"; PRD/F4 "labelled unverified"]`
 
-- [ ] **T1.3 Prompt lint** `[activity: backend-tooling]` `[component: C3]` `[parallel: true]`
+- [x] **T1.3 Prompt lint** `[activity: backend-tooling]` `[component: C3]` `[parallel: true]`
 
   1. Prime: Read the CLI contract `[ref: SDD/Internal API Changes]`, SDD-ADR-5, the W1 trace `[ref: SDD/Implementation Examples]` and the lint-as-test precedent `tests/test_shell_portability_lints.py`. Read the measured false-alarm table `[ref: research-technical.md §2]` and `plugins/tcs-helper/scripts/lib/semantic_detector.py:128-135`.
   2. Test: Write `tests/tcs-helper/test_prompt_lint.py` with fixtures under `tests/tcs-helper/fixtures/prompt_lint/`:
@@ -89,7 +89,7 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
      - text and `--json` output;
      - the W1/W2/W3 thresholds from SDD-ADR-5.
 
-     Run `--repo` over the prompt-file set defined in the SDD CLI contract (with its exclusions), and resolve every error, either by a fix that is in scope or by a `lint-ok` with a reason. semantic_detector.py is Must Not Touch: its two E4 findings go into a `KNOWN_OPEN` allow-list in test_prompt_lint_repo.py, keyed by path, check and issue number (#253 for 128–136; for 94–98 the issue the user decides on — extend #253 or a new issue, ask before writing to GitHub). Re-run the W1/W2 calibration on this set and record the numbers.
+     Run `--repo` over the prompt-file set defined in the SDD CLI contract (with its exclusions), and resolve every error, either by a fix that is in scope or by a `lint-ok` with a reason. semantic_detector.py is Must Not Touch: its two E4 findings go into a `KNOWN_OPEN` allow-list in test_prompt_lint_repo.py, keyed by path, check and issue number (#253 for 128–136; #253 also for 94–98 — the user chose to extend #253, comment posted 2026-11-05). Re-run the W1/W2 calibration on this set and record the numbers.
   4. Validate: Both test files pass on ubuntu and macOS (CI). `--repo` takes < 10 s. Error-level false alarms on the repo are ≤ 1, each one listed in the commit message.
   5. Success:
      - [ ] E1–E4 are errors and W1–W3 are warnings, with thresholds as in SDD-ADR-5 `[ref: PRD/F5 AC1, AC2]`

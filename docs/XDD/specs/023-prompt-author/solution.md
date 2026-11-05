@@ -479,6 +479,8 @@ Check definitions (SDD-ADR-5):
        error finding, else 2 if any file failed, else 0, so a crash elsewhere never masks a real error.
     A suppression without a reason is reported as check "E0" (level error, outside the seven-check registry).
     AGENTS.md and GEMINI.md match at any depth, like CLAUDE.md.
+    E4 name-only rule needs a literal word of ≥ 3 letters (userPrompt = f"Hi {x}" is not flagged); augmented assignment (+=) and
+    concatenation with a bare variable are not tracked.
     KNOWN_OPEN entries are keyed by path, check, issue and line range; a KNOWN_OPEN entry that no longer matches a finding fails the
     repo test, so it is removed when the issue is fixed.
     Calibration on the defined set (253 files): W1 fires in 4 files, W2 max 149 (catalog/core.md), W3 fires 3 times (all warning-level
@@ -560,6 +562,9 @@ ENTITY: CatalogEntry (NEW; one "## PA-NN <name>" section in catalog/*.md)
     applies_to: kinds ⊆ {api-system, brief, chat-template, code, instruction-file, skill, agent, any}
                 targets ⊆ {claude, openai, google, small-local, any}
     evidence: vendor | measured | practitioner | unverified   (+ sources line)
+              vendor = vendor guidance or published research (paper, study); measured = measured in this repo (spec 023 corpus or experiment);
+              practitioner = practitioner write-up without controlled evidence; unverified = no source found. An entry backed by both
+              published research and a repo measurement takes the stronger external grade (vendor) and names both sources.
     fingerprint: 1-3 canonical sentences, verbatim, used by C5
     status: active | contested | retired
   RULES:
