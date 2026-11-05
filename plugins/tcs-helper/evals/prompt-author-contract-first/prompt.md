@@ -5,7 +5,7 @@ runs: 3
 max_turns: 20
 timeout_seconds: 600
 allowed_tools: [Read, Glob, Grep]
-expected_outcome: The brief requests the OUTCOME line in the vocabulary step 6 parses (SHIPPED, PARKED, NEED_INPUT), not the DONE/FAILED status the request suggested, and the reply names step 6 as the consumer it checked.
+expected_outcome: The brief requests every field the orchestrator reads from the reply (OUTCOME with SHIPPED, PARKED, NEED_INPUT; REASON; QUESTION; WHEEL for step 4; WARNINGS for step 5), not the DONE/FAILED status the request suggested, and the reply names the steps it checked and tells the author the requested status does not match what the orchestrator parses.
 ---
 
 /tcs-helper:prompt-author Write the brief that our release orchestrator sends to its packaging
@@ -33,10 +33,12 @@ Dispatch the packaging subagent with the brief below. It builds the sdist and wh
 <!-- BRIEF GOES HERE -->
 
 ## Step 4: Smoke test
-Install the TestPyPI package in a fresh virtualenv and import it.
+In a fresh virtualenv, install the exact file the packaging reply named on its `WHEEL:` line, then
+import the package.
 
 ## Step 5: Announce
-Draft the release notes from `RELEASE.md`.
+Draft the release notes from `RELEASE.md`. Copy each item from the packaging reply's `WARNINGS:` line
+(the `twine check` warnings, `none` when clean) into a "Known issues" section.
 
 ## Step 6: Collect results
 Read the packaging subagent's reply and find its last line that starts with `OUTCOME:`.
