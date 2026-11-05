@@ -13,7 +13,7 @@ version: "1.0"
 - [x] All required sections are complete
 - [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Architecture pattern is clearly stated with rationale
-- [ ] **All architecture decisions confirmed by user** (ADR-1–4 confirmed; ADR-5–8 pending)
+- [x] **All architecture decisions confirmed by user**
 - [x] Every interface has specification
 
 ### QUALITY CHECKS (Should Pass)
@@ -169,7 +169,7 @@ version: "1.0"
 - service: Ollama HTTP API
   doc: https://github.com/ollama/ollama/blob/main/docs/api.md
   relevance: HIGH
-  why: "Small local model target and default judge; reached at $OLLAMA_HOST (container: host.docker.internal:11434)"
+  why: "Optional: small local model target and, where configured, the judge; endpoint from $OLLAMA_HOST or startup.toml"
 ```
 
 ### Implementation Boundaries
@@ -376,6 +376,7 @@ plugins/tcs-helper/
 └── skills/memory-claude-md-optimize/reference/scoring-rubric.md                         # MODIFY
 docs/about/principles.md                                                                 # MODIFY l.43, l.146
 CLAUDE.md                                                                                # MODIFY local-testing: copy prompt-author too
+.claude/startup.toml                                                                     # MODIFY: prompt_eval_judge, prompt_eval_ollama_host for this repo
 ```
 
 prompt-author's own Iron-Law cases sit in `plugins/tcs-helper/evals/` with the migration cases, because `plugin eval` discovers the plugin-level directory by default. agent-author's existing `evals/pressure-scenarios.md` stays where it is.
@@ -650,7 +651,7 @@ sequenceDiagram
 - **Consent missing or declined.** C4 exits 3 after printing the plan, and C2 delivers the kit only. A run against another target is never started as a substitute. A proxy run happens only when the author asks for it, and is labelled "proxy".
 - **Secret in a prompt or kit.** C4 exits 4 and prints the path:line and check, never the value.
 - **Cost ceiling reached.** C4 exits 2 with a partial report marked partial.
-- **Judge equals target**, or the judge is not reachable. C4 refuses (exit 1). The report marks judge criteria "not_run" when only deterministic graders could run.
+- **Judge equals target**, or the judge is not reachable. C4 refuses (exit 1) and names the configured judge and its source. It never falls back silently to another judge. The report marks judge criteria "not_run" when only deterministic graders could run.
 - **Case sets differ between two plugin-eval results.** eval_compare exits 1 and lists the mismatch, because a comparison over different cases is not paired.
 - **A cross-skill link fails to resolve after install.** C5 checks links in the repo. The installed layout is verified once before release (Implementation Gotchas).
 
@@ -693,7 +694,12 @@ Trace (spec 023 labels):
 ### Single Application Deployment
 - **Environment:** inside the tcs-helper plugin, released by merge + auto-bump. Installed plugins contain the whole plugin directory (verified: `~/.claude/plugins/cache/the-custom-startup/tcs-helper/<ver>/` holds `skills/`, `scripts/`, `templates/`), so `../prompt-author/` links resolve after install.
 - **Configuration:**
-  - `OLLAMA_HOST`: optional; the default is `http://localhost:11434`. In the container it is `http://host.docker.internal:11434`.
+  - Optional `[tcs]` keys in `.claude/startup.toml` (repo) or `~/.claude/startup.toml` (global), with repo overriding global as for `docs_base`:
+    - `prompt_eval_judge = "PROVIDER:MODEL"` (default `claude:haiku`),
+    - `prompt_eval_ollama_host = "URL"` (overridden by `$OLLAMA_HOST`; default `http://localhost:11434`).
+  - These are read by a minimal `[tcs]` key reader (Python 3.8 has no `tomllib`), in the same scope chain as the bash `_extract_docs_base`.
+  - In this repo: judge `ollama:qwen2.5:32b-instruct-q4_K_M`, host `http://host.docker.internal:11434`.
+  - Ollama is optional. Without it, Ollama targets are unavailable and the judge runs on Claude.
   - No other settings. No keys are read.
 - **Dependencies:**
   - the `claude` CLI ≥ 2.1.269 for `plugin eval` (the machine has 2.1.316),
@@ -786,7 +792,7 @@ Not applicable: no UI. The skill's outputs are a finding table, a draft, a port 
   - Trade-offs: about five new cases plus their proving runs (~$5 each at 3 runs per the tcs-workflow suite). This is slower than a manual review.
   - User confirmed: **Yes** (2026-11-05)
 
-- [ ] ADR-5 Lint design: one stdlib script with a check registry. Errors E1–E4: secret, unbalanced XML tag, dead Markdown link/anchor or `@`-import, undelimited interpolation in a code prompt. Warnings W1–W3:
+- [x] ADR-5 Lint design: one stdlib script with a check registry. Errors E1–E4: secret, unbalanced XML tag, dead Markdown link/anchor or `@`-import, undelimited interpolation in a code prompt. Warnings W1–W3:
   - W1 emphasis ≥3 hits and >5/1k words,
   - W2 >150 imperative items,
   - W3 a paragraph of ≥2 sentences with only prohibitions.
@@ -796,25 +802,36 @@ Not applicable: no UI. The skill's outputs are a finding table, a draft, a port 
   - Trade-offs:
     - Backticked stale paths, the AGENTS.md class (#252), are left to the audit's stale-fact review, not the lint.
     - The thresholds are calibrated on one repo.
-  - User confirmed: _Pending_
+  - User confirmed: **Yes** (2026-11-05)
 
-- [ ] ADR-6 Port profiles are catalog data, not procedure: `profiles/<target>.md` with one entry per topic carrying source, date and evidence. `port.md` holds only the procedure. The small-local profile's turn-shape and gate entries are graded "measured" (T5); everything else for small-local is "unverified".
+- [x] ADR-6 Port profiles are catalog data, not procedure: `profiles/<target>.md` with one entry per topic carrying source, date and evidence. `port.md` holds only the procedure. The small-local profile's turn-shape and gate entries are graded "measured" (T5); everything else for small-local is "unverified".
   - Rationale: profiles change with vendor guidance; the procedure does not. The PRD requires source and date per entry.
   - Trade-offs: four more files to keep current.
-  - User confirmed: _Pending_
+  - User confirmed: **Yes** (2026-11-05)
 
-- [ ] ADR-7 Judge defaults and validation:
-  - The default judge is Ollama `qwen2.5:32b-instruct-q4_K_M` when reachable, else `claude:haiku`. The judge is refused when it equals the target.
+- [x] ADR-7 Judge selection and validation:
+  - The judge is configurable and never assumes Ollama. Resolution order, first hit wins:
+    1. `--judge PROVIDER:MODEL`,
+    2. `prompt_eval_judge` in the repo's `.claude/startup.toml` `[tcs]`,
+    3. the same key in `~/.claude/startup.toml`,
+    4. the built-in default `claude:haiku`, or `claude:sonnet` when the target is haiku.
+  - The Ollama endpoint resolves the same way: `$OLLAMA_HOST` > `prompt_eval_ollama_host` (repo > global) > `http://localhost:11434`.
+  - This repo sets `prompt_eval_judge = "ollama:qwen2.5:32b-instruct-q4_K_M"` in its own startup.toml; other users get the Claude default.
+  - The report records the judge and which source chose it. The judge is refused when it equals the target.
   - Validation: sample every judge FAIL plus random PASS up to 20 per criterion (seed 2305), labelled in a Markdown file. ≥8 decided labels and ≥85% agreement → validated.
   - An unvalidated criterion is dropped from all-pass, and the report shows the rate both ways.
   - Rationale: this is the experiment's working setup. The T1 lesson is that the judge passed its controls and still failed calibration, so validation must come from labels.
-  - Trade-offs: a Markdown label file instead of the artifact page used in the experiment, so it works offline and needs no runtime capabilities. A single labeller.
-  - User confirmed: _Pending_
+  - Trade-offs:
+    - A Markdown label file instead of the artifact page used in the experiment, so it works offline and needs no runtime capabilities.
+    - A single labeller.
+    - The Claude default judge costs money per graded output, where the Ollama judge is free.
+    - Judge validation is per judge, so a different configured judge starts unvalidated.
+  - User confirmed: **Yes, with change** (2026-11-05): judge and Ollama host must be configurable; other users cannot be required to run Ollama or a specific model
 
-- [ ] ADR-8 The write-time nudge extends `authoring_reminder.py`: a new pattern `(^|/)(AGENTS|GEMINI)\.md$`, `\.prompt\.md$`, `(^|/)prompts/` with a one-line prompt-author reminder. CLAUDE.md gets no reminder: it is owned by memory-claude-md-optimize and is written often, so a reminder there would be noise. The PRD AC "existing reminders keep naming their own skills" holds because the SKILL.md/agent reminders are unchanged.
+- [x] ADR-8 The write-time nudge extends `authoring_reminder.py`: a new pattern `(^|/)(AGENTS|GEMINI)\.md$`, `\.prompt\.md$`, `(^|/)prompts/` with a one-line prompt-author reminder. CLAUDE.md gets no reminder: it is owned by memory-claude-md-optimize and is written often, so a reminder there would be noise. The PRD AC "existing reminders keep naming their own skills" holds because the SKILL.md/agent reminders are unchanged.
   - Rationale: one hook, one matcher style, already tested.
   - Trade-offs: prompts embedded in code get no nudge (no path signal).
-  - User confirmed: _Pending_
+  - User confirmed: **Yes** (2026-11-05)
 
 ## Quality Requirements
 
@@ -878,6 +895,7 @@ Not applicable: no UI. The skill's outputs are a finding table, a draft, a port 
   - deterministic graders where checkable,
   - binary llm graders with PASS and FAIL conditions.
 - [ ] WHEN run with two versions, THE SYSTEM SHALL produce an EvalReport with per-criterion rates, paired difference, bootstrap CI, sign test and cost.
+- [ ] THE SYSTEM SHALL resolve the judge and Ollama host via the order in ADR-7, and SHALL record the judge and its source in the report. With no configuration and no Ollama, a run SHALL complete with the Claude default judge (test with config files stubbed).
 - [ ] IF judge == target, THEN THE SYSTEM SHALL refuse. The report SHALL mark each judge criterion validated, not_validated, insufficient or not_run.
 - [ ] WHEN labels are recorded, THE SYSTEM SHALL compute agreement and apply the validation rule (≥8 decided, ≥85%).
 - [ ] IF `--confirm-provider` does not cover the target and judge providers, THEN THE SYSTEM SHALL print the plan and exit 3 without sending. The runner SHALL support only the claude and ollama providers.
@@ -924,7 +942,7 @@ Each PRD feature has exactly one owner. Kit *authoring* (writing cases) is the s
 ### Known Technical Issues
 - **#250–#253 stay open** until fixed separately. They are the audit's acceptance cases, so the acceptance run uses the pre-fix commits.
 - `plugin eval` cannot compare two versions natively, so ADR-3 needs a git worktree per base run. Worktrees outlive their use if the run aborts; cleanup is part of the eval-loop procedure.
-- The Ollama judge (qwen2.5:32b) was validated on one criterion only (T5 9/10); it was invalid on T1. Each new kit's judge criteria start provisional.
+- This repo's configured judge (Ollama qwen2.5:32b) was validated on one criterion only (T5 9/10); it was invalid on T1. Each new kit's judge criteria start provisional.
 
 ### Technical Debt
 - **Two `decision-tree.md` copies without a sync test.** Out of scope; noted for a follow-up.

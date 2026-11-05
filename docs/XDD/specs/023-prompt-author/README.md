@@ -48,6 +48,7 @@
 | 2026-11-05 | PRD scope: lint = low-false-alarm checks as errors, rest warn/review; eval = kit + local runs (Claude CLI, Ollama), other vendors kit only; rule corrections applied in migration, measured per skill, reverted on regression | User choices; matches measured FP rates (research-technical.md) and the cheap local harness ($7.97 for 385 runs) |
 | 2026-11-05 | PRD approved; phase → SDD. CLAUDE.md stays owned by memory-claude-md-optimize (catalog consumer); prompt-author owns AGENTS.md/GEMINI.md and all non-skill, non-agent prompt kinds | User approval; avoids a second CLAUDE.md owner (skill-evaluate U1 overlap) |
 | 2026-11-05 | SDD ADR-1–4 confirmed: catalog inside prompt-author skill with ../ links; IDs + fingerprint test; two eval routes (plugin eval at two git states + standalone runner) with one kit format; eval case first, then each rule correction | User choices; model-ladder precedent shows cross-skill links survive install (whole plugin dir is installed) |
+| 2026-11-05 | SDD ADR-5–8 confirmed. ADR-7 changed by user: judge and Ollama host configurable via startup.toml [tcs] (repo > global > default claude:haiku); Ollama never assumed; this repo configures qwen2.5 | User: other users cannot be required to run Ollama or a specific model |
 
 ## Context
 
