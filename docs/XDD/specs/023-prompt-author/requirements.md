@@ -149,7 +149,7 @@ Consequence of not solving: the same defects keep being written. The user's assu
 #### Feature 1: Shared failure catalog (single source of truth)
 - **User Story:** As a catalog maintainer, I want every prompting rule stated once with its failure, fix, scope and evidence grade, so that a correction reaches every authoring skill and contested rules are visible as contested.
 - **Acceptance Criteria:**
-  - [ ] Given the catalog, When any entry is read, Then it states a name, the observable tell, the failure it prevents (one clause), the fix, which prompt kinds and targets it applies to, and an evidence grade from {vendor guidance, measured here, practitioner, unverified}
+  - [ ] Given the catalog, When any entry is read, Then it states a name, the observable tell, the failure it prevents (one clause), the fix, which prompt kinds and targets it applies to, and an evidence grade from {vendor guidance, published research, measured here, practitioner, unverified} *(research added 2026-11-05)*
   - [ ] Given the research and experiment of this spec, When the catalog ships, Then it contains at least these entries:
     - the corpus modes (emphasis, contradiction in-file and cross-file, assumed absent context, redundant restatement, contract asymmetry, stale facts, port leakage, scope mismatch, history noise, long instruction list, over-prescription, missing output contract, example over-anchoring, untrusted input)
     - the experiment modes (gate without an exit; small models copying the turn shape of an example)
@@ -160,7 +160,7 @@ Consequence of not solving: the same defects keep being written. The user's assu
     - 3–5 diverse examples, each behaviour also stated as a rule
     - Each corrected entry cites its vendor sources
   - [ ] Given the description authority rule (`MUST BE USED`), When it appears in the catalog, Then it is marked contested with a pointer to repo ADR-4 and its wording is unchanged
-  - [ ] Given any consuming skill, When the repo's tests run, Then a test fails if that skill restates a catalog rule instead of referring to the catalog
+  - [ ] Given any consuming skill, When the repo's tests run, Then a test fails if that skill copies a catalog rule's fingerprint verbatim instead of referring to the catalog; paraphrased copies are removed during the migration against the research-internal.md (A) list and checked in review *(amended 2026-11-05, SDD-ADR-2 trade-off)*
   - [ ] Given the catalog, When an agent loads it, Then it is read on demand, never imported into every context (declined.md 2026-09-05)
 
 #### Feature 2: Write mode — contract-first authoring for a named target

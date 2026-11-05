@@ -355,7 +355,10 @@ tests/tcs-helper/
 ├── test_prompt_lint_repo.py         # NEW C3: lint over git ls-files prompt files, 0 unsuppressed errors
 ├── test_prompt_eval.py              # NEW C4: report math (bootstrap, sign), consent gate, secret gate, out-dir guard, error runs; runners stubbed
 ├── test_eval_compare.py             # NEW C4: compare shape, case-set mismatch, run subcommand flags (plugin eval stubbed)
-├── test_prompt_catalog.py           # NEW C5
+├── catalog_helpers.py               # NEW C1/C5: shared parsers and constants (bare import; relies on pytest prepend mode)
+├── test_prompt_catalog.py           # NEW C1: entry, index, grade checks
+├── test_prompt_profiles.py          # NEW C1: profile checks
+├── test_prompt_single_source.py     # NEW C5: fingerprint/ID/@-import scans, pins, per-consumer strict xfails, eval privacy
 └── fixtures/prompt_lint/            # NEW C3 fixtures
 ```
 
@@ -481,9 +484,15 @@ Check definitions (SDD-ADR-5):
     AGENTS.md and GEMINI.md match at any depth, like CLAUDE.md.
     E4 name-only rule needs a literal word of ≥ 3 letters (userPrompt = f"Hi {x}" is not flagged); augmented assignment (+=) and
     concatenation with a bare variable are not tracked.
+    Further as-built details (phase 1 drift check): HTML comments are blanked for E2, E3 and W1-W3; W3 skips indented paragraphs, breaks
+    paragraphs at headings and table rows, strips `>` and matches the curly don’t; a suppression may name the check by ID or by name
+    (lint-ok: emphasis …); a path outside the prompt-file set falls back by file name, else kind brief; the E0 finding's entry is
+    "uncatalogued"; catalog entries also have a character budget (MAX_ENTRY_CHARS) next to the 12-line limit; catalog/core.md sits at
+    149 list items, one below W2. KNOWN_OPEN exists only in the repo test: `prompt_lint.py --repo` exits 1 until #253 is fixed, so the
+    skill treats findings listed in KNOWN_OPEN as known, not as new errors.
     KNOWN_OPEN entries are keyed by path, check, issue and line range; a KNOWN_OPEN entry that no longer matches a finding fails the
     repo test, so it is removed when the issue is fixed.
-    Calibration on the defined set (253 files): W1 fires in 4 files, W2 max 149 (catalog/core.md), W3 fires 3 times (all warning-level
+    Calibration on the defined set (253 files at T1.3; 258 at the end of phase 1): W1 fires in 4 files, W2 max 149 (catalog/core.md), W3 fires 3 times (all warning-level
     false alarms), 0 error-level false alarms, 0 suppressions, 2 KNOWN_OPEN (#253). --repo ≈ 1.5 s.
 
 Command: prompt_eval.py run
@@ -561,10 +570,12 @@ ENTITY: CatalogEntry (NEW; one "## PA-NN <name>" section in catalog/*.md)
     fix: what to write instead (positive form)
     applies_to: kinds ⊆ {api-system, brief, chat-template, code, instruction-file, skill, agent, any}
                 targets ⊆ {claude, openai, google, small-local, any}
-    evidence: vendor | measured | practitioner | unverified   (+ sources line)
-              vendor = vendor guidance or published research (paper, study); measured = measured in this repo (spec 023 corpus or experiment);
-              practitioner = practitioner write-up without controlled evidence; unverified = no source found. An entry backed by both
-              published research and a repo measurement takes the stronger external grade (vendor) and names both sources.
+    evidence: vendor | research | measured | practitioner | unverified   (+ sources line)
+              vendor = a model vendor's own guidance (Anthropic, OpenAI, Google docs, cookbooks, vendor engineering posts);
+              research = published research or a standards body (paper, study, OWASP); measured = measured in this repo (spec 023 corpus or
+              experiment); practitioner = practitioner write-up without controlled evidence; unverified = no source found.
+              One grade per entry: the strongest applicable source in the order vendor > research > measured > practitioner, all sources
+              named in the Sources line. (Revised 2026-11-05: research split from vendor after the phase 1 drift check.)
     fingerprint: 1-3 canonical sentences, verbatim, used by C5
     status: active | contested | retired
   RULES:
@@ -582,41 +593,41 @@ INITIAL ENTRIES (release 1; IDs fixed from here on):
     PA-07 Cross-file contradiction                                              measured (corpus)
     PA-08 Assumed absent context                                                measured (corpus)
     PA-09 Over-prescription / enumerated edge cases                             vendor
-    PA-10 Long instruction list                                                 vendor (IFScale)   Lint: W2
+    PA-10 Long instruction list                                                 research (IFScale) + corpus   Lint: W2
     PA-11 Example over-anchoring: use 3-5 diverse examples, each behaviour also stated as a rule   corrected "one example"   vendor
     PA-12 Example turn shape copied by small models                             measured (T5)
     PA-13 Missing output contract                                               measured (T2/T3)
     PA-14 Contract asymmetry (consumer reads what producer never requests)      measured (T2/T3)
-    PA-15 Untrusted input not delimited and marked as data                      vendor (OWASP, spotlighting)   Lint: E4
+    PA-15 Untrusted input not delimited and marked as data                      research (OWASP, spotlighting)   Lint: E4
     PA-16 Gate without an exit                                                  measured (T5)
     PA-17 Length without stated purpose (cut test)                              measured (results obs. 2)
     PA-18 Unbalanced or inconsistent delimiters                                 vendor   Lint: E2
-    PA-19 Secrets in prompts                                                    vendor (OWASP)   Lint: E1
+    PA-19 Secrets in prompts                                                    research (OWASP)   Lint: E1
   agentic.md
     PA-20 Behaviour when information is missing or unclear                      measured (T2 NEEDS_CONTEXT) + practitioner
     PA-21 Stopping conditions                                                   practitioner
     PA-22 Goal and constraints over a fixed script                              vendor
-    PA-23 Refusal with an approved alternative                                  practitioner + OWASP
+    PA-23 Refusal with an approved alternative                                  practitioner (OWASP backs the alternative, not the rule)
     PA-24 Scope fence (files, commit range, read-only git)                      measured (T3 teammate file)
     PA-25 Verdict prior in reviewer briefs                                      unverified (1 corpus item)
   instruction-files.md
-    PA-30 Stale facts (paths, commands, versions, counts)                       vendor (ETH AGENTS.md study) + corpus   Lint: E3 (links only)
-    PA-31 Overview the README or code already gives                             vendor (ETH)
+    PA-30 Stale facts (paths, commands, versions, counts)                       research (ETH AGENTS.md study) + corpus   Lint: E3 (links only)
+    PA-31 Overview the README or code already gives                             research (ETH)
     PA-32 Scope mismatch (rule at the wrong load level)                         measured (corpus)
   porting.md
     PA-40 Port leakage (source-environment idioms)                              measured (corpus)
     PA-41 Untested portability claim                                            measured (corpus)
   harness.md
     PA-50 Description authority language (MUST BE USED)                         contested — repo ADR-4 holds
-    PA-51 Description states triggers, not the workflow                         harness (replaces 8 copies)
-    PA-52 Front-loaded trigger, third person                                    harness
+    PA-51 Description states triggers, not the workflow                         practitioner (harness rule; replaces 8 copies)
+    PA-52 Front-loaded trigger, third person                                    vendor (Anthropic skills best practices; not fetched in spec 023)
 
 ENTITY: CatalogIndex (NEW; catalog/index.md table)
   FIELDS: id | name | kinds | targets | evidence | status | file
   BEHAVIOR: the skill reads the index first and loads only the files whose rows match the prompt's kind and target
 
 ENTITY: PortProfile (NEW; profiles/<target>.md)
-  FIELDS per topic (placement, delimiters, examples, negatives, emphasis, literalness, turn shape):
+  FIELDS per topic (placement, delimiters, examples, negatives, emphasis, literalness, turn shape; small-local adds gate exits):
     guidance, source URL, source date, evidence grade
   RULE: an entry without a source carries "unverified" and the port report repeats that label
 
@@ -726,7 +737,7 @@ W1 fires when: hits ≥ 3 AND hits / words × 1000 > 5.0
   hits = tokens in {MUST, NEVER, ALWAYS, CRITICAL, IMPORTANT, ONLY, ALL, ANY, NOT, REQUIRED, MANDATORY, NO EXCEPTIONS, DO NOT}
 ```
 
-Measured 2026-11-05 over 112 tracked prompt files (≥100 words): median 0.0/1k, p75 1.8, p90 3.0, max 7.2.
+Measured 2026-11-05 over 112 tracked prompt files (≥100 words): median 0.0/1k, p75 1.8, p90 3.0, max 7.2. *Superseded:* this pre-design count included CRITICAL, which the check definition (ADR-5) excludes; the as-built calibration under Internal API Changes is authoritative.
 
 | File | hits | words | /1k | W1 |
 |---|---|---|---|---|

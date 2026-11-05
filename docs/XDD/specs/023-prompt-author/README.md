@@ -60,6 +60,7 @@
 | 2026-11-05 | Spec finalized → Ready; ≥5 cases per migration rule group confirmed | User approval. Implementation via /implement 023 on its own branch |
 | 2026-11-05 | semantic_detector.py:94-98 (_claude_contradiction) recorded as an extension of #253 | User choice: same file, same defect class, same fix |
 | 2026-11-05 | Escalation T1.2: opus → opus@max | Two consecutive spec-compliance FAILs at opus (unsupported vendor attributions; compound evidence grade; restated PA-12 figures) |
+| 2026-11-05 | Evidence grade `research` added (vendor / research / measured / practitioner / unverified); PRD F1 single-source AC narrowed to verbatim fingerprint copies | Phase 1 drift check: studies (IFScale, ETH, spotlighting, OWASP) were shown as vendor guidance; paraphrased copies cannot be caught by fingerprints (SDD-ADR-2). User choices |
 | 2026-11-05 | Phase 3 red steps changed: no verbatim fingerprint copies exist (T1.4 allow-list empty), so the paraphrased rule copies are tracked by research-internal.md (A) and the per-consumer strict xfails, checked by the spec reviewer | Accepted SDD-ADR-2 trade-off (paraphrases escape fingerprints); the plan's "remove from allow-list" steps had nothing to remove |
 
 ## Context

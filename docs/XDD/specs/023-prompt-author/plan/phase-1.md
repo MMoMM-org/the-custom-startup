@@ -126,6 +126,14 @@ Establishes the shared, evidence-graded rule source and the mechanical checks th
     - the profiles match SDD-ADR-6.
   - Commit after each task. Record the measured repo lint numbers (errors, suppressions, W1 hits) in this file under a "Phase 1 results" heading.
 
+- [ ] **T1.6 Evidence grade `research` and drift fixes** `[activity: technical-writing]` `[component: C1, C3]` — added after the phase 1 drift check (2026-11-05)
+
+  1. Prime: Read the revised evidence definition and INITIAL ENTRIES grades `[ref: SDD/Application Data Models]` and the "Further as-built details" lines `[ref: SDD/Internal API Changes]`; PRD F1 AC1 (five grades).
+  2. Test: Extend the grade tests (tests/tcs-helper/test_prompt_catalog.py and test_prompt_profiles.py) to the five-grade enum and to the expected grade per entry from solution.md INITIAL ENTRIES (first word of the grade column); red on the current catalog. Add a lint test that the E0 finding's entry is "uncatalogued" in text and JSON; red.
+  3. Implement: Add `research` to the enum; regrade catalog entries and profile topics so that vendor means a model vendor's own guidance and published research or OWASP is `research` (at least PA-10, PA-15, PA-19, PA-30, PA-31; check every entry and topic against its Sources line); update index rows; set the E0 entry to "uncatalogued" in prompt_lint.py.
+  4. Validate: catalog, profile and lint tests green; full suite green.
+  5. Success: no source that is not a model vendor is graded vendor `[ref: PRD/F1 AC1 (amended)]`; every lint finding names an entry or "uncatalogued" `[ref: SDD/Quality Requirements]`
+
 ## Phase 1 results
 
 - Commits: f8c4c183, fa272848 (T1.1); 28df8672, 3c27be38, 1fc6ccae (T1.2, escalated to opus@max after two review FAILs); ddb0f7df, 6393a844 (T1.3); bc075cbf, 69000545, ab94fb4a, 2b898499 (T1.4).
