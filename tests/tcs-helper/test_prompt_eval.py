@@ -10,7 +10,10 @@ import importlib.util
 import json
 import os
 import re
+import shutil
+import signal
 import subprocess
+import time
 import urllib.error
 from pathlib import Path
 
@@ -131,6 +134,7 @@ class Providers(object):
 @pytest.fixture
 def prov(pe, monkeypatch, tmp_path):
     p = Providers()
+    p.real_claude_call = pe.claude_call
     monkeypatch.setattr(pe, "claude_call", p.claude_call)
     monkeypatch.setattr(pe, "ollama_call", p.ollama_call)
     monkeypatch.setattr(pe, "claude_available", lambda: p.claude_up)
@@ -298,6 +302,122 @@ def test_out_dir_inside_git_work_tree_is_refused_unless_ignored(pe, prov, tmp_pa
     assert prov.claude_calls == []
     _write(repo / ".gitignore", "evalout/\n")
     assert pe.main(run_args(kit, a, b, repo / "evalout")) == 0
+
+
+def test_out_dir_under_a_symlinked_parent_into_the_repo_is_refused(pe, prov, tmp_path,
+                                                                   monkeypatch, capsys):
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+    repo = tmp_path / "repo"
+    (repo / "sub").mkdir(parents=True)
+    _git("init", "-q", cwd=repo)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "link").symlink_to(repo / "sub")
+    kit = make_kit(tmp_path)
+    a, b = make_versions(tmp_path)
+    for target in (outside / "link" / "evalout", outside / "link" / "new" / "evalout"):
+        assert pe.main(run_args(kit, a, b, target)) == 1
+        assert "work tree" in capsys.readouterr().err
+    assert prov.claude_calls == []
+    assert not (repo / "sub" / "evalout").exists() and not (repo / "sub" / "new").exists()
+
+
+def test_out_dir_under_a_dangling_symlink_is_refused_cleanly(pe, prov, tmp_path, monkeypatch,
+                                                             capsys):
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git("init", "-q", cwd=repo)
+    (tmp_path / "dangling").symlink_to(repo / "not-yet")
+    kit = make_kit(tmp_path)
+    a, b = make_versions(tmp_path)
+    assert pe.main(run_args(kit, a, b, tmp_path / "dangling" / "evalout")) == 1
+    err = capsys.readouterr().err
+    assert "symlink" in err and "Traceback" not in err
+    assert prov.claude_calls == []
+    assert not (repo / "not-yet").exists()
+
+
+def test_out_dir_that_cannot_be_created_exits_1_before_any_send(pe, prov, tmp_path, capsys):
+    kit = make_kit(tmp_path)
+    a, b = make_versions(tmp_path)
+    blocker = _write(tmp_path / "a-file", "x\n")
+    assert pe.main(run_args(kit, a, b, blocker / "evalout")) == 1
+    assert "--out" in capsys.readouterr().err
+    assert prov.claude_calls == []
+
+
+def test_mkdir_oserror_in_run_eval_exits_1_before_any_send(pe, prov, setup, monkeypatch, capsys):
+    kit, a, b, out = setup
+
+    def refuse(self, *a, **kw):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(pe.Path, "mkdir", refuse)
+    assert pe.main(run_args(kit, a, b, out)) == 1
+    err = capsys.readouterr().err
+    assert "--out" in err and "PermissionError" in err
+    assert prov.claude_calls == []
+
+
+def test_reused_out_dir_drops_stale_runs_and_reports_only(pe, prov, tmp_path):
+    kit = make_kit(tmp_path)
+    a, b = make_versions(tmp_path)
+    out = tmp_path / "out"
+    assert pe.main(run_args(kit, a, b, out)) == 0
+    assert (out / "runs" / "b").is_dir()
+    keep = _write(out / "my-notes.txt", "mine\n")
+    elsewhere = tmp_path / "elsewhere"
+    _write(elsewhere / "precious.txt", "keep\n")
+    assert pe.main(run_args(kit, a, None, out)) == 0
+    assert not (out / "runs" / "b").exists()
+    assert (out / "runs" / "a" / "case00" / "1" / "final.txt").is_file()
+    assert keep.read_text() == "mine\n"
+    assert "b" not in report_of(out)["versions"]
+    # a runs/ symlink is unlinked, never followed
+    shutil.rmtree(str(out / "runs"))
+    (out / "runs").symlink_to(elsewhere)
+    assert pe.main(run_args(kit, a, None, out)) == 0
+    assert (elsewhere / "precious.txt").read_text() == "keep\n"
+    assert not (out / "runs").is_symlink()
+
+
+def test_stale_report_is_removed_when_the_new_run_writes_none(pe, prov, setup, monkeypatch):
+    kit, a, b, out = setup
+    assert pe.main(run_args(kit, a, b, out)) == 0
+    assert (out / "report.json").is_file()
+
+    def stop(*a, **kw):
+        raise RuntimeError("stop before report")
+
+    monkeypatch.setattr(pe, "build_report", stop)
+    with pytest.raises(RuntimeError):
+        pe.main(run_args(kit, a, b, out))
+    assert not (out / "report.json").exists() and not (out / "report.md").exists()
+
+
+def test_stored_output_is_capped(pe, prov, setup):
+    kit, a, b, out = setup
+    prov.target = lambda version, text, i: "good" + "x" * (pe.MAX_STORED_CHARS + 500)
+    assert pe.main(run_args(kit, a, b, out)) == 0
+    final = (out / "runs" / "a" / "case00" / "1" / "final.txt").read_text()
+    assert len(final) == pe.MAX_STORED_CHARS
+
+
+def test_partial_report_rates_cover_completed_runs_only(pe, prov, setup):
+    kit, a, b, out = setup
+    prov.claude_cost = 0.02
+    prov.target = lambda version, text, i: "good" if version == "a" else "bad"
+    assert pe.main(run_args(kit, a, b, out, cost="0.05")) == 2
+    rep = report_of(out)
+    assert rep["partial"] is True
+    assert rep["cases"]["n"] == 5
+    assert rep["all_pass"] == {"a": 1.0, "b": 0.0}
+    assert rep["errored_runs"] == {"a": 0, "b": 0}
+    assert rep["verdict"] == "insufficient cases"
+    grades = sorted(str(p.relative_to(out)) for p in (out / "runs").rglob("grade.json"))
+    assert grades == ["runs/a/case00/1/grade.json", "runs/a/case01/1/grade.json",
+                      "runs/b/case00/1/grade.json"]
 
 
 # ------------------------------------------------------------------ judge
@@ -528,46 +648,275 @@ def test_invalid_grader_makes_kit_invalid(pe, prov, tmp_path, grader):
     assert prov.claude_calls == []
 
 
-def test_real_claude_call_maps_failures_to_errors(pe, monkeypatch):
-    class Proc(object):
-        def __init__(self, stdout, returncode=0):
-            self.stdout, self.stderr, self.returncode = stdout, "", returncode
+def child(stdout, returncode=0, stderr=""):
+    """A run_child stub returning fixed output."""
+    return lambda cmd, stdin, cwd, timeout_s: (returncode, stdout, stderr)
 
+
+def raising(exc):
+    def run(cmd, stdin, cwd, timeout_s):
+        raise exc
+    return run
+
+
+def test_real_claude_call_maps_failures_to_errors(pe, monkeypatch):
     seen = []
 
-    def fake_run(cmd, **kw):
-        seen.append((cmd, kw))
-        return Proc(json.dumps({"result": "Not logged in", "is_error": True,
-                                "total_cost_usd": 0}), 1)
+    def fake_run(cmd, stdin, cwd, timeout_s):
+        seen.append((cmd, stdin, cwd))
+        return 1, json.dumps({"result": "Not logged in", "is_error": True,
+                              "total_cost_usd": 0}), ""
 
-    monkeypatch.setattr(pe.subprocess, "run", fake_run)
+    monkeypatch.setattr(pe, "run_child", fake_run)
     res = pe.claude_call("claude-haiku-5-5", "hello", system_text="sys", budget_usd=0.3)
     assert res["is_error"] is True
-    cmd, kw = seen[0]
+    assert res["cost_usd"] == 0 and res["cost_worst_case"] is False
+    cmd, stdin, cwd = seen[0]
     for flag in pe.ISOLATION_FLAGS:
         assert flag in cmd
     assert "bypassPermissions" not in " ".join(cmd)
     assert cmd[cmd.index("--max-budget-usd") + 1] == "0.3"
     assert cmd[cmd.index("--tools") + 1] == ""
     assert "--system-prompt-file" in cmd
-    assert kw["input"] == "hello"
-    assert not str(kw["cwd"]).startswith(str(REPO_ROOT))
+    assert stdin == "hello"
+    assert not str(cwd).startswith(str(REPO_ROOT))
 
-    monkeypatch.setattr(pe.subprocess, "run", lambda cmd, **kw: Proc("not json at all", 1))
+    monkeypatch.setattr(pe, "run_child", child("not json at all", 1))
     assert pe.claude_call("claude-haiku-5-5", "hi", budget_usd=1)["is_error"] is True
 
-    def timeout(cmd, **kw):
-        raise subprocess.TimeoutExpired(cmd, 1)
-
-    monkeypatch.setattr(pe.subprocess, "run", timeout)
+    monkeypatch.setattr(pe, "run_child", raising(subprocess.TimeoutExpired(["claude"], 1)))
     res = pe.claude_call("claude-haiku-5-5", "hi", budget_usd=1)
     assert res["is_error"] is True and "timeout" in res["error"]
 
-    monkeypatch.setattr(pe.subprocess, "run", lambda cmd, **kw: Proc(json.dumps(
+    monkeypatch.setattr(pe, "run_child", child(json.dumps(
         {"result": "fine", "is_error": False, "total_cost_usd": 0.004})))
     res = pe.claude_call("claude-haiku-5-5", "hi", budget_usd=1)
     assert res == {"text": "fine", "transcript": ["fine"], "cost_usd": 0.004,
-                   "is_error": False, "error": None}
+                   "is_error": False, "error": None, "cost_worst_case": False}
+
+
+# ------------------------------------------------------------------ worst-case cost on failure
+
+@pytest.mark.parametrize("runner", [
+    raising(subprocess.TimeoutExpired(["claude"], 1)),
+    raising(BrokenPipeError()),
+    child("not json at all", 1),
+    child("[]"),
+    child("42"),
+    child(json.dumps({"result": "ok", "is_error": False, "total_cost_usd": "lots"})),
+    child(json.dumps({"result": "ok", "is_error": False})),
+    child(json.dumps({"result": "ok", "is_error": False, "total_cost_usd": float("nan")})),
+    child(json.dumps({"result": "ok", "is_error": False, "total_cost_usd": -1})),
+], ids=["timeout", "io-error", "no-json", "json-list", "json-number", "cost-string",
+        "cost-missing", "cost-nan", "cost-negative"])
+def test_claude_failure_without_reliable_cost_books_the_cap(pe, monkeypatch, runner):
+    monkeypatch.setattr(pe, "run_child", runner)
+    res = pe.claude_call("claude-haiku-5-5", "hi", budget_usd=0.25)
+    assert res["is_error"] is True
+    assert res["cost_usd"] == pytest.approx(0.25)
+    assert res["cost_worst_case"] is True
+
+
+def test_claude_that_cannot_start_books_nothing(pe, monkeypatch):
+    def popen(*a, **kw):
+        raise FileNotFoundError("claude")
+
+    monkeypatch.setattr(pe.subprocess, "Popen", popen)
+    res = pe.claude_call("claude-haiku-5-5", "hi", budget_usd=0.25)
+    assert res["is_error"] is True and "start" in res["error"]
+    assert res["cost_usd"] == 0.0 and res["cost_worst_case"] is False
+
+
+def test_claude_error_text_stays_out_of_the_error_field(pe, monkeypatch):
+    model_text = "SECRET-MODEL-OUTPUT the model said this"
+    for runner in (child("garbage " + model_text, 1, stderr=model_text),
+                   child(json.dumps({"result": model_text, "is_error": True,
+                                     "subtype": model_text, "total_cost_usd": 0.01}), 1)):
+        monkeypatch.setattr(pe, "run_child", runner)
+        res = pe.claude_call("claude-haiku-5-5", "hi", budget_usd=0.25)
+        assert res["is_error"] is True
+        assert "SECRET-MODEL-OUTPUT" not in res["error"]
+        assert len(res["error"]) <= 80
+
+
+def test_two_timeouts_on_budget_005_exit_2_with_partial_report(pe, prov, setup, monkeypatch):
+    kit, a, b, out = setup
+    monkeypatch.setattr(pe, "claude_call", prov.real_claude_call)
+    launched = []
+
+    def timeout(cmd, stdin, cwd, timeout_s):
+        launched.append(cmd)
+        raise subprocess.TimeoutExpired(cmd, timeout_s)
+
+    monkeypatch.setattr(pe, "run_child", timeout)
+    code = pe.main(run_args(kit, a, b, out, cost="0.05"))
+    assert code == 2
+    rep = report_of(out)
+    assert rep["partial"] is True
+    assert rep["cost_usd"] == pytest.approx(0.05)
+    assert len(launched) <= 2
+    ledger = [json.loads(x) for x in (out / "ledger.jsonl").read_text().splitlines()]
+    assert sum(e["cost_usd"] for e in ledger) == pytest.approx(0.05)
+    assert all(e["cost_basis"] == "worst_case_cap" for e in ledger)
+    assert any("worst case" in n for n in rep["notes"])
+
+
+def _stream(*events):
+    return "\n".join(json.dumps(e) for e in events)
+
+
+RESULT_OK = {"type": "result", "subtype": "success", "is_error": False, "result": "one",
+             "total_cost_usd": 0.001}
+
+
+def test_short_stream_books_worst_case(pe, monkeypatch):
+    monkeypatch.setattr(pe, "run_child", child(_stream({"type": "system"}, RESULT_OK), 1))
+    res = pe.claude_call("claude-haiku-5-5", "hi", turns=["again"], budget_usd=0.4)
+    assert res["is_error"] is True
+    assert "1 of 2" in res["error"]
+    assert res["transcript"] == ["one"]
+    assert res["cost_usd"] == pytest.approx(0.4) and res["cost_worst_case"] is True
+
+
+def test_stream_with_is_error_result_and_full_count_books_reported_cost(pe, monkeypatch):
+    errored = {"type": "result", "subtype": "error_max_budget_usd", "is_error": True,
+               "result": "model words", "total_cost_usd": 0.02}
+    monkeypatch.setattr(pe, "run_child", child(_stream(RESULT_OK, errored)))
+    res = pe.claude_call("claude-haiku-5-5", "hi", turns=["again"], budget_usd=0.4)
+    assert res["is_error"] is True
+    assert "error_max_budget_usd" in res["error"] and "model words" not in res["error"]
+    assert res["cost_usd"] == pytest.approx(0.02) and res["cost_worst_case"] is False
+
+
+def test_stream_with_is_error_result_and_short_count_books_worst_case(pe, monkeypatch):
+    errored = dict(RESULT_OK, is_error=True, subtype="error_during_execution")
+    monkeypatch.setattr(pe, "run_child", child(_stream(errored, "[1]")))
+    res = pe.claude_call("claude-haiku-5-5", "hi", turns=["again", "more"], budget_usd=0.4)
+    assert res["is_error"] is True and "error_during_execution" in res["error"]
+    assert res["cost_usd"] == pytest.approx(0.4) and res["cost_worst_case"] is True
+
+
+def test_stream_with_bad_cost_books_worst_case(pe, monkeypatch):
+    monkeypatch.setattr(pe, "run_child", child(_stream(
+        RESULT_OK, dict(RESULT_OK, result="two", total_cost_usd="x"))))
+    res = pe.claude_call("claude-haiku-5-5", "hi", turns=["again"], budget_usd=0.4)
+    assert res["is_error"] is True
+    assert res["cost_usd"] == pytest.approx(0.4) and res["cost_worst_case"] is True
+
+
+def test_errored_run_counts_under_the_20_percent_rule(pe, prov, setup, monkeypatch):
+    kit, a, b, out = setup
+    monkeypatch.setattr(pe, "claude_call", prov.real_claude_call)
+    monkeypatch.setattr(pe, "run_child", child("[]"))
+    code = pe.main(run_args(kit, a, None, out, cost="100"))
+    assert code in (1, 2)
+    rep = report_of(out)
+    assert rep["errored_runs"]["a"] >= 1
+
+
+# ------------------------------------------------------------------ child process
+
+class FakeProc(object):
+    def __init__(self, pid=4242, timeouts=1):
+        self.pid = pid
+        self.returncode = None
+        self.timeouts = timeouts
+        self.killed = False
+
+    def communicate(self, input=None, timeout=None):
+        if self.timeouts:
+            self.timeouts -= 1
+            raise subprocess.TimeoutExpired(["claude"], timeout)
+        self.returncode = -9
+        return "", ""
+
+    def kill(self):
+        self.killed = True
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process groups are POSIX")
+def test_timeout_kills_the_whole_process_group(pe, monkeypatch):
+    procs, kills, popen_kw = [], [], {}
+
+    def popen(cmd, **kw):
+        popen_kw.update(kw)
+        procs.append(FakeProc())
+        return procs[-1]
+
+    monkeypatch.setattr(pe.subprocess, "Popen", popen)
+    monkeypatch.setattr(pe.os, "killpg", lambda pgid, sig: kills.append((pgid, sig)))
+    with pytest.raises(subprocess.TimeoutExpired):
+        pe.run_child(["claude"], "hi", "/", 1)
+    assert popen_kw["start_new_session"] is True
+    assert popen_kw["encoding"] == "utf-8" and popen_kw["errors"] == "replace"
+    assert kills == [(4242, signal.SIGKILL)]
+
+
+def test_timeout_falls_back_to_kill_without_process_groups(pe, monkeypatch):
+    procs = []
+
+    def popen(cmd, **kw):
+        procs.append(FakeProc())
+        return procs[-1]
+
+    monkeypatch.setattr(pe.subprocess, "Popen", popen)
+    monkeypatch.setattr(pe, "POSIX", False)
+    with pytest.raises(subprocess.TimeoutExpired):
+        pe.run_child(["claude"], "hi", "/", 1)
+    assert procs[0].killed is True
+
+
+def fake_claude_bin(tmp_path, monkeypatch, script):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    exe = bin_dir / "claude"
+    exe.write_text("#!/bin/sh\n" + script)
+    exe.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
+
+
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    stat = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True,
+                          text=True).stdout.strip()
+    return bool(stat) and not stat.startswith("Z")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process groups are POSIX")
+def test_timeout_kills_a_real_grandchild(pe, tmp_path, monkeypatch):
+    pidfile = tmp_path / "grandchild.pid"
+    monkeypatch.setenv("PE_PIDFILE", str(pidfile))
+    fake_claude_bin(tmp_path, monkeypatch, 'sleep 30 &\necho $! > "$PE_PIDFILE"\nwait\n')
+    started = time.time()
+    res = pe.claude_call("claude-haiku-5-5", "hi", budget_usd=0.1, timeout_s=1)
+    assert time.time() - started < 15
+    assert res["is_error"] is True and "timeout" in res["error"]
+    assert res["cost_worst_case"] is True
+    pid = int(pidfile.read_text().strip())
+    deadline = time.time() + 5
+    while _alive(pid) and time.time() < deadline:
+        time.sleep(0.1)
+    assert not _alive(pid)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="needs /bin/sh")
+def test_invalid_utf8_from_claude_is_replaced_not_raised(pe, tmp_path, monkeypatch):
+    fake_claude_bin(tmp_path, monkeypatch,
+                    "cat > /dev/null\n"
+                    "printf '{\"result\":\"ok \\377\",\"is_error\":false,"
+                    "\"total_cost_usd\":0.001}'\n")
+    res = pe.claude_call("claude-haiku-5-5", "hi", budget_usd=0.1, timeout_s=20)
+    assert res["is_error"] is False
+    assert res["text"] == "ok \ufffd"
+    assert res["cost_usd"] == pytest.approx(0.001)
 
 
 def test_real_ollama_call_maps_404_to_error(pe, monkeypatch):
@@ -578,6 +927,59 @@ def test_real_ollama_call_maps_404_to_error(pe, monkeypatch):
     res = pe.ollama_call("http://localhost:11434", "nope:1b",
                          [{"role": "user", "content": "hi"}])
     assert res["is_error"] is True and "404" in res["error"]
+
+
+@pytest.mark.parametrize("exc", [urllib.error.URLError("connection refused"),
+                                 TimeoutError("timed out"), OSError("reset")])
+def test_real_ollama_call_maps_network_failure_to_error(pe, monkeypatch, exc):
+    def fake_open(req, timeout=None):
+        raise exc
+
+    monkeypatch.setattr(pe.urllib.request, "urlopen", fake_open)
+    res = pe.ollama_call("http://localhost:11434", "gemma3:4b",
+                         [{"role": "user", "content": "hi"}])
+    assert res["is_error"] is True and res["cost_usd"] == 0.0
+    assert type(exc).__name__ in res["error"]
+
+
+@pytest.mark.parametrize("payload", [b"[]", b'{"message": "flat"}', b'{"message": {}}'])
+def test_real_ollama_call_odd_reply_is_an_errored_run(pe, monkeypatch, payload):
+    class Resp(object):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return payload
+
+    monkeypatch.setattr(pe.urllib.request, "urlopen", lambda req, timeout=None: Resp())
+    res = pe.ollama_call("http://localhost:11434", "gemma3:4b",
+                         [{"role": "user", "content": "hi"}])
+    assert res["is_error"] is True and res["text"] == ""
+
+
+def test_ollama_multi_turn_error_is_an_errored_run(pe, tmp_path, monkeypatch):
+    calls = []
+
+    def ollama(host, model, messages, temperature=None, timeout_s=None):
+        calls.append(len(messages))
+        if len(calls) == 2:
+            return {"text": "", "cost_usd": 0.0, "is_error": True,
+                    "error": "Ollama request failed: URLError"}
+        return {"text": "first reply", "cost_usd": 0.0, "is_error": False, "error": None}
+
+    monkeypatch.setattr(pe, "ollama_call", ollama)
+    budget = pe.Budget(1.0, tmp_path / "ledger.jsonl")
+    caller = pe.Caller(budget, "http://localhost:11434", None)
+    res = caller.send("ollama:gemma3:4b", "target", {"version": "a", "case": "c", "run": 1},
+                      "hi", turns=["follow-up", "never sent"])
+    assert res["is_error"] is True
+    assert res["transcript"] == ["first reply"]
+    assert calls == [1, 3]
+    entry = json.loads((tmp_path / "ledger.jsonl").read_text())
+    assert entry["exit"] == "error" and entry["error"] == "Ollama request failed: URLError"
 
 
 # ------------------------------------------------------------------ judge hardening
@@ -772,25 +1174,21 @@ def test_turns_on_claude_are_passed_as_stream_json_turns(pe, prov, tmp_path):
 
 def test_real_claude_call_multi_turn_uses_stream_json(pe, monkeypatch):
     seen = []
+    stdout = "\n".join(json.dumps(x) for x in [
+        {"type": "system", "subtype": "init"},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "one"}]}},
+        {"type": "result", "subtype": "success", "is_error": False, "result": "one",
+         "total_cost_usd": 0.001},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "two"}]}},
+        {"type": "result", "subtype": "success", "is_error": False, "result": "two",
+         "total_cost_usd": 0.003},
+    ])
 
-    class Proc(object):
-        returncode = 0
-        stderr = ""
-        stdout = "\n".join(json.dumps(x) for x in [
-            {"type": "system", "subtype": "init"},
-            {"type": "assistant", "message": {"content": [{"type": "text", "text": "one"}]}},
-            {"type": "result", "subtype": "success", "is_error": False, "result": "one",
-             "total_cost_usd": 0.001},
-            {"type": "assistant", "message": {"content": [{"type": "text", "text": "two"}]}},
-            {"type": "result", "subtype": "success", "is_error": False, "result": "two",
-             "total_cost_usd": 0.003},
-        ])
+    def fake_run(cmd, stdin, cwd, timeout_s):
+        seen.append((cmd, {"input": stdin}))
+        return 0, stdout, ""
 
-    def fake_run(cmd, **kw):
-        seen.append((cmd, kw))
-        return Proc()
-
-    monkeypatch.setattr(pe.subprocess, "run", fake_run)
+    monkeypatch.setattr(pe, "run_child", fake_run)
     res = pe.claude_call("claude-haiku-5-5", "hello", turns=["again"], budget_usd=0.5)
     cmd, kw = seen[0]
     assert cmd[cmd.index("--input-format") + 1] == "stream-json"
