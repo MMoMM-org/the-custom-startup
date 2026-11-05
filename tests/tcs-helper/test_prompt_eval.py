@@ -1219,7 +1219,7 @@ def test_report_carries_every_field_and_md_head(pe, prov, tmp_path):
         assert field in rep, field
     assert rep["per_criterion"]["says_good"]["kind"] == "deterministic"
     assert rep["per_criterion"]["rubric"]["kind"] == "judge"
-    assert rep["judge_validation"]["rubric"] == "not_validated"
+    assert rep["judge_validation"]["rubric"] == "provisional"
     assert rep["paired_difference"]["method"] == "bootstrap over cases, 2000 resamples, seed 2305"
     assert rep["author"] == "claude:claude-opus-5-5"
     head = "\n".join((out / "report.md").read_text().splitlines()[:5]).lower()
@@ -1232,6 +1232,32 @@ def test_report_carries_every_field_and_md_head(pe, prov, tmp_path):
     assert grade["criteria"]["rubric"]["result"] is True
     assert "rubric" in grade["criteria"]["rubric"]
     assert (out / "runs" / "b" / "case03" / "1" / "final.txt").read_text() == "good"
+
+
+def test_never_labelled_llm_criterion_is_provisional_and_stays_in_all_pass(pe, prov, tmp_path):
+    kit = make_kit(tmp_path, graders={
+        "rubric.md": "---\ntype: llm\n---\nPASS if good. FAIL if not.\n"})
+    a, b = make_versions(tmp_path)
+    out = tmp_path / "out"
+    assert pe.main(run_args(kit, a, b, out)) == 0
+    rep = report_of(out)
+    assert rep["judge_validation"]["rubric"] == "provisional"
+    assert not rep.get("dropped_from_all_pass")
+    assert "rubric provisional" in (out / "report.md").read_text()
+
+
+def test_report_notes_the_skipped_judge_vs_author_check_without_author(pe, prov, setup):
+    kit, a, b, out = setup
+    assert pe.main(run_args(kit, a, b, out)) == 0
+    skipped = [n for n in report_of(out)["notes"] if "--author" in n]
+    assert len(skipped) == 1 and "skipped" in skipped[0]
+    assert "Note: " + skipped[0] in (out / "report.md").read_text()
+
+
+def test_report_has_no_skipped_author_note_with_author(pe, prov, setup):
+    kit, a, b, out = setup
+    assert pe.main(run_args(kit, a, b, out, extra=("--author", "opus"))) == 0
+    assert not [n for n in report_of(out)["notes"] if "--author" in n]
 
 
 def test_no_llm_graders_validation_not_run(pe, prov, setup):

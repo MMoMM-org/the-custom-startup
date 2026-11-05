@@ -172,7 +172,7 @@ def test_llm_grader_without_verdict_is_a_judge_error(ec, tmp_path):
     rep = report_of(out)
     assert rep["per_criterion"]["rubric"]["kind"] == "judge"
     assert rep["judge_errors"] == {"a": 1, "b": 1}
-    assert rep["judge_validation"]["rubric"] == "not_validated"
+    assert rep["judge_validation"]["rubric"] == "provisional"
 
 
 def test_errored_run_is_counted(ec, tmp_path):
@@ -438,11 +438,13 @@ def test_run_refuses_a_secret_that_only_the_base_ref_holds(ec, repo, fake_claude
     prompt.write_text("key {}\n".format(FAKE_KEY))
     _commit_all(repo, "secret in base")
     prompt.write_text("working tree version\n")
-    assert ec.main(run_argv(repo, tmp_path / "out")) == 4
+    out = tmp_path / "out"
+    assert ec.main(run_argv(repo, out)) == 4
     captured = capsys.readouterr()
     assert FAKE_KEY not in captured.out + captured.err
     assert fake_claude() == []
     assert len(worktrees(repo)) == 1
+    assert not os.path.lexists(str(out / WORKTREE))
 
 
 def test_run_scans_only_the_case_directories_selected(ec, repo, fake_claude, tmp_path):
@@ -462,3 +464,95 @@ def test_run_fails_closed_when_the_secret_scan_raises(ec, repo, fake_claude, tmp
     captured = capsys.readouterr()
     assert FAKE_KEY not in captured.out + captured.err
     assert fake_claude() == []
+
+
+# ------------------------------------------------------------------ run failure paths (T2.10)
+
+def test_run_refuses_a_leftover_worktree_and_removes_nothing(ec, repo, fake_claude, tmp_path,
+                                                            capsys):
+    out = tmp_path / "out"
+    leftover = out / WORKTREE
+    leftover.mkdir(parents=True)
+    (leftover / "keep.txt").write_text("left by an aborted run\n")
+    assert ec.main(run_argv(repo, out)) == 1
+    err = capsys.readouterr().err
+    assert str(leftover) in err and "git worktree remove" in err
+    assert (leftover / "keep.txt").read_text() == "left by an aborted run\n"
+    assert fake_claude() == []
+
+
+def _git_failing_on(ec, monkeypatch, words, result):
+    """ec._git, except a call whose args start with WORDS returns or raises RESULT."""
+    real_git = ec._git
+
+    def fake(root, *args):
+        if tuple(args[:len(words)]) == tuple(words):
+            if isinstance(result, BaseException):
+                raise result
+            return result
+        return real_git(root, *args)
+    monkeypatch.setattr(ec, "_git", fake)
+
+
+def test_run_reports_a_failed_worktree_add_without_a_traceback(ec, repo, fake_claude, tmp_path,
+                                                              monkeypatch, capsys):
+    failed = subprocess.CompletedProcess([], 128, stdout="", stderr="fatal: cannot add\n")
+    _git_failing_on(ec, monkeypatch, ("worktree", "add"), failed)
+    assert ec.main(run_argv(repo, tmp_path / "out")) == 1
+    err = capsys.readouterr().err
+    assert "git worktree add failed" in err and "fatal: cannot add" in err
+    assert "Traceback" not in err
+    assert fake_claude() == []
+
+
+def test_run_removes_the_worktree_when_plugin_eval_times_out(ec, repo, fake_claude, tmp_path,
+                                                            monkeypatch, capsys):
+    def timed_out(cmd, cwd, log_path, timeout_s=None):
+        raise subprocess.TimeoutExpired(cmd, timeout_s or 1)
+    monkeypatch.setattr(ec, "_run_logged", timed_out)
+    out = tmp_path / "out"
+    assert ec.main(run_argv(repo, out)) == 1
+    assert "timed out" in capsys.readouterr().err
+    assert len(worktrees(repo)) == 1
+    assert not os.path.lexists(str(out / WORKTREE))
+    assert not (out / "report.json").exists()
+
+
+@pytest.mark.parametrize("words", [("rev-parse", "--show-toplevel"), ("worktree", "add")])
+def test_run_turns_a_git_timeout_into_a_refusal(ec, repo, fake_claude, tmp_path, monkeypatch,
+                                                capsys, words):
+    _git_failing_on(ec, monkeypatch, words, subprocess.TimeoutExpired(["git"], 60))
+    assert ec.main(run_argv(repo, tmp_path / "out")) == 1
+    err = capsys.readouterr().err
+    assert "timed out" in err and "Traceback" not in err
+    assert fake_claude() == []
+
+
+def test_run_removes_the_worktree_by_hand_when_git_worktree_remove_times_out(
+        ec, repo, fake_claude, tmp_path, monkeypatch):
+    _git_failing_on(ec, monkeypatch, ("worktree", "remove"), subprocess.TimeoutExpired(["git"], 60))
+    out = tmp_path / "out"
+    assert ec.main(run_argv(repo, out)) == 0
+    assert not os.path.lexists(str(out / WORKTREE))
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
+def test_run_writes_the_report_files_with_mode_0600(ec, repo, fake_claude, tmp_path):
+    out = tmp_path / "out"
+    assert ec.main(run_argv(repo, out)) == 0
+    for name in ("report.json", "report.md"):
+        assert (out / name).stat().st_mode & 0o777 == 0o600, name
+
+
+def test_run_with_a_case_glob_that_matches_nothing_exits_1_after_the_consent_check(
+        ec, repo, fake_claude, tmp_path, capsys):
+    out = tmp_path / "out"
+    argv = run_argv(repo, out)
+    argv[argv.index("--case") + 1] = "no-such-case-*"
+    assert ec.main(argv[:-2]) == 3
+    assert "none matched" in capsys.readouterr().out
+    assert ec.main(argv) == 1
+    assert "no-such-case-*" in capsys.readouterr().err
+    assert fake_claude() == []
+    assert len(worktrees(repo)) == 1
+    assert not os.path.lexists(str(out / WORKTREE))
