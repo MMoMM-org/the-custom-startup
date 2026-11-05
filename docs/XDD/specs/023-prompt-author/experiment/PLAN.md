@@ -55,6 +55,8 @@ Pilot: O1, S1, Q x 3 cases x 5 tasks = 45 runs, $1.45. Grader defects found and 
 
 Criteria are frozen from here; any later change is logged in this section with its regrade diff.
 
+Post-freeze changes (2026-11-05): T1 counter-argument labels widened, T5 `?` inside `[NEEDS ...]` ignored. Both are listed with their regrade diffs in results.md § Instrument changes.
+
 ## Budget and safety
 
 - Every `claude -p` call carries `--max-budget-usd`; a run ledger sums `total_cost_usd`; the whole experiment stops at a ceiling of $400 (estimate $100-400).

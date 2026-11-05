@@ -149,6 +149,9 @@ def count_questions(text):
     # A quoted line ending in '?' ("Did you do the bathroom?") is persona speech, not a
     # question to the user (orchestrator, after the pilot, 2026-11-04).
     t = re.sub(r"\"[^\"\n]{1,200}\?\"|“[^”\n]{1,200}\?”", " ", t)
+    # A '?' inside a [NEEDS ...] marker belongs to the draft, not a question to the user
+    # (post-freeze, 2026-11-05; logged in PLAN.md).
+    t = re.sub(r"\[\s*NEEDS[^\]]*\]", " ", t, flags=re.I)
     kept, in_open = [], False
     for line in t.splitlines():
         sec = _section_of(line)

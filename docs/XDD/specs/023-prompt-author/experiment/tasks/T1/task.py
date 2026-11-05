@@ -132,7 +132,11 @@ def _substantive(text):
 
 COUNTER_KEYWORD_RE = re.compile(
     r"(?i)counter[- ]?argument|\bagainst\b|downside|drawback|\brisks?\b|caveat|objection|"
-    r"criticism|trade[- ]?offs?|\bcons\b|devil'?s advocate|reasons? not to|might be wrong")
+    r"criticism|trade[- ]?offs?|\bcons\b|devil'?s advocate|reasons? not to|might be wrong|"
+    # Post-freeze (2026-11-05): request asks for "the strongest arguments against the
+    # obvious conclusion"; authors label that part as below.  Logged in PLAN.md.
+    r"counter[- ]?case|strongest case|weaker than|go(?:es)? wrong|complications?|"
+    r"failure modes?|limitations?|where the obvious|obvious (?:answer|reading) (?:is|needs)")
 _HEAD_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)?(#{1,6}\s+(?P<h>.+)|(\*\*|__)(?P<b>.+?)(\*\*|__)(?P<tail>.*))$")
 
 
