@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-11-04 |
-| **Current Phase** | PLAN |
+| **Current Phase** | Ready |
 | **Decomposition tier** | Incremental |
 | **Model tier** | hard |
 | **Last Updated** | 2026-11-05 |
@@ -16,7 +16,7 @@
 |----------|--------|-------|
 | requirements.md | completed | approved 2026-11-05 |
 | solution.md | completed | approved 2026-11-05 |
-| plan/ | in_progress | |
+| plan/ | completed | 4 phases, 24 tasks; validated 2026-11-05 |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -57,6 +57,8 @@
 | 2026-11-05 | SDD-ADR-4 revised: ≥5 cases per migration rule group instead of 1 | With one case the paired CI is [d, d], so one flipped run would force a revert; est. cost rises to ~$40-60 |
 | 2026-11-05 | PRD amended: F5 AC6 (no hook runs the lint), F9 AC2 (no CLAUDE.md reminder exists), adoption/engagement measured by 30-day manual review | Validation found ACs with no deliverable; the design's behaviour is the intended one |
 | 2026-11-05 | Judge config for this machine goes into global ~/.claude/startup.toml, not the tracked repo file | A tracked qwen2.5 judge would make every contributor's runs exit 1 |
+| 2026-11-05 | Spec finalized → Ready; ≥5 cases per migration rule group confirmed | User approval. Implementation via /implement 023 on its own branch |
+| 2026-11-05 | semantic_detector.py:94-98 (_claude_contradiction) recorded as an extension of #253 | User choice: same file, same defect class, same fix |
 
 ## Context
 
