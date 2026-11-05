@@ -152,11 +152,6 @@ command that would run it.
 
 ### 7. Deliver
 
-| Mode | Delivery |
-|---|---|
-| write | the draft in a fence, then the note write.md § Deliver specifies: consumer location checked, contract, entries applied, cut test, lint |
-| audit | the finding table ordered by severity, then the scopes and entries checked (audit.md § Report) |
-| port | the port in a fence, the change list with profile topic and evidence grade, the eval label (port.md § Report) |
-
-Every delivery ends with the eval state: a report and its verdict, or the kit and "not evaluated on
+Deliver as the mode file says: write.md § Deliver, audit.md § Report, port.md § Report. Every
+delivery ends with the eval state: a report and its verdict, or the kit and "not evaluated on
 target", or, outside port mode, "no eval offered" with the reason.
