@@ -320,3 +320,12 @@ def test_cites_a_vendor_accepts_only_model_vendor_hosts(value, expected):
 ])
 def test_grade_rule_violations(found, sources, expected):
     assert grade_rule_violations(found, sources) == expected
+
+
+def test_pa32_applies_to_chat_templates_in_entry_and_index():
+    # A chat-tool project's instructions are a chat-template (corpus item 5); PA-32 must load for it.
+    entry = next(e for e in all_entries() if e['id'] == 'PA-32')
+    kinds, _ = applies_to(entry['fields']['Applies to'])
+    assert 'chat-template' in kinds
+    row = next(cells for cells in index_rows() if cells[0].startswith('[PA-32]'))
+    assert 'chat-template' in {k.strip() for k in row[2].split(',')}

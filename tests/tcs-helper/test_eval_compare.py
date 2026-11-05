@@ -5,7 +5,9 @@ The fixture plugin-eval-xdd-tdd-no-trigger.json is one real `claude plugin eval
 Claude Code 2.1.316, captured 2026-11-05). Other inputs are derived from it in
 the tests: renamed cases, flipped grader verdicts, a with-only grader, a
 without arm. `run` is exercised against a fake `claude` on PATH that records
-its argv and writes the fixture to --json; nothing calls a model.
+its argv and writes the fixture to --json; nothing calls a model. A run sends
+only with --confirm-provider claude and after an E1 secret scan of the selected
+case directories (T2.9).
 """
 import copy
 import importlib.util
@@ -17,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+WORKTREE = "base-worktree"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = REPO_ROOT / "plugins/tcs-helper/skills/prompt-author/scripts"
 SCRIPT = SCRIPTS / "eval_compare.py"
@@ -274,9 +277,10 @@ def fake_claude(tmp_path, monkeypatch):
     return calls
 
 
-def run_argv(repo, out, cost="1", base="HEAD"):
-    return ["run", "--plugin", str(repo / "plugins" / "p"), "--case", "c1", "--base", base,
+def run_argv(repo, out, cost="1", base="HEAD", consent=True):
+    argv = ["run", "--plugin", str(repo / "plugins" / "p"), "--case", "c1", "--base", base,
             "--runs", "1", "--max-cost-usd", cost, "--out", str(out)]
+    return argv + (["--confirm-provider", "claude"] if consent else [])
 
 
 def _flag(argv, name):
@@ -384,3 +388,77 @@ def test_run_refuses_an_allow_tools_value_that_looks_like_a_flag(ec, repo, fake_
     assert ec.main(argv) == 1
     assert fake_claude() == []
     assert len(worktrees(repo)) == 1
+
+
+# ------------------------------------------------------------------ consent and secret scan (T2.9)
+
+# Built at runtime so this file holds no secret-shaped literal.
+FAKE_KEY = "sk-" + "ant-" + "A1b2C3d4" * 4
+
+
+def _commit_all(repo, message):
+    _git("-c", "user.name=t", "-c", "user.email=t@t", "add", "-A", cwd=repo)
+    _git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", message, cwd=repo)
+
+
+def test_run_without_consent_prints_the_plan_and_sends_nothing(ec, repo, fake_claude, tmp_path,
+                                                                capsys):
+    out = tmp_path / "out"
+    assert ec.main(run_argv(repo, out, consent=False)) == 3
+    printed = capsys.readouterr().out
+    assert "--confirm-provider claude" in printed
+    assert "c1" in printed and "HEAD" in printed
+    assert fake_claude() == []
+    assert len(worktrees(repo)) == 1
+    assert not (out / WORKTREE).exists()
+
+
+def test_run_with_consent_calls_plugin_eval_for_both_sides(ec, repo, fake_claude, tmp_path):
+    assert ec.main(run_argv(repo, tmp_path / "out")) == 0
+    assert [c["argv"][:2] for c in fake_claude()] == [["plugin", "eval"]] * 2
+
+
+@pytest.mark.parametrize("consent", [True, False])
+def test_run_refuses_a_secret_in_a_case_file_without_showing_it(ec, repo, fake_claude, tmp_path,
+                                                                capsys, consent):
+    grader = repo / "plugins" / "p" / "evals" / "c1" / "graders" / "g.md"
+    grader.parent.mkdir()
+    grader.write_text("token: {}\n".format(FAKE_KEY))
+    assert ec.main(run_argv(repo, tmp_path / "out", consent=consent)) == 4
+    captured = capsys.readouterr()
+    assert FAKE_KEY not in captured.out + captured.err
+    assert "g.md:1" in captured.err
+    assert fake_claude() == []
+    assert len(worktrees(repo)) == 1
+
+
+def test_run_refuses_a_secret_that_only_the_base_ref_holds(ec, repo, fake_claude, tmp_path,
+                                                          capsys):
+    prompt = repo / "plugins" / "p" / "evals" / "c1" / "prompt.md"
+    prompt.write_text("key {}\n".format(FAKE_KEY))
+    _commit_all(repo, "secret in base")
+    prompt.write_text("working tree version\n")
+    assert ec.main(run_argv(repo, tmp_path / "out")) == 4
+    captured = capsys.readouterr()
+    assert FAKE_KEY not in captured.out + captured.err
+    assert fake_claude() == []
+    assert len(worktrees(repo)) == 1
+
+
+def test_run_scans_only_the_case_directories_selected(ec, repo, fake_claude, tmp_path):
+    other = repo / "plugins" / "p" / "evals" / "other-case"
+    other.mkdir()
+    (other / "prompt.md").write_text("key {}\n".format(FAKE_KEY))
+    assert ec.main(run_argv(repo, tmp_path / "out")) == 0
+    assert len(fake_claude()) == 2
+
+
+def test_run_fails_closed_when_the_secret_scan_raises(ec, repo, fake_claude, tmp_path,
+                                                     monkeypatch, capsys):
+    def broken(paths):
+        raise RuntimeError("scanner broke on " + FAKE_KEY)
+    monkeypatch.setattr(ec, "scan_secrets", broken)
+    assert ec.main(run_argv(repo, tmp_path / "out")) == 4
+    captured = capsys.readouterr()
+    assert FAKE_KEY not in captured.out + captured.err
+    assert fake_claude() == []
