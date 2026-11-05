@@ -8,13 +8,13 @@
 | **Current Phase** | PRD |
 | **Decomposition tier** | {{DECOMPOSITION_TIER}} |
 | **Model tier** | {{MODEL_TIER}} |
-| **Last Updated** | 2026-11-04 |
+| **Last Updated** | 2026-11-05 |
 
 ## Documents
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| requirements.md | pending | |
+| requirements.md | in_progress | draft 2026-11-05, awaiting review |
 | solution.md | pending | |
 | plan/ | pending | |
 
@@ -45,6 +45,7 @@
 | 2026-11-04 | Gravity agent-prompt article added to research-external.md; its agent rules (stopping conditions, behaviour when unclear, goal over script, refusal with alternative) go into the shared catalog, reaching agent-author via the migration | User-supplied source; agent-author has none of these rules today; a direct edit would bypass the catalog that is meant to be the single source |
 | 2026-11-05 | Full experiment run (385 runs, $7.97): no measurable Opus-vs-Sonnet difference; explicit authoring beats the repo's subagent briefs (T2/T3 Q 0%); see experiment/results.md | Answers the user's question 'would Sonnet write better prompts' — no; the gap is in the missing contracts, not the author model |
 | 2026-11-05 | Judge validation from 28 user labels: T5 no_implementation_detail validated (9/10); T1 no_unsupported_fact invalid (3/10, all 7 judge FAILs overturned) and dropped from the T1 headline; T3 planted_bug_identified supported but not validated (4/4 decided, 4 UNSURE) | Below the 85% threshold a criterion is reported unvalidated; the T1 judge demands per-claim hedges the rubric does not ask for. Dropping it changes no conclusion (T1 O 98% / S 100% / Q 95%). Lesson for the catalog: an LLM judge passing hand-built controls is not calibrated |
+| 2026-11-05 | PRD scope: lint = low-false-alarm checks as errors, rest warn/review; eval = kit + local runs (Claude CLI, Ollama), other vendors kit only; rule corrections applied in migration, measured per skill, reverted on regression | User choices; matches measured FP rates (research-technical.md) and the cheap local harness ($7.97 for 385 runs) |
 
 ## Context
 
