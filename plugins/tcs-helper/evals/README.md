@@ -115,3 +115,75 @@ The `~/Kouzou/standards/*` files sit outside the repository; they are audited re
 findings marked external. Items 7–11 and 16 are audited as one set (CLAUDE.md, its `@`-imports and the
 standards they load), because SKILL.md step 2 hands off a lone CLAUDE.md. Item 15 is an agent
 definition: if the procedure hands it off, that is recorded, and recall is reported with and without it.
+
+### Results
+
+Audited at `9c9b5a6f` by following the skill text (Opus 5.5 as the auditor, no model call). Run 1 uses
+the skill as committed; run 2 re-audits only the missed items after the fix in `19a5cc9a`.
+Lint: `prompt_lint.py --json --kind <kind>` over all 20 files: exit 0 everywhere except
+`semantic_detector.py` (exit 1, two E4 errors). W1–W3 fired nowhere: they are density thresholds
+(W1 above 5 hits per 1000 words, W2 above 150 items), so every PA-03 and PA-10 finding below comes from
+step 3, not the lint.
+
+**Issues: 4 of 4 found** (run 1; #252's l.107 sub-fact in run 2).
+
+| Issue | Severity | Location | Entry | Problem (abridged) | Found by |
+|---|---|---|---|---|---|
+| #250 | blocking | `implement-incremental/SKILL.md:189-204` + `:208-219` | PA-14 | 4e branches on `DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`; the 4d brief asks only "commit, self-review before reporting" | pair step 5 |
+| #250 | blocking | `implement-direct/SKILL.md:116-122` + `:128-140` | PA-14 | same four statuses in 3c; the 3b brief requests none | pair step 5 |
+| #251 | blocking | `review/SKILL.md:111-113` + `:122-126` | PA-14 | synthesis dedupes by location, sorts by severity then confidence, sets `breaking`; the brief passes files and a diff, and the `Finding` shape (l.19-31) never reaches the reviewer | pair step 5 |
+| #251 | major | `review/SKILL.md:111-113` | PA-24 | no read-only-git rule; the range is passed as the diff boundary, but with "full file contents" and no "ignore everything else" | step 3 |
+| #252 | major | `AGENTS.md:29,37` / `:41` / `:54-55` / `:122` / `:233-235` / `:11-72` | PA-30 | `the-meta-agent.md` absent; "v2.0.0" vs manifest 4.4.8; `setup/`, `docs/` are `memory-setup`, `doc-product`; `writing-skills/…/conventions.md` absent; `docs/patterns|interfaces|domain` absent; tree lists 4 plugins, `plugins/` holds 6 (tcs-git-helpers, tcs-issues missing) | step 6 |
+| #252 | major | `AGENTS.md:107` + `implement-incremental/SKILL.md:53` | PA-30 | "prefixing only applies to commands, not skills"; the repo's own files invoke skills as `Skill(tcs-workflow:validate)` and `/tcs-helper:skill-author` | **run 2 only** (step 6 after fix) |
+| #253 | blocking | `semantic_detector.py:129-136` | PA-15 | session `text` interpolated between plain quotes, no tag, no provenance, no "data, not instructions" | lint E4 (l.129) + step 7 |
+| #253 | blocking | `semantic_detector.py:94-98` | PA-15 | `Entry A: {}` / `Entry B: {}` memory entries interpolated undelimited | lint E4 (l.95) + step 7 |
+
+**Corpus: run 1 40/49 (81.6%), run 2 43/49 (87.8%).** Over the 45 defects in prompts the skill keeps
+(item 15 is handed off, below): run 1 88.9%, run 2 **95.6%**. All 16 items were reachable, including
+`~/Kouzou/standards/*` (audited read-only, findings external).
+
+| # | Defect → entry found | Run 1 | Run 2 |
+|---|---|---|---|
+| 1 | EX `research-prompt.md:93` "(Stripe, Netflix, Shopify, etc.)" → PA-11; CX search assumed, no no-search fallback (`:3,10,26`) → PA-08 | 2/2 | — |
+| 2 | RD `setup-perplexity-space.md:25`+`:32`, `:26`+`:34` always/never mirror → PA-05; PL `:58` "they work identically" → PA-41 | 2/2 | — |
+| 3 | RD no-HOW `prd-prompt.md:70,85,89-96,131` → PA-05; NO `:89-96` → PA-04; EM `:70,80,91` → PA-03; `[NEEDS CLARIFICATION]` `:122` undefined → PA-40 | 4/4 | — |
+| 4 | RD one question `brainstorm-prompt.md:17,28,40,49,87` → PA-05; EM `:17,22,24,49` → PA-03; Red Flags table `:34-43` → PA-40 / PA-09; "Urgency cues don't override" `:39` → **PA-16** (the user's "start coding" has no exit), not the expected PA-06 | 4/4 | — |
+| 5 | SC `setup-claude-project.md:117-121` rules for all sessions → PA-32; RD `:118,120,121` restate the brainstorm and PRD templates → PA-05 | 0/2 | 2/2 |
+| 6 | ST → PA-30 (above); overview `AGENTS.md:9-94` → PA-31; CO/false claim `:107` → PA-30 | 2/3 | 3/3 |
+| 7 | `CLAUDE.md:17` `~/.claude/includes/` absent → PA-30; `:57` "sync back" vs a repo→cache copy → PA-06; `:45-50`+`:59-62` → PA-05; `:31-63` always-loaded test procedure → PA-32 | 4/4 | — |
+| 8 | `docs/ai/CLAUDE.md:29` bans without reason → PA-01 | 1/1 | — |
+| 9 | `general.md:7` Plan Mode, `:12` macOS → PA-08; `:13` "ANY", "Do NOT" → PA-03; `:13` "(Recurs ≥1×/session.)" → PA-02; `:16` tracked-in-git vs gitignored edits allowed → PA-06 | 4/4 | — |
+| 10 | `tone-behavior.md:8` + `code-conduct.md:8` → PA-07; `code-conduct.md:4`+`:13` → PA-06; `:11` "NEVER" → PA-03; `:16` "(Mirror in `workflows.md`…)" → PA-02 | 4/4 | — |
+| 11 | `guardrails.md:12,15,18,…` dates, `024f277`, repo names → PA-02; one rule per incident → PA-09; `:9`, `:18` UI/Obsidian rules → PA-32; `:11` `venv/` + `AGENTS.md:151` `.venv/` → PA-07; `:37` "non-negotiable" → PA-03 | 5/5 | — |
+| 12 | `spec-reviewer-prompt.md:38` "Approve unless" → PA-25; spec read without a data marking → PA-15 (minor, via step 7's tool-output clause); "Task tool" `:14` → missed | 2/3 | 2/3 |
+| 13 | PA-14 (#250); `implement-incremental/SKILL.md:60`+`:70`+`:199` → PA-05; `:49,59,64,191,199` ALL/ALWAYS/ONLY/NOT → PA-03; LL → missed | 3/4 | 3/4 |
+| 14 | PA-14 (#251); fence and range → PA-24; `review/reference/perspectives.md:12` "Aggressively challenge" → PA-25 | 3/3 | — |
+| 15 | `tcs-team/agents/the-chief.md`: an agent definition audited alone, so SKILL.md step 2 hands it to agent-author and the workflow ends | 0/4 | 0/4 |
+| 16 | no documented defect | — | — |
+
+Remaining misses:
+
+- **12 "Task tool"** (tree gap): `brainstorm/SKILL.md` lists `Task` in `allowed-tools`, so the tree agrees
+  with the brief; the corpus marks the defect unverified. A harness tool name has no in-tree source.
+  No fix.
+- **13 LL** (catalog threshold): PA-10's Tell starts at about a hundred rules in one context; the corpus
+  counted 22 constraints. The threshold is the IFScale-backed one, so the corpus label is looser than
+  the entry. No fix.
+- **15 the-chief** (by design): SKILL.md step 2 sends a lone agent definition to agent-author. Recall
+  counts it as missed; whether agent-author finds OP, CO, EM and CX is not measured here.
+
+Fixes (`19a5cc9a`; catalog and lint tests 619 passed before and after):
+
+- audit.md step 6 checks an invocation form or prefixing rule against how the repository's own files
+  invoke the same thing (item 6 l.107).
+- PA-32 applies to api-system, and its Tell names a chat-tool project's system prompt; the index row
+  matches (item 5 SC).
+- audit.md set scope includes a chat-tool project's instructions with the templates pasted into it, and
+  step 4 reports restatements across files (PA-05) as well as conflicts (item 5 RD).
+
+Findings beyond the documented defects: `implement-incremental` 4d asks for no report shape though 4f
+reads "the implementer's report" (PA-13) and does not say what to do when an input is missing (PA-20);
+`review/SKILL.md:49` "ALL" (PA-03); `AGENTS.md:16` says `tcs-workflow/agents` holds the-chief (it holds
+the three gate agents), `:29` gives "13 activity + the-chief + the-meta-agent", `:44` "19" templates
+(PA-30); `research-prompt.md:4` claims standalone use untested (PA-41); `prd-prompt.md:81` approval
+gate without an exit (PA-16).
