@@ -17,8 +17,8 @@ import pytest
 from catalog_helpers import (
     CATALOG_DIR, ENTRY_FILES, EVIDENCE_GRADES, EXPECTED, INDEX_LINK_RE, KINDS, LINT_CHECKS,
     PROFILE_TARGETS, REQUIRED_FIELDS, STATUSES, TARGETS,
-    all_entries, applies_to, cites_a_vendor, fingerprints, github_slug, grade, index_rows, index_statuses,
-    profile_path, profile_topics, source_hosts,
+    all_entries, applies_to, cites_a_vendor, fingerprints, github_slug, grade, grade_rule_violations,
+    index_rows, index_statuses, profile_path, profile_topics, source_hosts,
 )
 
 MAX_ENTRY_LINES = 12
@@ -94,16 +94,6 @@ def test_field_values_use_the_allowed_vocabularies():
                 for s in sentences if len(s) < MIN_FINGERPRINT_CHARS
             ]
     assert not problems, '\n'.join(problems)
-
-
-def test_vendor_graded_entries_cite_sources():
-    uncited = [
-        f"{e['file']}:{e['lineno']} {e['id']}"
-        for e in all_entries()
-        if grade(e['fields'].get('Evidence', '')) == 'vendor'
-        and 'http' not in e['fields'].get('Sources', '')
-    ]
-    assert not uncited, f'vendor-graded entries without a Sources URL: {uncited}'
 
 
 def test_lint_backed_entries_name_their_check():
@@ -266,6 +256,8 @@ def test_each_entry_carries_the_grade_solution_md_gives_it():
         found = grade(entry['fields'].get('Evidence', ''))
         if spec['contested']:
             # "contested" is a status, not a grade: the entry keeps its own grade and says so.
+            # solution.md gives a contested row no grade to compare against, so only
+            # Status contested plus some valid grade can be checked here.
             if entry['fields'].get('Status') != 'contested' or found not in EVIDENCE_GRADES:
                 problems.append(f'{entry_id}: contested row needs Status contested and one grade, has {found!r}')
             continue
@@ -274,22 +266,57 @@ def test_each_entry_carries_the_grade_solution_md_gives_it():
     assert not problems, '\n'.join(problems)
 
 
-def test_vendor_grade_means_a_model_vendor_source():
+def test_entry_grades_follow_the_vendor_and_research_source_rules():
     # A study or OWASP is research, however well it is cited; vendor is a model vendor's own guidance.
     problems = [
-        f"{e['file']}:{e['lineno']} {e['id']}: graded vendor, Sources cite no model vendor ({source_hosts(e['fields'].get('Sources', ''))})"
+        f"{e['file']}:{e['lineno']} {e['id']}: {problem}"
         for e in all_entries()
-        if grade(e['fields'].get('Evidence', '')) == 'vendor'
-        and not cites_a_vendor(e['fields'].get('Sources', ''))
+        for problem in grade_rule_violations(grade(e['fields'].get('Evidence', '')), e['fields'].get('Sources', ''))
     ]
     assert not problems, '\n'.join(problems)
 
 
-def test_research_graded_entries_cite_a_source_url():
-    uncited = [
-        f"{e['file']}:{e['lineno']} {e['id']}"
-        for e in all_entries()
-        if grade(e['fields'].get('Evidence', '')) == 'research'
-        and 'http' not in e['fields'].get('Sources', '')
-    ]
-    assert not uncited, f'research-graded entries without a Sources URL: {uncited}'
+@pytest.mark.parametrize('value, hosts', [
+    ('https://platform.claude.com/docs/en/prompting', ['platform.claude.com']),
+    ('http://docs.anthropic.com', ['docs.anthropic.com']),
+    ('(https://developers.openai.com/api/docs)', ['developers.openai.com']),
+    ('https://aistudio.google.com:443/prompts', ['aistudio.google.com']),
+    ('see https://openai.com, then https://arxiv.org.', ['openai.com', 'arxiv.org']),
+    ('https://genai.owasp.org/llmrisk/', ['genai.owasp.org']),
+    ('', []),
+    ('anthropic.com, no scheme', []),
+])
+def test_source_hosts_parses_the_host_of_every_url(value, hosts):
+    assert source_hosts(value) == hosts
+
+
+@pytest.mark.parametrize('value, expected', [
+    ('https://platform.claude.com/docs/en/prompting', True),
+    ('https://docs.anthropic.com/en/docs', True),
+    ('https://aistudio.google.com/prompts', True),
+    ('https://developers.openai.com/api/docs', True),
+    ('http://docs.anthropic.com', True),
+    ('https://openai.com:443/guide', True),
+    ('https://arxiv.org/abs/1, then https://anthropic.com.', True),
+    ('https://evilanthropic.com/docs', False),
+    ('https://anthropic.com.evil.example/docs', False),
+    ('https://arxiv.org/abs/2507.11538', False),
+    ('https://genai.owasp.org/llmrisk/ and https://owasp.org/www-project', False),
+    ('', False),
+    ('docs.anthropic.com without a scheme', False),
+])
+def test_cites_a_vendor_accepts_only_model_vendor_hosts(value, expected):
+    assert cites_a_vendor(value) is expected
+
+
+@pytest.mark.parametrize('found, sources, expected', [
+    ('vendor', 'https://docs.anthropic.com/en/docs', []),
+    ('vendor', 'https://genai.owasp.org/llmrisk/', ["graded vendor, sources cite no model vendor (['genai.owasp.org'])"]),
+    ('vendor', 'Anthropic docs, not linked', ['vendor-graded without a source URL']),
+    ('research', 'https://arxiv.org/abs/2507.11538', []),
+    ('research', 'IFScale, not linked', ['research-graded without a source URL']),
+    ('measured', '', []),
+    ('practitioner', '', []),
+])
+def test_grade_rule_violations(found, sources, expected):
+    assert grade_rule_violations(found, sources) == expected

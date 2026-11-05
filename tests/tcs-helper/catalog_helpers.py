@@ -5,8 +5,9 @@ Markdown, so they parse it here once: a format change breaks one parser, not thr
 copies that could drift apart and disagree about what the catalog contains.
 
 The expected ID set, the file each entry lives in, the lint check it names, its
-evidence grade and its contested status are read from the INITIAL ENTRIES block of the spec's solution.md,
-so the tests are red on a missing or partial catalog instead of passing vacuously.
+evidence grade and its contested status are read from the INITIAL ENTRIES block
+of the spec's solution.md, so the tests are red on a missing or partial catalog
+instead of passing vacuously.
 """
 import re
 from pathlib import Path
@@ -25,7 +26,9 @@ TARGETS = {'claude', 'openai', 'google', 'small-local', 'any'}
 EVIDENCE_GRADES = {'vendor', 'research', 'measured', 'practitioner', 'unverified'}
 # Hosts of model vendors' own guidance; a vendor grade needs a source on one of them.
 VENDOR_HOSTS = ('anthropic.com', 'claude.com', 'openai.com', 'google.com', 'google.dev')
-URL_HOST_RE = re.compile(r'https?://([^/\s)]+)')
+# Dot-separated labels after the scheme: stops before a port, a path, a closing
+# bracket or a trailing comma or period, so "https://openai.com:443," yields "openai.com".
+URL_HOST_RE = re.compile(r'https?://((?:[^/\s)\]:,.]+\.)*[^/\s)\]:,.]+)')
 STATUSES = {'active', 'contested', 'retired'}
 LINT_CHECKS = {'E1', 'E2', 'E3', 'E4', 'W1', 'W2', 'W3'}
 
@@ -77,10 +80,16 @@ def initial_entries():
             lint = re.search(r'Lint: (E\d|W\d)', line)
             contested = bool(CONTESTED_RE.search(line))
             grade_column = re.split(r'\s{2,}', line.split('Lint:')[0].strip())[-1]
+            first_word = grade_column.split()[0]
+            if not contested and first_word not in EVIDENCE_GRADES:
+                raise AssertionError(
+                    f'{SOLUTION_MD}:{block_start + offset}: grade {first_word!r} is not one of '
+                    f'{sorted(EVIDENCE_GRADES)} and the row is not contested: {line.strip()!r}'
+                )
             expected[entry_match.group(1)] = {
                 'file': current_file,
                 'lint': lint.group(1) if lint else None,
-                'grade': None if contested else grade_column.split()[0],
+                'grade': None if contested else first_word,
                 'contested': contested,
             }
     return expected
@@ -155,6 +164,22 @@ def source_hosts(value):
 
 def cites_a_vendor(value):
     return any(host == v or host.endswith('.' + v) for host in source_hosts(value) for v in VENDOR_HOSTS)
+
+
+def grade_rule_violations(found_grade, sources):
+    """Problems with a grade's sourcing; [] when it holds.
+
+    vendor needs a source on a model vendor's host; research needs a source URL
+    of any host. The other grades carry no sourcing rule.
+    """
+    hosts = source_hosts(sources)
+    if found_grade == 'vendor' and not hosts:
+        return ['vendor-graded without a source URL']
+    if found_grade == 'vendor' and not cites_a_vendor(sources):
+        return [f'graded vendor, sources cite no model vendor ({hosts})']
+    if found_grade == 'research' and not hosts:
+        return ['research-graded without a source URL']
+    return []
 
 
 def all_entries():
