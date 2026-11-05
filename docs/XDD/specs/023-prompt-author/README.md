@@ -5,9 +5,9 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-11-04 |
-| **Current Phase** | SDD |
-| **Decomposition tier** | {{DECOMPOSITION_TIER}} |
-| **Model tier** | {{MODEL_TIER}} |
+| **Current Phase** | PLAN |
+| **Decomposition tier** | Incremental |
+| **Model tier** | hard |
 | **Last Updated** | 2026-11-05 |
 
 ## Documents
@@ -15,8 +15,8 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | approved 2026-11-05 |
-| solution.md | in_progress | |
-| plan/ | pending | |
+| solution.md | completed | approved 2026-11-05 |
+| plan/ | in_progress | |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -49,6 +49,9 @@
 | 2026-11-05 | PRD approved; phase → SDD. CLAUDE.md stays owned by memory-claude-md-optimize (catalog consumer); prompt-author owns AGENTS.md/GEMINI.md and all non-skill, non-agent prompt kinds | User approval; avoids a second CLAUDE.md owner (skill-evaluate U1 overlap) |
 | 2026-11-05 | SDD ADR-1–4 confirmed: catalog inside prompt-author skill with ../ links; IDs + fingerprint test; two eval routes (plugin eval at two git states + standalone runner) with one kit format; eval case first, then each rule correction | User choices; model-ladder precedent shows cross-skill links survive install (whole plugin dir is installed) |
 | 2026-11-05 | SDD ADR-5–8 confirmed. ADR-7 changed by user: judge and Ollama host configurable via startup.toml [tcs] (repo > global > default claude:haiku); Ollama never assumed; this repo configures qwen2.5 | User: other users cannot be required to run Ollama or a specific model |
+| 2026-11-05 | SDD approved; phase → PLAN | User approval |
+| 2026-11-05 | Decomposition tier: Incremental | Classifier recommended Incremental (7 components: catalog, skill, lint, eval runners, catalog test, migration, hook; 7 Must features; 46 ACs). Accepted. |
+| 2026-11-05 | Model tier: hard (override) | Classifier recommended frontier (novel_pattern=true: fingerprint-tested catalog entries; high_risks=4). User chose hard: the new pattern is a simple test and the High risks are covered by measurement, not by implementation difficulty. |
 
 ## Context
 

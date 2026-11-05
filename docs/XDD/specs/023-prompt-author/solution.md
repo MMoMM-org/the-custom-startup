@@ -1,6 +1,6 @@
 ---
 title: "prompt-author: write, audit, port and measure LLM prompts beyond skills and agents"
-status: draft
+status: approved
 version: "1.0"
 ---
 
