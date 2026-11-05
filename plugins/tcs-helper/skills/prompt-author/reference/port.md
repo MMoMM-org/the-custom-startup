@@ -21,10 +21,9 @@ topics say which idioms that vendor's prompts carry.
 
 1. **Inventory the source's idioms**
    ([PA-40](catalog/porting.md#pa-40-port-leakage-source-environment-idioms)). List every element the
-   target cannot act on: Claude Code markers and slash commands, skill-format sections, tool names the
-   target lacks, markers such as `[NEEDS CLARIFICATION]` that the prompt never defines, references to
-   files, projects or knowledge the target cannot resolve ("Works with a Claude project"). For each,
-   rewrite it in the target's terms, define it inside the port, or remove it.
+   target cannot act on: the idioms PA-40's Tell names, slash commands, and references to files,
+   projects or knowledge the target cannot resolve ("Works with a Claude project"). For each, rewrite it
+   in the target's terms, define it inside the port, or remove it.
 2. **Apply the profile.** Go through the profile's topics in order. For each topic, change the prompt
    where the source differs from the guidance, and record one change-list row.
 3. **Small-local targets.** The profile's Turn shape
