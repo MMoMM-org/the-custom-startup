@@ -4,6 +4,10 @@ This file holds the format, ID-set, index-agreement and size checks. The expecte
 ID set, the file each entry lives in, the lint check it names and its contested
 status are read from the INITIAL ENTRIES block of the spec's solution.md, so the
 tests are red on a missing or partial catalog instead of passing vacuously.
+
+The port-profile checks (spec 023 T1.2, SDD-ADR-6) cover reference/profiles/:
+every topic sourced, dated and graded, and profiles cite catalog IDs instead of
+restating entries.
 """
 import re
 from pathlib import Path
@@ -347,3 +351,110 @@ def test_index_rows_and_sections_agree():
         problems.append(f'sections without an index row: {missing_rows}')
     assert rows, 'index has no rows'
     assert not problems, '\n'.join(problems)
+
+
+# ---------------------------------------------------------------- port profiles
+
+PROFILES_DIR = CATALOG_DIR.parent / 'profiles'
+PROFILE_TARGETS = ('anthropic', 'openai', 'google', 'small-local')
+PROFILE_TOPICS = ('Placement', 'Delimiters', 'Examples', 'Negatives', 'Emphasis', 'Literalness', 'Turn shape')
+PROFILE_FIELDS = ('Source', 'Date', 'Evidence')
+# SDD-ADR-6: only the T5 findings are measured for small-local; no vendor guidance exists for it.
+SMALL_LOCAL_MEASURED = ('Turn shape', 'Gate exits')
+DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+PA_REF_RE = re.compile(r'\bPA-\d{2}\b')
+
+
+def _profile_topics(path):
+    """Return {topic: {'guidance': [lines], 'fields': {name: value}}} for each '## ' section."""
+    topics = {}
+    current = None
+    for line in path.read_text(encoding='utf-8').splitlines():
+        if line.startswith('## '):
+            current = {'guidance': [], 'fields': {}}
+            topics[line[3:].strip()] = current
+            continue
+        if current is None or not line.strip():
+            continue
+        field = FIELD_RE.match(line)
+        if field:
+            current['fields'][field.group(1)] = field.group(2).strip()
+        else:
+            current['guidance'].append(line)
+    return topics
+
+
+def _profile_path(target):
+    return PROFILES_DIR / f'{target}.md'
+
+
+@pytest.mark.parametrize('target', PROFILE_TARGETS)
+def test_profile_exists(target):
+    assert _profile_path(target).is_file(), f'missing port profile {target}.md'
+
+
+@pytest.mark.parametrize('target', PROFILE_TARGETS)
+def test_profile_has_every_topic_with_guidance_source_date_and_evidence(target):
+    path = _profile_path(target)
+    assert path.is_file(), f'missing port profile {target}.md'
+    topics = _profile_topics(path)
+    problems = []
+    for topic in PROFILE_TOPICS:
+        if topic not in topics:
+            problems.append(f'{target}: no "## {topic}" section')
+    for topic, section in topics.items():
+        where = f'{target} / {topic}'
+        if not section['guidance']:
+            problems.append(f'{where}: no guidance text')
+        fields = section['fields']
+        for name in PROFILE_FIELDS:
+            if not fields.get(name):
+                problems.append(f'{where}: lacks {name}')
+        if fields.get('Date') and not DATE_RE.match(fields['Date']):
+            problems.append(f"{where}: Date {fields['Date']!r} is not YYYY-MM-DD")
+        grades = _grades(fields.get('Evidence', ''))
+        if fields.get('Evidence') and (not grades or set(grades) - EVIDENCE_GRADES):
+            problems.append(f'{where}: evidence {grades}')
+        if 'vendor' in grades and 'http' not in fields.get('Source', ''):
+            problems.append(f'{where}: vendor-graded without a source URL')
+    assert not problems, '\n'.join(problems)
+
+
+def test_small_local_grades_only_the_t5_findings_as_measured():
+    path = _profile_path('small-local')
+    assert path.is_file(), 'missing port profile small-local.md'
+    topics = _profile_topics(path)
+    problems = []
+    for topic in SMALL_LOCAL_MEASURED:
+        if topic not in topics:
+            problems.append(f'small-local: no "## {topic}" section')
+    for topic, section in topics.items():
+        grades = _grades(section['fields'].get('Evidence', ''))
+        expected = ['measured'] if topic in SMALL_LOCAL_MEASURED else ['unverified']
+        if grades != expected:
+            problems.append(f'small-local / {topic}: evidence {grades}, expected {expected}')
+    assert not problems, '\n'.join(problems)
+
+
+@pytest.mark.parametrize('target', PROFILE_TARGETS)
+def test_profile_cites_only_catalogued_entries(target):
+    path = _profile_path(target)
+    assert path.is_file(), f'missing port profile {target}.md'
+    cited = set(PA_REF_RE.findall(path.read_text(encoding='utf-8')))
+    known = {e['id'] for e in _all_entries()}
+    assert cited, f'{target}.md cites no catalog entry; profiles cite PA IDs for the underlying rule'
+    assert not cited - known, f'{target}.md cites unknown entries {sorted(cited - known)}'
+
+
+@pytest.mark.parametrize('target', PROFILE_TARGETS)
+def test_profile_does_not_restate_a_catalog_fingerprint(target):
+    path = _profile_path(target)
+    assert path.is_file(), f'missing port profile {target}.md'
+    text = path.read_text(encoding='utf-8')
+    copied = [
+        f"{e['id']}: {sentence}"
+        for e in _all_entries()
+        for sentence in _fingerprints(e)
+        if sentence in text
+    ]
+    assert not copied, f'{target}.md restates catalog entries instead of citing them: {copied}'
