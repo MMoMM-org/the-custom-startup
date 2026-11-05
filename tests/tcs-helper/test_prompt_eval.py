@@ -1597,3 +1597,197 @@ def test_agree_refuses_when_runs_changed_since_label(pe, spec023_out, capsys):
     grade_path.write_text(json.dumps(grade))
     assert pe.main(["agree", "--out", str(out), "--criterion", crit]) == 1
     assert "label" in capsys.readouterr().err
+
+
+# ------------------------------------------------------------------ T2.2 review follow-ups
+
+STATS_SCRIPT = SCRIPT.parent / "prompt_eval_stats.py"
+
+
+def _load_stats():
+    if not STATS_SCRIPT.is_file():
+        pytest.fail("prompt_eval_stats.py does not exist yet: {}".format(STATS_SCRIPT))
+    spec = importlib.util.spec_from_file_location("prompt_eval_stats_under_test",
+                                                  str(STATS_SCRIPT))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_stats_module_holds_the_report_and_label_pieces_without_provider_code():
+    stats = _load_stats()
+    for name in ("paired_stats", "sign_test", "decide_verdict", "build_report",
+                 "render_markdown", "write_report", "select_sample", "validation_state",
+                 "parse_labels", "render_label_file", "out_dir_problem"):
+        assert callable(getattr(stats, name)), name
+    for name in ("claude_call", "ollama_call", "run_child", "consent_missing", "Caller"):
+        assert not hasattr(stats, name), name
+    source = STATS_SCRIPT.read_text()
+    assert "urllib" not in source and "claude -p" not in source
+
+
+def test_label_lines_are_matched_case_and_space_insensitively(pe):
+    text = ("## Item L01\n\nlabel: PASS\n\n##  Item L02\n  Label : fail\n\n"
+            "## Item\tL03\nLABEL:\n")
+    labels = pe.parse_labels(text.replace("##  Item", "## Item  "))
+    assert labels == {"L01": "PASS", "L02": "fail", "L03": ""}
+
+
+def test_an_item_without_any_label_line_raises_unlike_an_empty_label(pe):
+    assert pe.parse_labels("## Item L01\nlabel:\n") == {"L01": ""}
+    with pytest.raises(ValueError) as exc:
+        pe.parse_labels("## Item L01\nlabel: PASS\n## Item L02\nno label here\n")
+    assert "L02" in str(exc.value)
+
+
+def test_agree_refuses_a_deleted_label_line(pe, spec023_out, capsys):
+    kit, out = spec023_out
+    crit = "no_unsupported_fact"
+    assert pe.main(["label", "--out", str(out), "--criterion", crit]) == 0
+    path = out / "labels-{}.md".format(crit)
+    text = path.read_text()
+    path.write_text(text.replace("label: ", "", 1))
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit]) == 1
+    assert "label line" in capsys.readouterr().err
+
+
+def _labelled(pe, out, crit):
+    assert pe.main(["label", "--out", str(out), "--criterion", crit]) == 0
+    label_as_spec023(out, crit)
+
+
+def test_agree_refuses_an_unparsable_kit_record_and_overwrites_nothing(pe, spec023_out, capsys):
+    kit, out = spec023_out
+    crit = "no_unsupported_fact"
+    _labelled(pe, out, crit)
+    record = _write(kit / "judge-validation.json", '[{"judge": "claude:haiku", ')
+    report_before = (out / "report.json").read_text()
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit, "--kit", str(kit)]) == 1
+    assert "judge-validation.json" in capsys.readouterr().err
+    assert record.read_text() == '[{"judge": "claude:haiku", '
+    assert (out / "report.json").read_text() == report_before
+
+
+def test_agree_keeps_a_bare_list_record_file_a_list(pe, spec023_out):
+    kit, out = spec023_out
+    other = {"judge": "ollama:qwen2.5:32b-instruct-q4_K_M", "criterion": "x", "state": "validated",
+             "n": 9, "agreement": 1.0, "date": "2026-11-01"}
+    _write(kit / "judge-validation.json", json.dumps([other]))
+    crit = "no_unsupported_fact"
+    _labelled(pe, out, crit)
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit, "--kit", str(kit)]) == 0
+    data = json.loads((kit / "judge-validation.json").read_text())
+    assert isinstance(data, list) and data[0] == other and len(data) == 2
+
+
+def test_agree_keeps_other_keys_of_a_wrapped_record_file(pe, spec023_out):
+    kit, out = spec023_out
+    _write(kit / "judge-validation.json", json.dumps({"note": "kept", "records": []}))
+    crit = "no_unsupported_fact"
+    _labelled(pe, out, crit)
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit, "--kit", str(kit)]) == 0
+    data = json.loads((kit / "judge-validation.json").read_text())
+    assert data["note"] == "kept" and len(data["records"]) == 1
+
+
+def test_kit_record_is_written_atomically(pe, spec023_out, monkeypatch):
+    kit, out = spec023_out
+    original = json.dumps([])
+    record = _write(kit / "judge-validation.json", original)
+    crit = "no_unsupported_fact"
+    _labelled(pe, out, crit)
+    real_replace = os.replace
+
+    def failing_replace(src, dst):
+        if str(dst) == str(record):
+            raise OSError("disk full")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(pe.os, "replace", failing_replace)
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit, "--kit", str(kit)]) == 1
+    assert record.read_text() == original
+    assert sorted(p.name for p in kit.iterdir() if p.is_file()) == ["README.md",
+                                                                   "judge-validation.json"]
+
+
+def test_agree_writes_the_report_before_the_kit_record(pe, spec023_out, monkeypatch):
+    kit, out = spec023_out
+    crit = "no_unsupported_fact"
+    _labelled(pe, out, crit)
+    seen = []
+    real = pe._write_kit_record
+
+    def spy(path, data):
+        seen.append(json.loads((out / "report.json").read_text()).get("judge_agreement"))
+        return real(path, data)
+
+    monkeypatch.setattr(pe, "_write_kit_record", spy)
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit, "--kit", str(kit)]) == 0
+    assert seen and crit in seen[0]
+
+
+def test_write_report_does_not_follow_a_symlinked_report(pe, spec023_out, tmp_path):
+    kit, out = spec023_out
+    crit = "no_unsupported_fact"
+    _labelled(pe, out, crit)
+    outside = tmp_path / "outside.json"
+    outside.write_text((out / "report.json").read_text())
+    (out / "report.json").unlink()
+    (out / "report.json").symlink_to(outside)
+    before = outside.read_text()
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit]) == 0
+    assert outside.read_text() == before
+    assert not (out / "report.json").is_symlink()
+    assert crit in report_of(out)["judge_agreement"]
+
+
+def test_leniency_is_tested_only_when_the_sample_holds_a_judge_fail(pe, spec023_out):
+    kit, out = spec023_out
+    crit = "no_implementation_detail"   # the judge failed two runs
+    assert pe.main(["label", "--out", str(out), "--criterion", crit, "--n", "1"]) == 0
+    key = _key(out, crit)
+    assert key["judge_fails"] == 2
+    assert [v["judge"] for v in key["items"].values()] == ["PASS"]
+    fill_labels(out, crit, lambda i: "PASS")
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit]) == 0
+    assert report_of(out)["judge_agreement"][crit]["leniency_tested"] is False
+    assert "leniency not tested" in (out / "report.md").read_text()
+
+
+def test_model_text_naming_a_login_problem_is_not_auth_required(pe, monkeypatch):
+    assistant = {"type": "assistant", "message": {"content": [
+        {"type": "text", "text": "Your config has an invalid API key; please run /login."}]}}
+    max_turns = {"type": "result", "subtype": "error_max_turns", "is_error": True,
+                 "total_cost_usd": 0.01}
+    monkeypatch.setattr(pe, "run_child", child(_stream(assistant, max_turns, max_turns), 1))
+    res = pe.claude_call("claude-haiku-5-5", "hi", turns=["again"], budget_usd=0.25)
+    assert res["is_error"] is True and res["error"] != "auth_required"
+    single = dict(max_turns, result="The model wrote: invalid API key")
+    monkeypatch.setattr(pe, "run_child", child(json.dumps(single), 1))
+    res = pe.claude_call("claude-haiku-5-5", "hi", budget_usd=0.25)
+    assert res["error"] == "is_error (error_max_turns), exit 1"
+    monkeypatch.setattr(pe, "run_child", child("not json, model says Not logged in", 1))
+    res = pe.claude_call("claude-haiku-5-5", "hi", budget_usd=0.25)
+    assert res["error"] != "auth_required"
+
+
+def test_the_cli_error_field_names_a_login_problem(pe, monkeypatch):
+    reply = {"type": "result", "subtype": "error_during_execution", "is_error": True,
+             "error": "Not logged in", "total_cost_usd": 0}
+    monkeypatch.setattr(pe, "run_child", child(json.dumps(reply), 1))
+    assert pe.claude_call("claude-haiku-5-5", "hi", budget_usd=0.25)["error"] == "auth_required"
+
+
+@pytest.mark.parametrize("decided,agreed,state", [(40, 34, "validated"), (40, 33, "not_validated")])
+def test_validation_state_at_exactly_85_percent(pe, decided, agreed, state):
+    assert pe.validation_state(decided, agreed) == state
+
+
+def test_sample_order_is_shuffled(pe):
+    fails = ["f{}".format(i) for i in range(3)]
+    passes = ["p{:02d}".format(i) for i in range(30)]
+    chosen = pe.select_sample(fails, passes, 20, 2305)
+    unshuffled = fails + [c for c in chosen if c.startswith("p")]
+    assert sorted(chosen) == sorted(unshuffled)
+    assert chosen != unshuffled
+    assert chosen[:3] != fails
