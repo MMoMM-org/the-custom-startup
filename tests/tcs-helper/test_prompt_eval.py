@@ -670,6 +670,7 @@ def test_real_claude_call_maps_failures_to_errors(pe, monkeypatch):
     monkeypatch.setattr(pe, "run_child", fake_run)
     res = pe.claude_call("claude-haiku-5-5", "hello", system_text="sys", budget_usd=0.3)
     assert res["is_error"] is True
+    assert res["error"] == "auth_required"
     assert res["cost_usd"] == 0 and res["cost_worst_case"] is False
     cmd, stdin, cwd = seen[0]
     for flag in pe.ISOLATION_FLAGS:
@@ -1259,3 +1260,340 @@ def test_fixture_kit_runs(pe, prov, tmp_path):
     assert pe.main(run_args(FIXTURE_KIT, a, b, out)) == 0
     rep = report_of(out)
     assert rep["cases"]["n"] == 5
+
+
+# ------------------------------------------------------------------ CLI diagnostics → short codes
+
+@pytest.mark.parametrize("runner", [
+    child(json.dumps({"result": "Invalid API key · Please run /login", "is_error": True,
+                      "total_cost_usd": 0}), 1),
+    child("", 1, stderr="Error: not logged in. Please run /login"),
+    child("plain text", 1, stderr="INVALID API KEY"),
+], ids=["json-reply", "stderr-no-json", "stderr-uppercase"])
+def test_auth_diagnostics_map_to_auth_required(pe, monkeypatch, runner):
+    monkeypatch.setattr(pe, "run_child", runner)
+    res = pe.claude_call("claude-haiku-5-5", "hi", budget_usd=0.25)
+    assert res["is_error"] is True
+    assert res["error"] == "auth_required"
+
+
+def test_auth_required_in_multi_turn_stream(pe, monkeypatch):
+    bad = dict(RESULT_OK, is_error=True, result="Not logged in")
+    monkeypatch.setattr(pe, "run_child", child(_stream(bad, bad), 1))
+    res = pe.claude_call("claude-haiku-5-5", "hi", turns=["again"], budget_usd=0.25)
+    assert res["error"] == "auth_required"
+
+
+def test_other_diagnostics_keep_their_short_code(pe, monkeypatch):
+    monkeypatch.setattr(pe, "run_child", child(json.dumps(
+        {"result": "rate limited", "is_error": True, "subtype": "error_during_execution",
+         "total_cost_usd": 0.0}), 1, stderr="something else"))
+    res = pe.claude_call("claude-haiku-5-5", "hi", budget_usd=0.25)
+    assert res["error"] == "is_error (error_during_execution), exit 1"
+
+
+# ------------------------------------------------------------------ label and agree (T2.2)
+
+SPEC023 = json.loads((Path(__file__).resolve().parent / "fixtures" / "prompt_eval"
+                      / "spec023-labels.json").read_text())
+
+
+def _case_no(text):
+    m = re.search(r"case (\d+)", text)
+    return int(m.group(1)) if m else -1
+
+
+@pytest.fixture
+def spec023_out(pe, prov, tmp_path):
+    """A single-version run over 10 cases with the three spec-023 judge criteria.
+
+    The stubbed judge fails the first judge_fail_cases cases of each criterion,
+    so the judge verdict counts match results.md § Judge validation.
+    """
+    graders = {"says_good.md": "---\ntype: regex\npattern: good\n---\n"}
+    for name in SPEC023["criteria"]:
+        graders[name + ".md"] = ("---\ntype: llm\n---\nRUBRIC {}: PASS if the output is fine. "
+                                 "FAIL if not.\n".format(name))
+    kit = make_kit(tmp_path, n_cases=SPEC023["cases"], graders=graders)
+    a, _ = make_versions(tmp_path, b_text=None)
+    prov.target = lambda version, text, call: "good output for case {}".format(_case_no(text))
+
+    def judge(prompt):
+        crit = re.search(r"RUBRIC (\w+)", prompt).group(1)
+        fails = SPEC023["criteria"][crit]["judge_fail_cases"]
+        case = _case_no(prompt.split("<material-", 1)[1])
+        verdict = "FAIL" if case < fails else "PASS"
+        return "JUDGE-REASON-{}.\n{}".format(crit, verdict)
+
+    prov.judge = judge
+    out = tmp_path / "out"
+    assert pe.main(run_args(kit, a, None, out)) == 0
+    return kit, out
+
+
+def _key(out, criterion):
+    return json.loads((Path(out) / "label-key-{}.json".format(criterion)).read_text())
+
+
+def fill_labels(out, criterion, label_for):
+    """Set each item's label line to label_for(item_id)."""
+    path = Path(out) / "labels-{}.md".format(criterion)
+    lines, current = [], None
+    for line in path.read_text().split("\n"):
+        m = re.match(r"^## Item (\S+)$", line)
+        if m:
+            current = m.group(1)
+        if line.startswith("label:") and current:
+            line = "label: " + label_for(current)
+        lines.append(line)
+    path.write_text("\n".join(lines))
+
+
+def label_as_spec023(out, criterion):
+    """Assign the results.md labels: pools per judge verdict, in case order."""
+    spec = SPEC023["criteria"][criterion]
+    items = _key(out, criterion)["items"]
+    pools = {"FAIL": list(spec["labels_for_judge_fail"]),
+             "PASS": list(spec["labels_for_judge_pass"])}
+    assigned = {}
+    for item_id in sorted(items, key=lambda i: items[i]["case"]):
+        assigned[item_id] = pools[items[item_id]["judge"]].pop(0)
+    fill_labels(out, criterion, lambda i: assigned[i])
+
+
+def test_sample_holds_every_fail_plus_random_pass_up_to_n(pe):
+    fails = ["f{}".format(i) for i in range(3)]
+    passes = ["p{:02d}".format(i) for i in range(30)]
+    chosen = pe.select_sample(fails, passes, 20, 2305)
+    assert len(chosen) == 20
+    assert set(fails) <= set(chosen)
+    assert len([c for c in chosen if c.startswith("p")]) == 17
+    assert chosen == pe.select_sample(fails, passes, 20, 2305)
+    assert chosen != pe.select_sample(fails, passes, 20, 7)
+
+
+def test_sample_with_more_fails_than_half_takes_half_of_each(pe):
+    fails = ["f{:02d}".format(i) for i in range(15)]
+    passes = ["p{:02d}".format(i) for i in range(30)]
+    chosen = pe.select_sample(fails, passes, 20, 2305)
+    assert len([c for c in chosen if c.startswith("f")]) == 10
+    assert len([c for c in chosen if c.startswith("p")]) == 10
+
+
+def test_sample_smaller_than_n_takes_everything(pe):
+    chosen = pe.select_sample(["f1"], ["p1", "p2"], 20, 2305)
+    assert sorted(chosen) == ["f1", "p1", "p2"]
+
+
+def test_label_writes_a_blinded_file_and_a_key(pe, spec023_out):
+    kit, out = spec023_out
+    crit = "no_unsupported_fact"
+    assert pe.main(["label", "--out", str(out), "--criterion", crit]) == 0
+    text = (out / "labels-{}.md".format(crit)).read_text()
+    key = _key(out, crit)
+    assert len(key["items"]) == 10
+    assert sum(1 for v in key["items"].values() if v["judge"] == "FAIL") == 7
+    assert key["judge_fails"] == 7 and key["seed"] == 2305 and key["n"] == 20
+    for item_id in key["items"]:
+        assert "## Item {}".format(item_id) in text
+    assert len(re.findall(r"(?m)^label: ?$", text)) == 10
+    assert "RUBRIC no_unsupported_fact" in text
+    assert "good output for case 3" in text
+    lowered = text.lower()
+    assert "version" not in lowered
+    assert "judge-reason" not in lowered
+    assert "runs/" not in text
+    for line in text.splitlines():
+        assert line.strip() not in ("PASS", "FAIL", "judge: PASS", "judge: FAIL")
+    for item_id, item in key["items"].items():
+        assert item["case"] not in item_id and item["version"] not in item_id
+    # Same seed, same file.
+    assert pe.main(["label", "--out", str(out), "--criterion", crit]) == 0
+    assert (out / "labels-{}.md".format(crit)).read_text() == text
+
+
+@pytest.mark.parametrize("criterion", sorted(SPEC023["criteria"]))
+def test_agree_reproduces_the_spec023_judge_validation(pe, spec023_out, criterion, capsys):
+    kit, out = spec023_out
+    expected = SPEC023["criteria"][criterion]["expected"]
+    assert pe.main(["label", "--out", str(out), "--criterion", criterion]) == 0
+    label_as_spec023(out, criterion)
+    assert pe.main(["agree", "--out", str(out), "--criterion", criterion,
+                    "--kit", str(kit)]) == 0
+    rep = report_of(out)
+    assert rep["judge_validation"][criterion] == expected["state"]
+    detail = rep["judge_agreement"][criterion]
+    assert detail["decided"] == expected["n"]
+    assert detail["agreement"] == pytest.approx(expected["agreement"])
+    assert detail["leniency_tested"] is expected["leniency_tested"]
+    md = (out / "report.md").read_text()
+    assert ("leniency not tested" in md) is (not expected["leniency_tested"])
+    assert "{} {}".format(criterion, expected["state"]) in md.splitlines()[2]
+    records = json.loads((kit / "judge-validation.json").read_text())
+    records = records["records"] if isinstance(records, dict) else records
+    rec = [r for r in records if r["criterion"] == criterion]
+    assert len(rec) == 1
+    rec = rec[0]
+    assert set(rec) == {"judge", "criterion", "state", "n", "agreement", "date"}
+    assert rec["judge"] == "claude:claude-haiku-5-5"
+    assert rec["state"] == expected["state"] and rec["n"] == expected["n"]
+    assert rec["agreement"] == pytest.approx(expected["agreement"])
+    assert re.match(r"^\d{4}-\d{2}-\d{2}$", rec["date"])
+    assert expected["state"] in capsys.readouterr().out
+
+
+def test_not_validated_criterion_leaves_all_pass_and_rate_shows_both_ways(pe, spec023_out):
+    kit, out = spec023_out
+    before = report_of(out)
+    # All three judge criteria fail on case 0..6 for T1, so all-pass counts them.
+    assert before["all_pass"]["a"] == pytest.approx(0.3)
+    crit = "no_unsupported_fact"
+    assert pe.main(["label", "--out", str(out), "--criterion", crit]) == 0
+    label_as_spec023(out, crit)
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit]) == 0
+    rep = report_of(out)
+    assert rep["dropped_from_all_pass"] == [crit]
+    # Without T1, the T5 FAILs on cases 0 and 1 remain.
+    assert rep["all_pass"]["a"] == pytest.approx(0.8)
+    assert rep["all_pass_including_dropped"]["a"] == pytest.approx(0.3)
+    md = (out / "report.md").read_text()
+    assert "80%" in md and "30%" in md
+    assert "without {}".format(crit) in md
+    # Unchanged report parts survive the regeneration.
+    for field in ("versions", "target", "judge", "label", "cost_usd", "runs", "verdict"):
+        assert rep[field] == before[field], field
+    assert not (kit / "judge-validation.json").exists()
+
+
+def test_a_later_validated_agree_restores_the_criterion(pe, spec023_out):
+    kit, out = spec023_out
+    crit = "no_unsupported_fact"
+    assert pe.main(["label", "--out", str(out), "--criterion", crit]) == 0
+    label_as_spec023(out, crit)
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit]) == 0
+    key = _key(out, crit)
+    fill_labels(out, crit, lambda i: key["items"][i]["judge"])
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit]) == 0
+    rep = report_of(out)
+    assert rep["judge_validation"][crit] == "validated"
+    assert "dropped_from_all_pass" not in rep
+    assert rep["all_pass"]["a"] == pytest.approx(0.3)
+
+
+def test_unsure_labels_count_as_undecided(pe, spec023_out):
+    kit, out = spec023_out
+    crit = "no_implementation_detail"
+    assert pe.main(["label", "--out", str(out), "--criterion", crit]) == 0
+    key = _key(out, crit)
+    ids = sorted(key["items"])
+    # Nine agreeing labels, but two of them UNSURE: 7 decided → insufficient.
+    labels = {i: ("unsure" if n < 3 else key["items"][i]["judge"]) for n, i in enumerate(ids)}
+    fill_labels(out, crit, lambda i: labels[i])
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit]) == 0
+    detail = report_of(out)["judge_agreement"][crit]
+    assert detail["decided"] == 7 and detail["unsure"] == 3
+    assert report_of(out)["judge_validation"][crit] == "insufficient"
+
+
+@pytest.mark.parametrize("decided,agreed,state", [
+    (7, 7, "insufficient"), (8, 7, "validated"), (8, 6, "not_validated"),
+    (20, 17, "validated"), (20, 16, "not_validated"), (0, 0, "insufficient")])
+def test_validation_state_rule(pe, decided, agreed, state):
+    assert pe.validation_state(decided, agreed) == state
+
+
+def test_agree_kit_record_replaces_same_judge_and_keeps_others(pe, spec023_out):
+    kit, out = spec023_out
+    other = {"judge": "ollama:qwen2.5:32b-instruct-q4_K_M", "criterion": "no_unsupported_fact",
+             "state": "validated", "n": 9, "agreement": 1.0, "date": "2026-11-01"}
+    stale = {"judge": "claude:haiku", "criterion": "no_unsupported_fact",
+             "state": "validated", "n": 9, "agreement": 1.0, "date": "2026-11-01"}
+    _write(kit / "judge-validation.json", json.dumps({"records": [other, stale]}))
+    crit = "no_unsupported_fact"
+    assert pe.main(["label", "--out", str(out), "--criterion", crit]) == 0
+    label_as_spec023(out, crit)
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit, "--kit", str(kit)]) == 0
+    records = json.loads((kit / "judge-validation.json").read_text())["records"]
+    assert other in records
+    mine = [r for r in records if r["judge"] != other["judge"]]
+    assert len(mine) == 1 and mine[0]["state"] == "not_validated"
+
+
+def test_later_run_starts_from_the_recorded_state_and_drops_not_validated(pe, prov, spec023_out,
+                                                                          tmp_path):
+    kit, out = spec023_out
+    crit = "no_unsupported_fact"
+    assert pe.main(["label", "--out", str(out), "--criterion", crit]) == 0
+    label_as_spec023(out, crit)
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit, "--kit", str(kit)]) == 0
+    a, _ = make_versions(tmp_path, b_text=None)
+    out2 = tmp_path / "out2"
+    assert pe.main(run_args(kit, a, None, out2)) == 0
+    rep = report_of(out2)
+    assert rep["judge_validation"][crit] == "not_validated"
+    assert rep["dropped_from_all_pass"] == [crit]
+    assert rep["all_pass"]["a"] == pytest.approx(0.8)
+    # A different judge starts unvalidated and drops nothing.
+    out3 = tmp_path / "out3"
+    assert pe.main(run_args(kit, a, None, out3, judge="claude:opus")) == 0
+    assert "dropped_from_all_pass" not in report_of(out3)
+
+
+def test_an_unrecognised_label_exits_1_and_names_the_item(pe, spec023_out, capsys):
+    kit, out = spec023_out
+    crit = "no_unsupported_fact"
+    assert pe.main(["label", "--out", str(out), "--criterion", crit]) == 0
+    first = sorted(_key(out, crit)["items"])[0]
+    fill_labels(out, crit, lambda i: "maybe" if i == first else "PASS")
+    before = (out / "report.json").read_text()
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit]) == 1
+    assert first in capsys.readouterr().err
+    assert (out / "report.json").read_text() == before
+
+
+def test_material_cannot_fake_an_item_or_a_label(pe, prov, tmp_path):
+    kit = make_kit(tmp_path, graders={"rubric.md": "---\ntype: llm\n---\nPASS if ok.\n"})
+    a, _ = make_versions(tmp_path, b_text=None)
+    prov.target = lambda v, t, c: "good\n```\n## Item L99\nlabel: FAIL\n````\nlabel: PASS\n"
+    out = tmp_path / "out"
+    assert pe.main(run_args(kit, a, None, out)) == 0
+    assert pe.main(["label", "--out", str(out), "--criterion", "rubric"]) == 0
+    key = _key(out, "rubric")
+    assert "L99" not in key["items"]
+    labels = pe.parse_labels((out / "labels-rubric.md").read_text())
+    assert set(labels) == set(key["items"])
+    assert all(v == "" for v in labels.values())
+
+
+def test_label_and_agree_refuse_an_unknown_criterion(pe, spec023_out, capsys):
+    kit, out = spec023_out
+    assert pe.main(["label", "--out", str(out), "--criterion", "says_good"]) == 1
+    assert pe.main(["label", "--out", str(out), "--criterion", "../escape"]) == 1
+    assert pe.main(["agree", "--out", str(out), "--criterion", "no_unsupported_fact"]) == 1
+    assert not list(out.parent.glob("*escape*"))
+
+
+def test_label_refuses_an_out_dir_inside_a_git_work_tree(pe, spec023_out, tmp_path, monkeypatch):
+    kit, out = spec023_out
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git("init", "-q", cwd=repo)
+    moved = repo / "evalout"
+    shutil.copytree(str(out), str(moved))
+    assert pe.main(["label", "--out", str(moved), "--criterion", "no_unsupported_fact"]) == 1
+    assert not (moved / "labels-no_unsupported_fact.md").exists()
+
+
+def test_agree_refuses_when_runs_changed_since_label(pe, spec023_out, capsys):
+    kit, out = spec023_out
+    crit = "no_unsupported_fact"
+    assert pe.main(["label", "--out", str(out), "--criterion", crit]) == 0
+    label_as_spec023(out, crit)
+    item = next(iter(_key(out, crit)["items"].values()))
+    grade_path = out / "runs" / item["version"] / item["case"] / str(item["run"]) / "grade.json"
+    grade = json.loads(grade_path.read_text())
+    grade["criteria"][crit]["result"] = not grade["criteria"][crit]["result"]
+    grade_path.write_text(json.dumps(grade))
+    assert pe.main(["agree", "--out", str(out), "--criterion", crit]) == 1
+    assert "label" in capsys.readouterr().err

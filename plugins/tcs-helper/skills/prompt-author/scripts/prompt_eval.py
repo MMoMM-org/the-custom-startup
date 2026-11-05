@@ -5,22 +5,26 @@
                      [--judge PROVIDER:MODEL] [--author MODEL] [--kind KIND] [--runs N]
                      --max-cost-usd X --out DIR [--confirm-provider P[=HOST]]...
                      [--proxy-for TARGET] [--temperature T]
+  prompt_eval.py label --out DIR --criterion NAME [--n 20] [--seed 2305]
+  prompt_eval.py agree --out DIR --criterion NAME [--kit DIR]
 
 Runs prompt version A (and optionally B) over every case of an eval kit on one
 target, grades each run with regex and llm graders, and writes a paired
 comparison report. Only two providers exist: the local `claude` CLI and an
 Ollama server. Nothing is sent before five checks pass (kit, secret scan, out
-dir, judge, consent). No API key is read or printed.
+dir, judge, consent). No API key is read or printed. `label` writes a blinded
+sample of one judge criterion's verdicts for a human to label; `agree` measures
+the judge against those labels and applies the validation rule (SDD-ADR-7).
 
 Exit: 0 done | 1 invalid kit, refused judge/out dir, unreachable target or
 judge, error rate above 20% | 2 cost ceiling hit (partial report)
 | 3 consent missing | 4 secret found or secret scan failed
 
 The statistics and report functions (paired_stats, sign_test, decide_verdict,
-build_report, render_markdown, write_report) are importable for the label and
-agree subcommands and for eval_compare.py. Stdlib only, Python 3.8+.
+build_report, render_markdown, write_report) are importable for eval_compare.py. Stdlib only, Python 3.8+.
 """
 import argparse
+import datetime
 import importlib.util
 import json
 import math
@@ -474,6 +478,15 @@ def _kill_group(proc):
 
 
 SUBTYPE = re.compile(r"^[a-z_]{1,40}$")
+# CLI diagnostics the skill can act on; only the code is stored, never the text.
+AUTH_DIAGNOSTICS = ("not logged in", "invalid api key", "please run /login")
+AUTH_REQUIRED = "auth_required"
+
+
+def _diagnostic_code(*texts):
+    """AUTH_REQUIRED when the CLI output names a login problem, else None."""
+    joined = " ".join(t for t in texts if isinstance(t, str)).lower()
+    return AUTH_REQUIRED if any(d in joined for d in AUTH_DIAGNOSTICS) else None
 
 
 def _subtype(event):
@@ -496,14 +509,26 @@ def _reported_cost(event):
 
 def claude_call(model, user_text, system_text=None, turns=None, budget_usd=1.0,
                 timeout_s=TARGET_TIMEOUT_S):
+    """See _claude_call; a failed call whose output names a login problem
+    carries the short code auth_required instead of its generic code."""
+    res, stdout, stderr = _claude_call(model, user_text, system_text, turns, budget_usd,
+                                       timeout_s)
+    if res["is_error"]:
+        code = _diagnostic_code(stdout, stderr)
+        if code:
+            res["error"] = code
+    return res
+
+
+def _claude_call(model, user_text, system_text, turns, budget_usd, timeout_s):
     """One isolated `claude -p` call without tools, in a fresh temp dir.
 
     With turns, the conversation goes through --input-format stream-json: the
     first message and each follow-up are separate user turns of one session.
     A failure without a trustworthy total_cost_usd books budget_usd, the
     --max-budget-usd cap the call ran under, as its worst-case cost.
-    Returns {text, transcript, cost_usd, is_error, error, cost_worst_case};
-    error is a short code, never model output.
+    Returns ({text, transcript, cost_usd, is_error, error, cost_worst_case},
+    stdout, stderr); error is a short code, never model output.
     """
     cap = float(budget_usd)
     workdir = tempfile.mkdtemp(prefix="prompt-eval-")
@@ -525,17 +550,21 @@ def claude_call(model, user_text, system_text=None, turns=None, budget_usd=1.0,
                             + "\n" for msg in [user_text] + list(turns))
         else:
             stdin = user_text
-        code, stdout, _ = run_child(cmd, stdin, workdir, timeout_s)
+        code, stdout, stderr = run_child(cmd, stdin, workdir, timeout_s)
     except ChildStartFailed as exc:
-        return _call_result("", [], 0.0, "claude could not start: {}".format(exc))
+        return _call_result("", [], 0.0, "claude could not start: {}".format(exc)), "", ""
     except subprocess.TimeoutExpired:
-        return _worst_case(cap, "timeout after {}s".format(timeout_s))
+        return _worst_case(cap, "timeout after {}s".format(timeout_s)), "", ""
     except OSError as exc:
-        return _worst_case(cap, "claude I/O failed: {}".format(type(exc).__name__))
+        return _worst_case(cap, "claude I/O failed: {}".format(type(exc).__name__)), "", ""
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
     if multi:
-        return _parse_stream(stdout, code, 1 + len(turns), cap)
+        return _parse_stream(stdout, code, 1 + len(turns), cap), stdout, stderr
+    return _parse_reply(stdout, code, cap), stdout, stderr
+
+
+def _parse_reply(stdout, code, cap):
     try:
         data = json.loads(stdout)
     except (ValueError, RecursionError):
@@ -801,14 +830,14 @@ def build_report(meta, results, dropped=()):
         for v in versions:
             entry[v] = _rate(values.get(v, []))
 
-    def all_pass(r):
-        crits = [c for n, c in r["criteria"].items() if n not in dropped]
+    def all_pass(r, excluded):
+        crits = [c for n, c in r["criteria"].items() if n not in excluded]
         if r["errored"] or any(c["result"] is None for c in crits):
             return None
         return all(c["result"] for c in crits)
 
     for r in results:
-        r["all_pass"] = all_pass(r)
+        r["all_pass"] = all_pass(r, dropped)
     all_pass_rates = {v: _rate([r["all_pass"] for r in results if r["version"] == v])
                       for v in versions}
     errored = {v: sum(1 for r in results if r["version"] == v and r["errored"]) for v in versions}
@@ -827,6 +856,8 @@ def build_report(meta, results, dropped=()):
     })
     if dropped:
         report["dropped_from_all_pass"] = sorted(dropped)
+        report["all_pass_including_dropped"] = {
+            v: _rate([all_pass(r, ()) for r in results if r["version"] == v]) for v in versions}
 
     if "b" not in versions:
         report.update({"paired_difference": None, "sign_test": None,
@@ -928,9 +959,19 @@ def render_markdown(report):
     for name, entry in sorted(report["per_criterion"].items()):
         lines.append("| {} | {} | {} |".format(name, entry["kind"], " | ".join(
             _fmt_rate(entry.get(v)) for v in versions)))
-    lines.append("| all pass | - | {} |".format(" | ".join(
-        _fmt_rate(report["all_pass"].get(v)) for v in versions)))
+    dropped = report.get("dropped_from_all_pass")
+    if dropped:
+        names = ", ".join(dropped)
+        lines.append("| all pass (without {}) | - | {} |".format(names, " | ".join(
+            _fmt_rate(report["all_pass"].get(v)) for v in versions)))
+        lines.append("| all pass (with {}) | - | {} |".format(names, " | ".join(
+            _fmt_rate(report["all_pass_including_dropped"].get(v)) for v in versions)))
+    else:
+        lines.append("| all pass | - | {} |".format(" | ".join(
+            _fmt_rate(report["all_pass"].get(v)) for v in versions)))
     lines.append("")
+    for name, agreement in sorted((report.get("judge_agreement") or {}).items()):
+        lines.append(_agreement_line(name, agreement))
     pd = report.get("paired_difference")
     if pd and pd.get("estimate") is not None:
         st = report["sign_test"]
@@ -949,6 +990,17 @@ def render_markdown(report):
     return "\n".join(lines) + "\n"
 
 
+def _agreement_line(name, a):
+    line = "Judge agreement {}: {} of {} decided labels agree ({}); {} unsure, {} unlabelled; " \
+           "{}.".format(name, a["agreed"], a["decided"], _fmt_rate(a["agreement"]), a["unsure"],
+                        a["unlabelled"], a["state"])
+    if a["state"] == "not_validated":
+        line += " Dropped from all pass."
+    if not a["leniency_tested"]:
+        line += " Judge leniency not tested: the judge gave no FAIL."
+    return line
+
+
 def write_report(out_dir, report):
     out = Path(out_dir)
     (out / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n",
@@ -956,30 +1008,55 @@ def write_report(out_dir, report):
     (out / "report.md").write_text(render_markdown(report), encoding="utf-8")
 
 
+VALIDATION_FILE = "judge-validation.json"
+
+
+def _validation_records(kit_dir):
+    """(records, wrapped): KIT/judge-validation.json as a list of records,
+    and whether the file holds {"records": [...]} rather than a bare list."""
+    path = Path(kit_dir) / VALIDATION_FILE
+    if not path.is_file():
+        return [], False
+    try:
+        data = json.loads(_read(path))
+    except ValueError:
+        return [], False
+    if isinstance(data, dict):
+        records = data.get("records", [])
+        return (records if isinstance(records, list) else []), True
+    return (data if isinstance(data, list) else []), False
+
+
+def recorded_states(kit_dir, judge_id):
+    """{criterion: state} recorded by `agree` for this judge (last record wins)."""
+    states = {}
+    for rec in _validation_records(kit_dir)[0]:
+        if isinstance(rec, dict) and isinstance(rec.get("criterion"), str) \
+                and _same_model(rec.get("judge"), judge_id) and rec.get("state"):
+            states[rec["criterion"]] = rec["state"]
+    return states
+
+
 def judge_validation(kit_dir, judge_id, cases):
     """Starting state per criterion: validated/not_validated/insufficient from
     KIT/judge-validation.json for this judge; not_run for deterministic criteria."""
-    records = []
-    path = Path(kit_dir) / "judge-validation.json"
-    if path.is_file():
-        try:
-            data = json.loads(_read(path))
-            records = data.get("records", []) if isinstance(data, dict) else list(data)
-        except ValueError:
-            records = []
+    recorded = recorded_states(kit_dir, judge_id)
     states = {}
     for case in cases:
         for grader in case["graders"]:
             if grader["type"] != "llm":
                 states.setdefault(grader["name"], "not_run")
                 continue
-            state = "not_validated"
-            for rec in records:
-                if isinstance(rec, dict) and rec.get("criterion") == grader["name"] \
-                        and _same_model(rec.get("judge"), judge_id):
-                    state = rec.get("state", state)
-            states[grader["name"]] = state
+            states[grader["name"]] = recorded.get(grader["name"], "not_validated")
     return states
+
+
+def recorded_drops(kit_dir, judge_id, cases):
+    """llm criteria whose recorded agreement failed (not_validated): they leave
+    all-pass. A criterion never labelled is not_validated too, but stays in."""
+    llm = {g["name"] for c in cases for g in c["graders"] if g["type"] == "llm"}
+    return {name for name, state in recorded_states(kit_dir, judge_id).items()
+            if state == "not_validated" and name in llm}
 
 
 def _same_model(a, b):
@@ -1017,9 +1094,22 @@ def _parse_args(argv):
     run.add_argument("--confirm-provider", action="append", default=[])
     run.add_argument("--proxy-for")
     run.add_argument("--temperature", type=float)
+    label = sub.add_parser("label", help="write a blinded sample of one judge criterion")
+    label.add_argument("--out", required=True)
+    label.add_argument("--criterion", required=True)
+    label.add_argument("--n", type=int, default=DEFAULT_LABEL_N)
+    label.add_argument("--seed", type=int, default=SEED)
+    agree = sub.add_parser("agree", help="measure the judge against the labels")
+    agree.add_argument("--out", required=True)
+    agree.add_argument("--criterion", required=True)
+    agree.add_argument("--kit")
     args = parser.parse_args(argv)
+    if args.cmd not in ("run", "label", "agree"):
+        raise ArgumentError("a subcommand is required: run, label or agree")
+    if args.cmd == "label" and args.n < 1:
+        raise ArgumentError("--n must be at least 1")
     if args.cmd != "run":
-        raise ArgumentError("a subcommand is required: run")
+        return args
     if args.max_cost_usd is None or args.max_cost_usd <= 0:
         raise ArgumentError("--max-cost-usd is required and must be positive")
     if args.runs < 1:
@@ -1178,7 +1268,8 @@ def run_eval(args, ctx):
     }
     if ctx["uses_ollama"]:
         meta["ollama_host"] = {"url": ctx["ollama_host"], "source": ctx["ollama_host_source"]}
-    report = build_report(meta, results)
+    report = build_report(meta, results,
+                          dropped=recorded_drops(args.kit, ctx["judge"], ctx["cases"]))
     write_report(out, report)
     print("{}: {}".format(out / "report.md", render_markdown(report).splitlines()[1]))
     if partial:
@@ -1227,6 +1318,300 @@ def _grade(caller, ctx, where, grader, final, transcript):
             "reply": (res["text"] or res["error"] or "")[-400:]}
 
 
+# ------------------------------------------------------------------ label and agree
+
+LABEL_VALUES = ("PASS", "FAIL", "UNSURE")
+DEFAULT_LABEL_N = 20
+MIN_DECIDED = 8
+MIN_AGREEMENT_PCT = 85
+CRITERION_NAME = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$")
+ITEM_HEAD = re.compile(r"^## Item (\S+)\s*$")
+LABEL_LINE = re.compile(r"^label:(.*)$")
+FENCE_OPEN = re.compile(r"^(`{3,})")
+# report.json fields build_report derives; agree drops them and rebuilds the rest.
+DERIVED_FIELDS = ("cases", "per_criterion", "all_pass", "all_pass_including_dropped",
+                  "errored_runs", "judge_errors", "dropped_from_all_pass", "paired_difference",
+                  "sign_test", "verdict", "recommendation", "error_rates", "verdict_withheld")
+
+
+def select_sample(fails, passes, n, seed=SEED):
+    """Every judge FAIL plus random PASS up to n; when FAILs exceed n/2,
+    n/2 random FAILs and n/2 random PASS. Shuffled, so order says nothing."""
+    rng = random.Random(seed)
+    if 2 * len(fails) > n:
+        half = n // 2
+        chosen = rng.sample(list(fails), half)
+        chosen += rng.sample(list(passes), min(n - half, len(passes)))
+    else:
+        chosen = list(fails) + rng.sample(list(passes), min(n - len(fails), len(passes)))
+    rng.shuffle(chosen)
+    return chosen
+
+
+def validation_state(decided, agreed):
+    """SDD Complex Logic: < 8 decided → insufficient; ≥ 85% → validated."""
+    if decided < MIN_DECIDED:
+        return "insufficient"
+    if agreed * 100 >= MIN_AGREEMENT_PCT * decided:
+        return "validated"
+    return "not_validated"
+
+
+def _fence_for(*texts):
+    longest = max([len(run) for text in texts for run in re.findall(r"`+", text)] + [2])
+    return "`" * (longest + 1)
+
+
+def render_label_file(criterion, items):
+    """items: [(id, rubric, material)]. Fences are longer than any backtick
+    run in the content, so material cannot open an item or fake a label."""
+    lines = ["# Judge labels: {}".format(criterion), "",
+             "Judge each item's material against its rubric only. Write PASS, FAIL or UNSURE "
+             "after `label:`; leave it empty to skip the item.", ""]
+    for item_id, rubric, material in items:
+        fence = _fence_for(rubric, material)
+        lines += ["## Item {}".format(item_id), "", "Rubric:", "", fence + "text", rubric, fence,
+                  "", "Material:", "", fence + "text", material, fence, "", "label: ", ""]
+    return "\n".join(lines)
+
+
+def parse_labels(text):
+    """{item id: label text} from a label file; lines inside fences are content."""
+    labels, current, fence = {}, None, None
+    for line in text.replace("\r\n", "\n").split("\n"):
+        if fence:
+            if line.strip() == fence:
+                fence = None
+            continue
+        opened = FENCE_OPEN.match(line)
+        if opened:
+            fence = opened.group(1)
+            continue
+        head = ITEM_HEAD.match(line)
+        if head:
+            current = head.group(1)
+            if current in labels:
+                raise ValueError("item {} appears twice".format(current))
+            labels[current] = None
+            continue
+        label = LABEL_LINE.match(line)
+        if label and current is not None:
+            if labels[current] is not None:
+                raise ValueError("item {} has two label lines".format(current))
+            labels[current] = label.group(1).strip()
+    return {k: (v or "") for k, v in labels.items()}
+
+
+def _label_files(out, criterion):
+    return out / "labels-{}.md".format(criterion), out / "label-key-{}.json".format(criterion)
+
+
+def _write_in_out(path, text):
+    """Write PATH, replacing a symlink there instead of following it."""
+    if path.is_symlink():
+        path.unlink()
+    path.write_text(text, encoding="utf-8")
+
+
+def _load_json(path, what):
+    try:
+        return json.loads(_read(path))
+    except (OSError, ValueError) as exc:
+        raise Refused(EXIT_INVALID, "cannot read {} {} ({})".format(what, path,
+                                                                     type(exc).__name__))
+
+
+def _labelling_context(args):
+    """Checks shared by label and agree; returns (out, report)."""
+    if not CRITERION_NAME.match(args.criterion or ""):
+        raise Refused(EXIT_INVALID, "--criterion {!r} is not a grader name".format(args.criterion))
+    problem = out_dir_problem(args.out)
+    if problem:
+        raise Refused(EXIT_INVALID, problem)
+    out = Path(args.out)
+    if not (out / "report.json").is_file():
+        raise Refused(EXIT_INVALID, "--out {} holds no report.json; run prompt_eval.py run "
+                                    "first".format(out))
+    report = _load_json(out / "report.json", "report")
+    crit = (report.get("per_criterion") or {}).get(args.criterion)
+    if not isinstance(crit, dict) or crit.get("kind") != "judge":
+        raise Refused(EXIT_INVALID, "criterion {} has no judge verdicts in {}".format(
+            args.criterion, out / "report.json"))
+    return out, report
+
+
+def _graded_runs(out):
+    """[(run_dir, grade)] for every runs/<version>/<case>/<run>/grade.json, sorted."""
+    runs = []
+    for path in sorted((out / "runs").glob("*/*/*/grade.json")):
+        grade = _load_json(path, "grade")
+        if not isinstance(grade, dict):
+            raise Refused(EXIT_INVALID, "grade file {} is not an object".format(path))
+        runs.append((path.parent, grade))
+    return runs
+
+
+def _judge_verdict(grade, criterion):
+    """PASS/FAIL the judge gave this run on CRITERION, or None (errored, judge error)."""
+    crit = (grade.get("criteria") or {}).get(criterion)
+    if grade.get("errored") or not isinstance(crit, dict) or crit.get("result") is None:
+        return None
+    return "PASS" if crit["result"] else "FAIL"
+
+
+def _warn_on_secrets(path):
+    """The label file holds model output; flag secret-shaped text, never show it."""
+    try:
+        hits = scan_secrets([path])
+    except Exception as exc:  # local file only: warn, the labeller still needs it
+        print("prompt_eval.py: secret scan of {} failed ({}); do not share it unchecked".format(
+            path, type(exc).__name__), file=sys.stderr)
+        return
+    for p, line, message in hits:
+        print("prompt_eval.py: {}:{}: {}; do not share this file".format(p, line, message),
+              file=sys.stderr)
+
+
+def label_cmd(args):
+    out, report = _labelling_context(args)
+    graded = []
+    for run_dir, grade in _graded_runs(out):
+        verdict = _judge_verdict(grade, args.criterion)
+        if verdict:
+            graded.append((run_dir, grade, verdict))
+    fails = [g for g in graded if g[2] == "FAIL"]
+    passes = [g for g in graded if g[2] == "PASS"]
+    chosen = select_sample(fails, passes, args.n, args.seed)
+    if not chosen:
+        raise Refused(EXIT_INVALID, "no judge verdicts for {} to label".format(args.criterion))
+    width = max(2, len(str(len(chosen))))
+    items, key_items = [], {}
+    for idx, (run_dir, grade, verdict) in enumerate(chosen, 1):
+        item_id = "L{:0{}d}".format(idx, width)
+        rubric = grade["criteria"][args.criterion].get("rubric") or ""
+        material = _read(run_dir / "final.txt") if (run_dir / "final.txt").is_file() else ""
+        items.append((item_id, rubric, material))
+        key_items[item_id] = {"version": grade.get("version"), "case": grade.get("case"),
+                              "run": grade.get("run"), "judge": verdict}
+    key = {"criterion": args.criterion, "judge": report["judge"]["id"], "n": args.n,
+           "seed": args.seed, "judge_fails": len(fails), "judge_passes": len(passes),
+           "items": key_items}
+    labels_path, key_path = _label_files(out, args.criterion)
+    try:
+        _write_in_out(labels_path, render_label_file(args.criterion, items))
+        _write_in_out(key_path, json.dumps(key, indent=1, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        raise Refused(EXIT_INVALID, "cannot write the label files in {} ({})".format(
+            out, type(exc).__name__))
+    _warn_on_secrets(labels_path)
+    print("{}: {} items to label; then run prompt_eval.py agree --out {} --criterion {}".format(
+        labels_path, len(items), out, args.criterion))
+    return EXIT_OK
+
+
+def _read_agreement(out, report, criterion):
+    """Agreement detail from the label file and its key; refuses stale or bad labels."""
+    labels_path, key_path = _label_files(out, criterion)
+    if not labels_path.is_file() or not key_path.is_file():
+        raise Refused(EXIT_INVALID, "no label files for {} in {}; run prompt_eval.py label "
+                                    "first".format(criterion, out))
+    key = _load_json(key_path, "label key")
+    items = key.get("items") if isinstance(key, dict) else None
+    if not isinstance(items, dict) or key.get("criterion") != criterion:
+        raise Refused(EXIT_INVALID, "label key {} does not belong to {}".format(key_path,
+                                                                                criterion))
+    if not _same_model(key.get("judge"), report["judge"]["id"]):
+        raise Refused(EXIT_INVALID, "the report's judge changed since the sample was drawn; "
+                                    "run prompt_eval.py label again")
+    try:
+        labels = parse_labels(_read(labels_path))
+    except ValueError as exc:
+        raise Refused(EXIT_INVALID, "{}: {}".format(labels_path, exc))
+    problems = ["item {}: not in the key".format(i) for i in sorted(set(labels) - set(items))]
+    problems += ["item {}: missing from the label file".format(i)
+                 for i in sorted(set(items) - set(labels))]
+    problems += ["item {}: label must be PASS, FAIL, UNSURE or empty".format(i)
+                 for i in sorted(labels) if labels[i].upper() not in LABEL_VALUES + ("",)]
+    if problems:
+        raise Refused(EXIT_INVALID, "{}:\n  {}".format(labels_path, "\n  ".join(problems)))
+    for item_id, item in sorted(items.items()):
+        grade_path = out / "runs" / str(item["version"]) / str(item["case"]) / str(item["run"]) \
+            / "grade.json"
+        current = _judge_verdict(_load_json(grade_path, "grade"), criterion) \
+            if grade_path.is_file() else None
+        if current != item.get("judge"):
+            raise Refused(EXIT_INVALID, "the runs changed since the sample was drawn (item {}); "
+                                        "run prompt_eval.py label again".format(item_id))
+    decided = agreed = unsure = 0
+    for item_id, raw in labels.items():
+        label = raw.upper()
+        if label in ("PASS", "FAIL"):
+            decided += 1
+            agreed += label == items[item_id]["judge"]
+        elif label == "UNSURE":
+            unsure += 1
+    return {"state": validation_state(decided, agreed), "decided": decided, "agreed": agreed,
+            "agreement": round(agreed / float(decided), 4) if decided else None,
+            "unsure": unsure, "unlabelled": len(labels) - decided - unsure,
+            "sampled": len(labels), "leniency_tested": int(key.get("judge_fails") or 0) > 0}
+
+
+def _record_in_kit(kit_dir, criterion, judge_id, agreement):
+    """Replace this judge's record for CRITERION in KIT/judge-validation.json."""
+    kit = Path(kit_dir)
+    if not kit.is_dir():
+        raise Refused(EXIT_INVALID, "--kit is not a directory: {}".format(kit))
+    llm = {g["name"] for c in load_kit(kit) for g in c["graders"] if g["type"] == "llm"}
+    if criterion not in llm:
+        raise Refused(EXIT_INVALID, "kit {} has no llm grader {}".format(kit, criterion))
+    path = kit / VALIDATION_FILE
+    if path.is_symlink():
+        raise Refused(EXIT_INVALID, "{} is a symlink; not written through".format(path))
+    records, wrapped = _validation_records(kit)
+    records = [r for r in records if not (isinstance(r, dict) and r.get("criterion") == criterion
+                                          and _same_model(r.get("judge"), judge_id))]
+    record = {"judge": judge_id, "criterion": criterion, "state": agreement["state"],
+              "n": agreement["decided"], "agreement": agreement["agreement"],
+              "date": datetime.date.today().isoformat()}
+    records.append(record)
+    data = {"records": records} if wrapped else records
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path
+
+
+def rebuild_report(out, report, criterion, agreement):
+    """report.json with judge_validation[criterion] set and all-pass recomputed."""
+    meta = {k: v for k, v in report.items() if k not in DERIVED_FIELDS}
+    meta["case_ids"] = list((report.get("cases") or {}).get("ids") or [])
+    meta["judge_validation"] = dict(report.get("judge_validation") or {})
+    meta["judge_validation"][criterion] = agreement["state"]
+    meta["judge_agreement"] = dict(report.get("judge_agreement") or {})
+    meta["judge_agreement"][criterion] = agreement
+    dropped = set(report.get("dropped_from_all_pass") or []) - {criterion}
+    if agreement["state"] == "not_validated":
+        dropped.add(criterion)
+    return build_report(meta, [grade for _, grade in _graded_runs(out)], dropped=dropped)
+
+
+def agree_cmd(args):
+    out, report = _labelling_context(args)
+    agreement = _read_agreement(out, report, args.criterion)
+    new_report = rebuild_report(out, report, args.criterion, agreement)
+    kit_path = None
+    if args.kit:
+        kit_path = _record_in_kit(args.kit, args.criterion, report["judge"]["id"], agreement)
+    write_report(out, new_report)
+    print(_agreement_line(args.criterion, agreement))
+    if agreement["state"] == "not_validated":
+        print("All pass without {}: {}; with it: {}.".format(args.criterion, ", ".join(
+            "{} {}".format(v, _fmt_rate(r)) for v, r in sorted(new_report["all_pass"].items())),
+            ", ".join("{} {}".format(v, _fmt_rate(r)) for v, r in sorted(
+                new_report["all_pass_including_dropped"].items()))))
+    if kit_path:
+        print("Recorded in {}.".format(kit_path))
+    return EXIT_OK
+
+
 def main(argv=None):
     try:
         args = _parse_args(sys.argv[1:] if argv is None else argv)
@@ -1234,6 +1619,10 @@ def main(argv=None):
         print("prompt_eval.py: {}".format(exc), file=sys.stderr)
         return EXIT_INVALID
     try:
+        if args.cmd == "label":
+            return label_cmd(args)
+        if args.cmd == "agree":
+            return agree_cmd(args)
         ctx = preflight(args)
     except Refused as exc:
         stream = sys.stdout if exc.code == EXIT_CONSENT else sys.stderr
