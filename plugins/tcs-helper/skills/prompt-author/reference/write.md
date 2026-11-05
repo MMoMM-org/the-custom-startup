@@ -52,19 +52,14 @@ that the index loads for its kind.
 The status values the brief uses for the unclear and stop cases are part of the contract: they come
 from the consumer's list, or the note tells the author the consumer has no branch for them.
 
-## Gates
+## Gates and outside input
 
-Find each approval, confirmation or "wait for my OK" step in the draft and give it its exit
-([PA-16](catalog/core.md#pa-16-gate-without-an-exit)), with the trigger phrased in words a user would
-type.
-
-## Delimiting input
-
-Find each place the draft takes input from outside the author's control (user text, documents, web
-pages, logs, tool output, another model's reply) and apply
-[PA-15](catalog/core.md#pa-15-untrusted-input-not-delimited-and-marked-as-data) there. In a prompt
-built in code, the tag pair sits inside the string literal around the placeholder, because quotes are
-not a delimiter and the lint (E4) reads only the literal.
+Give each approval or "wait for my OK" step its exit
+([PA-16](catalog/core.md#pa-16-gate-without-an-exit)) in words a user would type, and delimit each
+input from outside the author's control, another model's reply included
+([PA-15](catalog/core.md#pa-15-untrusted-input-not-delimited-and-marked-as-data)). In a prompt built
+in code, the tag pair sits inside the string literal around the placeholder, because quotes are not a
+delimiter and the lint (E4) reads only the literal.
 
 ## Cut test
 
