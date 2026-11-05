@@ -7,8 +7,8 @@ Entries for prompts an agent re-reads at every step of a loop: subagent briefs, 
 - **Fails because:** the agent cannot ask mid-run, so it guesses and reports success.
 - **Fix:** name the action for the unclear case, such as returning `NEEDS_CONTEXT` with the open question.
 - **Applies to:** brief, agent, api-system · any
-- **Evidence:** measured + practitioner (spec 023 experiment T2: NEEDS_CONTEXT returned only when the brief defined it)
-- **Sources:** Gravity, "AI agent prompt vs traditional prompt" (https://gravity.fast/blog/ai-agent-prompt-vs-traditional-prompt/, fetched 2026-11-04)
+- **Evidence:** measured (spec 023 experiment T2: NEEDS_CONTEXT returned only when the brief defined it)
+- **Sources:** Gravity, "AI agent prompt vs traditional prompt" (https://gravity.fast/blog/ai-agent-prompt-vs-traditional-prompt/, fetched 2026-11-04); graded measured, not practitioner, because T2 tests the fix this entry states and Gravity gives the rule without controlled evidence
 - **Fingerprint:** "Say what the agent does when an input is missing or unclear."
 - **Status:** active
 
@@ -27,8 +27,8 @@ Entries for prompts an agent re-reads at every step of a loop: subagent briefs, 
 - **Fails because:** the script breaks on the first case it did not foresee (pagination, a missing field, a rate limit), and the agent has no goal to recover toward.
 - **Fix:** state the goal, the constraints and the done criterion instead of the sequence of tool calls.
 - **Applies to:** brief, agent, api-system · any
-- **Evidence:** vendor + practitioner
-- **Sources:** Anthropic, Prompting best practices, "Prefer general instructions over prescriptive steps" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices, fetched 2026-11-04); Gravity, "AI agent prompt vs traditional prompt" (https://gravity.fast/blog/ai-agent-prompt-vs-traditional-prompt/, fetched 2026-11-04)
+- **Evidence:** vendor
+- **Sources:** Anthropic, Prompting best practices, "Prefer general instructions over prescriptive steps" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices, fetched 2026-11-04); Gravity, "AI agent prompt vs traditional prompt" (https://gravity.fast/blog/ai-agent-prompt-vs-traditional-prompt/, fetched 2026-11-04); graded vendor, not practitioner, because the Anthropic guidance carries this entry's rule and Gravity adds only the failure examples
 - **Fingerprint:** "Give the agent a goal to recover toward, not only a script to follow."
 - **Status:** active
 
@@ -37,8 +37,8 @@ Entries for prompts an agent re-reads at every step of a loop: subagent briefs, 
 - **Fails because:** a blocked agent improvises a workaround, often worse than the action it was denied.
 - **Fix:** apply PA-04, the general rule this entry specialises for agents: pair each forbidden action with an approved alternative such as stop and report.
 - **Applies to:** brief, agent, api-system · any
-- **Evidence:** practitioner + vendor
-- **Sources:** Gravity, "AI agent prompt vs traditional prompt" (https://gravity.fast/blog/ai-agent-prompt-vs-traditional-prompt/, fetched 2026-11-04); OWASP, LLM01 Prompt Injection, least privilege and human approval (https://genai.owasp.org/llmrisk/llm01-prompt-injection/, fetched 2026-11-04)
+- **Evidence:** practitioner
+- **Sources:** Gravity, "AI agent prompt vs traditional prompt" (https://gravity.fast/blog/ai-agent-prompt-vs-traditional-prompt/, fetched 2026-11-04); OWASP, LLM01 Prompt Injection, least privilege and human approval (https://genai.owasp.org/llmrisk/llm01-prompt-injection/, fetched 2026-11-04); graded practitioner, not vendor, because only Gravity states this entry's rule and OWASP backs human approval as an alternative, not the failure
 - **Fingerprint:** "Give a blocked agent a sanctioned next step: stop and report, escalate, or ask."
 - **Status:** active
 

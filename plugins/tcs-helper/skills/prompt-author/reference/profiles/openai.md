@@ -9,7 +9,7 @@ For a prompt with long context, put the instructions both above and below the co
 - **Evidence:** vendor
 
 ## Delimiters
-Structure the prompt with Markdown headings and lists, and delimit documents with Markdown or XML tags. OpenAI found JSON-wrapped documents performed particularly poorly, so convert JSON blocks of input to XML or Markdown when porting. For GPT-5, structured XML specifications improved adherence. Close every tag and keep one style per block kind (PA-18).
+Structure the prompt with Markdown headings and lists, and delimit documents with Markdown or XML tags. OpenAI reports that JSON "performed particularly poorly", so convert JSON blocks of input to XML or Markdown when porting. For GPT-5, structured XML specifications improved adherence. Close every tag and keep one style per block kind (PA-18).
 - **Source:** OpenAI, GPT-4.1 prompting guide, delimiters (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide); OpenAI, GPT-5 prompting guide, structured XML specs (https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide)
 - **Date:** 2026-11-04
 - **Evidence:** vendor
@@ -21,19 +21,19 @@ Back each behaviour an example shows with a rule stated in the instructions (PA-
 - **Evidence:** vendor
 
 ## Negatives
-GPT-4.1 follows instructions literally, so keep an explicit don't next to the positive rule wherever the boundary matters, such as "Write prose paragraphs; do not use bullet lists" (PA-04). This differs from Anthropic, which advises telling the model what to do rather than what not to do; when porting from a Claude prompt, add the don't at each boundary the target could cross.
+GPT-4.1 follows instructions literally and may need explicit don'ts, so keep a don't where PA-04 places one for a literal target, such as "Write prose paragraphs; do not use bullet lists". This differs from Anthropic, which advises telling the model what to do rather than what not to do; when porting from a Claude prompt, add the don't at each boundary the target could cross.
 - **Source:** OpenAI, GPT-4.1 prompting guide, literal instruction following (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide)
 - **Date:** 2026-11-04
 - **Evidence:** vendor
 
 ## Emphasis
-Write rules in sentence case without capitals, bribes or tips; OpenAI calls them generally not necessary. For GPT-5, an emphatic "be thorough" made the model over-use tools, and softening the wording fixed it (PA-03).
-- **Source:** OpenAI, GPT-4.1 prompting guide, all-caps "generally not necessary" (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide); OpenAI, GPT-5 prompting guide, softening the language (https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide)
+Leave out all-caps emphasis, bribes and tips; OpenAI calls them generally not necessary. In Cursor's prompt for GPT-5, "Be THOROUGH" made the model over-use tools, and softening the language fixed it (PA-03).
+- **Source:** OpenAI, GPT-4.1 prompting guide, all-caps "generally not necessary" (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide); OpenAI, GPT-5 prompting guide, Cursor's "Be THOROUGH" and "softening the language" (https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide)
 - **Date:** 2026-11-04
 - **Evidence:** vendor
 
 ## Literalness
-GPT-4.1 follows instructions more closely and more literally than earlier models, so state every behaviour you want instead of implying it. Resolve each conflict before porting (PA-06): when two instructions conflict the later one tends to win, and GPT-5 spends reasoning tokens trying to reconcile them. To revise a prompt for GPT-5, ask GPT-5 itself for minimal edits and additions.
+GPT-4.1 follows instructions "more closely and more literally", so state every behaviour you want instead of implying it. Resolve each conflict before porting (PA-06): when two instructions conflict the later one tends to win, and GPT-5 spends reasoning tokens trying to reconcile them. To revise a prompt for GPT-5, ask GPT-5 itself for minimal edits and additions.
 - **Source:** OpenAI, GPT-4.1 prompting guide, literal following and conflicting instructions (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide); OpenAI, GPT-5 prompting guide, contradictions and meta-prompting (https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide)
 - **Date:** 2026-11-04
 - **Evidence:** vendor

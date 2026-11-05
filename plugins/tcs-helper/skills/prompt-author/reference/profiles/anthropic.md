@@ -3,7 +3,7 @@
 Apply this profile when the target of a port is a Claude model. Each topic gives the Claude-specific guidance; the rule behind it is the cited catalog entry in `../catalog/`, which this profile does not repeat. Evidence grades are those of the catalog index.
 
 ## Placement
-For a prompt with long context (around 20k tokens or more), put the documents at the top and the question or task at the end. Anthropic reports that query-last placement can improve response quality by up to 30%. OpenAI places instructions at both ends instead; when porting from an OpenAI prompt, move the instructions below the documents and drop the copy above them.
+For a prompt with long context (around 20k tokens or more), put the documents at the top and the query at the end. Anthropic reports that query-last placement can improve response quality by up to 30%. OpenAI places instructions at both ends instead; when porting from an OpenAI prompt, move the instructions below the documents and drop the copy above them.
 - **Source:** Anthropic, Prompting best practices, long context prompting (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices)
 - **Date:** 2026-11-04
 - **Evidence:** vendor
@@ -27,14 +27,14 @@ Rewrite each ban as the behaviour Claude should produce: "Your response should b
 - **Evidence:** vendor
 
 ## Emphasis
-Write every rule in sentence case. Replace a capitalised directive such as "Critical: you must use this tool when…" with "Use this tool when…", and remove "if in doubt, use the tool" phrasing, which Anthropic names as a cause of overtriggering (PA-03). The exception is the description field of a Claude Code skill or agent, where repo ADR-4 holds (PA-50).
-- **Source:** Anthropic, Prompting best practices, "soften any aggressive language" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices)
+Soften any aggressive language (PA-03): in place of "CRITICAL: You MUST use this tool when…", write "Use this tool when…". Remove "If in doubt, use [tool]" phrasing, which Anthropic names as a cause of overtriggering. The exception is the description field of a Claude Code skill or agent, where repo ADR-4 holds (PA-50).
+- **Source:** Anthropic, Prompting best practices, "soften any aggressive language" and "'If in doubt, use [tool]' cause overtriggering" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices)
 - **Date:** 2026-11-04
 - **Evidence:** vendor
 
 ## Literalness
 Claude generalises from a stated reason and from a brief instruction, so give the reason for each non-obvious rule (PA-01) and the goal over a list of steps or cases (PA-09). When porting from a prompt written for a literal target, collapse its enumerated cases into the principle they share and keep a few diverse, canonical examples.
-- **Source:** Anthropic, Prompting Claude Fable 5, "Give the reason, not only the request" and "steer most behaviors with a brief instruction" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5); Anthropic, Prompting best practices, "Prefer general instructions over prescriptive steps" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices); Anthropic, Effective context engineering, no "laundry list of edge cases", use "diverse, canonical examples" (https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- **Source:** Anthropic, Prompting Claude Fable 5, "Give the reason, not only the request" and "steer most behaviors with a brief instruction" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5); Anthropic, Prompting best practices, "Claude can generalize from the explanation" and "Prefer general instructions over prescriptive steps" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices); Anthropic, Effective context engineering, no "laundry list of edge cases", use "diverse, canonical examples" (https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
 - **Date:** 2026-11-04
 - **Evidence:** vendor
 

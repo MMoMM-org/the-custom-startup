@@ -8,6 +8,9 @@ tests are red on a missing or partial catalog instead of passing vacuously.
 The port-profile checks (spec 023 T1.2, SDD-ADR-6) cover reference/profiles/:
 every topic sourced, dated and graded, and profiles cite catalog IDs instead of
 restating entries.
+
+Evidence is one grade wherever it appears (entry, index row, profile topic):
+solution.md (ENTITY: CatalogEntry) defines no compound such as "vendor + measured".
 """
 import re
 from pathlib import Path
@@ -132,9 +135,9 @@ def _applies_to(value):
     return kinds, targets
 
 
-def _grades(value):
-    """'vendor + measured (corpus)' -> ['vendor', 'measured']."""
-    return [g.strip() for g in _strip_parentheticals(value).split('+') if g.strip()]
+def _grade(value):
+    """'measured (corpus: 3 of 16)' -> 'measured'; a compound such as 'vendor + measured' stays whole."""
+    return ' '.join(_strip_parentheticals(value).split())
 
 
 def _all_entries():
@@ -225,10 +228,6 @@ def test_field_values_use_the_allowed_vocabularies():
                 problems.append(f'{where} kinds {sorted(kinds - KINDS) or "empty"}')
             if not targets or targets - TARGETS:
                 problems.append(f'{where} targets {sorted(targets - TARGETS) or "empty"}')
-        if 'Evidence' in f:
-            grades = _grades(f['Evidence'])
-            if not grades or set(grades) - EVIDENCE_GRADES:
-                problems.append(f'{where} evidence {grades}')
         if 'Status' in f and f['Status'] not in STATUSES:
             problems.append(f"{where} status {f['Status']!r}")
         if 'Fingerprint' in f:
@@ -242,7 +241,7 @@ def test_vendor_graded_entries_cite_sources():
     uncited = [
         f"{e['file']}:{e['lineno']} {e['id']}"
         for e in _all_entries()
-        if 'vendor' in _grades(e['fields'].get('Evidence', ''))
+        if _grade(e['fields'].get('Evidence', '')) == 'vendor'
         and 'http' not in e['fields'].get('Sources', '')
     ]
     assert not uncited, f'vendor-graded entries without a Sources URL: {uncited}'
@@ -338,7 +337,7 @@ def test_index_rows_and_sections_agree():
             'status': (status, f.get('Status')),
             'kinds': ({k.strip() for k in kinds.split(',')}, entry_kinds),
             'targets': ({t.strip() for t in targets.split(',')}, entry_targets),
-            'evidence': ([g.strip() for g in evidence.split('+')], _grades(f.get('Evidence', ''))),
+            'evidence': (evidence, _grade(f.get('Evidence', ''))),
         }
         for label, (in_index, in_section) in checks.items():
             if in_index != in_section:
@@ -412,10 +411,7 @@ def test_profile_has_every_topic_with_guidance_source_date_and_evidence(target):
                 problems.append(f'{where}: lacks {name}')
         if fields.get('Date') and not DATE_RE.match(fields['Date']):
             problems.append(f"{where}: Date {fields['Date']!r} is not YYYY-MM-DD")
-        grades = _grades(fields.get('Evidence', ''))
-        if fields.get('Evidence') and (not grades or set(grades) - EVIDENCE_GRADES):
-            problems.append(f'{where}: evidence {grades}')
-        if 'vendor' in grades and 'http' not in fields.get('Source', ''):
+        if _grade(fields.get('Evidence', '')) == 'vendor' and 'http' not in fields.get('Source', ''):
             problems.append(f'{where}: vendor-graded without a source URL')
     assert not problems, '\n'.join(problems)
 
@@ -429,10 +425,10 @@ def test_small_local_grades_only_the_t5_findings_as_measured():
         if topic not in topics:
             problems.append(f'small-local: no "## {topic}" section')
     for topic, section in topics.items():
-        grades = _grades(section['fields'].get('Evidence', ''))
-        expected = ['measured'] if topic in SMALL_LOCAL_MEASURED else ['unverified']
-        if grades != expected:
-            problems.append(f'small-local / {topic}: evidence {grades}, expected {expected}')
+        grade = _grade(section['fields'].get('Evidence', ''))
+        expected = 'measured' if topic in SMALL_LOCAL_MEASURED else 'unverified'
+        if grade != expected:
+            problems.append(f'small-local / {topic}: evidence {grade!r}, expected {expected!r}')
     assert not problems, '\n'.join(problems)
 
 
@@ -458,3 +454,35 @@ def test_profile_does_not_restate_a_catalog_fingerprint(target):
         if sentence in text
     ]
     assert not copied, f'{target}.md restates catalog entries instead of citing them: {copied}'
+
+
+# ---------------------------------------------------------------- evidence grades
+
+def _evidence_values():
+    """{source: [(location, Evidence value)]} for catalog entries, index rows and profile topics."""
+    profile_topics = [
+        (f'{target}.md / {topic}', section['fields'].get('Evidence', ''))
+        for target in PROFILE_TARGETS if _profile_path(target).is_file()
+        for topic, section in _profile_topics(_profile_path(target)).items()
+    ]
+    return {
+        'catalog entries': [
+            (f"{e['file']}:{e['lineno']} {e['id']}", e['fields'].get('Evidence', '')) for e in _all_entries()
+        ],
+        'index rows': [(f'index.md {cells[0]}', cells[4]) for cells in _index_rows() if len(cells) == 7],
+        'profile topics': profile_topics,
+    }
+
+
+def test_evidence_is_a_single_allowed_grade():
+    sources = _evidence_values()
+    empty = [name for name, values in sources.items() if not values]
+    assert not empty, f'no Evidence values found in: {empty}'
+    # A missing or empty value is reported by the field-presence and index-agreement tests.
+    problems = [
+        f'{where}: {_grade(value)!r} is not exactly one of {sorted(EVIDENCE_GRADES)}'
+        for values in sources.values()
+        for where, value in values
+        if value and _grade(value) not in EVIDENCE_GRADES
+    ]
+    assert not problems, '\n'.join(problems)

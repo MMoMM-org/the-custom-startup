@@ -7,8 +7,8 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Fails because:** without the failure the rule prevents, the model cannot extend it to cases the rule does not list.
 - **Fix:** add one clause naming the failure the rule prevents ("…, because a fixed temp file name is shared by every session"); leave history and provenance to git and the ADRs (PA-02).
 - **Applies to:** any · any
-- **Evidence:** vendor + measured (spec 023 corpus: reasons written as history in 3 of 16 prompts)
-- **Sources:** Anthropic, Prompting best practices, "Add context to improve performance" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices, fetched 2026-11-04); Anthropic, Prompting Claude Fable 5, "Give the reason, not only the request" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5, fetched 2026-11-04); OpenAI, GPT-5 prompting guide, product context "helped reduce ambiguity" (https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide, fetched 2026-11-04)
+- **Evidence:** vendor
+- **Sources:** Anthropic, Prompting best practices, "Add context to improve performance" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices, fetched 2026-11-04); Anthropic, Prompting Claude Fable 5, "Give the reason, not only the request" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5, fetched 2026-11-04); OpenAI, GPT-5 prompting guide, product context "helped reduce ambiguity" (https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide, fetched 2026-11-04); spec 023 corpus: reasons written as history in 3 of 16 prompts
 - **Fingerprint:** "Give each non-obvious rule one clause naming the failure it prevents."
 - **Status:** active
 
@@ -26,8 +26,8 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Fails because:** current models follow plain instructions, so emphasis makes them over-apply the rule without raising accuracy.
 - **Fix:** state the rule in sentence case with its reason (PA-01); a hard terminal constraint may be restated once, plainly, at the end of the prompt.
 - **Applies to:** any · claude, openai, google (small-local: unverified)
-- **Evidence:** vendor + measured (spec 023 corpus: 8 of 16 prompts)
-- **Sources:** Anthropic, Prompting best practices, "soften any aggressive language" and "'If in doubt, use [tool]' cause overtriggering" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices, fetched 2026-11-04); OpenAI, GPT-4.1 prompting guide, capitals "generally not necessary" (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide, fetched 2026-11-04); OpenAI, GPT-5 prompting guide, emphatic "be thorough" counterproductive (https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide, fetched 2026-11-04); "Attention is Case-Sensitive" (https://arxiv.org/abs/2608.03711, fetched 2026-11-04); "Did You Forget What I Asked?", trailing reminder restores compliance (https://arxiv.org/abs/2603.23530, fetched 2026-11-04)
+- **Evidence:** vendor
+- **Sources:** Anthropic, Prompting best practices, "soften any aggressive language" and "'If in doubt, use [tool]' cause overtriggering" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices, fetched 2026-11-04); OpenAI, GPT-4.1 prompting guide, capitals "generally not necessary" (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide, fetched 2026-11-04); OpenAI, GPT-5 prompting guide, Cursor's "Be THOROUGH" "counterproductive with GPT-5" (https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide, fetched 2026-11-04); "Attention is Case-Sensitive" (https://arxiv.org/abs/2608.03711, fetched 2026-11-04); "Did You Forget What I Asked?", trailing reminder restores compliance (https://arxiv.org/abs/2603.23530, fetched 2026-11-04); spec 023 corpus: 8 of 16 prompts
 - **Lint:** W1
 - **Fingerprint:** "Write rules in sentence case; restate a terminal constraint once at the end instead of capitalising it."
 - **Status:** active
@@ -57,8 +57,8 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Fails because:** the model spends reasoning reconciling them and the later one tends to win, so behaviour depends on order.
 - **Fix:** keep the instruction that holds and delete the other, or state the condition that selects each.
 - **Applies to:** any · any (highest risk: openai)
-- **Evidence:** vendor + measured (spec 023 corpus: 6 of 16)
-- **Sources:** OpenAI, GPT-5 prompting guide, "contradictory or vague instructions can be more damaging" (https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide, fetched 2026-11-04); OpenAI, GPT-4.1 prompting guide, the later instruction tends to win (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide, fetched 2026-11-04)
+- **Evidence:** vendor
+- **Sources:** OpenAI, GPT-5 prompting guide, "contradictory or vague instructions can be more damaging" (https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide, fetched 2026-11-04); OpenAI, GPT-4.1 prompting guide, the later instruction tends to win (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide, fetched 2026-11-04); spec 023 corpus: 6 of 16
 - **Fingerprint:** "When two instructions conflict, keep one or state the condition that selects each."
 - **Status:** active
 
@@ -85,8 +85,8 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Fails because:** the model follows the list literally, misses cases outside it, and reasons less than it would unprompted.
 - **Fix:** state the goal and the principle behind the cases, and show a few canonical examples instead of every case.
 - **Applies to:** any · claude, openai, google
-- **Evidence:** vendor + measured (spec 023 corpus: 2 of 16)
-- **Sources:** Anthropic, Prompting best practices, "Prefer general instructions over prescriptive steps" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices, fetched 2026-11-04); Anthropic, Effective context engineering, "right altitude", no "laundry list of edge cases" (https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents, fetched 2026-11-04); Anthropic, Prompting Claude Fable 5, older skills "too prescriptive" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5, fetched 2026-11-04)
+- **Evidence:** vendor
+- **Sources:** Anthropic, Prompting best practices, "Prefer general instructions over prescriptive steps" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices, fetched 2026-11-04); Anthropic, Effective context engineering, "right altitude", no "laundry list of edge cases" (https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents, fetched 2026-11-04); Anthropic, Prompting Claude Fable 5, older skills "too prescriptive" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5, fetched 2026-11-04); spec 023 corpus: 2 of 16
 - **Fingerprint:** "Give the principle, not a list of every case it covers."
 - **Status:** active
 
@@ -95,8 +95,8 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Fails because:** compliance drops as the instruction count grows, mostly by omitting later items.
 - **Fix:** keep the rules this task needs in the prompt, put the critical ones first, and move the rest to files read on demand.
 - **Applies to:** any · any (steepest decay: small-local)
-- **Evidence:** vendor + measured (spec 023 corpus: 3 of 16 prompts carry a long rule list)
-- **Sources:** IFScale, instruction-following at 10-500 instructions across 20 models (https://arxiv.org/abs/2507.11538, fetched 2026-11-04), published research behind the `vendor` grade; spec 023 corpus count behind the `measured` grade
+- **Evidence:** vendor
+- **Sources:** IFScale, instruction-following at 10-500 instructions across 20 models (https://arxiv.org/abs/2507.11538, fetched 2026-11-04); spec 023 corpus: 3 of 16 prompts carry a long rule list
 - **Lint:** W2
 - **Fingerprint:** "Every rule in a loaded context competes with every other rule for compliance."
 - **Status:** active

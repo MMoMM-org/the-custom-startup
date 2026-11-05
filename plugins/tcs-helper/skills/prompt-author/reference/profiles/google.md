@@ -9,7 +9,7 @@ Put the context first and the instructions or question at the very end. Put the 
 - **Evidence:** vendor
 
 ## Delimiters
-Use XML tags or Markdown to separate the parts of the prompt, and pick one of them for the whole prompt (PA-18). A Claude prompt with XML tags can keep them; a prompt mixing tags and headings for the same kind of block needs one style chosen.
+Use XML tags or Markdown to separate the parts of the prompt, and pick one of them for the whole prompt (PA-18). A Claude prompt with XML tags can keep them.
 - **Source:** Google, Gemini prompting strategies, delimiters used consistently (https://aistudio.google.com/docs/prompting-strategies)
 - **Date:** 2026-11-04
 - **Evidence:** vendor
@@ -27,8 +27,8 @@ Unverified: Google's guidance found in research gives no position on positive ve
 - **Evidence:** unverified
 
 ## Emphasis
-For Gemini 3, leave out unnecessary or overly persuasive language (PA-03), and request the length and detail you want explicitly, such as "explain each step in two or three sentences", because Gemini 3 needs verbosity requested. The vendor evidence on emphasis is mixed: Google's own prompt templates still write "must" in capitals, so a ported prompt that keeps one capitalised rule is within Google's practice, though not its stated advice.
-- **Source:** Google, Gemini prompting strategies, Gemini 3 "Avoid unnecessary or overly persuasive language" and verbosity requested explicitly; Google prompt templates using "you MUST" (https://aistudio.google.com/docs/prompting-strategies)
+For Gemini 3, leave out unnecessary or overly persuasive language (PA-03), and request the length and detail you want explicitly, such as "explain each step in two or three sentences", because Gemini 3 needs verbosity requested. The vendor evidence on emphasis is mixed: Google gives no explicit all-caps guidance, and its own prompt templates use "you MUST", so a ported prompt that keeps one capitalised rule is within Google's practice.
+- **Source:** Google, Gemini prompting strategies, Gemini 3 "Avoid unnecessary or overly persuasive language" and verbosity requested explicitly; Google prompt templates using "you MUST" (https://aistudio.google.com/docs/prompting-strategies); research-external.md §1, "No explicit all-caps guidance"
 - **Date:** 2026-11-04
 - **Evidence:** vendor
 
@@ -39,7 +39,7 @@ Unverified: no Google position on rule literalness found (research-external.md �
 - **Evidence:** unverified
 
 ## Turn shape
-Unverified: no Google guidance on the shape of a chat turn was found. Since Gemini prompts carry few-shot examples, make each example turn match the shape you want exactly and state that shape as a rule (PA-11).
+Unverified: no Google guidance on the shape of a chat turn was found. Since Google advises always including few-shot examples, make each example turn match the shape you want exactly and state that shape as a rule (PA-11).
 - **Source:** none found; research-external.md §1 covers no turn-shape guidance from Google
 - **Date:** 2026-11-04
 - **Evidence:** unverified
