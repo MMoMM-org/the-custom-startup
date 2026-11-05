@@ -193,6 +193,30 @@ def test_unreadable_input_exits_1(ec, tmp_path, content, capsys):
     assert "bad.json" in capsys.readouterr().err
 
 
+def _malformed(where):
+    data = real()
+    case = data["cases"][0]
+    if where == "arms":
+        case["arms"] = ["with"]
+    elif where == "run":
+        case["arms"]["with"] = ["not a run"]
+    elif where == "run graders":
+        case["arms"]["with"][0]["graders"] = {"name": "x"}
+    elif where == "grader":
+        case["arms"]["with"][0]["graders"] = ["not a grader"]
+    elif where == "case graders":
+        case["graders"] = "none"
+    return data
+
+
+@pytest.mark.parametrize("where", ["arms", "run", "run graders", "grader", "case graders"])
+def test_malformed_case_structure_exits_1_without_a_traceback(ec, tmp_path, where, capsys):
+    bad = dump(tmp_path / "bad.json", _malformed(where))
+    assert ec.main(["compare", str(bad), str(FIXTURE), "--out", str(tmp_path / "out")]) == 1
+    err = capsys.readouterr().err
+    assert "bad.json" in err and "Traceback" not in err
+
+
 def test_partial_input_marks_the_report_partial_and_exits_2(ec, tmp_path):
     data = real()
     data["partial"] = True
@@ -481,6 +505,17 @@ def test_run_refuses_a_leftover_worktree_and_removes_nothing(ec, repo, fake_clau
     assert fake_claude() == []
 
 
+def _git_timing_out_on(monkeypatch, words):
+    """subprocess.run, except `git -C ROOT WORDS...` raises TimeoutExpired."""
+    real_run = subprocess.run
+
+    def fake(cmd, *args, **kwargs):
+        if list(cmd[:1]) == ["git"] and tuple(cmd[3:3 + len(words)]) == tuple(words):
+            raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout") or 60)
+        return real_run(cmd, *args, **kwargs)
+    monkeypatch.setattr(subprocess, "run", fake)
+
+
 def _git_failing_on(ec, monkeypatch, words, result):
     """ec._git, except a call whose args start with WORDS returns or raises RESULT."""
     real_git = ec._git
@@ -521,7 +556,7 @@ def test_run_removes_the_worktree_when_plugin_eval_times_out(ec, repo, fake_clau
 @pytest.mark.parametrize("words", [("rev-parse", "--show-toplevel"), ("worktree", "add")])
 def test_run_turns_a_git_timeout_into_a_refusal(ec, repo, fake_claude, tmp_path, monkeypatch,
                                                 capsys, words):
-    _git_failing_on(ec, monkeypatch, words, subprocess.TimeoutExpired(["git"], 60))
+    _git_timing_out_on(monkeypatch, words)
     assert ec.main(run_argv(repo, tmp_path / "out")) == 1
     err = capsys.readouterr().err
     assert "timed out" in err and "Traceback" not in err
@@ -530,7 +565,7 @@ def test_run_turns_a_git_timeout_into_a_refusal(ec, repo, fake_claude, tmp_path,
 
 def test_run_removes_the_worktree_by_hand_when_git_worktree_remove_times_out(
         ec, repo, fake_claude, tmp_path, monkeypatch):
-    _git_failing_on(ec, monkeypatch, ("worktree", "remove"), subprocess.TimeoutExpired(["git"], 60))
+    _git_timing_out_on(monkeypatch, ("worktree", "remove"))
     out = tmp_path / "out"
     assert ec.main(run_argv(repo, out)) == 0
     assert not os.path.lexists(str(out / WORKTREE))
