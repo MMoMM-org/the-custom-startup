@@ -67,3 +67,51 @@ cases, without about $0.41) and takes about 6 minutes with `-j 4`. Set `--max-co
 ceiling is checked before each run launches, so at 8 the last port-gate-exit runs can be cut off and
 their llm grader skipped. T2.4/T2.5 spent $9.04 before this round; the redesign and proving-signal
 round spent $10.81.
+
+## Audit acceptance (T2.6)
+
+A manual acceptance run of prompt-author's audit mode (PRD F3 AC6, Success Metrics "Audit recall").
+The auditor reads and follows `SKILL.md`, `reference/audit.md`, the catalog through its index and
+`scripts/prompt_lint.py`, and uses nothing else to find a defect; a defect found only from outside
+knowledge counts as missed. No model call, no plugin eval. Each prompt is audited at the commit
+before its fix: no fix for #250–#253 had landed on `main` or on this branch, so HEAD `9c9b5a6f` is
+the audited version.
+
+### Expected findings (written before the run)
+
+**Issues** (SDD F3 acceptance criterion):
+
+| Issue | Scope | Files | Expected |
+|---|---|---|---|
+| #250 | pair | `implement-incremental/SKILL.md` step 4d brief + the status branch after it; `implement-direct/SKILL.md` brief + its status branch | PA-14: the orchestrator branches on `DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`, the brief never requests a status (both skills) |
+| #251 | pair | `review/SKILL.md` perspective brief + synthesis | PA-14: synthesis dedupes by location and sorts by severity, then confidence; the brief requests no finding format. PA-24: no read-only-git fence and no commit-range scoping |
+| #252 | single (instruction-file) | `AGENTS.md` | PA-30 for each stale fact: `the-meta-agent.md` absent; "v2.0.0" vs the manifest; skills `setup/`, `docs/`; `writing-skills/reference/conventions.md`; `docs/patterns`, `docs/interfaces`, `docs/domain`; tcs-git-helpers and tcs-issues missing from the tree; the false "prefixing only applies to commands" claim |
+| #253 | single (code) | `scripts/lib/semantic_detector.py` | PA-15 on both prompt literals that interpolate session text; lint E4 reports them |
+
+**Corpus** (`research-corpus.md`, one documented defect per item and failure code, mapped to the
+catalog; where the catalog splits a corpus code, either entry named counts as found):
+
+| # | Prompt | Scope | Documented defects → expected entry | n |
+|---|---|---|---|---|
+| 1 | `docs/templates/research-prompt.md` | single | EX → PA-11; CX no no-search fallback → PA-08 | 2 |
+| 2 | `docs/templates/setup-perplexity-space.md` | single | RD → PA-05; PL "work identically" untested → PA-41 (or PA-40) | 2 |
+| 3 | `docs/templates/prd-prompt.md` | single | RD → PA-05; NO → PA-04; EM → PA-03; PL/CX undefined `[NEEDS CLARIFICATION]` → PA-40 or PA-08 | 4 |
+| 4 | `docs/templates/brainstorm-prompt.md` | single | RD → PA-05; EM → PA-03; PL/OP Red Flags table → PA-40 or PA-09; CO "urgency cues don't override" vs the user → PA-06 | 4 |
+| 5 | `docs/templates/setup-claude-project.md` | single | SC project-wide gate hits research queries → PA-32; RD PRD ban repeated from #3 → PA-05 | 2 |
+| 6 | `AGENTS.md` | single | ST → PA-30; CO l.107 → PA-06 (or PA-30); LL mostly overview → PA-10 or PA-31 | 3 |
+| 7 | `CLAUDE.md` | set | CX/ST `~/.claude/includes/` → PA-08 or PA-30; CO "sync changes back" → PA-06; RD cp block duplicated → PA-05; SC/LL always-loaded procedure → PA-32 or PA-10 | 4 |
+| 8 | `docs/ai/CLAUDE.md` | set | RH/NO ban without reason → PA-01 or PA-04 | 1 |
+| 9 | `~/Kouzou/standards/general.md` | set | CX Plan Mode / macOS → PA-08; EM "ANY" → PA-03; RH "(Recurs ≥1×/session.)" → PA-02; CO tracked-in-git vs gitignored → PA-06 | 4 |
+| 10 | `~/Kouzou/standards/tone-behavior.md` + `code-conduct.md` | set | cross-file CO → PA-07; in-file CO → PA-06; EM "NEVER create files" → PA-03; RH maintainer note → PA-02 | 4 |
+| 11 | `~/Kouzou/standards/guardrails.md` | set | RH dates/SHAs → PA-02; EE one rule per incident → PA-09; SC off-topic rules → PA-32; cross-file CO `venv/` vs `.venv/` → PA-07; EM "non-negotiable" → PA-03 | 5 |
+| 12 | `brainstorm/reference/spec-reviewer-prompt.md` | pair | VP "Approve unless" → PA-25; UI spec not marked as data → PA-15; ST "Task tool" → PA-30 | 3 |
+| 13 | `implement-incremental` + `implement-direct` brief | pair | OC/CA → PA-14 (or PA-13); RD/CO l.60 vs l.70 → PA-05 or PA-06; EM → PA-03; LL → PA-10 | 4 |
+| 14 | `review/SKILL.md` brief | pair | OC/CA → PA-14; CX fence and range → PA-24 (or PA-08); EM "Aggressively challenge" → PA-03 (or PA-25) | 3 |
+| 15 | `tcs-team/agents/the-chief.md` | single | OP → PA-09; CO → PA-06; EM → PA-03; CX → PA-08 | 4 |
+| 16 | `docs/ai/memory/active.md`, `general.md` | set | none documented (the corpus's "best in corpus"; its weaknesses carry no failure code) | 0 |
+| | | | **total** | **49** |
+
+The `~/Kouzou/standards/*` files sit outside the repository; they are audited read-only and their
+findings marked external. Items 7–11 and 16 are audited as one set (CLAUDE.md, its `@`-imports and the
+standards they load), because SKILL.md step 2 hands off a lone CLAUDE.md. Item 15 is an agent
+definition: if the procedure hands it off, that is recorded, and recall is reported with and without it.
