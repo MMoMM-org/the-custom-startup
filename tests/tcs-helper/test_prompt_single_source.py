@@ -446,7 +446,6 @@ def test_documented_plugin_eval_runs_keep_the_report_private():
     assert not findings, '\n'.join(findings)
 
 
-@pytest.mark.xfail(strict=True, reason='eval-loop.md is written in T2.4; remove this marker there')
 def test_eval_loop_reference_exists():
     assert EVAL_LOOP.is_file(), f'missing {EVAL_LOOP.relative_to(REPO_ROOT)}'
 

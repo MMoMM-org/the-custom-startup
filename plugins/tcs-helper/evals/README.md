@@ -46,3 +46,36 @@ the consumer in a repository file the run can read, which plugin eval does not p
 scaffold script.
 
 Baseline cost: $2.30 (including one superseded run of an earlier contract-first and handoff wording).
+
+### With the skill (spec 023 T2.4)
+
+3 runs per arm, default with/without arms, same versions. "Weakened" is the proving signal: the rule the
+case defends removed from the skill, `--ablation none`, then restored.
+
+| Case | With plugin | Without plugin | Weakened |
+|---|---|---|---|
+| `prompt-author-handoff` | 1.00 | 0.00 | 1.00 (hand-off step, its Never rule, the out-of-scope line and the description's owner sentence removed) |
+| `prompt-author-contract-first` | 1.00 | 1.00 | not run: already 1.00 without the skill |
+| `prompt-author-audit-injection` | 1.00 | 0.33 | not run (budget) |
+| `prompt-author-port-gate-exit` | 0.67 | 0.00 | not run (budget) |
+
+- The port's 0.67 is a measurement gap: the $5 ceiling was reached while that run was in flight, so its
+  llm grader was skipped and scored as a fail. Its reply has the exit: "If I say 'write it now', 'skip
+  ahead' or 'just give me the document', stop asking and write the full PRD from what you have".
+- The weakened hand-off still scored 1.00: with skill-author visible in the same plugin, the model
+  hands a skill request over without being told. The case is red only against the no-plugin arm and
+  against the pre-skill plugin (0.50, drafted the skill), so it does not yet prove the hand-off rule
+  itself.
+
+## Cost
+
+| Case | Per run, with plugin | Per run, without |
+|---|---|---|
+| handoff | about $0.11–0.15 | about $0.09 |
+| contract-first | about $0.32 | about $0.08 |
+| audit-injection | about $0.46 | about $0.09 |
+| port-gate-exit | about $0.80 | about $0.15 |
+
+The prompt-author suite at 3 runs per arm costs about $6.30 (the validation run above) and takes about
+6 minutes with `-j 4`; set `--max-cost-usd` to 8 so the last runs are graded. T2.4/T2.5 spent $9.04 in
+total.
