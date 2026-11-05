@@ -25,9 +25,8 @@ topics say which idioms that vendor's prompts carry.
    target lacks, markers such as `[NEEDS CLARIFICATION]` that the prompt never defines, references to
    files, projects or knowledge the target cannot resolve ("Works with a Claude project"). For each,
    rewrite it in the target's terms, define it inside the port, or remove it.
-2. **Apply the profile.** Go through the profile's topics in order (Placement, Delimiters, Examples,
-   Negatives, Emphasis, Literalness, Turn shape; small-local adds Gate exits). For each topic, change the
-   prompt where the source differs from the guidance, and record one change-list row.
+2. **Apply the profile.** Go through the profile's topics in order. For each topic, change the prompt
+   where the source differs from the guidance, and record one change-list row.
 3. **Small-local targets.** Two topics there are measured, and both are required in the port:
    - *Turn shape* ([PA-12](catalog/core.md#pa-12-example-turn-shape-copied-by-small-models)): include one
      complete example turn in exactly the shape the model should produce (for an interview, one question

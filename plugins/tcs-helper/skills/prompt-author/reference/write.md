@@ -40,8 +40,7 @@ paths, the purpose, prior results, the definition of every marker. Then apply ea
 SKILL.md step 3 whose Tell the draft shows.
 
 For a target other than Claude, read that target's profile in `profiles/` and apply each of its topics
-(Placement, Delimiters, Examples, Negatives, Emphasis, Literalness, Turn shape, and Gate exits for
-small-local) to the draft.
+to the draft.
 
 ## Agentic prompts
 
