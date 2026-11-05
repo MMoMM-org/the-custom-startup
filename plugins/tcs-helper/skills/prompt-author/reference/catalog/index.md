@@ -33,7 +33,7 @@ Kinds: api-system, brief, chat-template, code, instruction-file, skill, agent. T
 | [PA-25](agentic.md#pa-25-verdict-prior-in-reviewer-briefs) | Verdict prior in reviewer briefs | brief, agent | any | unverified | active | agentic.md |
 | [PA-30](instruction-files.md#pa-30-stale-facts-paths-commands-versions-counts) | Stale facts (paths, commands, versions, counts) | instruction-file, skill, agent | any | research | active | instruction-files.md |
 | [PA-31](instruction-files.md#pa-31-overview-the-readme-or-code-already-gives) | Overview the README or code already gives | instruction-file | any | research | active | instruction-files.md |
-| [PA-32](instruction-files.md#pa-32-scope-mismatch-rule-at-the-wrong-load-level) | Scope mismatch (rule at the wrong load level) | instruction-file, skill | any | measured | active | instruction-files.md |
+| [PA-32](instruction-files.md#pa-32-scope-mismatch-rule-at-the-wrong-load-level) | Scope mismatch (rule at the wrong load level) | instruction-file, skill, api-system | any | measured | active | instruction-files.md |
 | [PA-40](porting.md#pa-40-port-leakage-source-environment-idioms) | Port leakage (source-environment idioms) | chat-template, api-system, brief | any | measured | active | porting.md |
 | [PA-41](porting.md#pa-41-untested-portability-claim) | Untested portability claim | chat-template, api-system, brief | any | measured | active | porting.md |
 | [PA-50](harness.md#pa-50-description-authority-language-must-be-used) | Description authority language (`MUST BE USED`) | skill, agent | claude | unverified | contested | harness.md |

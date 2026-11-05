@@ -24,10 +24,10 @@ Entries for always-loaded instruction files: CLAUDE.md, AGENTS.md, global standa
 - **Status:** active
 
 ## PA-32 Scope mismatch (rule at the wrong load level)
-- **Tell:** a rule loaded wider or narrower than where it applies: a domain rule in a global file, or a project-wide rule that one session type cannot follow.
+- **Tell:** a rule loaded wider or narrower than where it applies: a domain rule in a global file, or a project-wide rule, including a chat-tool project's system prompt, that one session type cannot follow.
 - **Fails because:** every session pays for the rule, and sessions it does not fit follow it anyway.
 - **Fix:** put each rule at the narrowest load level that covers every session it applies to.
-- **Applies to:** instruction-file, skill · any
+- **Applies to:** instruction-file, skill, api-system · any
 - **Evidence:** measured (spec 023 corpus: 3 of 16)
 - **Fingerprint:** "Load each rule at the narrowest level that covers every session it applies to."
 - **Status:** active
