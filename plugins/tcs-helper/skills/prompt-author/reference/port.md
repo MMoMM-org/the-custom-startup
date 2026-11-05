@@ -27,16 +27,10 @@ topics say which idioms that vendor's prompts carry.
    rewrite it in the target's terms, define it inside the port, or remove it.
 2. **Apply the profile.** Go through the profile's topics in order. For each topic, change the prompt
    where the source differs from the guidance, and record one change-list row.
-3. **Small-local targets.** Two topics there are measured, and both are required in the port:
-   - *Turn shape* ([PA-12](catalog/core.md#pa-12-example-turn-shape-copied-by-small-models)): include one
-     complete example turn in exactly the shape the model should produce (for an interview, one question
-     and nothing after it), and remove sample questions or replies whose shape the rules forbid.
-   - *Gate exits* ([PA-16](catalog/core.md#pa-16-gate-without-an-exit)): beside each approval or
-     confirmation step, write what the model does when the user asks for the result directly ("If I say
-     'write it now' or 'just give me the document', write the full document from what you have and list
-     the sections I did not confirm.").
-   Keep the rest of a small-local port short (Placement topic): move rules this conversation does not
-   need out of it.
+3. **Small-local targets.** The profile's Turn shape
+   ([PA-12](catalog/core.md#pa-12-example-turn-shape-copied-by-small-models)) and Gate exits
+   ([PA-16](catalog/core.md#pa-16-gate-without-an-exit)) topics are measured, so the port applies both:
+   every approval or confirmation step in the ported text states its exit.
 4. **Portability claims**
    ([PA-41](catalog/porting.md#pa-41-untested-portability-claim)). Remove claims such as "works the same
    in X and Y" unless each named target has an eval result; the label in step 6 replaces them.
