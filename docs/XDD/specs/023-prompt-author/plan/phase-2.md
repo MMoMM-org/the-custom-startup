@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: prompt-author Skill and Eval Runners"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -165,7 +165,7 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
   4. Validate: full tcs-helper tests green; lint over the skill 0 errors.
   5. Success: no eval runner sends without consent and a secret scan; the kind table follows the prompt, not the file `[ref: PRD/F6 AC5; PRD/J1]`
 
-- [ ] **T2.10 Skill cleanup round with one eval re-run** `[activity: skill-authoring]` `[component: C2, C4]` — after T2.9 (same files)
+- [x] **T2.10 Skill cleanup round with one eval re-run** `[activity: skill-authoring]` `[component: C2, C4]` — after T2.9 (same files)
 
   1. Prime: the cleanup list (cuts a-m, minors 1-14, T2.3 review minors) and the LOW drift findings: `--author` in the eval-loop.md example and a report line when the judge-vs-author check was skipped; a separate `provisional` state for never-labelled llm criteria; eval-loop.md:5-6 stale sentence; SKILL.md step 5 KNOWN_OPEN path "in this repository, if present". T2.9 review advisories: eval_compare exits 1 when `--case` matches no case directory (after the consent check; test); drop the redundant `or []` on `args.confirm_provider`; the secret-in-base test also asserts the worktree directory is gone.
   2. Test (red first): the T2.3 test gaps (leftover worktree, failed worktree add, plugin-eval timeout, git TimeoutExpired, report file mode 0600); a test for the `provisional` state; a test for the skipped-author report line.
@@ -181,5 +181,6 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
 - Iron-Law evals (plugins/tcs-helper/evals/README.md): handoff, audit-injection, port-gate-exit red without the plugin, 1.00 with it; contract-first green without the skill (regression guard). Weakening the skill's procedure text did not lower any score; removing catalog entry PA-15 did (1.00 → 0.78).
 - Audit acceptance: #250-#253 all found; corpus recall 43/49 (87.8%), 43/45 (95.6%) excluding the agent definition the skill hands off to agent-author.
 - T2.7: global ~/.claude/startup.toml holds prompt_eval_judge and prompt_eval_ollama_host; a plan-only run shows source global-config. The prompt-author eval suite was not re-run in T2.7 (measured in T2.5, $7.40 per full run).
-- Open for the phase boundary: skill cleanup list (scratchpad skill-cleanup-findings.md: ~6.7 KB cut candidates, minor consistency fixes, T2.3 test gaps); recall denominator decision; kind-table gaps found by T2.6 (chat-tool project instructions, brief inside a skill, files holding both a brief and a skill).
+- Phase boundary round (T2.8-T2.10): spec amended (recall denominator = kept kinds, contract-first a regression guard, stale SDD sections); eval_compare run gated by `--confirm-provider claude` and an E1 scan of the selected case dirs (exit 3 / 4); kind classified by prompt text, PA-32 also for chat-template, item 5 found under either kind; cleanup: SKILL.md + reference/*.md 36 486 → 32 278 bytes, refusals exit 1, `provisional` state, skipped-author note. Eval after the cuts (with-plugin arm, 3 runs): all four prompt-author cases 1.00, $5.36 of the $8 consent. Tests: tcs-helper 644 passed, 3 strict xfails.
+- Not done, by decision: grader tightening (would break comparability with T2.5; own measured round); scanning plugin files outside the case dirs; a partial dir after a timed-out `git worktree add` is refused on the next run rather than removed.
 

@@ -69,6 +69,7 @@
 | 2026-11-05 | Phase 2 drift: eval_compare.py run gets `--confirm-provider claude` and an E1 secret scan of the case directories, like prompt_eval.py | User choice "Impl nachrüsten": SDD QR "zero sends without --confirm-provider" applies to both runners |
 | 2026-11-05 | Phase 2 drift: prompt kind is classified by the prompt text, not the containing file (a brief stored in a skill directory stays with prompt-author); PA-32 also loads for chat-template; corpus item 5 re-checked | User choice "Jetzt fixen" |
 | 2026-11-05 | Phase 2 cleanup round (T2.10) with one eval re-run, live-run consent ≤ $8; revert any cut that lowers a score | User choice; list from the T2.3/T2.4 code-quality reviews plus the LOW drift findings |
+| 2026-11-05 | Phase 2 complete (T2.1-T2.10) | Boundary round done: spec amendments, eval_compare consent gate, kind by prompt text, cleanup -4.2 KB with all prompt-author cases still 1.00 ($5.36); T2.10 refusals exit 1 (plan said 2; SDD reserves 2 for partial results) |
 
 ## Context
 
