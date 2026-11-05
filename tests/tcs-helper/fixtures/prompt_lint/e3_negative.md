@@ -15,6 +15,7 @@
 - a backticked path `missing/never-checked.md` and `[x](missing.md)` in code
 
 [ref]: e3_target.md
+[^1]: a footnote definition, not a link target
 
 @e3_target.md
 

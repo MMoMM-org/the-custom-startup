@@ -11,8 +11,10 @@ low false-alarm rate are registered; everything else is left to review.
 Python files are read with ast.parse only: linted code is never imported or
 executed. Stdlib only, Python >= 3.8.
 
-Exit: 0 no unsuppressed errors (warnings allowed), 1 at least one unsuppressed
-error, 2 internal failure (callers report "lint failed" and continue).
+Exit: 1 at least one unsuppressed error; else 2 if any file could not be linted
+(a check raised, or a .py file could not be parsed; callers report "lint failed"
+and continue); else 0 (warnings allowed). A failure in one file never discards
+the findings of the others, so a real error is never masked by a crash.
 
 Suppression: "lint-ok: <check> <reason>" on the finding's line or the line
 above. A suppression without a reason does not count and is itself an error.
@@ -184,8 +186,9 @@ FENCE_OPEN = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
 
 
 class FileContext(object):
-    def __init__(self, path, display, text, kind):
+    def __init__(self, path, display, text, kind, anchor_cache=None):
         self.path = path
+        self.anchor_cache = {} if anchor_cache is None else anchor_cache
         self.display = display
         self.text = text
         self.kind = kind
@@ -206,25 +209,32 @@ def _blank(text, start, end):
 
 
 def _blank_inline_code(line):
+    if "`" not in line:
+        return line
+    out = []
     i = 0
-    out = line
-    while i < len(out):
-        if out[i] != "`":
-            i += 1
-            continue
-        j = i
-        while j < len(out) and out[j] == "`":
+    n = len(line)
+    while i < n:
+        start = line.find("`", i)
+        if start == -1:
+            out.append(line[i:])
+            break
+        out.append(line[i:start])
+        j = start
+        while j < n and line[j] == "`":
             j += 1
-        run = out[i:j]
-        k = out.find(run, j)
-        while k != -1 and (k + len(run) < len(out) and out[k + len(run)] == "`"):
-            k = out.find(run, k + len(run) + 1)
+        run = line[start:j]
+        k = line.find(run, j)
+        while k != -1 and k + len(run) < n and line[k + len(run)] == "`":
+            k = line.find(run, k + len(run) + 1)
         if k == -1:
+            out.append(run)
             i = j
             continue
-        out = _blank(out, i, k + len(run))
-        i = k + len(run)
-    return out
+        end = k + len(run)
+        out.append(" " * (end - start))
+        i = end
+    return "".join(out)
 
 
 class MarkdownStructure(object):
@@ -289,8 +299,8 @@ class MarkdownStructure(object):
 # ---------------------------------------------------------------------------
 
 SECRET_PATTERNS = (
-    ("anthropic-api-key", re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}")),
-    ("openai-api-key", re.compile(r"sk-(?:proj-)?[A-Za-z0-9]{20,}")),
+    ("anthropic-api-key", re.compile(r"(?<![A-Za-z0-9])sk-ant-[A-Za-z0-9_-]{20,}")),
+    ("openai-api-key", re.compile(r"(?<![A-Za-z0-9])sk-(?:proj-)?[A-Za-z0-9]{20,}")),
     ("google-api-key", re.compile(r"AIza[0-9A-Za-z_-]{35}")),
     ("github-token", re.compile(r"gh[pousr]_[A-Za-z0-9]{36}")),
     ("github-pat", re.compile(r"github_pat_[A-Za-z0-9_]{40,}")),
@@ -356,7 +366,7 @@ def check_tags(ctx):
 # ---------------------------------------------------------------------------
 
 INLINE_LINK = re.compile(r"!?\[[^\]]*\]\(\s*(<[^>]*>|[^)\s]+)(?:\s+[\"'(][^)]*)?\s*\)")
-REFERENCE_DEF = re.compile(r"^\s{0,3}\[[^\]]+\]:\s*(\S+)")
+REFERENCE_DEF = re.compile(r"^\s{0,3}\[(?!\^)[^\]]+\]:\s*(\S+)")  # [^n]: is a footnote
 AT_IMPORT = re.compile(r"(?:^|(?<=\s))@([^\s`'\"<>()\[\]]+)")
 SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 ATX_HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$")
@@ -364,6 +374,8 @@ SETEXT_UNDERLINE = re.compile(r"^\s{0,3}(?:=+|-+)\s*$")
 HTML_ANCHOR = re.compile(r"<a\s[^>]*?(?:id|name)\s*=\s*[\"']([^\"']+)[\"']", re.IGNORECASE)
 MD_LINK_TEXT = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
 HTML_TAG = re.compile(r"<[^>]+>")
+# INLINE_LINK is quadratic on a long run of "["; no real prompt line is this long.
+MAX_LINK_SCAN_CHARS = 10000
 
 
 def github_slugs(headings):
@@ -384,13 +396,11 @@ def github_slugs(headings):
     return out
 
 
-_ANCHOR_CACHE = {}
-
-
-def _anchors_of(path, lines=None):
+def _anchors_of(path, cache, lines=None):
+    """Anchors of a Markdown file; cache is one lint run's {abspath: anchors}."""
     key = os.path.abspath(path)
-    if key in _ANCHOR_CACHE:
-        return _ANCHOR_CACHE[key]
+    if key in cache:
+        return cache[key]
     if lines is None:
         lines = _read_text(path).split("\n")
     doc = MarkdownStructure(lines)
@@ -407,7 +417,7 @@ def _anchors_of(path, lines=None):
             headings.append(lines[idx - 1].strip())
         anchors.update(HTML_ANCHOR.findall(line))
     anchors.update(github_slugs(headings))
-    _ANCHOR_CACHE[key] = anchors
+    cache[key] = anchors
     return anchors
 
 
@@ -433,7 +443,7 @@ def _dead(ctx, target, allow_anchor=True):
     if os.path.isdir(resolved) or not resolved.endswith(".md"):
         return None
     lines = ctx.lines if resolved == os.path.abspath(ctx.path) else None
-    anchors = _anchors_of(resolved, lines)
+    anchors = _anchors_of(resolved, ctx.anchor_cache, lines)
     anchor = unquote(anchor)
     if anchor in anchors or anchor.lower() in anchors:
         return None
@@ -451,7 +461,9 @@ def check_references(ctx):
     for idx, text in enumerate(doc.prose):
         if not text.strip():
             continue
-        targets = [m.group(1) for m in INLINE_LINK.finditer(text)]
+        targets = []
+        if len(text) <= MAX_LINK_SCAN_CHARS:
+            targets = [m.group(1) for m in INLINE_LINK.finditer(text)]
         ref = REFERENCE_DEF.match(text)
         if ref:
             targets.append(ref.group(1))
@@ -477,7 +489,11 @@ def check_references(ctx):
 # E4 undelimited interpolation in a code prompt
 # ---------------------------------------------------------------------------
 
-PROMPT_NAME = re.compile(r"(?i)(prompt|system|instruction)")
+PROMPT_WORDS = {"prompt", "prompts", "system", "instruction", "instructions"}
+# A prompt word followed by one of these names a path or a measure, not the text.
+NON_TEXT_SUFFIXES = {"path", "file", "dir", "name", "id", "count", "len", "size", "url"}
+IDENTIFIER_SEGMENT = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
+TEXT_WORD = re.compile(r"[A-Za-z]{3,}")
 PROMPT_KWARGS = {"system", "instructions", "prompt"}
 SUBPROCESS_CALLS = {"run", "Popen", "call", "check_call", "check_output"}
 PERCENT_FIELD = re.compile(r"%(?:\([^)]*\))?[-#0 +]*(?:\*|\d+)?(?:\.(?:\*|\d+))?[diouxXeEfFgGcrsa%]")
@@ -540,12 +556,62 @@ def _joined_template(node):
     return "".join(parts), positions
 
 
-class _Scope(object):
-    """Assignments by name inside one function or module (nested scopes included)."""
+def prompt_name(identifier):
+    """True if a prompt word is a whole segment of identifier (split on _ and
+    camelCase) and is not followed by a path-like suffix (system_path, promptFile)."""
+    segments = [seg.lower() for part in identifier.split("_") for seg in IDENTIFIER_SEGMENT.findall(part)]
+    for idx, segment in enumerate(segments):
+        if segment not in PROMPT_WORDS:
+            continue
+        following = segments[idx + 1] if idx + 1 < len(segments) else None
+        if following is None or not (following in NON_TEXT_SUFFIXES
+                                     or (following.endswith("s") and following[:-1] in NON_TEXT_SUFFIXES)):
+            return True
+    return False
 
-    def __init__(self, node):
+
+def _looks_like_text(literal_parts):
+    """A literal meant for a model: whitespace and a word of 3+ letters outside the placeholders."""
+    return (re.search(r"\s", "".join(literal_parts)) is not None
+            and any(TEXT_WORD.search(part) for part in literal_parts))
+
+
+def _strip_fields(template, positions):
+    """Literal text of template with the placeholder at each position removed."""
+    parts = []
+    last = 0
+    for position in positions:
+        parts.append(template[last:position])
+        if template[position] == "{":
+            last = template.find("}", position) + 1
+        elif template[position] == "%":
+            match = PERCENT_FIELD.match(template, position)
+            last = match.end() if match else position + 1
+        else:  # f-string placeholder marker
+            last = position + 1
+    parts.append(template[last:])
+    return parts
+
+
+def _scope_nodes(node):
+    """Nodes of one scope: node's subtree without nested function bodies."""
+    stack = list(ast.iter_child_nodes(node))
+    while stack:
+        child = stack.pop()
+        yield child
+        if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            stack.extend(ast.iter_child_nodes(child))
+
+
+class _Scope(object):
+    """Assignments by name inside one function or the module body; a name not
+    assigned here is looked up in the enclosing scope, as Python does."""
+
+    def __init__(self, node, parent=None):
+        self.node = node
+        self.parent = parent
         self.assigned = {}
-        for child in ast.walk(node):
+        for child in _scope_nodes(node):
             if isinstance(child, ast.Assign):
                 for target in child.targets:
                     if isinstance(target, ast.Name):
@@ -553,43 +619,68 @@ class _Scope(object):
             elif isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name) and child.value:
                 self.assigned.setdefault(child.target.id, []).append(child.value)
 
+    def lookup(self, name):
+        scope = self
+        while scope is not None:
+            if name in scope.assigned:
+                return scope.assigned[name]
+            scope = scope.parent
+        return []
 
-def _interpolated_literals(expr, scope, depth=0):
-    """[(literal line, all placeholders delimited)] for interpolations in expr."""
+
+def _scopes(tree):
+    out = []
+    pending = [(tree, None)]
+    while pending:
+        node, parent = pending.pop()
+        scope = _Scope(node, parent)
+        out.append(scope)
+        pending.extend((child, scope) for child in _scope_nodes(node)
+                       if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)))
+    return out
+
+
+def _literal_hit(line, template, positions, need_text):
+    if not positions:
+        return []
+    if need_text and not _looks_like_text(_strip_fields(template, positions)):
+        return []
+    return [(line, all(_delimited(template, p) for p in positions))]
+
+
+def _interpolated_literals(expr, scope, need_text, depth=0):
+    """[(literal line, all placeholders delimited)] for interpolations in expr.
+    need_text: the expression is a prompt only by its variable name, so the
+    literal must also look like text for a model."""
     if isinstance(expr, ast.JoinedStr):
         template, positions = _joined_template(expr)
-        if positions:
-            return [(expr.lineno, all(_delimited(template, p) for p in positions))]
-        return []
+        return _literal_hit(expr.lineno, template, positions, need_text)
     if isinstance(expr, ast.Call) and isinstance(expr.func, ast.Attribute) and expr.func.attr == "format":
-        return _templated(expr.func.value, scope, _format_fields, depth)
+        return _templated(expr.func.value, scope, _format_fields, need_text, depth)
     if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Mod):
-        return _templated(expr.left, scope, _percent_fields, depth)
+        return _templated(expr.left, scope, _percent_fields, need_text, depth)
     if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Add):
-        return (_interpolated_literals(expr.left, scope, depth)
-                + _interpolated_literals(expr.right, scope, depth))
+        return (_interpolated_literals(expr.left, scope, need_text, depth)
+                + _interpolated_literals(expr.right, scope, need_text, depth))
     if isinstance(expr, ast.IfExp):
-        return (_interpolated_literals(expr.body, scope, depth)
-                + _interpolated_literals(expr.orelse, scope, depth))
+        return (_interpolated_literals(expr.body, scope, need_text, depth)
+                + _interpolated_literals(expr.orelse, scope, need_text, depth))
     if isinstance(expr, ast.Name) and depth < MAX_RESOLVE_DEPTH:
         out = []
-        for value in scope.assigned.get(expr.id, []):
-            out.extend(_interpolated_literals(value, scope, depth + 1))
+        for value in scope.lookup(expr.id):
+            out.extend(_interpolated_literals(value, scope, need_text, depth + 1))
         return out
     return []
 
 
-def _templated(base, scope, fields_of, depth):
+def _templated(base, scope, fields_of, need_text, depth):
     if _is_str(base):
-        positions = fields_of(base.value)
-        if positions:
-            return [(base.lineno, all(_delimited(base.value, p) for p in positions))]
-        return []
+        return _literal_hit(base.lineno, base.value, fields_of(base.value), need_text)
     if isinstance(base, ast.Name) and depth < MAX_RESOLVE_DEPTH:
         out = []
-        for value in scope.assigned.get(base.id, []):
+        for value in scope.lookup(base.id):
             if _is_str(value):
-                out.extend(_templated(value, scope, fields_of, depth + 1))
+                out.extend(_templated(value, scope, fields_of, need_text, depth + 1))
         return out
     return []
 
@@ -616,7 +707,7 @@ def _argv_elements(call, scope):
             argv = keyword.value
     candidates = [argv]
     if isinstance(argv, ast.Name):
-        candidates = scope.assigned.get(argv.id, [])
+        candidates = scope.lookup(argv.id)
     for candidate in candidates:
         if isinstance(candidate, (ast.List, ast.Tuple)):
             names_tool = any(_is_str(e) and ("claude" in e.value or "ollama" in e.value)
@@ -626,34 +717,42 @@ def _argv_elements(call, scope):
     return []
 
 
-def _prompt_expressions(scope_node, scope, subprocess_names):
-    """Expressions that are prompts by rule (a), (b) or (c), plus .format / %
-    applied to a prompt-named variable."""
-    for node in ast.walk(scope_node):
+def _named_prompt(node):
+    return prompt_name(_target_name(node) or "")
+
+
+def _prompt_expressions(scope, subprocess_names):
+    """(expression, need_text) for each prompt by rule (a) name, (b) keyword or
+    role/content dict, or (c) claude/ollama argv, plus .format / % applied to a
+    prompt-named variable. Name-only rules need a text-like literal."""
+    for node in _scope_nodes(scope.node):
         if isinstance(node, ast.Assign):
-            if any(PROMPT_NAME.search(_target_name(t) or "") for t in node.targets):
-                yield node.value
+            if any(_named_prompt(t) for t in node.targets):
+                yield node.value, True
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            if PROMPT_NAME.search(_target_name(node.target) or ""):
-                yield node.value
+            if _named_prompt(node.target):
+                yield node.value, True
         elif isinstance(node, ast.Call):
             for keyword in node.keywords:
                 if keyword.arg in PROMPT_KWARGS:
-                    yield keyword.value
+                    yield keyword.value, False
             if _is_subprocess_call(node, subprocess_names):
                 for element in _argv_elements(node, scope):
-                    yield element
+                    yield element, False
             func = node.func
-            if (isinstance(func, ast.Attribute) and func.attr == "format"
-                    and PROMPT_NAME.search(_target_name(func.value) or "")):
-                yield node
+            if isinstance(func, ast.Attribute) and func.attr == "format" and _named_prompt(func.value):
+                yield node, True
         elif isinstance(node, ast.Dict):
             keys = {k.value: v for k, v in zip(node.keys, node.values) if k is not None and _is_str(k)}
             if "role" in keys and "content" in keys:
-                yield keys["content"]
+                yield keys["content"], False
         elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
-            if PROMPT_NAME.search(_target_name(node.left) or ""):
-                yield node
+            if _named_prompt(node.left):
+                yield node, True
+
+
+class LintFailure(Exception):
+    """A file could not be linted; the message names the cause, never file content."""
 
 
 def check_interpolation(ctx):
@@ -661,19 +760,17 @@ def check_interpolation(ctx):
         return []
     try:
         tree = ast.parse(ctx.text, filename=ctx.path)
-    except (SyntaxError, ValueError):
-        return []
+    except (SyntaxError, ValueError) as exc:
+        raise LintFailure("could not parse ({})".format(type(exc).__name__))
     subprocess_names = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module == "subprocess":
             subprocess_names.update(alias.asname or alias.name for alias in node.names
                                     if alias.name in SUBPROCESS_CALLS)
-    scopes = [tree] + [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
     undelimited = set()
-    for scope_node in scopes:
-        scope = _Scope(scope_node)
-        for expr in _prompt_expressions(scope_node, scope, subprocess_names):
-            for line, delimited in _interpolated_literals(expr, scope):
+    for scope in _scopes(tree):
+        for expr, need_text in _prompt_expressions(scope, subprocess_names):
+            for line, delimited in _interpolated_literals(expr, scope, need_text):
                 if not delimited:
                     undelimited.add(line)
     return [(line, "interpolated value in a prompt string sits outside a <tag>...</tag> pair "
@@ -830,17 +927,34 @@ def _suppressions(ctx):
 
 def _read_text(path):
     with open(path, "rb") as handle:
-        return handle.read().decode("utf-8", errors="replace")
+        return handle.read().decode("utf-8-sig", errors="replace").replace("\r\n", "\n")
 
 
-def lint_file(path, kind=None, display=None):
+def _failure_text(exc):
+    """The cause of a failure without the exception message, which may quote file content."""
+    if isinstance(exc, LintFailure):
+        return str(exc)
+    return type(exc).__name__
+
+
+def lint_file(path, kind=None, display=None, anchor_cache=None, failures=None):
+    """Findings for one file. With a failures list, a check that raises is
+    recorded there as {"path", "error"} and the other checks still run;
+    without one, the exception propagates."""
     kind = kind or infer_kind(path)
-    ctx = FileContext(path, display or path, _read_text(path), kind)
+    ctx = FileContext(path, display or path, _read_text(path), kind, anchor_cache)
     findings = []
     for check in CHECKS.values():
         if not check.applies(ctx):
             continue
-        for line, message in check.run(ctx):
+        try:
+            hits = check.run(ctx)
+        except Exception as exc:  # recorded per file; the run continues
+            if failures is None:
+                raise
+            failures.append({"path": ctx.display, "error": "{}: {}".format(check.id, _failure_text(exc))})
+            continue
+        for line, message in hits:
             findings.append(Finding(ctx.display, line, check.id, check.name, check.level,
                                     check.entry, message))
     marks = _suppressions(ctx)
@@ -862,9 +976,11 @@ def lint_file(path, kind=None, display=None):
 
 
 def lint(paths, kind=None):
+    """Findings for paths in one run (one anchor cache); any failure raises."""
+    anchor_cache = {}
     findings = []
     for path in paths:
-        findings.extend(lint_file(path, kind=kind))
+        findings.extend(lint_file(path, kind=kind, anchor_cache=anchor_cache))
     return findings
 
 
@@ -903,24 +1019,35 @@ def main(argv=None):
                 sys.stderr.write("prompt_lint: no such file: {}\n".format(", ".join(missing)))
                 return 2
             targets = [(p, p, args.kind) for p in args.paths]
-        findings = []
-        for path, display, kind in targets:
-            findings.extend(lint_file(path, kind=kind, display=display))
-    except Exception as exc:  # the skill reports "lint failed" and continues
-        sys.stderr.write("prompt_lint: internal error: {}: {}\n".format(type(exc).__name__, exc))
+    except Exception as exc:  # no file list: the skill reports "lint failed" and continues
+        sys.stderr.write("prompt_lint: internal error: {}\n".format(type(exc).__name__))
         return 2
+    anchor_cache = {}
+    findings = []
+    failures = []
+    for path, display, kind in targets:
+        try:
+            findings.extend(lint_file(path, kind=kind, display=display, anchor_cache=anchor_cache,
+                                      failures=failures))
+        except Exception as exc:  # reading or setting up the file failed; the run continues
+            failures.append({"path": display, "error": _failure_text(exc)})
+    for failure in failures:
+        sys.stderr.write("prompt_lint: lint failed for {path}: {error}\n".format(**failure))
     errors = sum(1 for f in findings if f.level == "error" and not f.suppressed)
     if args.json:
-        report = {"version": 1, "files": len(targets), "findings": [f.as_json() for f in findings]}
+        report = {"version": 1, "files": len(targets), "findings": [f.as_json() for f in findings],
+                  "errors": failures}
         sys.stdout.write(json.dumps(report, indent=1) + "\n")  # json-ascii: machine-read
     else:
         for finding in findings:
             sys.stdout.write(finding.as_text() + "\n")
         warnings = sum(1 for f in findings if f.level == "warning" and not f.suppressed)
         suppressed = sum(1 for f in findings if f.suppressed)
-        sys.stderr.write("prompt_lint: {} files, {} errors, {} warnings, {} suppressed\n".format(
-            len(targets), errors, warnings, suppressed))
-    return 1 if errors else 0
+        sys.stderr.write("prompt_lint: {} files, {} errors, {} warnings, {} suppressed, {} failed\n".format(
+            len(targets), errors, warnings, suppressed, len({f["path"] for f in failures})))
+    if errors:
+        return 1
+    return 2 if failures else 0
 
 
 if __name__ == "__main__":

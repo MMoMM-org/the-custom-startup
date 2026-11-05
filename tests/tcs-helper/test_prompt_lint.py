@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -109,6 +110,12 @@ def test_e1_matches_every_pattern_and_never_prints_the_value(tmp_path):
         assert value not in as_json.stdout + as_json.stderr
 
 
+def test_e1_needs_a_boundary_before_sk(pl, tmp_path):
+    target = tmp_path / "brief.md"
+    target.write_text("# Brief\n\nrun task-" + "a1B2c" * 5 + " next\n")
+    assert [f for f in pl.lint([str(target)]) if f.check == "E1"] == []
+
+
 def test_e1_scans_code_files(tmp_path):
     target = tmp_path / "client.py"
     target.write_text('API_KEY = "{}"\n'.format(_secret_values()["aws"]))
@@ -155,6 +162,16 @@ def test_e3_checks_at_imports_only_in_instruction_files(pl):
     assert _lines(_findings(pl, "e3_positive.md", "E3", kind="skill")) == [3, 4, 5, 6]
 
 
+def test_e3_anchor_cache_lives_for_one_run(pl, tmp_path):
+    target = tmp_path / "target.md"
+    target.write_text("# Target\n")
+    source = tmp_path / "source.md"
+    source.write_text("# Source\n\n[x](target.md#later)\n")
+    assert [f.check for f in pl.lint([str(source)])] == ["E3"]
+    target.write_text("# Target\n\n## Later\n")
+    assert pl.lint([str(source)]) == []
+
+
 def test_github_slug_rule(pl):
     assert pl.github_slugs(["Step 1 - prepare", "Paths a/b and c", "The `--repo` flag",
                             "Notes", "Notes", "Notes"]) == [
@@ -167,8 +184,9 @@ def test_github_slug_rule(pl):
 # ---------------------------------------------------------------------------
 
 def test_e4_flags_each_prompt_form_and_treats_quotes_as_no_delimiter(pl):
-    # 6 f-string in quotes, 12 system=, 13 role/content dict, 18 claude argv, 22 .format via name
-    assert _lines(_findings(pl, "e4_positive.py", "E4")) == [6, 12, 13, 18, 22]
+    # 6 f-string in quotes, 12 system=, 13 role/content dict, 18 claude argv, 22 .format via name,
+    # 27 camelCase name
+    assert _lines(_findings(pl, "e4_positive.py", "E4")) == [6, 12, 13, 18, 22, 27]
 
 
 def test_e4_accepts_tag_pairs_and_fences_and_ignores_non_prompts(pl):
@@ -178,8 +196,47 @@ def test_e4_accepts_tag_pairs_and_fences_and_ignores_non_prompts(pl):
 def test_e4_flags_semantic_detector_prompt():
     # #253 is the acceptance case; both sites are reported at the literal's first line.
     e4 = [f.line for f in _load_module().lint([str(SEMANTIC_DETECTOR)]) if f.check == "E4"]
-    assert any(128 <= line <= 136 for line in e4), e4
-    assert any(94 <= line <= 98 for line in e4), e4
+    assert sorted(e4) == [95, 129]
+
+
+def test_e4_name_rule_matches_whole_segments_only(pl):
+    hits = {name: pl.prompt_name(name) for name in (
+        "prompt", "SYSTEM_PROMPT", "system_text", "userPrompt", "instructions", "prompt_header",
+        "system_path", "prompt_file", "promptDir", "instruction_count", "filesystem_root",
+        "systemic", "prompts_dir", "prompt_paths")}
+    assert sorted(n for n, hit in hits.items() if hit) == [
+        "SYSTEM_PROMPT", "instructions", "prompt", "prompt_header", "system_text", "userPrompt"]
+
+
+def test_e4_scopes_stop_at_function_boundaries(pl, tmp_path):
+    target = tmp_path / "scopes.py"
+    target.write_text(
+        "def a(text):\n"
+        "    message = f\"Summarise {text}\"\n"
+        "    return message\n"
+        "\n"
+        "\n"
+        "def b(client):\n"
+        "    return client.create(system=message)\n"
+        "\n"
+        "\n"
+        "BASE = f\"Review the change by {__name__}\"\n"
+        "\n"
+        "\n"
+        "def c(client):\n"
+        "    return client.create(system=BASE)\n")
+    assert [f.line for f in pl.lint([str(target)]) if f.check == "E4"] == [10]
+
+
+def test_e4_unparsable_python_is_a_failure_not_clean(tmp_path):
+    target = tmp_path / "broken.py"
+    target.write_text("def f(:\n")
+    result = _run("--json", target)
+    assert result.returncode == 2
+    data = json.loads(result.stdout)
+    assert [e["path"] for e in data["errors"]] == [str(target)]
+    assert "could not parse" in data["errors"][0]["error"]
+    assert str(target) in result.stderr
 
 
 def test_e4_runs_only_on_code(pl, tmp_path):
@@ -285,13 +342,36 @@ def test_exit_0_when_every_error_is_suppressed(tmp_path):
     assert _run(target).returncode == 0
 
 
-def test_lint_exit_2_on_internal_failure(pl, monkeypatch, capsys):
-    def boom(*_args, **_kwargs):
-        raise RuntimeError("forced")
+def _break_check_for(pl, monkeypatch, check_id, file_name):
+    original = pl.CHECKS[check_id].run
 
-    monkeypatch.setattr(pl.CHECKS["E2"], "run", boom)
-    assert pl.main([str(FIXTURES / "e2_negative.md")]) == 2
-    assert "internal error" in capsys.readouterr().err
+    def run(ctx):
+        if ctx.path.endswith(file_name):
+            raise RuntimeError("forced")
+        return original(ctx)
+
+    monkeypatch.setattr(pl.CHECKS[check_id], "run", run)
+
+
+def test_a_failing_file_does_not_mask_errors_elsewhere(pl, monkeypatch, capsys):
+    _break_check_for(pl, monkeypatch, "E2", "e2_negative.md")
+    failing = str(FIXTURES / "e2_negative.md")
+    assert pl.main(["--json", failing, str(FIXTURES / "e3_positive.md")]) == 1
+    out, err = capsys.readouterr()
+    data = json.loads(out)
+    assert {f["check"] for f in data["findings"]} == {"E3"}
+    assert data["errors"] == [{"path": failing, "error": "E2: RuntimeError"}]
+    assert failing in err and "RuntimeError" in err
+    assert "forced" not in out + err
+
+
+def test_lint_exit_2_on_internal_failure(pl, monkeypatch, capsys):
+    _break_check_for(pl, monkeypatch, "E2", "e2_negative.md")
+    failing = str(FIXTURES / "e2_negative.md")
+    assert pl.main([failing, str(FIXTURES / "w1_positive.md")]) == 2
+    out, err = capsys.readouterr()
+    assert "W1 emphasis" in out  # findings that survived are still printed
+    assert failing in err and "lint failed" in err
 
 
 def test_exit_2_on_a_missing_path(tmp_path):
@@ -338,6 +418,59 @@ def test_linting_python_never_executes_it(tmp_path):
     assert not marker.exists()
     assert not (workdir / "prompt-lint-marker").exists()
     assert sorted(p.name for p in workdir.iterdir()) == ["creates_file.py"]
+
+
+# ---------------------------------------------------------------------------
+# Input robustness
+# ---------------------------------------------------------------------------
+
+def test_crlf_markdown_keeps_frontmatter_fences_and_links(pl, tmp_path):
+    target = tmp_path / "skill.md"
+    target.write_bytes(b"---\r\ndescription: MUST NEVER ALWAYS MUST NEVER\r\n---\r\n# Skill\r\n\r\n"
+                       b"```\r\n<open>\r\n```\r\n\r\nSee [x](gone.md) and [y](#skill).\r\n")
+    assert [(f.check, f.line) for f in pl.lint([str(target)])] == [("E3", 10)]
+
+
+def test_non_utf8_bytes_are_replaced_not_fatal(pl, tmp_path):
+    target = tmp_path / "brief.md"
+    target.write_bytes(b"# Brief\n\nCaf\xe9 \xff\xfe text, see [x](gone.md).\n")
+    assert [(f.check, f.line) for f in pl.lint([str(target)])] == [("E3", 3)]
+
+
+def test_bom_is_stripped_for_frontmatter_and_python(pl, tmp_path):
+    markdown = tmp_path / "skill.md"
+    markdown.write_bytes(b"\xef\xbb\xbf---\ndescription: MUST NEVER ALWAYS MUST NEVER\n---\n# Skill\n\nShort body.\n")
+    assert pl.lint([str(markdown)]) == []
+    code = tmp_path / "tool.py"
+    code.write_bytes(b"\xef\xbb\xbfprompt = f'Summarise this text: {x}'\n")
+    assert [(f.check, f.line) for f in pl.lint([str(code)])] == [("E4", 1)]
+
+
+def test_a_pathological_line_lints_quickly(pl, tmp_path):
+    target = tmp_path / "brief.md"
+    target.write_text("# Brief\n\n" + "[" * 200000 + "\n" + "`a` " * 50000 + "\n")
+    started = time.monotonic()
+    pl.lint([str(target)])
+    assert time.monotonic() - started < 2.0
+
+
+def test_repo_skips_a_tracked_but_deleted_file(tmp_path):
+    repo = tmp_path / "repo"
+    skill = repo / "plugins/x/skills/y/SKILL.md"
+    gone = repo / "plugins/x/skills/z/SKILL.md"
+    for path in (skill, gone):
+        path.parent.mkdir(parents=True)
+        path.write_text("# Skill\n\nPlain text.\n")
+    env = dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
+    git = ["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t"]
+    subprocess.run(["git", "init", "-q", str(repo)], check=True, env=env)
+    subprocess.run(git + ["add", "."], check=True, env=env)
+    subprocess.run(git + ["commit", "-qm", "init"], check=True, env=env)
+    gone.unlink()
+    result = _run("--json", "--repo", cwd=str(repo), env=env)
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert (data["files"], data["errors"]) == (1, [])
 
 
 def test_kind_inference_from_repo_paths(pl):

@@ -21,3 +21,8 @@ def run_cli(entry):
 def legacy(name):
     system_text = "Hello {name}, review the diff."
     return system_text.format(name=name)
+
+
+def camel(name):
+    userPrompt = f"Review the code written by {name}."
+    return userPrompt

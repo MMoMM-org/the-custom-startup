@@ -458,6 +458,31 @@ Check definitions (SDD-ADR-5):
   W3 prohibition-only paragraph: a non-list paragraph (blank-line separated) of ≥ 2 sentences in which every sentence matches
      (?i)\b(never|do not|don't|must not|avoid|no longer|cannot)\b and none contains a positive instruction (a sentence without those words).
   Suppression: "lint-ok: <check> <reason>" on the line or the line above; a suppression without a reason is itself an E-level finding.
+  As built (T1.3, 2026-11-05; accepted in review):
+    E2 a lone unclosed <name> inside a sentence that is never closed anywhere in the file is a placeholder (<path>, <dir>) and not
+       flagged; an unclosed tag alone on its line, or closed elsewhere, is; stray closing tags are always flagged.
+    E3 @-imports are checked only for kind instruction-file (Claude Code expands @ only in memory files), and only for tokens that look
+       like a path (./, ../, ~/, / or a file extension); any URI scheme is skipped; anchors also accept setext headings, <a id|name>
+       and a case-insensitive match. Footnote definitions [^n]: are not reference links. Lines over 10 000 characters skip the
+       inline-link scan (the link regex is quadratic on a run of "[").
+    E4 rule (a), and .format / % on a named variable, match prompt|prompts|system|instruction|instructions only as a whole segment of
+       the identifier (split on _ and camelCase), not followed by a path-like segment (path, file, dir, name, id, count, len, size, url,
+       or their plural): system_text and userPrompt match; system_path, prompt_file, filesystem_root and instruction_count do not.
+       A name-only prompt also needs a text-like literal: whitespace and a word of ≥ 3 letters outside the placeholders. Rules (b) and
+       (c) are unchanged. Each function is its own scope; a name not assigned in it resolves in the enclosing scope, so a name assigned
+       in function A is not the value of the same name in function B. An unparsable .py is a lint failure, never clean.
+    E1 sk- patterns need a non-alphanumeric character (or line start) before sk-, so task-<25 alnum> is not a key.
+    Files are read as utf-8-sig with CRLF normalised to LF and undecodable bytes replaced; the anchor cache lives for one lint run.
+    Failures: a check that raises (or a .py that does not parse) is recorded for that file and the run continues; the other checks and
+       files still report. Each failure is named on stderr as path plus cause (exception type or "could not parse"), never file content,
+       and listed in --json as "errors": [{"path", "error"}] (error is "<check>: <cause>"). Exit precedence: 1 if any unsuppressed
+       error finding, else 2 if any file failed, else 0, so a crash elsewhere never masks a real error.
+    A suppression without a reason is reported as check "E0" (level error, outside the seven-check registry).
+    AGENTS.md and GEMINI.md match at any depth, like CLAUDE.md.
+    KNOWN_OPEN entries are keyed by path, check, issue and line range; a KNOWN_OPEN entry that no longer matches a finding fails the
+    repo test, so it is removed when the issue is fixed.
+    Calibration on the defined set (253 files): W1 fires in 4 files, W2 max 149 (catalog/core.md), W3 fires 3 times (all warning-level
+    false alarms), 0 error-level false alarms, 0 suppressions, 2 KNOWN_OPEN (#253). --repo ≈ 1.5 s.
 
 Command: prompt_eval.py run
   Usage: prompt_eval.py run --kit DIR --a FILE [--b FILE] --target PROVIDER:MODEL [--judge PROVIDER:MODEL] [--author MODEL]
