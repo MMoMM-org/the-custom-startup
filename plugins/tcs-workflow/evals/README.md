@@ -10,7 +10,7 @@ From the repository root:
 
 ```bash
 claude plugin eval plugins/tcs-workflow --runs 3 -j 4 --allow-tools Write Edit \
-  --trust-plugin --no-publish --max-cost-usd 10
+  --trust-plugin --no-publish --output-dir <scratch-dir> --max-cost-usd 10
 ```
 
 One case: add `--case <name>`. Against a deliberately weakened skill: add `--ablation none` to skip
