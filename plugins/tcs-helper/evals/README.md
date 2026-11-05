@@ -58,6 +58,24 @@ skill files were never changed.
 - **audit-injection** drops only when the PA-15 entry itself is gone, and then to 0.78 (1 of 3 runs
   without the `PA-15` citation): the case defends the catalog entry more than the SKILL.md data rule.
 
+### Cleanup re-run (T2.10)
+
+Spec 023 T2.10 cut 4 208 bytes from the skill's procedure text (SKILL.md plus `reference/*.md`,
+catalog and profiles excluded): 36 486 before, 32 278 after (-11.5%). Catalog entries were not touched.
+One with-plugin run (`--ablation none`, 3 runs per case, `-j 4`, ceiling $8) at `168d87e3`, Claude Code
+2.1.316, judge Haiku:
+
+| Case | T2.5 with skill | T2.10 | Spend |
+|---|---|---|---|
+| `prompt-author-handoff` | 1.00 | 1.00 | $0.33 |
+| `prompt-author-contract-first` | 1.00 | 1.00 | $1.07 |
+| `prompt-author-audit-injection` | 1.00 | 1.00 | $1.51 |
+| `prompt-author-port-gate-exit` | 1.00 | 1.00 (all 3 judged) | $2.45 |
+
+Total spend $5.36, not partial. No score dropped, so no cut was reverted. The shorter text is
+recommended, since there is no measurable difference (PRD F8 AC2). At 1.00 before and after, the run
+cannot show whether a cut helped. It shows only that no cut broke a defended behaviour.
+
 ## Cost
 
 The prompt-author suite at 3 runs per arm costs about $7.40 (with plugin about $2.05 per round of four
