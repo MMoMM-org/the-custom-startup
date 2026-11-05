@@ -22,12 +22,12 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Status:** active
 
 ## PA-03 Emphasis and authority language
-- **Tell:** capitalised directives (`MUST`, `NEVER`, `CRITICAL`), "no exceptions", "non-negotiable", or "if in doubt, use X".
+- **Tell:** capitalised directives (`MUST`, `NEVER`, `CRITICAL`) or absolute phrases such as "no exceptions" and "non-negotiable".
 - **Fails because:** current models follow plain instructions, so emphasis makes them over-apply the rule without raising accuracy.
 - **Fix:** state the rule in sentence case with its reason (PA-01); a hard terminal constraint may be restated once, plainly, at the end of the prompt.
 - **Applies to:** any · claude, openai, google (small-local: unverified)
 - **Evidence:** vendor + measured (spec 023 corpus: 8 of 16 prompts)
-- **Sources:** Anthropic, Prompting best practices, "soften any aggressive language" and "'If in doubt, use [tool]' cause overtriggering" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices, fetched 2026-11-04); OpenAI, GPT-4.1 prompting guide, capitals "generally not necessary" (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide, fetched 2026-11-04); OpenAI, GPT-5 prompting guide, emphatic "be thorough" counterproductive (https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide, fetched 2026-11-04); "Attention is Case-Sensitive" (https://arxiv.org/abs/2608.03711); trailing reminder restores compliance (https://arxiv.org/abs/2603.23530)
+- **Sources:** Anthropic, Prompting best practices, "soften any aggressive language" and "'If in doubt, use [tool]' cause overtriggering" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices, fetched 2026-11-04); OpenAI, GPT-4.1 prompting guide, capitals "generally not necessary" (https://developers.openai.com/cookbook/examples/gpt4-1_prompting_guide, fetched 2026-11-04); OpenAI, GPT-5 prompting guide, emphatic "be thorough" counterproductive (https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_prompting_guide, fetched 2026-11-04); "Attention is Case-Sensitive" (https://arxiv.org/abs/2608.03711, fetched 2026-11-04); "Did You Forget What I Asked?", trailing reminder restores compliance (https://arxiv.org/abs/2603.23530, fetched 2026-11-04)
 - **Lint:** W1
 - **Fingerprint:** "Write rules in sentence case; restate a terminal constraint once at the end instead of capitalising it."
 - **Status:** active
@@ -46,7 +46,7 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 ## PA-05 Redundant restatement
 - **Tell:** the same rule two or more times in one prompt, as an always/never mirror or reworded in another section.
 - **Fails because:** repetition acts as emphasis and spends instruction budget, and reworded copies drift apart into contradictions.
-- **Fix:** state each rule once, where it applies, and refer to it by name elsewhere.
+- **Fix:** state each rule once, where it applies, and refer to it by name elsewhere, except one plain terminal restatement (see PA-03).
 - **Applies to:** any · any
 - **Evidence:** measured (spec 023 corpus: 5 of 16)
 - **Fingerprint:** "State each rule once, at the point where it applies."
@@ -95,8 +95,8 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Fails because:** compliance drops as the instruction count grows, mostly by omitting later items.
 - **Fix:** keep the rules this task needs in the prompt, put the critical ones first, and move the rest to files read on demand.
 - **Applies to:** any · any (steepest decay: small-local)
-- **Evidence:** vendor + measured (spec 023 corpus: 3 of 16)
-- **Sources:** IFScale, instruction-following at 10-500 instructions across 20 models (https://arxiv.org/abs/2507.11538, fetched 2026-11-04)
+- **Evidence:** measured (spec 023 corpus: 3 of 16 prompts carry a long rule list)
+- **Sources:** IFScale, instruction-following at 10-500 instructions across 20 models (https://arxiv.org/abs/2507.11538, fetched 2026-11-04); third-party research, not vendor guidance, so the decay claim carries no vendor grade and `measured` covers only the corpus count
 - **Lint:** W2
 - **Fingerprint:** "Every rule in a loaded context competes with every other rule for compliance."
 - **Status:** active
@@ -116,7 +116,7 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Fails because:** a small model copies the shape of an example turn over the rule that contradicts it.
 - **Fix:** for a small target, show one complete turn in exactly the shape you want, such as one question and nothing after it.
 - **Applies to:** chat-template, api-system · small-local
-- **Evidence:** measured (spec 023 experiment T5: one question per turn in 53% of runs for prompts with sample questions)
+- **Evidence:** measured (spec 023 experiment T5: Opus-authored prompts, whose sample question style the model copied, kept one question per turn in 53% of runs, vs 83% for Sonnet-authored and 60% for the status quo)
 - **Fingerprint:** "For a small model, show the exact turn shape you want."
 - **Status:** active
 
@@ -154,7 +154,7 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Fails because:** literal targets keep asking for approval after the user asks for the result.
 - **Fix:** state the exit next to the gate: "If the user asks for the result directly, deliver it and list what was not confirmed."
 - **Applies to:** chat-template, api-system, brief · any (highest risk: small-local)
-- **Evidence:** measured (spec 023 experiment T5: prompts keeping the gate delivered the document in 53% of runs vs 90% status quo)
+- **Evidence:** measured (spec 023 experiment T5: Sonnet-authored prompts kept the approval gate and delivered the final document in 53% of runs, vs 77% for Opus-authored and 90% for the status quo)
 - **Fingerprint:** "Every gate states its exit."
 - **Status:** active
 

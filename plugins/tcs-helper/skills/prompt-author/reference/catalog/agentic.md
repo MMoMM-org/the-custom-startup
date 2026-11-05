@@ -5,7 +5,7 @@ Entries for prompts an agent re-reads at every step of a loop: subagent briefs, 
 ## PA-20 Behaviour when information is missing or unclear
 - **Tell:** an agent brief with no instruction for a missing input, an ambiguous requirement or a document it cannot find.
 - **Fails because:** the agent cannot ask mid-run, so it guesses and reports success.
-- **Fix:** name the action for the unclear case: stop and return a stated status such as `NEEDS_CONTEXT` with the open question, or proceed on a stated assumption and list it in the report.
+- **Fix:** name the action for the unclear case, such as returning `NEEDS_CONTEXT` with the open question.
 - **Applies to:** brief, agent, api-system · any
 - **Evidence:** measured + practitioner (spec 023 experiment T2: NEEDS_CONTEXT returned only when the brief defined it)
 - **Sources:** Gravity, "AI agent prompt vs traditional prompt" (https://gravity.fast/blog/ai-agent-prompt-vs-traditional-prompt/, fetched 2026-11-04)
@@ -25,7 +25,7 @@ Entries for prompts an agent re-reads at every step of a loop: subagent briefs, 
 ## PA-22 Goal and constraints over a fixed script
 - **Tell:** an agent prompt that is a numbered script of tool calls with no stated goal or done criterion.
 - **Fails because:** the script breaks on the first case it did not foresee (pagination, a missing field, a rate limit), and the agent has no goal to recover toward.
-- **Fix:** state the goal, the constraints and the done criterion; keep a fixed order only where the order is itself a requirement.
+- **Fix:** state the goal, the constraints and the done criterion instead of the sequence of tool calls.
 - **Applies to:** brief, agent, api-system · any
 - **Evidence:** vendor + practitioner
 - **Sources:** Anthropic, Prompting best practices, "Prefer general instructions over prescriptive steps" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices, fetched 2026-11-04); Gravity, "AI agent prompt vs traditional prompt" (https://gravity.fast/blog/ai-agent-prompt-vs-traditional-prompt/, fetched 2026-11-04)
@@ -35,11 +35,11 @@ Entries for prompts an agent re-reads at every step of a loop: subagent briefs, 
 ## PA-23 Refusal with an approved alternative
 - **Tell:** a list of actions the agent must not take, with nothing it may do instead.
 - **Fails because:** a blocked agent improvises a workaround, often worse than the action it was denied.
-- **Fix:** pair each forbidden action with the approved alternative: stop and report, escalate to a named channel, or ask for confirmation.
+- **Fix:** apply PA-04, the general rule this entry specialises for agents: pair each forbidden action with an approved alternative such as stop and report.
 - **Applies to:** brief, agent, api-system · any
 - **Evidence:** practitioner + vendor
 - **Sources:** Gravity, "AI agent prompt vs traditional prompt" (https://gravity.fast/blog/ai-agent-prompt-vs-traditional-prompt/, fetched 2026-11-04); OWASP, LLM01 Prompt Injection, least privilege and human approval (https://genai.owasp.org/llmrisk/llm01-prompt-injection/, fetched 2026-11-04)
-- **Fingerprint:** "Every forbidden action names the approved alternative."
+- **Fingerprint:** "Give a blocked agent a sanctioned next step: stop and report, escalate, or ask."
 - **Status:** active
 
 ## PA-24 Scope fence (files, commit range, read-only git)

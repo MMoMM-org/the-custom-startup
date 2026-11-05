@@ -5,11 +5,11 @@ Entries for the description field of Claude Code skills and agents, which Claude
 ## PA-50 Description authority language (`MUST BE USED`)
 - **Tell:** a skill or agent description that states its trigger in neutral phrasing only.
 - **Fails because:** Claude tends to under-trigger, so it skips a skill or agent it should invoke.
-- **Fix:** Use "slightly pushy" phrasing: `Use PROACTIVELY when…` and `MUST BE USED when…`.
 - **Applies to:** skill, agent · claude
 - **Evidence:** unverified (no trigger or overtrigger measurement in this repo)
 - **Sources:** conflicting vendor guidance: Anthropic, Prompting best practices, "soften any aggressive language" and "'If in doubt, use [tool]' cause overtriggering" (https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices, fetched 2026-11-04)
 - **Decision:** repo ADR-4 holds (`docs/ai/memory/decisions.md`): `MUST BE USED` in descriptions is layer 3 of the three-layer enforcement for skill auto-invocation; change it only through a superseding ADR backed by a trigger and overtrigger measurement with `claude plugin eval`.
+- **Fix:** Repo ADR-4 requires "slightly pushy" phrasing: `Use PROACTIVELY when…` and `MUST BE USED when…`.
 - **Fingerprint:** "`Use PROACTIVELY when…` and `MUST BE USED when…`"
 - **Status:** contested
 

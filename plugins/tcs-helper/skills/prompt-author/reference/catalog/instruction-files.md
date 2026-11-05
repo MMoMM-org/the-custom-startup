@@ -5,7 +5,7 @@ Entries for always-loaded instruction files: CLAUDE.md, AGENTS.md, global standa
 ## PA-30 Stale facts (paths, commands, versions, counts)
 - **Tell:** a path, command, version, count or file name in an instruction file that the tree no longer matches.
 - **Fails because:** the agent trusts the file over the tree, so it searches for, runs or cites what does not exist.
-- **Fix:** keep only facts the agent needs and a check can verify; link to files instead of copying their contents, and re-check paths and commands when the tree changes.
+- **Fix:** keep only facts a check can verify against the tree, such as a link to a file instead of a copy of its contents.
 - **Applies to:** instruction-file, skill, agent · any
 - **Evidence:** vendor + measured (spec 023 corpus: 3 of 16, all instruction files)
 - **Sources:** "Evaluating AGENTS.md" (ETH, ICLR 2026), tooling facts are followed, generated files cost more without gain (https://arxiv.org/abs/2602.11988, fetched 2026-11-04)

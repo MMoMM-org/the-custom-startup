@@ -25,10 +25,13 @@ LINT_CHECKS = {'E1', 'E2', 'E3', 'E4', 'W1', 'W2', 'W3'}
 
 REQUIRED_FIELDS = ('Tell', 'Fails because', 'Fix', 'Applies to', 'Evidence', 'Fingerprint', 'Status')
 MAX_ENTRY_LINES = 12
+# Entries are loaded into the authoring context; the largest (PA-03) is ~1,570 chars, so 1,900 leaves ~20% headroom.
+MAX_ENTRY_CHARS = 1900
 
 HEADING_RE = re.compile(r'^## (PA-\d{2}) (.+?)\s*$')
 FIELD_RE = re.compile(r'^- \*\*([^*]+):\*\* ?(.*)$')
 QUOTED_RE = re.compile(r'"([^"]+)"')
+CONTESTED_RE = re.compile(r'— contested|contested —')
 INDEX_LINK_RE = re.compile(r'^\[(PA-\d{2})\]\(([^)#]+)#([^)]+)\)$')
 
 
@@ -37,22 +40,33 @@ INDEX_LINK_RE = re.compile(r'^\[(PA-\d{2})\]\(([^)#]+)#([^)]+)\)$')
 def _initial_entries():
     """Parse solution.md INITIAL ENTRIES into {id: {file, lint, contested}}."""
     text = SOLUTION_MD.read_text(encoding='utf-8')
-    start = text.index('INITIAL ENTRIES')
-    end = text.index('ENTITY: CatalogIndex', start)
+    try:
+        start = text.index('INITIAL ENTRIES')
+        end = text.index('ENTITY: CatalogIndex', start)
+    except ValueError:
+        raise AssertionError(
+            f'{SOLUTION_MD}: no "INITIAL ENTRIES" block ending at "ENTITY: CatalogIndex"; '
+            'the format of solution.md changed'
+        ) from None
     expected = {}
     current_file = None
-    for line in text[start:end].splitlines():
+    block_start = text.count('\n', 0, start) + 1
+    for offset, line in enumerate(text[start:end].splitlines()):
         file_match = re.match(r'^\s+([a-z-]+\.md)\s*$', line)
         if file_match:
             current_file = file_match.group(1)
             continue
         entry_match = re.match(r'^\s+(PA-\d{2})\s', line)
         if entry_match:
+            if current_file is None:
+                raise AssertionError(
+                    f'{SOLUTION_MD}:{block_start + offset}: entry before any file heading: {line.strip()!r}'
+                )
             lint = re.search(r'Lint: (E\d|W\d)', line)
             expected[entry_match.group(1)] = {
                 'file': current_file,
                 'lint': lint.group(1) if lint else None,
-                'contested': 'contested' in line,
+                'contested': bool(CONTESTED_RE.search(line)),
             }
     return expected
 
@@ -186,12 +200,13 @@ def test_each_entry_lives_in_its_specified_file():
 
 
 def test_every_entry_has_all_fields():
+    entries = _all_entries()
+    assert entries, 'no catalog entries found'
     problems = []
-    for e in _all_entries():
+    for e in entries:
         for field in REQUIRED_FIELDS:
             if not e['fields'].get(field):
                 problems.append(f"{e['file']}:{e['lineno']} {e['id']} lacks {field}")
-    assert _all_entries(), 'no catalog entries found'
     assert not problems, '\n'.join(problems)
 
 
@@ -265,6 +280,28 @@ def test_entries_stay_within_the_line_budget():
         if len(e['body']) > MAX_ENTRY_LINES
     ]
     assert not too_long, too_long
+
+
+def test_entries_stay_within_the_character_budget():
+    too_long = []
+    for e in _all_entries():
+        size = len('\n'.join(e['body']))
+        if size > MAX_ENTRY_CHARS:
+            too_long.append(f"{e['file']}:{e['lineno']} {e['id']} has {size} chars")
+    assert not too_long, too_long
+
+
+def _fingerprints(entry):
+    return QUOTED_RE.findall(entry['fields'].get('Fingerprint', ''))
+
+
+def test_fingerprints_are_unique_across_entries():
+    owners = {}
+    for e in _all_entries():
+        for sentence in _fingerprints(e):
+            owners.setdefault(sentence, []).append(e['id'])
+    shared = {s: ids for s, ids in owners.items() if len(ids) > 1}
+    assert not shared, f'fingerprints shared by several entries: {shared}'
 
 
 def test_index_rows_and_sections_agree():
