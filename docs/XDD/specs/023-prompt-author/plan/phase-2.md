@@ -149,7 +149,7 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
   - Run `pytest -q -rs`, `prompt_lint.py --repo` and the prompt-author eval cases. All pass.
   - Verify the error-handling list in the SDD Runtime View against the tests, one test per bullet.
 
-- [ ] **T2.8 Spec amendments from the phase 2 drift check** `[activity: technical-writing]` `[ref: SDD/Acceptance Criteria; SDD/Directory Map; PRD/Success Metrics]` `[parallel: true]`
+- [x] **T2.8 Spec amendments from the phase 2 drift check** `[activity: technical-writing]` `[ref: SDD/Acceptance Criteria; SDD/Directory Map; PRD/Success Metrics]` `[parallel: true]`
 
   1. Prime: Read the phase 2 drift findings in README.md Decisions Log (2026-11-05 rows "Phase 2 drift") and plugins/tcs-helper/evals/README.md § Audit acceptance.
   2. Test: `.venv/bin/python -m pytest -q tests/tcs-helper/` stays green (spec text is cited by no test except the PA-ID scans).
@@ -157,7 +157,7 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
   4. Validate: no section contradicts another; grep for "report module, which lives inside prompt_eval.py" returns nothing.
   5. Success: every MEDIUM spec-side drift finding is resolved in the documents `[ref: PRD/Success Metrics; SDD/Acceptance Criteria]`
 
-- [ ] **T2.9 eval_compare consent gate and kind classification** `[activity: backend-tooling]` `[component: C2, C4]` `[ref: SDD/Quality Requirements; SDD/System-Wide Patterns Security; PRD/F6 AC5; PRD/J1]` `[parallel: true]`
+- [x] **T2.9 eval_compare consent gate and kind classification** `[activity: backend-tooling]` `[component: C2, C4]` `[ref: SDD/Quality Requirements; SDD/System-Wide Patterns Security; PRD/F6 AC5; PRD/J1]` `[parallel: true]`
 
   1. Prime: scripts/prompt_eval.py consent and E1 scan code; scripts/eval_compare.py `run`; SKILL.md step 1 intake and step 2 hand-off table; reference/audit.md step 1; catalog/index.md kinds column; catalog/instruction-files.md PA-32; corpus item 5 (docs/templates/setup-claude-project.md) in evals/README.md.
   2. Test (red first): eval_compare `run` without `--confirm-provider claude` prints the plan and exits 3 with no subprocess call; with a secret in a case file it exits 4 and never prints the value; with consent it calls plugin eval (stubbed). A catalog test asserts PA-32 lists chat-template.
@@ -167,10 +167,10 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
 
 - [ ] **T2.10 Skill cleanup round with one eval re-run** `[activity: skill-authoring]` `[component: C2, C4]` — after T2.9 (same files)
 
-  1. Prime: the cleanup list (cuts a-m, minors 1-14, T2.3 review minors) and the LOW drift findings: `--author` in the eval-loop.md example and a report line when the judge-vs-author check was skipped; a separate `provisional` state for never-labelled llm criteria; eval-loop.md:5-6 stale sentence; SKILL.md step 5 KNOWN_OPEN path "in this repository, if present".
+  1. Prime: the cleanup list (cuts a-m, minors 1-14, T2.3 review minors) and the LOW drift findings: `--author` in the eval-loop.md example and a report line when the judge-vs-author check was skipped; a separate `provisional` state for never-labelled llm criteria; eval-loop.md:5-6 stale sentence; SKILL.md step 5 KNOWN_OPEN path "in this repository, if present". T2.9 review advisories: eval_compare exits 1 when `--case` matches no case directory (after the consent check; test); drop the redundant `or []` on `args.confirm_provider`; the secret-in-base test also asserts the worktree directory is gone.
   2. Test (red first): the T2.3 test gaps (leftover worktree, failed worktree add, plugin-eval timeout, git TimeoutExpired, report file mode 0600); a test for the `provisional` state; a test for the skipped-author report line.
   3. Implement: the fixes and cuts. Each cut is a separate commit so a regressing one can be reverted alone.
-  4. Validate: full tests green; then one `eval_compare.py run --confirm-provider claude` over the prompt-author cases at base a321c5c5 vs the working tree, `--max-cost-usd 8`. Any case whose score drops: revert the cut responsible and record it.
+  4. Validate: full tests green; then one `claude plugin eval plugins/tcs-helper --case 'prompt-author-*' --runs 3 -j 4 --ablation none --trust-plugin --no-publish --output-dir <scratch> --max-cost-usd 8` over the working tree (with-plugin arm only, about $6.15). The before scores are the recorded T2.5 with-plugin scores (all 1.00, plugins/tcs-helper/evals/README.md); an eval_compare base-vs-tree run would cost about $12 and exceed the $8 consent. Any case below 1.00: find the cut responsible, revert it and record it.
   5. Success: SKILL.md + references smaller, no prompt-author case score lower than before, spend ≤ $8 recorded `[ref: PRD/F8 AC2; SDD-ADR-4]`
 
 ## Phase 2 results
