@@ -6,12 +6,9 @@ the profile topic or catalog entry behind it.
 
 ## Choose the profile
 
-| The target is | Profile |
-|---|---|
-| a Claude model, Claude Code, `claude -p` | [profiles/anthropic.md](profiles/anthropic.md) |
-| an OpenAI GPT model, ChatGPT, a Custom GPT | [profiles/openai.md](profiles/openai.md) |
-| a Google Gemini model, a Gem, AI Studio | [profiles/google.md](profiles/google.md) |
-| an open-weights model run locally (Ollama, llama.cpp, LM Studio), or any model small enough to run on a laptop | [profiles/small-local.md](profiles/small-local.md) |
+The intake's target names the profile: `profiles/<target>.md`, with
+[anthropic.md](profiles/anthropic.md) for claude. An open-weights model run locally (Ollama, llama.cpp,
+LM Studio), or any model small enough to run on a laptop, is small-local.
 
 Read the target's profile and [catalog/porting.md](catalog/porting.md), plus the core entries the
 profile cites. For a source written for another vendor, also read the source's profile, since its
