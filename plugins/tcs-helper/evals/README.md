@@ -146,9 +146,9 @@ step 3, not the lint.
 |---|---|---|---|
 | 1 | EX `research-prompt.md:93` "(Stripe, Netflix, Shopify, etc.)" → PA-11; CX search assumed, no no-search fallback (`:3,10,26`) → PA-08 | 2/2 | — |
 | 2 | RD `setup-perplexity-space.md:25`+`:32`, `:26`+`:34` always/never mirror → PA-05; PL `:58` "they work identically" → PA-41 | 2/2 | — |
-| 3 | RD no-HOW `prd-prompt.md:70,85,89-96,131` → PA-05; NO `:89-96` → PA-04; EM `:70,80,91` → PA-03; `[NEEDS CLARIFICATION]` `:122` undefined → PA-40 | 4/4 | — |
+| 3 | RD no-HOW `prd-prompt.md:11,26,30-37,72` → PA-05; NO `:30-37` → PA-04; EM `:11,21,32` → PA-03; `[NEEDS CLARIFICATION]` `:63` undefined → PA-40 | 4/4 | — |
 | 4 | RD one question `brainstorm-prompt.md:17,28,40,49,87` → PA-05; EM `:17,22,24,49` → PA-03; Red Flags table `:34-43` → PA-40 / PA-09; "Urgency cues don't override" `:39` → **PA-16** (the user's "start coding" has no exit), not the expected PA-06 | 4/4 | — |
-| 5 | SC `setup-claude-project.md:117-121` rules for all sessions → PA-32; RD `:118,120,121` restate the brainstorm and PRD templates → PA-05 | 0/2 | 2/2 |
+| 5 | SC `setup-claude-project.md:30-34` rules for all sessions → PA-32; RD `:31,33,34` restate the brainstorm and PRD templates → PA-05 | 0/2 | 2/2 |
 | 6 | ST → PA-30 (above); overview `AGENTS.md:9-94` → PA-31; CO/false claim `:107` → PA-30 | 2/3 | 3/3 |
 | 7 | `CLAUDE.md:17` `~/.claude/includes/` absent → PA-30; `:57` "sync back" vs a repo→cache copy → PA-06; `:45-50`+`:59-62` → PA-05; `:31-63` always-loaded test procedure → PA-32 | 4/4 | — |
 | 8 | `docs/ai/CLAUDE.md:29` bans without reason → PA-01 | 1/1 | — |
@@ -185,5 +185,5 @@ Findings beyond the documented defects: `implement-incremental` 4d asks for no r
 reads "the implementer's report" (PA-13) and does not say what to do when an input is missing (PA-20);
 `review/SKILL.md:49` "ALL" (PA-03); `AGENTS.md:16` says `tcs-workflow/agents` holds the-chief (it holds
 the three gate agents), `:29` gives "13 activity + the-chief + the-meta-agent", `:44` "19" templates
-(PA-30); `research-prompt.md:4` claims standalone use untested (PA-41); `prd-prompt.md:81` approval
+(PA-30); `research-prompt.md:4` claims standalone use untested (PA-41); `prd-prompt.md:22` approval
 gate without an exit (PA-16).
