@@ -2,7 +2,8 @@
 
 Measures whether a prompt change helped, on the target the prompt is for. Two runners share one kit
 format and one report: `scripts/prompt_eval.py` for standalone prompts, and `scripts/eval_compare.py`
-for skills and agents through `claude plugin eval`. Both scripts sit in this skill's base directory.
+for skills and agents through `claude plugin eval`. Both scripts sit in this skill's base directory;
+until `eval_compare.py` exists there, use the by-hand procedure under § Skills and agents.
 
 ## When to offer one
 

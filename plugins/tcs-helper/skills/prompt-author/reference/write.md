@@ -40,15 +40,14 @@ the kind and target from the loaded catalog. The ones most drafts need:
 
 | Concern | Entry |
 |---|---|
-| a reason for each rule whose purpose is not obvious | [PA-01](catalog/core.md#pa-01-reason-clause-for-non-obvious-rules) |
-| present-tense mechanisms, no incident history | [PA-02](catalog/core.md#pa-02-history-and-provenance-noise) |
-| sentence case, one plain terminal restatement at most | [PA-03](catalog/core.md#pa-03-emphasis-and-authority-language) |
-| a wanted behaviour next to each prohibition | [PA-04](catalog/core.md#pa-04-prohibition-only-instructions) |
-| each rule once | [PA-05](catalog/core.md#pa-05-redundant-restatement) |
-| principles over enumerated cases | [PA-09](catalog/core.md#pa-09-over-prescription--enumerated-edge-cases) |
-| examples: several, diverse, each behaviour also a rule | [PA-11](catalog/core.md#pa-11-example-over-anchoring) |
-| one delimiter style, every tag closed | [PA-18](catalog/core.md#pa-18-unbalanced-or-inconsistent-delimiters) |
-| no secret in the text | [PA-19](catalog/core.md#pa-19-secrets-in-prompts) |
+| reason clauses | [PA-01](catalog/core.md#pa-01-reason-clause-for-non-obvious-rules) |
+| history and provenance | [PA-02](catalog/core.md#pa-02-history-and-provenance-noise) |
+| emphasis and restatement | [PA-03](catalog/core.md#pa-03-emphasis-and-authority-language), [PA-05](catalog/core.md#pa-05-redundant-restatement) |
+| prohibitions | [PA-04](catalog/core.md#pa-04-prohibition-only-instructions) |
+| enumerated cases | [PA-09](catalog/core.md#pa-09-over-prescription--enumerated-edge-cases) |
+| examples | [PA-11](catalog/core.md#pa-11-example-over-anchoring) |
+| delimiters | [PA-18](catalog/core.md#pa-18-unbalanced-or-inconsistent-delimiters) |
+| secrets | [PA-19](catalog/core.md#pa-19-secrets-in-prompts) |
 
 For a target other than Claude, read that target's profile in `profiles/` and apply each of its topics
 (Placement, Delimiters, Examples, Negatives, Emphasis, Literalness, Turn shape, and Gate exits for
@@ -57,37 +56,33 @@ small-local) to the draft.
 ## Agentic prompts
 
 A subagent brief, an agent prompt or an API agent with tools is re-read at every step of a loop, and
-nobody can answer its questions mid-run. Its draft states:
+nobody can answer its questions mid-run. Apply each entry of the agentic catalog to its draft:
 
-- the goal, the constraints and the done criterion, rather than a numbered script of tool calls
-  ([PA-22](catalog/agentic.md#pa-22-goal-and-constraints-over-a-fixed-script));
-- what to do when an input is missing, ambiguous or not found, such as a `NEEDS_CONTEXT` status that
-  the consumer handles ([PA-20](catalog/agentic.md#pa-20-behaviour-when-information-is-missing-or-unclear));
-- when to stop and report, and what the report contains
-  ([PA-21](catalog/agentic.md#pa-21-stopping-conditions));
-- for each forbidden action, the approved next step
-  ([PA-23](catalog/agentic.md#pa-23-refusal-with-an-approved-alternative));
-- the files or commit range in scope and which git operations are allowed
-  ([PA-24](catalog/agentic.md#pa-24-scope-fence-files-commit-range-read-only-git));
-- for a reviewer, the criteria and what does not count as an issue, with the verdict left open
-  ([PA-25](catalog/agentic.md#pa-25-verdict-prior-in-reviewer-briefs), unverified).
+| Concern | Entry |
+|---|---|
+| goal over script | [PA-22](catalog/agentic.md#pa-22-goal-and-constraints-over-a-fixed-script) |
+| missing or unclear input | [PA-20](catalog/agentic.md#pa-20-behaviour-when-information-is-missing-or-unclear) |
+| stopping and the report | [PA-21](catalog/agentic.md#pa-21-stopping-conditions) |
+| refusals | [PA-23](catalog/agentic.md#pa-23-refusal-with-an-approved-alternative) |
+| scope fence | [PA-24](catalog/agentic.md#pa-24-scope-fence-files-commit-range-read-only-git) |
+| reviewer verdict prior (unverified) | [PA-25](catalog/agentic.md#pa-25-verdict-prior-in-reviewer-briefs) |
 
 The status values the brief uses for the unclear and stop cases are part of the contract: they come
 from the consumer's list, or the note tells the author the consumer has no branch for them.
 
 ## Gates
 
-Each approval, confirmation or "wait for my OK" step in the draft gets its exit written beside it: what
-the model does when the user asks for the result directly or says to skip the step
-([PA-16](catalog/core.md#pa-16-gate-without-an-exit)). Phrase the trigger in words a user would type.
+Find each approval, confirmation or "wait for my OK" step in the draft and give it its exit
+([PA-16](catalog/core.md#pa-16-gate-without-an-exit)), with the trigger phrased in words a user would
+type.
 
 ## Delimiting input
 
-Input from outside the author's control (user text, documents, web pages, logs, tool output, another
-model's reply) goes inside a named tag or fence, with its source stated and a sentence saying it is data
-to work on ([PA-15](catalog/core.md#pa-15-untrusted-input-not-delimited-and-marked-as-data)). In a
-prompt built in code, the tag pair sits inside the string literal around the placeholder, because quotes
-are not a delimiter and the lint (E4) reads only the literal.
+Find each place the draft takes input from outside the author's control (user text, documents, web
+pages, logs, tool output, another model's reply) and apply
+[PA-15](catalog/core.md#pa-15-untrusted-input-not-delimited-and-marked-as-data) there. In a prompt
+built in code, the tag pair sits inside the string literal around the placeholder, because quotes are
+not a delimiter and the lint (E4) reads only the literal.
 
 ## Cut test
 

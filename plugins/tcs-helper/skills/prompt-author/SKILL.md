@@ -71,8 +71,8 @@ go to their owners (step 2).
 - Draft a prompt whose kind another skill owns; hand it to that skill (step 2).
 - Run an eval on a different target than the one asked for as a stand-in; run a proxy only when the
   author asks, and label it "proxy".
-- Propose a louder copy of a rule as its fix; give the fix the catalog's corrected form instead (PA-01,
-  PA-03, PA-04).
+- Propose a louder copy of a rule as its fix; take the fix from the cited entry instead
+  ([PA-03](reference/catalog/core.md#pa-03-emphasis-and-authority-language)).
 
 ## Reference Materials
 
