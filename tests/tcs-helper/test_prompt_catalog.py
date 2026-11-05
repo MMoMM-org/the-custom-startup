@@ -11,8 +11,20 @@ restating entries.
 
 Evidence is one grade wherever it appears (entry, index row, profile topic):
 solution.md (ENTITY: CatalogEntry) defines no compound such as "vendor + measured".
+
+The single-source checks (spec 023 T1.4, SDD-ADR-2) scan every git-tracked .md
+under plugins/ and docs/about/ outside catalog/: no active entry's fingerprint is
+copied there, every PA-NN token names an indexed entry that is not retired, no
+file @-imports a catalog file, every documented `claude plugin eval` run keeps
+its report private, and each consumer skill cites at least one entry. Each scan
+is a function returning "file:line ..." findings, run once against the repo and
+once against seeded fixtures, so a scan that silently finds nothing fails.
+Contested entries are exempt from the copy scan; their intentional copies are
+pinned instead (repo ADR-4).
 """
+import bisect
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -516,3 +528,313 @@ def test_evidence_is_a_single_allowed_grade():
         if value and _grade(value) not in EVIDENCE_GRADES
     ]
     assert not problems, '\n'.join(problems)
+
+
+# ---------------------------------------------------------------- single source (T1.4)
+
+SCAN_ROOTS = ('plugins', 'docs/about')
+CATALOG_REL = CATALOG_DIR.relative_to(REPO_ROOT).as_posix() + '/'
+TCS_HELPER_REL = 'plugins/tcs-helper/'
+EVAL_LOOP = REPO_ROOT / 'plugins/tcs-helper/skills/prompt-author/reference/eval-loop.md'
+PA_TOKEN_RE = re.compile(r'\bPA-\d+\b')
+# An @-import starts a line or follows whitespace or an opening bracket, as Claude Code resolves it.
+CATALOG_IMPORT_RE = re.compile(r'(?:^|[\s(\[])@(\S*catalog/[\w.-]+\.md)')
+EVAL_COMMAND = 'claude plugin eval'
+EVAL_REQUIRED_FLAGS = ('--no-publish', '--output-dir')
+
+# Pre-migration fingerprint copies: {(file, PA ID): owning Phase 3 task}. A copy
+# listed here is reported nowhere else; the owning task removes the entry, sees the
+# test fail, and replaces the copy with a citation. T3.8 requires this to be empty.
+# Found at T1.4 (2026-11-05): none. The known copies are paraphrases, which a
+# fingerprint does not detect (SDD-ADR-2 trade-off); Phase 3 removes them by reading.
+PRE_MIGRATION_COPIES = {}
+
+# Documented eval runs that predate the --output-dir rule: {(file, missing flag): owning task}.
+EVAL_COMMAND_EXCEPTIONS = {
+    ('plugins/tcs-helper/skills/skill-author/reference/plugin-evals.md', '--output-dir'): 'T2.4',
+}
+
+# Contested PA-50 (repo ADR-4): the description authority-language rule stays copied
+# verbatim in agent-author. Pinned by content so a rewording revisits the decision.
+PINNED_AUTHORITY_SENTENCES = {
+    'plugins/tcs-helper/skills/agent-author/reference/conventions.md': (
+        '- **Expect under-triggering.** Anthropic explicitly notes Claude tends to skip '
+        'skills/agents when it should invoke them. Use *"slightly pushy"* phrasing: '
+        '`Use PROACTIVELY when…` and `MUST BE USED when…`.'
+    ),
+    'plugins/tcs-helper/skills/agent-author/reference/description-patterns.md': (
+        '### 3. Use imperative phrasing — `Use PROACTIVELY when…` and `MUST BE USED when…`'
+    ),
+}
+
+CONSUMERS = {
+    'skill-author': 'T3.1',
+    'agent-author': 'T3.1',
+    'memory-claude-md-optimize': 'T3.5',
+}
+
+
+def _normalise(text):
+    """Lowercase, strip Markdown emphasis (*, _, `), collapse whitespace."""
+    return ' '.join(re.sub(r'[*_`]', '', text.lower()).split())
+
+
+def _tracked_markdown():
+    """{repo-relative path: text} for git-tracked .md files under SCAN_ROOTS outside catalog/."""
+    listed = subprocess.run(
+        ['git', '-C', str(REPO_ROOT), 'ls-files', '-z', '--', *SCAN_ROOTS],
+        capture_output=True, text=True, check=True,
+    ).stdout.split('\0')
+    return {
+        rel: (REPO_ROOT / rel).read_text(encoding='utf-8')
+        for rel in listed
+        if rel.endswith('.md') and not rel.startswith(CATALOG_REL) and (REPO_ROOT / rel).is_file()
+    }
+
+
+def _index_statuses():
+    """{PA ID: status} from the index rows."""
+    statuses = {}
+    for cells in _index_rows():
+        link = INDEX_LINK_RE.match(cells[0])
+        if link and len(cells) == 7:
+            statuses[link.group(1)] = cells[5]
+    return statuses
+
+
+def _active_fingerprints():
+    """[(PA ID, fingerprint)] of active entries; contested and retired entries are exempt."""
+    return [
+        (e['id'], sentence)
+        for e in _all_entries()
+        if e['fields'].get('Status') == 'active'
+        for sentence in _fingerprints(e)
+    ]
+
+
+def _copy_findings(files, fingerprints):
+    """[(file, line, PA ID, fingerprint)] for each fingerprint found in a file after normalising.
+
+    Lines are normalised one by one and joined with a space, which equals normalising
+    the whole file, so a fingerprint wrapped across lines is still found.
+    """
+    findings = []
+    for rel, text in files.items():
+        starts, parts, line_numbers, offset = [], [], [], 0
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            part = _normalise(line)
+            if not part:
+                continue
+            starts.append(offset)
+            parts.append(part)
+            line_numbers.append(lineno)
+            offset += len(part) + 1
+        joined = ' '.join(parts)
+        for entry_id, sentence in fingerprints:
+            needle = _normalise(sentence)
+            position = joined.find(needle) if needle else -1
+            while position >= 0:
+                lineno = line_numbers[bisect.bisect_right(starts, position) - 1]
+                findings.append((rel, lineno, entry_id, sentence))
+                position = joined.find(needle, position + 1)
+    return findings
+
+
+def _dead_id_findings(files, statuses):
+    """['file:line PA-NN reason'] for each PA token not in the index or retired."""
+    findings = []
+    for rel, text in files.items():
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for token in PA_TOKEN_RE.findall(line):
+                if token not in statuses:
+                    findings.append(f'{rel}:{lineno}: {token} is not in index.md')
+                elif statuses[token] == 'retired':
+                    findings.append(f'{rel}:{lineno}: {token} is retired')
+    return findings
+
+
+def _catalog_import_findings(files):
+    findings = []
+    for rel, text in files.items():
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for target in CATALOG_IMPORT_RE.findall(line):
+                findings.append(f'{rel}:{lineno}: @-imports {target}; cite the entry ID instead')
+    return findings
+
+
+def _eval_commands(text):
+    """[(line, command)] for each documented `claude plugin eval` run.
+
+    An inline-code command ends at its closing backtick; a fenced one continues over
+    lines ending in a backslash. A bare mention (`claude plugin eval` with no
+    arguments) and the `init` subcommand run nothing and are skipped.
+    """
+    lines = text.splitlines()
+    commands = []
+    for index, line in enumerate(lines):
+        position = line.find(EVAL_COMMAND)
+        while position >= 0:
+            inline = position > 0 and line[position - 1] == '`'
+            command, follow = line[position:], index
+            if inline:
+                while '`' not in command and follow + 1 < len(lines):
+                    follow += 1
+                    command += ' ' + lines[follow]
+                command = command.split('`', 1)[0]
+            else:
+                while command.rstrip().endswith('\\') and follow + 1 < len(lines):
+                    follow += 1
+                    command = command.rstrip()[:-1] + ' ' + lines[follow]
+            arguments = command[len(EVAL_COMMAND):].split()
+            if arguments and arguments[0] != 'init':
+                commands.append((index + 1, ' '.join(command.split())))
+            position = line.find(EVAL_COMMAND, position + len(EVAL_COMMAND))
+    return commands
+
+
+def _eval_flag_findings(files):
+    """[(file, line, missing flag, command)] for documented eval runs lacking a required flag."""
+    findings = []
+    for rel, text in files.items():
+        for lineno, command in _eval_commands(text):
+            for flag in EVAL_REQUIRED_FLAGS:
+                if flag not in command.split():
+                    findings.append((rel, lineno, flag, command))
+    return findings
+
+
+def _tcs_helper(files):
+    return {rel: text for rel, text in files.items() if rel.startswith(TCS_HELPER_REL)}
+
+
+# Fixtures: one of each defect the scans must catch, in files the repo scan never sees.
+
+def _seeded_files(tmp_path):
+    """{relative path: text} written under tmp_path, each carrying one seeded defect."""
+    fingerprint = _active_fingerprints()[0]
+    seeds = {
+        'plugins/demo/copy.md': f'# Demo\n\nIntro line.\n**{fingerprint[1].upper()}**\n',
+        'plugins/demo/wrapped.md': 'Lead.\n' + fingerprint[1].replace(' ', '\n', 1) + '\n',
+        'plugins/demo/dead.md': 'See PA-99 for the rule.\n',
+        'plugins/demo/retired.md': 'Line one.\nSee PA-01.\n',
+        'docs/about/import.md': 'Rules:\n@../plugins/tcs-helper/skills/prompt-author/reference/catalog/core.md\n',
+        'plugins/tcs-helper/evals/README.md': (
+            'Run `claude plugin eval plugins/tcs-helper --case x --no-publish`.\n'
+            '```\nclaude plugin eval plugins/tcs-helper --runs 3 \\\n  --output-dir /tmp/x\n```\n'
+            'A `claude plugin eval` case; scaffold with `claude plugin eval init --bare x`.\n'
+        ),
+    }
+    for rel, text in seeds.items():
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+    return {rel: (tmp_path / rel).read_text(encoding='utf-8') for rel in seeds}, fingerprint
+
+
+def test_tracked_markdown_scan_covers_plugins_and_docs_about_but_not_the_catalog():
+    files = _tracked_markdown()
+    assert any(rel.startswith('docs/about/') for rel in files), 'docs/about/ not scanned'
+    assert any(rel.startswith('plugins/tcs-helper/skills/prompt-author/reference/profiles/') for rel in files)
+    assert not any(rel.startswith(CATALOG_REL) for rel in files), 'the catalog must not scan itself'
+
+
+def test_copy_scan_catches_a_seeded_copy_with_file_and_line(tmp_path):
+    files, (entry_id, sentence) = _seeded_files(tmp_path)
+    found = {(rel, line, pa) for rel, line, pa, _ in _copy_findings(files, [(entry_id, sentence)])}
+    assert ('plugins/demo/copy.md', 4, entry_id) in found
+    assert ('plugins/demo/wrapped.md', 2, entry_id) in found
+
+
+def test_id_scan_catches_a_dead_and_a_retired_id_with_file_and_line(tmp_path):
+    files, _ = _seeded_files(tmp_path)
+    statuses = dict(_index_statuses(), **{'PA-01': 'retired'})
+    findings = _dead_id_findings(files, statuses)
+    assert 'plugins/demo/dead.md:1: PA-99 is not in index.md' in findings
+    assert 'plugins/demo/retired.md:2: PA-01 is retired' in findings
+
+
+def test_import_scan_catches_a_seeded_catalog_import_with_file_and_line(tmp_path):
+    files, _ = _seeded_files(tmp_path)
+    findings = _catalog_import_findings(files)
+    assert findings == [
+        'docs/about/import.md:2: @-imports ../plugins/tcs-helper/skills/prompt-author/reference/catalog/core.md; '
+        'cite the entry ID instead'
+    ]
+
+
+def test_eval_scan_catches_runs_without_the_privacy_flags(tmp_path):
+    files, _ = _seeded_files(tmp_path)
+    found = {(rel, line, flag) for rel, line, flag, _ in _eval_flag_findings(files)}
+    assert found == {
+        ('plugins/tcs-helper/evals/README.md', 1, '--output-dir'),
+        ('plugins/tcs-helper/evals/README.md', 3, '--no-publish'),
+    }
+
+
+def test_no_active_fingerprint_is_copied_outside_the_catalog():
+    findings = _copy_findings(_tracked_markdown(), _active_fingerprints())
+    unlisted = [
+        f'{rel}:{line}: copies {pa} fingerprint "{sentence}"; cite {pa} instead'
+        for rel, line, pa, sentence in findings
+        if (rel, pa) not in PRE_MIGRATION_COPIES
+    ]
+    assert not unlisted, '\n'.join(unlisted)
+
+
+def test_pre_migration_allow_list_is_owned_and_still_needed():
+    found = {(rel, pa) for rel, _, pa, _ in _copy_findings(_tracked_markdown(), _active_fingerprints())}
+    problems = [
+        f'{key}: owner {owner!r} is not a Phase 3 task' for key, owner in PRE_MIGRATION_COPIES.items()
+        if not re.fullmatch(r'T3\.[1-7]', owner)
+    ] + [f'{key}: no longer copied; remove it from PRE_MIGRATION_COPIES' for key in PRE_MIGRATION_COPIES
+         if key not in found]
+    assert not problems, '\n'.join(problems)
+
+
+def test_every_pa_token_outside_the_catalog_names_an_indexed_entry_that_is_not_retired():
+    findings = _dead_id_findings(_tracked_markdown(), _index_statuses())
+    assert not findings, '\n'.join(findings)
+
+
+def test_no_file_at_imports_a_catalog_file():
+    listed = subprocess.run(
+        ['git', '-C', str(REPO_ROOT), 'ls-files', '-z', '--', '*.md'],
+        capture_output=True, text=True, check=True,
+    ).stdout.split('\0')
+    files = {rel: (REPO_ROOT / rel).read_text(encoding='utf-8')
+             for rel in listed if rel.endswith('.md') and (REPO_ROOT / rel).is_file()}
+    findings = _catalog_import_findings(files)
+    assert not findings, '\n'.join(findings)
+
+
+def test_documented_plugin_eval_runs_keep_the_report_private():
+    findings = _eval_flag_findings(_tcs_helper(_tracked_markdown()))
+    unlisted = [
+        f'{rel}:{line}: `claude plugin eval` run lacks {flag}: {command}'
+        for rel, line, flag, command in findings
+        if (rel, flag) not in EVAL_COMMAND_EXCEPTIONS
+    ]
+    stale = [key for key in EVAL_COMMAND_EXCEPTIONS if key not in {(r, f) for r, _, f, _ in findings}]
+    assert not unlisted and not stale, '\n'.join(unlisted + [f'{k}: fixed; remove the exception' for k in stale])
+
+
+@pytest.mark.xfail(strict=True, reason='eval-loop.md is written in T2.4; remove this marker there')
+def test_eval_loop_reference_exists():
+    assert EVAL_LOOP.is_file(), f'missing {EVAL_LOOP.relative_to(REPO_ROOT)}'
+
+
+@pytest.mark.parametrize('rel, sentence', sorted(PINNED_AUTHORITY_SENTENCES.items()))
+def test_contested_authority_sentences_stay_verbatim(rel, sentence):
+    lines = (REPO_ROOT / rel).read_text(encoding='utf-8').splitlines()
+    assert sentence in lines, f'{rel}: pinned PA-50 sentence changed or moved out of its line: {sentence!r}'
+
+
+@pytest.mark.parametrize('consumer', [
+    pytest.param(name, marks=pytest.mark.xfail(strict=True, reason=f'{name} cites the catalog from {task}'))
+    for name, task in CONSUMERS.items()
+])
+def test_consumer_cites_a_catalog_entry(consumer):
+    skill_dir = f'plugins/tcs-helper/skills/{consumer}/'
+    files = {rel: text for rel, text in _tracked_markdown().items() if rel.startswith(skill_dir)}
+    assert files, f'no tracked Markdown under {skill_dir}'
+    assert any(PA_TOKEN_RE.search(text) for text in files.values()), f'{consumer} cites no PA entry'
