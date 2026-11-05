@@ -63,7 +63,7 @@ go to their owners (step 2).
 ## Reference Materials
 
 - [reference/catalog/index.md](reference/catalog/index.md) — read first: which catalog files to load for a kind and target
-- [reference/write.md](reference/write.md) — write mode: contract first, agentic entries, gates, delimiting, cut test
+- [reference/write.md](reference/write.md) — write mode: contract first, agentic entries, gates and outside input, cut test
 - [reference/audit.md](reference/audit.md) — audit mode: single, set and pair scopes, finding format, severity, edge cases
 - [reference/port.md](reference/port.md) — port mode: profile application, idiom removal, small-local turn shape, labels
 - [reference/eval-loop.md](reference/eval-loop.md) — eval kits, both runners, consent, judge validation

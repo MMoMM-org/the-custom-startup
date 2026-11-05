@@ -571,6 +571,14 @@ def test_run_removes_the_worktree_by_hand_when_git_worktree_remove_times_out(
     assert not os.path.lexists(str(out / WORKTREE))
 
 
+def test_run_succeeds_when_git_worktree_prune_times_out(ec, repo, fake_claude, tmp_path,
+                                                       monkeypatch):
+    _git_timing_out_on(monkeypatch, ("worktree", "prune"))
+    out = tmp_path / "out"
+    assert ec.main(run_argv(repo, out)) == 0
+    assert not os.path.lexists(str(out / WORKTREE))
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
 def test_run_writes_the_report_files_with_mode_0600(ec, repo, fake_claude, tmp_path):
     out = tmp_path / "out"

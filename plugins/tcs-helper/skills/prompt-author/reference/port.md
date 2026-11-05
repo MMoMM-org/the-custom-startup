@@ -6,8 +6,8 @@ the profile topic or catalog entry behind it.
 
 ## Choose the profile
 
-The intake's target names the profile: `profiles/<target>.md`, with
-[anthropic.md](profiles/anthropic.md) for claude. An open-weights model run locally (Ollama, llama.cpp,
+The intake's target names the profile: claude → [anthropic.md](profiles/anthropic.md);
+openai, google and small-local → the profile of the same name. An open-weights model run locally (Ollama, llama.cpp,
 LM Studio), or any model small enough to run on a laptop, is small-local.
 
 Read the target's profile and [catalog/porting.md](catalog/porting.md), plus the core entries the
