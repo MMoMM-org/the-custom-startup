@@ -100,7 +100,7 @@ A skill or agent is measured with its plugin's eval cases, before and after the 
 
 ```bash
 python3 -I "<dir>/scripts/eval_compare.py" run --plugin plugins/<plugin> --case '<glob>' \
-  --base main --runs 3 --max-cost-usd 4 --out "<scratchpad>/compare-<name>"
+  --base main --runs 3 --max-cost-usd 4 --out "<scratchpad>/compare-<name>" [--allow-tools Write Edit]
 ```
 
 It creates a git worktree of the base ref under `--out`, runs the cases there and on the working tree

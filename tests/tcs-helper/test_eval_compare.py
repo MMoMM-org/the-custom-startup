@@ -343,3 +343,44 @@ def test_run_refuses_an_unknown_base_ref(ec, repo, fake_claude, tmp_path):
 def test_run_requires_a_positive_cost_ceiling(ec, repo, fake_claude, tmp_path, cost):
     assert ec.main(run_argv(repo, tmp_path / "out", cost=cost)) == 1
     assert fake_claude() == []
+
+
+def _allow_tools_after(argv):
+    """The values following --allow-tools in ARGV, up to the next flag; None if absent."""
+    if "--allow-tools" not in argv:
+        return None
+    rest = argv[argv.index("--allow-tools") + 1:]
+    values = []
+    for item in rest:
+        if item.startswith("--"):
+            break
+        values.append(item)
+    return values
+
+
+def test_run_passes_allow_tools_to_both_plugin_eval_runs(ec, repo, fake_claude, tmp_path):
+    argv = run_argv(repo, tmp_path / "out") + ["--allow-tools", "Write", "Edit"]
+    assert ec.main(argv) == 0
+    calls = fake_claude()
+    assert len(calls) == 2
+    for call in calls:
+        assert _allow_tools_after(call["argv"]) == ["Write", "Edit"]
+        assert call["argv"].count("--allow-tools") == 1
+        assert "--no-publish" in call["argv"]
+
+
+def test_run_without_allow_tools_passes_none(ec, repo, fake_claude, tmp_path):
+    assert ec.main(run_argv(repo, tmp_path / "out")) == 0
+    for call in fake_claude():
+        assert "--allow-tools" not in call["argv"]
+
+
+@pytest.mark.parametrize("extra", [["--allow-tools=--publish"], ["--allow-tools=-x"],
+                                   ["--allow-tools", "Write", "--publish"],
+                                   ["--allow-tools", "--publish"]])
+def test_run_refuses_an_allow_tools_value_that_looks_like_a_flag(ec, repo, fake_claude,
+                                                                 tmp_path, extra):
+    argv = run_argv(repo, tmp_path / "out") + extra
+    assert ec.main(argv) == 1
+    assert fake_claude() == []
+    assert len(worktrees(repo)) == 1

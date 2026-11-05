@@ -2,6 +2,7 @@
 """Before/after comparison of a plugin's eval suite (spec 023, C4, SDD-ADR-3).
 
   eval_compare.py run --plugin DIR --case GLOB --base REF --runs N --max-cost-usd X --out DIR
+                     [--allow-tools TOOL...]
   eval_compare.py compare BEFORE.json AFTER.json --out DIR
 
 `claude plugin eval` compares with- against without-plugin only, so a version
@@ -10,8 +11,9 @@ runs the suite there (before) and on the working tree (after), each with half
 the ceiling, removes the worktree (also on failure) and compares. Every run
 gets --ablation none --no-publish --trust-plugin --json and --output-dir under
 DIR (and --threshold 0, so exit 1 means a failed run, not a low score); these are
-fixed here, never passed through. DIR must be outside any git
-work tree unless gitignored.
+fixed here and cannot be overridden. The one flag passed through is --allow-tools
+(for suites that need gated tools), to both runs; a value that starts with "-" is
+refused. DIR must be outside any git work tree unless gitignored.
 
 `compare` reads two `plugin eval --json` files and writes report.md and
 report.json in prompt_eval.py's shape: per-grader pass rates, all-pass, the
@@ -216,14 +218,16 @@ def _run_logged(cmd, cwd, log_path, timeout_s=PLUGIN_EVAL_TIMEOUT_S):
 
 
 def plugin_eval_cmd(plugin, args, out, side):
-    """The fixed plugin eval command; --no-publish and --output-dir are not optional."""
-    return ["claude", "plugin", "eval", str(plugin),
-            "--case", args.case, "--runs", str(args.runs),
-            "--ablation", "none", "--no-publish", "--trust-plugin",
-            "--threshold", "0",
-            "--max-cost-usd", str(round(args.max_cost_usd / 2.0, 6)),
-            "--json", str(out / (side + ".json")),
-            "--output-dir", str(out / side)]
+    """The fixed plugin eval command; --no-publish and --output-dir are not optional.
+    Only --allow-tools is passed through, ahead of the fixed flags."""
+    allow = ["--allow-tools"] + list(args.allow_tools) if args.allow_tools else []
+    return ["claude", "plugin", "eval", str(plugin)] + allow + [
+        "--case", args.case, "--runs", str(args.runs),
+        "--ablation", "none", "--no-publish", "--trust-plugin",
+        "--threshold", "0",
+        "--max-cost-usd", str(round(args.max_cost_usd / 2.0, 6)),
+        "--json", str(out / (side + ".json")),
+        "--output-dir", str(out / side)]
 
 
 def _plugin_eval(plugin, cwd, args, out, side):
@@ -261,6 +265,10 @@ def run(args):
         raise Refused("--max-cost-usd must be positive")
     if args.runs < 1:
         raise Refused("--runs must be at least 1")
+    flagged = [t for t in args.allow_tools or [] if not t or t.startswith("-")]
+    if flagged:
+        raise Refused("--allow-tools takes tool names, not flags: {}".format(
+            ", ".join(repr(t) for t in flagged)))
     problem = out_dir_problem(args.out)
     if problem:
         raise Refused(problem)
@@ -318,6 +326,8 @@ def _parse_args(argv):
     run_p.add_argument("--runs", type=int, default=3)
     run_p.add_argument("--max-cost-usd", type=float, required=True)
     run_p.add_argument("--out", required=True)
+    run_p.add_argument("--allow-tools", nargs="+", metavar="TOOL",
+                       help="passed to both plugin eval runs as --allow-tools")
     cmp_p = sub.add_parser("compare", help="compare two plugin eval --json files")
     cmp_p.add_argument("before")
     cmp_p.add_argument("after")
