@@ -36,12 +36,23 @@ For nested types, define them inline with their own table:
 | fix | string | Yes | Proposed remediation |
 ```
 
-Close the section with where the return appears and one filled-in example of it, as the caller receives it:
+Close the section with where the return appears and one filled-in example of it, as the caller receives it. Where the return appears and how it is serialized follow what the caller parses: JSON for a caller that loads an object, labelled lines for one that matches a prefix, a table for one a human reads. Do not default to JSON. The two examples below are cases of that rule, not templates (PA-11).
+
+A caller that loads a JSON object:
 
 ```markdown
 The final message is one JSON object and nothing else. Example:
 
 {"findings": [{"severity": "Warning", "location": "src/app.py:12", "description": "…", "fix": "…"}], "filesReviewed": ["src/app.py"], "testsRun": "pytest -q: 41 passed", "recommendedNextStep": "…"}
+```
+
+A caller that branches on a verdict line:
+
+```markdown
+The last two lines of the final message are the verdict, in this form and nothing after them. Example:
+
+VERDICT: FAIL
+REASON: src/app.py:12 reads the config before it is validated.
 ```
 
 Use rubric-style markdown lists (`- **Critical**`, `- **Warning**`) instead of typed tables only when the agent's output is purely human-facing and won't be consumed by orchestration.

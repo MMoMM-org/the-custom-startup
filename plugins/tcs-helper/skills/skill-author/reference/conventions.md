@@ -168,7 +168,7 @@ State {
 **In scope:** What this skill acts on.
 **Out of scope:** What is off-limits.
 
-The Interface is the output contract a caller branches on: every field, with its allowed values inlined. Reason: [PA-13](../../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract).
+The Interface is the output contract a caller branches on: every field, with its allowed values inlined, where the return appears, and, for a return the caller parses, one example of it. Reason: [PA-13](../../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract).
 
 No forward declarations — the Workflow headings serve as the function index.
 

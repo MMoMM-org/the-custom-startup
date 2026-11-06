@@ -323,8 +323,10 @@ of the return exactly as the caller receives it. Reason: [PA-13](../../prompt-au
 | filesReviewed | string[] | Yes | Paths examined |
 | recommendedNextStep | string | Yes | Single-sentence next action |
 
-> Example of the final message:
-> `{"status": "DONE", "findings": [{"severity": "Warning", "location": "src/app.py:12", "description": "…", "fix": "…"}], "filesReviewed": ["src/app.py"], "recommendedNextStep": "…"}`
+`Finding`: `severity` (enum: `Critical` \| `Warning` \| `Suggestion`), `location` (`file:line`), `description`, `fix` — all strings, all required.
+
+Where the return appears and its serialization follow what the caller parses; JSON is one case
+among several. For examples in two serializations, see [output-formats.md](output-formats.md#output-section--tcs-convention).
 
 **Free-form prose output is reject-on-sight.** Every agent must define an explicit return contract.
 
