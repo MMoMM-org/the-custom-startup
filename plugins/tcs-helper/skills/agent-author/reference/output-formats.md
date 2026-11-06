@@ -145,6 +145,11 @@ Use rubric-style markdown lists (`- **Critical**`, `- **Warning**`) instead of t
 | | At least one `## Decision: <Topic>` for routing decisions | If agent makes routing choices |
 | | `## Activities` numbered list of concrete actions | Yes |
 | | `## Output` typed table or named rubrics | Yes — never free prose |
+| **Agentic Contract** | `## Mission` names a done criterion (PA-22) | Yes |
+| | Names the action for missing or unclear input (PA-20) | Yes |
+| | States when to stop and report other than on success, and what the report contains (PA-21) | Yes |
+| | Each forbidden action and out-of-scope request has what to do instead (PA-23) | Yes |
+| | Names the files or commit range in scope and the git and write operations allowed (PA-24) | Yes — see conventions.md § Agentic Contract |
 | **Size** | Body ≤ 25 KB | Yes; if larger, externalize to reference/ |
 | **Instruction Purity** | Each non-obvious rule has one reason clause, `(Why: …)` passes (PA-01); no history, spec refs without action, or negative existence claims in body (PA-02) | Yes |
 

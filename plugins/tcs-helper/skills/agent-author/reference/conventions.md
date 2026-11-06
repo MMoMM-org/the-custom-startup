@@ -285,7 +285,9 @@ What the agent reads and internalizes before doing the work. Lists for orientati
 
 ### 4. `## Mission`
 
-Single-sentence purpose statement. The "why" of the agent.
+Single-sentence purpose statement. The "why" of the agent. Name the goal and the done criterion, what is
+true when the job is complete, so the agent can recover toward it when a step fails:
+[PA-22](../../prompt-author/reference/catalog/agentic.md#pa-22-goal-and-constraints-over-a-fixed-script).
 
 ### 5. `## Decision: <Topic>` (one or more)
 
@@ -300,7 +302,9 @@ Use multiple `## Decision: <X>` sections if the agent makes several distinct dec
 
 ### 6. `## Activities`
 
-Numbered list of concrete actions. Be specific — vague activities produce vague results.
+Numbered list of concrete actions. Be specific — vague activities produce vague results. The steps
+serve the Mission's goal; they are not a script of tool calls the agent must follow when a step
+does not fit (PA-22).
 
 > 1. Identify the relevant modules, interfaces, and architectural seams.
 > 2. Check whether responsibilities are cleanly separated.
@@ -323,6 +327,23 @@ Typed table defining the agent's return contract:
 - `## YOLO Mode` — for agents that behave differently when `YOLO=true`
 - `## Evaluation Logic` — for gate-style agents (e.g., `tdd-guardian`)
 - `## Validation Checklist` — for agents that audit other artifacts
+
+---
+
+## Agentic Contract
+
+An agent re-reads its body at every step and cannot ask the dispatcher mid-run, so the body states four
+things besides the Mission's done criterion. Put each where the agent looks when the case arises:
+
+| State | Where | Catalog entry |
+|---|---|---|
+| The action for a missing input, an ambiguous requirement or a file it cannot find, such as returning `NEEDS_CONTEXT` with the open question | a `## Decision` row or an Output status value | [PA-20](../../prompt-author/reference/catalog/agentic.md#pa-20-behaviour-when-information-is-missing-or-unclear) |
+| When to stop and report other than on success (a retry or tool-call limit, the same error twice, a failed check) and what that report contains | `## Constraints` or a `## Decision` row, with the status in `## Output` | [PA-21](../../prompt-author/reference/catalog/agentic.md#pa-21-stopping-conditions) |
+| For each forbidden action and for a request outside the job, what the agent does instead, such as stop and report or return a named status | each `never {}` entry, or a `## Decision` row | [PA-23](../../prompt-author/reference/catalog/agentic.md#pa-23-refusal-with-an-approved-alternative) |
+| The files, directories or commit range in scope, to ignore everything else, and which git and write operations it may run | `## Constraints` `require {}` | [PA-24](../../prompt-author/reference/catalog/agentic.md#pa-24-scope-fence-files-commit-range-read-only-git) |
+
+Give each non-obvious rule one clause naming the failure it prevents:
+[PA-01](../../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules).
 
 ---
 
