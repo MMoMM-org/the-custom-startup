@@ -166,7 +166,7 @@ Use rubric-style markdown lists (`- **Critical**`, `- **Warning**`) instead of t
 | "Output is hard to parse" | Format weakness | Replace free prose with typed table |
 | "Agent overlaps with another" | Duplicate scope | Modernize one, deprecate other, or merge |
 | "Agent reads whole repo" | Context hygiene | Add filtering in Activities + size limits in Output |
-| "Agent assumes parent context" | Channel violation | Move context-passing into the dispatch prompt; remove "we discussed" references |
+| "Agent assumes parent context" | Channel violation | Move context-passing into the dispatch prompt; remove "we discussed" references (PA-08) |
 | "Agent searches for removed files/features" | Documentation smell | Strip historical refs, negative existence claims and rationale beyond one clause (PA-01, PA-02); relocate it to docs/ or ADR |
 | "Agent wastes tokens on non-actionable content" | Instruction impurity | Remove spec refs without action, past-tense narrative, inline comments narrating history (PA-02) |
 
