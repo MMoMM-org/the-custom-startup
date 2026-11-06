@@ -6,7 +6,7 @@ A fully annotated example demonstrating the ICMDA layout used by all TCS team ag
 
 ## File: `~/.claude/agents/code-reviewer.md`
 
-```markdown
+````markdown
 ---
 name: code-reviewer
 description: |
@@ -103,7 +103,7 @@ Catch correctness issues, regression risks, and test gaps before code reaches ma
 | codeQuote | string | Yes | 3–5 lines of relevant code |
 | issue | string | Yes | What is wrong |
 | fix | string | Yes | Specific proposed remediation |
-```
+````
 
 ---
 
