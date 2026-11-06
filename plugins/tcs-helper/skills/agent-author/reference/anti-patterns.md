@@ -111,9 +111,9 @@ Agent's description was written when the feature launched, never updated. Misses
 
 ### Assuming Parent Context Is Visible
 
-Agent system prompt references *"the file we just discussed"* or *"the user's earlier point about X"*. **Subagents do not see parent conversation.** They get only: their system prompt, the Agent-tool task prompt, project `CLAUDE.md`, and their tool catalog.
+Agent system prompt references *"the file we just discussed"* or *"the user's earlier point about X"*.
 
-**Fix:** the Agent-tool dispatch prompt is the **only** parent → child channel. Pass everything explicitly: file paths, decisions, constraints.
+**Fix:** pass everything through the Agent-tool dispatch prompt: file paths, decisions, constraints. Reason: [PA-08](../../prompt-author/reference/catalog/core.md#pa-08-assumed-absent-context).
 
 ### The Repo-Vacuum
 

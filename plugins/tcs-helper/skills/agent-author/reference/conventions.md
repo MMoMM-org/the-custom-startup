@@ -369,7 +369,7 @@ This appears in the terminal status line when the agent activates, letting users
 
 - **`tools: *`** — grants everything; loses parent approvals; every call re-prompts
 - **Mega-role god-agents** — single agent with 50+ KB prompt and ten responsibilities
-- **Assuming parent context is visible** — it isn't; pass everything through the task prompt
+- **Assuming parent context is visible** — pass everything through the task prompt. Reason: [PA-08](../../prompt-author/reference/catalog/core.md#pa-08-assumed-absent-context)
 - **Parallel agents with implicit inter-dependencies** — siblings don't see each other
 - **Headless write-capable agents with no review gate** — run plan mode first, or require human review between read and write phases
 - **Context bloat from verbose subagent returns** — ask for key findings, not exhaustive details
