@@ -276,6 +276,47 @@ Spend, a comparison figure only (subscription): before $7.62, after $7.59.
 
 eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
 
+### Canonical-example follow-up (spec 023 T3.8, F-B1)
+
+agent-author's `examples/canonical-agent.md`, which create step 4 reads as the gold-standard body, did
+not meet the Agentic Contract it teaches. `b95f0505` adds the five elements to it: a done criterion in the
+Mission (PA-22), a `## Decision` row that returns `NEEDS_CONTEXT` for an unresolvable input (PA-20), a
+`require {}` stop on the same error twice with `status` and `blocker` in Output (PA-21), an `instead`
+alternative on every `never {}` item (PA-23), and a `require {}` scope fence naming the change set and the
+read-only git and write operations (PA-24). `tests/tcs-helper/test_agent_author_canonical.py`
+(`4dd500de`, red 5/5 before the edit) keeps the example in step with the conventions.md table.
+
+This is a regression guard, not a fresh signal: "before" is the T3.6 after run (`467a0e41`, 100% all
+pass). "After" is HEAD at `b95f0505`, which also contains `2bd68e65` (F-A: SKILL.md step 6.7 cut to a
+pointer at conventions.md § Agentic Contract), so it measures F-A's cut and this change together. Same
+five `agent-author-agentic-*` cases, `--ablation none --allow-tools Write Edit`, 3 runs per case, `-j 4`,
+Claude Code 2.1.316, Opus 5.5, default judge model.
+
+| Case | Before | After | Delta |
+|---|---|---|---|
+| `agent-author-agentic-dep-upgrade` | 3/3 | 3/3 | 0.00 |
+| `agent-author-agentic-flaky-triage` | 3/3 | 3/3 | 0.00 |
+| `agent-author-agentic-link-check` | 3/3 | 3/3 | 0.00 |
+| `agent-author-agentic-migration-gate` | 3/3 | 3/3 | 0.00 |
+| `agent-author-agentic-release-notes` | 3/3 | 3/3 | 0.00 |
+
+| Criterion | Kind | Before | After |
+|---|---|---|---|
+| `file-written` | deterministic | 100% | 100% |
+| `agentic-contract` | judge | 100% | 100% |
+| all pass | - | 100% | 100% |
+
+eval_compare verdict: **no measurable difference**. Paired difference (after − before) +0.000, 95% CI
+[+0.000, +0.000]; sign test ties 5, p = 1. Errored runs: before 0, after 0; judge errors: before 0, after
+0. The judge is provisional. The revert rule fires only on "a better", so **the change is kept**. The run
+contains `NEEDS_CONTEXT` in 3 of 15 runs, against 8 of 15 in the T3.6 after run (a raw string count over
+result.json). The judge still passed PA-20 in every run, so the agents named another action for unclear
+input; this count is not a grader.
+
+Spend, a comparison figure only (subscription): before $7.59, after $7.78.
+
+eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
+
 ## Instruction-file scoring group (spec 023 T3.5, PA-31, PA-30, PA-01)
 
 Five cases defend the corrected rule: memory-claude-md-optimize gives no score for CLAUDE.md content
@@ -352,6 +393,20 @@ confirming the gain needs fresh cases.
 
 eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus
 before, averaged over the cases.
+
+### Copies-only follow-up (spec 023 T3.8, F-B2)
+
+The T3.5 quality review asked whether a CLAUDE.md made only of README copies could still score
+Currency or Actionability, since an accurate copy has "no stale entries". A sixth case,
+`claude-md-optimize-overview-copies-only` (`7999e324`), tests it: the same fixture repo, a CLAUDE.md of
+architecture, layout, stack and setup copied from the README, and an llm grader that requires Currency
+0 and Actionability 0, or a statement that nothing remains once the copies are set aside.
+
+On the skill at T3.5's second correction (`9660a3a5`) it scored 3/3 before any change: every report
+gave Currency 0/15, Actionability 0/15 and 0/100 in total. The preamble rule from `9660a3a5` already
+reaches both criteria, so the rubric was not changed and no after run was needed. The case stays as a
+regression guard. Spend $1.68; no errored or unjudged runs. Same caveat as T3.5: one fixture repo,
+provisional judge.
 
 ## Cost
 
