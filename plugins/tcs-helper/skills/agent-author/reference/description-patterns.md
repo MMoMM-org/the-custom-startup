@@ -12,7 +12,7 @@ Claude selects skills and subagents by performing **text reasoning over the desc
 
 - Words you write in the description are the only routing signal
 - Phrasing matters more than synonym coverage
-- Imperative phrasing compensates for under-triggering: [PA-50](../../prompt-author/reference/catalog/harness.md#pa-50-description-authority-language-must-be-used)
+- Authority phrasing in descriptions is contested; status and repo decision: [PA-50](../../prompt-author/reference/catalog/harness.md#pa-50-description-authority-language-must-be-used)
 
 ---
 
@@ -46,7 +46,7 @@ description: You are a security expert that helps with various security tasks.
 
 ### 3. Use imperative phrasing — `Use PROACTIVELY when…` and `MUST BE USED when…`
 
-These phrases are explicitly recommended by Anthropic to counteract Claude's under-triggering bias.
+Status and evidence: [PA-50](../../prompt-author/reference/catalog/harness.md#pa-50-description-authority-language-must-be-used)
 
 ### 4. Include 2–3 `<example>` blocks (PRINCIPLES § 4.3)
 
