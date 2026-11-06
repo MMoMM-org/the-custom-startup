@@ -1,5 +1,5 @@
 ---
-description: No-false-positive guard: the same review brief as the review case, with an example of the return; the audit must not raise PA-13 for a missing example.
+description: No-false-positive guard, the same review brief as the review case, with an example of the return; the audit must not raise PA-13 for a missing example.
 tags: [prompt-author, audit, contract, spec-023]
 runs: 3
 max_turns: 30
