@@ -117,7 +117,7 @@ Skills are loaded into context on every invocation. Every token costs money and 
 - Move educational content, examples, and verbose checklists to `reference/` files
 - Reference `--help` instead of documenting all flags inline
 - Cross-reference other skills instead of repeating their content
-- One excellent example beats five mediocre ones
+- When a skill shows its output format by example, give 3-5 diverse examples, each a different case of the format rather than a near-copy, and state each behaviour they show as a rule in the text as well: [PA-11](../../prompt-author/reference/catalog/core.md#pa-11-example-over-anchoring)
 
 ---
 
