@@ -121,7 +121,7 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 - **Status:** active
 
 ## PA-13 Missing output contract
-- **Tell:** a program or orchestrator parses the output, and the prompt names no fields, status values or format.
+- **Tell:** a program or orchestrator parses the output, and the prompt names no fields, status values or format, or, for a return the caller parses, shows no example or schema of it.
 - **Fails because:** the model chooses its own shape, and the caller's parsing fails on every run.
 - **Fix:** state the output contract the caller branches on: each field, its allowed values, where it appears, and, for a return the caller parses, one example or schema of the return.
 - **Applies to:** brief, agent, api-system, code · any
