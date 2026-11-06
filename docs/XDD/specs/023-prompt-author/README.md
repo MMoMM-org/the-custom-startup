@@ -74,6 +74,7 @@
 | 2026-11-06 | T3.2 group cap raised to $17 (before run $8.19, $0.19 over its $8 cap: in-flight runs finished after the ceiling); after run same 5 cases × 3 runs, --max-cost-usd 8.5 | User choice. Before: audit-fix 0.50, history-brief 0.67, reference 0.83 (run 2 unjudged, ceiling), body 1.00, discipline 1.00: the current strip-rationale rule rarely strips reasons Opus is given; the signal is history kept (PA-02). Ceiling cases guard against regression only |
 | 2026-11-06 | T3.2 result: PA-01/PA-02 correction kept for skill-author and agent-author. All-pass 60% → 87%, paired diff +0.267, CI [0, +0.533], verdict no measurable difference; spend $16.90 of $17 | Revert rule fires only on "a better". Signal from audit-fix and history-brief; body, discipline, reference guard against regression |
 | 2026-11-06 | T3.2b added: eval_compare counts a grader skipped by the cost ceiling as a failure | Symmetric in T3.2, but a one-sided skip could fake "a better" and force a wrong revert in T3.3-T3.6. Every later run also sets --max-cost-usd ~5% under its share, because in-flight runs overshoot by 2-3% |
+| 2026-11-06 | Dollar caps dropped as a budget for Claude eval runs; cost is recorded as a comparison figure only. `--max-cost-usd` is set above the expected cost so no paid grader is skipped | User: runs go through the Max20 subscription, no real cost. T3.3 before ($8.76 at a $6.80 ceiling) left verify-done fully unjudged; it is re-run before the after run |
 
 ## Context
 

@@ -82,3 +82,6 @@
 
 <!-- 2026-10-29 -->
 - **`_write_pr_state_cache` replaces a branch's entry, never merges** — a caller that omits a field silently drops it. → Read the existing entry and pass every field back in.
+
+<!-- 2026-11-06 -->
+- **`plugin eval --max-cost-usd` below the run's cost skips the paid graders** — in-flight runs finish, their llm graders record "skipped: cost ceiling" (unjudged), and `-j 4` overshoots by up to 30%. → Set the ceiling above the expected cost; cap spend with `--runs`/cases instead.
