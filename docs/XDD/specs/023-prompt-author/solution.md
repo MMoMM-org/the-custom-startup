@@ -584,6 +584,10 @@ As built (T2.3): statistics, report and label code live in prompt_eval_stats.py,
   OUT/base-worktree, is removed in a finally right after the before run, and an existing one is refused with the cleanup command;
   the smaller-version recommendation does not apply to plugin evals; compare also guards --out; --allow-tools is passed through
   to plugin eval for suites that need gated tools (added in the T2.3 review round).
+
+As built (T3.2b): an llm grader the cost ceiling skipped (run skippedPaidGraders true, explanation "skipped: cost ceiling")
+  is unjudged, not failed: out of rates, all-pass and pairing, listed under unjudged_runs. A skippedPaidGraders run with no
+  matching llm grader (marker drift) is warned about on stderr and listed under ceiling_skip_unmatched.
 ```
 
 #### Application Data Models
@@ -840,6 +844,7 @@ sequenceDiagram
 - **Cost ceiling reached.** C4 exits 2 with a partial report marked partial.
 - **Judge equals target or author**, or the judge is not reachable. C4 refuses (exit 1) and names the configured judge and its source. It never falls back silently to another judge. The report marks judge criteria "not_run" when only deterministic graders could run.
 - **Case sets differ between two plugin-eval results.** eval_compare exits 1 and lists the mismatch, because a comparison over different cases is not paired.
+- **A paid grader skipped by the plugin-eval cost ceiling.** plugin eval stores it as a failure; eval_compare treats it as unjudged when the run has `skippedPaidGraders` true and the llm grader's explanation is exactly `skipped: cost ceiling`. The run is excluded from rates, all-pass and pairing and listed under `unjudged_runs`, so a skip on one side cannot fake a winner. A run with the skip flag but no matching grader (a renamed marker) is warned about on stderr and listed under `ceiling_skip_unmatched`.
 - **A cross-skill link fails to resolve after install.** C5 checks links in the repo. The installed layout is verified once before release (Implementation Gotchas).
 
 ### Complex Logic (if applicable)
