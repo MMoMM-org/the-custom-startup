@@ -82,6 +82,7 @@ CONSUMERS = {
     'agent-author': 'T3.1',
     'memory-claude-md-optimize': 'T3.5',
 }
+MIGRATED_CONSUMERS = {'skill-author', 'agent-author'}
 
 
 # ---------------------------------------------------------------- loaders
@@ -465,7 +466,8 @@ def test_every_rule_bearing_authority_sentence_is_pinned():
 
 
 @pytest.mark.parametrize('consumer', [
-    pytest.param(name, marks=pytest.mark.xfail(strict=True, reason=f'{name} cites the catalog from {task}'))
+    pytest.param(name, marks=() if name in MIGRATED_CONSUMERS else
+                 pytest.mark.xfail(strict=True, reason=f'{name} cites the catalog from {task}'))
     for name, task in CONSUMERS.items()
 ])
 def test_consumer_cites_a_catalog_entry(consumer):

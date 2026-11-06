@@ -135,9 +135,9 @@ Claude's auto-delegation router reads the `description` field via **text reasoni
 
 ### Hard Rules (PRINCIPLES § 2.1)
 
-- **Front-load the trigger scenario in the first ~50 characters** — the `/skills` UI truncates at 250 chars, the field hard-caps at 1,024.
-- **Third-person, scenario-anchored.** *"Reviews changes for security and compliance issues. Use when the task mentions auth, permissions, or injection."* — not *"Helps with security."*
+- **Front-load the trigger scenario in the first ~50 characters, in the third person:** [PA-52](../../prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person). The `/skills` UI truncates at 250 chars, the field hard-caps at 1,024.
 - **Expect under-triggering.** Anthropic explicitly notes Claude tends to skip skills/agents when it should invoke them. Use *"slightly pushy"* phrasing: `Use PROACTIVELY when…` and `MUST BE USED when…`.
+  Status and evidence: [PA-50](../../prompt-author/reference/catalog/harness.md#pa-50-description-authority-language-must-be-used).
 - **Include 2–3 `<example>` blocks** showing concrete invocation scenarios — improves parent-side delegation accuracy.
 
 See `description-patterns.md` for templates and good/bad examples.

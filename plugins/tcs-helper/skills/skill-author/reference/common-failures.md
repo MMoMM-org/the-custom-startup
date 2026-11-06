@@ -44,7 +44,7 @@ match (target) {
 
 ## Failure: Description Summarizes Workflow
 
-**Symptom:** Agent follows description shortcut, skips skill body
+**Symptom and fix:** [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow)
 
 **Bad:**
 ```yaml
@@ -154,6 +154,6 @@ An `AskUserQuestion` option label carries a parenthetical for the user — `Befo
 | Audit without reading file | Miss actual issues | Always read the skill |
 | Fix without testing | May not address root cause | Verify fix works |
 | Declarative-only workflow | Agents don't execute | Use imperative ### step headings |
-| Description with workflow | Agents skip body | Triggers only in description |
+| Description with workflow | [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow) | Triggers only in description |
 | `type` aliases for enums | Extra indirection | Inline values into interface fields |
 | Mirrored Always/Never rules | Wastes tokens | Each rule once, most natural framing |

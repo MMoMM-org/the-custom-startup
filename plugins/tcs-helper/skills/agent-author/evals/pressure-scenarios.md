@@ -41,6 +41,10 @@ This is the **PRINCIPLES § 2.7 evaluation-first** pattern: capture failure mode
 
 **PASS** — subagent rejected all three rationalizations explicitly, kept full workflow, AskUserQuestion'd to disambiguate scope. Identified weakness: skill doesn't have explicit "user pressure response" canned phrasings.
 
+### Hand-walk after spec 023 T3.1 (2026-11-06, no model call)
+
+**PASS** — the description rule the scenario exercises (triggers + `<example>` blocks, `Use PROACTIVELY`/`MUST BE USED`) is unchanged in SKILL.md and in the description-patterns templates and checklist; only the restated reasons now point to PA-50–PA-52. The Red Flags rejection of "formal stuff" does not depend on the moved text.
+
 ---
 
 ## Scenario 2 — Wrong Mechanism
@@ -71,6 +75,10 @@ This is the **PRINCIPLES § 2.7 evaluation-first** pattern: capture failure mode
 ### Baseline verdict (2026-04-25)
 
 **PASS** — subagent ran Mechanism Check first, identified slash-command framing via Q4, halted workflow, offered three explicit options with hand-off recommendation.
+
+### Hand-walk after spec 023 T3.1 (2026-11-06, no model call)
+
+**PASS** — no description text on this path; Mechanism Check, decision-tree.md and the hand-off are untouched by T3.1.
 
 ---
 
@@ -104,6 +112,10 @@ This is the **PRINCIPLES § 2.7 evaluation-first** pattern: capture failure mode
 ### Baseline verdict (2026-04-25)
 
 **PASS** — subagent rejected yes/no framing with reference to Output contract, refused to fabricate against missing file, planned Glob+AskUserQuestion correctly.
+
+### Hand-walk after spec 023 T3.1 (2026-11-06, no model call)
+
+**PASS** — the audit rubric rows in output-formats.md and the reject checklist in anti-patterns.md still list every description check; T3.1 moved only their reasons to PA-51/PA-52.
 
 ---
 

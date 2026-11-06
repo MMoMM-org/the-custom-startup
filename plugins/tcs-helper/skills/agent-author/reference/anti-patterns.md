@@ -97,9 +97,7 @@ Agent designed for back-and-forth dialogue, brainstorming, *"let's iterate toget
 
 `description: Reads files, analyzes diff, runs tests, writes report.`
 
-**Why it fails:** Claude may follow the description as a shortcut and skip reading the system prompt body. **Documented failure mode** — caused real production behavior breaks (one review instead of two when description summarized "two-stage review").
-
-**Fix:** description = triggering conditions only. Workflow stays in body.
+**Why it fails and fix:** [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow).
 
 ### Stale Description
 

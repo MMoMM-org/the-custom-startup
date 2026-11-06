@@ -63,11 +63,9 @@ For skills that need to delegate to a domain specialist, use the `find-agents.sh
 
 ### Description Guidelines
 
-- Explain WHAT the skill does AND WHEN to use it
+- Open with what the skill does and when to use it, in the third person: [PA-52](../../prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person)
 - Include keywords users would naturally say
-- Keep it focused on triggers, not implementation details
-- Write in third person (injected into system prompt)
-- NEVER describe the workflow in the description — agents will follow it as a shortcut and skip the body
+- State triggers, not the workflow: [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow)
 
 ### String Substitutions
 
@@ -87,12 +85,10 @@ Skills are discovered by Claude reading their description. The description field
 
 ### Description: When to Use, NOT What the Skill Does
 
-**Critical rule:** Description must describe triggering conditions only. Never summarize the skill's workflow.
-
-**Why this matters:** When a description summarizes the workflow, Claude may follow the description as a shortcut and skip reading the full skill body. A description saying "dispatches subagent per task with code review between tasks" caused Claude to do ONE review even though the skill's flowchart showed TWO. Changing the description to just triggering conditions fixed the behavior.
+Rule and reason: [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow).
 
 ```yaml
-# ❌ BAD: summarizes workflow — Claude skips the body
+# ❌ BAD: summarizes workflow
 description: Use when creating skills — search for duplicates, write SKILL.md, test with subagents
 
 # ✅ GOOD: triggering conditions only

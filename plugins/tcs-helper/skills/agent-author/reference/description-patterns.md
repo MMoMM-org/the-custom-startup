@@ -12,9 +12,7 @@ Claude selects skills and subagents by performing **text reasoning over the desc
 
 - Words you write in the description are the only routing signal
 - Phrasing matters more than synonym coverage
-- "Slightly pushy" imperatives outperform neutral descriptions
-
-Anthropic explicitly notes that Claude tends to **under-trigger** — it errs toward not invoking when it should. Compensate with imperative phrasing.
+- Imperative phrasing compensates for under-triggering: [PA-50](../../prompt-author/reference/catalog/harness.md#pa-50-description-authority-language-must-be-used)
 
 ---
 
@@ -22,7 +20,7 @@ Anthropic explicitly notes that Claude tends to **under-trigger** — it errs to
 
 ### 1. Front-load the trigger in the first ~50 characters
 
-The `/skills` UI truncates at 250 chars. The field hard-caps at 1,024. Combined `description + when_to_use` caps at 1,536. Anything past those limits is invisible to part of the routing path.
+Why: [PA-52](../../prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person). Limits: the `/skills` UI truncates at 250 chars, the field hard-caps at 1,024, and combined `description + when_to_use` caps at 1,536.
 
 ```yaml
 # ✅ GOOD — trigger scenario in first 50 chars
@@ -35,6 +33,8 @@ description: |
 ```
 
 ### 2. Third-person, scenario-anchored
+
+Why: [PA-52](../../prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person).
 
 ```yaml
 # ✅ GOOD — third-person, scenario
@@ -164,7 +164,7 @@ Problems: maximally overlapping with main agent, no trigger phrases.
 ```yaml
 description: Reads files, analyzes diff, runs tests, writes report.
 ```
-Problems: describes the workflow, not when to use the agent. **Claude may follow the description as a shortcut and skip reading the system prompt body** — confirmed failure mode in real use.
+Problems: describes the workflow, not when to use the agent ([PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow)).
 
 ---
 
@@ -203,7 +203,7 @@ Before shipping a description:
 - [ ] Contains `Use PROACTIVELY` OR `MUST BE USED`
 - [ ] Has at least 2 concrete trigger phrases (verbatim user-language)
 - [ ] Third-person, scenario-anchored
-- [ ] Does NOT summarize the workflow (Claude will skip the body)
+- [ ] Does NOT summarize the workflow ([PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow))
 - [ ] Distinguishable from main-agent scope (not "for all X")
 - [ ] For high-value agents: includes 2–3 `<example>` blocks
 - [ ] Total length ≤ 1,024 chars (hard cap); UI-safe portion ≤ 250 chars
