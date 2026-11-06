@@ -127,6 +127,29 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   4. Validate: `pytest -q tests/test_docs_links.py tests/test_claude_md_imports.py tests/tcs-helper/test_prompt_single_source.py` passes.
   5. Success: The docs no longer contradict the catalog `[ref: SDD/Implementation Boundaries "Can Modify"]`
 
+- [ ] **T3.9 Citation gaps and small fixes from T3.8** `[activity: skill-authoring]` `[component: C6]` `[ref: PRD/F7 AC1; SDD/C6]`
+
+  1. Prime: the T3.8 inventory findings R1-R4 and the drift check's impl items (README Decisions Log 2026-11-06 "Phase 3 drift").
+  2. Test (red first): a scratch grep check that fails at HEAD. It requires: a PA-51 link at docs/about/skill-and-agent-design.md:218; a PA-52 link at docs/about/principles.md:41-42; PA IDs on agent-author output-formats.md:134 and :138; a PA-17 link at skill-author conventions.md:354; agent-author SKILL.md "Run step 8" disambiguated; no "no exceptions" in agent-author SKILL.md. Separately, the dead strict-xfail branch and the stale docstring in test_prompt_single_source.py are removed while the suite stays green.
+  3. Implement: citations (operational line plus PA link), the reference fix, the cleanup. No rule change.
+  4. Validate: full tcs-helper tests are green; prompt_lint reports 0 errors on the changed files.
+  5. Success: no (A) location in scope restates a rule without its PA link `[ref: PRD/F7 AC1]`
+
+- [ ] **T3.10 Redundant-restatement group (PA-05)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]` — after T3.9; parallel with T3.11
+  - research-internal.md (A) row 12 (skill-author conventions ~:177, :314-327; common-failures :159). Same five beats as T3.2-T3.6: 5 cases, before, citation, after, eval_compare, revert on "a better".
+
+- [ ] **T3.11 Assumed-absent-context group (PA-08)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]` — after T3.9; parallel with T3.10
+  - (A) row 18 (agent-author anti-patterns ~:112-116, conventions ~:372; docs/about/principles.md:80-81). Same five beats.
+
+- [ ] **T3.12 Output-contract group (PA-13)** `[activity: skill-authoring]` `[component: C6]` — after T3.10 and T3.11 (shares conventions files)
+  - (A) row 14 (skill-author conventions ~:171; agent-author conventions ~:313-323; output-formats :3). Same five beats.
+
+- [ ] **T3.13 Long-instruction-list group (PA-10)** `[activity: skill-authoring]` `[component: C6]` — after T3.12
+  - The copies the T3.8 inventory names for PA-10. Locate them first; if none restates PA-10, record that and close without an eval. Same five beats otherwise.
+
+- [ ] **T3.14 Spec update from the Phase 3 drift check** `[activity: technical-writing]` `[ref: SDD-ADR-4; SDD/Directory Map; PRD/F7 AC1]` — after T3.13
+  - Case families and Directory Map (including test_agent_author_canonical.py and T3.2b tests); AC1 becomes "cite, with at most a one-line operational rule; reasons and evidence stay in the catalog"; Can Modify widened to the three skills' directories plus the docs touched; SDD-ADR-4 gains: the before run on the old rule is the proving signal, an iterated correction needs held-out cases to claim a gain, merged before-sides are allowed when a case was unjudged, and cost is a comparison figure; the EvalReport fields `unjudged_runs` and `ceiling_skip_unmatched` and the verdict "insufficient cases"; the T3.2 figures in the Decisions Log corrected to 64% → 93%; plan task text for T3.2-T3.6 updated to the case families.
+
 - [ ] **T3.8 Phase Validation** `[activity: validate]`
 
   - All per-consumer strict xfails are removed and pass. The spec-compliance reviewer confirms every research-internal.md (A) copy location now cites instead of restating.
