@@ -276,6 +276,83 @@ Spend, a comparison figure only (subscription): before $7.62, after $7.59.
 
 eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
 
+## Instruction-file scoring group (spec 023 T3.5, PA-31, PA-30, PA-01)
+
+Five cases defend the corrected rule: memory-claude-md-optimize gives no score for CLAUDE.md content
+that the README or code already provides, and it proposes removing that content. Each case has the
+model write a small fixture repo (`tally`: README.md, pyproject.toml, three modules and a test) whose
+CLAUDE.md repeats one README section next to a commit rule the README lacks. The repeated section is
+the architecture overview, the directory tree, the tech-stack list or the setup steps. The `mix`
+case repeats overview, stack and setup, and adds one rule no file shows (the `ops-reports` nightly
+job reads `tally.db`). Each case then runs `/tcs-helper:memory-claude-md-optimize --scope repo`, writes
+the proposal and stops before apply. Graders read `claude-md-optimization/OPTIMIZATION-REPORT.md`:
+`file-written` (file_exists), `duplicate-not-rewarded` (llm: no criterion score credits the copy, and
+the report proposes removing it rather than keeping or migrating it) and, in `mix` only,
+`gotcha-kept` (llm: the `ops-reports` rule is kept or migrated, not deleted).
+
+"Before" is the skill at `98a5cac2`. Its rubric rewarded a "clear architectural overview" and its
+low-score guidance said to add one. The correction came in two commits, measured as after1 and
+after2:
+
+- `ded717a3` cites PA-31, PA-30 and PA-01. The rubric reads the README and code first and credits
+  only what they lack. Architecture Clarity rewards constraints and design reasons the README lacks,
+  with the failure each prevents. SKILL.md marks README duplicates for removal, not migration.
+- `9660a3a5`: Currency and Actionability are also scored only on what remains once the duplicates
+  are set aside. The after1 reports showed the cause: they removed the copy and gave it 0
+  Architecture Clarity, but Currency credited its accuracy ("every path matches the tree").
+
+All runs used `--ablation none --allow-tools Write Edit`, 3 runs per case, `-j 4`, Opus 5.5, the
+default judge model.
+
+Rates are each case's all-pass rate over runs that neither errored nor went unjudged:
+
+| Case | Before | After1 | After2 |
+|---|---|---|---|
+| `claude-md-optimize-overview-architecture` | 0/3 | 2/3 | 3/3 |
+| `claude-md-optimize-overview-tree` | 0/3 | 0/3 | 3/3 |
+| `claude-md-optimize-overview-stack` | 0/3 | 0/3 | 3/3 |
+| `claude-md-optimize-overview-setup` | 0/3 | 0/3 | 3/3 |
+| `claude-md-optimize-overview-mix` | 0/3 | 0/3 | 3/3 |
+
+- **Before:** every report already removed the copy, so the whole failure was the score. The copied
+  overview earned 13/20 Architecture Clarity, and a file listing earned 5/20. The issues list said
+  "add a brief overview" even when the README had one.
+- **After1:** the copy earned 0 Architecture Clarity in every report. 13 of 15 runs still failed,
+  because Currency or Actionability credited the copy.
+- **mix:** `gotcha-kept` passed 3/3 in every arm. Every report kept the `ops-reports` rule in
+  CLAUDE.md.
+
+| Criterion | Kind | Before | After1 | After2 |
+|---|---|---|---|---|
+| `file-written` | deterministic | 100% | 100% | 100% |
+| `duplicate-not-rewarded` | judge | 0% | 13% | 100% |
+| `gotcha-kept` | judge | 100% | 100% | 100% |
+| all pass | - | 0% | 13% | 100% |
+
+eval_compare, before vs after1: **no measurable difference**. Paired difference +0.133, 95% CI
+[+0.000, +0.400]; sign test 1/0/4 ties, p = 1.
+
+eval_compare, before vs after2: **b better** (after better). Paired difference (b − a) +1.000, 95% CI
+[+1.000, +1.000] over the 5 cases; sign test b better 5, a better 0, ties 0, p = 0.0625. No errored
+runs, no judge errors and no unjudged runs in any arm.
+
+The revert rule fires only on "a better", so **the correction is kept**. The memory-claude-md-optimize
+strict xfail in `test_prompt_single_source.py` is gone: the skill is in `MIGRATED_CONSUMERS`.
+
+Spend, a comparison figure only (subscription): before $10.76, after1 $8.83, after2 $8.74.
+
+How far this result holds: after1 is the only first-pass result, the only one not tuned on these
+cases. It showed no measurable difference (+0.133, CI [0.000, +0.400], sign test 1/0/4) and no
+regression. The second commit (`9660a3a5`, Currency and Actionability score only what is not a copy)
+was designed from after1's failures on the same 5 cases and measured on them again, so after2's
++1.000, CI [+1.000, +1.000] is in-sample. The CI is degenerate because all five cases flipped, and at
+n = 5 the sign test cannot go below p = 0.0625. All five cases share one fixture repo, there was no
+held-out case, and the judge is provisional. The change is kept because no regression was found;
+confirming the gain needs fresh cases.
+
+eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus
+before, averaged over the cases.
+
 ## Cost
 
 The prompt-author suite at 3 runs per arm costs about $7.40 (with plugin about $2.05 per round of four

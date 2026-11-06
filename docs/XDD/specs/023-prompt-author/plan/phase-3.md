@@ -91,7 +91,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   4. Validate: Run after, compare, keep or revert, and record.
   5. Success: The correction is measured `[ref: PRD/F7 AC2]`
 
-- [ ] **T3.5 memory-claude-md-optimize scoring (PA-30, PA-31)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]`
+- [x] **T3.5 memory-claude-md-optimize scoring (PA-30, PA-31)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]`
 
   1. Prime: Read scoring-rubric.md:35-49 and :72-86 `[ref: research-internal.md (A) rubric rows; (F)7]` and the ETH findings `[ref: research-external.md §4]`.
   2. Test: Create `plugins/tcs-helper/evals/claude-md-optimize-no-overview-reward/`:
@@ -132,6 +132,6 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   - All per-consumer strict xfails are removed and pass. The spec-compliance reviewer confirms every research-internal.md (A) copy location now cites instead of restating.
   - `pytest -q -rs` and `prompt_lint.py --repo` pass.
   - evals/README.md has before/after scores, kept/reverted and cost for T3.2–T3.6.
-  - Review follow-ups carried from T3.1-T3.3: testing-with-subagents.md:55,69,93,118 ("IMPORTANT: This is a real scenario" in test-subagent prompts), :146-147 ("Violating letter IS violating spirit", "Delete means delete"); persuasion-principles.md Authority still under "Principles That Work for Skills"; T3.1 consumers where the operational rule sits only behind the PA link (agent-author anti-patterns.md:100, skill-author conventions.md:88, common-failures.md:47). Decide per item: fix (measured if it is a rule change) or record as out of scope.
+  - Review follow-ups carried from T3.1-T3.3: testing-with-subagents.md:55,69,93,118 ("IMPORTANT: This is a real scenario" in test-subagent prompts), :146-147 ("Violating letter IS violating spirit", "Delete means delete"); persuasion-principles.md Authority still under "Principles That Work for Skills"; T3.1 consumers where the operational rule sits only behind the PA link (agent-author anti-patterns.md:100, skill-author conventions.md:88, common-failures.md:47). Also from T3.5/T3.6: agent-author examples/canonical-agent.md does not meet the new agentic contract (no done criterion, NEEDS_CONTEXT, stop condition, alternatives, scope fence); memory-claude-md-optimize scoring-rubric.md Currency/Actionability need "nothing left after copies → 0" and Actionability an echo of the remainder rule. Decide per item: fix (measured if it is a rule change) or record as out of scope.
   - Any reverted group is recorded in its catalog entry ("reverted for <skill>: <reason>") and in the spec README Decisions Log.
   - Success: every shared rule is cited, not restated `[ref: PRD/F7 AC1; PRD/Success Metrics Business Impact]`
