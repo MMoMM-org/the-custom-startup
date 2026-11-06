@@ -50,7 +50,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
 - [x] **T3.2 Rationale rule group (PA-01, PA-02)** `[activity: skill-authoring]` `[component: C6]`
 
   1. Prime: Read the "strip rationale" copies `[ref: research-internal.md (A) row 1; (F)1-2]` and the discipline-skill exception at skill-author conventions:356-366.
-  2. Test: Create `plugins/tcs-helper/evals/skill-author-rationale-clause/`:
+  2. Test: Create the case family `plugins/tcs-helper/evals/skill-author-rationale-*/` and `agent-author-rationale-*/` (5 cases):
      - Task: write a discipline skill with three non-obvious rules.
      - Graders: an llm grader checks that each non-obvious rule carries a one-clause reason; a regex grader requires no dates, commit SHAs or "previously".
 
@@ -70,7 +70,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
 - [x] **T3.3 Authority-language rule group (PA-03)** `[activity: skill-authoring]` `[component: C6]`
 
   1. Prime: Read skill-author conventions:301-318 and persuasion-principles.md `[ref: research-internal.md (F)3-4]`.
-  2. Test: Create `plugins/tcs-helper/evals/skill-author-no-authority-language/`:
+  2. Test: Create the case family `plugins/tcs-helper/evals/skill-author-authority-*/` (5 cases):
      - Task: write a discipline skill.
      - Graders: a regex grader requires that "YOU MUST" and "No exceptions" do not appear; an llm grader requires that the Red Flags / excuse→reality table is present.
 
@@ -82,7 +82,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
 - [x] **T3.4 Examples rule group (PA-11)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]` — T3.4–T3.6 run in parallel, but their edits to `plugins/tcs-helper/evals/README.md` are merged one at a time
 
   1. Prime: Read skill-author conventions:124 `[ref: research-internal.md (F)6]`.
-  2. Test: Create `plugins/tcs-helper/evals/skill-author-diverse-examples/`:
+  2. Test: Create the case family `plugins/tcs-helper/evals/skill-author-examples-*/` (5 cases):
      - Task: write a skill whose output format needs examples.
      - Grader: an llm grader requires 3–5 examples that differ in kind, with each shown behaviour also stated as a rule.
 
@@ -94,7 +94,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
 - [x] **T3.5 memory-claude-md-optimize scoring (PA-30, PA-31)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]`
 
   1. Prime: Read scoring-rubric.md:35-49 and :72-86 `[ref: research-internal.md (A) rubric rows; (F)7]` and the ETH findings `[ref: research-external.md §4]`.
-  2. Test: Create `plugins/tcs-helper/evals/claude-md-optimize-no-overview-reward/`:
+  2. Test: Create the case family `plugins/tcs-helper/evals/claude-md-optimize-overview-*/` (5 cases; T3.8 added `-copies-only`):
      - Fixture: a repo whose README already gives the architecture overview, and a CLAUDE.md that repeats it.
      - Grader: an llm grader requires that the score does not reward the overview and that the optimizer proposes removing it.
 
@@ -106,7 +106,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
 - [x] **T3.6 agent-author agentic entries (PA-20–PA-24)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]`
 
   1. Prime: Read the agent-author conventions and output-formats, and the Gravity table `[ref: research-external.md § Agent prompts vs one-shot prompts]`.
-  2. Test: Create `plugins/tcs-helper/evals/agent-author-agentic-contract/`:
+  2. Test: Create the case family `plugins/tcs-helper/evals/agent-author-agentic-*/` (5 cases):
      - Task: write an agent for a multi-step job with a parsed return.
      - Grader: an llm grader requires stated behaviour when unclear, stop conditions, the goal rather than a fixed script, a refusal with an alternative, and a scope fence (PA-24).
 

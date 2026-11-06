@@ -230,7 +230,7 @@ Consequence of not solving: the same defects keep being written. The user's assu
 #### Feature 7: Migration of the existing authoring skills to the catalog, with measured corrections
 - **User Story:** As a catalog maintainer, I want skill-author, agent-author and memory-claude-md-optimize to use the shared catalog with the corrected rules, and each correction measured, so that the corrections improve the skills and a regression is caught.
 - **Acceptance Criteria:**
-  - [ ] Given the three skills, When the migration is complete, Then each refers to the catalog for every rule it shares, and no shared rule is restated in them
+  - [ ] Given the three skills, When the migration is complete, Then each cites the catalog for every rule it shares, with at most a one-line operational rule; reasons and evidence stay in the catalog *(amended 2026-11-07, Phase 3 drift check: a bare PA link left the operational rule out of reach on paths that never open the catalog)*
   - [ ] Given each skill, When a corrected rule changes its guidance, Then the skill's eval runs before and after the change, and a drop beyond noise reverts the correction for that skill and records why
   - [ ] Given memory-claude-md-optimize's scoring, When it is migrated, Then it no longer rewards a generic architecture overview, only content the README and code do not already give
   - [ ] Given agent-author, When it is migrated, Then it gains the agentic entries (stopping conditions, behaviour when unclear, goal over script, refusal with alternative) through the catalog

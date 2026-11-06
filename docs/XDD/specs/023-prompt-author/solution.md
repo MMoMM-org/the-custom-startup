@@ -179,10 +179,11 @@ version: "1.0"
   - The `plugin eval` suites in tcs-workflow.
   - The behaviour of skill-author/agent-author on everything the catalog does not correct.
 - **Can Modify:**
-  - skill-author, agent-author, memory-claude-md-optimize reference files (rule copies → catalog references; corrected rules).
+  - The skill-author, agent-author and memory-claude-md-optimize directories (`plugins/tcs-helper/skills/skill-author/`, `skills/agent-author/`, `skills/memory-claude-md-optimize/`): SKILL.md, reference files and examples (rule copies → catalog citations; corrected rules). *(widened 2026-11-07, Phase 3 drift check: T3.6 and T3.8 changed SKILL.md and examples/canonical-agent.md, not only reference files)*
+  - The prompt-author catalog (`plugins/tcs-helper/skills/prompt-author/reference/catalog/`) where an entry's Fix or Tell is amended, only as a measured change: the PA-13 amendment in T3.12, measured by the `prompt-author-audit-contract-*` cases.
   - authoring_reminder.py.
-  - docs/about/principles.md (stale eval claim l.146, contested description note l.43).
-  - The CLAUDE.md local-testing section (add the prompt-author dependency).
+  - docs/about/principles.md (stale eval claim l.146, contested description note l.43, PA citations) and docs/about/skill-and-agent-design.md (PA-51 citation).
+  - The CLAUDE.md local-testing section (add the prompt-author dependency), the AGENTS.md plugin tree, the root README.md and plugins/tcs-helper/README.md skill lists, and docs/ai/memory/tools.md.
 - **Must Not Touch:**
   - The prompts behind #250–#253, and plugins/tcs-helper/scripts/lib/semantic_detector.py as a whole (no `lint-ok` comment either). They are separate issues; prompt-author only finds them. Their open findings are allow-listed in the repo lint test with the issue number (KNOWN_OPEN).
   - rule-enforcer (its strong-wording rule is a follow-up, see Technical Debt).
@@ -360,26 +361,33 @@ tests/tcs-helper/
 ├── test_prompt_catalog.py           # NEW C1: entry, index, grade checks
 ├── test_prompt_profiles.py          # NEW C1: profile checks
 ├── test_prompt_single_source.py     # NEW C5: fingerprint/ID/@-import scans, pins, per-consumer strict xfails, eval privacy
+├── test_agent_author_canonical.py   # NEW C6: examples/canonical-agent.md meets the agentic contract (T3.8 F-B1)
 └── fixtures/prompt_lint/            # NEW C3 fixtures
 ```
+
+The T3.2b ceiling-skip tests (unjudged runs, one-sided skip, "insufficient cases" when fewer than 5 judged cases remain) live in test_eval_compare.py.
 
 **Component**: C6 migration
 ```
 plugins/tcs-helper/
 ├── evals/                                         # NEW plugin-level suite (plugin eval default dir)
 │   ├── README.md                                  # NEW: scores before/after per rule group, cost
-│   ├── skill-author-rationale-clause/             # NEW case
-│   ├── skill-author-no-authority-language/        # NEW case
-│   ├── skill-author-diverse-examples/             # NEW case
-│   ├── agent-author-agentic-contract/             # NEW case
-│   ├── claude-md-optimize-no-overview-reward/     # NEW case
+│   ├── {skill,agent}-author-rationale-*/          # NEW 5 cases, T3.2 (PA-01/PA-02); the *-rationale-* family
+│   ├── skill-author-authority-*/                  # NEW 5 cases, T3.3 (PA-03); the *-authority-* family
+│   ├── skill-author-examples-*/                   # NEW 5 cases, T3.4 (PA-11); the *-examples-* family
+│   ├── claude-md-optimize-overview-*/             # NEW 6 cases, T3.5 (PA-31/PA-30) + T3.8 copies-only
+│   ├── agent-author-agentic-*/                    # NEW 5 cases, T3.6 (PA-20..PA-24)
+│   ├── skill-author-restate-*/                    # NEW 5 cases, T3.10 (PA-05)
+│   ├── agent-author-context-*/                    # NEW 5 cases, T3.11 (PA-08)
+│   ├── agent-author-output-*/                     # NEW 5 cases, T3.12 (PA-13)
+│   ├── prompt-author-audit-contract-*/            # NEW 6 cases, T3.12 PA-13 catalog amendment (incl. guard-example)
 │   └── prompt-author-*/                           # NEW cases for C2 (Iron Law), see Acceptance Criteria
-├── skills/skill-author/reference/{conventions,common-failures,persuasion-principles}.md  # MODIFY
-├── skills/skill-author/SKILL.md                                                         # MODIFY: cite catalog
-├── skills/agent-author/reference/{anti-patterns,output-formats,conventions,description-patterns}.md  # MODIFY
-├── skills/agent-author/SKILL.md                                                         # MODIFY
-└── skills/memory-claude-md-optimize/reference/scoring-rubric.md                         # MODIFY
-docs/about/principles.md                                                                 # MODIFY l.43, l.146
+├── skills/skill-author/{SKILL.md,reference/}                                            # MODIFY: cite catalog, corrected rules
+├── skills/agent-author/{SKILL.md,reference/,examples/canonical-agent.md}                # MODIFY: cite catalog, agentic contract
+├── skills/memory-claude-md-optimize/{SKILL.md,reference/scoring-rubric.md}              # MODIFY
+└── skills/prompt-author/reference/catalog/core.md                                       # MODIFY: PA-13 Fix/Tell amendment (measured, T3.12)
+docs/about/principles.md                                                                 # MODIFY l.43, l.146, PA citations
+docs/about/skill-and-agent-design.md                                                     # MODIFY: PA-51 citation
 CLAUDE.md                                                                                # MODIFY local-testing: copy prompt-author too
 ```
 
@@ -680,9 +688,11 @@ ENTITY: EvalReport (NEW; report.json + report.md)
           per_criterion: {name: {a: rate, b: rate, kind: deterministic|judge}},
           all_pass: {a, b}, paired_difference: {estimate, ci95, method: "bootstrap over cases, 2000 resamples, seed 2305"},
           sign_test: {b_better, a_better, ties, p},
-          verdict: "b better" | "a better" | "no measurable difference",
+          verdict: "b better" | "a better" | "no measurable difference" | "insufficient cases",   # insufficient: < 5 judged cases, no winner
           judge: {id, source: cli | repo-config | global-config | default},
           errored_runs: {a, b}, judge_errors: {a, b},
+          unjudged_runs: {a: [{case, run, criteria}], b: [...]},   # only when non-empty; llm grader skipped by the cost ceiling (T3.2b), out of rates and pairing
+          ceiling_skip_unmatched: {a: [{case, run}], b: [...]},    # only when non-empty; skippedPaidGraders run with no matching grader (marker drift), also warned on stderr
           judge_validation: {criterion: validated | not_validated | insufficient | provisional | not_run}   # not_run = kit has no llm graders,
           cost_usd, label: "evaluated on <target>" | "proxy: evaluated on <other>"
 ```
@@ -986,7 +996,12 @@ Not applicable: no UI. The skill's outputs are a finding table, a draft, a port 
   - Rationale: two of the three skills have no evals. Changing them unmeasured would repeat the defect class (rules copied on judgement, not measurement). The skill-author Iron Law demands a failing eval anyway.
   - Trade-offs: about 25 new cases (5 groups × 5) plus proving runs; at the tcs-workflow suite's rate (~$5 for 6 cases × 3 runs × 2 arms) roughly $40–60 in total. Slower than a manual review.
   - Revised 2026-11-05 after spec validation: the confirmed "one case per group" made the revert rule degenerate (n = 1 → CI = [d, d]).
-  - User confirmed: **Yes** (2026-11-05)
+  - Revised 2026-11-07 after the Phase 3 drift check (T3.8), as built in T3.2-T3.13:
+    - No separate weakened-rule run: the before run on the old rule is the proving signal. A 1.00 before is valid for a citation-only migration and makes that group a regression guard.
+    - Held-out cases: an iterated correction needs held-out cases to claim a gain. A second correction designed from the first after run's failures on the same cases (T3.5 after2, the T3.10 grader redesign) is in-sample: it is kept if nothing regresses, but its gain is provisional.
+    - A before side may merge a re-run of a case that was unjudged (every run's llm grader skipped by the cost ceiling), as in T3.3; the re-run replaces only that case.
+    - Dollar caps are dropped for Claude runs on the subscription: cost is a comparison figure, recorded per run in evals/README.md, and `--max-cost-usd` is set above the expected cost so no paid grader is skipped.
+  - User confirmed: **Yes** (2026-11-05); 2026-11-07 revisions are user choices recorded in the README Decisions Log (2026-11-06 rows)
 
 - [x] SDD-ADR-5 Lint design: one stdlib script with a check registry. Errors E1–E4: secret, unbalanced XML tag, dead Markdown link/anchor or `@`-import, undelimited interpolation in a code prompt. Warnings W1–W3:
   - W1 emphasis ≥3 hits and >5/1k words,
@@ -1103,10 +1118,11 @@ Not applicable: no UI. The skill's outputs are a finding table, a draft, a port 
 - [ ] IF the CI of the paired difference includes 0, THEN THE SYSTEM SHALL report "no measurable difference".
 
 **PRD F7 — Migration**
-- [ ] WHEN migration is complete, THE SYSTEM SHALL have skill-author, agent-author and memory-claude-md-optimize citing PA IDs for every shared rule, with no fingerprint copies (C5).
+- [ ] WHEN migration is complete, THE SYSTEM SHALL have skill-author, agent-author and memory-claude-md-optimize citing PA IDs for every shared rule, with at most a one-line operational rule; reasons and evidence stay in the catalog, with no fingerprint copies (C5).
 - [ ] WHEN a rule group is corrected, THE SYSTEM SHALL have a before and an after score for its eval case in evals/README.md. A drop beyond noise SHALL leave that group uncorrected for that skill, with the reason recorded.
-- [ ] THE SYSTEM SHALL score CLAUDE.md content by what README and code lack, not reward a generic overview. Eval case `claude-md-optimize-no-overview-reward`.
-- [ ] THE SYSTEM SHALL give agent-author the agentic entries PA-20–PA-24 via citation (PA-24 scope fence included, graded by the case). Eval case `agent-author-agentic-contract`.
+- [ ] THE SYSTEM SHALL score CLAUDE.md content by what README and code lack, not reward a generic overview. Eval cases `claude-md-optimize-overview-*`.
+- [ ] THE SYSTEM SHALL give agent-author the agentic entries PA-20–PA-24 via citation (PA-24 scope fence included, graded by the case). Eval cases `agent-author-agentic-*`.
+- [ ] Added by the Phase 3 drift check (T3.10-T3.13), same five beats as SDD-ADR-4: PA-05 cited in skill-author (`skill-author-restate-*`, T3.10); PA-08 cited in agent-author and docs/about/principles.md (`agent-author-context-*`, T3.11); PA-13 corrected in agent-author and cited in skill-author (`agent-author-output-*`), with the measured PA-13 catalog amendment (`prompt-author-audit-contract-*`, T3.12); PA-10 closed without an eval because no consumer restates it (T3.13).
 - [ ] THE SYSTEM SHALL leave the `MUST BE USED` guidance text in agent-author unchanged (C5 pins the current sentences).
 
 **PRD F8 — Cut test**
