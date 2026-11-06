@@ -76,6 +76,39 @@ Total spend $5.36, not partial. No score dropped, so no cut was reverted. The sh
 recommended, since there is no measurable difference (PRD F8 AC2). At 1.00 before and after, the run
 cannot show whether a cut helped. It shows only that no cut broke a defended behaviour.
 
+## Rationale rule group (spec 023 T3.2, PA-01/PA-02)
+
+Five cases defend the corrected rule: keep one clause naming the failure a non-obvious rule prevents,
+and strip history, provenance and dead references. Each case has an llm grader
+(`reasons-for-non-obvious-rules`: the three non-obvious rules each carry such a clause) and a regex
+grader (`no-history`: no ISO date, commit SHA or "previously" in the written file).
+
+"Before" is the skills at `19aa49f6`, which told authors to strip rationale. "After" is the correction:
+skill-author in `8f833690` and agent-author in `cb856f6e`, both citing PA-01/PA-02. Both runs were
+`--ablation none`, 3 runs per case, `-j 4`, Claude Code 2.1.316, Opus 5.5, judge Haiku.
+
+| Case | Skill | Before | After | Delta |
+|---|---|---|---|---|
+| `agent-author-rationale-audit-fix` | agent-author | 0.50 | 0.83 | +0.33 |
+| `agent-author-rationale-body` | agent-author | 1.00 | 1.00 | 0.00 |
+| `skill-author-rationale-discipline` | skill-author | 1.00 | 1.00 | 0.00 |
+| `skill-author-rationale-history-brief` | skill-author | 0.67 | 1.00 | +0.33 |
+| `skill-author-rationale-reference` | skill-author | 0.83 | 0.83 | 0.00 |
+
+- **audit-fix:** before, the llm grader failed in 3 of 3 runs; after, in 1 of 3.
+- **history-brief:** before, 2 of 3 runs left a date, SHA or "previously" in the file; after, none did.
+- **reference:** in both runs, one of the three runs had its llm grader skipped by the cost ceiling
+  ("skipped: cost ceiling"). That run is unjudged, not a failure. Its regex grader passed both times,
+  and the two judged runs scored 1.00 in both. The case therefore has no measured change.
+
+eval_compare verdict: **no measurable difference**. Paired difference (after − before) +0.267,
+95% CI [+0.000, +0.533] over the 5 cases; sign test after better 2, before better 0, ties 3, p = 0.5.
+The revert rule fires only on "a better" (CI below 0), so **both corrections are kept**. No case
+dropped. The CI touches 0, so the gain is not established either.
+
+Spend: before $8.19, after $8.71 (ceiling $8.50, crossed by runs already in flight), total $16.90
+against the group cap of $17.
+
 ## Cost
 
 The prompt-author suite at 3 runs per arm costs about $7.40 (with plugin about $2.05 per round of four
