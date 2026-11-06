@@ -12,8 +12,9 @@ a file with no commands scores 0 on criterion 1 regardless of its other merits.
 
 Read the repository's README and skim its code layout before scoring, and credit only what they do
 not already tell the agent ([PA-31](../../prompt-author/reference/catalog/instruction-files.md#pa-31-overview-the-readme-or-code-already-gives)). An architecture overview, directory tour, tech-stack list or
-setup steps that the README or code already gives earns no points on any criterion; record it in
-`issues[]` as a removal, not a migration. A path, command, version or count the tree no longer
+setup steps that the README or code already gives earns no points on any criterion, Currency and
+Actionability included: score every criterion on what remains once that content is set aside, and
+record it in `issues[]` as a removal, not a migration. A path, command, version or count the tree no longer
 matches earns no points either ([PA-30](../../prompt-author/reference/catalog/instruction-files.md#pa-30-stale-facts-paths-commands-versions-counts)).
 
 ---
@@ -102,6 +103,8 @@ can score low.
 ### 5. Currency (0-15 points)
 
 **Definition:** Content reflects the current state of the codebase, toolchain, and team practices.
+Judge only the content the README and code do not already give: an accurate copy of the README's
+paths, versions or setup commands earns nothing here.
 Stale references — deprecated libraries, outdated version numbers, references to tools that have
 been replaced, or instructions for workflows that no longer exist — actively mislead developers.
 
