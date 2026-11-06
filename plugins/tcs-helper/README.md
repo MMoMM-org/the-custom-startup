@@ -23,6 +23,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history. Hooks load natively from `
 |-------|-------------|
 | `/skill-author` | Create, audit, or convert Claude Code skills |
 | `/agent-author` | Create, audit, or fix Claude Code subagents |
+| `/prompt-author` | Write, audit, or port prompts a model reads: API system prompts, subagent briefs, AGENTS.md / GEMINI.md, non-Claude targets |
 | `/skill-evaluate` | Evaluate skill quality before importing |
 | `/skill-import` | Fetch a single skill from any GitHub repo |
 | `/rule-enforcer` | Triage a recurrence rule via 4 questions and route to the right enforcement mechanism (CI / git hook / Claude hook / Memory). Also runs in **batch mode** (`/rule-enforcer --scan`) to sweep `CLAUDE.md` + memory files, extract the enforceable rules, dedup against installed hooks, and mechanize them in one confirm. |

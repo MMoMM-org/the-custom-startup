@@ -54,6 +54,8 @@ When developing new skills in `plugins/tcs-helper/skills/`, they are not automat
 
 Both locations are required. Cache-only does not work — Claude Code validates against the marketplace source.
 
+Testing `skill-author`, `agent-author` or `memory-claude-md-optimize` also needs `prompt-author` copied: they link to its catalog via `../prompt-author/`.
+
 After testing, sync any changes back:
 ```bash
 cp -r plugins/tcs-helper/skills/<skill-name>/* \
