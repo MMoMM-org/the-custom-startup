@@ -33,7 +33,9 @@ paired difference over cases with its CI, the sign test, cost.
   - An llm grader the cost ceiling skipped (its run has skippedPaidGraders
     true and the grader's explanation is "skipped: cost ceiling") is stored as
     a failure but was never judged: it counts as no result, not as a judge
-    error, and the report lists the run as unjudged.
+    error, and the report lists the run as unjudged. A run flagged
+    skippedPaidGraders whose llm graders none match (marker drift) is warned
+    about on stderr and listed under ceiling_skip_unmatched.
 
 Exit: 0 done | 1 case sets differ, unreadable input, refused out dir or ref,
 no case matched, leftover worktree, git or plugin eval failed or timed out,
@@ -62,6 +64,7 @@ EXIT_OK, EXIT_INVALID, EXIT_CEILING, EXIT_CONSENT, EXIT_SECRET = 0, 1, 2, 3, 4
 PROVIDER = "claude"
 SCHEMA_VERSION = 1
 SIDES = ("before", "after")
+SIDE_OF = {"a": "before", "b": "after"}
 WORKTREE_DIR = "base-worktree"
 # Files run writes into --out; a reused --out loses only these.
 RUN_OUTPUTS = ("before.json", "after.json", "before", "after", "before.log", "after.log",
@@ -142,6 +145,7 @@ def runs_of(data, version, ignored):
         for number, run in enumerate(with_runs, 1):
             criteria = {}
             ceiling_skip = run.get(CEILING_SKIP_RUN_FIELD) is True
+            matched = False
             for grader in run.get("graders") or []:
                 name = grader.get("name")
                 if grader.get("withOnly"):
@@ -153,13 +157,22 @@ def runs_of(data, version, ignored):
                 scored = grader.get("scored", True) is not False
                 unjudged = (ceiling_skip and kind == "judge"
                             and grader.get("explanation") == CEILING_SKIP_EXPLANATION)
+                matched = matched or unjudged
                 decided = isinstance(passed, bool) and scored and not unjudged
+                no_verdict = scored and not unjudged and not decided
                 criteria[name] = {"kind": kind, "result": passed if decided else None,
-                                  "judge_error": kind == "judge" and not decided and scored
-                                  and not unjudged,
+                                  "judge_error": kind == "judge" and no_verdict,
                                   "unjudged": unjudged}
+            unmatched = ceiling_skip and not matched
+            if unmatched:
+                print("eval_compare.py: warning: {} case {} run {} has {} true but no llm "
+                      "grader explained {!r}; its graders count as judged (marker "
+                      "drift?)".format(SIDE_OF[version], case["name"], number,
+                                       CEILING_SKIP_RUN_FIELD, CEILING_SKIP_EXPLANATION),
+                      file=sys.stderr)
             results.append({"version": version, "case": case["name"], "run": number,
-                            "errored": run.get("error") is not None, "criteria": criteria})
+                            "errored": run.get("error") is not None, "criteria": criteria,
+                            "ceiling_skip_unmatched": unmatched})
     return results, validation, runs
 
 

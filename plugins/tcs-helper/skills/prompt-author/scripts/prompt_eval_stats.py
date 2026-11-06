@@ -37,7 +37,7 @@ FENCE_OPEN = re.compile(r"^(`{3,})")
 DERIVED_FIELDS = ("cases", "per_criterion", "all_pass", "all_pass_including_dropped",
                   "errored_runs", "judge_errors", "dropped_from_all_pass", "paired_difference",
                   "sign_test", "verdict", "recommendation", "error_rates", "verdict_withheld",
-                  "unjudged_runs")
+                  "unjudged_runs", "ceiling_skip_unmatched")
 
 
 # ------------------------------------------------------------------ statistics
@@ -100,6 +100,9 @@ def build_report(meta, results, dropped=()):
       A criterion may also carry unjudged: true (never judged, e.g. skipped by a cost
       ceiling); its result is None, so it is already out of every rate and pairing,
       and the run is listed under unjudged_runs.
+      A result may carry ceiling_skip_unmatched: true (its run says the cost ceiling
+      skipped a grader, but no grader matched the skip); it is listed under
+      ceiling_skip_unmatched.
     dropped: criteria excluded from all-pass (unvalidated judge criteria, set by `agree`).
     """
     versions = sorted(meta["versions"])
@@ -148,6 +151,12 @@ def build_report(meta, results, dropped=()):
                 for v in versions}
     if any(unjudged.values()):
         report["unjudged_runs"] = unjudged
+    unmatched = {v: [{"case": r["case"], "run": r["run"]}
+                     for r in sorted(results, key=lambda r: (r["case"], r["run"]))
+                     if r["version"] == v and r.get("ceiling_skip_unmatched")]
+                 for v in versions}
+    if any(unmatched.values()):
+        report["ceiling_skip_unmatched"] = unmatched
     if dropped:
         report["dropped_from_all_pass"] = sorted(dropped)
         report["all_pass_including_dropped"] = {
@@ -287,6 +296,12 @@ def render_markdown(report):
             "{} {}".format(v, ", ".join("{} run {} ({})".format(
                 u["case"], u["run"], ", ".join(u["criteria"])) for u in unjudged.get(v, []))
                 or "none") for v in versions)))
+    unmatched = report.get("ceiling_skip_unmatched")
+    if unmatched:
+        lines.append("Ceiling skip flag without a matching grader: {}.".format("; ".join(
+            "{} {}".format(v, ", ".join("{} run {}".format(u["case"], u["run"])
+                                        for u in unmatched.get(v, [])) or "none")
+            for v in versions)))
     for v in versions:
         meta = report["versions"][v]
         size = " ({} bytes)".format(meta["bytes"]) if "bytes" in meta else ""
