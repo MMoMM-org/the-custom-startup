@@ -310,6 +310,81 @@ def test_a_case_with_every_run_unjudged_drops_out_of_the_pairing(ec, tmp_path):
     assert rep["verdict"] == "insufficient cases"
 
 
+def _with_skipped_run(mutate):
+    """judged_cases(["c"]) with run 1 ceiling-skipped, then MUTATE(case, run, grader)."""
+    data = judged_cases(["c"], skipped={("c", 1)})
+    case = data["cases"][0]
+    run = case["arms"]["with"][0]
+    mutate(case, run, next(g for g in run["graders"] if g["name"] == "rubric"))
+    return data
+
+
+def _assert_rubric_run_is_a_plain_failure(ec, tmp_path, after_data, before_data=None):
+    before = dump(tmp_path / "before.json", before_data or judged_cases(["c"]))
+    after = dump(tmp_path / "after.json", after_data)
+    out = tmp_path / "out"
+    ec.main(["compare", str(before), str(after), "--out", str(out)])
+    rep = report_of(out)
+    assert rep["per_criterion"]["rubric"]["b"] < 1.0
+    assert "unjudged_runs" not in rep
+    return rep
+
+
+@pytest.mark.parametrize("flag", ["absent", "true", 1])
+def test_skip_explanation_without_the_run_flag_true_is_a_plain_failure(ec, tmp_path, flag):
+    def mutate(case, run, grader):
+        if flag == "absent":
+            del run["skippedPaidGraders"]
+        else:
+            run["skippedPaidGraders"] = flag
+    _assert_rubric_run_is_a_plain_failure(ec, tmp_path, _with_skipped_run(mutate))
+
+
+def test_run_flag_with_another_explanation_is_a_plain_failure(ec, tmp_path):
+    def mutate(case, run, grader):
+        grader["explanation"] = "skipped: cost ceiling reached"
+    _assert_rubric_run_is_a_plain_failure(ec, tmp_path, _with_skipped_run(mutate))
+
+
+def test_both_markers_on_a_non_llm_grader_are_a_plain_failure(ec, tmp_path):
+    def not_llm(case):
+        next(g for g in case["graders"] if g["name"] == "rubric")["type"] = "tool_used"
+    before = judged_cases(["c"])
+    not_llm(before["cases"][0])
+    after = _with_skipped_run(lambda case, run, grader: not_llm(case))
+    rep = _assert_rubric_run_is_a_plain_failure(ec, tmp_path, after, before)
+    assert rep["per_criterion"]["rubric"]["kind"] == "deterministic"
+
+
+def test_run_flag_without_a_matching_llm_grader_is_warned_and_listed(ec, tmp_path, capsys):
+    def mutate(case, run, grader):
+        grader["explanation"] = "skipped: cost ceiling reached"
+    before = dump(tmp_path / "before.json", judged_cases(["c"]))
+    after = dump(tmp_path / "after.json", _with_skipped_run(mutate))
+    out = tmp_path / "out"
+    ec.main(["compare", str(before), str(after), "--out", str(out)])
+    err = capsys.readouterr().err
+    warnings = [line for line in err.splitlines() if "warning" in line]
+    assert len(warnings) == 1
+    assert "after" in warnings[0] and "case c run 1" in warnings[0]
+    assert "skippedPaidGraders" in warnings[0]
+    rep = report_of(out)
+    assert rep["ceiling_skip_unmatched"] == {"a": [], "b": [{"case": "c", "run": 1}]}
+    md = (out / "report.md").read_text()
+    assert "Ceiling skip flag without a matching grader: a none; b c run 1." in md
+
+
+def test_a_matched_ceiling_skip_gives_no_warning_and_no_unmatched_field(ec, tmp_path, capsys):
+    before = dump(tmp_path / "before.json", judged_cases(["c"]))
+    after = dump(tmp_path / "after.json", judged_cases(["c"], skipped={("c", 1)}))
+    out = tmp_path / "out"
+    ec.main(["compare", str(before), str(after), "--out", str(out)])
+    assert "warning" not in capsys.readouterr().err
+    rep = report_of(out)
+    assert "ceiling_skip_unmatched" not in rep
+    assert "Ceiling skip flag" not in (out / "report.md").read_text()
+
+
 def _git(*args, cwd):
     env = dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
     return subprocess.run(["git", "-C", str(cwd)] + list(args), check=True, env=env,
