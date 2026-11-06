@@ -85,7 +85,7 @@ Skills are discovered by Claude reading their description. The description field
 
 ### Description: When to Use, NOT What the Skill Does
 
-Rule and reason: [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow).
+State only when to use the skill; never summarize its workflow. Reason: [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow).
 
 ```yaml
 # ❌ BAD: summarizes workflow

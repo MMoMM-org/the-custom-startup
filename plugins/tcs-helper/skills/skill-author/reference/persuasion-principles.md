@@ -12,7 +12,56 @@ LLMs respond to the same persuasion principles as humans. Understanding this psy
 
 ## Principles That Work for Skills
 
-### 1. Authority — unverified for current models
+### 1. Commitment
+
+**What it is:** Consistency with prior statements and explicit choices.
+
+**How to use:**
+- Force explicit choices: "Choose A, B, or C"
+- Require announcements: "First, state what you will do"
+- Use tracking: Checklists that must be completed
+
+**Example:**
+```markdown
+✅ Before proceeding, confirm: "I have checked for duplicates: [Yes/No]"
+❌ You might want to check for duplicates.
+```
+
+### 2. Scarcity / Urgency
+
+**What it is:** Time-bound requirements that prevent procrastination.
+
+**How to use:**
+- "Before proceeding" requirements
+- "Immediately after X" sequences
+- Sequential dependencies
+
+**Example:**
+```markdown
+✅ After completing a task, run verification immediately, before proceeding.
+❌ You can verify when convenient.
+```
+
+### 3. Social Proof
+
+**What it is:** Establishing what's normal and expected.
+
+**How to use:**
+- Universal patterns: "Every time", "Always"
+- Failure modes: "X without Y = failure"
+- "All skills follow this pattern"
+
+**Example:**
+```markdown
+✅ Skills without testing = skills that fail in production. Every time.
+❌ Some people find testing helpful.
+```
+
+---
+
+## Unverified for current models
+
+### Authority
 
 **What it is:** Deference to expertise and non-negotiable rules.
 
@@ -31,51 +80,6 @@ LLMs respond to the same persuasion principles as humans. Understanding this psy
 ```markdown
 ✅ Wrote code before its test? Delete it and start over: code written first shapes the test to fit it.
 ❌ Consider writing tests first when feasible.
-```
-
-### 2. Commitment
-
-**What it is:** Consistency with prior statements and explicit choices.
-
-**How to use:**
-- Force explicit choices: "Choose A, B, or C"
-- Require announcements: "First, state what you will do"
-- Use tracking: Checklists that must be completed
-
-**Example:**
-```markdown
-✅ Before proceeding, confirm: "I have checked for duplicates: [Yes/No]"
-❌ You might want to check for duplicates.
-```
-
-### 3. Scarcity / Urgency
-
-**What it is:** Time-bound requirements that prevent procrastination.
-
-**How to use:**
-- "Before proceeding" requirements
-- "Immediately after X" sequences
-- Sequential dependencies
-
-**Example:**
-```markdown
-✅ After completing a task, run verification immediately, before proceeding.
-❌ You can verify when convenient.
-```
-
-### 4. Social Proof
-
-**What it is:** Establishing what's normal and expected.
-
-**How to use:**
-- Universal patterns: "Every time", "Always"
-- Failure modes: "X without Y = failure"
-- "All skills follow this pattern"
-
-**Example:**
-```markdown
-✅ Skills without testing = skills that fail in production. Every time.
-❌ Some people find testing helpful.
 ```
 
 ---

@@ -153,11 +153,7 @@ Read reference/conventions.md for the archetype → tools/model/color mapping.
    - `## Decision: <Topic>` — routing tables for decision points (one or more)
    - `## Activities` — numbered concrete steps
    - `## Output` — typed table `| Field | Type | Required | Description |`
-7. Give the body the agentic contract (reference/conventions.md § Agentic Contract), because the agent cannot ask mid-run:
-   - the action for a missing input, an ambiguous requirement or a file it cannot find, such as returning `NEEDS_CONTEXT` with the open question ([PA-20](../prompt-author/reference/catalog/agentic.md#pa-20-behaviour-when-information-is-missing-or-unclear));
-   - when it stops and reports other than on success, and what that report contains ([PA-21](../prompt-author/reference/catalog/agentic.md#pa-21-stopping-conditions));
-   - for each forbidden action and for a request outside its job, what it does instead ([PA-23](../prompt-author/reference/catalog/agentic.md#pa-23-refusal-with-an-approved-alternative));
-   - the files, directories or commit range in scope, to ignore the rest, and which git and write operations it may run ([PA-24](../prompt-author/reference/catalog/agentic.md#pa-24-scope-fence-files-commit-range-read-only-git)).
+7. Give the body the four items of the agentic contract, because the agent cannot ask mid-run: missing-input action, stop condition, alternative to each forbidden action, scope fence. What each states, where it goes and its catalog entry: reference/conventions.md § Agentic Contract.
 8. Give each non-obvious rule one clause naming the failure it prevents ([PA-01](../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules)); leave out history and provenance ([PA-02](../prompt-author/reference/catalog/core.md#pa-02-history-and-provenance-noise)).
 9. Write the file at the chosen scope path.
 10. Run step 8 (Verify Agent).
@@ -182,7 +178,7 @@ Validate via Bash + Read:
 5. **Active-agent announcement** — first non-blank line after frontmatter is `**Active agent: <name>**`.
 6. **ICMDA body** — Grep for `^## ` headings: Identity / Constraints / Mission / Decision / Activities / Output all present.
 7. **Output format** — `## Output` is typed table or named rubrics, not free prose.
-8. **Agentic contract** — the body states the four items of step 6.7 and Mission states a done criterion.
+8. **Agentic contract** — the body states the four items of the conventions.md § Agentic Contract table and Mission states a done criterion.
 9. **Size** — Bash: `wc -l <path>`. Body ≤ 25 KB / ~250 lines; if larger, suggest externalizing to a sibling reference file.
 
 If any check fails: fix immediately, re-verify. Do not present results until all checks pass.

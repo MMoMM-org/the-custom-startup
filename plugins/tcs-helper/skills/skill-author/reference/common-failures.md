@@ -44,7 +44,7 @@ match (target) {
 
 ## Failure: Description Summarizes Workflow
 
-**Symptom and fix:** [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow)
+**Fix:** list triggering conditions only; never summarize the workflow in the description. Symptom: [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow)
 
 **Bad:**
 ```yaml

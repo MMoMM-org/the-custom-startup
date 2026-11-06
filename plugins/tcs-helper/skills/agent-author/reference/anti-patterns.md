@@ -97,7 +97,7 @@ Agent designed for back-and-forth dialogue, brainstorming, *"let's iterate toget
 
 `description: Reads files, analyzes diff, runs tests, writes report.`
 
-**Why it fails and fix:** [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow).
+**Fix:** put triggering conditions only in the description; the workflow stays in the body. Why it fails: [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow).
 
 ### Stale Description
 
