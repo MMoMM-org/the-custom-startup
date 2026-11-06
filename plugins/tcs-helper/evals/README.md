@@ -553,6 +553,160 @@ Spend, a comparison figure only (subscription): before $6.19, after $6.42.
 
 eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
 
+## Output-contract group (spec 023 T3.12, PA-13)
+
+Five cases guard the rule that an agent whose caller parses its return states a complete output
+contract. Each asks agent-author for one such agent, with a different return kind: an accessibility
+auditor returning findings, a license gate returning one verdict with reasons, an incident summarizer
+returning a structured summary, an env-var checker returning a table of variables with statuses, and a
+docker-compose fixer returning a diff proposal. The prompts say only "the caller parses its result" and
+nothing about the format. Each case has two graders on the written file: `file-written` (file_exists)
+and `output-contract` (llm, binary). That grader checks three things in the body: every field is named,
+nested items included; every field has a type, and every status, verdict or severity field lists its
+allowed values; and the section shows an example or a serialized schema of the return. A field table on
+its own does not count as the example.
+
+This is a correction plus citation. The copies said only "typed table" and "explicit return contract",
+and asked for no example of the return. The measured gain comes from the example requirement: the
+before files already had allowed values and often said where the return appears, and 14 of 15 failed
+only on the missing example (see Signal below). "Before" is
+agent-author at `b29d8c61`. "After" is `99514049`. In agent-author SKILL.md, create step 6's Output line
+asks for every field's type or allowed values and one example of the return as the caller receives it,
+and cites PA-13. Verify step 7 checks the same. `reference/conventions.md` § 7 states the full contract,
+adds a status enum row and an example line, with `Reason: PA-13`. In `reference/output-formats.md`, line
+3 states the contract and cites PA-13 in place of the restated reason ("makes orchestration brittle").
+The TCS convention there gains a closing example block, and the audit checklist gains a PA-13 row. In
+skill-author `reference/conventions.md` (`d41ffd73`), the "Why TypeScript-like syntax" reason becomes
+the operational line plus `Reason: PA-13`. No case exercises skill-author, so that change is unmeasured.
+A follow-up (`1ff3c1b0`) adds "where the return appears in the reply" to agent-author conventions.md
+§ 7 and to the create and Verify lines in SKILL.md, the third part of PA-13's Fix. It came after the
+after run and is unmeasured.
+Both runs were `--ablation none --allow-tools Write Edit`, 3 runs per case, `-j 4`, Claude Code
+2.1.316, Opus 5.5, default judge model.
+
+Rates are each case's all-pass rate over runs that neither errored nor went unjudged, as eval_compare counts them:
+
+| Case | Before | After | Delta |
+|---|---|---|---|
+| `agent-author-output-diff` | 0/3 | 3/3 | +1.00 |
+| `agent-author-output-findings` | 1/3 | 3/3 | +0.67 |
+| `agent-author-output-status-table` | 0/3 | 3/3 | +1.00 |
+| `agent-author-output-summary` | 0/3 | 3/3 | +1.00 |
+| `agent-author-output-verdict` | 0/3 | 3/3 | +1.00 |
+
+- **Signal:** strong. All 14 before failures were judged FAIL FAIL FAIL. Checked by hand, the before
+  files have full field tables with enum types (no status field typed only as `string`) and often say
+  where the return appears ("one fenced `json` block"). But 14 of 15 show no example of the return.
+  The one pass (findings run 3) is the only file with an example.
+- **After:** all 15 files have an example of the return after the field tables, every one a filled-in
+  JSON object.
+- No run errored or went unjudged on either side.
+
+| Criterion | Kind | Before | After |
+|---|---|---|---|
+| `file-written` | deterministic | 100% | 100% |
+| `output-contract` | judge | 7% | 100% |
+| all pass | - | 7% | 100% |
+
+eval_compare verdict: **b better** (after better). Paired difference (after − before) +0.933, 95% CI
+[+0.800, +1.000] over the 5 cases; sign test after better 5, before better 0, ties 0, p = 0.0625.
+Errored runs: before 0, after 0; judge errors: before 0, after 0. The judge is provisional (not
+validated against hand labels). The revert rule fires only on "a better", so **the correction is kept**.
+
+Spend, a comparison figure only (subscription): before $8.32, after $8.73.
+
+- **After3** (`cda2731f`, which also carries the earlier unmeasured `1ff3c1b0`): a review found that
+  output-formats.md and conventions.md § 7 each showed one JSON example and never said the
+  serialization follows the caller, and all 15 after agents returned JSON (PA-11 risk).
+  output-formats.md now states that where the return appears and its serialization follow what the
+  caller parses, and shows the JSON example as one case next to a `VERDICT:`/`REASON:` line example.
+  § 7 points to it in place of its own JSON example and defines `Finding`. all pass 15/15.
+  eval_compare after → after3: **no measurable difference** (paired difference +0.000, 95% CI
+  [+0.000, +0.000]; ties 5, p = 1; errored runs 0 and 0, judge errors 0 and 0), so **the change is
+  kept**. Non-JSON returns: 0 of 15, as before. Every prompt says only that "the caller parses its
+  result", and JSON is a reasonable answer to that, so this does not show whether the single example
+  anchored the choice. A case naming a non-JSON parser would. Spend $8.83.
+
+eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
+
+### Catalog amendment (PA-13)
+
+The agent-author result showed that PA-13's Fix itself left out the example. The Fix now reads "each
+field, its allowed values, where it appears, and, for a return the caller parses, one example or schema
+of the return" (`85a5cebf`). The Evidence line cites spec 023 T3.12. The Fingerprint is unchanged. The
+Tell, at first unchanged, was later extended to match the Fix (`e9c98749`, see After2 below).
+Five `prompt-author-audit-contract-*` cases (`f575c461`) measure whether audits now flag the gap. In each,
+the model saves a subagent brief and audits it with prompt-author: a security reviewer returning a JSON
+findings block, a license gate returning `VERDICT:`/`REASON:` lines, an incident summarizer returning
+YAML, an env-var checker returning CSV rows, and a compose fixer returning a JSON change list. Each brief
+has a complete field table with types and allowed values and says where the return appears, but shows
+no example and no schema. Graders: `file-written` on `audit/findings.md`, and `flags-missing-example`
+(llm, binary), which passes only on a PA-13 finding naming the missing example or schema. "Before" is
+the unamended catalog at `f575c461`; "after" is `85a5cebf`; "after2" is `e9c98749`. Same run settings as above.
+
+| Case | Before | After | After2 |
+|---|---|---|---|
+| `prompt-author-audit-contract-diff` | 0/3 | 1/3 | 1/3 |
+| `prompt-author-audit-contract-review` | 0/3 | 2/3 | 3/3 |
+| `prompt-author-audit-contract-status-table` | 1/3 | 3/3 | 3/3 |
+| `prompt-author-audit-contract-summary` | 0/3 | 3/3 | 3/3 |
+| `prompt-author-audit-contract-verdict` | 0/3 | 3/3 | 3/3 |
+
+- **Signal:** before, 14 of 15 audits found a contract present and filed PA-13, if at all, only for
+  position or format gaps ("PA-13: a contract is present"). The one pass (status-table run 3, judge
+  votes 2 of 3) asks for the literal CSV header line.
+- **After:** 12 of 15 audits flag the missing example under PA-13, and several quote the Fix ("which the
+  entry's Fix requires when a caller parses the output"). Of the three failures, two raise PA-13 only
+  for other gaps (diff runs 1-2), and one raises the missing example as "uncatalogued" (review run 1).
+  The audit procedure cites an entry only when its Tell is present, and the Tell still reads "names no
+  fields, status values or format", which these briefs do not match. That likely explains the misses.
+- No run errored or went unjudged on either side.
+
+| Criterion | Kind | Before | After |
+|---|---|---|---|
+| `file-written` | deterministic | 100% | 100% |
+| `flags-missing-example` | judge | 7% | 80% |
+| all pass | - | 7% | 80% |
+
+After2 (Tell extended): `flags-missing-example` 87%, all pass 87%, `file-written` 100%.
+
+eval_compare verdict: **b better** (after better). Paired difference (after − before) +0.733, 95% CI
+[+0.533, +0.933] over the 5 cases; sign test after better 5, before better 0, ties 0, p = 0.0625.
+Errored runs: before 0, after 0; judge errors: before 0, after 0. The judge is provisional. The guard
+case is excluded from the paired set: both result files were filtered to the 5 cases before comparing.
+The revert rule fires only on "a better", so **the amendment is kept**.
+
+- **After2:** the Tell now adds "or, for a return the caller parses, shows no example or schema of it"
+  (`e9c98749`). 13 of 15 audits flag the missing example under PA-13. Review is now 3/3. Diff stays at
+  1/3: runs 1 and 3 again raise PA-13 only for other gaps, and run 1 says the Tell's "no example or
+  schema" does not apply because "the field table serves as a schema".
+- eval_compare after → after2 (the measure for the Tell change): **no measurable difference**. Paired
+  difference +0.067, 95% CI [+0.000, +0.200]; sign test after2 better 1, after better 0, ties 4, p = 1.
+  Errored runs 0 and 0; judge errors 0 and 0. Not "a better", so **the Tell change is kept**.
+- eval_compare before → after2 (the whole amendment): **b better**. Paired difference +0.800, 95% CI
+  [+0.533, +1.000]; sign test after2 better 5, before better 0, ties 0, p = 0.0625. Errored runs 0 and
+  0; judge errors 0 and 0.
+
+**Guard case** (`prompt-author-audit-contract-guard-example`): the review brief with a filled-in JSON
+example added. Its grader passes when no PA-13 finding claims a missing example or schema. Before 3/3;
+after 2/3 as judged (run 3 votes FAIL PASS FAIL). By hand, after run 3 raises no PA-13 finding about the
+example. It lists PA-13 as "a contract is present" and raises only PA-11 (a single example may
+over-anchor). So the judge misjudged a passing run, and no false positive appeared on either side. After2: 3/3
+(run 1 votes PASS FAIL PASS). By hand, no after2 run raises a PA-13 finding about a missing example:
+run 1 raises PA-13 only for the `line` numbering and the `category` enum's fallback, and runs 2 and 3
+list PA-13 as clean ("states fields, values, position and an example"). The example's narrow coverage
+is raised under PA-11 in all three. So the guard shows no false positive in after2 either. The
+guard's first before run did not load (a YAML colon in its description, fixed in `cba6b41f`), so its
+before was run on its own at `cba6b41f`. After these runs, the guard grader was clarified (`53e8319b`):
+a finding that the example is narrow or may over-anchor (PA-11) does not count as a missing example.
+The guard is unpaired, so the paired measurement is unchanged.
+
+Spend, a comparison figure only (subscription): before $13.92 for the 5 cases plus $2.86 for the guard;
+after $16.45 for all 6 ($14.02 for the 5 cases, judge included); after2 $17.57 for all 6 ($14.67 for
+the 5 cases, $2.90 for the guard).
+
+eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
+
 ## Cost
 
 The prompt-author suite at 3 runs per arm costs about $7.40 (with plugin about $2.05 per round of four

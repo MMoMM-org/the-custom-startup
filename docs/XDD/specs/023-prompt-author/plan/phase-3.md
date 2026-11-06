@@ -141,7 +141,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
 - [x] **T3.11 Assumed-absent-context group (PA-08)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]` — after T3.9; parallel with T3.10
   - (A) row 18 (agent-author anti-patterns ~:112-116, conventions ~:372; docs/about/principles.md:80-81). Same five beats.
 
-- [ ] **T3.12 Output-contract group (PA-13)** `[activity: skill-authoring]` `[component: C6]` — after T3.10 and T3.11 (shares conventions files)
+- [x] **T3.12 Output-contract group (PA-13)** `[activity: skill-authoring]` `[component: C6]` — after T3.10 and T3.11 (shares conventions files)
   - (A) row 14 (skill-author conventions ~:171; agent-author conventions ~:313-323; output-formats :3). Same five beats.
 
 - [ ] **T3.13 Long-instruction-list group (PA-10)** `[activity: skill-authoring]` `[component: C6]` — after T3.12
