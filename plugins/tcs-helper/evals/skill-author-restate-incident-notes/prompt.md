@@ -5,7 +5,7 @@ runs: 3
 max_turns: 30
 timeout_seconds: 900
 allowed_tools: [Read, Glob, Grep, Write, Edit]
-expected_outcome: skills/incident-notes/SKILL.md exists and states each of its rules once, with no second statement in a summary, checklist, Always/Never list or reminder section.
+expected_outcome: skills/incident-notes/SKILL.md exists and states each of its rules once; its requested "Before you post" checklist points to where the rules are stated instead of restating them.
 ---
 
 /tcs-helper:skill-author Create a new personal skill, `incident-notes`, and write it to
