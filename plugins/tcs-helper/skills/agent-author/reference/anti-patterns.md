@@ -194,7 +194,7 @@ Omitting `model:` field on activity agents. When user runs Opus, every dispatch 
 
 ## Documentation Smell Anti-Patterns
 
-Agent body files are **imperative instructions for an LLM**, not documentation for humans. Rationale, history, and spec references dilute directives and cause actively harmful behavior.
+Agent body files are **imperative instructions for an LLM**, not documentation for humans. Keep one clause on each non-obvious rule naming the failure it prevents ([PA-01](../../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules)); strip history, provenance and dead references ([PA-02](../../prompt-author/reference/catalog/core.md#pa-02-history-and-provenance-noise)).
 
 ### The Streisand Effect
 
@@ -208,19 +208,20 @@ File auth-v1.py was removed in the rewrite. Use auth.py instead.
 Use auth.py for authentication logic.
 ```
 
-### Rationale Dilution
+### Rationale Block Instead of a Reason Clause
 
-Explaining WHY competes with WHAT for the model's attention:
+Cut the history and the design debate; keep the one clause that names the failure ([PA-01](../../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules)). A rule whose purpose the reader can infer needs no clause. An inline `(Why: …)` clause passes.
 
 ```markdown
-# ❌ BAD: 3 lines of rationale, 1 line of instruction
+# ❌ BAD: history and alternatives, the failure never named
 Because the legacy parser couldn't handle nested brackets (see issue #347),
 and after evaluating three alternatives (documented in ADR-8),
 we chose the recursive descent approach.
 Use recursive descent parsing for bracket expressions.
 
-# ✅ GOOD: instruction only
-Use recursive descent parsing for bracket expressions.
+# ✅ GOOD: the rule plus the failure it prevents
+Use recursive descent parsing for bracket expressions (Why: brackets nest,
+and a regex parser mismatches the closing bracket).
 ```
 
 ### Dead Spec References
@@ -237,7 +238,7 @@ Validate input: non-empty string, max 255 chars, UTF-8 only.
 
 ### Strip-First Risk
 
-Before removing rationale from an agent file, verify the WHY is captured elsewhere (docs/ mirror, ADR, git history). Write to destination first, strip from runtime second — strip-first destroys institutional knowledge.
+Before removing history or extended rationale from an agent file, verify it is captured elsewhere (docs/ mirror, ADR, git history). Write to destination first, strip from runtime second — strip-first destroys institutional knowledge.
 
 ---
 
@@ -255,5 +256,5 @@ When auditing an agent, immediately reject if:
 - [ ] Scope overlaps significantly with main agent or another existing agent
 - [ ] Designed for interactive chat instead of artifact delivery
 - [ ] Body exceeds 25 KB without progressive disclosure to references
-- [ ] Body contains rationale blocks, historical references, or spec citations without actionable instructions
+- [ ] Body contains rationale blocks beyond one reason clause (PA-01), historical references, or spec citations without actionable instructions (PA-02); a `(Why: …)` clause on a non-obvious rule passes
 - [ ] Body mentions removed/non-existent files or features (Streisand effect)
