@@ -174,7 +174,7 @@ No forward declarations — the Workflow headings serve as the function index.
 
 ### Constraints
 
-Use markdown **Always:** and **Never:** lists. Each rule appears once, in whichever framing is most natural. Move enforcement-worthy rules from Persona into **Never:**.
+Use markdown **Always:** and **Never:** lists. State each rule once, in one place and in whichever framing is most natural: a rule in Constraints is not restated in a workflow step, and a closing check step names what it checks ("check the draft against Constraints") instead of listing the rules again. Reason: [PA-05](../../prompt-author/reference/catalog/core.md#pa-05-redundant-restatement). Move enforcement-worthy rules from Persona into **Never:**.
 
 **Always:**
 - Every finding must have a specific, implementable fix.
@@ -313,7 +313,7 @@ Skills are loaded into context on every invocation. Every token costs money, con
 
 ### Constraint Deduplication
 
-Each rule appears once, in whichever framing (**Always** or **Never**) is most natural. Never mirror the same rule in both lists.
+Each rule appears once in the skill, in whichever framing (**Always** or **Never**) is most natural. Do not mirror it in the other list, restate it in a workflow step, or repeat it in a summary, reminder or closing checklist; elsewhere refer to it by name. The one exception is the plain terminal restatement a discipline skill may keep (see Discipline-Enforcing Skills). Reason: [PA-05](../../prompt-author/reference/catalog/core.md#pa-05-redundant-restatement).
 
 Bad — same rule stated twice:
 ```
@@ -324,6 +324,19 @@ Bad — same rule stated twice:
 Good — one rule, one location:
 ```
 **Never:** Skip test verification after a change.
+```
+
+Bad — a closing check that lists the Constraints again:
+```
+### 3. Check Before Returning
+- [ ] Tests ran after every change
+- [ ] Changelog entry added
+```
+
+Good — the check refers to them:
+```
+### 3. Check Before Returning
+Check the result against Constraints; fix any miss, then return it.
 ```
 
 ### Instruction Purity
@@ -387,7 +400,7 @@ When converting an existing skill to these conventions:
 - [ ] Replace novel syntax blocks (prefer/avoid) with **In scope:** / **Out of scope:**
 
 **Token efficiency:**
-- [ ] Deduplicate Always/Never — no mirrored rules
+- [ ] Each rule stated once — no Always/Never mirror, no step, recap or checklist that repeats a Constraint ([PA-05](../../prompt-author/reference/catalog/core.md#pa-05-redundant-restatement))
 - [ ] Move enforcement-worthy Persona rules into **Never:**
 - [ ] Remove forward declarations from Interface
 - [ ] Remove self-evident State comments

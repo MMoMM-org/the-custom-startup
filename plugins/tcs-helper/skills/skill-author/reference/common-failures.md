@@ -156,4 +156,4 @@ An `AskUserQuestion` option label carries a parenthetical for the user — `Befo
 | Declarative-only workflow | Agents don't execute | Use imperative ### step headings |
 | Description with workflow | [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow) | Triggers only in description |
 | `type` aliases for enums | Extra indirection | Inline values into interface fields |
-| Mirrored Always/Never rules | Wastes tokens | Each rule once, most natural framing |
+| Rule restated in a second place (Always/Never mirror, workflow step, recap, closing checklist) | [PA-05](../../prompt-author/reference/catalog/core.md#pa-05-redundant-restatement) | Each rule once, most natural framing; refer to it by name elsewhere |
