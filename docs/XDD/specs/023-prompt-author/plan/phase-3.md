@@ -127,7 +127,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   4. Validate: `pytest -q tests/test_docs_links.py tests/test_claude_md_imports.py tests/tcs-helper/test_prompt_single_source.py` passes.
   5. Success: The docs no longer contradict the catalog `[ref: SDD/Implementation Boundaries "Can Modify"]`
 
-- [ ] **T3.9 Citation gaps and small fixes from T3.8** `[activity: skill-authoring]` `[component: C6]` `[ref: PRD/F7 AC1; SDD/C6]`
+- [x] **T3.9 Citation gaps and small fixes from T3.8** `[activity: skill-authoring]` `[component: C6]` `[ref: PRD/F7 AC1; SDD/C6]`
 
   1. Prime: the T3.8 inventory findings R1-R4 and the drift check's impl items (README Decisions Log 2026-11-06 "Phase 3 drift").
   2. Test (red first): a scratch grep check that fails at HEAD. It requires: a PA-51 link at docs/about/skill-and-agent-design.md:218; a PA-52 link at docs/about/principles.md:41-42; PA IDs on agent-author output-formats.md:134 and :138; a PA-17 link at skill-author conventions.md:354; agent-author SKILL.md "Run step 8" disambiguated; no "no exceptions" in agent-author SKILL.md. Separately, the dead strict-xfail branch and the stale docstring in test_prompt_single_source.py are removed while the suite stays green.
