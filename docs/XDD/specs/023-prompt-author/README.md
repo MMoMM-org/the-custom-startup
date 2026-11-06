@@ -71,6 +71,7 @@
 | 2026-11-05 | Phase 2 cleanup round (T2.10) with one eval re-run, live-run consent ≤ $8; revert any cut that lowers a score | User choice; list from the T2.3/T2.4 code-quality reviews plus the LOW drift findings |
 | 2026-11-05 | Phase 2 complete (T2.1-T2.10) | Boundary round done: spec amendments, eval_compare consent gate, kind by prompt text, cleanup -4.2 KB with all prompt-author cases still 1.00 ($5.36); T2.10 refusals exit 1 (plan said 2; SDD reserves 2 for partial results) |
 | 2026-11-06 | Phase 3 started (same branch, Standard mode). Live-run consent: ≤ $80 total, ≤ $16 per rule group (T3.2-T3.6 plus the xdd-tdd-pressure-invoked runs); each run carries its own --max-cost-usd; exceeding either cap stops and asks | User choice. Re-estimate $60-80: ≥5 cases × 3 runs × both sides of eval_compare at ~$0.35-0.45 per authoring run, above the plan's $40-60 |
+| 2026-11-06 | T3.2 group cap raised to $17 (before run $8.19, $0.19 over its $8 cap: in-flight runs finished after the ceiling); after run same 5 cases × 3 runs, --max-cost-usd 8.5 | User choice. Before: audit-fix 0.50, history-brief 0.67, reference 0.83 (run 2 unjudged, ceiling), body 1.00, discipline 1.00: the current strip-rationale rule rarely strips reasons Opus is given; the signal is history kept (PA-02). Ceiling cases guard against regression only |
 
 ## Context
 
