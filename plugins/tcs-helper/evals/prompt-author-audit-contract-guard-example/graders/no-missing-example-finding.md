@@ -12,3 +12,5 @@ parts of the contract, and findings under other entries, do not matter.
 
 FAIL if a PA-13 finding says the return has no example, no schema, or no template of its serialized
 form.
+
+A finding that the example is narrow or may over-anchor (PA-11) does not count as a missing example.
