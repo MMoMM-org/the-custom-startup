@@ -351,7 +351,7 @@ So for these skills the move is **relocation, not deletion**: each argument goes
 
 An argument placed where the rationalization occurs beats the same argument in a section the model has already read past.
 
-**When unsure whether a cut is safe, measure it** — run the pressure scenario with and without the candidate text using the subagent-probe method in [testing-with-subagents.md](testing-with-subagents.md). Micro-testing each cut is cheap; a silent discipline regression is not. Do not resolve this by reading the text and judging it redundant. That judgement is exactly what the measurement contradicted.
+**When unsure whether a cut is safe, measure it** — run the pressure scenario with and without the candidate text using the subagent-probe method in [testing-with-subagents.md](testing-with-subagents.md). Micro-testing each cut is cheap; a silent discipline regression is not. Do not resolve this by reading the text and judging it redundant. That judgement is exactly what the measurement contradicted. Reason: [PA-17](../../prompt-author/reference/catalog/core.md#pa-17-length-without-stated-purpose-cut-test).
 
 What stays strippable in these skills: recap sections, restatements of what the skill already did, and prose selling the skill's benefits to a reader who has already invoked it.
 

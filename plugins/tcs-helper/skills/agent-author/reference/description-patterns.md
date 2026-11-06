@@ -199,10 +199,10 @@ Use phrases users actually type. Verbatim user-language outperforms paraphrases.
 
 Before shipping a description:
 
-- [ ] Trigger scenario appears in the first ~50 characters
+- [ ] Trigger scenario appears in the first ~50 characters ([PA-52](../../prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person))
 - [ ] Contains `Use PROACTIVELY` OR `MUST BE USED`
 - [ ] Has at least 2 concrete trigger phrases (verbatim user-language)
-- [ ] Third-person, scenario-anchored
+- [ ] Third-person, scenario-anchored ([PA-52](../../prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person))
 - [ ] Does NOT summarize the workflow ([PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow))
 - [ ] Distinguishable from main-agent scope (not "for all X")
 - [ ] For high-value agents: includes 2–3 `<example>` blocks

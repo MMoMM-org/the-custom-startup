@@ -215,7 +215,7 @@ Four recent decisions, with the criterion that drove each.
 | Two specialists merged into one agent + two skills "to be more skill-driven" | Trigger description either bloats or generalizes; output schemas collide | Keep specialists distinct when triggers and outputs are genuinely different |
 | Agent created for what is essentially deterministic decision logic over small inputs | Subagent overhead (round-trip, isolated context) for work that could happen inline | Convert to a skill if inline visibility is fine and project context is small |
 | Agent-internal skill with `user-invocable: true` | Pollutes the `/` menu without giving the user a meaningful affordance | Set `user-invocable: false`; auto-trigger via description still works |
-| Skill body that summarizes the workflow instead of stating triggers | Claude follows the description as a shortcut and skips the body | Description states *when* to use; body states *how* |
+| Skill body that summarizes the workflow instead of stating triggers | Claude follows the description as a shortcut and skips the body | Description states *when* to use; body states *how*. Reason: [PA-51](../../plugins/tcs-helper/skills/prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow) |
 | Subagent that returns a body the user wants to iterate on | Iteration requires the body in the parent — subagents only return summaries | Convert to a skill |
 
 ---

@@ -59,7 +59,7 @@ If you catch yourself thinking any of these, STOP and follow the full workflow:
 | "The description is fine — it explains the role" | If it's passive, auto-delegation will fail |
 | "I'll grant all tools to be safe" | Broad tools = unsafe + token waste |
 | "Sonnet might not be enough — let's use Opus" | Default sonnet; only escalate with rationale |
-| "Free-form output is fine for this agent" | Every agent needs `## Output` typed table — no exceptions |
+| "Free-form output is fine for this agent" | Every agent needs a `## Output` typed table, including read-only, single-step and research agents: the parent parses what it returns |
 | "It's just a small description tweak" | Description quality is THE delegation lever |
 
 ## Reference Materials
@@ -156,7 +156,7 @@ Read reference/conventions.md for the archetype → tools/model/color mapping.
 7. Give the body the four items of the agentic contract, because the agent cannot ask mid-run: missing-input action, stop condition, alternative to each forbidden action, scope fence. What each states, where it goes and its catalog entry: reference/conventions.md § Agentic Contract.
 8. Give each non-obvious rule one clause naming the failure it prevents ([PA-01](../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules)); leave out history and provenance ([PA-02](../prompt-author/reference/catalog/core.md#pa-02-history-and-provenance-noise)).
 9. Write the file at the chosen scope path.
-10. Run step 8 (Verify Agent).
+10. Run § 8 Verify Agent.
 
 ### 7. Audit / Modernize Agent
 
@@ -165,7 +165,7 @@ Read reference/conventions.md for the archetype → tools/model/color mapping.
 3. Run the audit checklist (output-formats.md → Audit Checklist).
 4. For each FAIL or WARN: identify root cause, propose specific fix per the Issue Categories table.
 5. If user invoked Modernize: apply fixes via Edit. If Audit: report only.
-6. Run step 8 (Verify Agent) on the modified file.
+6. Run § 8 Verify Agent on the modified file.
 
 ### 8. Verify Agent
 

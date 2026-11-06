@@ -247,7 +247,7 @@ Before removing history or extended rationale from an agent file, verify it is c
 When auditing an agent, immediately reject if:
 
 - [ ] Description has no `Use PROACTIVELY` / `MUST BE USED`
-- [ ] Description summarizes the workflow
+- [ ] Description summarizes the workflow ([PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow))
 - [ ] `tools: *` or unjustifiably broad list
 - [ ] `tools: inherit` without explicit justification
 - [ ] Model is `inherit` (with no documented reason)

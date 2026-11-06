@@ -131,11 +131,11 @@ Use rubric-style markdown lists (`- **Critical**`, `- **Warning**`) instead of t
 | | `model` set explicitly (TCS convention) | `sonnet` default; `haiku`/`opus` with rationale; not `inherit` without justification |
 | | `tools` minimal per archetype | No `*`; security/reviewer no `Write` |
 | | `color` matches archetype semantic | Per conventions.md table |
-| **Description** | Trigger in first ~50 chars | Yes |
+| **Description** | Trigger in first ~50 chars ([PA-52](../../prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person)) | Yes |
 | | Contains `Use PROACTIVELY` or `MUST BE USED` | Yes |
 | | At least 2 concrete trigger phrases | Verbatim user-language |
-| | Third-person, scenario-anchored | Yes |
-| | Does NOT summarize the workflow | Yes |
+| | Third-person, scenario-anchored ([PA-52](../../prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person)) | Yes |
+| | Does NOT summarize the workflow ([PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow)) | Yes |
 | | Distinguishable from main-agent scope | Not "for all X" |
 | | High-value agents have 2–3 `<example>` blocks | Yes |
 | **Active-agent announcement** | First non-blank line after frontmatter | `**Active agent: <plugin>:<role>:<activity>**` |
