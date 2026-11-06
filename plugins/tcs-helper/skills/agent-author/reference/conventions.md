@@ -313,8 +313,8 @@ does not fit (PA-22).
 ### 7. `## Output`
 
 The return contract the caller branches on: a typed table with every field, nested types included,
-each with its type or its allowed values, then one example of the return exactly as the caller
-receives it. Reason: [PA-13](../../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract).
+each with its type or its allowed values, where the return appears in the reply, then one example
+of the return exactly as the caller receives it. Reason: [PA-13](../../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract).
 
 | Field | Type | Required | Description |
 |---|---|---|---|

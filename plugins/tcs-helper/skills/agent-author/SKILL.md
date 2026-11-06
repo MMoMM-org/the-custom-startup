@@ -152,7 +152,7 @@ Read reference/conventions.md for the archetype → tools/model/color mapping.
    - `## Mission` — the goal and the done criterion, what is true when the job is complete ([PA-22](../prompt-author/reference/catalog/agentic.md#pa-22-goal-and-constraints-over-a-fixed-script))
    - `## Decision: <Topic>` — routing tables for decision points (one or more)
    - `## Activities` — numbered concrete steps
-   - `## Output` — typed table `| Field | Type | Required | Description |` with every field's type or allowed values, then one example of the return as the caller receives it ([PA-13](../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract))
+   - `## Output` — typed table `| Field | Type | Required | Description |` with every field's type or allowed values, where it appears in the reply, then one example of the return as the caller receives it ([PA-13](../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract))
 7. Give the body the four items of the agentic contract, because the agent cannot ask mid-run: missing-input action, stop condition, alternative to each forbidden action, scope fence. What each states, where it goes and its catalog entry: reference/conventions.md § Agentic Contract.
 8. Give each non-obvious rule one clause naming the failure it prevents ([PA-01](../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules)); leave out history and provenance ([PA-02](../prompt-author/reference/catalog/core.md#pa-02-history-and-provenance-noise)).
 9. Write the file at the chosen scope path.
@@ -177,7 +177,7 @@ Validate via Bash + Read:
 4. **Tools** — minimal per archetype. Security/Reviewer/Explorer/Architect: NO `Write`.
 5. **Active-agent announcement** — first non-blank line after frontmatter is `**Active agent: <name>**`.
 6. **ICMDA body** — Grep for `^## ` headings: Identity / Constraints / Mission / Decision / Activities / Output all present.
-7. **Output format** — `## Output` is typed table or named rubrics, not free prose; every field has a type or allowed values, and one example of the return follows the table.
+7. **Output format** — `## Output` is typed table or named rubrics, not free prose; every field has a type or allowed values, the section says where the return appears in the reply, and one example of the return follows the table.
 8. **Agentic contract** — the body states the four items of the conventions.md § Agentic Contract table and Mission states a done criterion.
 9. **Size** — Bash: `wc -l <path>`. Body ≤ 25 KB / ~250 lines; if larger, suggest externalizing to a sibling reference file.
 
