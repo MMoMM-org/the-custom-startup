@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Measured Migration of the Authoring Skills"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -150,7 +150,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
 - [x] **T3.14 Spec update from the Phase 3 drift check** `[activity: technical-writing]` `[ref: SDD-ADR-4; SDD/Directory Map; PRD/F7 AC1]` — after T3.13
   - Case families and Directory Map (including test_agent_author_canonical.py and T3.2b tests); AC1 becomes "cite, with at most a one-line operational rule; reasons and evidence stay in the catalog"; Can Modify widened to the three skills' directories plus the docs touched; SDD-ADR-4 gains: the before run on the old rule is the proving signal, an iterated correction needs held-out cases to claim a gain, merged before-sides are allowed when a case was unjudged, and cost is a comparison figure; the EvalReport fields `unjudged_runs` and `ceiling_skip_unmatched` and the verdict "insufficient cases"; the T3.2 figures in the Decisions Log corrected to 64% → 93%; plan task text for T3.2-T3.6 updated to the case families.
 
-- [ ] **T3.8 Phase Validation** `[activity: validate]`
+- [x] **T3.8 Phase Validation** `[activity: validate]`
 
   - All per-consumer strict xfails are removed and pass. The spec-compliance reviewer confirms every research-internal.md (A) copy location now cites instead of restating.
   - `pytest -q -rs` and `prompt_lint.py --repo` pass.
@@ -159,3 +159,12 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   - Follow-ups done (2026-11-06): (A) wording in 2bd68e65, 1b7f7b97; (B1) canonical-agent.md contract with structural tests 4dd500de, b95f0505, f0a4fbd6, 1d2db495, regression guard no measurable difference; (B2) copies-only case 7999e324 already 3/3, rubric unchanged; (C) left as is.
   - Any reverted group is recorded in its catalog entry ("reverted for <skill>: <reason>") and in the spec README Decisions Log.
   - Success: every shared rule is cited, not restated `[ref: PRD/F7 AC1; PRD/Success Metrics Business Impact]`
+
+## Phase 3 results
+
+- Groups measured (eval_compare, 5+ cases, 3 runs): T3.2 PA-01/02 kept (no measurable difference after T3.2b fix, 64% → 93%); T3.3 PA-03 kept (b better, 46% → 92%); T3.4 PA-11 kept (b better, 60% → 93%); T3.5 PA-31/30/01 kept (after2 0% → 100%, in-sample); T3.6 PA-20-24 kept (b better, 80% → 100%); T3.10 PA-05 kept (grader redesigned, 27% → 47%, b better); T3.11 PA-08 kept (regression guard, 15/15); T3.12 PA-13 kept (1/15 → 15/15) plus catalog amendment of PA-13 measured on prompt-author audits (7% → 87%, guard clean); T3.13 PA-10 no copy, no eval. No group reverted.
+- Tooling: T3.2b makes eval_compare treat ceiling-skipped graders as unjudged and warn on marker drift.
+- Follow-ups (T3.8 F-A/F-B1/F-B2, T3.9) done; canonical-agent.md guarded by test_agent_author_canonical.py.
+- Spec brought in line with the build (T3.14): AC1 wording, SDD-ADR-4 revisions, Directory Map, Can Modify, EvalReport fields.
+- Validation: full suite 2305 passed, 2 skipped; prompt_lint --repo only the 2 KNOWN_OPEN #253 errors; T3.8 inventory re-check PASS (no RESTATES).
+- Open, recorded: the PA-13 diff audit case stays 1/3 (a field table read as a schema); JSON-only returns cannot separate anchoring from a sensible default; literal NEEDS_CONTEXT in produced agents fell after the step-6.7 trim (PA-20 still met); T3.5 and T3.10 gains are in-sample.
