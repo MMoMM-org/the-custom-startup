@@ -117,6 +117,63 @@ dropped. The CI touches 0, so the gain is not established either.
 Spend: before $8.19, after $8.71 (ceiling $8.50, crossed by runs already in flight), total $16.90
 against the group cap of $17.
 
+## Authority-language rule group (spec 023 T3.3, PA-03)
+
+Five cases defend the corrected rule: a discipline skill states its rules in sentence case with their
+reasons, without "YOU MUST" or "No exceptions", and keeps its Red Flags list or excuse → reality
+table. Each case asks skill-author for a small discipline skill with 2-3 rules and has three graders
+on the written file: `file-written` (file_exists), `no-authority-phrases` (regex, absent,
+case-insensitive: `YOU MUST|No exceptions`) and `red-flags-present` (llm: a Red Flags list or
+excuse → reality table covers every rule).
+
+"Before" is skill-author at `a72272f6`, which told authors to "use strong language: YOU MUST, No
+exceptions". "After" is the correction in `6eb028fe`, citing PA-03. Both runs were `--ablation none
+--allow-tools Write Edit`, 3 runs per case, `-j 4`, Claude Code 2.1.316, Opus 5.5, default judge model. In
+the first before run, all 3 verify-done runs had their llm grader skipped by the cost ceiling, so
+verify-done was re-run alone on the unchanged skill and its runs replaced in the before file.
+
+Rates are each case's all-pass rate over runs that neither errored nor went unjudged, as eval_compare
+counts them:
+
+| Case | Before | After | Delta |
+|---|---|---|---|
+| `skill-author-authority-changelog` | 2/3 | 3/3 | +0.33 |
+| `skill-author-authority-deletion` | 1/2 (1 errored) | 2/2 (1 errored) | +0.50 |
+| `skill-author-authority-migrations` | 0/3 | 2/2 (1 errored) | +1.00 |
+| `skill-author-authority-secrets` | 1/2 (1 unjudged) | 2/3 | +0.17 |
+| `skill-author-authority-verify-done` | 2/3 | 2/2 (1 errored) | +0.33 |
+
+- **Every before failure was the regex:** 8 of 14 written files before, none after. Each match
+  contained "No exceptions"; verify-done run 3 also had two "YOU MUST" rules.
+- **Errored runs** ended with "API Error: Opus 5's safeguards flagged this message" before writing the
+  file: deletion run 2 before; deletion run 3, migrations run 3 and verify-done run 2 after. They are a
+  platform refusal, not a skill outcome, and eval_compare leaves them out of the rates.
+- **secrets:** before, run 2's llm grader was skipped by the cost ceiling (unjudged). After, run 1's
+  judge voted PASS FAIL FAIL on `red-flags-present`, the only red-flags failure in either arm.
+
+| Criterion | Kind | Before | After |
+|---|---|---|---|
+| `file-written` | deterministic | 100% | 100% |
+| `no-authority-phrases` | deterministic | 43% | 100% |
+| `red-flags-present` | judge | 100% | 92% |
+| all pass | - | 46% | 92% |
+
+eval_compare verdict: **b better** (after better). Paired difference (after − before) +0.467, 95% CI
+[+0.267, +0.733] over the 5 cases; sign test after better 5, before better 0, ties 0, p = 0.0625.
+Errored runs: before 1, after 3; unjudged runs: before 1 (secrets run 2), after none.
+The revert rule fires only on "a better", so **the correction is kept**. The gain is the authority
+phrases leaving the written skills; the Red Flags tables stayed (one judge split in 12 judged runs).
+
+Discipline guard: `tcs-workflow` case `xdd-tdd-pressure-invoked`, 3 runs, `--ablation none
+--allow-tools Write Edit`, before and after the correction: all graders passed in 3 of 3 runs on each
+side (score 1.00 → 1.00). eval_compare reports "insufficient cases" for this single case. The
+correction does not touch tcs-workflow, so this pair measures run-to-run noise, not a change.
+
+Spend, a comparison figure only (subscription): before $9.18 (the first run's $8.76 with verify-done's
+$1.38 swapped for the re-run's $1.79), after $9.33, guard $0.63 before and $0.65 after. Another $2.35
+went on a verify-done re-run without `--allow-tools Write Edit`, which could not write the file and was
+discarded.
+
 ## Cost
 
 The prompt-author suite at 3 runs per arm costs about $7.40 (with plugin about $2.05 per round of four
