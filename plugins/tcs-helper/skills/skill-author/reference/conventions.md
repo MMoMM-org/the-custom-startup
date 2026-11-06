@@ -294,24 +294,16 @@ placeholder per task, such as `<!-- T2.3 will populate -->`. Each task replaces 
 marker, so siblings stay untouched, and `grep -c 'will populate'` tracks RED → GREEN: zero
 markers left means the skill is complete.
 
-### Discipline-Enforcing Skills Need Extra Work
-
-Skills that enforce rules (TDD, verification-before-completion) need rationalization-proofing:
-- Use strong language: "YOU MUST", "No exceptions"
-- Add a **Red Flags** section listing thoughts that signal the agent is about to rationalize
-- Build an excuse → reality table from actual baseline test output
-- See `reference/persuasion-principles.md` for language patterns backed by research
-
 ---
 
 ## Discipline-Enforcing Skills
 
-Skills that enforce rules (TDD, verification) need special attention:
-- Use strong language: "YOU MUST", "No exceptions", "Never"
-- Add rationalization counters (excuse → reality table)
-- Add Red Flags section listing rationalizations that indicate violation
+Skills that enforce rules (TDD, verification-before-completion) need rationalization-proofing:
+- State each rule in sentence case, with the failure it prevents, not as a capitalised or absolute directive: [PA-03](../../prompt-author/reference/catalog/core.md#pa-03-emphasis-and-authority-language). A hard terminal constraint may be restated once, plainly, at the end of the skill.
+- Add a **Red Flags** section listing thoughts that signal the agent is about to rationalize
+- Build an excuse → reality table from actual baseline test output
 - Test with 3+ combined pressure scenarios (see testing-with-subagents.md)
-- See persuasion-principles.md for research on language patterns
+- See persuasion-principles.md for which persuasion patterns still apply
 
 ---
 

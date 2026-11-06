@@ -142,7 +142,7 @@ Agent violated rule despite having the skill? Capture the rationalization and ad
 
 | Rationalization | Counter to Add |
 |-----------------|----------------|
-| "This case is different" | Add explicit "No exceptions" list |
+| "This case is different" | List the cases the rule covers, by name ([PA-03](../../prompt-author/reference/catalog/core.md#pa-03-emphasis-and-authority-language)) |
 | "Spirit not letter" | Add "Violating letter IS violating spirit" |
 | "Keep as reference" | Add "Delete means delete - don't look at it" |
 | "Being pragmatic" | Add rationalization table with this excuse |
@@ -156,7 +156,7 @@ For each new rationalization:
 ```markdown
 Write code before test? Delete it. Start over.
 
-**No exceptions:**
+**This includes:**
 - Don't keep it as "reference"
 - Don't "adapt" it while writing tests
 - Delete means delete
