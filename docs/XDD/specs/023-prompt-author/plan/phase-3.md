@@ -79,7 +79,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   4. Validate: Run after, compare, keep or revert, and record. Additionally run the tcs-workflow discipline eval `xdd-tdd-pressure-invoked` once before and once after (`xdd-tdd-pressure` scores 0 in both arms, so it carries no signal), because those skills were written under the old rule.
   5. Success: The correction is measured, and discipline compliance is not regressed beyond noise `[ref: PRD/F7 AC2; PRD/Risks row 1]`
 
-- [ ] **T3.4 Examples rule group (PA-11)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]` — T3.4–T3.6 run in parallel, but their edits to `plugins/tcs-helper/evals/README.md` are merged one at a time
+- [x] **T3.4 Examples rule group (PA-11)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]` — T3.4–T3.6 run in parallel, but their edits to `plugins/tcs-helper/evals/README.md` are merged one at a time
 
   1. Prime: Read skill-author conventions:124 `[ref: research-internal.md (F)6]`.
   2. Test: Create `plugins/tcs-helper/evals/skill-author-diverse-examples/`:

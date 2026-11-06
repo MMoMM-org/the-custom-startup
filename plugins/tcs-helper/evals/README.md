@@ -174,6 +174,54 @@ $1.38 swapped for the re-run's $1.79), after $9.33, guard $0.63 before and $0.65
 went on a verify-done re-run without `--allow-tools Write Edit`, which could not write the file and was
 discarded.
 
+## Examples rule group (spec 023 T3.4, PA-11)
+
+Five cases defend the corrected rule: a skill that shows its output format by example gives 3-5
+diverse examples, and states each behaviour they show as a rule as well. Each case asks skill-author
+for a skill whose output format is easier to show than to describe (commit message, changelog entry,
+API error body, test name, log line), lists 4 format rules, and has two graders on the written file:
+`file-written` (file_exists) and `diverse-examples` (llm: 3-5 good examples, differing in kind, each
+shown behaviour also stated as a rule; bad-example samples do not count).
+
+"Before" is skill-author at `5c4a17db`, whose conventions.md said "One excellent example beats five
+mediocre ones". "After" is the correction in `8358e2fc`, citing PA-11. Both runs were `--ablation none
+--allow-tools Write Edit`, 3 runs per case, `-j 4`, Claude Code 2.1.316, Opus 5.5, default judge model.
+
+Rates are each case's all-pass rate over runs that neither errored nor went unjudged, as eval_compare
+counts them:
+
+| Case | Before | After | Delta |
+|---|---|---|---|
+| `skill-author-examples-api-error` | 3/3 | 3/3 | 0.00 |
+| `skill-author-examples-changelog-entry` | 1/3 | 3/3 | +0.67 |
+| `skill-author-examples-commit-message` | 3/3 | 3/3 | 0.00 |
+| `skill-author-examples-log-line` | 2/3 | 3/3 | +0.33 |
+| `skill-author-examples-test-name` | 0/3 | 2/3 | +0.67 |
+
+- **Before failures were the example count, both ways:** changelog-entry wrote 2 full examples plus a
+  rewrite table; log-line run 3 wrote one example; test-name wrote a 6-row good-name table every run.
+- **api-error and commit-message** passed 3/3 on both sides. They guard against a regression rather than
+  showing the change.
+- **test-name after, run 1** failed again: a 5-row examples table plus a corrections table whose "Good"
+  column adds more names.
+- **Judge splits** (2 of 3 votes): changelog-entry run 3 before; changelog-entry run 1, log-line run 3
+  and test-name run 3 after. All of them count as PASS.
+
+| Criterion | Kind | Before | After |
+|---|---|---|---|
+| `file-written` | deterministic | 100% | 100% |
+| `diverse-examples` | judge | 60% | 93% |
+| all pass | - | 60% | 93% |
+
+eval_compare verdict: **b better** (after better). Paired difference (after − before) +0.333, 95% CI
+[+0.067, +0.600] over the 5 cases; sign test after better 3, before better 0, ties 2, p = 0.25.
+Errored runs: none; unjudged runs: none. The revert rule fires only on "a better", so **the correction
+is kept**.
+
+Spend, a comparison figure only (subscription): before $5.39, after $5.70.
+
+eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
+
 ## Cost
 
 The prompt-author suite at 3 runs per arm costs about $7.40 (with plugin about $2.05 per round of four
