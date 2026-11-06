@@ -30,6 +30,10 @@ paired difference over cases with its CI, the sign test, cost.
     no result for that run.
   - An llm grader whose verdict is missing is a judge error; llm graders stay
     provisional (labelling needs prompt_eval.py's per-run files).
+  - An llm grader the cost ceiling skipped (its run has skippedPaidGraders
+    true and the grader's explanation is "skipped: cost ceiling") is stored as
+    a failure but was never judged: it counts as no result, not as a judge
+    error, and the report lists the run as unjudged.
 
 Exit: 0 done | 1 case sets differ, unreadable input, refused out dir or ref,
 no case matched, leftover worktree, git or plugin eval failed or timed out,
@@ -63,6 +67,11 @@ WORKTREE_DIR = "base-worktree"
 RUN_OUTPUTS = ("before.json", "after.json", "before", "after", "before.log", "after.log",
                "report.json", "report.md")
 PLUGIN_EVAL_TIMEOUT_S = 3600
+# plugin eval stores a paid grader skipped by --max-cost-usd as passed false,
+# scored true; these two markers (run field, grader explanation) say it was
+# not judged. Both must match exactly.
+CEILING_SKIP_RUN_FIELD = "skippedPaidGraders"
+CEILING_SKIP_EXPLANATION = "skipped: cost ceiling"
 POSIX = os.name == "posix"
 
 
@@ -132,6 +141,7 @@ def runs_of(data, version, ignored):
         runs = max(runs, len(with_runs))
         for number, run in enumerate(with_runs, 1):
             criteria = {}
+            ceiling_skip = run.get(CEILING_SKIP_RUN_FIELD) is True
             for grader in run.get("graders") or []:
                 name = grader.get("name")
                 if grader.get("withOnly"):
@@ -140,10 +150,14 @@ def runs_of(data, version, ignored):
                 kind = "judge" if types.get(name) == "llm" else "deterministic"
                 validation.setdefault(name, "provisional" if kind == "judge" else "not_run")
                 passed = grader.get("passed")
-                decided = isinstance(passed, bool) and grader.get("scored", True) is not False
+                scored = grader.get("scored", True) is not False
+                unjudged = (ceiling_skip and kind == "judge"
+                            and grader.get("explanation") == CEILING_SKIP_EXPLANATION)
+                decided = isinstance(passed, bool) and scored and not unjudged
                 criteria[name] = {"kind": kind, "result": passed if decided else None,
-                                  "judge_error": kind == "judge" and not decided
-                                  and grader.get("scored", True) is not False}
+                                  "judge_error": kind == "judge" and not decided and scored
+                                  and not unjudged,
+                                  "unjudged": unjudged}
             results.append({"version": version, "case": case["name"], "run": number,
                             "errored": run.get("error") is not None, "criteria": criteria})
     return results, validation, runs

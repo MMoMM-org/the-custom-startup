@@ -93,23 +93,24 @@ skill-author in `8f833690` and agent-author in `cb856f6e`, both citing PA-01/PA-
 | `agent-author-rationale-body` | agent-author | 1.00 | 1.00 | 0.00 |
 | `skill-author-rationale-discipline` | skill-author | 1.00 | 1.00 | 0.00 |
 | `skill-author-rationale-history-brief` | skill-author | 0.67 | 1.00 | +0.33 |
-| `skill-author-rationale-reference` | skill-author | 0.83 | 0.83 | 0.00 |
+| `skill-author-rationale-reference` | skill-author | 1.00 (2 judged) | 1.00 (2 judged) | 0.00 |
 
 - **audit-fix:** the llm grader failed in 3 of 3 runs before, 1 of 3 after.
 - **history-brief:** 2 of 3 runs left a date, SHA or "previously" in the file before, none after.
-- **reference:** in both arms, one run's llm grader was skipped by the cost ceiling ("skipped: cost
-  ceiling"); the other two scored 1.00 both times, so the case has no measured change.
-  eval_compare counts that skipped run as a failure on both sides, which leaves the difference unchanged.
+- **reference:** in both arms, run 3's llm grader was skipped by the cost ceiling ("skipped: cost
+  ceiling"); the other two scored 1.00 both times, so the case has no measured change. eval_compare
+  reports run 3 as unjudged on each side and leaves it out of the rates (2/2 both sides; T3.2b).
 
 | Criterion | Kind | Before | After |
 |---|---|---|---|
 | `no-history` | deterministic | 87% | 100% |
-| `reasons-for-non-obvious-rules` | judge | 73% | 87% |
-| all pass | - | 60% | 87% |
+| `reasons-for-non-obvious-rules` | judge | 79% | 93% |
+| all pass | - | 64% | 93% |
 
 eval_compare verdict: **no measurable difference**. Paired difference (after − before) +0.267 in
 each case's all-pass rate (audit-fix 0/3 → 2/3, history-brief 1/3 → 3/3, the other three unchanged),
 95% CI [+0.000, +0.533] over the 5 cases; sign test after better 2, before better 0, ties 3, p = 0.5.
+Rates are over judged runs: 14 per side, one unjudged run each.
 The revert rule fires only on "a better" (CI below 0), so **both corrections are kept**. No case
 dropped. The CI touches 0, so the gain is not established either.
 

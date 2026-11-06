@@ -36,7 +36,8 @@ FENCE_OPEN = re.compile(r"^(`{3,})")
 # report.json fields build_report derives; a rebuild drops them and recomputes the rest.
 DERIVED_FIELDS = ("cases", "per_criterion", "all_pass", "all_pass_including_dropped",
                   "errored_runs", "judge_errors", "dropped_from_all_pass", "paired_difference",
-                  "sign_test", "verdict", "recommendation", "error_rates", "verdict_withheld")
+                  "sign_test", "verdict", "recommendation", "error_rates", "verdict_withheld",
+                  "unjudged_runs")
 
 
 # ------------------------------------------------------------------ statistics
@@ -96,6 +97,9 @@ def build_report(meta, results, dropped=()):
 
     meta: versions, target, judge, author, runs, label, cost_usd, partial, ...
     results: [{version, case, run, errored, criteria: {name: {kind, result, judge_error}}}]
+      A criterion may also carry unjudged: true (never judged, e.g. skipped by a cost
+      ceiling); its result is None, so it is already out of every rate and pairing,
+      and the run is listed under unjudged_runs.
     dropped: criteria excluded from all-pass (unvalidated judge criteria, set by `agree`).
     """
     versions = sorted(meta["versions"])
@@ -136,6 +140,14 @@ def build_report(meta, results, dropped=()):
         "errored_runs": errored,
         "judge_errors": judge_errors,
     })
+    unjudged = {v: [{"case": r["case"], "run": r["run"],
+                     "criteria": sorted(n for n, c in r["criteria"].items() if c.get("unjudged"))}
+                    for r in sorted(results, key=lambda r: (r["case"], r["run"]))
+                    if r["version"] == v and not r["errored"]
+                    and any(c.get("unjudged") for c in r["criteria"].values())]
+                for v in versions}
+    if any(unjudged.values()):
+        report["unjudged_runs"] = unjudged
     if dropped:
         report["dropped_from_all_pass"] = sorted(dropped)
         report["all_pass_including_dropped"] = {
@@ -269,6 +281,12 @@ def render_markdown(report):
     lines.append("Errored runs: {}; judge errors: {}.".format(
         ", ".join("{} {}".format(v, report["errored_runs"][v]) for v in versions),
         ", ".join("{} {}".format(v, report["judge_errors"][v]) for v in versions)))
+    unjudged = report.get("unjudged_runs")
+    if unjudged:
+        lines.append("Unjudged runs: {}.".format("; ".join(
+            "{} {}".format(v, ", ".join("{} run {} ({})".format(
+                u["case"], u["run"], ", ".join(u["criteria"])) for u in unjudged.get(v, []))
+                or "none") for v in versions)))
     for v in versions:
         meta = report["versions"][v]
         size = " ({} bytes)".format(meta["bytes"]) if "bytes" in meta else ""
