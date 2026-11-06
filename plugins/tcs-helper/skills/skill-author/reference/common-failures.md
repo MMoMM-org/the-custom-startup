@@ -96,7 +96,7 @@ Skills and agents are **imperative instructions for an LLM**, not documentation 
 | Pattern | Example | Harm |
 |---------|---------|------|
 | Historical references | "was removed", "previously used", "no longer exists" | Model searches for the removed thing (Streisand effect) |
-| Rationale beyond one clause | alternatives considered, design debate, "this was done to..." | Keep only the clause naming the failure the rule prevents (PA-01) |
+| Rationale beyond one clause | alternatives considered, design debate, "this was done to..." | Buries the directive; the one clause naming the failure is enough (PA-01) |
 | Spec/doc refs without action | "see PRD §3.2", "per ADR-5", "as documented in..." | Dead context — model can't read external docs |
 | Negative existence claims | "X doesn't exist", "there is no Y" | Model treats as hint that X/Y might exist |
 | Past-tense narrative | "we decided to...", "this was introduced when..." | Wrong temporal frame — instructions must be present-tense imperative |

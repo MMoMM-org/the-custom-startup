@@ -95,13 +95,20 @@ skill-author in `8f833690` and agent-author in `cb856f6e`, both citing PA-01/PA-
 | `skill-author-rationale-history-brief` | skill-author | 0.67 | 1.00 | +0.33 |
 | `skill-author-rationale-reference` | skill-author | 0.83 | 0.83 | 0.00 |
 
-- **audit-fix:** before, the llm grader failed in 3 of 3 runs; after, in 1 of 3.
-- **history-brief:** before, 2 of 3 runs left a date, SHA or "previously" in the file; after, none did.
-- **reference:** in both runs, one of the three runs had its llm grader skipped by the cost ceiling
-  ("skipped: cost ceiling"). That run is unjudged, not a failure. Its regex grader passed both times,
-  and the two judged runs scored 1.00 in both. The case therefore has no measured change.
+- **audit-fix:** the llm grader failed in 3 of 3 runs before, 1 of 3 after.
+- **history-brief:** 2 of 3 runs left a date, SHA or "previously" in the file before, none after.
+- **reference:** in both arms, one run's llm grader was skipped by the cost ceiling ("skipped: cost
+  ceiling"); the other two scored 1.00 both times, so the case has no measured change.
+  eval_compare counts that skipped run as a failure on both sides, which leaves the difference unchanged.
 
-eval_compare verdict: **no measurable difference**. Paired difference (after − before) +0.267,
+| Criterion | Kind | Before | After |
+|---|---|---|---|
+| `no-history` | deterministic | 87% | 100% |
+| `reasons-for-non-obvious-rules` | judge | 73% | 87% |
+| all pass | - | 60% | 87% |
+
+eval_compare verdict: **no measurable difference**. Paired difference (after − before) +0.267 in
+each case's all-pass rate (audit-fix 0/3 → 2/3, history-brief 1/3 → 3/3, the other three unchanged),
 95% CI [+0.000, +0.533] over the 5 cases; sign test after better 2, before better 0, ties 3, p = 0.5.
 The revert rule fires only on "a better" (CI below 0), so **both corrections are kept**. No case
 dropped. The CI touches 0, so the gain is not established either.

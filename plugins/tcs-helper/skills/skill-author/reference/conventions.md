@@ -345,7 +345,7 @@ Skills are **imperative instructions for an LLM**, not documentation for humans.
 - Spec refs without action ("see PRD §3.2", "per ADR-5")
 - Negative existence ("X doesn't exist"), which triggers the model to search for X
 - Past-tense narrative ("we decided to...")
-- Rationale beyond the one clause: alternatives considered, design debate, the incident story
+- Rationale beyond the one clause: alternatives considered, design debate, the incident story ([PA-01](../../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules))
 
 **The test:** *"Would removing this line degrade execution?"* If no, strip it. The reason clause on a non-obvious rule passes it.
 
