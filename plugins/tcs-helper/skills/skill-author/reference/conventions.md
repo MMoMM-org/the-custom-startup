@@ -336,22 +336,24 @@ Good — one rule, one location:
 
 ### Instruction Purity
 
-Skills are **imperative instructions for an LLM**, not documentation for humans. Every line must earn its place by improving execution. Content that explains WHY, references history, or cites specs without an actionable directive is dead weight — or worse, actively harmful.
+Skills are **imperative instructions for an LLM**, not documentation for humans. Every line must earn its place by improving execution.
 
-**Strip on sight:**
-- Rationale ("because...", "the reason is...")
-- History ("was removed", "previously", "no longer")
+**Keep:** one clause on each non-obvious rule, naming the failure it prevents: [PA-01](../../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules). A rule whose purpose the reader can infer needs none.
+
+**Strip on sight** ([PA-02](../../prompt-author/reference/catalog/core.md#pa-02-history-and-provenance-noise)):
+- History and provenance ("was removed", "previously", "no longer", dates, commit SHAs, issue numbers)
 - Spec refs without action ("see PRD §3.2", "per ADR-5")
-- Negative existence ("X doesn't exist") — triggers the model to search for X
-- Past-tense narrative ("we decided to...") — wrong temporal frame
+- Negative existence ("X doesn't exist"), which triggers the model to search for X
+- Past-tense narrative ("we decided to...")
+- Rationale beyond the one clause: alternatives considered, design debate, the incident story
 
-**The test:** *"Would removing this line degrade execution?"* If no, strip it.
+**The test:** *"Would removing this line degrade execution?"* If no, strip it. The reason clause on a non-obvious rule passes it.
 
-**Before stripping:** verify the WHY is captured elsewhere (docs/ mirror, ADR, git history). Write to destination first, strip from runtime second — strip-first destroys institutional knowledge.
+**Before stripping:** verify the stripped history or argument is captured elsewhere (docs/ mirror, ADR, git history). Write to destination first, strip from runtime second — strip-first destroys institutional knowledge.
 
-#### Exception: rationale is load-bearing in discipline-enforcing skills
+#### Discipline-enforcing skills: keep the whole argument, not only the clause
 
-In a skill that enforces a rule against pressure, the rationale **is** the mechanism. It is the counter-argument that fires at the moment the model is talking itself out of the rule, so stripping it degrades execution — measurably, not theoretically. `obra/superpowers` deleted the "Why Order Matters" section from their TDD skill as redundant prose and measured test-first behavior fall from **8/10 to 5/10** under "just write it, tests after" pressure, reproduced on two model families.
+In a skill that enforces a rule against pressure, one reason clause is not enough: the full rationale **is** the mechanism. It is the counter-argument that fires at the moment the model is talking itself out of the rule, so stripping it degrades execution — measurably, not theoretically. `obra/superpowers` deleted the "Why Order Matters" section from their TDD skill as redundant prose and measured test-first behavior fall from **8/10 to 5/10** under "just write it, tests after" pressure, reproduced on two model families.
 
 So for these skills the move is **relocation, not deletion**: each argument goes into the excuse → reality row where that excuse appears (see § Discipline-Enforcing Skills). The standalone section disappears; the argument survives at its point of use, where an agent mid-rationalization actually hits it.
 
