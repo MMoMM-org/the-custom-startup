@@ -47,7 +47,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   4. Validate: T1.4 passes for these entries; remove the strict-xfail markers for skill-author and agent-author in the per-consumer citation check. Run agent-author's `evals/pressure-scenarios.md` description scenarios once by hand and record the verdicts. The wording is unchanged in effect, so no eval delta is expected.
   5. Success: The description rules are stated once, in harness.md `[ref: PRD/F7 AC1; PRD/F7 AC5]`
 
-- [ ] **T3.2 Rationale rule group (PA-01, PA-02)** `[activity: skill-authoring]` `[component: C6]`
+- [x] **T3.2 Rationale rule group (PA-01, PA-02)** `[activity: skill-authoring]` `[component: C6]`
 
   1. Prime: Read the "strip rationale" copies `[ref: research-internal.md (A) row 1; (F)1-2]` and the discipline-skill exception at skill-author conventions:356-366.
   2. Test: Create `plugins/tcs-helper/evals/skill-author-rationale-clause/`:
@@ -58,6 +58,14 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   3. Implement: Apply (F)1-2 in skill-author conventions and common-failures, and in agent-author anti-patterns, output-formats and the reject checklist. Replace the copies (research-internal.md (A) row 1 file:lines) with citations of PA-01/PA-02.
   4. Validate: Run after, then eval_compare before vs after. Keep, or revert per skill. Record both scores in evals/README.md.
   5. Success: The correction is measured, then kept or reverted with the reason recorded `[ref: PRD/F7 AC2]`
+
+- [ ] **T3.2b Ceiling-skipped graders are unjudged, not failed** `[activity: backend-tooling]` `[component: C4]` `[ref: SDD/Error Handling; SDD-ADR-4]` — before T3.3
+
+  1. Prime: prompt_eval_stats.build_report and eval_compare's reading of plugin-eval result.json; the T3.2 before/after result.json, where a grader skipped by the cost ceiling ("skipped: cost ceiling") is stored as `passed: false, scored: true`.
+  2. Test (red first): a fixture result.json where one run's llm grader is skipped by the ceiling. The run counts as unjudged: excluded from that criterion's rate and from the all-pass rate. The report lists unjudged runs per side. A skip on one side only cannot produce "a better". A fixture where every run of a case is unjudged yields "insufficient cases" if fewer than 5 judged cases remain.
+  3. Implement: in the plugin-eval reader, recognise the skipped-by-ceiling marker and map it to unjudged. Use the exact field and text taken from the T3.2 result.json files.
+  4. Validate: full tcs-helper tests are green. Re-running `eval_compare.py compare` on the T3.2 files (offline) gives the reference case 2/2 on both sides. Record the corrected figures in the T3.2 README section.
+  5. Success: a ceiling skip can no longer fake a regression `[ref: SDD-ADR-4]`
 
 - [ ] **T3.3 Authority-language rule group (PA-03)** `[activity: skill-authoring]` `[component: C6]`
 
@@ -103,7 +111,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
      - Grader: an llm grader requires stated behaviour when unclear, stop conditions, the goal rather than a fixed script, a refusal with an alternative, and a scope fence (PA-24).
 
      Run it before, prove the signal, and record the score.
-  3. Implement: Add citations of PA-20–PA-24 where agent-author defines what an agent body contains. This is an addition, not a correction.
+  3. Implement: Add citations of PA-20–PA-24 where agent-author defines what an agent body contains. This is an addition, not a correction. The create path (agent-author SKILL.md create steps) never reads anti-patterns.md, so state the PA-01 reason-clause rule there too (T3.2 review finding); it is measured by this group's after run.
   4. Validate: Run after, compare, keep or revert, and record.
   5. Success: agent-author gains the agentic entries through citation `[ref: PRD/F7 AC4]`
 
