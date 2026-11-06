@@ -408,6 +408,151 @@ reaches both criteria, so the rubric was not changed and no after run was needed
 regression guard. Spend $1.68; no errored or unjudged runs. Same caveat as T3.5: one fixture repo,
 provisional judge.
 
+## Redundant-restatement rule group (spec 023 T3.10, PA-05)
+
+Five cases defend PA-05: a skill states each of its rules in one place. Each case asks skill-author
+for a small skill whose brief invites a restatement: notes that repeat each rule across three wiki
+pages (`pr-description`), a suggested closing "Key reminders" recap (`endpoint-docs`), the same rules
+as Always and as Never (`dependency-bump`), a requested "Before you post" checklist (`incident-notes`),
+and a brief that repeats each rule three times (`translation-keys`). Two graders read the written
+file: `file-written` (file_exists) and `stated-once` (llm).
+
+"Before" is skill-author at `af8fefcb`, which only forbade mirroring a rule across the Always and
+Never lists. "After" is the correction in `3d3ade64`, citing PA-05: state each rule once in the skill;
+a rule in Constraints is not restated in a summary, reminder or closing checklist, and a closing check
+names what it checks ("check the draft against Constraints"). The one exception is the
+discipline-skill terminal restatement (PA-03). `637742c5` then cut the Constraints paragraph of
+`conventions.md`, which restated the Constraint Deduplication section in the same file, to a pointer
+to that section. All runs used `--ablation none --allow-tools Write Edit`, 3 runs per case, `-j 4`,
+Opus 5.5, the default judge model.
+
+### Round 1: the grader could not see the change
+
+Round 1's `stated-once` counted every place a rule appears, so a Constraints rule plus the workflow
+step that carries it out counted as two statements. Both sides scored 0/15 (all five cases 0/3), and
+eval_compare reported **no measurable difference** (+0.000, CI [+0.000, +0.000], sign test 0/0/5,
+p = 1). The files did differ: after the correction, the closing check referred to Constraints in 11
+of 15 files, against 0 of 15 before. But the skill-author layout (Constraints, then Workflow)
+produces the rule-plus-step overlap for every output-format rule, so the grader failed every file on
+both sides.
+
+### Round 2: grader redesigned, both arms re-measured
+
+After round 1 the grader was redesigned, not the skill (`61353054`). A rule stated once, plus any
+workflow step, layout template or example that applies or carries it out, now counts as one
+statement. A second statement as a rule still fails: a summary, recap, "key reminders" or "remember"
+section, a checklist or closing check that re-lists the rules instead of pointing to them, or an
+Always/Never mirror. A one-line cross-reference passes. `incident-notes` keeps its requested
+checklist: one that points to the rules passes, one that restates them fails. No prompt changed;
+only `incident-notes`' `expected_outcome` metadata follows the grader.
+
+Both arms were re-measured with the new grader; no round-1 data is reused. before2 ran against a
+worktree at `af8fefcb` with the new grader files copied in, and after2 ran on HEAD (`637742c5`).
+
+| Case | Before2 | After2 | Delta |
+|---|---|---|---|
+| `skill-author-restate-dependency-bump` | 1/3 | 2/3 | +1 |
+| `skill-author-restate-endpoint-docs` | 2/3 | 3/3 | +1 |
+| `skill-author-restate-incident-notes` | 0/3 | 0/3 | 0 |
+| `skill-author-restate-pr-description` | 1/3 | 2/3 | +1 |
+| `skill-author-restate-translation-keys` | 0/3 | 0/3 | 0 |
+
+| Criterion | Kind | Before2 | After2 |
+|---|---|---|---|
+| `file-written` | deterministic | 100% | 100% |
+| `stated-once` | judge | 27% | 47% |
+| all pass | - | 27% | 47% |
+
+- **Closing check:** it refers to Constraints in 11 of 15 after2 files, against 0 of 15 in before2.
+  Before2 check steps list the rules again, for example "Confirm every new key starts with the page
+  name and exists in both `en.json` and `de.json`".
+- **`incident-notes` fails 3/3 on both sides.** Every file has the requested "Before you post"
+  checklist, and in every file its four items restate the four rules. After2 runs the draft "through
+  Before you post below", but the checklist itself still states the rules. The correction does not
+  get skill-author to write a pointing checklist when the user asks for one.
+- **`translation-keys` fails 3/3 on both sides.** Its brief repeats each rule three times. After2's
+  check step opens with "Check the change against Constraints", then names the rules again ("confirm
+  every new key exists in both JSON files and both are staged in the same commit"). The judges count
+  that as a second statement.
+- **Split votes:** before2 `dependency-bump` runs 1 and 2, and after2 `pr-description` runs 1 and 3,
+  were 2-1 majorities.
+
+eval_compare verdict: **b better** (after better). Paired difference (after − before) +0.200, 95% CI
+[+0.067, +0.333] over the 5 cases; sign test after better 3, before better 0, ties 2, p = 0.25.
+Errored runs: none; judge errors: none; unjudged runs: none. The revert rule fires only on "a better",
+so **the correction is kept**. Judge validation: `stated-once` provisional.
+
+Spend, a comparison figure only (subscription): round 1 before $5.27, after $5.38; round 2 before2
+$5.20, after2 $4.68.
+
+How far this result holds: the round-2 grader was designed from round 1's outputs on the same 5
+cases, so its +0.200 is in-sample for the grader, although the skill was not changed between rounds.
+At n = 5 the sign test cannot go below p = 0.0625, and this one is p = 0.25. The judge is
+provisional and has no recorded reasoning per vote. The two cases that fail on both sides show the
+correction's limit: it stops recaps and Always/Never mirrors, but not a checklist the user asks for,
+or a check step that names the rules after pointing to Constraints.
+
+eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus
+before, averaged over the cases.
+
+Wording gap left open: skill-author conventions.md:316 forbids restating a rule in a workflow step,
+while the round-2 grader accepts a step that applies the rule. Applying is not restating, so the two
+agree in substance, but :316 can read as stricter. It was not reworded, because that would change the
+measured arm and need a new after run.
+
+After the measured runs, the checklist item at conventions.md:403 was cut to a pointer to Constraint Deduplication (`37af98bc`), because it restated the rule in a checklist. That edit is unmeasured; it only points at the measured section.
+
+## Assumed-absent-context group (spec 023 T3.11, PA-08)
+
+Five cases guard the rule that a subagent sees only its own body and its brief. Each asks agent-author
+for an agent a parent dispatches with a brief, from a request that leans on facts only the parent
+conversation has: "the migration file we discussed" and "the usual branch" (migration reviewer), "the
+bug from earlier" and "the test layout we agreed on" (bug reproducer), "the naming convention I
+mentioned once" (naming checker), "the fix we talked about" and "the test command from last time"
+(fix backporter), and "the settings we agreed to remove" (config auditor). Each case has two graders
+on the written file: `file-written` (file_exists) and `explicit-inputs` (llm, binary). That grader
+checks that the body names every such fact as an input the caller passes, or reports it as missing, and
+that the body has no wording that presumes the parent conversation.
+
+This is a citation migration, not a rule change. "Before" is agent-author at `2c6bae47`. "After" is
+`70ab20c9` plus `241c9d8f`. In agent-author `reference/anti-patterns.md` "Assuming Parent Context Is
+Visible", the restated reason and the list of what a subagent receives are removed; the tell and the Fix
+stay, with `Reason: PA-08`. The `reference/conventions.md` anti-pattern bullet drops "it isn't" and
+gains `Reason: PA-08`. In `docs/about/principles.md` § 2.3 the two delegation bullets become one, with
+`Reason: PA-08`. Both runs were `--ablation none --allow-tools Write Edit`, 3 runs per case, `-j 4`,
+Claude Code 2.1.316, Opus 5.5, default judge model.
+
+Rates are each case's all-pass rate over runs that neither errored nor went unjudged, as eval_compare counts them:
+
+| Case | Before | After | Delta |
+|---|---|---|---|
+| `agent-author-context-backport` | 3/3 | 3/3 | 0.00 |
+| `agent-author-context-bug-repro` | 3/3 | 3/3 | 0.00 |
+| `agent-author-context-config-audit` | 3/3 | 3/3 | 0.00 |
+| `agent-author-context-migration-review` | 3/3 | 3/3 | 0.00 |
+| `agent-author-context-naming-check` | 3/3 | 3/3 | 0.00 |
+
+- **Signal:** none, as expected. The rule was already correct, so all five cases sat at 1.00 before and
+  serve as regression guards. Every judge vote was PASS PASS PASS. A bug-reproducer file checked by hand
+  takes the report and the test layout from the brief only, says it cannot see the parent conversation,
+  and returns `NEEDS_CONTEXT` when the brief has no layout.
+- No run errored or went unjudged on either side.
+
+| Criterion | Kind | Before | After |
+|---|---|---|---|
+| `file-written` | deterministic | 100% | 100% |
+| `explicit-inputs` | judge | 100% | 100% |
+| all pass | - | 100% | 100% |
+
+eval_compare verdict: **no measurable difference**. Paired difference (after − before) +0.000, 95% CI
+[+0.000, +0.000]; sign test ties 5, p = 1. Errored runs: before 0, after 0; judge errors: before 0, after
+0. The judge is provisional (not validated against hand labels). The revert rule fires only on "a
+better", so **the citation is kept**.
+
+Spend, a comparison figure only (subscription): before $6.19, after $6.42.
+
+eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
+
 ## Cost
 
 The prompt-author suite at 3 runs per arm costs about $7.40 (with plugin about $2.05 per round of four

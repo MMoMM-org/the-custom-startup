@@ -135,10 +135,10 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   4. Validate: full tcs-helper tests are green; prompt_lint reports 0 errors on the changed files.
   5. Success: no (A) location in scope restates a rule without its PA link `[ref: PRD/F7 AC1]`
 
-- [ ] **T3.10 Redundant-restatement group (PA-05)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]` — after T3.9; parallel with T3.11
+- [x] **T3.10 Redundant-restatement group (PA-05)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]` — after T3.9; parallel with T3.11
   - research-internal.md (A) row 12 (skill-author conventions ~:177, :314-327; common-failures :159). Same five beats as T3.2-T3.6: 5 cases, before, citation, after, eval_compare, revert on "a better".
 
-- [ ] **T3.11 Assumed-absent-context group (PA-08)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]` — after T3.9; parallel with T3.10
+- [x] **T3.11 Assumed-absent-context group (PA-08)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]` — after T3.9; parallel with T3.10
   - (A) row 18 (agent-author anti-patterns ~:112-116, conventions ~:372; docs/about/principles.md:80-81). Same five beats.
 
 - [ ] **T3.12 Output-contract group (PA-13)** `[activity: skill-authoring]` `[component: C6]` — after T3.10 and T3.11 (shares conventions files)
