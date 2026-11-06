@@ -185,11 +185,14 @@ Display discovery summary table:
 
 Read reference/scoring-rubric.md.
 
+Read the repository README and skim the code layout first: the rubric credits only what they do not
+already give.
+
 For each discovered file where type is `claude_md` or `agents_md`:
 1. Read the file content
 2. Apply all 6 scoring criteria from the rubric:
    - commands_workflows (0-20): scan for runnable commands, CLI invocations, workflow steps
-   - architecture_clarity (0-20): scan for system structure, design rationale, data flow
+   - architecture_clarity (0-20): scan for structural constraints and design reasons the README and code lack
    - non_obvious_patterns (0-15): scan for gotchas, workarounds, "note:", "important:", edge cases
    - conciseness (0-15): measure line count, redundancy, ratio of actionable to filler content
    - currency (0-15): scan for stale references, deprecated tools, outdated versions
@@ -210,7 +213,10 @@ Read reference/categorization.md and reference/scope-rules.md.
 
 For each discovered file:
 1. Parse content into discrete items (bullet points, sections with content, code blocks, paragraphs)
-2. For each item: classify by category using categorization.md signal keywords and edge case rules:
+   - If the README or code already gives an item (an overview, directory tour, tech-stack list or
+     setup steps), mark it for removal instead of categorizing it, and list it in Content Migration
+     with To: `removed (in README)` or `removed (in code)` ([PA-31](../prompt-author/reference/catalog/instruction-files.md#pa-31-overview-the-readme-or-code-already-gives)).
+2. For each remaining item: classify by category using categorization.md signal keywords and edge case rules:
    - general: naming, convention, style, format, always/never/prefer directives
    - tools: CLI commands, build/CI references, API/SDK knowledge, tool quirks
    - domain: business rules, entity definitions, data model constraints, domain vocabulary
@@ -315,8 +321,9 @@ OPTIMIZATION-REPORT.md
 ```
 
 For each optimized CLAUDE.md file: replace @-imports with descriptive references from
-ImportReplacement[]; move categorized content to the appropriate memory category file under
-`repo/memory/`; keep routing rules, guardrails, and essentials in CLAUDE.md.
+ImportReplacement[]; drop items marked for removal; move categorized content to the appropriate
+memory category file under `repo/memory/`; keep routing rules, guardrails, and essentials in
+CLAUDE.md.
 
 Write `claude-md-optimization/OPTIMIZATION-REPORT.md` with these sections:
 

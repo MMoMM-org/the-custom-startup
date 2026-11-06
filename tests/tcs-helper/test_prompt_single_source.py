@@ -82,7 +82,7 @@ CONSUMERS = {
     'agent-author': 'T3.1',
     'memory-claude-md-optimize': 'T3.5',
 }
-MIGRATED_CONSUMERS = {'skill-author', 'agent-author'}
+MIGRATED_CONSUMERS = {'skill-author', 'agent-author', 'memory-claude-md-optimize'}
 
 
 # ---------------------------------------------------------------- loaders
