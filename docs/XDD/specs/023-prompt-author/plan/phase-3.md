@@ -103,7 +103,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   4. Validate: Run after, compare, keep or revert, and record.
   5. Success: The rubric no longer rewards a generic overview; the memory-claude-md-optimize strict-xfail marker is removed `[ref: PRD/F7 AC3]`
 
-- [ ] **T3.6 agent-author agentic entries (PA-20–PA-24)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]`
+- [x] **T3.6 agent-author agentic entries (PA-20–PA-24)** `[activity: skill-authoring]` `[component: C6]` `[parallel: true]`
 
   1. Prime: Read the agent-author conventions and output-formats, and the Gravity table `[ref: research-external.md § Agent prompts vs one-shot prompts]`.
   2. Test: Create `plugins/tcs-helper/evals/agent-author-agentic-contract/`:

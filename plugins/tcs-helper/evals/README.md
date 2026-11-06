@@ -222,6 +222,60 @@ Spend, a comparison figure only (subscription): before $5.39, after $5.70.
 
 eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
 
+## Agentic-contract group (spec 023 T3.6, PA-20 to PA-24)
+
+Five cases defend the added rule: an agent for a multi-step job whose reply a program parses states
+what it does with unclear input, when it stops other than on success, its goal and done criterion, what
+it does instead of a forbidden or out-of-scope action, and its scope fence. Each case asks agent-author
+for one such agent (dependency-upgrade checker returning a JSON list, flaky-test triager returning a
+verdict table, migration gate returning a `VERDICT:` line plus findings, docs link checker returning
+broken links as JSON, release-notes drafter returning YAML) and has two graders on the written file:
+`file-written` (file_exists) and `agentic-contract` (llm: all five of PA-20 to PA-24 present in the
+body, binary).
+
+"Before" is agent-author at `5a7fc3ef`, whose create steps defined the body as ICMDA sections only and
+never read anti-patterns.md. "After" is the addition in `467a0e41`: SKILL.md create step 6 cites PA-22
+for the Mission's done criterion, gains a sub-step with PA-20, PA-21, PA-23 and PA-24 and one with the
+PA-01 reason-clause rule, and verify step 8 checks the contract; conventions.md gains an Agentic
+Contract section; the output-formats.md audit checklist gains five rows. Both runs were `--ablation
+none --allow-tools Write Edit`, 3 runs per case, `-j 4`, Claude Code 2.1.316, Opus 5.5, default judge
+model.
+
+Rates are each case's all-pass rate over runs that neither errored nor went unjudged, as eval_compare counts them:
+
+| Case | Before | After | Delta |
+|---|---|---|---|
+| `agent-author-agentic-dep-upgrade` | 2/3 | 3/3 | +0.33 |
+| `agent-author-agentic-flaky-triage` | 2/3 | 3/3 | +0.33 |
+| `agent-author-agentic-link-check` | 3/3 | 3/3 | 0.00 |
+| `agent-author-agentic-migration-gate` | 3/3 | 3/3 | 0.00 |
+| `agent-author-agentic-release-notes` | 2/3 | 3/3 | +0.33 |
+
+- **Signal:** before, the model often wrote parts of the contract unprompted, so link-check and
+  migration-gate sat at 1.00 and serve as regression guards. The three before failures were judged
+  FAIL FAIL FAIL (flaky-triage run 3, release-notes run 1) and PASS FAIL FAIL (dep-upgrade run 2, an
+  8 KB file). The flaky-triage file, checked by hand, has no action for a missing CI log or an unknown
+  test ID, no stop condition other than success, and a mostly bare `never {}` list.
+- **After:** `NEEDS_CONTEXT` appears in 8 of 15 written files, against 0 of 15 before.
+- No run errored or went unjudged on either side.
+
+| Criterion | Kind | Before | After |
+|---|---|---|---|
+| `file-written` | deterministic | 100% | 100% |
+| `agentic-contract` | judge | 80% | 100% |
+| all pass | - | 80% | 100% |
+
+eval_compare verdict: **b better** (after better). Paired difference (after − before) +0.200, 95% CI
+[+0.067, +0.333] over the 5 cases; sign test after better 3, before better 0, ties 2, p = 0.25.
+Errored runs: before 0, after 0; judge errors: before 0, after 0. The judge is provisional (not
+validated against hand labels). The revert rule fires only on "a better", so **the addition is
+kept**. The PA-01 reason-clause rule on the create path has no grader of its own here; it is covered
+only in that no case regressed.
+
+Spend, a comparison figure only (subscription): before $7.62, after $7.59.
+
+eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
+
 ## Cost
 
 The prompt-author suite at 3 runs per arm costs about $7.40 (with plugin about $2.05 per round of four
