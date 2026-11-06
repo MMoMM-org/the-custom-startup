@@ -179,7 +179,7 @@ version: "1.0"
   - The `plugin eval` suites in tcs-workflow.
   - The behaviour of skill-author/agent-author on everything the catalog does not correct.
 - **Can Modify:**
-  - The skill-author, agent-author and memory-claude-md-optimize directories (`plugins/tcs-helper/skills/skill-author/`, `skills/agent-author/`, `skills/memory-claude-md-optimize/`): SKILL.md, reference files and examples (rule copies → catalog citations; corrected rules). *(widened 2026-11-07, Phase 3 drift check: T3.6 and T3.8 changed SKILL.md and examples/canonical-agent.md, not only reference files)*
+  - The skill-author, agent-author and memory-claude-md-optimize directories (`plugins/tcs-helper/skills/skill-author/`, `skills/agent-author/`, `skills/memory-claude-md-optimize/`): SKILL.md, reference files and examples (rule copies → catalog citations; corrected rules). *(widened 2026-11-06, Phase 3 drift check: T3.6 and T3.8 changed SKILL.md and examples/canonical-agent.md, not only reference files)*
   - The prompt-author catalog (`plugins/tcs-helper/skills/prompt-author/reference/catalog/`) where an entry's Fix or Tell is amended, only as a measured change: the PA-13 amendment in T3.12, measured by the `prompt-author-audit-contract-*` cases.
   - authoring_reminder.py.
   - docs/about/principles.md (stale eval claim l.146, contested description note l.43, PA citations) and docs/about/skill-and-agent-design.md (PA-51 citation).
@@ -996,12 +996,12 @@ Not applicable: no UI. The skill's outputs are a finding table, a draft, a port 
   - Rationale: two of the three skills have no evals. Changing them unmeasured would repeat the defect class (rules copied on judgement, not measurement). The skill-author Iron Law demands a failing eval anyway.
   - Trade-offs: about 25 new cases (5 groups × 5) plus proving runs; at the tcs-workflow suite's rate (~$5 for 6 cases × 3 runs × 2 arms) roughly $40–60 in total. Slower than a manual review.
   - Revised 2026-11-05 after spec validation: the confirmed "one case per group" made the revert rule degenerate (n = 1 → CI = [d, d]).
-  - Revised 2026-11-07 after the Phase 3 drift check (T3.8), as built in T3.2-T3.13:
+  - Revised 2026-11-06 after the Phase 3 drift check (T3.8), as built in T3.2-T3.13:
     - No separate weakened-rule run: the before run on the old rule is the proving signal. A 1.00 before is valid for a citation-only migration and makes that group a regression guard.
     - Held-out cases: an iterated correction needs held-out cases to claim a gain. A second correction designed from the first after run's failures on the same cases (T3.5 after2, the T3.10 grader redesign) is in-sample: it is kept if nothing regresses, but its gain is provisional.
     - A before side may merge a re-run of a case that was unjudged (every run's llm grader skipped by the cost ceiling), as in T3.3; the re-run replaces only that case.
     - Dollar caps are dropped for Claude runs on the subscription: cost is a comparison figure, recorded per run in evals/README.md, and `--max-cost-usd` is set above the expected cost so no paid grader is skipped.
-  - User confirmed: **Yes** (2026-11-05); 2026-11-07 revisions are user choices recorded in the README Decisions Log (2026-11-06 rows)
+  - User confirmed: **Yes** (2026-11-05); 2026-11-06 revisions are user choices recorded in the README Decisions Log (2026-11-06 rows)
 
 - [x] SDD-ADR-5 Lint design: one stdlib script with a check registry. Errors E1–E4: secret, unbalanced XML tag, dead Markdown link/anchor or `@`-import, undelimited interpolation in a code prompt. Warnings W1–W3:
   - W1 emphasis ≥3 hits and >5/1k words,
