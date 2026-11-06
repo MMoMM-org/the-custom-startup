@@ -1,6 +1,6 @@
 # Output Format Templates
 
-Every agent MUST define an explicit `## Output` section in its body. Free-form prose is reject-on-sight — it makes orchestration brittle and hides important findings.
+Every agent MUST define an explicit `## Output` section in its body: every field, its type or allowed values, where it appears in the reply, and one example of the return as the caller receives it. Free-form prose is reject-on-sight. Reason: [PA-13](../../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract).
 
 This file provides:
 1. **Typed-table templates per archetype** for the agent's own `## Output` section
@@ -34,6 +34,14 @@ For nested types, define them inline with their own table:
 | location | string | Yes | file:line citation |
 | description | string | Yes | What the issue is |
 | fix | string | Yes | Proposed remediation |
+```
+
+Close the section with where the return appears and one filled-in example of it, as the caller receives it:
+
+```markdown
+The final message is one JSON object and nothing else. Example:
+
+{"findings": [{"severity": "Warning", "location": "src/app.py:12", "description": "…", "fix": "…"}], "filesReviewed": ["src/app.py"], "testsRun": "pytest -q: 41 passed", "recommendedNextStep": "…"}
 ```
 
 Use rubric-style markdown lists (`- **Critical**`, `- **Warning**`) instead of typed tables only when the agent's output is purely human-facing and won't be consumed by orchestration.
@@ -145,6 +153,7 @@ Use rubric-style markdown lists (`- **Critical**`, `- **Warning**`) instead of t
 | | At least one `## Decision: <Topic>` for routing decisions | If agent makes routing choices |
 | | `## Activities` numbered list of concrete actions | Yes |
 | | `## Output` typed table or named rubrics | Yes — never free prose |
+| | Every field has a type or its allowed values, and the section shows one example of the return (PA-13) | If a caller parses the return |
 | **Agentic Contract** | `## Mission` names a done criterion (PA-22) | Yes |
 | | Names the action for missing or unclear input (PA-20) | Yes |
 | | States when to stop and report other than on success, and what the report contains (PA-21) | Yes |

@@ -312,13 +312,19 @@ does not fit (PA-22).
 
 ### 7. `## Output`
 
-Typed table defining the agent's return contract:
+The return contract the caller branches on: a typed table with every field, nested types included,
+each with its type or its allowed values, then one example of the return exactly as the caller
+receives it. Reason: [PA-13](../../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract).
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| status | enum: `DONE` \| `NEEDS_CONTEXT` \| `BLOCKED` | Yes | Whether the job completed |
 | findings | Finding[] | Yes | Audit findings list |
 | filesReviewed | string[] | Yes | Paths examined |
 | recommendedNextStep | string | Yes | Single-sentence next action |
+
+> Example of the final message:
+> `{"status": "DONE", "findings": [{"severity": "Warning", "location": "src/app.py:12", "description": "…", "fix": "…"}], "filesReviewed": ["src/app.py"], "recommendedNextStep": "…"}`
 
 **Free-form prose output is reject-on-sight.** Every agent must define an explicit return contract.
 
