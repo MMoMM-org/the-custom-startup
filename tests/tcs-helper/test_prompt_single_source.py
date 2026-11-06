@@ -7,7 +7,7 @@ git-tracked .md under plugins/ and docs/about/ outside catalog/: no active entry
 fingerprint is copied there, every PA token names an indexed entry that is not
 retired, no file @-imports a catalog file, every documented `claude plugin eval` run
 under plugins/ keeps its report private, and each consumer skill cites at least one
-entry (strict xfails until Phase 3 migrates them).
+entry.
 
 Each scan is a function returning findings with file and line, run once against
 the repo and once against seeded fixtures, so a scan that silently finds nothing
@@ -77,12 +77,8 @@ PINNED_AUTHORITY_SENTENCES = (
      '- [ ] Description has no `Use PROACTIVELY` / `MUST BE USED`'),
 )
 
-CONSUMERS = {
-    'skill-author': 'T3.1',
-    'agent-author': 'T3.1',
-    'memory-claude-md-optimize': 'T3.5',
-}
-MIGRATED_CONSUMERS = {'skill-author', 'agent-author', 'memory-claude-md-optimize'}
+# Skills that apply the catalog's rules; each must cite at least one resolving PA entry.
+CONSUMERS = ('skill-author', 'agent-author', 'memory-claude-md-optimize')
 
 
 # ---------------------------------------------------------------- loaders
@@ -465,11 +461,7 @@ def test_every_rule_bearing_authority_sentence_is_pinned():
     assert not unpinned, 'pin these PA-50 sentences in PINNED_AUTHORITY_SENTENCES:\n' + '\n'.join(unpinned)
 
 
-@pytest.mark.parametrize('consumer', [
-    pytest.param(name, marks=() if name in MIGRATED_CONSUMERS else
-                 pytest.mark.xfail(strict=True, reason=f'{name} cites the catalog from {task}'))
-    for name, task in CONSUMERS.items()
-])
+@pytest.mark.parametrize('consumer', CONSUMERS)
 def test_consumer_cites_a_catalog_entry(consumer):
     skill_dir = f'plugins/tcs-helper/skills/{consumer}/'
     files = consumer_rule_files(tracked_markdown(), skill_dir)
