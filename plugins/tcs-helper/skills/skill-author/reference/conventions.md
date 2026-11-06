@@ -400,7 +400,7 @@ When converting an existing skill to these conventions:
 - [ ] Replace novel syntax blocks (prefer/avoid) with **In scope:** / **Out of scope:**
 
 **Token efficiency:**
-- [ ] Each rule stated once — no Always/Never mirror, no step, recap or checklist that repeats a Constraint ([PA-05](../../prompt-author/reference/catalog/core.md#pa-05-redundant-restatement))
+- [ ] Each rule stated once (see [Constraint Deduplication](#constraint-deduplication))
 - [ ] Move enforcement-worthy Persona rules into **Never:**
 - [ ] Remove forward declarations from Interface
 - [ ] Remove self-evident State comments
