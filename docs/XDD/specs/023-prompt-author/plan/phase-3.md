@@ -59,7 +59,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   4. Validate: Run after, then eval_compare before vs after. Keep, or revert per skill. Record both scores in evals/README.md.
   5. Success: The correction is measured, then kept or reverted with the reason recorded `[ref: PRD/F7 AC2]`
 
-- [ ] **T3.2b Ceiling-skipped graders are unjudged, not failed** `[activity: backend-tooling]` `[component: C4]` `[ref: SDD/Error Handling; SDD-ADR-4]` — before T3.3
+- [x] **T3.2b Ceiling-skipped graders are unjudged, not failed** `[activity: backend-tooling]` `[component: C4]` `[ref: SDD/Error Handling; SDD-ADR-4]` — before T3.3
 
   1. Prime: prompt_eval_stats.build_report and eval_compare's reading of plugin-eval result.json; the T3.2 before/after result.json, where a grader skipped by the cost ceiling ("skipped: cost ceiling") is stored as `passed: false, scored: true`.
   2. Test (red first): a fixture result.json where one run's llm grader is skipped by the ceiling. The run counts as unjudged: excluded from that criterion's rate and from the all-pass rate. The report lists unjudged runs per side. A skip on one side only cannot produce "a better". A fixture where every run of a case is unjudged yields "insufficient cases" if fewer than 5 judged cases remain.
