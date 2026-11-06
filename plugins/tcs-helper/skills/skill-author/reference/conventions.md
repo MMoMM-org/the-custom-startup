@@ -174,7 +174,7 @@ No forward declarations — the Workflow headings serve as the function index.
 
 ### Constraints
 
-Use markdown **Always:** and **Never:** lists. State each rule once, in one place and in whichever framing is most natural: a rule in Constraints is not restated in a workflow step, and a closing check step names what it checks ("check the draft against Constraints") instead of listing the rules again. Reason: [PA-05](../../prompt-author/reference/catalog/core.md#pa-05-redundant-restatement). Move enforcement-worthy rules from Persona into **Never:**.
+Use markdown **Always:** and **Never:** lists, with each rule in one place (see [Constraint Deduplication](#constraint-deduplication)), and move enforcement-worthy rules from Persona into **Never:**.
 
 **Always:**
 - Every finding must have a specific, implementable fix.
