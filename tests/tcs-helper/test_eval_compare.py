@@ -226,6 +226,90 @@ def test_partial_input_marks_the_report_partial_and_exits_2(ec, tmp_path):
     assert report_of(out)["partial"] is True
 
 
+# ------------------------------------------------------------------ ceiling-skipped graders (T3.2b)
+
+# The run and grader record plugin eval writes when --max-cost-usd skips a paid
+# (llm) grader, copied from the T3.2 before/after result.json (Claude Code
+# 2.1.316, case skill-author-rationale-reference, run 3). The verdict is stored
+# as a failure; the run's skippedPaidGraders and the grader's explanation say
+# it was never judged.
+CEILING_SKIP_RUN = {"score": 0.5, "passed": False, "judgeCostUsd": 0,
+                    "skippedPaidGraders": True}
+CEILING_SKIPPED_GRADER = {"name": "rubric", "passed": False, "weight": 1,
+                          "explanation": "skipped: cost ceiling", "withOnly": False,
+                          "scored": True}
+
+
+def judged_cases(names, runs=3, skipped=()):
+    """The real fixture with an llm grader "rubric", every grader passing in
+    RUNS runs per case; the (case, run) pairs in SKIPPED have rubric skipped by
+    the cost ceiling, in the exact shape plugin eval stores."""
+    out = with_cases(real(), names, True)
+    for case in out["cases"]:
+        case["graders"].append({"name": "rubric", "type": "llm", "weight": 1, "config": {}})
+        template = case["arms"]["with"][0]
+        template.update({"score": 1, "passed": True})
+        case["arms"]["with"] = []
+        for number in range(1, runs + 1):
+            run = copy.deepcopy(template)
+            if (case["name"], number) in skipped:
+                run.update(CEILING_SKIP_RUN)
+                run["graders"].append(dict(CEILING_SKIPPED_GRADER))
+            else:
+                run["graders"].append({"name": "rubric", "passed": True, "weight": 1,
+                                       "explanation": "PASS", "withOnly": False,
+                                       "scored": True})
+            case["arms"]["with"].append(run)
+    return out
+
+
+def test_ceiling_skipped_run_is_left_out_of_the_criterion_and_all_pass_rates(ec, tmp_path):
+    before = dump(tmp_path / "before.json", judged_cases(["c"], skipped={("c", 3)}))
+    after = dump(tmp_path / "after.json", judged_cases(["c"]))
+    out = tmp_path / "out"
+    ec.main(["compare", str(before), str(after), "--out", str(out)])
+    rep = report_of(out)
+    assert rep["per_criterion"]["rubric"] == {"kind": "judge", "a": 1.0, "b": 1.0}
+    assert rep["all_pass"] == {"a": 1.0, "b": 1.0}
+    assert rep["judge_errors"] == {"a": 0, "b": 0}
+
+
+def test_report_lists_the_unjudged_runs_of_each_side(ec, tmp_path):
+    before = dump(tmp_path / "before.json", judged_cases(["c"], skipped={("c", 3)}))
+    after = dump(tmp_path / "after.json", judged_cases(["c"], skipped={("c", 1)}))
+    out = tmp_path / "out"
+    ec.main(["compare", str(before), str(after), "--out", str(out)])
+    rep = report_of(out)
+    assert rep["unjudged_runs"] == {"a": [{"case": "c", "run": 3, "criteria": ["rubric"]}],
+                                    "b": [{"case": "c", "run": 1, "criteria": ["rubric"]}]}
+    md = (out / "report.md").read_text()
+    assert "Unjudged runs: a c run 3 (rubric); b c run 1 (rubric)." in md
+
+
+def test_a_skip_on_one_side_only_does_not_make_a_better(ec, tmp_path):
+    names = ["case{}".format(i) for i in range(5)]
+    before = dump(tmp_path / "before.json", judged_cases(names))
+    after = dump(tmp_path / "after.json",
+                 judged_cases(names, skipped={(n, 3) for n in names}))
+    out = tmp_path / "out"
+    assert ec.main(["compare", str(before), str(after), "--out", str(out)]) == 0
+    rep = report_of(out)
+    assert rep["verdict"] == "no measurable difference"
+    assert rep["sign_test"]["a_better"] == 0
+
+
+def test_a_case_with_every_run_unjudged_drops_out_of_the_pairing(ec, tmp_path):
+    names = ["case{}".format(i) for i in range(5)]
+    before = dump(tmp_path / "before.json",
+                  judged_cases(names, skipped={("case0", n) for n in (1, 2, 3)}))
+    after = dump(tmp_path / "after.json", judged_cases(names))
+    out = tmp_path / "out"
+    ec.main(["compare", str(before), str(after), "--out", str(out)])
+    rep = report_of(out)
+    assert rep["paired_difference"]["n_cases"] == 4
+    assert rep["verdict"] == "insufficient cases"
+
+
 def _git(*args, cwd):
     env = dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
     return subprocess.run(["git", "-C", str(cwd)] + list(args), check=True, env=env,
