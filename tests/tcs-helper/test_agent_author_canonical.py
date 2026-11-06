@@ -85,7 +85,10 @@ def output_status_values():
 # ---------------------------------------------------------------- tests
 
 def test_mission_states_a_done_criterion():
-    assert 'done criterion' in CONVENTIONS.read_text(encoding='utf-8')
+    rule = CONVENTIONS.read_text(encoding='utf-8').split('### 4. `## Mission`', 1)[1].split('\n### ', 1)[0]
+    assert 'done criterion' in rule and '#pa-22-' in rule, (
+        'conventions.md § 4 `## Mission` no longer requires a done criterion citing PA-22'
+    )
     mission = section('Mission')
     assert re.search(r'\bis done when\b', mission), (
         'Mission names no done criterion ("... is done when ..."); conventions.md § 4 / PA-22'
