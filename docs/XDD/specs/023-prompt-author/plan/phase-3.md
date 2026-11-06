@@ -115,7 +115,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   4. Validate: Run after, compare, keep or revert, and record.
   5. Success: agent-author gains the agentic entries through citation `[ref: PRD/F7 AC4]`
 
-- [ ] **T3.7 Docs and local-testing procedure** `[activity: technical-writing]` `[component: C6]`
+- [x] **T3.7 Docs and local-testing procedure** `[activity: technical-writing]` `[component: C6]`
 
   1. Prime: Read docs/about/principles.md:43 and :146, and the CLAUDE.md "Testing Skills During Development" section.
   2. Test: T1.4's PA-token check covers `docs/about/`: write the PA-50 citation in principles.md:43 first with a wrong ID and watch the dead-ID check fail, then correct it.
@@ -132,6 +132,6 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   - All per-consumer strict xfails are removed and pass. The spec-compliance reviewer confirms every research-internal.md (A) copy location now cites instead of restating.
   - `pytest -q -rs` and `prompt_lint.py --repo` pass.
   - evals/README.md has before/after scores, kept/reverted and cost for T3.2–T3.6.
-  - Review follow-ups carried from T3.1-T3.3: testing-with-subagents.md:55,69,93,118 ("IMPORTANT: This is a real scenario" in test-subagent prompts), :146-147 ("Violating letter IS violating spirit", "Delete means delete"); persuasion-principles.md Authority still under "Principles That Work for Skills"; T3.1 consumers where the operational rule sits only behind the PA link (agent-author anti-patterns.md:100, skill-author conventions.md:88, common-failures.md:47). Also from T3.5/T3.6: agent-author examples/canonical-agent.md does not meet the new agentic contract (no done criterion, NEEDS_CONTEXT, stop condition, alternatives, scope fence); memory-claude-md-optimize scoring-rubric.md Currency/Actionability need "nothing left after copies → 0" and Actionability an echo of the remainder rule. Decide per item: fix (measured if it is a rule change) or record as out of scope.
+  - Review follow-ups carried from T3.1-T3.3: testing-with-subagents.md:55,69,93,118 ("IMPORTANT: This is a real scenario" in test-subagent prompts), :146-147 ("Violating letter IS violating spirit", "Delete means delete"); persuasion-principles.md Authority still under "Principles That Work for Skills"; T3.1 consumers where the operational rule sits only behind the PA link (agent-author anti-patterns.md:100, skill-author conventions.md:88, common-failures.md:47). Also from T3.5/T3.6: agent-author examples/canonical-agent.md does not meet the new agentic contract (no done criterion, NEEDS_CONTEXT, stop condition, alternatives, scope fence); memory-claude-md-optimize scoring-rubric.md Currency/Actionability need "nothing left after copies → 0" and Actionability an echo of the remainder rule. From T3.7: root README.md:141 lists tcs-helper skills without /prompt-author. Decide per item: fix (measured if it is a rule change) or record as out of scope.
   - Any reverted group is recorded in its catalog entry ("reverted for <skill>: <reason>") and in the spec README Decisions Log.
   - Success: every shared rule is cited, not restated `[ref: PRD/F7 AC1; PRD/Success Metrics Business Impact]`
