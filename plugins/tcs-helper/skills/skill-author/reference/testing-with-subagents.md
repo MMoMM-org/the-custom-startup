@@ -198,7 +198,7 @@ it crystal clear that Option [Y] was the only acceptable answer?
 
 1. **"The skill WAS clear, I chose to ignore it"**
    - Need stronger foundational principle
-   - Add "Violating letter is violating spirit"
+   - Name the cases the rule covers, so no case can be argued outside its intent
 
 2. **"The skill should have said X"**
    - Documentation problem - add their suggestion
