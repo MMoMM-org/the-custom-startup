@@ -184,6 +184,11 @@ version: "1.0"
   - authoring_reminder.py.
   - docs/about/principles.md (stale eval claim l.146, contested description note l.43, PA citations) and docs/about/skill-and-agent-design.md (PA-51 citation).
   - The CLAUDE.md local-testing section (add the prompt-author dependency), the AGENTS.md plugin tree, the root README.md and plugins/tcs-helper/README.md skill lists, and docs/ai/memory/tools.md.
+  - The prompt-author scripts (`plugins/tcs-helper/skills/prompt-author/scripts/`): eval_compare.py and prompt_eval_stats.py, for the T3.2b unjudged-run handling. *(widened 2026-11-06, Phase 3 as built)*
+  - The eval suite (`plugins/tcs-helper/evals/`): the case families (prompt.md and graders/) and evals/README.md with the before/after record. *(widened 2026-11-06, Phase 3 as built)*
+  - The tcs-helper tests (`tests/tcs-helper/`): test_agent_author_canonical.py, test_eval_compare.py and test_prompt_single_source.py. *(widened 2026-11-06, Phase 3 as built)*
+  - The agent-author pressure scenarios (`plugins/tcs-helper/skills/agent-author/evals/pressure-scenarios.md`), inside the agent-author directory but not among the file kinds named above. *(widened 2026-11-06, Phase 3 as built)*
+  - The memory index docs/ai/memory/memory.md (date of the tools.md entry). *(widened 2026-11-06, Phase 3 as built)*
 - **Must Not Touch:**
   - The prompts behind #250–#253, and plugins/tcs-helper/scripts/lib/semantic_detector.py as a whole (no `lint-ok` comment either). They are separate issues; prompt-author only finds them. Their open findings are allow-listed in the repo lint test with the issue number (KNOWN_OPEN).
   - rule-enforcer (its strong-wording rule is a follow-up, see Technical Debt).

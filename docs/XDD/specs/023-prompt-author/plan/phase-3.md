@@ -147,7 +147,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
 - [x] **T3.13 Long-instruction-list group (PA-10)** `[activity: skill-authoring]` `[component: C6]` — after T3.12
   - The copies the T3.8 inventory names for PA-10. Locate them first; if none restates PA-10, record that and close without an eval. Same five beats otherwise.
 
-- [ ] **T3.14 Spec update from the Phase 3 drift check** `[activity: technical-writing]` `[ref: SDD-ADR-4; SDD/Directory Map; PRD/F7 AC1]` — after T3.13
+- [x] **T3.14 Spec update from the Phase 3 drift check** `[activity: technical-writing]` `[ref: SDD-ADR-4; SDD/Directory Map; PRD/F7 AC1]` — after T3.13
   - Case families and Directory Map (including test_agent_author_canonical.py and T3.2b tests); AC1 becomes "cite, with at most a one-line operational rule; reasons and evidence stay in the catalog"; Can Modify widened to the three skills' directories plus the docs touched; SDD-ADR-4 gains: the before run on the old rule is the proving signal, an iterated correction needs held-out cases to claim a gain, merged before-sides are allowed when a case was unjudged, and cost is a comparison figure; the EvalReport fields `unjudged_runs` and `ceiling_skip_unmatched` and the verdict "insufficient cases"; the T3.2 figures in the Decisions Log corrected to 64% → 93%; plan task text for T3.2-T3.6 updated to the case families.
 
 - [ ] **T3.8 Phase Validation** `[activity: validate]`
