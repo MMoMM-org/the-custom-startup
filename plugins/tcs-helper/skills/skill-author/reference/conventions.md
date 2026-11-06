@@ -168,7 +168,7 @@ State {
 **In scope:** What this skill acts on.
 **Out of scope:** What is off-limits.
 
-**Why TypeScript-like syntax**: LLMs have extensive training on TypeScript interfaces. This format has near-zero parsing overhead and unambiguously communicates output contracts.
+The Interface is the output contract a caller branches on: every field, with its allowed values inlined. Reason: [PA-13](../../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract).
 
 No forward declarations — the Workflow headings serve as the function index.
 
