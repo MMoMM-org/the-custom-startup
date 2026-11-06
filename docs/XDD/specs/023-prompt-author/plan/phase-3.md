@@ -67,7 +67,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   4. Validate: full tcs-helper tests are green. Re-running `eval_compare.py compare` on the T3.2 files (offline) gives the reference case 2/2 on both sides. Record the corrected figures in the T3.2 README section.
   5. Success: a ceiling skip can no longer fake a regression `[ref: SDD-ADR-4]`
 
-- [ ] **T3.3 Authority-language rule group (PA-03)** `[activity: skill-authoring]` `[component: C6]`
+- [x] **T3.3 Authority-language rule group (PA-03)** `[activity: skill-authoring]` `[component: C6]`
 
   1. Prime: Read skill-author conventions:301-318 and persuasion-principles.md `[ref: research-internal.md (F)3-4]`.
   2. Test: Create `plugins/tcs-helper/evals/skill-author-no-authority-language/`:
@@ -132,5 +132,6 @@ Makes the three authoring skills consume the shared catalog with the corrected r
   - All per-consumer strict xfails are removed and pass. The spec-compliance reviewer confirms every research-internal.md (A) copy location now cites instead of restating.
   - `pytest -q -rs` and `prompt_lint.py --repo` pass.
   - evals/README.md has before/after scores, kept/reverted and cost for T3.2–T3.6.
+  - Review follow-ups carried from T3.1-T3.3: testing-with-subagents.md:55,69,93,118 ("IMPORTANT: This is a real scenario" in test-subagent prompts), :146-147 ("Violating letter IS violating spirit", "Delete means delete"); persuasion-principles.md Authority still under "Principles That Work for Skills"; T3.1 consumers where the operational rule sits only behind the PA link (agent-author anti-patterns.md:100, skill-author conventions.md:88, common-failures.md:47). Decide per item: fix (measured if it is a rule change) or record as out of scope.
   - Any reverted group is recorded in its catalog entry ("reverted for <skill>: <reason>") and in the spec README Decisions Log.
   - Success: every shared rule is cited, not restated `[ref: PRD/F7 AC1; PRD/Success Metrics Business Impact]`

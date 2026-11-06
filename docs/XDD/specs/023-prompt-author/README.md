@@ -75,6 +75,7 @@
 | 2026-11-06 | T3.2 result: PA-01/PA-02 correction kept for skill-author and agent-author. All-pass 60% → 87%, paired diff +0.267, CI [0, +0.533], verdict no measurable difference; spend $16.90 of $17 | Revert rule fires only on "a better". Signal from audit-fix and history-brief; body, discipline, reference guard against regression |
 | 2026-11-06 | T3.2b added: eval_compare counts a grader skipped by the cost ceiling as a failure | Symmetric in T3.2, but a one-sided skip could fake "a better" and force a wrong revert in T3.3-T3.6. Every later run also sets --max-cost-usd ~5% under its share, because in-flight runs overshoot by 2-3% |
 | 2026-11-06 | Dollar caps dropped as a budget for Claude eval runs; cost is recorded as a comparison figure only. `--max-cost-usd` is set above the expected cost so no paid grader is skipped | User: runs go through the Max20 subscription, no real cost. T3.3 before ($8.76 at a $6.80 ceiling) left verify-done fully unjudged; it is re-run before the after run |
+| 2026-11-06 | T3.3 result: PA-03 correction kept (skill-author conventions, persuasion-principles, testing-with-subagents). All-pass 46% → 92%, paired +0.467, CI [+0.267, +0.733], verdict b better (5/0/0); xdd-tdd-pressure-invoked 1.00 → 1.00 | First group with a measured gain: the old rule made the model write "No exceptions"/"YOU MUST" into 8 of 14 skills. Before side merges a verify-done re-run (stage A runs were unjudged). Cost figures $18.51 + guard $1.28 |
 
 ## Context
 
