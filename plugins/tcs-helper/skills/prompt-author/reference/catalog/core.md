@@ -123,9 +123,9 @@ Entries that apply to most prompt kinds and targets. Cite an entry by its ID and
 ## PA-13 Missing output contract
 - **Tell:** a program or orchestrator parses the output, and the prompt names no fields, status values or format.
 - **Fails because:** the model chooses its own shape, and the caller's parsing fails on every run.
-- **Fix:** state the output contract the caller branches on: each field, its allowed values, and where it appears.
+- **Fix:** state the output contract the caller branches on: each field, its allowed values, where it appears, and, for a return the caller parses, one example or schema of the return.
 - **Applies to:** brief, agent, api-system, code · any
-- **Evidence:** measured (spec 023 experiment T2/T3: briefs without a contract 0% vs 97-100% with one)
+- **Evidence:** measured (spec 023 experiment T2/T3: briefs without a contract 0% vs 97-100% with one; spec 023 T3.12)
 - **Fingerprint:** "State the output contract your caller branches on."
 - **Status:** active
 
