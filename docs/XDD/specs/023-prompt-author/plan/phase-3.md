@@ -39,7 +39,7 @@ phase: 3
 
 Makes the three authoring skills consume the shared catalog with the corrected rules, each correction measured.
 
-- [ ] **T3.1 Description rules → citations (no behaviour change)** `[activity: skill-authoring]` `[component: C6]`
+- [x] **T3.1 Description rules → citations (no behaviour change)** `[activity: skill-authoring]` `[component: C6]`
 
   1. Prime: Read the 8 description-rule and 5 purity-rule copies `[ref: research-internal.md (A) rows "Description = triggers only", "Front-load trigger", "Strip rationale"]` and PA-50–PA-52.
   2. Test: Red = the strict xfails for skill-author and agent-author in test_prompt_single_source.py ("cites an ID"): they fail as soon as citations exist (XPASS), so removing the markers is part of green. List the copies to replace from research-internal.md (A) before editing.
