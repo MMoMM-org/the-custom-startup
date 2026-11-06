@@ -144,7 +144,7 @@ Makes the three authoring skills consume the shared catalog with the corrected r
 - [x] **T3.12 Output-contract group (PA-13)** `[activity: skill-authoring]` `[component: C6]` — after T3.10 and T3.11 (shares conventions files)
   - (A) row 14 (skill-author conventions ~:171; agent-author conventions ~:313-323; output-formats :3). Same five beats.
 
-- [ ] **T3.13 Long-instruction-list group (PA-10)** `[activity: skill-authoring]` `[component: C6]` — after T3.12
+- [x] **T3.13 Long-instruction-list group (PA-10)** `[activity: skill-authoring]` `[component: C6]` — after T3.12
   - The copies the T3.8 inventory names for PA-10. Locate them first; if none restates PA-10, record that and close without an eval. Same five beats otherwise.
 
 - [ ] **T3.14 Spec update from the Phase 3 drift check** `[activity: technical-writing]` `[ref: SDD-ADR-4; SDD/Directory Map; PRD/F7 AC1]` — after T3.13

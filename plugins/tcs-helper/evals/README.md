@@ -707,6 +707,25 @@ the 5 cases, $2.90 for the guard).
 
 eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
 
+## Long-instruction-list group (spec 023 T3.13, PA-10)
+
+No eval, because no consumer restates PA-10. At `8a92753e`, nothing in skill-author, agent-author,
+memory-claude-md-optimize or the docs/about files that research-internal.md (A) names makes a rule
+about how many instructions or list items a prompt carries. Nothing there says compliance falls as the
+count grows, and nothing says to put critical rules first. PA-10 is cited only inside prompt-author
+(catalog, audit severity table, SKILL.md, small-local profile, lint W2). The closest passages are the
+size budgets: SKILL.md under 500 lines or 200 for orchestrators, an agent body of at most 25 KB, and
+the CLAUDE.md rubric warnings at 150 and 200 lines. These limit lines, bytes or tokens because of
+context cost and progressive disclosure, and (A) classes them as harness-specific. Their "move content
+to reference/" advice overlaps PA-10's Fix. But it is driven by size, not by rule count, so citing PA-10
+there would give them a reason they do not state. The group closes with no change and no cases. The
+search terms and every hit are listed in the task scratch file `t3x/t313/copies.md`.
+
+
+No eval ran: there was nothing to pair.
+
+eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
+
 ## Cost
 
 The prompt-author suite at 3 runs per arm costs about $7.40 (with plugin about $2.05 per round of four
