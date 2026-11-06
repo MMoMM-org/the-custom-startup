@@ -77,8 +77,7 @@ What does **not** reach it: the parent's conversation history, previously invoke
 
 Implications for TCS:
 
-- **Write the delegation prompt like a brief for a colleague who just walked in.** Targets, decisions, and constraints must be inline; the prompt string is the only parent→child channel.
-- **Never write a subagent that assumes it can "see what we discussed."** It cannot.
+- **Write the delegation prompt like a brief for a colleague who just walked in.** Targets, decisions, and constraints must be inline; the prompt string is the only parent→child channel, so a subagent body names the inputs it needs instead of referring to "what we discussed". Reason: [PA-08](../../plugins/tcs-helper/skills/prompt-author/reference/catalog/core.md#pa-08-assumed-absent-context).
 - **Our Memory Bank reaches agents in two layers, deliberately.** `CLAUDE.md` `@`-imports `docs/ai/memory/active.md` — a budgeted file of rules whose violation is silent and whose trigger is broad — so those reach every subagent by the hierarchy. It also imports `docs/ai/memory/memory.md`, an index that *links* its category files, so the rest is available but costs nothing until an agent chooses to read it. The split exists because an import is paid for on every dispatch, not once per session.
 - Use isolation deliberately: dispatch a subagent when the exploration output should stay out of the parent; invoke a skill inline when the result must remain visible. This is the load-bearing question in [skill-and-agent-design.md](skill-and-agent-design.md).
 
