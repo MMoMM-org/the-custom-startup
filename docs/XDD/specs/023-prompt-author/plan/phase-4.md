@@ -42,7 +42,7 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
   4. Validate: The tests pass. The hook never blocks.
   5. Success: The nudge fires on the four patterns without blocking `[ref: PRD/F9 AC1, AC2]`
 
-- [ ] **T4.2 Installed-layout verification** `[activity: validate]` `[parallel: true]`
+- [x] **T4.2 Installed-layout verification** `[activity: validate]` `[parallel: true]`
 
   1. Prime: Read the SDD Deployment View and the gotcha "Verify the installed layout once before release".
   2. Test: Expected result: a consumer skill in an installed copy resolves `../prompt-author/reference/catalog/core.md`.
