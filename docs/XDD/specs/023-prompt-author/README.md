@@ -88,6 +88,7 @@
 | 2026-11-06 | T3.13 closed without an eval: no consumer restates PA-10. The 12 size-budget passages (lines, bytes, tokens) argue context cost, not rule count; citing PA-10 there would add a reason they do not state | A rule-count check in the authoring audits would be a new rule, not a migration |
 | 2026-11-06 | Phase 3 complete (T3.1-T3.14, T3.2b) | Every shared rule in the three authoring skills cites the catalog; nine rule groups measured, none reverted; T3.8 re-validation PASS; suite green |
 | 2026-11-07 | T4.2 installed layout verified | Real `claude plugin` install (scratch CLAUDE_CONFIG_DIR, local marketplace path, no login) of tcs-helper 4.4.8; a stdlib checker resolved all 60 `prompt-author/` links with anchors in 12 consumer-skill files (4 catalog files): 0 failures. Red when prompt-author is removed (60/60) and when the PA-01 heading is renamed (9). Model check skipped (needs a login). Scratch removed |
+| 2026-11-07 | T4.3 consent: --confirm-provider claude and ollama=http://host.docker.internal:11434 for journeys J1, J2, J3 (target qwen3.5:35b-a3b in J3, judge qwen2.5:32b-instruct-q4_K_M from global startup.toml); ~20 user labels collected in chat in rounds of 4 | User choices |
 
 ## Context
 
