@@ -67,7 +67,7 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
   4. Validate: The reports exist, each with verdict, judge validation state and cost. The templates themselves are not committed changed unless the user approves (Technical Debt: docs/templates are out of scope).
   5. Success: Every journey completes, with its labelled report or "not evaluated on target" kit `[ref: PRD/User Journey Maps J1-J4; PRD/F4 AC5]`
 
-- [ ] **T4.3a Judge verdict as the last word of the last line** `[activity: backend-tooling]` `[component: C4]` `[ref: SDD/Implementation Gotchas (judge parse, l.~538)]` — blocks T4.3 J2/J3
+- [x] **T4.3a Judge verdict as the last word of the last line** `[activity: backend-tooling]` `[component: C4]` `[ref: SDD/Implementation Gotchas (judge parse, l.~538)]` — blocks T4.3 J2/J3
 
   1. Prime: prompt_eval.py `parse_verdict`, its tests, and SDD line ~538. Evidence: T4.3 J2 c1, where 4 of 10 qwen2.5 judge replies ended "... reason. PASS" and were booked as judge errors.
   2. Test (red first): `... reason. PASS` and `... reason. FAIL` on the last non-empty line parse as PASS/FAIL. Still errors: `**PASS**`, `pass`, a verdict-first line (`PASS because ...`), and a last line containing both PASS and FAIL. The existing last-line-only cases stay as they are.
