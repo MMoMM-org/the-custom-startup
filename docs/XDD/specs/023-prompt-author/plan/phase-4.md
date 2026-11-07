@@ -30,7 +30,7 @@ phase: 4
 
 Closes the loop: users are nudged to the skill, the installed layout is proven, and the whole flow runs end to end on real prompts.
 
-- [ ] **T4.1 Write-time nudge** `[activity: backend-tooling]` `[component: C7]`
+- [x] **T4.1 Write-time nudge** `[activity: backend-tooling]` `[component: C7]`
 
   1. Prime: Read `plugins/tcs-helper/scripts/authoring_reminder.py`, `tests/tcs-helper/test_authoring_reminder.py` and SDD-ADR-8.
   2. Test: Extend test_authoring_reminder.py:
