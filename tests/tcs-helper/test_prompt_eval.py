@@ -616,6 +616,33 @@ def test_parse_verdict_last_line_only(pe, reply, expected):
     assert pe.parse_verdict(reply) == expected
 
 
+QWEN_SAME_LINE_REPLY = (
+    "The response does not claim to have searched or retrieved sources and marks "
+    "specific sources as unverified or from memory where necessary. PASS")
+
+
+@pytest.mark.parametrize("reply,expected", [
+    ("The output meets the criterion. PASS", "PASS"),
+    ("The output misses the trade-off. FAIL", "FAIL"),
+    (QWEN_SAME_LINE_REPLY, "PASS"),
+    ("Intro line.\nThe output meets the criterion. PASS", "PASS"),
+    ("The output meets the criterion. PASS  \n\n", "PASS"),
+    ("Nothing here would fail. PASS", "PASS"),
+    # Trailing punctuation: no real judge reply carries it; the token must be exact.
+    ("The output meets the criterion. PASS.", None),
+    ("The output meets the criterion. FAIL.", None),
+    ("The output meets the criterion. **PASS**", None),
+    ("The output meets the criterion. pass", None),
+    ("PASS because the output meets the criterion", None),
+    ("Reason.\nPASS because the output meets the criterion", None),
+    ("It could PASS or FAIL. PASS", None),
+    ("It does not FAIL. PASS", None),
+    ("It does not PASS. FAIL", None),
+])
+def test_parse_verdict_last_token_of_last_line(pe, reply, expected):
+    assert pe.parse_verdict(reply) == expected
+
+
 def test_empty_kit_exits_1_before_send(pe, prov, tmp_path):
     kit = tmp_path / "emptykit"
     kit.mkdir()
