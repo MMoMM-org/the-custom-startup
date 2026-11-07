@@ -704,11 +704,18 @@ class Caller(object):
 # ------------------------------------------------------------------ grading
 
 def parse_verdict(reply):
-    """PASS or FAIL when the last non-empty line is exactly that word, else None."""
+    """PASS or FAIL when it is the last whitespace-separated token of the last
+    non-empty line and that line does not name the other verdict, else None."""
     lines = [line.strip() for line in (reply or "").splitlines() if line.strip()]
-    if lines and lines[-1] in ("PASS", "FAIL"):
-        return lines[-1]
-    return None
+    if not lines:
+        return None
+    verdict = lines[-1].split()[-1]
+    if verdict not in ("PASS", "FAIL"):
+        return None
+    other = "FAIL" if verdict == "PASS" else "PASS"
+    if re.search(r"\b" + other + r"\b", lines[-1]):
+        return None
+    return verdict
 
 
 def judge_prompt(rubric, material):

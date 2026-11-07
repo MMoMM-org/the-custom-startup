@@ -528,7 +528,9 @@ Command: prompt_eval.py run
         so overshoot is bounded by one call
   Errors during runs: a run that errors (CLI not logged in, timeout, is_error, Ollama 404 model not pulled, HTTP error) is recorded as
         errored, excluded from rates, and counted. A judge reply whose last non-empty line is not exactly PASS or FAIL is judge_error for that
-        criterion. If errored runs or judge errors exceed 20% for either version → exit 1 with a report that has no verdict
+        criterion. (amended 2026-11-07, T4.3a) The verdict is the last whitespace-separated token of that line, exactly PASS or FAIL, and
+        the line must not contain the other verdict word, so "reason. PASS" parses and "PASS.", "**PASS**" or "PASS because …" stay
+        judge errors. If errored runs or judge errors exceed 20% for either version → exit 1 with a report that has no verdict
   Multi-turn (turns.md): Ollama sends native message lists. For claude, --input-format stream-json --output-format stream-json --verbose
         under the isolation flags carries all user turns in one session (verified live in T2.1, 2026-11-05: turn 2 recalled turn 1, the
         system prompt held on both turns); cost = the last result event's total_cost_usd (cumulative)
