@@ -90,6 +90,7 @@
 | 2026-11-07 | T4.2 installed layout verified | Real `claude plugin` install (scratch CLAUDE_CONFIG_DIR, local marketplace path, no login) of tcs-helper 4.4.8; a stdlib checker resolved all 60 `prompt-author/` links with anchors in 12 consumer-skill files (4 catalog files): 0 failures. Red when prompt-author is removed (60/60) and when the PA-01 heading is renamed (9). Model check skipped (needs a login). Scratch removed |
 | 2026-11-07 | T4.3 consent: --confirm-provider claude and ollama=http://host.docker.internal:11434 for journeys J1, J2, J3 (target qwen3.5:35b-a3b in J3, judge qwen2.5:32b-instruct-q4_K_M from global startup.toml); ~20 user labels collected in chat in rounds of 4 | User choices |
 | 2026-11-07 | T4.3 stopped on a runner defect; T4.3a added: the judge parser accepts PASS/FAIL as the last word of the last line | qwen2.5 put the verdict after its reason in 4 of 10 replies, so they were booked as judge errors (>20% means no verdict). Option 1 of 3 (smallest; ambiguity checks kept). J1 done: contract coverage 100% (24/24) |
+| 2026-11-07 | T4.3 end-to-end run complete | J1 contract coverage 100% (12 cases x 2, haiku); J2 audit no measurable difference, smaller version recommended, judge validated 89% (16/18) but passed both author-FAIL items (leniency 0/2); J3 port no measurable difference (73% -> 93%, CI touches 0), smaller port recommended; T5 levels not comparable (scripted turns, simpler graders) |
 
 ## Context
 

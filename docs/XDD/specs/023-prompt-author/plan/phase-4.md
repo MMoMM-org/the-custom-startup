@@ -54,7 +54,7 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
   4. Validate: Every link resolves on disk. Record the commands and the result in the spec README Decisions Log.
   5. Success: The cross-skill links survive install `[ref: PRD/Constraints "must still work under local testing and after marketplace install"]`
 
-- [ ] **T4.3 End-to-end run on real prompts** `[activity: validate]`
+- [x] **T4.3 End-to-end run on real prompts** `[activity: validate]`
 
   1. Prime: Read PRD journeys J1–J4.
   2. Test: The expected outcomes are the PRD acceptance criteria for F2, F3, F4 and F6, as listed in the traceability table below.
@@ -66,6 +66,12 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
      Validate the judge on one criterion with ~20 labels from the user (T2.2 flow). Ask for consent before every run.
   4. Validate: The reports exist, each with verdict, judge validation state and cost. The templates themselves are not committed changed unless the user approves (Technical Debt: docs/templates are out of scope).
   5. Success: Every journey completes, with its labelled report or "not evaluated on target" kit `[ref: PRD/User Journey Maps J1-J4; PRD/F4 AC5]`
+
+  - Results (2026-11-07; outputs in the session scratchpad, nothing published, docs/templates unchanged):
+    - J1: brief for a fixture orchestrator, 12-case contract kit x 2 runs on claude:haiku, contract coverage 100% (KPI >= 95%).
+    - J2: audit of setup-perplexity-space.md, fixes applied to a copy; 7 cases x 3 runs on claude:haiku: no measurable difference (all-pass 100% vs 95%, paired -0.048, CI [-0.143, +0.000]); runner recommends the smaller version a. Judge for recommendation_tradeoff validated on 20 user labels: 16 of 18 decided agree (89%), but it passed all 20, including both items the user labelled FAIL (leniency evidence 0/2); labels were given on excerpts, the judge saw full text.
+    - J3: port of prd-prompt.md to ollama:qwen3.5:35b-a3b, 15 cases x 1 run: no measurable difference (all-pass 73% vs 93%, paired +0.200, CI [+0.000, +0.400], sign 3/0/12); runner recommends the smaller port. one_question 40% -> 100% is the main gain. The experiment's T5 had Q 50%, O 43%, S 33% all-pass; this kit uses scripted user turns and simpler graders, so the levels are not comparable, only the direction. Judge criterion no_implementation_detail stays provisional.
+    - T4.3a was added on the way: the judge parse accepted no same-line verdict, which booked 40% of qwen2.5 replies as judge errors.
 
 - [x] **T4.3a Judge verdict as the last word of the last line** `[activity: backend-tooling]` `[component: C4]` `[ref: SDD/Implementation Gotchas (judge parse, l.~538)]` — blocks T4.3 J2/J3
 
