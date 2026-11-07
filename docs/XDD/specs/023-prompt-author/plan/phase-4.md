@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Write-Time Nudge, Install Check and End-to-End Validation"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 4
 ---
