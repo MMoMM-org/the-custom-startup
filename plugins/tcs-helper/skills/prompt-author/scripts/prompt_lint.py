@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mechanical checks for prompt files (spec 023, SDD-ADR-5).
+"""Mechanical checks for prompt files.
 
 Usage: prompt_lint.py [--json] [--kind KIND] (PATH... | --repo)
 

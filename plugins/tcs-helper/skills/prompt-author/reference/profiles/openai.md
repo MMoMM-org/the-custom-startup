@@ -40,6 +40,6 @@ GPT-4.1 follows instructions "more closely and more literally", so state every b
 
 ## Turn shape
 Unverified: no OpenAI guidance on the shape of a chat turn was found. Given the target's literal following, state the turn shape as a rule, such as "ask one question per turn and end the turn after it", and make every example turn match it (PA-11).
-- **Source:** none found; research-external.md §1 covers no turn-shape guidance from OpenAI
+- **Source:** none found; docs/XDD/specs/023-prompt-author/research-external.md §1 covers no turn-shape guidance from OpenAI
 - **Date:** 2026-11-04
 - **Evidence:** unverified

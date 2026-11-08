@@ -78,7 +78,7 @@ Read the request and any files it names. Then settle each Intake field:
 | Field | Where it usually comes from |
 |---|---|
 | mode | the verb: write, draft, create → write; audit, review, check, "why does it fail" → audit; port, adapt, convert to another model → port |
-| kind | what the prompt text is and where it runs, not the file or directory that holds it: a `system=` or system-prompt file → api-system; text sent to a subagent → brief, also when it is stored in a skill's directory (`reference/*-prompt.md`); pasted into another chat tool, including a chat-tool project's instructions → chat-template; a string in source code → code; AGENTS.md, GEMINI.md or a rules file → instruction-file; skill-format text (a SKILL.md body or a skill's procedure) → skill |
+| kind | what the prompt text is and where it runs, not the file or directory that holds it: a `system=` or system-prompt file → api-system; text sent to a subagent → brief, also when it is stored in a skill's directory (`reference/*-prompt.md`); pasted into another chat tool, including a chat-tool project's instructions → chat-template; a string in source code → code; AGENTS.md, GEMINI.md or a rules file → instruction-file; skill-format text (a SKILL.md body or a skill's procedure) → skill, which step 2 hands off |
 | target | the model named, the API called, or the tool the template is pasted into; Claude Code subagents and `claude -p` → claude |
 | consumer, consumerUse, consumerLocation | the code or step that reads the output and where you found it; search for it before asking (write.md § Contract first) |
 | replaces | an existing file at the same path, or the prompt the request says to rewrite |

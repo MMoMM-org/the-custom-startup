@@ -40,6 +40,6 @@ Claude generalises from a stated reason and from a brief instruction, so give th
 
 ## Turn shape
 Unverified: no Anthropic guidance on the shape of a chat turn was found. State the turn shape you want as a rule, such as "ask one question per turn", and back any shape an example shows with that rule (PA-11).
-- **Source:** none found; research-external.md §1 covers no turn-shape guidance from Anthropic
+- **Source:** none found; docs/XDD/specs/023-prompt-author/research-external.md §1 covers no turn-shape guidance from Anthropic
 - **Date:** 2026-11-04
 - **Evidence:** unverified

@@ -22,24 +22,24 @@ Always include few-shot examples, and keep their formatting consistent across ex
 
 ## Negatives
 Unverified: Google's guidance found in research gives no position on positive versus negative framing. Apply the catalog default (PA-04) and check the boundary cases in the prompt's eval kit (PA-41).
-- **Source:** none found; research-external.md §1 lists no Google position on negatives
+- **Source:** none found; docs/XDD/specs/023-prompt-author/research-external.md §1 lists no Google position on negatives
 - **Date:** 2026-11-04
 - **Evidence:** unverified
 
 ## Emphasis
 For Gemini 3, leave out unnecessary or overly persuasive language (PA-03), and request the length and detail you want explicitly, such as "explain each step in two or three sentences", because Gemini 3 needs verbosity requested. The vendor evidence on emphasis is mixed: Google gives no explicit all-caps guidance, and its own prompt templates use "you MUST", so a ported prompt that keeps one capitalised rule is within Google's practice.
-- **Source:** Google, Gemini prompting strategies, Gemini 3 "Avoid unnecessary or overly persuasive language" and verbosity requested explicitly; Google prompt templates using "you MUST" (https://aistudio.google.com/docs/prompting-strategies); research-external.md §1, "No explicit all-caps guidance"
+- **Source:** Google, Gemini prompting strategies, Gemini 3 "Avoid unnecessary or overly persuasive language" and verbosity requested explicitly; Google prompt templates using "you MUST" (https://aistudio.google.com/docs/prompting-strategies); docs/XDD/specs/023-prompt-author/research-external.md §1, "No explicit all-caps guidance"
 - **Date:** 2026-11-04
 - **Evidence:** vendor
 
 ## Literalness
-Unverified: no Google position on rule literalness found (research-external.md §1). Apply the catalog defaults for reasons and conflicts (PA-01, PA-06) and check in the prompt's eval kit whether the target reads a rule more or less literally than intended (PA-41).
-- **Source:** none found; research-external.md §1 lists no Google position on rule literalness
+Unverified: no Google position on rule literalness found. Apply the catalog defaults for reasons and conflicts (PA-01, PA-06) and check in the prompt's eval kit whether the target reads a rule more or less literally than intended (PA-41).
+- **Source:** none found; docs/XDD/specs/023-prompt-author/research-external.md §1 lists no Google position on rule literalness
 - **Date:** 2026-11-04
 - **Evidence:** unverified
 
 ## Turn shape
 Unverified: no Google guidance on the shape of a chat turn was found. Since Google advises always including few-shot examples, make each example turn match the shape you want exactly and state that shape as a rule (PA-11).
-- **Source:** none found; research-external.md §1 covers no turn-shape guidance from Google
+- **Source:** none found; docs/XDD/specs/023-prompt-author/research-external.md §1 covers no turn-shape guidance from Google
 - **Date:** 2026-11-04
 - **Evidence:** unverified
