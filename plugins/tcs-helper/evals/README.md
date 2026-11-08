@@ -726,6 +726,105 @@ No eval ran: there was nothing to pair.
 
 eval_compare pairs the two sides per case on that all-pass rate; the paired difference is after minus before, averaged over the cases.
 
+## Coverage follow-up (spec 023 T4.7)
+
+Final validation found PRD criteria with no case, or resting on one manual run. T4.7 adds four cases
+and one grader. Every llm grader reads a written file, so each prompt asks for its output as files and
+the cases need `--allow-tools Write Edit`.
+
+| Case | Defends | Graders |
+|---|---|---|
+| `prompt-author-write-agentic-brief` | a subagent brief states the unclear-input action, a stop-and-report condition and the goal with a done criterion, though the request dictates a four-step script (F2 AC3; PA-20, PA-21, PA-22) | file_exists `briefs/migrate-brief.md`; llm on it: all three present |
+| `prompt-author-write-untrusted-input` | a template that embeds a public issue delimits it and marks it as data (F2 AC5; PA-15) | file_exists `prompts/triage.md`; regex on it: `{{issue_body}}` inside a tag pair, a fence or BEGIN/END lines; llm on it: both placeholders delimited and the text marked as data |
+| `prompt-author-write-cut-test` | a replacement's note gives both sizes and the failure each added section prevents (F8 AC1; PA-17) | file_exists `notes/commit-msg.md`; regex on it: the old size measured (281 bytes, 278-284 accepted) with a unit; llm on it: the new size and a purpose for every added section |
+| `prompt-author-port-report` | a small-local port's report sources each change, labels unverified changes, and carries exactly one delivery label (F4 AC1, AC2, AC4, AC5) | file_exists on the port and the report; regex not_contains on the port: `AskUserQuestion`, `Claude project`; regex on the report: `unverified`; regex: `not evaluated on target`; regex not_contains: any other "evaluated on" label; llm on the report: every change names a profile topic or PA entry, and every change from an unverified topic says so |
+| `prompt-author-audit-contract-review` (grader added) | each finding row carries a `path:line` location, a PA-NN or "uncatalogued" entry, a severity in {blocking, major, minor} and a fix (F3 AC1) | regex `finding-row-format` on `audit/findings.md`, next to the two existing graders |
+
+The port-report source carries four Claude-environment idioms (a Claude project, CLAUDE.md, the
+AskUserQuestion tool, a `/tcs-workflow:review` command), capitalised emphasis, a gate without an exit
+and an undelimited diff. Only the two idioms a local model can neither use nor have defined for it are
+graded by regex; CLAUDE.md and the slash command could legitimately be defined in the port.
+`finding-row-format` checks "one entry" as "at least one", since a problem cell may mention a second ID.
+
+### Expected findings (written before the run)
+
+- **agentic-brief:** with plugin 3/3; PA-20 to PA-22 load for a brief, and write.md maps the stop and
+  unclear cases onto the consumer's `RESULT: BLOCKED`. Without plugin likely 1/3 to 3/3: the request's
+  "keep it that short, four steps" pushes toward a script, but Opus 5.5 wrote parts of the agentic
+  contract unprompted in T3.6. May end as a regression guard.
+- **untrusted-input:** with plugin 3/3. Without plugin likely 2/3 to 3/3: delimiting a public issue is
+  common practice for Opus 5.5, so probably a regression guard. The llm grader's "marked as data" half
+  is the likelier failure without the skill.
+- **cut-test:** with plugin 3/3. Without plugin 0/3 on `old-size-stated`: a model without write.md's cut
+  test has no reason to measure the old prompt in bytes. Discriminating.
+- **port-report:** with plugin 3/3. Without plugin 0/3 on `unverified-labelled`, `not-evaluated-label`
+  and the change-list llm grader, since the labels and topics exist only in the skill. `idioms-removed`
+  probably passes both arms. Discriminating.
+- **audit-contract-review:** with plugin, `finding-row-format` 3/3; the all-pass rate stays bounded
+  by `flags-missing-example` (3/3 in T3.12 after2). Without plugin, `finding-row-format` 0/3: a base
+  audit has no PA IDs.
+
+### Results
+
+Default ablation (with and without plugin), 3 runs per arm, `--allow-tools Write Edit`, Claude Code
+2.1.316, Opus 5.5, judge Haiku. Brace globs are not supported by `--case`, so three runs went in
+parallel: `prompt-author-write-*` (`-j 3`), `prompt-author-port-r*` and
+`prompt-author-audit-contract-re*` (`-j 2` each). Two cut-test runs errored on an API safeguard flag
+("Opus 5's safeguards flagged this message"), so the cut-test case was run a second time, unchanged,
+and its rows pool both runs over the runs that did not error. No grader or case was changed after a
+run, so every result is out of sample.
+
+| Case | With plugin, all pass | Without plugin, all pass | Verdict | Spend, with / without |
+|---|---|---|---|---|
+| `prompt-author-write-agentic-brief` | 3/3 | 3/3 | not discriminating, regression guard | $1.11 / $0.34 |
+| `prompt-author-write-untrusted-input` | 3/3 | 3/3 | not discriminating, regression guard | $1.46 / $0.29 |
+| `prompt-author-write-cut-test` | 5/5 (1 errored) | 0/5 (1 errored) | discriminating | $3.88 / $0.85 |
+| `prompt-author-port-report` | 3/3 | 0/3 | discriminating | $3.08 / $0.51 |
+| `prompt-author-audit-contract-review` | 3/3 | 0/3 | discriminating (`finding-row-format` 3/3 against 0/3) | $3.26 / $0.79 |
+
+Per grader, without plugin (with plugin passed every grader in every run that did not error):
+
+| Case | Grader | Kind | Without |
+|---|---|---|---|
+| cut-test | `file-written` | deterministic | 5/5 |
+| cut-test | `old-size-stated` | deterministic | 0/5 |
+| cut-test | `sections-purpose` | judge | 0/5 |
+| port-report | `port-written`, `report-written` | deterministic | 3/3 |
+| port-report | `idioms-removed`, `no-other-label` | deterministic | 3/3 |
+| port-report | `not-evaluated-label`, `unverified-labelled` | deterministic | 0/3 |
+| port-report | `change-list-sourced` | judge | 0/3 |
+| audit-contract-review | `file-written` | deterministic | 3/3 |
+| audit-contract-review | `finding-row-format` | deterministic | 0/3 |
+| audit-contract-review | `flags-missing-example` | judge | 0/3 |
+
+- **agentic-brief** and **untrusted-input** match the expectation that they would guard. Checked by
+  hand, the no-plugin brief keeps the four steps but adds a goal, a done check ("grep again should
+  find only the uses you left alone"), BLOCKED for calls that cannot be rewritten mechanically, and a
+  pre-existing-failure check. The no-plugin templates wrap both placeholders in tags and say the text
+  is untrusted data whose instructions are not followed. Opus 5.5 does both unprompted, so F2 AC3 and
+  F2 AC5 are now guarded against regression, but no case proves the skill causes them.
+- **cut-test** separates on sizes, not on purposes. Every no-plugin note lists its changes with the
+  failure each prevents, which already meets half of `sections-purpose`. It fails because no
+  no-plugin note gives a size for either prompt. The case grants no Bash, so the skill cannot run
+  `wc -c`: the with-plugin notes give the old size as "281 bytes, counted by hand" or "about 280
+  bytes" and the new size as an estimate. `old-size-stated` checks the number, not how it was
+  measured, so it passes both. A case that tests the measurement itself needs Bash granted.
+- **port-report**: no-plugin ports remove the AskUserQuestion and Claude-project idioms as well as
+  the skill does, and write a change table with reasons. But no row names a profile topic or PA entry,
+  nothing is labelled unverified, and no report carries a delivery label. With plugin, every report
+  opens with "Eval label: not evaluated on target" and writes an eval kit to `port/eval-kit/`.
+- **audit-contract-review**: the no-plugin audits write heading-style findings ("F1 (high): …") with
+  no catalog entry and severities outside the set, so `finding-row-format` fails them for a real
+  reason. The with-plugin reports use audit.md's table, and every row carries `path:line` locations
+  (ranges and `+` pairs), a linked PA ID, a severity from the set, and a fix. The grader would also
+  fail a correct audit that lists findings as headings rather than table rows; audit.md prescribes
+  the table, so that is accepted.
+- No judge error and no skipped paid grader occurred. The judge is provisional (not validated against
+  hand labels); its no-plugin FAILs for cut-test and port-report were checked by hand and are right.
+
+Spend, a comparison figure only (subscription): $15.52 in total ($5.41 write cases, $3.58 port-report,
+$4.04 audit-contract-review, $2.49 cut-test re-run).
+
 ## Cost
 
 The prompt-author suite at 3 runs per arm costs about $7.40 (with plugin about $2.05 per round of four
