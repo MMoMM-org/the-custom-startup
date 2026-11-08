@@ -754,32 +754,30 @@ VALIDATION_FILE = "judge-validation.json"
 
 def read_validation_file(kit_dir):
     """(records, problem) for KIT/judge-validation.json: ([], None) when absent;
-    ([], problem) when it does not parse or holds no record list, so a run starts
-    unvalidated and says why (agree refuses to overwrite such a file)."""
+    ([], problem) when it cannot be read or holds no record list, so every llm
+    criterion starts provisional and the run says why (agree refuses to overwrite
+    such a file)."""
     path = Path(kit_dir) / VALIDATION_FILE
     if not path.is_file():
         return [], None
     try:
         data = json.loads(_read(path))
     except (OSError, ValueError) as exc:
-        return [], "{} does not parse ({}); every llm criterion starts unvalidated".format(
+        return [], "{} cannot be read ({}); every llm criterion starts provisional".format(
             path, type(exc).__name__)
     if isinstance(data, dict):
         data = data.get("records", [])
     if not isinstance(data, list):
         return [], "{} holds no list of records; every llm criterion starts " \
-                   "unvalidated".format(path)
+                   "provisional".format(path)
     return data, None
-
-
-def _validation_records(kit_dir):
-    return read_validation_file(kit_dir)[0]
 
 
 def recorded_states(kit_dir, judge_id):
     """{criterion: state} recorded by `agree` for this judge (last record wins)."""
     states = {}
-    for rec in _validation_records(kit_dir):
+    records, _ = read_validation_file(kit_dir)
+    for rec in records:
         if isinstance(rec, dict) and isinstance(rec.get("criterion"), str) \
                 and _same_model(rec.get("judge"), judge_id) and rec.get("state"):
             states[rec["criterion"]] = rec["state"]
@@ -989,7 +987,7 @@ def run_eval(args, ctx):
     kind = ctx["kind"]
     texts = {v: _read(p) for v, p in ctx["versions"].items()}
     notes = []
-    validation_problem = read_validation_file(args.kit)[1]
+    _, validation_problem = read_validation_file(args.kit)
     if validation_problem:
         notes.append(validation_problem)
         print("prompt_eval.py: {}".format(validation_problem), file=sys.stderr)

@@ -1873,7 +1873,7 @@ def test_run_reports_an_unusable_kit_validation_file(pe, prov, tmp_path, capsys,
     err = capsys.readouterr().err
     assert "judge-validation.json" in err
     notes = [n for n in report_of(out)["notes"] if "judge-validation.json" in n]
-    assert len(notes) == 1 and "unvalidated" in notes[0]
+    assert len(notes) == 1 and "starts provisional" in notes[0]
     assert notes[0] in (out / "report.md").read_text()
     assert report_of(out)["judge_validation"]["rubric"] == "provisional"
 
@@ -1922,6 +1922,13 @@ def test_refusal_paths_exit_1_with_a_message(pe, prov, tmp_path, capsys, make_re
     assert pe.main(argv) == 1
     assert message in capsys.readouterr().err
     assert len(prov.claude_calls) + len(prov.ollama_calls) == calls_before
+
+
+def test_invalid_kind_refuses_before_clearing_a_previous_run(pe, prov, setup):
+    kit, a, b, out = setup
+    previous = _write(out / "runs" / "previous-run.txt", "an earlier run\n")
+    assert pe.main(run_args(kit, a, b, out, extra=("--kind", "bogus"))) == 1
+    assert previous.is_file()
 
 
 def test_unreachable_ollama_target_exits_1_without_falling_back_to_claude(pe, prov, setup,
