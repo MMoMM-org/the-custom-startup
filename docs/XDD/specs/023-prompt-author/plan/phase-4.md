@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Write-Time Nudge, Install Check and End-to-End Validation"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 4
 ---
@@ -89,15 +89,15 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
   - Spec README: the Status table; finalize via xdd-meta after merge. Do not merge without the user's explicit OK.
   - Check the traceability table below; every row has implementing evidence on the branch (final validation).
 
-- [ ] **T4.5 Spec text matches the build (final validation)** `[activity: technical-writing]` `[ref: SDD; PRD; plan]`
+- [x] **T4.5 Spec text matches the build (final validation)** `[activity: technical-writing]` `[ref: SDD; PRD; plan]`
   - Validation 2026-11-08 findings #1-3, #7-23: C5 test naming, repo ADR-4 label, README Status table, judge states, not_run, index fields, CLI optionality, Finding scope, judge-parse text, T4.3a ref, glossary, verdict enum and proxy label, entry-format example, traceability rows, fixture dirs in the Directory Map, Can Modify for tcs-workflow/evals/README.md, agent-author "MUST" (PA-03).
   - Success: each finding fixed in place; tests and lint green.
 
-- [ ] **T4.6 Runner robustness and refusal tests** `[activity: backend-tooling]` `[component: C4]` `[ref: SDD/Internal API Changes; PRD/F6 AC5-AC6]` `[parallel: true]`
+- [x] **T4.6 Runner robustness and refusal tests** `[activity: backend-tooling]` `[component: C4]` `[ref: SDD/Internal API Changes; PRD/F6 AC5-AC6]` `[parallel: true]`
   - Findings #24-29 (code and tests): malformed config string refuses with exit 1; corrupt judge-validation.json reported on run; tests for the untested refusal paths, an unreachable Ollama target, the eval_compare start failure; F1.3 corrected-wording assertions.
   - Success: red-first tests for each, all green.
 
-- [ ] **T4.7 Eval coverage for write, cut-test and port criteria** `[activity: skill-authoring]` `[component: C2]` `[ref: PRD/F2 AC3, AC5; PRD/F8 AC1; PRD/F4 AC1-AC5; PRD/F3 AC1]` `[parallel: true]`
+- [x] **T4.7 Eval coverage for write, cut-test and port criteria** `[activity: skill-authoring]` `[component: C2]` `[ref: PRD/F2 AC3, AC5; PRD/F8 AC1; PRD/F4 AC1-AC5; PRD/F3 AC1]` `[parallel: true]`
   - Findings #4-6 and #29b: new write-mode cases (agentic stop/unclear clause, delimited untrusted input), a replacement-draft case grading the size report and a failure per added section, port graders for the change report and the delivery label, one deterministic finding-shape grader for an audit case. Each case runs with and without the plugin (3 runs) and discriminates, or is recorded as not discriminating.
   - Success: cases exist, results in evals/README.md.
 
@@ -131,3 +131,4 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
 - T4.4: pytest 2333 passed, 2 skipped; prompt_lint --repo only the 2 known-open errors; skill-author audit of prompt-author PASS (4 minor wording findings, fixed in 496fb662; the agentic.md Sources grade reasons were restored afterwards, because T1.2 puts each grade's reason there).
 - Full eval suite, 51 cases x 3 runs with the plugin ($84.91 notional): 42/51 cases pass, 91% of runs. Misses at or above their Phase 3 level: audit-contract-diff 1/3, examples-test-name 2/3, restate-dependency-bump 2/3, restate-translation-keys 0/3, restate-incident-notes 1/3, authority-secrets 2/3 (one Opus safeguard error). Slightly below: audit-contract-review 2/3 (3/3), rationale-history-brief 2/3 (3/3), rationale-discipline 1/3 (3/3).
 - Open: rationale-discipline `no-history` fires on a sample commit SHA inside the written skill's example output table, confirmed in a re-run with --keep-temp, a grader false positive; restate-translation-keys and restate-incident-notes stay low as recorded in T3.10.
+- Final validation follow-ups (2026-11-08): T4.5 spec text fixed (5a638d85); T4.6 runner refusals exit 1 instead of tracebacks, including an invalid --kind that cleared --out first (bbfc1b83, c324ef57); T4.7 four new cases plus a finding-row grader (69cd5def): port-report, write-cut-test and finding-row-format discriminate, write-agentic-brief and write-untrusted-input are regression guards (the base model already passes them), $15.52 notional.
