@@ -144,7 +144,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 - [x] [Phase 1: Catalog, Lint and Single-Source Test](phase-1.md)
 - [x] [Phase 2: prompt-author Skill and Eval Runners](phase-2.md)
 - [x] [Phase 3: Measured Migration of the Authoring Skills](phase-3.md)
-- [x] [Phase 4: Write-Time Nudge, Install Check and End-to-End Validation](phase-4.md)
+- [ ] [Phase 4: Write-Time Nudge, Install Check and End-to-End Validation](phase-4.md)
 
 ---
 

@@ -93,6 +93,7 @@
 | 2026-11-07 | T4.3 end-to-end run complete | J1 contract coverage 100% (12 cases x 2, haiku); J2 audit no measurable difference, smaller version recommended, judge validated 89% (16/18) but passed both author-FAIL items (leniency 0/2); J3 port no measurable difference (73% -> 93%, CI touches 0), smaller port recommended; T5 levels not comparable (scripted turns, simpler graders) |
 | 2026-11-08 | Phase 4 complete (T4.1-T4.4, T4.3a); T4.4 eval criterion amended | Full suite 42/51 cases (91% of runs); no case below its Phase 3 level apart from noise; rationale-discipline no-history false positive on an example SHA recorded open. User choice: close and record open |
 | 2026-11-08 | Phase 4 drift check: Good | Contradicts: T4.4 audit fix removed T1.2's grade reasons from agentic.md, restored. Missing: memory commands, T4.4 text amended (recipes stay in the skill). Acknowledged: T4.2/T4.3 artefacts stay in the scratchpad per F6 AC6; no CONSTITUTION.md |
+| 2026-11-08 | Final validation (comparison, 4 perspectives): Needs Attention, 0 FAIL, 29 WARN | User choice: fix all now; phase 4 reopened with T4.5 (spec text), T4.6 (runner robustness), T4.7 (eval coverage, live runs consented) |
 
 ## Context
 

@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Write-Time Nudge, Install Check and End-to-End Validation"
-status: completed
+status: in_progress
 version: "1.0"
 phase: 4
 ---
@@ -88,6 +88,18 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
   - Update docs/ai/memory (tools.md: lint and runner gotchas; decisions.md: the catalog as single source) via /memory-add. The commands themselves stay in the skill and evals/README.md: memory-add routes recipes out of memory.
   - Spec README: the Status table; finalize via xdd-meta after merge. Do not merge without the user's explicit OK.
   - Check the traceability table below; every row has implementing evidence on the branch (final validation).
+
+- [ ] **T4.5 Spec text matches the build (final validation)** `[activity: technical-writing]` `[ref: SDD; PRD; plan]`
+  - Validation 2026-11-08 findings #1-3, #7-23: C5 test naming, repo ADR-4 label, README Status table, judge states, not_run, index fields, CLI optionality, Finding scope, judge-parse text, T4.3a ref, glossary, verdict enum and proxy label, entry-format example, traceability rows, fixture dirs in the Directory Map, Can Modify for tcs-workflow/evals/README.md, agent-author "MUST" (PA-03).
+  - Success: each finding fixed in place; tests and lint green.
+
+- [ ] **T4.6 Runner robustness and refusal tests** `[activity: backend-tooling]` `[component: C4]` `[ref: SDD/Internal API Changes; PRD/F6 AC5-AC6]` `[parallel: true]`
+  - Findings #24-29 (code and tests): malformed config string refuses with exit 1; corrupt judge-validation.json reported on run; tests for the untested refusal paths, an unreachable Ollama target, the eval_compare start failure; F1.3 corrected-wording assertions.
+  - Success: red-first tests for each, all green.
+
+- [ ] **T4.7 Eval coverage for write, cut-test and port criteria** `[activity: skill-authoring]` `[component: C2]` `[ref: PRD/F2 AC3, AC5; PRD/F8 AC1; PRD/F4 AC1-AC5; PRD/F3 AC1]` `[parallel: true]`
+  - Findings #4-6 and #29b: new write-mode cases (agentic stop/unclear clause, delimited untrusted input), a replacement-draft case grading the size report and a failure per added section, port graders for the change report and the delivery label, one deterministic finding-shape grader for an audit case. Each case runs with and without the plugin (3 runs) and discriminates, or is recorded as not discriminating.
+  - Success: cases exist, results in evals/README.md.
 
 ## PRD → task traceability
 
