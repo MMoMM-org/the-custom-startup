@@ -85,9 +85,9 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
 
   - Run `pytest -q -rs`, `prompt_lint.py --repo` and the full `plugins/tcs-helper/evals` suite (`--no-publish`, a ceiling above the expected cost). Tests and lint pass; no eval case falls below its Phase 3 level apart from noise (amended 2026-11-08: several measured cases never reached 3/3 in Phase 3).
   - Run the skill-author audit on prompt-author once more.
-  - Update docs/ai/memory (tools.md: lint and runner commands; decisions.md: the catalog as single source) via /memory-add.
+  - Update docs/ai/memory (tools.md: lint and runner gotchas; decisions.md: the catalog as single source) via /memory-add. The commands themselves stay in the skill and evals/README.md: memory-add routes recipes out of memory.
   - Spec README: the Status table; finalize via xdd-meta after merge. Do not merge without the user's explicit OK.
-  - Check the traceability table below; every row ticked.
+  - Check the traceability table below; every row has implementing evidence on the branch (final validation).
 
 ## PRD → task traceability
 
@@ -115,6 +115,6 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
 
 - T4.1 write-time nudge for prompt files; T4.2 cross-skill links survive a real install; T4.3a judge parse accepts a same-line verdict.
 - T4.3 end-to-end: J1 contract coverage 100%; J2 and J3 no measurable difference, smaller version recommended; judge validated 16/18 with leniency evidence 0/2.
-- T4.4: pytest 2333 passed, 2 skipped; prompt_lint --repo only the 2 known-open errors; skill-author audit of prompt-author PASS (4 minor wording findings, fixed in 496fb662).
+- T4.4: pytest 2333 passed, 2 skipped; prompt_lint --repo only the 2 known-open errors; skill-author audit of prompt-author PASS (4 minor wording findings, fixed in 496fb662; the agentic.md Sources grade reasons were restored afterwards, because T1.2 puts each grade's reason there).
 - Full eval suite, 51 cases x 3 runs with the plugin ($84.91 notional): 42/51 cases pass, 91% of runs. Misses at or above their Phase 3 level: audit-contract-diff 1/3, examples-test-name 2/3, restate-dependency-bump 2/3, restate-translation-keys 0/3, restate-incident-notes 1/3, authority-secrets 2/3 (one Opus safeguard error). Slightly below: audit-contract-review 2/3 (3/3), rationale-history-brief 2/3 (3/3), rationale-discipline 1/3 (3/3).
-- Open: rationale-discipline `no-history` fires on a sample commit SHA inside the written skill's example output table (re-run with --keep-temp), a grader false positive; restate-translation-keys and restate-incident-notes stay low as recorded in T3.10.
+- Open: rationale-discipline `no-history` fires on a sample commit SHA inside the written skill's example output table, confirmed in a re-run with --keep-temp, a grader false positive; restate-translation-keys and restate-incident-notes stay low as recorded in T3.10.
