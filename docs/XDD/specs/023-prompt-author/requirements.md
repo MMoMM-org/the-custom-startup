@@ -306,7 +306,7 @@ Consequence of not solving: the same defects keep being written. The user's assu
   - Contract coverage: briefs written with the skill pass a T2/T3-style contract eval at ≥ 95%, against 0% for the status quo.
   - No regression beyond noise in the evals of the three migrated skills.
 - **Business Impact:**
-  - Zero duplicated copies of catalog rules across the authoring skills (test-enforced).
+  - Zero duplicated copies of catalog rules across the authoring skills (verbatim copies test-enforced, paraphrases by review).
   - The three contradicted rules are corrected or reverted with a recorded measurement.
   - Prompts in the repo stop gaining length without a stated purpose (Feature 8 report).
 
@@ -351,7 +351,7 @@ No runtime telemetry. All tracking comes from artefacts the skill and tests prod
 |------|--------|------------|------------|
 | A corrected rule (rationale clause, no authority language) makes a discipline skill less compliant | High | Medium | Feature 7 measures each correction per skill and reverts on regression. Repeating a terminal constraint stays allowed |
 | The catalog itself grows into a long instruction list, the failure it warns about | Medium | High | Entries are loaded per kind and target, not all at once; each entry is one tell, one clause, one fix; the cut test applies to the catalog too |
-| The LLM judge is miscalibrated while passing its hand-built controls (happened: T1 judge 3/10) | High | Medium | Feature 6 requires label-based validation and marks unvalidated criteria provisional; deterministic graders are preferred |
+| The LLM judge is miscalibrated while passing its hand-built controls (happened: T1 judge 3/10) | High | Medium | Feature 6 requires label-based validation and marks a judge criterion that has never been checked against labelled examples provisional, and leaves out of the overall pass any criterion that was checked and found unreliable; deterministic graders are preferred |
 | Overlap with skill-author is seen as redundant (skill-evaluate U1) | Medium | Medium | Explicit hand-off for kinds owned by other skills; prompt-author covers only kinds outside skill-author's scope; the overlap argument is recorded in the SDD |
 | A shared reference breaks after marketplace install or under local testing | High | Medium | Stated as a constraint; verified in a real install before release |
 | Authored prompts follow rules too literally on small models (gates without exit, copied turn shapes) | Medium | High (measured) | Catalog entries plus the small-model profile; port mode always evaluates on Ollama when reachable |

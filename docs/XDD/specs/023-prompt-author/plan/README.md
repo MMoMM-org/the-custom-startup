@@ -110,7 +110,7 @@ PRD references use `PRD/F<n>` plus a short quote of the acceptance criterion, be
 **Key Design Decisions**:
 
 - **SDD-ADR-1**: Catalog lives in `plugins/tcs-helper/skills/prompt-author/reference/catalog/`. Consumers link `../prompt-author/…` (the model-ladder precedent).
-- **SDD-ADR-2**: Stable `PA-NN` IDs plus a fingerprint test. A copied rule or a dead ID fails `tests/tcs-helper/test_prompt_catalog.py`.
+- **SDD-ADR-2**: Stable `PA-NN` IDs plus a fingerprint test. A copied rule or a dead ID fails `tests/tcs-helper/test_prompt_single_source.py`.
 - **SDD-ADR-3**: Two eval routes share one kit format: `plugin eval` at two git states via `eval_compare.py`, and `prompt_eval.py` on `claude -p` / Ollama.
 - **SDD-ADR-4**: Migration writes the eval case first, proves its signal, then corrects. A regression reverts that rule group for that skill.
 - **SDD-ADR-5 / SDD-ADR-7**: Lint E1–E4 and W1–W3 are calibrated on the repo. The judge is configurable (`prompt_eval_judge` in startup.toml, default `claude:haiku`) and validated by labels (≥8 decided, ≥85%).

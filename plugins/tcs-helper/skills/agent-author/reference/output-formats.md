@@ -1,6 +1,6 @@
 # Output Format Templates
 
-Every agent MUST define an explicit `## Output` section in its body: every field, its type or allowed values, where it appears in the reply, and one example of the return as the caller receives it. Free-form prose is reject-on-sight. Reason: [PA-13](../../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract).
+Give every agent an explicit `## Output` section in its body: every field, its type or allowed values, where it appears in the reply, and one example of the return as the caller receives it. The caller parses that reply, and without a stated shape the agent picks its own, so the parse fails. Free-form prose is reject-on-sight. Reason: [PA-13](../../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract).
 
 This file provides:
 1. **Typed-table templates per archetype** for the agent's own `## Output` section

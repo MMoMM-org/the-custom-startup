@@ -73,9 +73,9 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
     - J3: port of prd-prompt.md to ollama:qwen3.5:35b-a3b, 15 cases x 1 run: no measurable difference (all-pass 73% vs 93%, paired +0.200, CI [+0.000, +0.400], sign 3/0/12); runner recommends the smaller port. one_question 40% -> 100% is the main gain. The experiment's T5 had Q 50%, O 43%, S 33% all-pass; this kit uses scripted user turns and simpler graders, so the levels are not comparable, only the direction. Judge criterion no_implementation_detail stays provisional.
     - T4.3a was added on the way: the judge parse accepted no same-line verdict, which booked 40% of qwen2.5 replies as judge errors.
 
-- [x] **T4.3a Judge verdict as the last word of the last line** `[activity: backend-tooling]` `[component: C4]` `[ref: SDD/Implementation Gotchas (judge parse, l.~538)]` — blocks T4.3 J2/J3
+- [x] **T4.3a Judge verdict as the last word of the last line** `[activity: backend-tooling]` `[component: C4]` `[ref: SDD/Internal API Changes (prompt_eval.py run, errors during runs, l.~535)]` — blocks T4.3 J2/J3
 
-  1. Prime: prompt_eval.py `parse_verdict`, its tests, and SDD line ~538. Evidence: T4.3 J2 c1, where 4 of 10 qwen2.5 judge replies ended "... reason. PASS" and were booked as judge errors.
+  1. Prime: prompt_eval.py `parse_verdict`, its tests, and the SDD rule under Internal API Changes (l.~535). Evidence: T4.3 J2 c1, where 4 of 10 qwen2.5 judge replies ended "... reason. PASS" and were booked as judge errors.
   2. Test (red first): `... reason. PASS` and `... reason. FAIL` on the last non-empty line parse as PASS/FAIL. Still errors: `**PASS**`, `pass`, a verdict-first line (`PASS because ...`), and a last line containing both PASS and FAIL. The existing last-line-only cases stay as they are.
   3. Implement the parser change and amend the SDD rule in the same commit.
   4. Validate: the prompt_eval tests are green. Re-parse the T4.3 J2 c1 grade.json replies offline: 0 of 10 are judge errors.
@@ -108,20 +108,21 @@ Closes the loop: users are nudged to the skill, the installed layout is proven, 
 | F1 entry fields; minimum entries; corrected rules; PA-50 contested | T1.1 |
 | F1 restated rule fails a test; read on demand, never imported | T1.4, T3.8 |
 | F2 intake and hand-off (AC1, AC6) | T2.4, T2.5 (handoff) |
-| F2 consumer contract, agentic, gate exit, delimiting (AC2–AC5) | T2.4, T2.5 (contract-first, port-gate-exit), T4.3 J1 |
-| F3 findings, set/pair, stale facts, data-not-instructions (AC1–AC5) | T2.4, T2.5 (audit-injection), T4.3 J2 |
+| F2 consumer contract, agentic, gate exit, delimiting (AC2–AC5) | T2.4, T2.5 (contract-first, port-gate-exit), T4.3 J1, T4.7 (AC3, AC5 cases) |
+| F3 findings, set/pair, stale facts, data-not-instructions (AC1–AC5) | T2.4, T2.5 (audit-injection), T4.3 J2, T4.7 (AC1 finding-shape grader) |
 | F3 known defects #250–#253 (AC6) | T2.6 |
-| F4 profiles, idioms, small-local, unverified labels, delivery label | T1.2, T2.4, T4.3 J3 |
+| F4 profiles, idioms, small-local, unverified labels, delivery label | T1.2, T2.4, T4.3 J3, T4.7 (port graders) |
 | F5 all criteria | T1.3 |
-| F6 kit, report, judge rules, labels, consent, safety, no-difference | T2.1, T2.2, T2.4 (eval-loop.md), T4.3 |
-| F7 citations, measured corrections, overview, agentic, MUST BE USED unchanged | T3.1–T3.8, T1.4 (pin) |
-| F8 sizes and PA per added section; smaller on no difference | T2.4, T2.1 |
+| F6 kit, report, judge rules, labels, consent, safety, no-difference | T2.1, T2.2, T2.4 (eval-loop.md), T2.9 (eval_compare consent gate and E1 scan), T2.10 (provisional state), T4.3, T4.3a (judge parse), T4.6 (AC5–AC6 refusal paths) |
+| F7 citations, measured corrections, overview, agentic, MUST BE USED unchanged | T3.1–T3.14 (incl. T3.2b), T1.4 (pin) |
+| F8 sizes and PA per added section; smaller on no difference | T2.4, T2.1, T4.7 (AC1 cut-test case) |
 | F9 nudge | T4.1 |
 | Success metric: contract coverage ≥ 95% | T4.3 J1 |
 | Constraint: works after install and under local testing | T4.2, T3.7 |
 | Success metric: audit recall ≥ 90% | T2.6 |
 | Success metric: lint ≤ 1 false alarm | T1.3 |
 | Success metric: zero duplicated rules | T3.8 |
+| Spec text matches the build (final validation) | T4.4, T4.5 |
 
 ## Phase 4 results
 

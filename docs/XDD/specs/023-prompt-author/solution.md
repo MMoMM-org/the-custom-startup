@@ -84,7 +84,7 @@ version: "1.0"
 - **CON-3 Security and data.**
   - The Gemini key must not be used.
   - Live targets: the local `claude` CLI and Ollama on the host. Nothing goes to another provider.
-  - Every `plugin eval` run uses `--no-publish`, `--max-cost-usd` and `--output-dir <scratch>`; `eval_compare.py run` hard-codes all three.
+  - Every `plugin eval` run uses `--no-publish`, `--max-cost-usd` and `--output-dir <scratch>`; `eval_compare.py run` fixes `--no-publish` and `--output-dir`, and passes half of its own required `--max-cost-usd` to each plugin eval run.
   - Keys appear only in the environment, never in argv, output or logs.
   - Results go to a caller-supplied scratch directory outside the repository (the plugin-eval default `<plugin>/evals/results/` is overridden by `--output-dir`).
   - The lint never imports or executes audited code (`ast.parse`, `python3 -I`).
@@ -145,7 +145,7 @@ version: "1.0"
   why: "PostToolUse path matcher extended for prompt files (F9)"
 - file: tests/test_model_ladder.py
   relevance: HIGH
-  why: "Precedent for a test guarding a cross-skill Markdown reference; pattern for test_prompt_catalog.py"
+  why: "Precedent for a test guarding a cross-skill Markdown reference; pattern for test_prompt_single_source.py"
 - file: tests/test_shell_portability_lints.py
   relevance: HIGH
   why: "Lint-as-test precedent: git ls-files, lint-ok suppression"
@@ -189,6 +189,7 @@ version: "1.0"
   - The tcs-helper tests (`tests/tcs-helper/`): test_agent_author_canonical.py, test_eval_compare.py and test_prompt_single_source.py. *(widened 2026-11-06, Phase 3 as built)*
   - The agent-author pressure scenarios (`plugins/tcs-helper/skills/agent-author/evals/pressure-scenarios.md`), inside the agent-author directory but not among the file kinds named above. *(widened 2026-11-06, Phase 3 as built)*
   - The memory index docs/ai/memory/memory.md (date of the tools.md entry). *(widened 2026-11-06, Phase 3 as built)*
+  - The tcs-workflow eval suite notes `plugins/tcs-workflow/evals/README.md` (the documented `plugin eval` command gains `--output-dir`; the suites themselves stay as Must Preserve says). *(widened, T1.4 side fix)*
 - **Must Not Touch:**
   - The prompts behind #250–#253, and plugins/tcs-helper/scripts/lib/semantic_detector.py as a whole (no `lint-ok` comment either). They are separate issues; prompt-author only finds them. Their open findings are allow-listed in the repo lint test with the issue number (KNOWN_OPEN).
   - rule-enforcer (its strong-wording rule is a follow-up, see Technical Debt).
@@ -270,7 +271,7 @@ data:
 - **Ownership:** a single maintainer. The catalog is owned by prompt-author; consumers may cite it but not restate it.
 - **Shared resources:** the catalog files. A change to an entry's fix that alters consumer behaviour requires the migration measurement (SDD-ADR-4).
 - **Breaking-change policy:**
-  - Renaming or removing an ID fails `test_prompt_catalog.py` until every citation is updated.
+  - Renaming or removing an ID fails `test_prompt_single_source.py` (dead-ID scan) until every citation is updated.
   - Changing the lint's exit codes or `--json` shape requires updating the skill's lint step and the repo test in the same commit.
 
 ### Project Commands
@@ -310,7 +311,7 @@ graph LR
     EV --> LINT
     MIG[C6 migrated skills + their evals] --> CAT
     HOOK[C7 authoring_reminder.py] -.-> SK
-    TCAT[C5 test_prompt_catalog.py] --> CAT
+    TCAT[C5 test_prompt_single_source.py] --> CAT
     TCAT --> MIG
     TLINT[C3 tests incl. repo lint] --> LINT
 ```
@@ -337,12 +338,12 @@ plugins/tcs-helper/skills/prompt-author/
 │   ├── port.md                      # NEW C2: port procedure (profiles are data in C1)
 │   ├── eval-loop.md                 # NEW C2/C4: kit authoring rules, runner usage, judge validation, consent
 │   ├── catalog/
-│   │   ├── index.md                 # NEW C1: ID | name | kinds | targets | evidence | file
+│   │   ├── index.md                 # NEW C1: ID | name | kinds | targets | evidence | status | file
 │   │   ├── core.md                  # NEW C1: PA-01..PA-19 (any prompt)
 │   │   ├── agentic.md               # NEW C1: PA-20..PA-29 (briefs, agents, API agents)
-│   │   ├── instruction-files.md     # NEW C1: PA-30..PA-39 (CLAUDE.md/AGENTS.md/GEMINI.md)
+│   │   ├── instruction-files.md     # NEW C1: PA-30..PA-39 (files loaded into every session: instruction files, skills and agents, a project-wide system prompt)
 │   │   ├── porting.md               # NEW C1: PA-40..PA-49
-│   │   └── harness.md               # NEW C1: PA-50..PA-59 (skill/agent descriptions; SDD-ADR-4 entry)
+│   │   └── harness.md               # NEW C1: PA-50..PA-59 (skill/agent descriptions; repo ADR-4 entry)
 │   └── profiles/
 │       ├── anthropic.md             # NEW C1
 │       ├── openai.md                # NEW C1
@@ -367,7 +368,10 @@ tests/tcs-helper/
 ├── test_prompt_profiles.py          # NEW C1: profile checks
 ├── test_prompt_single_source.py     # NEW C5: fingerprint/ID/@-import scans, pins, per-consumer strict xfails, eval privacy
 ├── test_agent_author_canonical.py   # NEW C6: examples/canonical-agent.md meets the agentic contract (T3.8 F-B1)
-└── fixtures/prompt_lint/            # NEW C3 fixtures
+└── fixtures/
+    ├── prompt_lint/                 # NEW C3 fixtures
+    ├── prompt_eval/                 # NEW C4 fixtures (prompt_eval.py)
+    └── eval_compare/                # NEW C4 fixtures (eval_compare.py)
 ```
 
 The T3.2b ceiling-skip tests (unjudged runs, one-sided skip, "insufficient cases" when fewer than 5 judged cases remain) live in test_eval_compare.py.
@@ -524,20 +528,21 @@ Command: prompt_eval.py run
     5. consent: the set {target provider, judge provider} must each be covered by a --confirm-provider; an Ollama host that is not
        localhost / 127.0.0.1 / host.docker.internal must be named (--confirm-provider ollama=HOST). Otherwise print the plan
        (runs, estimated cost, resolved judge and Ollama host with their config sources) and exit 3
-  Cost: --max-cost-usd is required; target and judge cost both count; each claude call gets --max-budget-usd = remaining budget,
+  Cost: --max-cost-usd is optional to argparse, but run rejects a missing or non-positive value with exit 1 before any check
+        or send; target and judge cost both count; each claude call gets --max-budget-usd = remaining budget,
         so overshoot is bounded by one call
   Errors during runs: a run that errors (CLI not logged in, timeout, is_error, Ollama 404 model not pulled, HTTP error) is recorded as
-        errored, excluded from rates, and counted. A judge reply whose last non-empty line is not exactly PASS or FAIL is judge_error for that
-        criterion. (amended 2026-11-07, T4.3a) The verdict is the last whitespace-separated token of that line, exactly PASS or FAIL, and
-        the line must not contain the other verdict word, so "reason. PASS" parses and "PASS.", "**PASS**" or "PASS because …" stay
-        judge errors. If errored runs or judge errors exceed 20% for either version → exit 1 with a report that has no verdict
+        errored, excluded from rates, and counted. The judge verdict is the last whitespace-separated token of the reply's last
+        non-empty line, exactly PASS or FAIL, and that line must not contain the other verdict word as a whole word (amended
+        2026-11-07, T4.3a); any other reply is judge_error for that criterion, so "reason. PASS" parses and "PASS.", "**PASS**" or
+        "PASS because …" stay judge errors. If errored runs or judge errors exceed 20% for either version → exit 1 with a report that has no verdict
   Multi-turn (turns.md): Ollama sends native message lists. For claude, --input-format stream-json --output-format stream-json --verbose
         under the isolation flags carries all user turns in one session (verified live in T2.1, 2026-11-05: turn 2 recalled turn 1, the
         system prompt held on both turns); cost = the last result event's total_cost_usd (cumulative)
   As built (T2.1): kinds skill and agent use system placement like api-system; the judge runs at temperature 0 on Ollama (the
         --temperature flag applies to the target only, and only on Ollama — the claude CLI has no temperature flag; the report notes it);
         Ollama calls use num_ctx 16384 (from the harness); the material tag is random per judge call; the judge prompt asks for a
-        one-sentence reason first and PASS or FAIL alone on the last line; an llm criterion starts not_validated unless
+        one-sentence reason first and PASS or FAIL alone on the last line; an llm criterion starts provisional unless
         KIT/judge-validation.json holds a record for the same normalised judge; build_report takes the criteria T2.2's agree drops
   As built (T2.1 fix round): a claude call that fails without a usable total_cost_usd (timeout, I/O error during the call, non-JSON
         or non-object output, bad cost, short stream) books its --max-budget-usd cap as worst-case cost (ledger cost_basis
@@ -578,10 +583,11 @@ Command: prompt_eval.py agree
   Usage: prompt_eval.py agree --out DIR --criterion NAME [--kit DIR]
   Output: agreement on decided labels (PASS/FAIL; UNSURE = undecided); writes judge_validation[criterion] into DIR/report.json,
           regenerates report.md, and — with --kit — records {judge, criterion, state, n, agreement, date} in KIT/judge-validation.json,
-          which later runs with the same judge read as the starting state (a different judge starts unvalidated)
+          which later runs with the same judge read as the starting state (a different judge starts provisional)
 
 Command: eval_compare.py run
-  Usage: eval_compare.py run --plugin DIR --case GLOB --base REF --runs N --max-cost-usd X --out DIR [--allow-tools TOOL...] --confirm-provider claude
+  Usage: eval_compare.py run --plugin DIR --case GLOB --base REF [--runs N] --max-cost-usd X --out DIR [--allow-tools TOOL...] --confirm-provider claude
+         (--runs defaults to 3)
   Gates: without `--confirm-provider claude` it prints the plan and exits 3 before any send; an E1 secret scan of the selected case dirs runs first and exits 4 on a hit.
   Behaviour: creates a git worktree of REF under DIR, runs `claude plugin eval <worktree plugin> --case GLOB --runs N --ablation none
              --no-publish --trust-plugin --max-cost-usd X/2 --json DIR/before.json --output-dir DIR/before` and the same on the working tree
@@ -680,7 +686,8 @@ ENTITY: PortProfile (NEW; profiles/<target>.md)
 
 ENTITY: Finding (NEW; audit output, Markdown table or JSON)
   FIELDS: location (path:line or path:line + path:line for cross-file), entry (PA-NN | "uncatalogued"),
-          severity (blocking | major | minor), evidence grade, problem, suggested fix, scope (single | set | pair)
+          severity (blocking | major | minor), evidence grade, problem, suggested fix,
+          scope (single | set | pair; CONDITIONAL: the column appears only when a report mixes scopes)
 
 ENTITY: EvalKit (NEW; directory)
   LAYOUT: <kit>/<case>/prompt.md       # the input the prompt under test receives
@@ -695,13 +702,16 @@ ENTITY: EvalReport (NEW; report.json + report.md)
           per_criterion: {name: {a: rate, b: rate, kind: deterministic|judge}},
           all_pass: {a, b}, paired_difference: {estimate, ci95, method: "bootstrap over cases, 2000 resamples, seed 2305"},
           sign_test: {b_better, a_better, ties, p},
-          verdict: "b better" | "a better" | "no measurable difference" | "insufficient cases",   # insufficient: < 5 judged cases, no winner
+          verdict: "b better" | "a better" | "no measurable difference" | "insufficient cases" | "single version" | null,
+                   # insufficient: < 5 judged cases, no winner; single version: no --b, rates only;
+                   # null: verdict withheld (error rate above 20%, or eval_compare case sets differ), reason in verdict_withheld
+          verdict_withheld: string,   # only when verdict is null; report.md prints "Verdict: none (<reason>)"
           judge: {id, source: cli | repo-config | global-config | default},
           errored_runs: {a, b}, judge_errors: {a, b},
           unjudged_runs: {a: [{case, run, criteria}], b: [...]},   # only when non-empty; llm grader skipped by the cost ceiling (T3.2b), out of rates and pairing
           ceiling_skip_unmatched: {a: [{case, run}], b: [...]},    # only when non-empty; skippedPaidGraders run with no matching grader (marker drift), also warned on stderr
-          judge_validation: {criterion: validated | not_validated | insufficient | provisional | not_run}   # not_run = kit has no llm graders,
-          cost_usd, label: "evaluated on <target>" | "proxy: evaluated on <other>"
+          judge_validation: {criterion: validated | not_validated | insufficient | provisional | not_run}   # not_run = a deterministic (non-llm) criterion; the judge never grades it
+          cost_usd, label: "evaluated on <target>" | "proxy: evaluated on <target> for <TARGET>"   # <TARGET> = --proxy-for
 ```
 
 #### Integration Points
@@ -741,10 +751,10 @@ Ollama:
 ```markdown
 ## PA-16 Gate without an exit
 - **Tell:** an approval or confirmation step with no stated behaviour for "skip it, give me the result".
-- **Fails because:** literal targets keep asking for approval after the user asks for the result (measured: T5, spec 023 — Sonnet-authored prompts delivered the PRD in 53% of runs vs 90% status quo).
+- **Fails because:** literal targets keep asking for approval after the user asks for the result.
 - **Fix:** state the exit next to the gate: "If the user asks for the result directly, deliver it and list what was not confirmed."
-- **Applies to:** chat-template, api-system, brief · any target, highest risk on small-local
-- **Evidence:** measured (experiment/results.md)
+- **Applies to:** chat-template, api-system, brief · any (highest risk: small-local)
+- **Evidence:** measured (spec 023 experiment T5: Sonnet-authored prompts kept the approval gate and delivered the final document in 53% of runs, vs 77% for Opus-authored and 90% for the status quo)
 - **Fingerprint:** "Every gate states its exit."
 - **Status:** active
 ```
@@ -859,7 +869,7 @@ sequenceDiagram
 - **Consent missing or declined.** C4 exits 3 after printing the plan, and C2 delivers the kit only. A run against another target is never started as a substitute. A proxy run happens only when the author asks for it, and is labelled "proxy".
 - **Secret in a prompt or kit.** C4 exits 4 and prints the path:line and check, never the value.
 - **Cost ceiling reached.** C4 exits 2 with a partial report marked partial.
-- **Judge equals target or author**, or the judge is not reachable. C4 refuses (exit 1) and names the configured judge and its source. It never falls back silently to another judge. The report marks judge criteria "not_run" when only deterministic graders could run.
+- **Judge equals target or author**, or the judge is not reachable. C4 refuses (exit 1) and names the configured judge and its source. It never falls back silently to another judge. A deterministic criterion is marked not_run; the judge never grades it.
 - **Case sets differ between two plugin-eval results.** eval_compare exits 1 and lists the mismatch, because a comparison over different cases is not paired.
 - **A paid grader skipped by the plugin-eval cost ceiling.** plugin eval stores it as a failure; eval_compare treats it as unjudged when the run has `skippedPaidGraders` true and the llm grader's explanation is exactly `skipped: cost ceiling`. The run is excluded from rates, all-pass and pairing and listed under `unjudged_runs`, so a skip on one side cannot fake a winner. A run with the skip flag but no matching grader (a renamed marker) is warned about on stderr and listed under `ceiling_skip_unmatched`.
 - **A cross-skill link fails to resolve after install.** C5 checks links in the repo. The installed layout is verified once before release (Implementation Gotchas).
@@ -981,7 +991,7 @@ Not applicable: no UI. The skill's outputs are a finding table, a draft, a port 
   - Trade-offs: local testing of a consumer needs prompt-author copied too. The catalog's owner is a skill, not a neutral place.
   - User confirmed: **Yes** (2026-11-05)
 
-- [x] SDD-ADR-2 Single-source enforcement: stable entry IDs plus a fingerprint test (`tests/tcs-helper/test_prompt_catalog.py`). Each entry carries 1–3 verbatim fingerprint sentences. The test fails if a fingerprint appears outside the catalog, if a cited ID does not exist or is retired, or if a consumer cites no ID.
+- [x] SDD-ADR-2 Single-source enforcement: stable entry IDs plus a fingerprint test (`tests/tcs-helper/test_prompt_single_source.py`; fingerprint uniqueness across entries is checked in `test_prompt_catalog.py`). Each entry carries 1–3 verbatim fingerprint sentences. The test fails if a fingerprint appears outside the catalog, if a cited ID does not exist or is retired, or if a consumer cites no ID.
   - Rationale:
     - A link-only test cannot see a copied rule, and copies (8× description rule, 5× purity rule) are the defect being removed.
     - Fingerprints are cheap to match exactly and need no semantic parsing.
@@ -1043,7 +1053,7 @@ Not applicable: no UI. The skill's outputs are a finding table, a draft, a port 
     - A Markdown label file instead of the artifact page used in the experiment, so it works offline and needs no runtime capabilities.
     - A single labeller.
     - The Claude default judge costs money per graded output, where the Ollama judge is free.
-    - Judge validation is per judge, so a different configured judge starts unvalidated.
+    - Judge validation is per judge, so a different configured judge starts provisional.
   - User confirmed: **Yes, with change** (2026-11-05): judge and Ollama host must be configurable; other users cannot be required to run Ollama or a specific model
 
 - [x] SDD-ADR-8 The write-time nudge extends `authoring_reminder.py`: a new pattern `(^|/)(AGENTS|GEMINI)\.md$`, `\.prompt\.md$`, `(^|/)prompts/` with a one-line prompt-author reminder. CLAUDE.md gets no reminder: it is owned by memory-claude-md-optimize and is written often, so a reminder there would be noise. The PRD AC "existing reminders keep naming their own skills" holds because the SKILL.md/agent reminders are unchanged.
@@ -1076,7 +1086,7 @@ Not applicable: no UI. The skill's outputs are a finding table, a draft, a port 
 - [ ] THE SYSTEM SHALL contain entries for every mode the PRD lists, including:
   - the corrected forms of PA-01 (reason clause), PA-03 (emphasis) and PA-11 (examples), with vendor sources,
   - PA-50 (description authority language) with status contested and a pointer to repo ADR-4.
-- [ ] WHEN a fingerprint appears outside the catalog, a cited ID is missing or retired, or a consumer cites no ID, THE SYSTEM SHALL fail `test_prompt_catalog.py` naming file:line.
+- [ ] WHEN a fingerprint appears outside the catalog, a cited ID is missing or retired, or a consumer cites no ID, THE SYSTEM SHALL fail `test_prompt_single_source.py` naming file:line.
 - [ ] THE SYSTEM SHALL contain no `@`-import of a catalog file anywhere (C5).
 
 **PRD F2 — Write mode**
@@ -1114,7 +1124,7 @@ Not applicable: no UI. The skill's outputs are a finding table, a draft, a port 
   - binary llm graders with PASS and FAIL conditions.
 - [ ] WHEN run with two versions, THE SYSTEM SHALL produce an EvalReport with per-criterion rates, paired difference, bootstrap CI, sign test and cost.
 - [ ] THE SYSTEM SHALL resolve the judge and Ollama host via the order in SDD-ADR-7, and SHALL record the judge and its source in the report. With no configuration and no Ollama, a run SHALL complete with the Claude default judge (test with config files stubbed).
-- [ ] IF judge == target OR judge == author (after alias normalisation), THEN THE SYSTEM SHALL refuse. The report SHALL mark each judge criterion validated, not_validated, insufficient or not_run.
+- [ ] IF judge == target OR judge == author (after alias normalisation), THEN THE SYSTEM SHALL refuse. The report SHALL mark each criterion validated, not_validated, insufficient, provisional (an llm criterion never labelled) or not_run (a deterministic criterion).
 - [ ] WHEN labels are recorded, THE SYSTEM SHALL compute agreement and apply the validation rule (≥8 decided, ≥85%).
 - [ ] IF `--confirm-provider` does not cover the target and judge providers, THEN THE SYSTEM SHALL print the plan and exit 3 without sending. The runner SHALL support only the claude and ollama providers.
 - [ ] THE SYSTEM SHALL:
@@ -1198,7 +1208,7 @@ Each PRD feature has exactly one owner. Kit *authoring* (writing cases) is the s
 |------|------------|---------|
 | Kit | Directory of cases (prompt.md + graders) for one prompt | F6, both runners |
 | Paired difference | Per-case pass-rate difference between two versions on the same cases | Report verdict |
-| Proving signal | Showing an eval's score drops when the rule it defends is weakened | SDD-ADR-4 migration |
+| Proving signal | Showing an eval's score drops when the rule it defends is weakened; for a migration (SDD-ADR-4 as revised), the before run on the old rule | SDD-ADR-4 migration |
 | Judge validation | Agreement of an LLM judge with human labels on a blinded sample | SDD-ADR-7 |
 
 ### API/Interface Terms
@@ -1207,4 +1217,4 @@ Each PRD feature has exactly one owner. Kit *authoring* (writing cases) is the s
 |------|------------|---------|
 | `--confirm-provider` | Consent token the runner requires per provider before sending | F6 security |
 | `--ablation none` | plugin eval flag: run only the with-plugin arm | SDD-ADR-3 |
-| Exit 2 (lint) | Internal failure; hook callers treat it as pass | Fail-open rule |
+| Exit 2 (lint) | Internal failure; the skill reports "lint failed" and continues (no hook runs the lint) | Fail-open rule |

@@ -50,8 +50,8 @@ Delivers the user-facing skill (write, audit, port modes) and the measurement to
        - with no config and no Ollama, a run completes on `claude:haiku`;
        - an unreachable configured judge gives exit 1 naming the judge and its source, with no fallback.
      - **Cost:** `--max-cost-usd` is required; judge cost counts; each claude call gets `--max-budget-usd` = remaining; reaching the ceiling gives exit 2 and a report marked partial.
-     - **Errors:** errored runs (not logged in, timeout, `is_error`, Ollama 404) and judge replies whose last line is not PASS/FAIL are excluded and counted; above 20% → exit 1 with no verdict; an empty kit or a case without graders → exit 1 before any send.
-     - **Judge hardening:** a graded output containing `</material>` or a fake trailing `PASS` cannot change the verdict (per-run random tag; strict last-line parsing).
+     - **Errors:** errored runs (not logged in, timeout, `is_error`, Ollama 404) and judge replies without a verdict (the verdict is the last whitespace token of the last non-empty line, exactly PASS or FAIL, on a line that does not contain the other verdict word as a whole word; amended T4.3a) are excluded and counted; above 20% → exit 1 with no verdict; an empty kit or a case without graders → exit 1 before any send.
+     - **Judge hardening:** a graded output containing `</material>` or a fake trailing `PASS` cannot change the verdict (per-run random tag; the verdict is the last whitespace token of the last non-empty line, exactly PASS or FAIL, and that line must not contain the other verdict word).
      - **Small n:** fewer than 5 cases → verdict "insufficient cases"; all ties → sign-test p = 1.0.
      - **Single version / proxy:** no `--b` → "single version" report; `--proxy-for` sets the proxy label.
      - **Verdicts:**
