@@ -1844,3 +1844,94 @@ def test_sample_order_is_shuffled(pe):
     assert sorted(chosen) == sorted(unshuffled)
     assert chosen != unshuffled
     assert chosen[:3] != fails
+
+
+# ------------------------------------------------------------------ T4.6 validation follow-ups
+
+RUBRIC = {"rubric.md": "---\ntype: llm\n---\nPASS if good. FAIL if not.\n"}
+
+
+def test_malformed_config_string_exits_1_naming_the_file_before_any_send(pe, prov, tmp_path,
+                                                                         monkeypatch, capsys):
+    repo_cfg = _write(tmp_path / "repo.toml", '[tcs]\nprompt_eval_judge = "claude:\\q"\n')
+    monkeypatch.setattr(pe, "config_paths", lambda: (repo_cfg, tmp_path / "none.toml"))
+    kit = make_kit(tmp_path, graders=RUBRIC)
+    a, b = make_versions(tmp_path)
+    assert pe.main(run_args(kit, a, b, tmp_path / "out")) == 1
+    err = capsys.readouterr().err
+    assert str(repo_cfg) in err and "prompt_eval_judge" in err
+    assert prov.claude_calls == [] and prov.ollama_calls == []
+
+
+@pytest.mark.parametrize("content", ['[{"judge": "claude:haiku", ', '"just a string"'])
+def test_run_reports_an_unusable_kit_validation_file(pe, prov, tmp_path, capsys, content):
+    kit = make_kit(tmp_path, graders=RUBRIC)
+    _write(kit / "judge-validation.json", content)
+    a, b = make_versions(tmp_path)
+    out = tmp_path / "out"
+    assert pe.main(run_args(kit, a, b, out)) == 0
+    err = capsys.readouterr().err
+    assert "judge-validation.json" in err
+    notes = [n for n in report_of(out)["notes"] if "judge-validation.json" in n]
+    assert len(notes) == 1 and "unvalidated" in notes[0]
+    assert notes[0] in (out / "report.md").read_text()
+    assert report_of(out)["judge_validation"]["rubric"] == "provisional"
+
+
+def _refusal_kit_not_a_directory(pe, tmp_path):
+    a, b = make_versions(tmp_path)
+    return run_args(_write(tmp_path / "kit-file", "x\n"), a, b, tmp_path / "out"), \
+        "kit is not a directory"
+
+
+def _refusal_invalid_kind(pe, tmp_path):
+    a, b = make_versions(tmp_path)
+    return run_args(make_kit(tmp_path), a, b, tmp_path / "out", extra=("--kind", "bogus")), \
+        "--kind must be one of"
+
+
+def _refusal_a_not_a_file(pe, tmp_path):
+    _, b = make_versions(tmp_path)
+    return run_args(make_kit(tmp_path), tmp_path / "missing-a.md", b, tmp_path / "out"), \
+        "--a is not a file"
+
+
+def _refusal_b_not_a_file(pe, tmp_path):
+    a, _ = make_versions(tmp_path)
+    return run_args(make_kit(tmp_path), a, tmp_path / "missing-b.md", tmp_path / "out"), \
+        "--b is not a file"
+
+
+def _refusal_grade_not_an_object(pe, tmp_path):
+    kit = make_kit(tmp_path, graders=RUBRIC)
+    a, b = make_versions(tmp_path)
+    out = tmp_path / "out"
+    assert pe.main(run_args(kit, a, b, out)) == 0
+    grade = sorted((out / "runs").glob("*/*/*/grade.json"))[0]
+    grade.write_text("[1, 2]")
+    return ["label", "--out", str(out), "--criterion", "rubric"], "is not an object"
+
+
+@pytest.mark.parametrize("make_refusal", [
+    _refusal_kit_not_a_directory, _refusal_invalid_kind, _refusal_a_not_a_file,
+    _refusal_b_not_a_file, _refusal_grade_not_an_object])
+def test_refusal_paths_exit_1_with_a_message(pe, prov, tmp_path, capsys, make_refusal):
+    argv, message = make_refusal(pe, tmp_path)
+    calls_before = len(prov.claude_calls) + len(prov.ollama_calls)
+    capsys.readouterr()
+    assert pe.main(argv) == 1
+    assert message in capsys.readouterr().err
+    assert len(prov.claude_calls) + len(prov.ollama_calls) == calls_before
+
+
+def test_unreachable_ollama_target_exits_1_without_falling_back_to_claude(pe, prov, setup,
+                                                                          capsys):
+    kit, a, b, out = setup
+    prov.ollama_up = False
+    code = pe.main(run_args(kit, a, b, out, target="ollama:qwen2.5:32b-instruct-q4_K_M",
+                            confirm=("claude", "ollama")))
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "target ollama:qwen2.5:32b-instruct-q4_K_M" in err and "no fallback" in err
+    assert prov.claude_calls == [] and prov.ollama_calls == []
+    assert not (out / "report.json").exists()

@@ -329,3 +329,19 @@ def test_pa32_applies_to_chat_templates_in_entry_and_index():
     assert 'chat-template' in kinds
     row = next(cells for cells in index_rows() if cells[0].startswith('[PA-32]'))
     assert 'chat-template' in {k.strip() for k in row[2].split(',')}
+
+
+# Capitalised directives PA-03 names as the tell; PA-01 and PA-02 must not model them.
+AUTHORITY_TOKEN_RE = re.compile(r'\b(?:MUST|NEVER|ALWAYS|CRITICAL)\b')
+
+
+@pytest.mark.parametrize('entry_id', ['PA-01', 'PA-02'])
+def test_reason_and_history_entries_carry_no_authority_token(entry_id):
+    entry = next(e for e in all_entries() if e['id'] == entry_id)
+    assert AUTHORITY_TOKEN_RE.findall('\n'.join(entry['body'])) == []
+
+
+def test_example_entry_states_3_to_5_examples():
+    entry = next(e for e in all_entries() if e['id'] == 'PA-11')
+    assert 'example' in entry['name'].lower()
+    assert '3-5' in entry['fields']['Fix'] and 'examples' in entry['fields']['Fix']

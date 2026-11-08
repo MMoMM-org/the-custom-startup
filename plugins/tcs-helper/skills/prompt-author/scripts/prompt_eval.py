@@ -168,7 +168,11 @@ def read_tcs_key(path, key):
             raw = m.group(2)
             if raw.startswith("'"):
                 return raw[1:-1]
-            return json.loads(raw)
+            try:
+                return json.loads(raw)
+            except ValueError:
+                raise Refused(EXIT_INVALID, "{}: [tcs] {} is not a valid basic string (bad "
+                                            "escape?); fix it, nothing was sent".format(path, key))
     return None
 
 
@@ -748,19 +752,28 @@ def place_prompt(kind, prompt_text, case_input):
 VALIDATION_FILE = "judge-validation.json"
 
 
-def _validation_records(kit_dir):
-    """KIT/judge-validation.json as a list of records; [] when absent or
-    unreadable, so a run starts unvalidated (agree refuses to overwrite it)."""
+def read_validation_file(kit_dir):
+    """(records, problem) for KIT/judge-validation.json: ([], None) when absent;
+    ([], problem) when it does not parse or holds no record list, so a run starts
+    unvalidated and says why (agree refuses to overwrite such a file)."""
     path = Path(kit_dir) / VALIDATION_FILE
     if not path.is_file():
-        return []
+        return [], None
     try:
         data = json.loads(_read(path))
-    except ValueError:
-        return []
+    except (OSError, ValueError) as exc:
+        return [], "{} does not parse ({}); every llm criterion starts unvalidated".format(
+            path, type(exc).__name__)
     if isinstance(data, dict):
         data = data.get("records", [])
-    return data if isinstance(data, list) else []
+    if not isinstance(data, list):
+        return [], "{} holds no list of records; every llm criterion starts " \
+                   "unvalidated".format(path)
+    return data, None
+
+
+def _validation_records(kit_dir):
+    return read_validation_file(kit_dir)[0]
 
 
 def recorded_states(kit_dir, judge_id):
@@ -883,6 +896,7 @@ def preflight(args):
     if hits:
         raise Refused(EXIT_SECRET, "possible secret found; nothing was sent:\n  " + "\n  ".join(
             "{}:{}: {}".format(p, line, msg) for p, line, msg in hits))
+    kind = _kind_of(args, load_prompt_lint())                     # --kind, before any send
 
     problem = out_dir_problem(args.out)                            # 3. out dir
     if problem:
@@ -932,7 +946,8 @@ def preflight(args):
 
     return {"target": target, "judge": judge, "judge_source": judge_source, "author": author,
             "versions": versions, "cases": cases, "ollama_host": ollama_host,
-            "ollama_host_source": host_source, "uses_ollama": "ollama" in needed}
+            "ollama_host_source": host_source, "uses_ollama": "ollama" in needed,
+            "kind": kind}
 
 
 def unreachable(spec, ollama_host):
@@ -971,10 +986,13 @@ def run_eval(args, ctx):
         return EXIT_INVALID
     budget = Budget(args.max_cost_usd, ledger)
     caller = Caller(budget, ctx["ollama_host"], args.temperature)
-    lint = load_prompt_lint()
-    kind = _kind_of(args, lint)
+    kind = ctx["kind"]
     texts = {v: _read(p) for v, p in ctx["versions"].items()}
     notes = []
+    validation_problem = read_validation_file(args.kit)[1]
+    if validation_problem:
+        notes.append(validation_problem)
+        print("prompt_eval.py: {}".format(validation_problem), file=sys.stderr)
     if args.temperature is not None and parse_spec(ctx["target"])[0] == "claude":
         notes.append("--temperature applies to Ollama only; the claude CLI has no such flag")
     if ctx["author"] is None:

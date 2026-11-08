@@ -758,3 +758,22 @@ def test_run_with_a_case_glob_that_matches_nothing_exits_1_after_the_consent_che
     assert fake_claude() == []
     assert len(worktrees(repo)) == 1
     assert not os.path.lexists(str(out / WORKTREE))
+
+
+def test_run_removes_the_worktree_when_plugin_eval_cannot_start(ec, repo, fake_claude, tmp_path,
+                                                                monkeypatch, capsys):
+    real_popen = subprocess.Popen
+
+    def popen(cmd, *args, **kwargs):
+        if cmd[0] == "claude":
+            raise OSError("exec failed")
+        return real_popen(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(ec.subprocess, "Popen", popen)
+    out = tmp_path / "out"
+    assert ec.main(run_argv(repo, out)) == 1
+    assert "plugin eval could not start (OSError)" in capsys.readouterr().err
+    assert fake_claude() == []
+    assert len(worktrees(repo)) == 1
+    assert not os.path.lexists(str(out / WORKTREE))
+    assert not (out / "report.json").exists()
