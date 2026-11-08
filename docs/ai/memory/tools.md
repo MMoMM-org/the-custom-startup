@@ -85,3 +85,7 @@
 
 <!-- 2026-11-06 -->
 - **`plugin eval --max-cost-usd` below the run's cost skips the paid graders** — in-flight runs finish, their llm graders record "skipped: cost ceiling" (unjudged), and `-j 4` overshoots by up to 30%. → Set the ceiling above the expected cost; cap spend with `--runs`/cases instead.
+
+<!-- 2026-11-08 -->
+- **A foreground Bash call dies at 10 min, killing a long eval with exit 143** — a `plugin eval` or `prompt_eval.py` run with 3 runs per arm outlasts it. → Launch with `setsid nohup`, write `exit $?` to its log, wait on that line.
+- **`prompt_lint.py --repo` exits non-zero on a clean tree** — two E4 errors in `semantic_detector.py` are pinned known-open, not a regression. → Compare the reported error set against those two, never the exit code.
