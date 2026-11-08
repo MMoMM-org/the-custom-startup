@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-11-04 |
-| **Current Phase** | Ready |
+| **Current Phase** | Implemented |
 | **Decomposition tier** | Incremental |
 | **Model tier** | hard |
 | **Last Updated** | 2026-11-08 |
@@ -95,6 +95,7 @@
 | 2026-11-08 | Phase 4 drift check: Good | Contradicts: T4.4 audit fix removed T1.2's grade reasons from agentic.md, restored. Missing: memory commands, T4.4 text amended (recipes stay in the skill). Acknowledged: T4.2/T4.3 artefacts stay in the scratchpad per F6 AC6; no CONSTITUTION.md |
 | 2026-11-08 | Final validation (comparison, 4 perspectives): Needs Attention, 0 FAIL, 29 WARN | User choice: fix all now; phase 4 reopened with T4.5 (spec text), T4.6 (runner robustness), T4.7 (eval coverage, live runs consented) |
 | 2026-11-08 | Validation follow-ups T4.5-T4.7 complete; phase 4 closed again | All 29 findings addressed; 3 of 5 new coverage checks discriminate, 2 recorded as regression guards; suite green |
+| 2026-11-08 | Implementation complete | Branch feat/prompt-author-spec, PR to main pending merge; prompt-author skill (33-entry catalog, lint, prompt_eval, eval_compare), three authoring skills cite the catalog, write-time nudge for prompt files; tcs-helper version bump by the auto-bump workflow on merge |
 
 ## Context
 
