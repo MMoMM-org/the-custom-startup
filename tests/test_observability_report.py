@@ -3847,3 +3847,71 @@ def test_truncated_marker_requires_the_boolean_true_not_a_truthy_string():
 
     assert "      commit -- flags: -a [truncated]\n" in text
     assert "      push -- flags: -f\n" in text
+
+
+# --- scope as a dimension of one path (#262) ---------------------------------
+#
+# Outside-repo paths redact to their basename (R-3), so User ~/.claude/CLAUDE.md
+# and Project CLAUDE.md both arrive as "CLAUDE.md". The key shape stays bare
+# path (see the spec-019 T3.1 note above); each entry tallies its scopes, and
+# the load report splits a path that loaded under more than one scope.
+
+
+def _scoped(path: str, reason: str, scope: str | None) -> dict:
+    record = _instruction(path, reason)
+    if scope is None:
+        record.pop("scope")
+    else:
+        record["scope"] = scope
+    return record
+
+
+def _scoped_stats(tmp_path, records):
+    events = tmp_path / "events.jsonl"
+    _write_jsonl(events, records)
+    parsed, _ = report.read_events(events)
+    return report.instruction_stats(parsed)
+
+
+def test_instruction_stats_tallies_each_scope_of_one_path(tmp_path):
+    stats = _scoped_stats(tmp_path, [
+        _scoped("CLAUDE.md", "session_start", "User"),
+        _scoped("CLAUDE.md", "session_start", "Project"),
+        _scoped("CLAUDE.md", "compact", "Project"),
+    ])
+    entry = stats["CLAUDE.md"]
+    assert entry.load_count == 3
+    assert {s: e.load_count for s, e in entry.scope_stats.items()} == {"User": 1, "Project": 2}
+    assert entry.scope_stats["Project"].reason_counts == {"session_start": 1, "compact": 1}
+
+
+def test_load_report_splits_a_path_loaded_under_two_scopes(tmp_path):
+    stats = _scoped_stats(tmp_path, [
+        _scoped("CLAUDE.md", "session_start", "User"),
+        _scoped("CLAUDE.md", "session_start", "Project"),
+        _scoped("CLAUDE.md", "compact", "Project"),
+    ])
+    text = report.build_load_report(stats, [])
+    assert "  CLAUDE.md [Project]: 2 load(s) [always] (compact=1, session_start=1)" in text
+    assert "  CLAUDE.md [User]: 1 load(s) [always] (session_start=1)" in text
+    assert "CLAUDE.md: 3 load(s)" not in text
+
+
+def test_load_report_keeps_one_line_for_a_single_scope(tmp_path):
+    stats = _scoped_stats(tmp_path, [
+        _scoped("docs/ai/memory/active.md", "include", "Project"),
+        _scoped("docs/ai/memory/active.md", "include", "Project"),
+    ])
+    text = report.build_load_report(stats, [])
+    assert "  docs/ai/memory/active.md: 2 load(s) [conditional] (include=2)" in text
+    assert "[Project]" not in text
+
+
+def test_load_report_names_unscoped_loads_when_splitting(tmp_path):
+    stats = _scoped_stats(tmp_path, [
+        _scoped("CLAUDE.md", "session_start", "User"),
+        _scoped("CLAUDE.md", "session_start", None),
+    ])
+    text = report.build_load_report(stats, [])
+    assert "  CLAUDE.md [User]: 1 load(s)" in text
+    assert "  CLAUDE.md [unknown scope]: 1 load(s)" in text
