@@ -869,11 +869,13 @@ PY
   _fx_repo_layout "DRIFT:ddd:3:4"
 
   # A PATH holding everything in /usr/bin and /bin except python3*, plus git.
+  # -L as well as -e: with /bin -> /usr/bin every name comes by twice, and a
+  # dangling link in /usr/bin fails -e, so it would be linked a second time.
   local nopy="$BATS_TEST_TMPDIR/nopy" f
   mkdir -p "$nopy"
   for f in /usr/bin/* /bin/*; do
     case "${f##*/}" in python3*) continue ;; esac
-    [ -e "$nopy/${f##*/}" ] || ln -s "$f" "$nopy/${f##*/}"
+    [ -e "$nopy/${f##*/}" ] || [ -L "$nopy/${f##*/}" ] || ln -s "$f" "$nopy/${f##*/}"
   done
   [ -e "$nopy/git" ] || ln -s "$(command -v git)" "$nopy/git"
   run env PATH="$nopy" /bin/bash -c 'command -v python3'
