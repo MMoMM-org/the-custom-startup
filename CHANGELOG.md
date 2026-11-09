@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requested one, so a missing-context or blocked task could come back as an unlabelled report.
   The brief now defines all four values. Update tcs-workflow.
 
+- **`/review` reviewers now return findings in the shape synthesis sorts on, and stay in scope
+  (#251).** The brief requests severity, confidence and location for every finding, forbids git
+  commands that change the worktree, and limits reviewers to the reviewed range and its files, so
+  a teammate's uncommitted work is no longer flagged. Update tcs-workflow.
+
 ## [Unreleased] — model tiers
 
 ### Added
