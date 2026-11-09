@@ -53,6 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   than one scope now gets one line per scope, such as `CLAUDE.md [User]` and
   `CLAUDE.md [Project]`. A path with a single scope reads as before.
 
+- **`/git-setup` repos now keep Claude Code's approval file and tokens out of git.**
+  `.claude/settings.local.json` stores "don't ask again" commands verbatim, tokens included, and
+  Claude Code ignores it only through the machine's global excludes. `pre-commit` (hook bundle
+  h10) blocks the staged file and credential-shaped values in staged `.claude/*.json` and
+  `*.jsonl`, without printing them; removing a leaked file still commits. `git-setup` writes
+  `.claude/.gitignore` with the rule. Update tcs-git-helpers and re-run `/git-setup`.
+
 ### Added
 
 - **tcs-issues blocks reading a GitHub issue without its comments.** Twice, work was recommended

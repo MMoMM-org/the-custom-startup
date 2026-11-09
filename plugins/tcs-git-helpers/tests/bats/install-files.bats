@@ -217,3 +217,27 @@ _run_install() {
   run diff "$TEMPLATES/lib-config-parser.sh" "$REPO/.githooks/lib-config-parser.sh"
   [ "$status" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# IF-claude: .claude/settings.local.json is ignored by a rule the repo carries
+# ---------------------------------------------------------------------------
+# Claude Code only adds this path to the machine's global git excludes, which
+# does not travel with the repository (Apiiro, 2026-11).
+
+@test "IF-claude install writes .claude/.gitignore ignoring settings.local.json" {
+  _run_install
+  [ "$status" -eq 0 ]
+  grep -qxF "settings.local.json" "$REPO/.claude/.gitignore"
+  mkdir -p "$REPO/.claude" && printf '{}\n' > "$REPO/.claude/settings.local.json"
+  git -C "$REPO" check-ignore -q .claude/settings.local.json
+}
+
+@test "IF-claude keeps an existing .claude/.gitignore and adds the rule once" {
+  mkdir -p "$REPO/.claude"
+  printf 'agent-memory-local/\n' > "$REPO/.claude/.gitignore"
+  _run_install
+  _run_install
+  [ "$status" -eq 0 ]
+  grep -qxF "agent-memory-local/" "$REPO/.claude/.gitignore"
+  [ "$(grep -cxF "settings.local.json" "$REPO/.claude/.gitignore")" -eq 1 ]
+}

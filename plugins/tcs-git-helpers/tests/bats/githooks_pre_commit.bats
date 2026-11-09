@@ -569,3 +569,97 @@ _stage_file() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"service.credentials.json"* ]]
 }
+
+# ---------------------------------------------------------------------------
+# Claude Code approval files and credential content (Apiiro, 2026-11)
+# ---------------------------------------------------------------------------
+# "Yes, and don't ask again" writes the full approved command, token included,
+# to .claude/settings.local.json. Fake tokens are assembled at run time so no
+# token-shaped literal lives in this repository.
+
+_fake() {
+  local prefix="$1" len="$2" body=""
+  while [ "${#body}" -lt "$len" ]; do body="${body}x"; done
+  printf '%s%s' "$prefix" "$body"
+}
+
+_run_hook() {
+  run bash -c '
+    cd "$1"
+    export GIT_DIR="$1/.git"
+    unset CLAUDE_PLUGIN_ROOT GIT_REFLOG_ACTION
+    bash "$2" 2>&1
+  ' _ "$REPO" "$HOOK"
+}
+
+@test "blocks staged .claude/settings.local.json" {
+  git -C "$REPO" checkout -q -b feat/local-settings
+  mkdir -p "$REPO/.claude"
+  _stage_file ".claude/settings.local.json" '{"permissions":{"allow":["Bash(ls)"]}}'
+  _run_hook
+  [ "$status" -eq 1 ]
+  _has "$output" "settings.local.json"
+}
+
+@test "blocks a nested package's .claude/settings.local.json" {
+  git -C "$REPO" checkout -q -b feat/nested-local-settings
+  mkdir -p "$REPO/packages/app/.claude"
+  _stage_file "packages/app/.claude/settings.local.json" '{}'
+  _run_hook
+  [ "$status" -eq 1 ]
+}
+
+@test "allows removing a tracked .claude/settings.local.json" {
+  mkdir -p "$REPO/.claude"
+  printf '{}\n' > "$REPO/.claude/settings.local.json"
+  git -C "$REPO" add .claude/settings.local.json
+  git -C "$REPO" -c core.hooksPath=/dev/null commit -q -m "chore: seed"
+  git -C "$REPO" checkout -q -b fix/remove-local-settings
+  git -C "$REPO" rm -q --cached .claude/settings.local.json
+  _run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "blocks a token inside a staged .claude/settings.json and never prints it" {
+  git -C "$REPO" checkout -q -b feat/shared-settings
+  mkdir -p "$REPO/.claude"
+  token="$(_fake ghp_ 36)"
+  _stage_file ".claude/settings.json" "{\"permissions\":{\"allow\":[\"Bash(curl -H 'Authorization: token ${token}' https://api.github.com)\"]}}"
+  _run_hook
+  [ "$status" -eq 1 ]
+  _has "$output" ".claude/settings.json"
+  _lacks "$output" "$token"
+}
+
+@test "blocks an Anthropic key in a staged .claude transcript" {
+  git -C "$REPO" checkout -q -b feat/transcript
+  mkdir -p "$REPO/.claude/sessions"
+  _stage_file ".claude/sessions/run.jsonl" "{\"command\":\"export ANTHROPIC_API_KEY=$(_fake sk-ant-api03- 40)\"}"
+  _run_hook
+  [ "$status" -eq 1 ]
+}
+
+@test "blocks an AWS access key id in a staged .claude json" {
+  git -C "$REPO" checkout -q -b feat/aws
+  mkdir -p "$REPO/.claude"
+  _stage_file ".claude/settings.json" "{\"env\":{\"AWS_ACCESS_KEY_ID\":\"AKIA$(_fake '' 16 | tr x Q)\"}}"
+  _run_hook
+  [ "$status" -eq 1 ]
+}
+
+@test "allows a clean staged .claude/settings.json" {
+  git -C "$REPO" checkout -q -b feat/clean-settings
+  mkdir -p "$REPO/.claude"
+  _stage_file ".claude/settings.json" '{"permissions":{"allow":["Bash(git status)","Bash(gh pr view:*)"]}}'
+  _run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "exclude-paths also bypasses the .claude content scan" {
+  git -C "$REPO" checkout -q -b feat/excluded-settings
+  mkdir -p "$REPO/.claude"
+  printf '.claude/settings.json\n' > "$REPO/.githooks/exclude-paths"
+  _stage_file ".claude/settings.json" "{\"x\":\"$(_fake ghp_ 36)\"}"
+  _run_hook
+  [ "$status" -eq 0 ]
+}
