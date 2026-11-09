@@ -81,14 +81,24 @@ class InstructionFileStats:
     `reason_counts` holds only named (non-empty) reasons -- an empty or
     missing `reason` increments `unknown_count` instead and is never folded
     in here (T2.1 finding, see module docstring point 2).
+
+    `scope_stats` holds the same tally per record `scope` (#262): outside-repo
+    paths redact to their basename, so a User and a Project file can share
+    one `path`. A record without a scope is tallied under `""`.
     """
 
     path: str
     load_count: int = 0
     reason_counts: dict[str, int] = field(default_factory=dict)
     unknown_count: int = 0
+    scope_stats: dict[str, "InstructionFileStats"] = field(default_factory=dict)
 
-    def record(self, reason: str | None) -> None:
+    def record(self, reason: str | None, scope: str | None = None) -> None:
+        key = scope if isinstance(scope, str) else ""
+        self.scope_stats.setdefault(key, InstructionFileStats(path=self.path))._tally(reason)
+        self._tally(reason)
+
+    def _tally(self, reason: str | None) -> None:
         self.load_count += 1
         if isinstance(reason, str) and reason:
             self.reason_counts[reason] = self.reason_counts.get(reason, 0) + 1
@@ -160,6 +170,23 @@ def read_events(base_path: Path) -> tuple[list[dict], int]:
 # ---------------------------------------------------------------------------
 
 
+def _render_instruction_line(label: str, entry: InstructionFileStats) -> str:
+    """One load-report line: count, layer and reasons for `label`."""
+    reason_parts = [f"{r}={c}" for r, c in sorted(entry.reason_counts.items())]
+    if entry.unknown_count:
+        reason_parts.append(f"unknown={entry.unknown_count}")
+    reasons = ", ".join(reason_parts) if reason_parts else "no reason recorded"
+    if entry.always_loaded and entry.conditionally_loaded:
+        layer = "always+conditional"
+    elif entry.always_loaded:
+        layer = "always"
+    elif entry.conditionally_loaded:
+        layer = "conditional"
+    else:
+        layer = "unknown"
+    return f"  {label}: {entry.load_count} load(s) [{layer}] ({reasons})"
+
+
 def instruction_stats(records: Iterable[dict]) -> dict[str, InstructionFileStats]:
     """Group `kind: instruction` records by path, counting loads and reasons.
 
@@ -175,7 +202,7 @@ def instruction_stats(records: Iterable[dict]) -> dict[str, InstructionFileStats
         if not path:
             continue
         entry = stats.setdefault(path, InstructionFileStats(path=path))
-        entry.record(rec.get("reason"))
+        entry.record(rec.get("reason"), rec.get("scope"))
     return stats
 
 
@@ -217,7 +244,7 @@ def instruction_stats_by_repo(records: Iterable[dict]) -> dict[str | None, dict[
         repo_key = repo if isinstance(repo, str) and repo else None
         stats = by_repo.setdefault(repo_key, {})
         entry = stats.setdefault(path, InstructionFileStats(path=path))
-        entry.record(rec.get("reason"))
+        entry.record(rec.get("reason"), rec.get("scope"))
     return by_repo
 
 
@@ -2019,19 +2046,12 @@ def build_load_report(
     lines.append(f"Loaded instruction files ({len(stats)}):")
     for path in sorted(stats):
         entry = stats[path]
-        reason_parts = [f"{r}={c}" for r, c in sorted(entry.reason_counts.items())]
-        if entry.unknown_count:
-            reason_parts.append(f"unknown={entry.unknown_count}")
-        reasons = ", ".join(reason_parts) if reason_parts else "no reason recorded"
-        if entry.always_loaded and entry.conditionally_loaded:
-            layer = "always+conditional"
-        elif entry.always_loaded:
-            layer = "always"
-        elif entry.conditionally_loaded:
-            layer = "conditional"
+        if len(entry.scope_stats) > 1:
+            for scope in sorted(entry.scope_stats):
+                label = f"{path} [{scope or 'unknown scope'}]"
+                lines.append(_render_instruction_line(label, entry.scope_stats[scope]))
         else:
-            layer = "unknown"
-        lines.append(f"  {path}: {entry.load_count} load(s) [{layer}] ({reasons})")
+            lines.append(_render_instruction_line(path, entry))
 
     missing = never_loaded(inventory, stats)
     lines.append("")

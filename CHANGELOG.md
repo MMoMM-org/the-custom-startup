@@ -47,6 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   branch's commit history and a PR or branch that was not checked out got the current branch's
   changes. Each target now resolves its own boundary. Update tcs-workflow.
 
+- **The observability load report no longer merges your User and Project `CLAUDE.md` (#262).**
+  Paths outside the repo are recorded by file name only, so `~/.claude/CLAUDE.md` and the
+  project's `CLAUDE.md` printed as one line with the sum of both. A path that loaded under more
+  than one scope now gets one line per scope, such as `CLAUDE.md [User]` and
+  `CLAUDE.md [Project]`. A path with a single scope reads as before.
+
 ## [Unreleased] — model tiers
 
 ### Added
