@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   known lint errors in `semantic_detector.py` stay open (#253). Update tcs-helper. See
   `plugins/tcs-helper/skills/prompt-author/SKILL.md`.
 
+### Fixed
+
+- **`/implement` now asks each implementer for the status it branches on (#250).** Both tiers
+  branched on `DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` and `BLOCKED`, but the brief never
+  requested one, so a missing-context or blocked task could come back as an unlabelled report.
+  The brief now defines all four values. Update tcs-workflow.
+
 ## [Unreleased] — model tiers
 
 ### Added
