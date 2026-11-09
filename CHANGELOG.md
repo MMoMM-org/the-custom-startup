@@ -21,8 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gates, a cost ceiling and judge validation against your labels, and `eval_compare.py` for
   plugin-eval suites. Writing an AGENTS.md, GEMINI.md, `*.prompt.md` or `prompts/` file now shows a
   one-line reminder to audit it. **What to know:** a live run asks for consent per provider and
-  runs only with an explicit `--max-cost-usd`; local models need Ollama. Not covered: the two
-  known lint errors in `semantic_detector.py` stay open (#253). Update tcs-helper. See
+  runs only with an explicit `--max-cost-usd`; local models need Ollama. Update tcs-helper. See
   `plugins/tcs-helper/skills/prompt-author/SKILL.md`.
 
 ### Fixed
@@ -36,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (#251).** The brief requests severity, confidence and location for every finding, forbids git
   commands that change the worktree, and limits reviewers to the reviewed range and its files, so
   a teammate's uncommitted work is no longer flagged. Update tcs-workflow.
+
+- **Memory capture can no longer be steered by text inside the session it classifies (#253).**
+  `/memory-add` asks `claude -p` whether a message is a learning and whether two entries
+  contradict. Both prompts pasted that text in undelimited, so an instruction inside it could
+  change the verdict. The text now sits in its own tag, its copies of that tag are escaped, and the
+  prompt marks it as data. `prompt_lint` reports no errors in the repo. Update tcs-helper.
 
 ## [Unreleased] — model tiers
 
