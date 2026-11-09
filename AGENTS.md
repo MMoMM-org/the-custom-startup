@@ -4,74 +4,101 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-**The Custom Agentic Startup** is a spec-driven development framework for Claude Code, distributed as marketplace plugins. It provides workflow commands, autonomous skills, specialized agents, and output styles to transform how you build software.
+**The Custom Agentic Startup** is a spec-driven development framework for Claude Code, distributed as marketplace plugins. It provides workflow skills, specialized agents, hooks and output styles.
 
 ## Repository Structure
+
+`tests/test_agents_md_tree.py` checks this tree against the filesystem in both directions: every entry must exist, and every plugin, skill and agent must be named.
 
 ```
 the-custom-startup/
 ├── plugins/
 │   ├── tcs-workflow/             # Core workflow orchestration plugin
 │   │   ├── .claude-plugin/       # Plugin manifest (plugin.json)
-│   │   ├── agents/               # Workflow agents (e.g., the-chief)
+│   │   ├── agents/               # Review and TDD gates the implement loop dispatches:
+│   │   │                         #   spec-compliance-reviewer, code-quality-reviewer, tdd-guardian
 │   │   ├── skills/               # 23 skills (user-invocable + autonomous)
-│   │   │                         #   implement dispatches to implement-direct /
+│   │   │                         # Core: analyze, brainstorm, constitution, debug,
+│   │   │                         #   document, guide, implement, parallel-agents, pickup,
+│   │   │                         #   receive-review, refactor, review, test,
+│   │   │                         #   validate, verify
+│   │   │                         # implement dispatches to implement-direct /
 │   │   │                         #   implement-incremental by decomposition tier
-│   │   │   │                     # Core: analyze, brainstorm, constitution, debug,
-│   │   │   │                     #   document, guide, implement, parallel-agents,
-│   │   │   │                     #   receive-review, refactor, review, test,
-│   │   │   │                     #   validate, verify
-│   │   │   │                     # XDD: xdd, xdd-meta, xdd-plan, xdd-prd, xdd-sdd, xdd-tdd
-│   │   ├── output-styles/        # The Startup, The ScaleUp output styles
+│   │   │                         # XDD: xdd, xdd-meta, xdd-plan, xdd-prd, xdd-sdd, xdd-tdd
+│   │   ├── output-styles/        # the-startup, the-scaleup
+│   │   ├── evals/                # claude plugin eval suites
 │   │   └── README.md             # Detailed plugin documentation
 │   │
 │   ├── tcs-team/                 # Specialized agent library plugin
-│   │   ├── agents/               # 8 roles with 15 agents (13 activity + the-chief + the-meta-agent)
+│   │   ├── agents/
 │   │   │   ├── the-chief.md      # Complexity assessment, routing
 │   │   │   ├── the-analyst/      # research-product
-│   │   │   ├── the-architect/    # design-system, review-security, review-robustness, review-compatibility
+│   │   │   ├── the-architect/    # design-system, record-decision, review-security,
+│   │   │   │                     #   review-robustness, review-compatibility
 │   │   │   ├── the-developer/    # build-feature, optimize-performance
 │   │   │   ├── the-devops/       # build-platform, monitor-production
 │   │   │   ├── the-designer/     # research-user, design-interaction, design-visual
-│   │   │   ├── the-tester/       # test-strategy
-│   │   │   └── the-meta-agent.md # Agent design and generation
-│   │   └── skills/               # Domain skills (cross-cutting, design, development, infrastructure, quality)
+│   │   │   └── the-tester/       # test-strategy
+│   │   └── skills/               # Domain skills the agents load:
+│   │                             #   api-contract-design, architecture-selection,
+│   │                             #   code-quality-review, domain-modeling,
+│   │                             #   feature-prioritization, frontend-patterns,
+│   │                             #   pattern-detection, performance-analysis,
+│   │                             #   platform-operations, project-discovery,
+│   │                             #   requirements-elicitation, security-assessment,
+│   │                             #   technical-writing, test-practices, user-research
 │   │
-│   ├── tcs-helper/               # Skill authoring + memory system plugin (optional)
-│   │   ├── .claude-plugin/       # Plugin manifest (plugin.json, v2.0.0)
-│   │   ├── hooks/hooks.json      # 4 hook events: UserPromptSubmit, SessionStart, PreCompact, PostToolUse
-│   │   ├── scripts/              # Python hook scripts + lib/reflect_utils.py
-│   │   ├── templates/            # 19 CLAUDE.md + memory templates (stacks: ts, go, python, cf, convex)
+│   ├── tcs-helper/               # Authoring, memory and session tooling (optional)
+│   │   ├── .claude-plugin/       # Plugin manifest (plugin.json)
+│   │   ├── hooks/hooks.json      # UserPromptSubmit, SessionStart, PreCompact, PostToolUse
+│   │   ├── scripts/              # Python hook scripts; shared code in scripts/lib/
+│   │   ├── templates/            # CLAUDE.md + memory templates (stacks: ts, go, python, cf, convex)
+│   │   ├── evals/                # claude plugin eval suites
 │   │   └── skills/
 │   │       ├── skill-author/     # Create, audit, convert Claude Code skills (PICS, TDD Iron Law)
+│   │       ├── agent-author/     # Create, audit Claude Code subagents
 │   │       ├── prompt-author/    # Write, audit, port prompts a model reads (API, briefs, AGENTS.md)
 │   │       ├── skill-evaluate/   # Evaluate a skill before importing or using
 │   │       ├── skill-import/     # Fetch + install a single skill from any GitHub repo
+│   │       ├── rule-enforcer/    # Turn a recurring rule into a hook
+│   │       ├── memory-setup/     # Provision docs/ai/memory/ + CLAUDE.md hierarchy in new repos
 │   │       ├── memory-add/       # Capture session learnings → route to correct memory file
 │   │       ├── memory-sync/      # Keep @imports and memory index in sync
 │   │       ├── memory-cleanup/   # Archive resolved issues, prune stale entries
 │   │       ├── memory-promote/   # Promote domain patterns to reusable skills
 │   │       ├── memory-claude-md-optimize/ # Audit, score, migrate CLAUDE.md → Memory Bank
-│   │       ├── setup/            # Provision docs/ai/memory/ + CLAUDE.md hierarchy in new repos
-│   │       ├── docs/             # Generate and maintain project documentation
+│   │       ├── context-bridge/   # Checkpoint a session before /clear or /compact
+│   │       ├── observability-setup/ # Turn session recording on or off per repo
+│   │       ├── claude-docs/      # Fetch and cache current Claude Code docs
+│   │       ├── doc-product/      # Plan, write and reader-test user-facing docs
 │   │       ├── finish-branch/    # Branch completion workflow
 │   │       └── git-worktree/     # Git worktree management
 │   │
-│   └── tcs-patterns/             # Domain pattern skills plugin (optional, selective install)
-│       ├── .claude-plugin/       # Plugin manifest (plugin.json)
-│       ├── skills/               # patterns-setup (installer), pattern (catalogue reader)
-│       └── templates/patterns/   # catalogue: 21 patterns, installed per repo as .claude/skills/tcs-<name>:
-│           │                     # Architecture: ddd, hexagonal, functional, event-driven,
-│           │                     #               event-sourcing
-│           │                     # API & Types: api-design, typescript-strict
-│           │                     # Security: secure-oauth-oidc, bff-entry-points
-│           │                     # Testing: testing, mutation-testing, frontend-testing, react-testing, test-design-reviewer
-│           │                     # Platforms: node-service, python-project, go-idiomatic
-│           │                     # DevOps: twelve-factor (→ tcs-team:the-devops:build-platform)
-│           │                     #         observability (→ tcs-team:the-devops:monitor-production)
-│           │                     # Integrations: mcp-server, obsidian-plugin
+│   ├── tcs-patterns/             # Domain pattern skills plugin (optional, selective install)
+│   │   ├── .claude-plugin/       # Plugin manifest (plugin.json)
+│   │   ├── skills/               # patterns-setup (installer), pattern (catalogue reader)
+│   │   └── templates/patterns/   # catalogue, installed per repo as .claude/skills/tcs-<name>:
+│   │                             # Architecture: ddd, hexagonal, functional, event-driven,
+│   │                             #               event-sourcing
+│   │                             # API & Types: api-design, typescript-strict
+│   │                             # Security: secure-oauth-oidc, bff-entry-points
+│   │                             # Testing: testing, mutation-testing, frontend-testing, react-testing, test-design-reviewer
+│   │                             # Platforms: node-service, python-project, go-idiomatic
+│   │                             # DevOps: twelve-factor (→ tcs-team:the-devops:build-platform)
+│   │                             #         observability (→ tcs-team:the-devops:monitor-production)
+│   │                             # Integrations: mcp-server, obsidian-plugin
+│   │
+│   ├── tcs-git-helpers/          # Git hooks: branch protection, commit checks, audit (optional)
+│   │   ├── hooks/hooks.json
+│   │   └── skills/               # git-setup (installer), git-audit (branch and override audit)
+│   │
+│   └── tcs-issues/               # GitHub issue lifecycle on a Projects (v2) board (optional)
+│       └── skills/               # issue, link-issue (sub-issues)
 │
 ├── scripts/
+│   ├── ci/                                         # CI checks (docs-sync, changelog/version sync)
+│   ├── dev/test.sh                                 # Provision .venv and run pytest + bats
+│   ├── observability/                              # Session recording and report tooling
 │   ├── the-custom-startup-statusline-standard.sh   # Standard (single-line) statusline
 │   ├── the-custom-startup-statusline-enhanced.sh   # Enhanced statusline with budget bar
 │   ├── the-custom-startup-statusline-lib.sh        # Shared statusline library
@@ -83,12 +110,15 @@ the-custom-startup/
 │
 ├── docs/
 │   ├── about/                    # Concepts, philosophy, principles, sources
+│   ├── ai/memory/                # Memory bank (routing rules in CLAUDE.md)
 │   ├── getting-started/          # Index, installation, quick-start, workflow
 │   ├── guides/                   # Multi-AI workflow, statusline, tcs-patterns
 │   ├── reference/                # Agents, plugins, skills, output-styles, XDD
 │   ├── templates/                # Multi-AI prompt templates (PRD, brainstorm, research, etc.)
 │   └── XDD/                      # Spec directories, ADRs, ideas
 │
+├── tests/                        # Repo-level pytest suites
+├── .github/workflows/            # Tests, auto-bump, release
 ├── install.sh                    # Interactive install wizard
 ├── uninstall.sh                  # Interactive uninstall wizard
 └── README.md                     # User-facing documentation
@@ -101,26 +131,27 @@ the-custom-startup/
 Each plugin lives in `plugins/[name]/` with:
 - `.claude-plugin/plugin.json` - Plugin manifest defining name, version, components
 - `skills/` - User-invocable and autonomous skills (SKILL.md files with trigger terms)
-- `output-styles/` - Output style definitions
-- `agents/` - Agent definitions (team plugin only)
+- `agents/` - Agent definitions (tcs-workflow, tcs-team)
+- `hooks/hooks.json` - Hook registrations (tcs-helper, tcs-patterns, tcs-git-helpers)
+- `output-styles/` - Output style definitions (tcs-workflow)
 
-**Skill invocation**: Skills are invoked by their name directly (e.g., `/brainstorm`, `/implement`).
-Plugin-name prefixing (`tcs-workflow:brainstorm`) only applies to commands, not skills.
-The team plugin's domain skills are agent-internal and not user-invocable directly.
+**Skill invocation**: plugin skills are namespaced by their plugin, as the repo's own files invoke
+them: `Skill(tcs-workflow:validate)`, `/tcs-helper:skill-author`. The tcs-team domain skills are
+loaded by its agents.
 
 ### Skill Structure
 
 Skills use progressive disclosure to minimize context usage:
 ```
 skills/[skill-name]/
-├── SKILL.md           # Core logic (~7-24 KB, always loaded)
+├── SKILL.md           # Core logic (always loaded)
 ├── reference/         # Advanced protocols (loaded when needed)
 ├── templates/         # Document templates
 ├── examples/          # Real-world scenarios
 └── validation.md      # Quality checklists
 ```
 
-For full skill conventions, PICS structure, and transformation checklist, see the `writing-skills` skill (`plugins/tcs-workflow/skills/writing-skills/reference/conventions.md`).
+For full skill conventions, PICS structure, and transformation checklist, see the `skill-author` skill (`plugins/tcs-helper/skills/skill-author/reference/conventions.md`).
 
 ### Agent Structure (Team Plugin)
 
@@ -137,6 +168,8 @@ Each agent markdown file defines:
 - Tool access permissions
 - Activation examples
 - Integration with other agents
+
+For agent conventions, see the `agent-author` skill (`plugins/tcs-helper/skills/agent-author/reference/conventions.md`).
 
 ## Development Workflow
 
@@ -171,37 +204,29 @@ with `bad interpreter`.
 
 ### Testing Changes Locally
 
-```bash
-# The plugins are directories - test by installing from local path
-claude plugin install ./plugins/tcs-workflow
-claude plugin install ./plugins/tcs-team
-
-# Or use the main installer to test full installation
-./install.sh
-
-# Uninstall to reset (interactive wizard)
-./uninstall.sh
-```
+Copy the changed skill into the plugin cache and the marketplace source, then run
+`/reload-plugins`. The steps are in CLAUDE.md, "Testing Skills During Development". Those copies
+are throwaway: never release by copying.
 
 ### Editing Skills
 
 1. Skills are markdown files (`SKILL.md`) - edit directly
-2. Skills activate on trigger terms defined in their YAML frontmatter
-3. Keep `SKILL.md` under ~25 KB for context efficiency
-4. Move advanced content to `reference/` directory (loaded on demand)
+2. Skills activate on the `description` in their YAML frontmatter
+3. Keep `SKILL.md` under 500 lines; move advanced content to `reference/` (loaded on demand)
+4. Audit every skill change with `/tcs-helper:skill-author` before committing
 
 ### Invoking Skills as Commands
 
 The `tcs-workflow` plugin has no separate `commands/` directory — skills serve as the user-invocable
-entry points. Each skill in `plugins/tcs-workflow/skills/[name]/SKILL.md` is accessible as
-`/[name]` (e.g. `/xdd`, `/implement`).
+entry points. Each skill in `plugins/tcs-workflow/skills/[name]/SKILL.md` is invoked as
+`/tcs-workflow:[name]` (e.g. `/tcs-workflow:xdd`).
 
 To add a new workflow entry point, add a skill directory under `plugins/tcs-workflow/skills/`.
 
 ### Editing Agents
 
-1. Agents are markdown files in `plugins/tcs-team/agents/[role]/`
-2. Agent name matches `[role]:[activity]` pattern
+1. Agents are markdown files in `plugins/tcs-team/agents/[role]/` or `plugins/tcs-workflow/agents/`
+2. A team agent's name follows `tcs-team:[role]:[activity]`
 3. Agents define specialized Task tool prompts for subagent delegation
 
 ### Editing Output Styles
@@ -212,13 +237,6 @@ To add a new workflow entry point, add a skill directory under `plugins/tcs-work
 
 ## Important Patterns
 
-### Progressive Disclosure
-
-Skills load minimal context initially, then progressively load:
-- `reference/` - Advanced protocols when complexity increases
-- `templates/` - Document templates when creating artifacts
-- `examples/` - Real-world scenarios when pattern matching
-
 ### Spec-Driven Development
 
 The primary workflow: `/xdd` → `/validate` → `/implement` → `/review`
@@ -227,13 +245,6 @@ Specifications live in `docs/XDD/specs/[NNN]-[name]/`:
 - `requirements.md` - What to build
 - `solution.md` - How to build it
 - `plan/` - Execution sequence (README.md manifest + phase-N.md files)
-
-### Knowledge Capture
-
-Discovered patterns, interfaces, and domain rules are automatically documented in:
-- `docs/patterns/` - Technical patterns
-- `docs/interfaces/` - External integrations
-- `docs/domain/` - Business rules
 
 ### Constitution Enforcement
 
@@ -259,5 +270,3 @@ The repository is a Claude Code marketplace. Publishing happens via:
 3. Users install via `./install.sh` or `/plugin marketplace add MMoMM-org/the-custom-startup`
 
 Plugin versions are bumped on merge by `.github/workflows/auto-bump-versions.yml`: a patch bump for every merged commit that touched the plugin since its version was last raised. What is owed is read from `main`'s history, not from the triggering push, so a run that never happened is caught up by the next one (or by Run workflow). A breaking or feature release is requested by writing the next-major or next-minor heading (e.g. `## [2.0.0] - <date>` against a 1.4.x manifest) at the top of the plugin's `CHANGELOG.md`; never hand-edit `plugin.json`. On a pull request, a CHANGELOG version beyond one patch, the next minor or the next major ahead of the manifest fails `scripts/ci/check-changelog-version-sync.sh`; a pre-release or non-canonical heading (`2.0.0-rc1`, `2.00.0`) requests nothing and gets the patch bump.
-
-
