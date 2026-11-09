@@ -1,7 +1,7 @@
 # Rule Enforcer — Mechanism Matrix
 
 Maps Q3 (earliest intervention point) × Q4 (response style) to the concrete
-enforcement mechanism. Consumed by the `/enforce-rule` skill at workflow step 6.
+enforcement mechanism. Consumed by the `/tcs-helper:rule-enforcer` skill at workflow step 6.
 
 Each section uses a parenthetical example so the user can recognize their own
 rule — matching against a real case is more reliable than judging an abstract

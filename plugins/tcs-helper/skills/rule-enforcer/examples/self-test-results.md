@@ -14,7 +14,7 @@ For each row: record the date, the actual mechanism the skill produced, and PASS
 ## Run instructions
 
 1. Restart Claude Code session so the rule-enforcer skill is indexed.
-2. For each fixture: invoke `/enforce-rule "<rule text>"` and answer Q1-Q4 per the fixture spec.
+2. For each fixture: invoke `/tcs-helper:rule-enforcer "<rule text>"` and answer Q1-Q4 per the fixture spec.
 3. Record the actual Step 6 mechanism + Step 8 hand-off in the table.
 4. Mark PASS if actual matches expected; FAIL otherwise.
 5. Any FAIL: file a follow-up to fix the matrix or workflow logic.

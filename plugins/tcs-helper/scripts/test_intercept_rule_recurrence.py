@@ -8,6 +8,7 @@ Behavior under test (public interface = script stdin/stdout/exit code):
   - p95 latency over 100 invocations ≤ 50ms (soft assertion with warning)
 """
 import json
+import re
 import os
 import statistics
 import subprocess
@@ -69,12 +70,24 @@ class TestInterceptBehavior(unittest.TestCase):
         # The matched trigger phrase text must appear in the suggestion (fails on empty snippet)
         self.assertIn("forgetting", stdout, "Expected matched trigger phrase text in suggestion")
 
-    def test_suggestion_contains_enforce_rule(self):
-        """Suggestion line mentions /enforce-rule command."""
+    def test_suggestion_names_a_skill_that_exists(self):
+        """The suggested command resolves to a shipped skill.
+
+        It named /enforce-rule from the start, a command that never existed;
+        the skill is tcs-helper:rule-enforcer.
+        """
         payload = json.dumps({'prompt': 'I keep forgetting to update docs', 'cwd': '/tmp'})
         stdout, code = _run(payload)
         self.assertEqual(code, 0)
-        self.assertIn('/enforce-rule', stdout)
+        match = re.search(r'/([a-z0-9-]+):([a-z0-9-]+)', stdout)
+        self.assertIsNotNone(match, stdout)
+        plugin, skill = match.groups()
+        plugins_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
+        self.assertTrue(
+            os.path.isfile(os.path.join(plugins_dir, plugin, 'skills', skill, 'SKILL.md')),
+            '/{}:{} is not a shipped skill'.format(plugin, skill),
+        )
+        self.assertNotIn('/enforce-rule', stdout)
 
     def test_deutsch_trigger_emits_suggestion(self):
         """German recurrence phrase triggers suggestion."""

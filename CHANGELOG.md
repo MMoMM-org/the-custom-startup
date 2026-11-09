@@ -60,6 +60,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `*.jsonl`, without printing them; removing a leaked file still commits. `git-setup` writes
   `.claude/.gitignore` with the rule. Update tcs-git-helpers and re-run `/git-setup`.
 
+- **The "I keep forgetting" hint now names a command that exists.** When a prompt carries a
+  recurrence phrase, tcs-helper suggests triaging it as a rule. The hint said `/enforce-rule`,
+  which was never a command; it now says `/tcs-helper:rule-enforcer`, and a test checks that the
+  suggested skill ships. Update tcs-helper.
+
 ### Added
 
 - **tcs-issues blocks reading a GitHub issue without its comments.** Twice, work was recommended
