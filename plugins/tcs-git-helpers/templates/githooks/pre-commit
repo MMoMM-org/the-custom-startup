@@ -172,6 +172,39 @@ done <<EOF
 $STAGED
 EOF
 
+# ---------------------------------------------------------------------------
+# 3. Claude Code approval files and credentials inside .claude/
+# ---------------------------------------------------------------------------
+# "Yes, and don't ask again" stores the full approved command, token included,
+# in .claude/settings.local.json. Claude Code ignores it only through the
+# machine's global excludes, which a clone does not inherit. Only added or
+# modified files count: removing a leaked file must stay possible. A match is
+# reported by file and kind, never by the matched value.
+ADDED="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)"
+
+CREDENTIAL_PATTERNS='gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-(proj-)?[A-Za-z0-9_-]{32,}|AKIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,}|glpat-[A-Za-z0-9_-]{20}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+  if _is_excluded "$file"; then
+    continue
+  fi
+  case "$file" in
+    .claude/settings.local.json|*/.claude/settings.local.json)
+      printf '  ✗ Staged Claude Code approval file (holds approved commands verbatim): %s\n' "$file" >&2
+      FOUND=1
+      ;;
+    .claude/*.json|.claude/*.jsonl|*/.claude/*.json|*/.claude/*.jsonl)
+      if git show ":$file" 2>/dev/null | grep -Eq -- "$CREDENTIAL_PATTERNS"; then
+        printf '  ✗ Staged file under .claude/ contains a credential-shaped value: %s\n' "$file" >&2
+        FOUND=1
+      fi
+      ;;
+  esac
+done <<EOF
+$ADDED
+EOF
+
 if [ "$FOUND" -eq 1 ]; then
   printf '\n' >&2
   printf '    Remove from staging: git restore --staged <file>\n' >&2

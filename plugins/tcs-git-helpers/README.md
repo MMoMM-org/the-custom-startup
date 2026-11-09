@@ -41,7 +41,7 @@ The installed hooks enforce their rules **even when the Claude Code plugin is di
 
 | Hook | Enforces |
 |------|----------|
-| `pre-commit` | Working-tree hygiene, `.orig` leak detection |
+| `pre-commit` | Direct commits to protected branches; staged secret files (`.env*`, `credentials.json`, `*.pem`/`*.key`/`*.p12`/`*.pfx`, SSH keys); Claude Code's `.claude/settings.local.json`, which stores approved commands verbatim; credential-shaped values (GitHub, Anthropic, OpenAI, AWS, Slack, GitLab tokens, private keys) in staged `.claude/*.json` and `*.jsonl`. Removing a leaked file is never blocked; `.githooks/exclude-paths` exempts a path |
 | `pre-push` | Push-to-closed-PR, force-push to protected branch |
 | `commit-msg` | Conventional Commits format (allowlisted types; merge commits exempt; `[skip-format-check]` escape; optional `TCS_REQUIRE_SCOPE=1`) |
 | `post-merge` | Stale-merged branch surfacing + branch awareness brief |
@@ -116,7 +116,7 @@ Then, in each repo where you want the `.githooks/` defense-in-depth layer:
 /tcs-git-helpers:git-setup
 ```
 
-The setup skill detects existing tooling (Husky, lefthook, pre-commit framework, simple-git-hooks) and aborts with a migration reference rather than silently coexisting. It does NOT auto-commit — review the `.githooks/` diff and commit manually.
+The setup skill detects existing tooling (Husky, lefthook, pre-commit framework, simple-git-hooks) and aborts with a migration reference rather than silently coexisting. It does NOT auto-commit — review the `.githooks/` diff and commit manually. It also writes `.claude/.gitignore` with a `settings.local.json` rule; commit it so every clone ignores the approval file, which Claude Code itself only excludes on the machine that created it.
 
 ## License
 

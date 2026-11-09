@@ -101,6 +101,18 @@ ROOT="$(_repo_root)"
     printf '%s\n' ".setup.lock" >> "$ROOT/.githooks/.gitignore"
   fi
 
+  # Ignore Claude Code's approval file by a rule the repository carries.
+  # "Yes, and don't ask again" writes approved commands verbatim, tokens
+  # included, to .claude/settings.local.json; Claude Code itself only adds it
+  # to the machine's global excludes, which no clone inherits. Same idempotent
+  # pattern as above; an existing .claude/.gitignore is kept.
+  mkdir -p "$ROOT/.claude"
+  if [ ! -f "$ROOT/.claude/.gitignore" ]; then
+    printf '%s\n' "settings.local.json" > "$ROOT/.claude/.gitignore"
+  elif ! grep -qxF "settings.local.json" "$ROOT/.claude/.gitignore"; then
+    printf '%s\n' "settings.local.json" >> "$ROOT/.claude/.gitignore"
+  fi
+
   # Copy hook scripts, substituting both version placeholders so the installed
   # banners always reflect plugin.json and the bundle version file.
   for h in $HOOK_FILES; do

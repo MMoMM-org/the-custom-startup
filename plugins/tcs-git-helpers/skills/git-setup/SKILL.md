@@ -133,6 +133,7 @@ After this step, the repo has:
 
 - `<repo>/.githooks/{pre-commit,pre-push,commit-msg,post-merge}` (executable, version banner substituted from `plugin.json` at install time — see ADR-13)
 - `<repo>/.githooks/.config.example` and `<repo>/.githooks/exclude-paths.example`
+- `<repo>/.claude/.gitignore` with a `settings.local.json` rule (an existing file is kept and the rule added once). Claude Code's approval file holds approved commands verbatim, and its own ignore lives only in the machine's global excludes. Tell the user to commit `.claude/.gitignore` so every clone inherits the rule
 - `<repo>/.git/config` with `[core] hooksPath = .githooks`
 
 ### 5. (Optional) `--with-gha`

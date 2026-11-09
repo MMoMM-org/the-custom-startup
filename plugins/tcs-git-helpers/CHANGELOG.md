@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.2.45] - 2026-11-09
+
+### Fixed
+
+- **A repo set up with `/git-setup` no longer lets Claude Code's approval file reach git.**
+  Choosing "Yes, and don't ask again" stores the full approved command, token included, in
+  `.claude/settings.local.json`. Claude Code ignores that file only through the machine's
+  global git excludes, which no clone inherits; Apiiro found real secrets in 1,122 public
+  copies. `pre-commit` now blocks a staged `settings.local.json`, and blocks any staged
+  `.claude/*.json` or `*.jsonl` holding a credential-shaped value, naming the file but never
+  the value. Removing a leaked file still commits. `git-setup` writes `.claude/.gitignore` with
+  the rule, so it travels with the repo. **What to know:** re-run `/git-setup` to get hook
+  bundle h10, commit `.claude/.gitignore`, and rotate any token found in that file's history.
+
 ## [2.2.42] - 2026-10-25
 
 ### Changed
