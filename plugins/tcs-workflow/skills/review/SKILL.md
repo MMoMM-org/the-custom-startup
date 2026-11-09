@@ -110,7 +110,10 @@ Recommend Agent Team when: files > 10, perspectives >= 4, cross-domain, or const
 
 Each reviewer subagent receives:
 - Full file contents for context
-- Diff bounded by `$BASE_SHA..$HEAD_SHA` (not unbounded)
+- Diff bounded by `$BASE_SHA..$HEAD_SHA` (not unbounded); for `staged`, the `git diff --cached` output instead
+- Scope: the range or staged diff, and the list of files it changes (`git diff --name-only` over the same boundary). Review only those files and that diff; ignore uncommitted changes and any other file in the worktree, which may be a teammate's work in progress.
+- Read-only git: no `stash`, `checkout`, `reset`, `restore`, `clean` or commit in this worktree; any mutation check runs in an isolated copy (`git archive` into a temp dir); never a `CLAUDE_ALLOW_*` override, and a hook denial is reported, not bypassed.
+- The finding contract: report each finding with the `Finding` fields from the Interface — `severity`, `confidence` (both as defined in reference/classification.md), `title`, `location` as path plus line, `issue`, `fix`, `code_example` for CRITICAL, and `breaking` when an external contract changes. With no findings, say so explicitly rather than returning prose.
 
 match (mode) {
   Standard => launch parallel subagents per applicable perspectives
