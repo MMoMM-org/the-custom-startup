@@ -57,7 +57,7 @@ State {
 - Skip already-completed phases when resuming an interrupted plan.
 - Dispatch tdd-guardian before every implementer subagent (4c).
 - Two-stage review: spec compliance (4f) ALWAYS before code quality (4g).
-- Fresh subagent per task: provide curated context only — no session history bleed.
+- Dispatch a fresh subagent per task with the curated context of 4d only — never session history or prior task outputs.
 - Select cheapest model that can handle task complexity (4b).
 
 **Never:**
@@ -67,7 +67,6 @@ State {
 - Proceed past a blocking constitution violation (L1/L2).
 - Start code quality review (4g) before spec compliance (4f) passes.
 - Dispatch implementer when tdd-guardian returns BLOCK (unless YOLO=true).
-- Pass session history to implementer subagents — scene-setting only.
 - Skip Finalize on completion — a spec stuck on `Ready` after shipping is the bug this skill exists to prevent. Step 7 runs Finalize regardless of the user's commit/PR choice.
 
 ## Reference Materials
@@ -198,10 +197,15 @@ Dispatch a **fresh** implementer subagent. Provide ONLY:
    - Current branch name
 4. Do NOT include session history, prior task outputs, or unrelated context
 
-Implementer subagent must:
+The brief tells the implementer subagent to:
 - Follow TDD (RED before GREEN)
 - Commit their work
 - Self-review before reporting
+- End the report with `Status:` and exactly one of these values, which 4e branches on:
+  - `DONE` — task complete, tests pass, work committed
+  - `DONE_WITH_CONCERNS` — complete, but something needs attention; list each concern and whether it is about correctness, scope or an observation
+  - `NEEDS_CONTEXT` — cannot proceed without information it lacks; name what is missing instead of guessing
+  - `BLOCKED` — cannot complete; say whether the cause is missing context, complexity, task size or a wrong plan
 
 #### 4e. Implementer Status Handling
 
