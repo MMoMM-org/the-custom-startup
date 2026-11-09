@@ -42,6 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change the verdict. The text now sits in its own tag, its copies of that tag are escaped, and the
   prompt marks it as data. `prompt_lint` reports no errors in the repo. Update tcs-helper.
 
+- **`/review staged`, `/review <PR>` and `/review <branch>` now review the right diff (#258).**
+  The range was always taken from the checked-out `HEAD`, so a staged review was given the
+  branch's commit history and a PR or branch that was not checked out got the current branch's
+  changes. Each target now resolves its own boundary. Update tcs-workflow.
+
 ## [Unreleased] — model tiers
 
 ### Added

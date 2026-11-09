@@ -47,8 +47,42 @@ def test_brief_fences_git_read_only():
     assert "CLAUDE_ALLOW_" in brief
 
 
-def test_brief_scopes_to_range_and_files():
+def test_brief_scopes_to_the_step_1_boundary_and_files():
     brief = _step(3)
-    assert "$BASE_SHA..$HEAD_SHA" in brief
-    assert "--name-only" in brief
-    assert "ignore uncommitted changes" in brief
+    assert "step 1 boundary" in brief
+    assert "changed-file list from step 1" in brief
+    assert "ignore every change outside the boundary" in brief
+
+
+# #258: the boundary was always merge-base(main, HEAD)..HEAD, wrong for a staged
+# review and for a PR or branch that is not checked out.
+
+def _target_arms() -> dict:
+    block = re.search(r"match \(target\) \{\n(.*?)^\}", _step(1), re.S | re.M)
+    assert block
+    arms = {}
+    for line in block.group(1).splitlines():
+        key, _, rule = line.strip().partition("=>")
+        arms[key.strip()] = rule
+    return arms
+
+
+def test_step_1_never_derives_the_boundary_from_head():
+    step = _step(1)
+    assert "merge-base origin/main HEAD" not in step
+    assert "git rev-parse HEAD" not in step
+
+
+def test_step_1_resolves_a_boundary_per_target():
+    arms = _target_arms()
+    assert set(arms) == {"/^\\d+$/", '"staged"', "containsSlash", "default"}
+    assert "headRefOid" in arms["/^\\d+$/"] and "pull/$target/head" in arms["/^\\d+$/"]
+    assert "`--cached`" in arms['"staged"'] and "no SHA range" in arms['"staged"']
+    assert "git rev-parse $target" in arms["default"]
+    assert "merge-base origin/main $target" in arms["default"]
+
+
+def test_step_1_derives_diff_and_files_from_the_boundary():
+    step = _step(1)
+    assert "git diff <boundary>" in step
+    assert "git diff --name-only <boundary>" in step
