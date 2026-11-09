@@ -53,6 +53,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   than one scope now gets one line per scope, such as `CLAUDE.md [User]` and
   `CLAUDE.md [Project]`. A path with a single scope reads as before.
 
+### Added
+
+- **tcs-issues blocks reading a GitHub issue without its comments.** Twice, work was recommended
+  from an issue's title or body that its comments showed was already done. A PreToolUse hook now
+  denies `gh issue view` reads that skip the comments (a plain view, or `--json` with `body`
+  and no `comments`), and a PostToolUse hook adds a note after `gh issue list`. `/pickup` now
+  loads the comments with the issue. **What to know:** add `--comments`, or `comments` to the
+  `--json` fields; `--web` and status-only reads such as `--json state` are not blocked. Update
+  tcs-issues and tcs-workflow. See `plugins/tcs-issues/README.md`.
+
 ## [Unreleased] — model tiers
 
 ### Added

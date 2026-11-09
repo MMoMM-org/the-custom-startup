@@ -93,6 +93,7 @@ the-custom-startup/
 │   │   └── skills/               # git-setup (installer), git-audit (branch and override audit)
 │   │
 │   └── tcs-issues/               # GitHub issue lifecycle on a Projects (v2) board (optional)
+│       ├── hooks/hooks.json      # Deny issue reads that skip comments; note after issue lists
 │       └── skills/               # issue, link-issue (sub-issues)
 │
 ├── scripts/

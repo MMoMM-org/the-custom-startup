@@ -8,6 +8,17 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [1.1.0] - 2026-11-09
+
+### Added
+
+- **Reading an issue without its comments is now blocked.** A PreToolUse hook denies
+  `gh issue view` when it reads the title or body but not the comments: a plain view, or
+  `--json` with `body` and without `comments`. Add `--comments`, or `comments` to the field
+  list. `--web` and status-only reads such as `--json state` still run. A second hook adds a
+  note after `gh issue list` that titles go stale and each issue needs a read with its
+  comments before you recommend from it. Both fail open when `jq` is missing.
+
 ## [1.0.4] - 2026-10-24
 
 ### Fixed

@@ -144,14 +144,17 @@ gh project item-edit --id <itemId> --project-id <projectId> \
 ### 4. Load context for the target issue
 
 ```bash
-gh issue view <issue> --repo <owner>/<repo> --json number,title,body,labels,url
+gh issue view <issue> --repo <owner>/<repo> --json number,title,body,comments,labels,url
 ```
 
+Read the comments before summarizing the issue: they record what was already done or decided
+since the body was written, and they override a stale body.
+
 - **Epic**: scan the body for `Part of #<N>`, `Epic: #<N>`, or `Parent: #<N>`; if found,
-  `gh issue view <N>` for its title. Also accept a native sub-issue parent if present.
+  `gh issue view <N> --json title -q .title` for its title. Also accept a native sub-issue parent if present.
 - **Blockers**: a Project `Blocked by` field is optional and often absent — use it only if
   present in the Step 3 JSON. Always scan the body for `Blocked by #<N>` and cross-repo
-  `owner/repo#<N>` references. For each blocker found, check state with `gh issue view`. If
+  `owner/repo#<N>` references. For each blocker found, check state with `gh issue view <N> --json state -q .state`. If
   any is still **open**, warn prominently. If none found, report "Blocked by: none".
 
 ### 5. Create the branch
