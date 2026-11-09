@@ -118,6 +118,11 @@ Dispatch a fresh subagent at the starting rung in the Direct column of [the mode
 2. The relevant requirements and solution sections, read and included in full.
 3. Scene-setting in a few lines: spec name and ID, repository layout at top level, current branch.
 4. An explicit test-first instruction: failing test, minimum code to pass, refactor.
+5. The report contract: end the report with `Status:` and exactly one of these values, which 3c branches on:
+   - `DONE` — unit complete, tests pass
+   - `DONE_WITH_CONCERNS` — complete, but something needs attention; list each concern and whether it is about correctness, scope or an observation
+   - `NEEDS_CONTEXT` — cannot proceed without information it lacks; name what is missing instead of guessing
+   - `BLOCKED` — cannot complete; say whether the cause is missing context, complexity, unit size or a wrong specification
 
 No session history. No prior unit output unless the next unit genuinely depends on it.
 
