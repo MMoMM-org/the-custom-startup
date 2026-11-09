@@ -44,7 +44,7 @@ match (target) {
 
 ## Failure: Description Summarizes Workflow
 
-**Symptom:** Agent follows description shortcut, skips skill body
+**Fix:** list triggering conditions only; never summarize the workflow in the description. Symptom: [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow)
 
 **Bad:**
 ```yaml
@@ -87,33 +87,33 @@ match (mode) {
 
 ## Failure: Documentation in Instructions
 
-**Symptom:** Agent searches for removed files, gets confused by historical context, or wastes tokens on rationale it can't act on
+**Symptom:** Agent searches for removed files, gets confused by historical context, or wastes tokens on history and argument it can't act on
 
-Skills and agents are **imperative instructions for an LLM**, not documentation for humans. Rationale, history, and spec references dilute directives and cause actively harmful behavior — mentioning "file X was removed" triggers the model to search for X.
+Skills and agents are **imperative instructions for an LLM**, not documentation for humans. Keep one clause on each non-obvious rule naming the failure it prevents ([PA-01](../../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules)); strip history, provenance and dead references ([PA-02](../../prompt-author/reference/catalog/core.md#pa-02-history-and-provenance-noise)).
 
 **Detect these anti-patterns:**
 
 | Pattern | Example | Harm |
 |---------|---------|------|
 | Historical references | "was removed", "previously used", "no longer exists" | Model searches for the removed thing (Streisand effect) |
-| Rationale blocks | "because...", "the reason is...", "this was done to..." | Dilutes the directive; model weighs explanation over instruction |
+| Rationale beyond one clause | alternatives considered, design debate, "this was done to..." | Buries the directive; the one clause naming the failure is enough (PA-01) |
 | Spec/doc refs without action | "see PRD §3.2", "per ADR-5", "as documented in..." | Dead context — model can't read external docs |
 | Negative existence claims | "X doesn't exist", "there is no Y" | Model treats as hint that X/Y might exist |
 | Past-tense narrative | "we decided to...", "this was introduced when..." | Wrong temporal frame — instructions must be present-tense imperative |
 | Inline comments explaining why | `// added for the auth rewrite`, `# workaround for bug #42` | Rot as context changes; model may try to find the referenced bug/rewrite |
 
-**The test:** For each non-imperative line, ask: *"Would removing this line degrade execution?"* If no — it's documentation, not instruction.
+**The test:** For each non-imperative line, ask: *"Would removing this line degrade execution?"* If no — it's documentation, not instruction. A reason clause on a non-obvious rule passes the test.
 
 **Where stripped content goes:**
 
 | Content type | Destination |
 |--------------|-------------|
-| Design rationale | `docs/` mirror file or ADR |
+| Design rationale beyond the one clause | `docs/` mirror file or ADR |
 | Decision history | Git commit message |
 | Recurring pattern | Memory bank |
 | Disposable context | Nowhere — delete it |
 
-**Critical:** Strip-first destroys institutional knowledge. Before removing rationale from a runtime file, verify the WHY is captured in its destination. Write to destination first, strip from runtime second.
+**Critical:** Strip-first destroys institutional knowledge. Before removing history or extended rationale from a runtime file, verify it is captured in its destination. Write to destination first, strip from runtime second.
 
 ---
 
@@ -154,6 +154,6 @@ An `AskUserQuestion` option label carries a parenthetical for the user — `Befo
 | Audit without reading file | Miss actual issues | Always read the skill |
 | Fix without testing | May not address root cause | Verify fix works |
 | Declarative-only workflow | Agents don't execute | Use imperative ### step headings |
-| Description with workflow | Agents skip body | Triggers only in description |
+| Description with workflow | [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow) | Triggers only in description |
 | `type` aliases for enums | Extra indirection | Inline values into interface fields |
-| Mirrored Always/Never rules | Wastes tokens | Each rule once, most natural framing |
+| Rule restated in a second place (Always/Never mirror, workflow step, recap, closing checklist) | [PA-05](../../prompt-author/reference/catalog/core.md#pa-05-redundant-restatement) | Each rule once, most natural framing; refer to it by name elsewhere |

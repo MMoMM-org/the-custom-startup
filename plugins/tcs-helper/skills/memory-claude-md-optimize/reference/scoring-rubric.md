@@ -10,6 +10,13 @@ improvement suggestions in the `issues[]` field of the QualityScore output.
 Score what is actually present in the file — not what could theoretically be added. Be consistent:
 a file with no commands scores 0 on criterion 1 regardless of its other merits.
 
+Read the repository's README and skim its code layout before scoring, and credit only what they do
+not already tell the agent ([PA-31](../../prompt-author/reference/catalog/instruction-files.md#pa-31-overview-the-readme-or-code-already-gives)). An architecture overview, directory tour, tech-stack list or
+setup steps that the README or code already gives earns no points on any criterion, Currency and
+Actionability included: score every criterion on what remains once that content is set aside, and
+record it in `issues[]` as a removal, not a migration. A path, command, version or count the tree no longer
+matches earns no points either ([PA-30](../../prompt-author/reference/catalog/instruction-files.md#pa-30-stale-facts-paths-commands-versions-counts)).
+
 ---
 
 ## Scoring Criteria
@@ -30,23 +37,27 @@ to understand when and why to use them — not just a bare command string.
 - **0 (Absent):** No actionable commands or workflow steps. The file contains only prose
   descriptions with nothing a developer can run.
 
+Commands the README already lists, such as its setup steps, earn nothing here; test, build and lint
+commands the README lacks are what this criterion rewards.
+
 ---
 
 ### 2. Architecture Clarity (0-20 points)
 
-**Definition:** The file conveys the system's structural design: how components relate, data flow,
-key boundaries, and the rationale behind significant design choices. A developer reading this file
-should understand why things are structured the way they are.
+**Definition:** The file gives the structural knowledge the README and the code do not: boundaries
+that must not be crossed, couplings to systems outside the repository, and design choices that look
+wrong without their reason. A component list, directory tour or data-flow summary the README or code
+already shows earns nothing here ([PA-31](../../prompt-author/reference/catalog/instruction-files.md#pa-31-overview-the-readme-or-code-already-gives)). Where the file states a non-obvious structural rule,
+credit it fully only when it carries one clause naming the failure it prevents ([PA-01](../../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules)).
 
-- **18-20 (Excellent):** Clear architectural overview that explains both structure and reasoning.
-  Describes the major components, their responsibilities, and how they interact. Key design
-  decisions are attributed to specific trade-offs.
-- **10-17 (Good):** Some structural context is present. The reader can infer the general layout
-  but design rationale is thin or absent for several choices.
-- **1-9 (Weak):** Mentions system components but without relationships or reasoning. Reads more
-  like a file listing than an architectural description.
-- **0 (Absent):** No architectural context. The file does not help the reader understand how the
-  system is structured.
+- **18-20 (Excellent):** Every structural statement is one the README and code lack, and each
+  non-obvious constraint carries the failure it prevents.
+- **10-17 (Good):** Some constraints or design reasons the README and code lack; some reasons are
+  missing, or part of the content repeats the README.
+- **1-9 (Weak):** Mostly repeats what the README or code shows, with at most one constraint or reason
+  they lack.
+- **0 (Absent):** No structural knowledge beyond what the README or code gives. A file whose only
+  architecture content is an overview the README already has scores 0.
 
 ---
 
@@ -77,24 +88,29 @@ information to filler, repetition, and verbosity. A concise file is not necessar
 can score low.
 
 - **13-15 (Excellent):** Every line is load-bearing. No filler phrases, no redundancy, no content
-  that duplicates what is already in a referenced file or standard documentation.
+  that duplicates what is already in the README, the code, a referenced file or standard
+  documentation ([PA-31](../../prompt-author/reference/catalog/instruction-files.md#pa-31-overview-the-readme-or-code-already-gives)).
 - **7-12 (Good):** Mostly tight, with some redundant phrasing or a few entries that could be
   condensed or removed without losing information.
 - **1-6 (Weak):** Noticeable verbosity or duplication. Large portions of the file repeat content
-  found elsewhere or add little to what can be inferred from context.
-- **0 (Absent):** Majority of content is filler, boilerplate, or duplicates external
-  documentation. Almost nothing would be lost by deleting the file.
+  found elsewhere, such as the README's overview, layout, stack or setup, or add little to what can
+  be inferred from context.
+- **0 (Absent):** Majority of content is filler, boilerplate, or duplicates the README, the code or
+  external documentation. Almost nothing would be lost by deleting the file.
 
 ---
 
 ### 5. Currency (0-15 points)
 
 **Definition:** Content reflects the current state of the codebase, toolchain, and team practices.
+Judge only the content the README and code do not already give: an accurate copy of the README's
+paths, versions or setup commands earns nothing here.
 Stale references — deprecated libraries, outdated version numbers, references to tools that have
 been replaced, or instructions for workflows that no longer exist — actively mislead developers.
 
 - **13-15 (Excellent):** All content reflects the current state. References to tools, versions,
-  and workflows are accurate. No stale or contradictory entries detected.
+  and workflows are accurate. No stale or contradictory entries detected. Check each path, command,
+  version and count against the tree, not against memory ([PA-30](../../prompt-author/reference/catalog/instruction-files.md#pa-30-stale-facts-paths-commands-versions-counts)).
 - **7-12 (Good):** Mostly current. A few items appear potentially stale (e.g., a version number
   that may be outdated, a tool that may have been replaced) but the core content is accurate.
 - **1-6 (Weak):** Multiple stale references. Some sections describe deprecated practices or tools
@@ -156,9 +172,9 @@ If the total score is below 50 (grade D or F), include concrete improvement sugg
 | Weakest Criterion | Suggested Improvement |
 |-------------------|-----------------------|
 | Commands & Workflows (score < 10) | "Add the 3-5 most common commands with brief usage context. Prefer annotated examples over bare command strings." |
-| Architecture Clarity (score < 10) | "Add a brief architectural overview: key components, their responsibilities, and the primary data flow. Even 5-10 lines of structure context reduces onboarding time significantly." |
+| Architecture Clarity (score < 10) | "Add the structural constraints and design reasons the README and code do not show, each with the failure it prevents. Do not add an overview the README already gives." ([PA-31](../../prompt-author/reference/catalog/instruction-files.md#pa-31-overview-the-readme-or-code-already-gives), [PA-01](../../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules)) |
 | Non-obvious Patterns (score < 7) | "Capture at least 3 gotchas, caveats, or non-standard behaviors specific to this codebase. Ask: what would a new developer get wrong in their first week?" |
-| Conciseness (score < 7) | "Remove or consolidate entries that duplicate external documentation. Each line should provide information not available elsewhere in the context." |
+| Conciseness (score < 7) | "Remove entries that duplicate the README, the code or external documentation. Each line should provide information not available elsewhere in the context." |
 | Currency (score < 7) | "Audit tool names, version numbers, and workflow references against the current codebase. Remove or update any stale entries." |
 | Actionability (score < 7) | "Convert descriptive statements to directives: replace 'X is used for Y' with 'Use X when Y'. Every entry should change behavior, not just inform." |
 

@@ -39,7 +39,7 @@ State {
 
 **Never:**
 - Ship a skill without verification (frontmatter, structure, entry point).
-- Write a description that summarizes the workflow (agents skip the body).
+- Write a description that summarizes the workflow ([PA-51](../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow)).
 - Accept "I can see the fix is correct" — test it anyway.
 
 ## Red Flags — STOP

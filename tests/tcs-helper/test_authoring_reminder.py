@@ -51,6 +51,51 @@ def test_an_agent_file_points_at_agent_author(path):
     assert '/tcs-helper:agent-author' in context_for(path, tool='Edit')
 
 
+SKILL_REMINDER = (
+    'This wrote a skill definition. Before committing, audit it with '
+    '/tcs-helper:skill-author.'
+)
+AGENT_REMINDER = (
+    'This wrote an agent definition. Before committing, audit it with '
+    '/tcs-helper:agent-author.'
+)
+
+
+def test_the_skill_reminder_text_is_unchanged():
+    assert context_for('/repo/plugins/tcs-helper/skills/memory-add/SKILL.md') == SKILL_REMINDER
+
+
+def test_the_agent_reminder_text_is_unchanged():
+    assert context_for('/repo/plugins/tcs-workflow/agents/tdd-guardian.md') == AGENT_REMINDER
+
+
+@pytest.mark.parametrize('path', [
+    '/repo/AGENTS.md',
+    'AGENTS.md',
+    '/repo/sub/GEMINI.md',
+    '/repo/docs/templates/x.prompt.md',
+    '/repo/prompts/a.md',
+    'prompts/a.md',
+])
+def test_a_prompt_file_gets_one_prompt_author_reminder(path):
+    text = context_for(path)
+    assert text is not None
+    assert text.count('/tcs-helper:prompt-author') == 1
+    assert '\n' not in text
+    assert 'skill-author' not in text and 'agent-author' not in text
+
+
+@pytest.mark.parametrize('path', [
+    '/repo/CLAUDE.md',
+    '/repo/plugins/tcs-helper/CLAUDE.md',
+    '/repo/MY-AGENTS.md',
+    '/repo/x.prompt.md.bak',
+    '/repo/myprompts/a.md',
+])
+def test_claude_md_and_near_misses_get_no_prompt_reminder(path):
+    assert context_for(path) is None
+
+
 @pytest.mark.parametrize('path', [
     '/repo/plugins/tcs-helper/skills/memory-add/reference/category-formats.md',
     '/repo/plugins/tcs-team/agents/README.md',

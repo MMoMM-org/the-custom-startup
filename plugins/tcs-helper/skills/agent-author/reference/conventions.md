@@ -135,9 +135,9 @@ Claude's auto-delegation router reads the `description` field via **text reasoni
 
 ### Hard Rules (PRINCIPLES § 2.1)
 
-- **Front-load the trigger scenario in the first ~50 characters** — the `/skills` UI truncates at 250 chars, the field hard-caps at 1,024.
-- **Third-person, scenario-anchored.** *"Reviews changes for security and compliance issues. Use when the task mentions auth, permissions, or injection."* — not *"Helps with security."*
+- **Front-load the trigger scenario in the first ~50 characters, in the third person:** [PA-52](../../prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person). The `/skills` UI truncates at 250 chars, the field hard-caps at 1,024.
 - **Expect under-triggering.** Anthropic explicitly notes Claude tends to skip skills/agents when it should invoke them. Use *"slightly pushy"* phrasing: `Use PROACTIVELY when…` and `MUST BE USED when…`.
+  Status and evidence: [PA-50](../../prompt-author/reference/catalog/harness.md#pa-50-description-authority-language-must-be-used).
 - **Include 2–3 `<example>` blocks** showing concrete invocation scenarios — improves parent-side delegation accuracy.
 
 See `description-patterns.md` for templates and good/bad examples.
@@ -285,7 +285,9 @@ What the agent reads and internalizes before doing the work. Lists for orientati
 
 ### 4. `## Mission`
 
-Single-sentence purpose statement. The "why" of the agent.
+Single-sentence purpose statement. The "why" of the agent. Name the goal and the done criterion, what is
+true when the job is complete, so the agent can recover toward it when a step fails:
+[PA-22](../../prompt-author/reference/catalog/agentic.md#pa-22-goal-and-constraints-over-a-fixed-script).
 
 ### 5. `## Decision: <Topic>` (one or more)
 
@@ -300,7 +302,9 @@ Use multiple `## Decision: <X>` sections if the agent makes several distinct dec
 
 ### 6. `## Activities`
 
-Numbered list of concrete actions. Be specific — vague activities produce vague results.
+Numbered list of concrete actions. Be specific — vague activities produce vague results. The steps
+serve the Mission's goal; they are not a script of tool calls the agent must follow when a step
+does not fit (PA-22).
 
 > 1. Identify the relevant modules, interfaces, and architectural seams.
 > 2. Check whether responsibilities are cleanly separated.
@@ -308,13 +312,21 @@ Numbered list of concrete actions. Be specific — vague activities produce vagu
 
 ### 7. `## Output`
 
-Typed table defining the agent's return contract:
+The return contract the caller branches on: a typed table with every field, nested types included,
+each with its type or its allowed values, where the return appears in the reply, then one example
+of the return exactly as the caller receives it. Reason: [PA-13](../../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract).
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| status | enum: `DONE` \| `NEEDS_CONTEXT` \| `BLOCKED` | Yes | Whether the job completed |
 | findings | Finding[] | Yes | Audit findings list |
 | filesReviewed | string[] | Yes | Paths examined |
 | recommendedNextStep | string | Yes | Single-sentence next action |
+
+`Finding`: `severity` (enum: `Critical` \| `Warning` \| `Suggestion`), `location` (`file:line`), `description`, `fix` — all strings, all required.
+
+Where the return appears and its serialization follow what the caller parses; JSON is one case
+among several. For examples in two serializations, see [output-formats.md](output-formats.md#output-section--tcs-convention).
 
 **Free-form prose output is reject-on-sight.** Every agent must define an explicit return contract.
 
@@ -323,6 +335,23 @@ Typed table defining the agent's return contract:
 - `## YOLO Mode` — for agents that behave differently when `YOLO=true`
 - `## Evaluation Logic` — for gate-style agents (e.g., `tdd-guardian`)
 - `## Validation Checklist` — for agents that audit other artifacts
+
+---
+
+## Agentic Contract
+
+An agent re-reads its body at every step and cannot ask the dispatcher mid-run, so the body states four
+things besides the Mission's done criterion. Put each where the agent looks when the case arises:
+
+| State | Where | Catalog entry |
+|---|---|---|
+| The action for a missing input, an ambiguous requirement or a file it cannot find, such as returning `NEEDS_CONTEXT` with the open question | a `## Decision` row or an Output status value | [PA-20](../../prompt-author/reference/catalog/agentic.md#pa-20-behaviour-when-information-is-missing-or-unclear) |
+| When to stop and report other than on success (a retry or tool-call limit, the same error twice, a failed check) and what that report contains | `## Constraints` or a `## Decision` row, with the status in `## Output` | [PA-21](../../prompt-author/reference/catalog/agentic.md#pa-21-stopping-conditions) |
+| For each forbidden action and for a request outside the job, what the agent does instead, such as stop and report or return a named status | each `never {}` entry, or a `## Decision` row | [PA-23](../../prompt-author/reference/catalog/agentic.md#pa-23-refusal-with-an-approved-alternative) |
+| The files, directories or commit range in scope, to ignore everything else, and which git and write operations it may run | `## Constraints` `require {}` | [PA-24](../../prompt-author/reference/catalog/agentic.md#pa-24-scope-fence-files-commit-range-read-only-git) |
+
+Give each non-obvious rule one clause naming the failure it prevents:
+[PA-01](../../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules).
 
 ---
 
@@ -348,7 +377,7 @@ This appears in the terminal status line when the agent activates, letting users
 
 - **`tools: *`** — grants everything; loses parent approvals; every call re-prompts
 - **Mega-role god-agents** — single agent with 50+ KB prompt and ten responsibilities
-- **Assuming parent context is visible** — it isn't; pass everything through the task prompt
+- **Assuming parent context is visible** — pass everything through the task prompt. Reason: [PA-08](../../prompt-author/reference/catalog/core.md#pa-08-assumed-absent-context)
 - **Parallel agents with implicit inter-dependencies** — siblings don't see each other
 - **Headless write-capable agents with no review gate** — run plan mode first, or require human review between read and write phases
 - **Context bloat from verbose subagent returns** — ask for key findings, not exhaustive details

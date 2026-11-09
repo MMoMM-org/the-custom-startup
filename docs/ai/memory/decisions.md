@@ -22,3 +22,6 @@
 
 <!-- 2026-10-23 -->
 - ADR-8: A template installed into consumer repos carries a version marker, bumped by hand when the template changes. → A drift check compares installed against plugin, and CI rejects a template change without a bump.
+
+<!-- 2026-11-08 -->
+- ADR-9: The prompt-author catalog (PA-xx) is the single source of prompt failure rules; consumer skills cite it with one operational line plus a PA link. → Change a rule in the catalog, measured before/after, never in a consumer copy.

@@ -49,7 +49,7 @@ authoring interview that needs an interactive terminal.
 
 A suite that passes proves nothing until it has failed:
 
-1. Run it: `claude plugin eval plugins/<plugin> --case <case> --runs 3 --trust-plugin --no-publish --max-cost-usd 5`.
+1. Run it: `claude plugin eval plugins/<plugin> --case <case> --runs 3 --trust-plugin --no-publish --output-dir <scratch-dir> --max-cost-usd 5`.
    The default with/without arms report the plugin's delta.
 2. Weaken the rule the case defends in the skill, re-run with `--ablation none`, and confirm the
    score drops. Restore the skill.

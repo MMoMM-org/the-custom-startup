@@ -1,6 +1,6 @@
 # Output Format Templates
 
-Every agent MUST define an explicit `## Output` section in its body. Free-form prose is reject-on-sight — it makes orchestration brittle and hides important findings.
+Give every agent an explicit `## Output` section in its body: every field, its type or allowed values, where it appears in the reply, and one example of the return as the caller receives it. The caller parses that reply, and without a stated shape the agent picks its own, so the parse fails. Free-form prose is reject-on-sight. Reason: [PA-13](../../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract).
 
 This file provides:
 1. **Typed-table templates per archetype** for the agent's own `## Output` section
@@ -34,6 +34,25 @@ For nested types, define them inline with their own table:
 | location | string | Yes | file:line citation |
 | description | string | Yes | What the issue is |
 | fix | string | Yes | Proposed remediation |
+```
+
+Close the section with where the return appears and one filled-in example of it, as the caller receives it. Where the return appears and how it is serialized follow what the caller parses: JSON for a caller that loads an object, labelled lines for one that matches a prefix, a table for one a human reads. Do not default to JSON. The two examples below are cases of that rule, not templates (PA-11).
+
+A caller that loads a JSON object:
+
+```markdown
+The final message is one JSON object and nothing else. Example:
+
+{"findings": [{"severity": "Warning", "location": "src/app.py:12", "description": "…", "fix": "…"}], "filesReviewed": ["src/app.py"], "testsRun": "pytest -q: 41 passed", "recommendedNextStep": "…"}
+```
+
+A caller that branches on a verdict line:
+
+```markdown
+The last two lines of the final message are the verdict, in this form and nothing after them. Example:
+
+VERDICT: FAIL
+REASON: src/app.py:12 reads the config before it is validated.
 ```
 
 Use rubric-style markdown lists (`- **Critical**`, `- **Warning**`) instead of typed tables only when the agent's output is purely human-facing and won't be consumed by orchestration.
@@ -131,11 +150,11 @@ Use rubric-style markdown lists (`- **Critical**`, `- **Warning**`) instead of t
 | | `model` set explicitly (TCS convention) | `sonnet` default; `haiku`/`opus` with rationale; not `inherit` without justification |
 | | `tools` minimal per archetype | No `*`; security/reviewer no `Write` |
 | | `color` matches archetype semantic | Per conventions.md table |
-| **Description** | Trigger in first ~50 chars | Yes |
+| **Description** | Trigger in first ~50 chars ([PA-52](../../prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person)) | Yes |
 | | Contains `Use PROACTIVELY` or `MUST BE USED` | Yes |
 | | At least 2 concrete trigger phrases | Verbatim user-language |
-| | Third-person, scenario-anchored | Yes |
-| | Does NOT summarize the workflow | Yes |
+| | Third-person, scenario-anchored ([PA-52](../../prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person)) | Yes |
+| | Does NOT summarize the workflow ([PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow)) | Yes |
 | | Distinguishable from main-agent scope | Not "for all X" |
 | | High-value agents have 2–3 `<example>` blocks | Yes |
 | **Active-agent announcement** | First non-blank line after frontmatter | `**Active agent: <plugin>:<role>:<activity>**` |
@@ -145,8 +164,14 @@ Use rubric-style markdown lists (`- **Critical**`, `- **Warning**`) instead of t
 | | At least one `## Decision: <Topic>` for routing decisions | If agent makes routing choices |
 | | `## Activities` numbered list of concrete actions | Yes |
 | | `## Output` typed table or named rubrics | Yes — never free prose |
+| | Every field has a type or its allowed values, and the section shows one example of the return (PA-13) | If a caller parses the return |
+| **Agentic Contract** | `## Mission` names a done criterion (PA-22) | Yes |
+| | Names the action for missing or unclear input (PA-20) | Yes |
+| | States when to stop and report other than on success, and what the report contains (PA-21) | Yes |
+| | Each forbidden action and out-of-scope request has what to do instead (PA-23) | Yes |
+| | Names the files or commit range in scope and the git and write operations allowed (PA-24) | Yes — see conventions.md § Agentic Contract |
 | **Size** | Body ≤ 25 KB | Yes; if larger, externalize to reference/ |
-| **Instruction Purity** | No rationale, history, spec refs, or negative existence claims in body | Yes — imperative instructions only |
+| **Instruction Purity** | Each non-obvious rule has one reason clause, `(Why: …)` passes (PA-01); no history, spec refs without action, or negative existence claims in body (PA-02) | Yes |
 
 ---
 
@@ -161,9 +186,9 @@ Use rubric-style markdown lists (`- **Critical**`, `- **Warning**`) instead of t
 | "Output is hard to parse" | Format weakness | Replace free prose with typed table |
 | "Agent overlaps with another" | Duplicate scope | Modernize one, deprecate other, or merge |
 | "Agent reads whole repo" | Context hygiene | Add filtering in Activities + size limits in Output |
-| "Agent assumes parent context" | Channel violation | Move context-passing into the dispatch prompt; remove "we discussed" references |
-| "Agent searches for removed files/features" | Documentation smell | Strip historical refs, rationale blocks, negative existence claims; relocate WHY to docs/ or ADR |
-| "Agent wastes tokens on non-actionable content" | Instruction impurity | Remove spec refs without action, past-tense narrative, inline comments explaining why |
+| "Agent assumes parent context" | Channel violation | Move context-passing into the dispatch prompt; remove "we discussed" references (PA-08) |
+| "Agent searches for removed files/features" | Documentation smell | Strip historical refs, negative existence claims and rationale beyond one clause (PA-01, PA-02); relocate it to docs/ or ADR |
+| "Agent wastes tokens on non-actionable content" | Instruction impurity | Remove spec refs without action, past-tense narrative, inline comments narrating history (PA-02) |
 
 ---
 

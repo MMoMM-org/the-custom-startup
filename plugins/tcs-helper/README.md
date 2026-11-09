@@ -23,6 +23,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history. Hooks load natively from `
 |-------|-------------|
 | `/skill-author` | Create, audit, or convert Claude Code skills |
 | `/agent-author` | Create, audit, or fix Claude Code subagents |
+| `/prompt-author` | Write, audit, or port prompts a model reads: API system prompts, subagent briefs, AGENTS.md / GEMINI.md, non-Claude targets |
 | `/skill-evaluate` | Evaluate skill quality before importing |
 | `/skill-import` | Fetch a single skill from any GitHub repo |
 | `/rule-enforcer` | Triage a recurrence rule via 4 questions and route to the right enforcement mechanism (CI / git hook / Claude hook / Memory). Also runs in **batch mode** (`/rule-enforcer --scan`) to sweep `CLAUDE.md` + memory files, extract the enforceable rules, dedup against installed hooks, and mechanize them in one confirm. |
@@ -67,7 +68,7 @@ Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the pl
 | `SessionStart` | `session_start_observability.py` | Warn when this repo's observability hooks call a bundle missing from this `$HOME` |
 | `PreCompact` | `check_learnings.py` | Back up queue before context compaction |
 | `PostToolUse(Bash)` | `post_commit_reminder.py` | Remind to run `/memory-add` after git commit; capture persistent tool errors |
-| `PostToolUse(Write\|Edit\|MultiEdit)` | `authoring_reminder.py` | Point at `/tcs-helper:skill-author` after a `SKILL.md` is written, `/tcs-helper:agent-author` after an `agents/**.md` |
+| `PostToolUse(Write\|Edit\|MultiEdit)` | `authoring_reminder.py` | Point at `/tcs-helper:skill-author` after a `SKILL.md` is written, `/tcs-helper:agent-author` after an `agents/**.md`, `/tcs-helper:prompt-author` after an `AGENTS.md`, `GEMINI.md`, `*.prompt.md` or `prompts/` file (never `CLAUDE.md`) |
 
 ### Pattern Detection
 

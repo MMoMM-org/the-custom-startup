@@ -1,0 +1,27 @@
+{
+  "source": "docs/XDD/specs/023-prompt-author/experiment/results.md, section Judge validation",
+  "cases": 10,
+  "criteria": {
+    "no_implementation_detail": {
+      "task": "T5",
+      "judge_fail_cases": 2,
+      "labels_for_judge_fail": ["FAIL", "FAIL"],
+      "labels_for_judge_pass": ["PASS", "PASS", "PASS", "PASS", "PASS", "PASS", "PASS", "FAIL"],
+      "expected": {"state": "validated", "n": 10, "agreement": 0.9, "leniency_tested": true}
+    },
+    "no_unsupported_fact": {
+      "task": "T1",
+      "judge_fail_cases": 7,
+      "labels_for_judge_fail": ["PASS", "PASS", "PASS", "PASS", "PASS", "PASS", "PASS"],
+      "labels_for_judge_pass": ["PASS", "PASS", "PASS"],
+      "expected": {"state": "not_validated", "n": 10, "agreement": 0.3, "leniency_tested": true}
+    },
+    "planted_bug_identified": {
+      "task": "T3",
+      "judge_fail_cases": 0,
+      "labels_for_judge_fail": [],
+      "labels_for_judge_pass": ["PASS", "PASS", "PASS", "PASS", "UNSURE", "UNSURE", "UNSURE", "UNSURE", "", ""],
+      "expected": {"state": "insufficient", "n": 4, "agreement": 1.0, "leniency_tested": false}
+    }
+  }
+}

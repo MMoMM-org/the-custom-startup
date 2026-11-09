@@ -63,11 +63,9 @@ For skills that need to delegate to a domain specialist, use the `find-agents.sh
 
 ### Description Guidelines
 
-- Explain WHAT the skill does AND WHEN to use it
+- Open with what the skill does and when to use it, in the third person: [PA-52](../../prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person)
 - Include keywords users would naturally say
-- Keep it focused on triggers, not implementation details
-- Write in third person (injected into system prompt)
-- NEVER describe the workflow in the description — agents will follow it as a shortcut and skip the body
+- State triggers, not the workflow: [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow)
 
 ### String Substitutions
 
@@ -87,12 +85,10 @@ Skills are discovered by Claude reading their description. The description field
 
 ### Description: When to Use, NOT What the Skill Does
 
-**Critical rule:** Description must describe triggering conditions only. Never summarize the skill's workflow.
-
-**Why this matters:** When a description summarizes the workflow, Claude may follow the description as a shortcut and skip reading the full skill body. A description saying "dispatches subagent per task with code review between tasks" caused Claude to do ONE review even though the skill's flowchart showed TWO. Changing the description to just triggering conditions fixed the behavior.
+State only when to use the skill; never summarize its workflow. Reason: [PA-51](../../prompt-author/reference/catalog/harness.md#pa-51-description-states-triggers-not-the-workflow).
 
 ```yaml
-# ❌ BAD: summarizes workflow — Claude skips the body
+# ❌ BAD: summarizes workflow
 description: Use when creating skills — search for duplicates, write SKILL.md, test with subagents
 
 # ✅ GOOD: triggering conditions only
@@ -121,7 +117,7 @@ Skills are loaded into context on every invocation. Every token costs money and 
 - Move educational content, examples, and verbose checklists to `reference/` files
 - Reference `--help` instead of documenting all flags inline
 - Cross-reference other skills instead of repeating their content
-- One excellent example beats five mediocre ones
+- When a skill shows its output format by example, give 3-5 diverse examples, each a different case of the format rather than a near-copy, and state each behaviour they show as a rule in the text as well: [PA-11](../../prompt-author/reference/catalog/core.md#pa-11-example-over-anchoring)
 
 ---
 
@@ -172,13 +168,13 @@ State {
 **In scope:** What this skill acts on.
 **Out of scope:** What is off-limits.
 
-**Why TypeScript-like syntax**: LLMs have extensive training on TypeScript interfaces. This format has near-zero parsing overhead and unambiguously communicates output contracts.
+The Interface is the output contract a caller branches on: every field, with its allowed values inlined, where the return appears, and, for a return the caller parses, one example of it. Reason: [PA-13](../../prompt-author/reference/catalog/core.md#pa-13-missing-output-contract).
 
 No forward declarations — the Workflow headings serve as the function index.
 
 ### Constraints
 
-Use markdown **Always:** and **Never:** lists. Each rule appears once, in whichever framing is most natural. Move enforcement-worthy rules from Persona into **Never:**.
+Use markdown **Always:** and **Never:** lists, with each rule in one place (see [Constraint Deduplication](#constraint-deduplication)), and move enforcement-worthy rules from Persona into **Never:**.
 
 **Always:**
 - Every finding must have a specific, implementable fix.
@@ -298,24 +294,16 @@ placeholder per task, such as `<!-- T2.3 will populate -->`. Each task replaces 
 marker, so siblings stay untouched, and `grep -c 'will populate'` tracks RED → GREEN: zero
 markers left means the skill is complete.
 
-### Discipline-Enforcing Skills Need Extra Work
-
-Skills that enforce rules (TDD, verification-before-completion) need rationalization-proofing:
-- Use strong language: "YOU MUST", "No exceptions"
-- Add a **Red Flags** section listing thoughts that signal the agent is about to rationalize
-- Build an excuse → reality table from actual baseline test output
-- See `reference/persuasion-principles.md` for language patterns backed by research
-
 ---
 
 ## Discipline-Enforcing Skills
 
-Skills that enforce rules (TDD, verification) need special attention:
-- Use strong language: "YOU MUST", "No exceptions", "Never"
-- Add rationalization counters (excuse → reality table)
-- Add Red Flags section listing rationalizations that indicate violation
+Skills that enforce rules (TDD, verification-before-completion) need rationalization-proofing:
+- State each rule in sentence case, with the failure it prevents, not as a capitalised or absolute directive: [PA-03](../../prompt-author/reference/catalog/core.md#pa-03-emphasis-and-authority-language). A hard terminal constraint may be restated once, plainly, at the end of the skill.
+- Add a **Red Flags** section listing thoughts that signal the agent is about to rationalize
+- Build an excuse → reality table from actual baseline test output
 - Test with 3+ combined pressure scenarios (see testing-with-subagents.md)
-- See persuasion-principles.md for research on language patterns
+- See persuasion-principles.md for which persuasion patterns still apply
 
 ---
 
@@ -325,7 +313,7 @@ Skills are loaded into context on every invocation. Every token costs money, con
 
 ### Constraint Deduplication
 
-Each rule appears once, in whichever framing (**Always** or **Never**) is most natural. Never mirror the same rule in both lists.
+Each rule appears once in the skill, in whichever framing (**Always** or **Never**) is most natural. Do not mirror it in the other list, restate it in a workflow step, or repeat it in a summary, reminder or closing checklist; elsewhere refer to it by name. The one exception is the plain terminal restatement a discipline skill may keep (see Discipline-Enforcing Skills). Reason: [PA-05](../../prompt-author/reference/catalog/core.md#pa-05-redundant-restatement).
 
 Bad — same rule stated twice:
 ```
@@ -338,30 +326,45 @@ Good — one rule, one location:
 **Never:** Skip test verification after a change.
 ```
 
+Bad — a closing check that lists the Constraints again:
+```
+### 3. Check Before Returning
+- [ ] Tests ran after every change
+- [ ] Changelog entry added
+```
+
+Good — the check refers to them:
+```
+### 3. Check Before Returning
+Check the result against Constraints; fix any miss, then return it.
+```
+
 ### Instruction Purity
 
-Skills are **imperative instructions for an LLM**, not documentation for humans. Every line must earn its place by improving execution. Content that explains WHY, references history, or cites specs without an actionable directive is dead weight — or worse, actively harmful.
+Skills are **imperative instructions for an LLM**, not documentation for humans. Every line must earn its place by improving execution.
 
-**Strip on sight:**
-- Rationale ("because...", "the reason is...")
-- History ("was removed", "previously", "no longer")
+**Keep:** one clause on each non-obvious rule, naming the failure it prevents: [PA-01](../../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules). A rule whose purpose the reader can infer needs none.
+
+**Strip on sight** ([PA-02](../../prompt-author/reference/catalog/core.md#pa-02-history-and-provenance-noise)):
+- History and provenance ("was removed", "previously", "no longer", dates, commit SHAs, issue numbers)
 - Spec refs without action ("see PRD §3.2", "per ADR-5")
-- Negative existence ("X doesn't exist") — triggers the model to search for X
-- Past-tense narrative ("we decided to...") — wrong temporal frame
+- Negative existence ("X doesn't exist"), which triggers the model to search for X
+- Past-tense narrative ("we decided to...")
+- Rationale beyond the one clause: alternatives considered, design debate, the incident story ([PA-01](../../prompt-author/reference/catalog/core.md#pa-01-reason-clause-for-non-obvious-rules))
 
-**The test:** *"Would removing this line degrade execution?"* If no, strip it.
+**The test:** *"Would removing this line degrade execution?"* If no, strip it. The reason clause on a non-obvious rule passes it.
 
-**Before stripping:** verify the WHY is captured elsewhere (docs/ mirror, ADR, git history). Write to destination first, strip from runtime second — strip-first destroys institutional knowledge.
+**Before stripping:** verify the stripped history or argument is captured elsewhere (docs/ mirror, ADR, git history). Write to destination first, strip from runtime second — strip-first destroys institutional knowledge.
 
-#### Exception: rationale is load-bearing in discipline-enforcing skills
+#### Discipline-enforcing skills: keep the whole argument, not only the clause
 
-In a skill that enforces a rule against pressure, the rationale **is** the mechanism. It is the counter-argument that fires at the moment the model is talking itself out of the rule, so stripping it degrades execution — measurably, not theoretically. `obra/superpowers` deleted the "Why Order Matters" section from their TDD skill as redundant prose and measured test-first behavior fall from **8/10 to 5/10** under "just write it, tests after" pressure, reproduced on two model families.
+In a skill that enforces a rule against pressure, one reason clause is not enough: the full rationale **is** the mechanism. It is the counter-argument that fires at the moment the model is talking itself out of the rule, so stripping it degrades execution — measurably, not theoretically. `obra/superpowers` deleted the "Why Order Matters" section from their TDD skill as redundant prose and measured test-first behavior fall from **8/10 to 5/10** under "just write it, tests after" pressure, reproduced on two model families.
 
 So for these skills the move is **relocation, not deletion**: each argument goes into the excuse → reality row where that excuse appears (see § Discipline-Enforcing Skills). The standalone section disappears; the argument survives at its point of use, where an agent mid-rationalization actually hits it.
 
 An argument placed where the rationalization occurs beats the same argument in a section the model has already read past.
 
-**When unsure whether a cut is safe, measure it** — run the pressure scenario with and without the candidate text using the subagent-probe method in [testing-with-subagents.md](testing-with-subagents.md). Micro-testing each cut is cheap; a silent discipline regression is not. Do not resolve this by reading the text and judging it redundant. That judgement is exactly what the measurement contradicted.
+**When unsure whether a cut is safe, measure it** — run the pressure scenario with and without the candidate text using the subagent-probe method in [testing-with-subagents.md](testing-with-subagents.md). Micro-testing each cut is cheap; a silent discipline regression is not. Do not resolve this by reading the text and judging it redundant. That judgement is exactly what the measurement contradicted. Reason: [PA-17](../../prompt-author/reference/catalog/core.md#pa-17-length-without-stated-purpose-cut-test).
 
 What stays strippable in these skills: recap sections, restatements of what the skill already did, and prose selling the skill's benefits to a reader who has already invoked it.
 
@@ -397,7 +400,7 @@ When converting an existing skill to these conventions:
 - [ ] Replace novel syntax blocks (prefer/avoid) with **In scope:** / **Out of scope:**
 
 **Token efficiency:**
-- [ ] Deduplicate Always/Never — no mirrored rules
+- [ ] Each rule stated once (see [Constraint Deduplication](#constraint-deduplication))
 - [ ] Move enforcement-worthy Persona rules into **Never:**
 - [ ] Remove forward declarations from Interface
 - [ ] Remove self-evident State comments

@@ -1,0 +1,423 @@
+[
+  {
+    "id": "t3-01-page-window",
+    "base": "main",
+    "head": "feature/page-window",
+    "commits": [
+      {
+        "message": "feat(paging): add page_window for the pager widget",
+        "ops": [
+          {
+            "op": "append",
+            "path": "tasklog/paging.py",
+            "text": "\n\ndef page_window(page, total_pages, width=2):\n    \"\"\"Page numbers to show around `page`, clipped to 1..total_pages.\"\"\"\n    first = max(1, page - width)\n    last = min(total_pages, page + width)\n    return list(range(first, last))\n"
+          },
+          {
+            "op": "replace",
+            "path": "tasklog/paging.py",
+            "old": "\"\"\"Return the items on 1-based `page`.\"\"\"",
+            "new": "\"\"\"Return the items on 1-based `page` (empty past the last page).\"\"\""
+          }
+        ]
+      },
+      {
+        "message": "docs: mention paging helpers",
+        "ops": [
+          {
+            "op": "append",
+            "path": "README.md",
+            "text": "- Paging: `tasklog.paging` (1-based pages, `page_window` for pagers)\n"
+          }
+        ]
+      }
+    ],
+    "planted": {
+      "file": "tasklog/paging.py",
+      "start_text": "return list(range(first, last))",
+      "end_text": "return list(range(first, last))",
+      "description": "page_window uses range(first, last), which excludes the upper bound: the last page of the window (and the current page when it is the last page) is never shown; must be range(first, last + 1).",
+      "lines": [
+        23,
+        23
+      ]
+    },
+    "teammate": {
+      "path": "tasklog/sync.py",
+      "mode": "write",
+      "content": "\"\"\"Push tasks to the team server (WIP).\"\"\"\n\nimport urllib.request\n\nAPI_TOKEN = \"tk_live_51H8xQ2eZvKYlo2C\"\n\n\ndef push(tasks):\n    for t in tasks:\n        try:\n            urllib.request.urlopen(\"http://tasks.internal/api?title=\" + t.title)\n        except:\n            pass\n"
+    }
+  },
+  {
+    "id": "t3-02-overdue-list",
+    "base": "main",
+    "head": "feature/overdue-list",
+    "commits": [
+      {
+        "message": "feat(store): list overdue tasks",
+        "ops": [
+          {
+            "op": "append",
+            "path": "tasklog/store.py",
+            "text": "\n    def overdue(self, today):\n        \"\"\"Open tasks whose due date is before `today`, oldest first.\"\"\"\n        tasks = [t for t in self.all() if not t.done and t.due and t.due > today]\n        return sorted(tasks, key=lambda t: t.due)\n"
+          },
+          {
+            "op": "replace",
+            "path": "tasklog/store.py",
+            "old": "        rows = self.conn.execute(\"SELECT id, title, due, done FROM tasks ORDER BY id\").fetchall()\n        return [_row_to_task(r) for r in rows]",
+            "new": "        \"\"\"All tasks ordered by id.\"\"\"\n        rows = self.conn.execute(\"SELECT id, title, due, done FROM tasks ORDER BY id\").fetchall()\n        return [_row_to_task(r) for r in rows]"
+          }
+        ]
+      }
+    ],
+    "planted": {
+      "file": "tasklog/store.py",
+      "start_text": "t.due > today",
+      "end_text": "t.due > today",
+      "description": "overdue() keeps tasks with t.due > today, i.e. tasks due in the future; overdue means t.due < today (compare dates.is_overdue).",
+      "lines": [
+        67,
+        67
+      ]
+    },
+    "teammate": {
+      "path": "tasklog/retry.py",
+      "mode": "append",
+      "content": "\n\ndef retry_forever(fn):\n    while True:\n        try:\n            return fn()\n        except Exception:\n            pass\n"
+    }
+  },
+  {
+    "id": "t3-03-rename",
+    "base": "main",
+    "head": "feature/rename-task",
+    "commits": [
+      {
+        "message": "feat(store): rename tasks",
+        "ops": [
+          {
+            "op": "append",
+            "path": "tasklog/store.py",
+            "text": "\n    def rename(self, task_id, title):\n        \"\"\"Change a task's title and return the updated Task.\"\"\"\n        task = self.get(task_id)\n        task.title = title.strip()\n        self.conn.execute(\"UPDATE tasks SET title = ? WHERE id = ?\", (task.title, task.id))\n        self.conn.commit()\n        return task\n"
+          }
+        ]
+      },
+      {
+        "message": "test(store): cover rename",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "tests/test_core.py",
+            "old": "    def test_mark_done(self):",
+            "new": "    def test_rename(self):\n        tid = self.store.add(\"old\")\n        self.assertEqual(self.store.rename(tid, \" new \").title, \"new\")\n\n    def test_mark_done(self):"
+          }
+        ]
+      }
+    ],
+    "planted": {
+      "file": "tasklog/store.py",
+      "start_text": "task = self.get(task_id)",
+      "end_text": "task.title = title.strip()",
+      "description": "rename() dereferences the result of self.get(), which returns None for an unknown id, so renaming a missing task raises AttributeError instead of being handled (no None check).",
+      "lines": [
+        66,
+        67
+      ]
+    },
+    "teammate": {
+      "path": "scripts/import_legacy.py",
+      "mode": "write",
+      "content": "\"\"\"One-off import from the old tracker (do not ship).\"\"\"\n\nimport sqlite3\n\n\ndef import_rows(db_path, rows):\n    conn = sqlite3.connect(db_path)\n    for title, due in rows:\n        conn.execute(f\"INSERT INTO tasks (title, due) VALUES ('{title}', '{due}')\")\n    conn.commit()\n"
+    }
+  },
+  {
+    "id": "t3-04-read-ids",
+    "base": "main",
+    "head": "feature/read-ids",
+    "commits": [
+      {
+        "message": "feat(export): read ids back from an exported file",
+        "ops": [
+          {
+            "op": "append",
+            "path": "tasklog/export.py",
+            "text": "\n\ndef read_ids(path):\n    \"\"\"Return the task ids listed in an exported CSV file.\"\"\"\n    fh = open(path, newline=\"\", encoding=\"utf-8\")\n    reader = csv.reader(fh)\n    next(reader, None)\n    return [int(row[0]) for row in reader]\n"
+          },
+          {
+            "op": "replace",
+            "path": "tasklog/export.py",
+            "old": "\"\"\"Export tasks to CSV.\"\"\"",
+            "new": "\"\"\"Export tasks to CSV and read exports back.\"\"\""
+          }
+        ]
+      }
+    ],
+    "planted": {
+      "file": "tasklog/export.py",
+      "start_text": "fh = open(path, newline=\"\", encoding=\"utf-8\")",
+      "end_text": "return [int(row[0]) for row in reader]",
+      "description": "read_ids() opens the file without a with-block or close(); the handle leaks (and stays open if int() raises). Use `with open(...) as fh:`.",
+      "lines": [
+        17,
+        20
+      ]
+    },
+    "teammate": {
+      "path": "tasklog/config.py",
+      "mode": "append",
+      "content": "\n\ndef save_config(path, cfg):\n    open(path, \"w\").write(json.dumps(cfg))\n"
+    }
+  },
+  {
+    "id": "t3-05-search",
+    "base": "main",
+    "head": "feature/search",
+    "commits": [
+      {
+        "message": "feat(store): title search",
+        "ops": [
+          {
+            "op": "append",
+            "path": "tasklog/store.py",
+            "text": "\n    def search(self, term):\n        \"\"\"Tasks whose title contains `term`, case-insensitive.\"\"\"\n        sql = \"SELECT id, title, due, done FROM tasks WHERE title LIKE '%{}%' ORDER BY id\".format(term)\n        return [_row_to_task(r) for r in self.conn.execute(sql).fetchall()]\n"
+          }
+        ]
+      },
+      {
+        "message": "docs: README search note",
+        "ops": [
+          {
+            "op": "append",
+            "path": "README.md",
+            "text": "- Search: `TaskStore.search(term)` matches titles case-insensitively\n"
+          }
+        ]
+      }
+    ],
+    "planted": {
+      "file": "tasklog/store.py",
+      "start_text": "sql = \"SELECT id, title, due, done FROM tasks WHERE title LIKE",
+      "end_text": "return [_row_to_task(r) for r in self.conn.execute(sql).fetchall()]",
+      "description": "search() formats the user-supplied term into the SQL string (SQL injection; a quote in the term also breaks the query). Use a parameter: LIKE ? with ('%' + term + '%',).",
+      "lines": [
+        66,
+        67
+      ]
+    },
+    "teammate": {
+      "path": "tasklog/report.py",
+      "mode": "write",
+      "content": "\"\"\"Weekly summary (draft).\"\"\"\n\n\ndef summary(tasks):\n    done = 0\n    for i in range(len(tasks) - 1):\n        if tasks[i].done == True:\n            done += 1\n    return \"{} of {} done\".format(done, len(tasks))\n"
+    }
+  },
+  {
+    "id": "t3-06-tags",
+    "base": "main",
+    "head": "feature/tags",
+    "commits": [
+      {
+        "message": "feat(tags): in-memory task tags",
+        "ops": [
+          {
+            "op": "write",
+            "path": "tasklog/tags.py",
+            "content": "\"\"\"In-memory tags per task id.\"\"\"\n\n\ndef tag_task(task, tag, registry={}):\n    \"\"\"Record `tag` (lowercased) for `task` and return the task's tags.\"\"\"\n    tags = registry.setdefault(task.id, [])\n    if tag.lower() not in tags:\n        tags.append(tag.lower())\n    return tags\n\n\ndef tags_for(task, registry):\n    \"\"\"The tags recorded for `task` in `registry`.\"\"\"\n    return list(registry.get(task.id, []))\n"
+          }
+        ]
+      },
+      {
+        "message": "style: tidy store docstrings",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "tasklog/store.py",
+            "old": "\"\"\"sqlite3-backed task storage.\"\"\"",
+            "new": "\"\"\"sqlite3-backed task storage (one table, `tasks`).\"\"\""
+          }
+        ]
+      }
+    ],
+    "planted": {
+      "file": "tasklog/tags.py",
+      "start_text": "def tag_task(task, tag, registry={}):",
+      "end_text": "def tag_task(task, tag, registry={}):",
+      "description": "tag_task() uses a mutable default argument registry={}: the dict is shared across all calls, so tags leak between unrelated callers/stores. Default to None and create a new dict.",
+      "lines": [
+        4,
+        4
+      ]
+    },
+    "teammate": {
+      "path": "tasklog/cli.py",
+      "mode": "write",
+      "content": "\"\"\"Command line entry point (WIP).\"\"\"\n\nimport os\nimport sys\n\n\ndef main():\n    path = sys.argv[1]\n    os.system(\"rm -f \" + path + \".bak\")\n"
+    }
+  },
+  {
+    "id": "t3-07-days-until",
+    "base": "main",
+    "head": "feature/days-until",
+    "commits": [
+      {
+        "message": "feat(dates): days until due",
+        "ops": [
+          {
+            "op": "append",
+            "path": "tasklog/dates.py",
+            "text": "\n\ndef days_until(task, today):\n    \"\"\"Days from `today` until the task is due; None without a due date.\"\"\"\n    if task.due is None:\n        return None\n    return days_between(task.due, today)\n"
+          }
+        ]
+      },
+      {
+        "message": "test(dates): parse_due strips whitespace",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "tests/test_core.py",
+            "old": "        self.assertEqual(parse_due(\"2026-02-01\"), date(2026, 2, 1))",
+            "new": "        self.assertEqual(parse_due(\"2026-02-01\"), date(2026, 2, 1))\n        self.assertEqual(parse_due(\" 2026-02-01 \"), date(2026, 2, 1))"
+          }
+        ]
+      }
+    ],
+    "planted": {
+      "file": "tasklog/dates.py",
+      "start_text": "return days_between(task.due, today)",
+      "end_text": "return days_between(task.due, today)",
+      "description": "days_until() calls days_between(task.due, today) with the arguments swapped; days_between(start, end) returns end - start, so the result has the wrong sign (a task due in 3 days returns -3).",
+      "lines": [
+        27,
+        27
+      ]
+    },
+    "teammate": {
+      "path": "tasklog/export.py",
+      "mode": "append",
+      "content": "\n\ndef export_titles(tasks, path):\n    fh = open(path, \"w\")\n    for t in tasks:\n        fh.write(t.title + \"\\n\")\n"
+    }
+  },
+  {
+    "id": "t3-08-config-fallback",
+    "base": "main",
+    "head": "feature/config-timeout",
+    "commits": [
+      {
+        "message": "feat(config): add timeout_s default",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "tasklog/config.py",
+            "old": "DEFAULTS = {\"db_path\": \"tasks.db\", \"per_page\": 20, \"retries\": 3}",
+            "new": "DEFAULTS = {\"db_path\": \"tasks.db\", \"per_page\": 20, \"retries\": 3, \"timeout_s\": 30}"
+          }
+        ]
+      },
+      {
+        "message": "refactor(config): fall back to defaults on read",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "tasklog/config.py",
+            "old": "        try:\n            data = json.load(fh)\n        except json.JSONDecodeError as exc:\n            raise ValueError(\"invalid config {}: {}\".format(path, exc))",
+            "new": "        try:\n            data = json.load(fh)\n        except json.JSONDecodeError:\n            return dict(DEFAULTS)"
+          }
+        ]
+      }
+    ],
+    "planted": {
+      "file": "tasklog/config.py",
+      "start_text": "except json.JSONDecodeError:",
+      "end_text": "return dict(DEFAULTS)",
+      "description": "load_config() now swallows JSONDecodeError and silently returns the defaults; a corrupt config goes unnoticed and the docstring's 'Raises ValueError' contract is broken.",
+      "lines": [
+        16,
+        17
+      ]
+    },
+    "teammate": {
+      "path": "tasklog/cache.py",
+      "mode": "write",
+      "content": "\"\"\"Tiny on-disk cache (experiment).\"\"\"\n\nimport pickle\n\n\ndef load(path):\n    return pickle.load(open(path, \"rb\"))\n"
+    }
+  },
+  {
+    "id": "t3-09-export-filter",
+    "base": "main",
+    "head": "feature/export-filter",
+    "commits": [
+      {
+        "message": "feat(export): optionally leave out finished tasks",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "tasklog/export.py",
+            "old": "def export_csv(tasks, path):\n    \"\"\"Write tasks as CSV with columns id,title,due,done.\"\"\"",
+            "new": "def export_csv(tasks, path, include_done=True):\n    \"\"\"Write tasks as CSV with columns id,title,due,done.\n\n    With include_done=False, finished tasks are left out.\n    \"\"\""
+          },
+          {
+            "op": "replace",
+            "path": "tasklog/export.py",
+            "old": "        for t in tasks:\n",
+            "new": "        for t in tasks:\n            if t.done and include_done:\n                continue\n"
+          }
+        ]
+      },
+      {
+        "message": "docs: export option in README",
+        "ops": [
+          {
+            "op": "append",
+            "path": "README.md",
+            "text": "- Export: `export_csv(tasks, path, include_done=True)`\n"
+          }
+        ]
+      }
+    ],
+    "planted": {
+      "file": "tasklog/export.py",
+      "start_text": "if t.done and include_done:",
+      "end_text": "continue",
+      "description": "export_csv() skips finished tasks when include_done is True (the default) and keeps them when it is False: the condition is inverted; it must be `if t.done and not include_done`.",
+      "lines": [
+        15,
+        16
+      ]
+    },
+    "teammate": {
+      "path": "tasklog/paging.py",
+      "mode": "append",
+      "content": "\n\ndef last_page_items(items, per_page):\n    n = len(items) // per_page\n    return items[n * per_page - 1:]\n"
+    }
+  },
+  {
+    "id": "t3-10-retry-hook",
+    "base": "main",
+    "head": "feature/retry-hook",
+    "commits": [
+      {
+        "message": "feat(retry): on_error callback",
+        "ops": [
+          {
+            "op": "replace",
+            "path": "tasklog/retry.py",
+            "old": "def retry(fn, attempts=3, exceptions=(OSError,)):\n    \"\"\"Call `fn()` up to `attempts` times; re-raise the last error.\"\"\"\n    if attempts < 1:\n        raise ValueError(\"attempts must be >= 1\")\n    last = None\n    for _ in range(attempts):\n        try:\n            return fn()\n        except exceptions as exc:\n            last = exc\n    raise last",
+            "new": "def retry(fn, attempts=3, exceptions=(OSError,), on_error=None):\n    \"\"\"Call `fn()` up to `attempts` times; re-raise the last error.\n\n    `on_error(attempt, exc)` is called after each failed attempt (1-based).\n    \"\"\"\n    if attempts < 1:\n        raise ValueError(\"attempts must be >= 1\")\n    last = None\n    for attempt in range(1, attempts):\n        try:\n            return fn()\n        except exceptions as exc:\n            last = exc\n            if on_error is not None:\n                on_error(attempt, exc)\n    raise last"
+          }
+        ]
+      }
+    ],
+    "planted": {
+      "file": "tasklog/retry.py",
+      "start_text": "for attempt in range(1, attempts):",
+      "end_text": "for attempt in range(1, attempts):",
+      "description": "retry() loops over range(1, attempts), so fn is tried attempts-1 times; with attempts=1 it is never called and `raise last` raises None (TypeError). Must be range(1, attempts + 1).",
+      "lines": [
+        12,
+        12
+      ]
+    },
+    "teammate": {
+      "path": "tasklog/store_v2.py",
+      "mode": "write",
+      "content": "\"\"\"Next-gen store (spike).\"\"\"\n\nimport sqlite3\n\n\nclass StoreV2:\n    def __init__(self, path):\n        self.conn = sqlite3.connect(path)\n\n    def delete(self, task_id):\n        self.conn.execute(\"DELETE FROM tasks WHERE id = \" + str(task_id))\n"
+    }
+  }
+]

@@ -142,9 +142,9 @@ Agent violated rule despite having the skill? Capture the rationalization and ad
 
 | Rationalization | Counter to Add |
 |-----------------|----------------|
-| "This case is different" | Add explicit "No exceptions" list |
-| "Spirit not letter" | Add "Violating letter IS violating spirit" |
-| "Keep as reference" | Add "Delete means delete - don't look at it" |
+| "This case is different" | List the cases the rule covers, by name ([PA-03](../../prompt-author/reference/catalog/core.md#pa-03-emphasis-and-authority-language)) |
+| "Spirit not letter" | Name the cases the rule covers, so no case can be argued outside its intent |
+| "Keep as reference" | State what deleting covers (no copy, no stash, no reading it while writing the test) and what to do instead: write the test from the requirement |
 | "Being pragmatic" | Add rationalization table with this excuse |
 | "I'll do it later" | Add "Immediately" or "Before proceeding" |
 
@@ -156,10 +156,10 @@ For each new rationalization:
 ```markdown
 Write code before test? Delete it. Start over.
 
-**No exceptions:**
+**This includes:**
 - Don't keep it as "reference"
 - Don't "adapt" it while writing tests
-- Delete means delete
+- Don't open the deleted code again; write the test from the requirement
 ```
 
 2. **Add entry in rationalization table:**
@@ -198,7 +198,7 @@ it crystal clear that Option [Y] was the only acceptable answer?
 
 1. **"The skill WAS clear, I chose to ignore it"**
    - Need stronger foundational principle
-   - Add "Violating letter is violating spirit"
+   - Name the cases the rule covers, so no case can be argued outside its intent
 
 2. **"The skill should have said X"**
    - Documentation problem - add their suggestion

@@ -43,7 +43,7 @@
 - **[Parallel Agent Execution](docs/reference/agents.md)** — Multiple specialist agents work simultaneously within each implementation phase.
 - **[Memory Bank](docs/about/concepts.md#memory-bank)** — Layered memory system (global / project / repo) with progressive disclosure. Keeps context usage low while maintaining project knowledge across sessions. Run `/memory-setup` to provision.
 - **[Multi-AI Workflow](docs/guides/multi-ai-workflow.md)** — Export specs as prompts for Claude.ai or Perplexity, import the results back as PRD or SDD.
-- **[Quality Gates](docs/getting-started/workflow.md#step-3-validate-before-implementation)** — Built-in validation at every stage: before you build, while you build, and before you ship.
+- **[Quality Gates](docs/getting-started/workflow.md#step-2-validate)** — Built-in validation at every stage: before you build, while you build, and before you ship.
 - **[Satori Integration](docs/about/concepts.md#satori--mcp-gateway-optional)** *(optional)* — MCP gateway that captures session activity and serves compact summaries, further reducing context consumption.
 - **Resume Across Sessions** — Specs live on disk. Hit a context limit? Start a fresh session and pick up exactly where you left off.
 - **[Interactive Install Wizard](#installation)** — Choose install target, plugins, output style, statusline, and multi-AI templates — with a confirmation summary before anything is written.
@@ -139,6 +139,7 @@ Skill and agent authoring tools, a layered **[Memory Bank](docs/about/concepts.m
 | Skill | Purpose |
 |-------|---------|
 | `/skill-author` · `/agent-author` · `/skill-evaluate` · `/skill-import` | Create, audit, and fetch Claude Code skills and subagents |
+| `/prompt-author` | Write, audit, or port prompts a model reads: API system prompts, subagent briefs, AGENTS.md / GEMINI.md, non-Claude targets |
 | `/memory-setup` | Provision `docs/ai/memory/` + CLAUDE.md hierarchy; install learning-capture hooks |
 | `/memory-add` · `/memory-sync` · `/memory-cleanup` · `/memory-promote` | Capture and maintain session learnings across scopes |
 | `/memory-claude-md-optimize` | Audit, score, and migrate flat CLAUDE.md files into Memory Bank structure |

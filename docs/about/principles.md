@@ -38,9 +38,9 @@ Skills and subagents are selected by Claude reasoning over their `description` f
 
 Consequences:
 
-- **Front-load the trigger scenario.** The first ~50 characters carry most of the routing weight. The `/skills` UI truncates around 250 characters.
-- **Write third-person and scenario-anchored.** "Extracts text and tables from PDF files. Use when the user mentions PDFs, forms, or document extraction" — not "Helps with documents."
-- **Expect under-triggering by default.** Anthropic notes that Claude tends not to invoke skills when it probably should, and recommends slightly pushy phrasing — the `Use PROACTIVELY when…` and `MUST BE USED when…` patterns visible across `tcs-team`'s agent descriptions.
+- **Front-load the trigger scenario.** The first ~50 characters carry most of the routing weight. The `/skills` UI truncates around 250 characters. Reason: [PA-52](../../plugins/tcs-helper/skills/prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person).
+- **Write third-person and scenario-anchored.** "Extracts text and tables from PDF files. Use when the user mentions PDFs, forms, or document extraction" — not "Helps with documents." Reason: [PA-52](../../plugins/tcs-helper/skills/prompt-author/reference/catalog/harness.md#pa-52-front-loaded-trigger-third-person).
+- **Expect under-triggering by default.** Anthropic notes that Claude tends not to invoke skills when it probably should, and recommends slightly pushy phrasing — the `Use PROACTIVELY when…` and `MUST BE USED when…` patterns visible across `tcs-team`'s agent descriptions. That authority phrasing is contested: newer vendor guidance says aggressive wording causes overtriggering. TCS keeps it as one of three enforcement layers ([ADR-4](../ai/memory/decisions.md)) until a trigger eval measures it; status and evidence: [PA-50](../../plugins/tcs-helper/skills/prompt-author/reference/catalog/harness.md#pa-50-description-authority-language-must-be-used).
 
 Description quality is the single highest-leverage field in an agent file. A perfect body behind a vague description never runs.
 
@@ -77,8 +77,7 @@ What does **not** reach it: the parent's conversation history, previously invoke
 
 Implications for TCS:
 
-- **Write the delegation prompt like a brief for a colleague who just walked in.** Targets, decisions, and constraints must be inline; the prompt string is the only parent→child channel.
-- **Never write a subagent that assumes it can "see what we discussed."** It cannot.
+- **Write the delegation prompt like a brief for a colleague who just walked in.** Targets, decisions, and constraints must be inline; the prompt string is the only parent→child channel, so a subagent body names the inputs it needs instead of referring to "what we discussed". Reason: [PA-08](../../plugins/tcs-helper/skills/prompt-author/reference/catalog/core.md#pa-08-assumed-absent-context).
 - **Our Memory Bank reaches agents in two layers, deliberately.** `CLAUDE.md` `@`-imports `docs/ai/memory/active.md` — a budgeted file of rules whose violation is silent and whose trigger is broad — so those reach every subagent by the hierarchy. It also imports `docs/ai/memory/memory.md`, an index that *links* its category files, so the rest is available but costs nothing until an agent chooses to read it. The split exists because an import is paid for on every dispatch, not once per session.
 - Use isolation deliberately: dispatch a subagent when the exploration output should stay out of the parent; invoke a skill inline when the result must remain visible. This is the load-bearing question in [skill-and-agent-design.md](skill-and-agent-design.md).
 
@@ -143,7 +142,7 @@ The authoring flow that produces skills which measurably change behavior:
 
 The discipline matters most for the changes that feel obviously right. A prose rule that reads as strong can change nothing, and a section deleted for brevity can quietly degrade behavior — both are only visible with an eval.
 
-**TCS does not meet this bar yet.** No plugin ships eval coverage. Until that changes, treat every claim that an authoring change "improved" a skill as unverified.
+**TCS meets this bar only where an eval exists.** The `claude plugin eval` cases live in `plugins/*/evals/`. Treat a claim that an authoring change "improved" a skill as unverified unless a case there measured it.
 
 ---
 

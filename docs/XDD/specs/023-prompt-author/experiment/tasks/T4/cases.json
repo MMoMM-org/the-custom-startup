@@ -1,0 +1,32 @@
+[
+  {
+    "id": "t4-01-chf",
+    "task": "Add support for Swiss francs (CHF). One CHF is worth 1.05 EUR. Ledgers with CHF transactions must convert correctly.",
+    "hidden_test": "import io\nimport os\nimport unittest\n\nfrom ledgerlite import cli, config, report\nfrom ledgerlite.currency import convert\nfrom ledgerlite.parser import parse_csv\n\nHEADER = 'date,amount,currency,category,description\\n'\n\n\nclass AcceptanceTest(unittest.TestCase):\n    def test_chf(self):\n        self.assertAlmostEqual(convert(100, 'CHF'), 105.0)\n        self.assertAlmostEqual(convert(105, 'EUR', to='CHF'), 100.0)\n\n    def test_existing_rates_kept(self):\n        self.assertAlmostEqual(convert(40, 'GBP'), 50.0)\n",
+    "hidden_test_count": 2
+  },
+  {
+    "id": "t4-02-parens",
+    "task": "Our bank exports refunds in accounting notation: a negative amount is written in parentheses, e.g. (12.50) or \"(1,234.50)\". Make the parser read these as negative amounts.",
+    "hidden_test": "import io\nimport os\nimport unittest\n\nfrom ledgerlite import cli, config, report\nfrom ledgerlite.currency import convert\nfrom ledgerlite.parser import parse_csv\n\nHEADER = 'date,amount,currency,category,description\\n'\n\n\nclass AcceptanceTest(unittest.TestCase):\n    def test_parentheses(self):\n        txs = parse_csv(HEADER + '2026-01-03,(12.50),EUR,refund,\\n')\n        self.assertEqual(txs[0].amount, -12.5)\n\n    def test_parentheses_with_thousands(self):\n        txs = parse_csv(HEADER + '2026-01-03,\"(1,234.50)\",EUR,refund,\\n')\n        self.assertEqual(txs[0].amount, -1234.5)\n\n    def test_plain_still_positive(self):\n        txs = parse_csv(HEADER + '2026-01-03,12.50,EUR,a,\\n')\n        self.assertEqual(txs[0].amount, 12.5)\n",
+    "hidden_test_count": 3
+  },
+  {
+    "id": "t4-03-top",
+    "task": "Add a --top N option to the `report` command: it shows only the N largest groups, while the final total line still sums all groups.",
+    "hidden_test": "import io\nimport os\nimport unittest\n\nfrom ledgerlite import cli, config, report\nfrom ledgerlite.currency import convert\nfrom ledgerlite.parser import parse_csv\n\nHEADER = 'date,amount,currency,category,description\\n'\n\n\nclass AcceptanceTest(unittest.TestCase):\n    def test_top_two(self):\n        out = io.StringIO()\n        path = os.path.join(config.home(), 'ledger.csv')\n        code = cli.main(['report', '--top', '2', path], out=out)\n        self.assertEqual(code, 0)\n        lines = out.getvalue().strip().splitlines()\n        groups = [l.split()[0] for l in lines[1:-1]]\n        self.assertEqual(groups, ['software', 'travel'])\n        self.assertTrue(lines[-1].endswith('161.00'))\n\n    def test_without_top_unchanged(self):\n        out = io.StringIO()\n        cli.main(['report'], out=out)\n        self.assertEqual(len(out.getvalue().strip().splitlines()), 6)\n",
+    "hidden_test_count": 2
+  },
+  {
+    "id": "t4-04-rounding",
+    "task": "Bug report: a category whose total is 0.29 EUR is shown as 0.28 in the report, and 0.999 is shown as 0.99. Report amounts must be rounded to the nearest cent. Fix it.",
+    "hidden_test": "import io\nimport os\nimport unittest\n\nfrom ledgerlite import cli, config, report\nfrom ledgerlite.currency import convert\nfrom ledgerlite.parser import parse_csv\n\nHEADER = 'date,amount,currency,category,description\\n'\n\n\nclass AcceptanceTest(unittest.TestCase):\n    def test_rounding(self):\n        self.assertEqual(report.format_amount(0.29), '0.29')\n        self.assertEqual(report.format_amount(19.99), '19.99')\n        self.assertEqual(report.format_amount(0.999), '1.00')\n        self.assertEqual(report.format_amount(-0.07), '-0.07')\n        self.assertEqual(report.format_amount(1234.56), '1234.56')\n        self.assertEqual(report.format_amount(12.5), '12.50')\n",
+    "hidden_test_count": 1
+  },
+  {
+    "id": "t4-05-convert",
+    "task": "Add a `convert` subcommand: `convert AMOUNT CURRENCY [--to CURRENCY]` prints the converted amount with two decimals (target defaults to EUR). An unknown currency must exit with status 1 and an error message on stderr, not a traceback.",
+    "hidden_test": "import io\nimport os\nimport unittest\n\nfrom ledgerlite import cli, config, report\nfrom ledgerlite.currency import convert\nfrom ledgerlite.parser import parse_csv\n\nHEADER = 'date,amount,currency,category,description\\n'\n\n\nimport contextlib\n\n\nclass AcceptanceTest(unittest.TestCase):\n    def run_cli(self, *argv):\n        out, err = io.StringIO(), io.StringIO()\n        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):\n            code = cli.main(list(argv), out=out)\n        return code, out.getvalue().strip(), err.getvalue()\n\n    def test_to_eur(self):\n        self.assertEqual(self.run_cli('convert', '10', 'GBP')[:2], (0, '12.50'))\n\n    def test_to_other(self):\n        code, text, _ = self.run_cli('convert', '100', 'EUR', '--to', 'GBP')\n        self.assertEqual((code, text), (0, '80.00'))\n\n    def test_unknown(self):\n        code, _, err = self.run_cli('convert', '1', 'XYZ')\n        self.assertEqual(code, 1)\n        self.assertIn('XYZ', err)\n        self.assertNotIn('Traceback', err)\n",
+    "hidden_test_count": 3
+  }
+]

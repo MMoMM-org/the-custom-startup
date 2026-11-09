@@ -44,6 +44,7 @@ the-custom-startup/
 │   │   ├── templates/            # 19 CLAUDE.md + memory templates (stacks: ts, go, python, cf, convex)
 │   │   └── skills/
 │   │       ├── skill-author/     # Create, audit, convert Claude Code skills (PICS, TDD Iron Law)
+│   │       ├── prompt-author/    # Write, audit, port prompts a model reads (API, briefs, AGENTS.md)
 │   │       ├── skill-evaluate/   # Evaluate a skill before importing or using
 │   │       ├── skill-import/     # Fetch + install a single skill from any GitHub repo
 │   │       ├── memory-add/       # Capture session learnings → route to correct memory file

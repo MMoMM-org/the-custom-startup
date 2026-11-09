@@ -1,0 +1,115 @@
+[
+  {
+    "id": "t2-01-restock",
+    "task_text": "- [ ] T1.1 Add `Inventory.restock` [ref: SDD/Section 3.1.1]\n  - Files: stockroom/inventory.py, tests/test_inventory.py\n  - Acceptance: restock behaves as specified in SDD 3.1.1, covered by unit tests.",
+    "sdd_section": "### 3.1.1 Restock\n\n- `restock(sku, qty)` adds `qty` units to the on-hand quantity of `sku` and returns the new quantity.\n- Unknown `sku` raises `KeyError`; `qty <= 0` raises `ValueError` and leaves the quantity unchanged.\n",
+    "withheld": false,
+    "scope_files": [
+      "stockroom/inventory.py",
+      "tests/test_inventory.py"
+    ],
+    "acceptance_test": "\nimport unittest\nfrom stockroom.inventory import Inventory\nfrom stockroom.item import Item\n\nclass Spec(unittest.TestCase):\n    def test_restock(self):\n        inv = Inventory([Item(\"A\", \"a\", 2, 1)])\n        self.assertEqual(inv.restock(\"A\", 5), 7)\n        self.assertEqual(inv.get(\"A\").qty, 7)\n        with self.assertRaises(KeyError):\n            inv.restock(\"Z\", 1)\n        with self.assertRaises(ValueError):\n            inv.restock(\"A\", 0)\n        self.assertEqual(inv.get(\"A\").qty, 7)\n"
+  },
+  {
+    "id": "t2-02-find-by-name",
+    "task_text": "- [ ] T1.2 Add `Inventory.find_by_name` [ref: SDD/Section 3.1.2]\n  - Files: stockroom/inventory.py, tests/test_inventory.py\n  - Acceptance: name search behaves as specified in SDD 3.1.2, covered by unit tests.",
+    "sdd_section": "### 3.1.2 Name search\n\n- `find_by_name(text)` returns the items whose `name` contains `text`, compared case-insensitively, sorted by SKU.\n- No match returns an empty list. Empty or whitespace-only `text` raises `ValueError`.\n",
+    "withheld": false,
+    "scope_files": [
+      "stockroom/inventory.py",
+      "tests/test_inventory.py"
+    ],
+    "acceptance_test": "\nimport unittest\nfrom stockroom.inventory import Inventory\nfrom stockroom.item import Item\n\nclass Spec(unittest.TestCase):\n    def test_find(self):\n        inv = Inventory([Item(\"B\", \"Hex Bolt\", 1, 1), Item(\"A\", \"bolt cutter\", 1, 1), Item(\"C\", \"Nut\", 1, 1)])\n        self.assertEqual([i.sku for i in inv.find_by_name(\"BOLT\")], [\"A\", \"B\"])\n        self.assertEqual(inv.find_by_name(\"washer\"), [])\n        for bad in (\"\", \"   \"):\n            with self.assertRaises(ValueError):\n                inv.find_by_name(bad)\n"
+  },
+  {
+    "id": "t2-03-lenient-load",
+    "task_text": "- [ ] T1.3 Add `csvio.load_csv_lenient` [ref: SDD/Section 3.2.1]\n  - Files: stockroom/csvio.py, tests/test_csvio.py\n  - Acceptance: lenient loading behaves as specified in SDD 3.2.1; `load_csv` is unchanged.",
+    "sdd_section": "### 3.2.1 Lenient load\n\n- `load_csv_lenient(path)` returns a tuple `(inventory, skipped)`.\n- A row that would make `load_csv` fail (non-integer qty/price, invalid Item, duplicate SKU) is skipped instead; `skipped` lists the 1-based file line numbers of skipped rows in ascending order.\n- A wrong header still raises `ValueError`. `load_csv` keeps its strict behaviour.\n",
+    "withheld": false,
+    "scope_files": [
+      "stockroom/csvio.py",
+      "tests/test_csvio.py"
+    ],
+    "acceptance_test": "\nimport os, tempfile, unittest\nfrom stockroom.csvio import load_csv, load_csv_lenient\n\nclass Spec(unittest.TestCase):\n    def test_lenient(self):\n        d = tempfile.mkdtemp()\n        p = os.path.join(d, \"x.csv\")\n        with open(p, \"w\") as fh:\n            fh.write(\"sku,name,qty,unit_price_cents\\nA,a,1,2\\nB,b,many,2\\nA,dup,1,1\\nC,c,-1,5\\nD,d,4,5\\n\")\n        inv, skipped = load_csv_lenient(p)\n        self.assertEqual([i.sku for i in inv.items()], [\"A\", \"D\"])\n        self.assertEqual(skipped, [3, 4, 5])\n        with self.assertRaises(ValueError):\n            load_csv(p)\n        with open(p, \"w\") as fh:\n            fh.write(\"sku,title,qty,unit_price_cents\\n\")\n        with self.assertRaises(ValueError):\n            load_csv_lenient(p)\n"
+  },
+  {
+    "id": "t2-04-report-sort",
+    "task_text": "- [ ] T1.4 Add `sort_by` to `format_report` [ref: SDD/Section 3.3.1]\n  - Files: stockroom/report.py, tests/test_report.py\n  - Acceptance: report ordering behaves as specified in SDD 3.3.1; the default output is unchanged.",
+    "sdd_section": "### 3.3.1 Report ordering\n\n- `format_report(inv, sort_by=\"sku\")`. `sort_by=\"sku\"` keeps today's output.\n- `sort_by=\"value\"` orders item lines by `qty * unit_price_cents` descending; equal values are ordered by SKU ascending.\n- Any other `sort_by` raises `ValueError`. The `TOTAL` line is always last and unchanged.\n",
+    "withheld": false,
+    "scope_files": [
+      "stockroom/report.py",
+      "tests/test_report.py"
+    ],
+    "acceptance_test": "\nimport unittest\nfrom stockroom.inventory import Inventory\nfrom stockroom.item import Item\nfrom stockroom.report import format_report\n\nclass Spec(unittest.TestCase):\n    def test_sort(self):\n        inv = Inventory([Item(\"A\", \"a\", 1, 10), Item(\"B\", \"b\", 5, 10), Item(\"C\", \"c\", 10, 1), Item(\"D\", \"d\", 2, 5)])\n        lines = format_report(inv, sort_by=\"value\").splitlines()\n        self.assertEqual([l.split()[0] for l in lines], [\"B\", \"A\", \"C\", \"D\", \"TOTAL\"])\n        self.assertEqual(format_report(inv), format_report(inv, sort_by=\"sku\"))\n        self.assertTrue(format_report(inv).startswith(\"A a x1\"))\n        with self.assertRaises(ValueError):\n            format_report(inv, sort_by=\"name\")\n"
+  },
+  {
+    "id": "t2-05-value-cents",
+    "task_text": "- [ ] T1.5 Add `Item.value_cents` and use it in `total_value` [ref: SDD/Section 2.1]\n  - Files: stockroom/item.py, stockroom/inventory.py, tests/test_item.py, tests/test_inventory.py\n  - Acceptance: `Item.value_cents` behaves as specified in SDD 2.1 and `Inventory.total_value` uses it.",
+    "sdd_section": "### 2.1 Item value\n\n- `Item.value_cents` is a read-only property: `qty * unit_price_cents`.\n- `Inventory.total_value()` sums `value_cents` over all items; its result does not change.\n- Item tests live in a new module `tests/test_item.py`.\n",
+    "withheld": false,
+    "scope_files": [
+      "stockroom/item.py",
+      "stockroom/inventory.py",
+      "tests/test_item.py",
+      "tests/test_inventory.py"
+    ],
+    "acceptance_test": "\nimport unittest\nfrom stockroom.inventory import Inventory\nfrom stockroom.item import Item\n\nclass Spec(unittest.TestCase):\n    def test_value(self):\n        it = Item(\"A\", \"a\", 3, 7)\n        self.assertEqual(it.value_cents, 21)\n        it.qty = 4\n        self.assertEqual(it.value_cents, 28)\n        with self.assertRaises(AttributeError):\n            it.value_cents = 5\n        self.assertEqual(Inventory([it, Item(\"B\", \"b\", 2, 5)]).total_value(), 38)\n"
+  },
+  {
+    "id": "t2-06-reorder",
+    "task_text": "- [ ] T1.6 Add `Inventory.reorder_list` [ref: SDD/Section 3.1.3]\n  - Files: stockroom/inventory.py, tests/test_inventory.py\n  - Acceptance: reorder suggestions behave as specified in SDD 3.1.3, covered by unit tests.",
+    "sdd_section": "### 3.1.3 Reorder list\n\n- `reorder_list(threshold, target)` returns a list of `(sku, order_qty)` tuples, sorted by SKU, for every item with `qty < threshold`, where `order_qty = target - qty`.\n- `target < threshold` raises `ValueError`.\n",
+    "withheld": false,
+    "scope_files": [
+      "stockroom/inventory.py",
+      "tests/test_inventory.py"
+    ],
+    "acceptance_test": "\nimport unittest\nfrom stockroom.inventory import Inventory\nfrom stockroom.item import Item\n\nclass Spec(unittest.TestCase):\n    def test_reorder(self):\n        inv = Inventory([Item(\"B\", \"b\", 1, 1), Item(\"A\", \"a\", 0, 1), Item(\"C\", \"c\", 5, 1), Item(\"D\", \"d\", 4, 1)])\n        self.assertEqual(inv.reorder_list(5, 10), [(\"A\", 10), (\"B\", 9), (\"D\", 6)])\n        self.assertEqual(inv.reorder_list(5, 5), [(\"A\", 5), (\"B\", 4), (\"D\", 1)])\n        with self.assertRaises(ValueError):\n            inv.reorder_list(5, 4)\n"
+  },
+  {
+    "id": "t2-07-format-cents",
+    "task_text": "- [ ] T1.7 Thousands separators and negatives in `format_cents` [ref: SDD/Section 3.3.2]\n  - Files: stockroom/report.py, tests/test_report.py\n  - Acceptance: `format_cents` formats amounts as specified in SDD 3.3.2.",
+    "sdd_section": "### 3.3.2 Money formatting\n\n- `format_cents(cents)` groups the whole units in thousands with commas: `123450` -> `'1,234.50'`, `5` -> `'0.05'`.\n- Negative amounts carry a leading minus on the absolute value: `-5` -> `'-0.05'`, `-100000` -> `'-1,000.00'`.\n",
+    "withheld": false,
+    "scope_files": [
+      "stockroom/report.py",
+      "tests/test_report.py"
+    ],
+    "acceptance_test": "\nimport unittest\nfrom stockroom.report import format_cents\n\nclass Spec(unittest.TestCase):\n    def test_cents(self):\n        cases = {0: \"0.00\", 5: \"0.05\", 1234: \"12.34\", 123450: \"1,234.50\", 100000000: \"1,000,000.00\",\n                 -5: \"-0.05\", -100000: \"-1,000.00\", -199: \"-1.99\"}\n        for cents, want in cases.items():\n            self.assertEqual(format_cents(cents), want, cents)\n"
+  },
+  {
+    "id": "t2-08-insufficient-stock",
+    "task_text": "- [ ] T1.8 Reject over-removal with `InsufficientStock` [ref: SDD/Section 3.1.4]\n  - Files: stockroom/errors.py, stockroom/inventory.py, tests/test_inventory.py\n  - Acceptance: `remove` behaves as specified in SDD 3.1.4.",
+    "sdd_section": "### 3.1.4 Insufficient stock\n\n- New module `stockroom/errors.py` defines `InsufficientStock`, a subclass of `ValueError`.\n- `remove(sku, qty)` with `qty` greater than the on-hand quantity raises `InsufficientStock` whose message contains the SKU, and leaves the quantity unchanged (today it silently clamps to 0).\n- Removing exactly the on-hand quantity is allowed and leaves 0.\n",
+    "withheld": false,
+    "scope_files": [
+      "stockroom/errors.py",
+      "stockroom/inventory.py",
+      "tests/test_inventory.py"
+    ],
+    "acceptance_test": "\nimport unittest\nfrom stockroom.inventory import Inventory\nfrom stockroom.item import Item\nfrom stockroom.errors import InsufficientStock\n\nclass Spec(unittest.TestCase):\n    def test_remove(self):\n        inv = Inventory([Item(\"A-7\", \"a\", 3, 1)])\n        self.assertTrue(issubclass(InsufficientStock, ValueError))\n        with self.assertRaises(InsufficientStock) as ctx:\n            inv.remove(\"A-7\", 4)\n        self.assertIn(\"A-7\", str(ctx.exception))\n        self.assertEqual(inv.get(\"A-7\").qty, 3)\n        inv.remove(\"A-7\", 3)\n        self.assertEqual(inv.get(\"A-7\").qty, 0)\n"
+  },
+  {
+    "id": "t2-09-quote-withheld",
+    "task_text": "- [ ] T2.1 Bulk-discount quote `Inventory.quote(sku, qty)` [ref: SDD/Section 5.2 Discount tiers]\n  - Files: stockroom/inventory.py, tests/test_inventory.py\n  - Acceptance: `quote` returns the price in cents for `qty` units with the discount tier from SDD 5.2 applied.",
+    "sdd_section": null,
+    "withheld": true,
+    "scope_files": [
+      "stockroom/inventory.py",
+      "tests/test_inventory.py"
+    ],
+    "acceptance_test": null
+  },
+  {
+    "id": "t2-10-interchange-withheld",
+    "task_text": "- [ ] T2.2 Warehouse interchange export `csvio.dump_interchange(inv, path)` [ref: SDD/Section 6.1 Interchange format]\n  - Files: stockroom/csvio.py, tests/test_csvio.py\n  - Acceptance: the written file matches the warehouse interchange format of SDD 6.1 exactly.",
+    "sdd_section": null,
+    "withheld": true,
+    "scope_files": [
+      "stockroom/csvio.py",
+      "tests/test_csvio.py"
+    ],
+    "acceptance_test": null
+  }
+]

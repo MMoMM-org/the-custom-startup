@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.316",
+  "startedAt": "2026-11-05T16:02:32.354Z",
+  "durationSeconds": 40,
+  "costUsd": 0.2006746,
+  "partial": false,
+  "suite": {
+    "root": "/Volumes/Moon/Coding/the-custom-startup/plugins/tcs-workflow",
+    "ablation": "none",
+    "caseFilter": "xdd-tdd-no-trigger",
+    "threshold": 1,
+    "concurrency": 1,
+    "plugins": [
+      {
+        "name": "tcs-workflow",
+        "version": "4.4.16",
+        "path": "/Volumes/Moon/Coding/the-custom-startup/plugins/tcs-workflow"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "xdd-tdd-no-trigger",
+      "dir": "evals/xdd-tdd-no-trigger",
+      "source": "prose",
+      "promptMarkdown": "Create `README.md` for this project with one heading, \"slugkit\", and one sentence: \"Turns titles\ninto URL slugs.\"",
+      "runsPerCase": 3,
+      "timeoutSeconds": 180,
+      "maxTurns": 8,
+      "graders": [
+        {
+          "name": "readme-written",
+          "type": "file_exists",
+          "weight": 1,
+          "config": {
+            "path": "README.md",
+            "exists": true
+          }
+        },
+        {
+          "name": "skill-not-fired",
+          "type": "tool_used",
+          "weight": 1,
+          "config": {
+            "tool": "Skill",
+            "input_match": "\"skill\"\\s*:\\s*\"(?:[\\w-]+:)?xdd-tdd\"",
+            "min": 0,
+            "max": 0,
+            "arm": "both"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 0.5,
+            "passed": false,
+            "turns": 3,
+            "costUsd": 0.2006746,
+            "judgeCostUsd": 0,
+            "durationSeconds": 40,
+            "startedAt": "2026-11-05T16:02:32.391Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-ZXpwt2/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "readme-written",
+                "passed": false,
+                "weight": 1,
+                "explanation": "README.md missing (expected present)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "skill-not-fired",
+                "passed": true,
+                "weight": 1,
+                "explanation": "Skill called 0x (expected 0..0)",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "advisories": [
+        "grader \"readme-written\" cannot pass with the granted tools: it checks a file the run creates, but no tool the run may use can create one (a plugin hook still could; a skill's own allowed-tools does not count inside a run) — add Write (or Edit / Bash) to the case's allowed_tools and grant it with --allow-tools"
+      ],
+      "aggregates": {
+        "score": 0.5,
+        "passRate": 0
+      }
+    }
+  ],
+  "aggregates": {
+    "casesTotal": 1,
+    "casesPassed": 0,
+    "overallScore": 0.5,
+    "overallPassRate": 0
+  }
+}

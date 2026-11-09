@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — prompt-author
+
+### Added
+
+- **`/tcs-helper:prompt-author` writes, audits and ports prompts outside Claude Code skills and
+  agents (spec 023, #250-#253).** It covers API system prompts, subagent briefs, AGENTS.md and
+  GEMINI.md, chat templates, and non-Claude targets (OpenAI, Google, small local models). Each
+  finding or change cites an entry in a shared failure catalog (PA-01 to PA-52, 33 entries), and
+  the catalog is now the single source for skill-author, agent-author and
+  memory-claude-md-optimize, which cite it instead of restating rules. It ships a lint
+  (`prompt_lint.py`) and two before/after runners: `prompt_eval.py` for any target, with consent
+  gates, a cost ceiling and judge validation against your labels, and `eval_compare.py` for
+  plugin-eval suites. Writing an AGENTS.md, GEMINI.md, `*.prompt.md` or `prompts/` file now shows a
+  one-line reminder to audit it. **What to know:** a live run asks for consent per provider and
+  runs only with an explicit `--max-cost-usd`; local models need Ollama. Not covered: the two
+  known lint errors in `semantic_detector.py` stay open (#253). Update tcs-helper. See
+  `plugins/tcs-helper/skills/prompt-author/SKILL.md`.
+
 ## [Unreleased] — model tiers
 
 ### Added
