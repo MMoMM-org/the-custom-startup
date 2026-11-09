@@ -161,3 +161,5 @@ Optional. GitHub issue lifecycle plus native sub-issue (parent/child) management
 |-------|-------------|
 | `/issue` | Create, list, close, and comment on issues. New issues are placed on the repo's Project (v2) board with a status and labels. Confirms before every write. |
 | `/link-issue` | Link / unlink native sub-issues (parent ↔ child) and list an issue's children and parent epic, via the GitHub GraphQL sub-issue API. |
+
+Its hooks deny `gh issue view` reads that skip an issue's comments, and add a note after `gh issue list` that titles are not enough to recommend from. See the plugin README.

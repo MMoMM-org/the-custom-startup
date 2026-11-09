@@ -1,0 +1,27 @@
+{
+  "description": "tcs-issues hook registrations: deny reading a GitHub issue without its comments, and note after an issue listing that titles are not enough to recommend from.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/require-issue-comments.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/nudge-issue-list.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
