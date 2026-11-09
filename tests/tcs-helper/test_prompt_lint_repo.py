@@ -15,14 +15,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "plugins/tcs-helper/skills/prompt-author/scripts/prompt_lint.py"
 
-# semantic_detector.py is Must Not Touch in spec 023; both prompts interpolate
-# user text without a delimiter. The user chose to extend #253 to the second site.
-KNOWN_OPEN = [
-    {"path": "plugins/tcs-helper/scripts/lib/semantic_detector.py", "check": "E4",
-     "issue": "#253", "lines": (128, 136)},
-    {"path": "plugins/tcs-helper/scripts/lib/semantic_detector.py", "check": "E4",
-     "issue": "#253", "lines": (94, 98)},
-]
+KNOWN_OPEN = []
 
 
 def _known_open(finding):

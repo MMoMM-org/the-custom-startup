@@ -193,10 +193,11 @@ def test_e4_accepts_tag_pairs_and_fences_and_ignores_non_prompts(pl):
     assert _findings(pl, "e4_negative.py", "E4") == []
 
 
-def test_e4_flags_semantic_detector_prompt():
-    # #253 is the acceptance case; both sites are reported at the literal's first line.
+def test_e4_accepts_semantic_detector_prompts():
+    # #253 was the acceptance case: both sites interpolated session text undelimited.
+    # Both now tag their input, so E4 reports nothing there.
     e4 = [f.line for f in _load_module().lint([str(SEMANTIC_DETECTOR)]) if f.check == "E4"]
-    assert sorted(e4) == [95, 129]
+    assert e4 == []
 
 
 def test_e4_name_rule_matches_whole_segments_only(pl):
