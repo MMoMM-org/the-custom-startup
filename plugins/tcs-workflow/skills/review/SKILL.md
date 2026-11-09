@@ -71,22 +71,16 @@ State {
 
 Determine the review target from $ARGUMENTS.
 
+Resolve one diff boundary for the target. Every later step uses this boundary, never one derived from the current `HEAD`:
+
 match (target) {
-  /^\d+$/       => gh pr diff $target       // PR number
-  "staged"      => git diff --cached        // staged changes
-  containsSlash => read file + recent changes  // file path
-  default       => git diff main...$target  // branch name
+  /^\d+$/       => PR number: read `gh pr view $target --json headRefOid,baseRefName`, run `git fetch origin pull/$target/head`, then `HEAD_SHA` = headRefOid, `BASE_SHA` = `git merge-base origin/$baseRefName $HEAD_SHA`; boundary = `$BASE_SHA..$HEAD_SHA`
+  "staged"      => staged changes: boundary = `--cached` (the index against `HEAD`); there is no SHA range
+  containsSlash => file path: boundary = the path; its diff is the recent history `git log -p -n 5 -- $target`
+  default       => branch name: `HEAD_SHA` = `git rev-parse $target`, `BASE_SHA` = `git merge-base origin/main $target`, falling back to `main`; boundary = `$BASE_SHA..$HEAD_SHA`
 }
 
-Retrieve full file contents for context (not just diff).
-
-Resolve SHAs for precise diff context:
-```bash
-BASE_SHA=$(git merge-base origin/main HEAD 2>/dev/null || git merge-base main HEAD 2>/dev/null)
-HEAD_SHA=$(git rev-parse HEAD)
-```
-
-Pass `BASE_SHA..HEAD_SHA` as the diff boundary to all review subagents.
+From the boundary, take the diff (`git diff <boundary>`) and the changed-file list (`git diff --name-only <boundary>`; for a file path, the path itself). Retrieve the full contents of those files for context, not just the diff.
 
 Read reference/perspectives.md. Determine applicable conditional perspectives:
 
@@ -110,8 +104,8 @@ Recommend Agent Team when: files > 10, perspectives >= 4, cross-domain, or const
 
 Each reviewer subagent receives:
 - Full file contents for context
-- Diff bounded by `$BASE_SHA..$HEAD_SHA` (not unbounded); for `staged`, the `git diff --cached` output instead
-- Scope: the range or staged diff, and the list of files it changes (`git diff --name-only` over the same boundary). Review only those files and that diff; ignore uncommitted changes and any other file in the worktree, which may be a teammate's work in progress.
+- The diff for the step 1 boundary, and the boundary itself (a `$BASE_SHA..$HEAD_SHA` range, `--cached`, or a path)
+- Scope: the changed-file list from step 1. Review only those files and that diff; ignore every change outside the boundary, including unstaged edits and other files in the worktree, which may be a teammate's work in progress.
 - Read-only git: no `stash`, `checkout`, `reset`, `restore`, `clean` or commit in this worktree; any mutation check runs in an isolated copy (`git archive` into a temp dir); never a `CLAUDE_ALLOW_*` override, and a hook denial is reported, not bypassed.
 - The finding contract: report each finding with the `Finding` fields from the Interface — `severity`, `confidence` (both as defined in reference/classification.md), `title`, `location` as path plus line, `issue`, `fix`, `code_example` for CRITICAL, and `breaking` when an external contract changes. With no findings, say so explicitly rather than returning prose.
 
