@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Stopping the brainstorm visual companion no longer reports a failure for a server that is
+  already gone.** A dead but unreaped server process counted as running. Update tcs-workflow.
 - **`git restore` on a directory or glob is now denied like `git restore .`.** Named files stay
   allowed, so an agent can still discard its own edit without an override. Update
   tcs-git-helpers.
