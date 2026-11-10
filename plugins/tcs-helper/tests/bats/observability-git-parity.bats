@@ -48,6 +48,11 @@ DRIVER_EOF
   # Heredoc feeding an interpreter stays code.
   CASES+=("bash <<'EOF'${NL}git reset --hard${NL}EOF")
   CASES+=("python3 <<EOF${NL}import os${NL}EOF")
+  # Shell executors with bundled or leading options (#268).
+  CASES+=("bash -lc 'git status'")
+  CASES+=("bash -e -c \"git status\"")
+  CASES+=("sh --norc -xc 'git log'")
+  CASES+=("ssh host -l me git status")
   # One heredoc per interpreter the guard names, so drift in that list shows.
   local interp
   for interp in sh bash zsh ksh dash csh tcsh fish python3.12 perl ruby node awk sed eval; do

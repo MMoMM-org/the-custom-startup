@@ -165,9 +165,19 @@ _record_deny() {
 # denial; if an override is set, override.sh consumes it (audit + sentinel)
 # and we silently allow. ALWAYS returns 0 so set -e wouldn't abort even if
 # the pattern dispatch chain were rewritten to use it.
+#
+# Several patterns can name one rule (`git restore --staged .` matches two
+# DESTRUCTIVE_RESTORE patterns; `git checkout . && git checkout -- x` matches
+# twice). The override is consumed once per command: a second consume inside
+# the 5 s double-tap window is refused, which used to deny a command its
+# override had just allowed. A rule already overridden in this invocation is
+# therefore allowed again without consuming.
+_OVERRIDDEN_RULES=" "
 _maybe_deny() {
   local rule="$1" msg="$2"
+  case "$_OVERRIDDEN_RULES" in *" $rule "*) return 0 ;; esac
   if _check_and_consume_override "$rule"; then
+    _OVERRIDDEN_RULES="${_OVERRIDDEN_RULES}${rule} "
     return 0
   fi
   _record_deny "$rule" "$msg"
@@ -543,21 +553,24 @@ _CMD_CLAUSES="$(_clausify "$CMD")"
 
 # === M7 destructive ops ===
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_RESET_HARD"          && _maybe_deny RESET_HARD            "git reset --hard destroys working tree + index"
-_match_clauses "$_CMD_CLAUSES" "$PATTERN_CLEAN_FORCE"         && _maybe_deny CLEAN_FORCE           "git clean -f deletes untracked files (use -n to dry-run first)"
+# A dry run (`-n`, `--dry-run`) deletes nothing, so its own clause is exempt (#268).
+_match_clauses_unless "$_CMD_CLAUSES" "$PATTERN_CLEAN_FORCE" "$PATTERN_CLEAN_DRY_RUN" \
+  && _maybe_deny CLEAN_FORCE "git clean -f deletes untracked files (use -n to dry-run first)"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_CHECKOUT_DOT"        && _maybe_deny DESTRUCTIVE_CHECKOUT  "git checkout . discards working-tree changes silently"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_CHECKOUT_PATH"       && _maybe_deny DESTRUCTIVE_CHECKOUT  "git checkout -- <path> discards path changes"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_RESTORE_DESTRUCTIVE" && _maybe_deny DESTRUCTIVE_RESTORE   "git restore --worktree --source / --staged destroys changes"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_RESTORE_ALL"         && _maybe_deny DESTRUCTIVE_RESTORE   "git restore . discards every working-tree change"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_FORCE_DELETE" && _maybe_deny FORCE_BRANCH_DELETE   "git branch -D force-deletes; use -d (safe) or recover via reflog"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_STASH_DESTROY"       && _maybe_deny STASH_DESTROY         "git stash drop/clear destroys stash; use pop"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_REFLOG_EXPIRE"       && _maybe_deny REFLOG_EXPIRE         "git reflog expire kills the recovery net"
 # NO_VERIFY matches per clause (like every pattern now) so the unbounded `.*`
 # cannot bridge into a sibling command's `-n` flag (e.g. `git commit && echo -n
 # ok`) — spec-015 sibling-isolation fix, preserved by _CMD_CLAUSES.
-_match_clauses "$_CMD_CLAUSES" "$PATTERN_NO_VERIFY"                              && _maybe_deny NO_VERIFY             "--no-verify bypasses .githooks/ — defeats the purpose"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_NO_VERIFY"                              && _maybe_deny NO_VERIFY             "--no-verify (commit, push, merge) bypasses .githooks/ — defeats the purpose"
 
 # === Push variants (M1 closed-PR + M7 destructive push forms) ===
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH"                && { _enter_git_target_dir "$PATTERN_PUSH" && _check_push_to_closed_pr; _leave_git_target_dir; }
-_match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH_FORCE"          && _maybe_deny FORCE_PUSH            "use --force-with-lease, not --force"
+_match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH_FORCE"          && _maybe_deny FORCE_PUSH            "use --force-with-lease, not --force / -f / +<refspec>"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH_DELETE_FLAG"    && _maybe_deny REMOTE_BRANCH_DELETE  "git push --delete removes remote branch"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH_COLON_DELETE"   && _maybe_deny REMOTE_BRANCH_DELETE  "git push <remote> :<branch> deletes remote branch"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_GH_REF_DELETE_A"     && _maybe_deny REMOTE_BRANCH_DELETE  "gh api DELETE on git/refs removes remote ref"

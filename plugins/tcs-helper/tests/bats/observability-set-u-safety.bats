@@ -55,7 +55,7 @@ teardown() {
 @test "set -u: _read_observability_bundle_version with no argument succeeds and resolves the template marker" {
   run bash -c "set -u; . '$VERSION_HELPER'; _read_observability_bundle_version"
   [ "$status" -eq 0 ]
-  [ "$output" = "h2" ]
+  [ "$output" = "h3" ]
 }
 
 # ---------------------------------------------------------------------------

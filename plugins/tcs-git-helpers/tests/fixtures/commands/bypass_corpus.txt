@@ -18,8 +18,16 @@ deny	FORCE_PUSH	zsh -c 'git push -f'
 deny	RESET_HARD	eval "git reset --hard"
 deny	RESET_HARD	eval 'git reset --hard'
 deny	RESET_HARD	(git reset --hard)
+deny	RESET_HARD	bash -lc "git reset --hard"
+deny	RESET_HARD	bash -e -c 'git reset --hard'
+deny	CLEAN_FORCE	sh -xc "git clean -fdx"
+deny	RESET_HARD	bash --norc -c 'git reset --hard'
 deny	FORCE_PUSH	(cd /tmp && git push --force)
 deny	RESET_HARD	$(echo git) reset --hard
+# #268: unquoting a -C/-c value must never hide code between two quoted strings
+deny	RESET_HARD	echo 'x -c "y' && git reset --hard && echo "z"
+deny	RESET_HARD	echo "x -c "$(git reset --hard)" y"
+deny	RESET_HARD	echo "x -c ";git reset --hard;" y"
 
 # === Compound chains (CAUGHT — both branches scanned) =====================
 deny	RESET_HARD	cd repo && git reset --hard

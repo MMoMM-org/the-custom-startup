@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.4.12] - 2026-11-10
+
+### Fixed
+
+- **Observability recognises `bash -lc`, `bash -e -c` and `sh -xc` as running a payload (#268).**
+  The git-command recorder's copy of the shell-executor check now matches the tcs-git-helpers
+  guard again, so a git command inside such a wrapper is recorded as code. Bundle marker h3.
+  **What to know:** the session-start drift notice asks you to re-run `/observability-setup` in
+  repos that record.
+
 ## [4.4.9] - 2026-10-30
 
 ### Changed

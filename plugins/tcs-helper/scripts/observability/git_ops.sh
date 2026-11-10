@@ -274,7 +274,10 @@ _git_ops_strip_heredocs() {
 #   or `eval`. Called on STRIPPED text only (#213).  Parity-tested against the
 #   guard (see header).
 _git_ops_has_shell_executor() {
-  [[ "$1" =~ (^|[^[:alnum:]_])[a-z]*sh[[:space:]]+-c([[:space:]]|$) ]] \
+  # `-c` may be bundled (`-lc`, `-ec`) or follow other options (`-e -c`,
+  # `--norc -c`) (#268): every one of those still runs the payload.
+  local re='(^|[^[:alnum:]_])[a-z]*sh([[:space:]]+-[-[:alnum:]]+)*[[:space:]]+-[[:alnum:]]*c[[:alnum:]]*([[:space:]]|$)'
+  [[ "$1" =~ $re ]] \
     || [[ "$1" =~ (^|[^[:alnum:]_])eval([[:space:]]|$) ]]
 }
 

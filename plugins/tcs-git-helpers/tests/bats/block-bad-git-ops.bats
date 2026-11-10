@@ -588,6 +588,23 @@ EOF
   _assert_deny_for_rule "RESET_HARD"
 }
 
+@test "override: a rule two patterns match is consumed once and stays ALLOWED (#268)" {
+  # `git restore --staged .` matches DESTRUCTIVE_RESTORE twice (--staged, and
+  # the whole-tree `.`). The second consume fell inside the double-tap window.
+  run _run_hook_with_cmd "CLAUDE_ALLOW_DESTRUCTIVE_RESTORE=1 git restore --staged ."
+  _assert_allow
+}
+
+@test "override: the same rule in two clauses is consumed once and stays ALLOWED (#268)" {
+  run _run_hook_with_cmd "CLAUDE_ALLOW_DESTRUCTIVE_CHECKOUT=1 git checkout . && git checkout -- x"
+  _assert_allow
+}
+
+@test "override: one rule's override does not allow a different rule in the same command" {
+  run _run_hook_with_cmd "CLAUDE_ALLOW_RESET_HARD=1 git restore --staged ."
+  _assert_deny_for_rule "DESTRUCTIVE_RESTORE"
+}
+
 @test "#42: cd-prefixed inline override (the harness command shape) → ALLOWED end-to-end" {
   run _run_hook_with_cmd "cd /repo && CLAUDE_ALLOW_RESET_HARD=1 git reset --hard"
   _assert_allow

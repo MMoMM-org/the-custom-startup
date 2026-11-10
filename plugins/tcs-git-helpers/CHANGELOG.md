@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.2.46] - 2026-11-10
+
+### Fixed
+
+- **The git guard no longer lets destructive commands through in other spellings (#268).**
+  `git -C "<dir>" reset --hard` with a quoted path, `bash -lc`/`bash -e -c`/`sh -xc` payloads,
+  `git push -f`/`-uf`/`+<ref>`, `sh -c "git push --force"` and `(cd x && git push --force)`,
+  `git restore .`/`:/`, and `git push --no-verify`/`git merge --no-verify` were all allowed; they
+  are now denied by the matching rule. `git clean -ndx` and other dry runs were denied and are
+  now allowed. The two command corpora (165 lines) now run through the hook in a test; 23 of
+  them failed before this fix. An override now holds when one command trips its rule twice
+  (`git restore --staged .`, or `git checkout . && git checkout -- x`); the second match used to
+  be refused as a double-tap. **What to know:** update the plugin. A single-path
+  `git restore <path>` stays allowed.
+
 ## [2.2.45] - 2026-11-09
 
 ### Fixed
