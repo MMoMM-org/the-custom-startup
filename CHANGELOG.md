@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`git restore` on a directory or glob is now denied like `git restore .`.** Named files stay
+  allowed, so an agent can still discard its own edit without an override. Update
+  tcs-git-helpers.
 - **The tcs-git-helpers guard catches destructive git commands it used to miss (#268).** A quoted
   `git -C "<dir>"`, `bash -lc` and `bash -e -c` wrappers, `git push -f`, `git restore .` and
   `git push --no-verify` were allowed, and the dry run `git clean -ndx` was denied. All are

@@ -26,8 +26,12 @@ setup_file() {
   export CORPUS_BIN="$BATS_FILE_TMPDIR/bin"
   export GIT_CONFIG_GLOBAL=/dev/null
   git init -q -b main "$CORPUS_REPO"
+  # A committed directory, for the `git restore <dir>` filesystem check.
+  mkdir -p "$CORPUS_REPO/src"
+  printf 'a\n' > "$CORPUS_REPO/src/a.txt"
+  git -C "$CORPUS_REPO" add src/a.txt
   git -C "$CORPUS_REPO" -c user.email=t@example.com -c user.name=t \
-    commit -q --allow-empty -m init
+    commit -q -m init
   # gh outside the repo, so the tree stays clean: always fails = no PR info.
   mkdir -p "$CORPUS_BIN"
   printf '#!/bin/sh\nexit 1\n' > "$CORPUS_BIN/gh"

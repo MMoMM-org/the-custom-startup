@@ -538,6 +538,47 @@ _leave_git_target_dir() {
 }
 
 # ---------------------------------------------------------------------------
+# git restore <directory> -- a filesystem check, not a pattern
+# ---------------------------------------------------------------------------
+#
+# `git restore src` discards every change under src/ exactly like `git restore
+# src/`, but only the filesystem can tell a directory from a file. Each restore
+# clause's pathspecs are tested with -d, relative to that clause's `git -C`
+# directory when it has one. Options are skipped; `-s`/`--source` take the
+# next token as their value. A path that does not exist is not a directory,
+# so this fails open.
+_check_restore_directory() {
+  local clause norm dir t skip
+  local -a toks
+  while IFS= read -r clause; do
+    _normalize_git_clause_into "$clause"
+    norm="$_GIT_NORM"
+    _match_command "$norm" "$PATTERN_RESTORE_ANY" || continue
+    dir="$(_git_dash_c_dir "$clause")"
+    case "$dir" in
+      "") dir="$PWD" ;;
+      /*) ;;
+      *) dir="$PWD/$dir" ;;
+    esac
+    read -ra toks <<< "${norm#*restore}"
+    skip=0
+    for t in "${toks[@]}"; do
+      if [ "$skip" = 1 ]; then skip=0; continue; fi
+      case "$t" in
+        -s|--source) skip=1 ;;
+        --) ;;
+        -*) ;;
+        *)
+          if [ -d "$dir/$t" ] || { case "$t" in /*) [ -d "$t" ] ;; *) false ;; esac; }; then
+            return 0
+          fi ;;
+      esac
+    done
+  done <<< "$_CMD_CLAUSES"
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # Pattern dispatch table
 # ---------------------------------------------------------------------------
 # Each line is `_match_clauses "$_CMD_CLAUSES" "$PATTERN" && _<handler> ARGS`.
@@ -558,8 +599,16 @@ _match_clauses_unless "$_CMD_CLAUSES" "$PATTERN_CLEAN_FORCE" "$PATTERN_CLEAN_DRY
   && _maybe_deny CLEAN_FORCE "git clean -f deletes untracked files (use -n to dry-run first)"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_CHECKOUT_DOT"        && _maybe_deny DESTRUCTIVE_CHECKOUT  "git checkout . discards working-tree changes silently"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_CHECKOUT_PATH"       && _maybe_deny DESTRUCTIVE_CHECKOUT  "git checkout -- <path> discards path changes"
-_match_clauses "$_CMD_CLAUSES" "$PATTERN_RESTORE_DESTRUCTIVE" && _maybe_deny DESTRUCTIVE_RESTORE   "git restore --worktree --source / --staged destroys changes"
-_match_clauses "$_CMD_CLAUSES" "$PATTERN_RESTORE_ALL"         && _maybe_deny DESTRUCTIVE_RESTORE   "git restore . discards every working-tree change"
+# One DESTRUCTIVE_RESTORE decision, first matching reason wins. A single named
+# file stays allowed; a directory, glob or pathspec file covers many files.
+if _match_clauses "$_CMD_CLAUSES" "$PATTERN_RESTORE_DESTRUCTIVE"; then
+  _maybe_deny DESTRUCTIVE_RESTORE "git restore --worktree --source / --staged destroys changes"
+elif _match_clauses "$_CMD_CLAUSES" "$PATTERN_RESTORE_ALL"; then
+  _maybe_deny DESTRUCTIVE_RESTORE "git restore . discards every working-tree change"
+elif _match_clauses "$_CMD_CLAUSES" "$PATTERN_RESTORE_MULTI" \
+    || { _match_clauses "$_CMD_CLAUSES" "$PATTERN_RESTORE_ANY" && _check_restore_directory; }; then
+  _maybe_deny DESTRUCTIVE_RESTORE "git restore <dir>/<glob> discards changes in many files; restore the files one by one"
+fi
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_FORCE_DELETE" && _maybe_deny FORCE_BRANCH_DELETE   "git branch -D force-deletes; use -d (safe) or recover via reflog"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_STASH_DESTROY"       && _maybe_deny STASH_DESTROY         "git stash drop/clear destroys stash; use pop"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_REFLOG_EXPIRE"       && _maybe_deny REFLOG_EXPIRE         "git reflog expire kills the recovery net"

@@ -95,6 +95,18 @@ PATTERN_RESTORE_DESTRUCTIVE="$_GIT_CMD"'restore[[:space:]]+(.*--worktree.*--sour
 # A whole-tree pathspec as its own argument, anywhere after `restore` (#268).
 PATTERN_RESTORE_ALL="$_GIT_CMD"'restore([[:space:]]+[^[:space:]]+)*[[:space:]]+(\.|:/)([[:space:]]|$)'
 
+# git restore <dir>/ | <glob> | :(magic)… | --pathspec-from-file=…
+# A pathspec that can cover many files, so it reads like `git restore .`. A
+# single named file stays allowed: discarding its own edit is routine for an
+# agent, and the override it would need every time teaches overriding.
+# A directory named without its trailing `/` is caught by the dispatcher's
+# filesystem check (_check_restore_directory), not by this pattern. A QUOTED
+# pathspec is blanked by _clausify and is not seen at all (see _match_clauses).
+PATTERN_RESTORE_MULTI="$_GIT_CMD"'restore([[:space:]]+[^[:space:]]+)*[[:space:]]+([^-[:space:]][^[:space:]]*/|[^-[:space:]]*[][*?][^[:space:]]*|:\([^[:space:]]*|--pathspec-from-file[^[:space:]]*)([[:space:]]|$)'
+
+# Any `git restore` with arguments -- selects the clauses the directory check reads.
+PATTERN_RESTORE_ANY="$_GIT_CMD"'restore[[:space:]]+[^[:space:]]'
+
 # git branch -D <name>   (capital D = force delete; lowercase -d is the safe form)
 PATTERN_BRANCH_FORCE_DELETE="$_GIT_CMD"'branch[[:space:]]+-D([^[:alnum:]_]|$)'
 
@@ -208,6 +220,8 @@ export \
   PATTERN_CHECKOUT_PATH \
   PATTERN_RESTORE_DESTRUCTIVE \
   PATTERN_RESTORE_ALL \
+  PATTERN_RESTORE_MULTI \
+  PATTERN_RESTORE_ANY \
   PATTERN_BRANCH_FORCE_DELETE \
   PATTERN_STASH_DESTROY \
   PATTERN_REFLOG_EXPIRE \
