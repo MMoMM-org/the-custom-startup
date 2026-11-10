@@ -12,11 +12,11 @@ It has a second job: making it cheap to check those origins for improvements. Ev
 |---|---|---|---|
 | [rsmdt/the-startup](https://github.com/rsmdt/the-startup) | 2026-02-28 (`d36ee90`, v3.4) | 2026-08-31 — `principles.md` only, from their April 2026 rewrite | **monitored** |
 | [citypaul/.dotfiles](https://github.com/citypaul/.dotfiles) | 2026-03-27 | 2026-08-31 — defect fixes from PR #184 (`331a637`) | **monitored** |
-| [obra/superpowers](https://github.com/obra/superpowers) | 2026-03-27 (~v5.0.6) | never | **monitored** |
+| [obra/superpowers](https://github.com/obra/superpowers) | 2026-03-27 (~v5.0.6) | 2026-08-31 — v6.2/v6.3 safety and TDD changes (#89, #91); reviewed again 2026-11-10 against v7.0.2 | **monitored** |
 | [BayramAnnakov/claude-reflect](https://github.com/BayramAnnakov/claude-reflect) | 2026-03-26 | n/a | historical |
 | [centminmod/my-claude-code-setup](https://github.com/centminmod/my-claude-code-setup) | 2026-03-26 | n/a | historical |
 | [mksglu/context-mode](https://github.com/mksglu/context-mode) | 2026-03-27 (spec-005) | n/a | historical |
-| [Bande-a-Bonnot/Boucle-framework](https://github.com/Bande-a-Bonnot/Boucle-framework) | 2026-05-09 | never | **monitored** |
+| [Bande-a-Bonnot/Boucle-framework](https://github.com/Bande-a-Bonnot/Boucle-framework) | 2026-05-09 | 2026-11-10 — `git-safe` reviewed up to `901394a20` (2026-09-25); gaps filed as #268 | **monitored** |
 | [lasso-security/mcp-gateway](https://github.com/lasso-security/mcp-gateway) | reference only | n/a | historical |
 | [tonydzi/claude-bible](https://github.com/tonydzi/claude-bible) | 2026-09-05 — declined-decisions journal | 2026-09-05 — first review | **monitored** |
 | [agiletec-inc/airis-mcp-gateway](https://github.com/agiletec-inc/airis-mcp-gateway) | reference only | n/a | historical |
@@ -209,11 +209,11 @@ Beyond the pattern skills (listed above), the philosophy-first CLAUDE.md approac
 
 **Repository:** [obra/superpowers](https://github.com/obra/superpowers) by Jesse Vincent
 **Adopted:** 2026-03-27, around upstream v5.0.6
-**Status:** monitored. Upstream is at v6.3.0 — a major version with changes to skills we derived from, including safety-relevant ones.
+**Status:** monitored. Upstream is at v7.0.2 (2026-11-03); v7.0.0 rebuilt brainstorming around a why-first dialogue.
 
 The TDD RED-GREEN-REFACTOR iron law and the rejected-rationalizations table are embedded into the `xdd-tdd` skill and the TDD/SDD integration design. The verification-before-completion discipline (evidence-before-claims) is implemented as the `/verify` gate. The receiving-code-review rigor pattern forms the basis of `/receive-review`. Dispatching-parallel-agents patterns were absorbed into `/parallel-agents`. Systematic-debugging anti-shortcut rules strengthen `/debug`. Related lineage: `/finish-branch`, `/git-worktree`, and `/brainstorm`.
 
-**Reconciled so far:** nothing. This is the largest outstanding gap.
+**Reconciled so far:** on 2026-08-31, the v6.2/v6.3 changes: worktree cleanup without destructive defaults (#89, `/finish-branch`, `/git-worktree`) and TDD falsifiability, brainstorm tiering and prose compression (#91, issue #81). On 2026-11-10 v7.x was reviewed. Still outstanding: concrete counter-actions for every Red Flags row (#272); a v7-style why-first brainstorm needs a decision, not a port.
 
 ---
 
@@ -226,6 +226,8 @@ The TDD RED-GREEN-REFACTOR iron law and the rejected-rationalizations table are 
 **Status:** monitored — the hooks we drew on are still the closest prior art for `tcs-git-helpers`.
 
 Three tools under `tools/` are prior art for the `tcs-git-helpers` hook set: `git-safe` (destructive-operation prevention over a regex set covering `--no-verify`, `reset --hard`, `clean -f`, `branch -D`, `stash drop/clear`, `reflog expire`), `branch-guard` (protected-branch commit blocking driven by a `.branch-guard` config), and `worktree-guard` (exit-time data-loss prevention via four `git cherry` checks). `worktree-guard` also confirmed that `PreToolUse:ExitWorktree` is the blockable event for worktree guards.
+
+**Reconciled so far:** on 2026-11-10, `git-safe` was compared up to `901394a20` (upstream #959, "Harden git-safe global options, target policies, and shell strings"). Upstream handles spellings our `block-bad-git-ops.sh` lets through: Git global options such as a quoted `git -C <dir>` are normalised before matching, and shell `-c` strings are inspected. Filed as #268.
 
 ---
 
@@ -333,6 +335,7 @@ the same ordering #118 landed on after the BSD-first form was found to pollute s
 
 | Date | Scope | Outcome |
 |---|---|---|
+| 2026-11-10 | Claude Code changelog 2.1.297 → 2.1.319, watch issue #144; all monitored sources; own skills and scripts | No entry changes the `memory:` grant, so #144 stays parked. 2.1.307 stops committing `settings.local.json` only on the self-hosted runner; locally that is now covered by the pre-commit guard (#266). Defects filed as #268–#270 (git hook bypasses, brainstorm server, `$N` substitution); improvements as #271–#274. Corrected this file: superpowers had been reconciled in #89/#91. Unverified: the statusline "Ultra" plan label needs a real payload. |
 | 2026-10-11 | Claude Code changelog 2026-09-01 → 2.1.296 (2026-10-09), watch issue #144 | Late August was not read. No entry in range changes the scope of the `memory:` grant; docs still say Read/Write/Edit are enabled with no confinement. Step 5 added to this procedure. |
 | 2026-09-05 | tonydzi/claude-bible | Reviewed on request. One gap found and closed the same day (declined-decisions journal, #148); their precedence scheme declined; five mechanisms already covered, two of them in a stronger form. |
 | 2026-09-04 | dsebastien/claude-epic-status-line (#72) | Reviewed on request rather than as part of a sweep. Three adoption candidates filed as #129, #130, #131 — all three landed the same day. |
