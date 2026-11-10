@@ -32,7 +32,7 @@ setup() {
   # Ground truth: the repo's current bundle version (see
   # observability-bundle-version.bats, which pins this same value against
   # the marker file directly).
-  CURRENT_VERSION="h2"
+  CURRENT_VERSION="h3"
 
   local tmpbase="${TMPDIR:-/tmp}"
   while [ "$tmpbase" != "/" ] && [ "${tmpbase%/}" != "$tmpbase" ]; do
