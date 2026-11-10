@@ -165,9 +165,19 @@ _record_deny() {
 # denial; if an override is set, override.sh consumes it (audit + sentinel)
 # and we silently allow. ALWAYS returns 0 so set -e wouldn't abort even if
 # the pattern dispatch chain were rewritten to use it.
+#
+# Several patterns can name one rule (`git restore --staged .` matches two
+# DESTRUCTIVE_RESTORE patterns; `git checkout . && git checkout -- x` matches
+# twice). The override is consumed once per command: a second consume inside
+# the 5 s double-tap window is refused, which used to deny a command its
+# override had just allowed. A rule already overridden in this invocation is
+# therefore allowed again without consuming.
+_OVERRIDDEN_RULES=" "
 _maybe_deny() {
   local rule="$1" msg="$2"
+  case "$_OVERRIDDEN_RULES" in *" $rule "*) return 0 ;; esac
   if _check_and_consume_override "$rule"; then
+    _OVERRIDDEN_RULES="${_OVERRIDDEN_RULES}${rule} "
     return 0
   fi
   _record_deny "$rule" "$msg"

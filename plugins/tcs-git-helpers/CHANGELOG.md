@@ -10,7 +10,9 @@
   `git restore .`/`:/`, and `git push --no-verify`/`git merge --no-verify` were all allowed; they
   are now denied by the matching rule. `git clean -ndx` and other dry runs were denied and are
   now allowed. The two command corpora (165 lines) now run through the hook in a test; 23 of
-  them failed before this fix. **What to know:** update the plugin. A single-path
+  them failed before this fix. An override now holds when one command trips its rule twice
+  (`git restore --staged .`, or `git checkout . && git checkout -- x`); the second match used to
+  be refused as a double-tap. **What to know:** update the plugin. A single-path
   `git restore <path>` stays allowed.
 
 ## [2.2.45] - 2026-11-09
