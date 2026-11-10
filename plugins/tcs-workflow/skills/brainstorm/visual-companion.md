@@ -38,13 +38,19 @@ The server watches a directory for HTML files and serves the newest one to the b
 plugins/tcs-workflow/skills/brainstorm/scripts/start-server.sh --project-dir /path/to/project --foreground
 
 # Writes to $STATE_DIR/server-info:
-#   {"type":"server-started","port":52341,"url":"http://localhost:52341",
+#   {"type":"server-started","port":52341,"url":"http://localhost:52341/?key=<64 hex>",
 #    "screen_dir":"/path/to/project/.brainstorm/12345-1706000000/content",
 #    "state_dir":"/path/to/project/.brainstorm/12345-1706000000/state"}
 ```
 
 Read `screen_dir`, `state_dir`, and the URL from `$STATE_DIR/server-info` on your
 next turn (the backgrounded call doesn't return its stdout). Tell the user to open the URL.
+
+**The URL carries a per-session key** (`?key=…`). Give the user the complete URL; without the key
+every page and the WebSocket answer 403, so no other page open in the browser can read the screens
+or write to `state_dir/events`. The first visit trades the key for a cookie and drops it from the
+address bar, so later reminders can name the full URL again. `server-info` is owner-only; do not
+paste the key anywhere else.
 
 **Finding connection info:** The server writes its startup JSON to `$STATE_DIR/server-info`. If you launched the server in the background and didn't capture stdout, read that file to get the URL and port.
 

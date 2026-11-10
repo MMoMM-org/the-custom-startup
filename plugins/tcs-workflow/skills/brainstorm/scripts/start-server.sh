@@ -16,6 +16,10 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# The session key the server prints ends up in server-info and server.log:
+# create the session directory and both files owner-only (#269).
+umask 077
+
 # Parse arguments
 PROJECT_DIR=""
 FOREGROUND="false"

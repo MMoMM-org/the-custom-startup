@@ -7,6 +7,14 @@ const path = require('path');
 
 const OPCODES = { TEXT: 0x01, CLOSE: 0x08, PING: 0x09, PONG: 0x0A };
 const WS_MAGIC = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+// Browser events are a few hundred bytes. The cap is checked against the
+// DECLARED length, before anything is buffered, so a frame that announces a
+// huge payload is refused at once instead of growing the buffer until it fits.
+const MAX_FRAME_PAYLOAD_BYTES = 1024 * 1024;
+const CLOSE_MESSAGE_TOO_BIG = 1009;
+const CLOSE_PROTOCOL_ERROR = 1002;
+
+class FrameTooLargeError extends Error {}
 
 function computeAcceptKey(clientKey) {
   return crypto.createHash('sha1').update(clientKey + WS_MAGIC).digest('base64');
@@ -53,8 +61,15 @@ function decodeFrame(buffer) {
     offset = 4;
   } else if (payloadLen === 127) {
     if (buffer.length < 10) return null;
-    payloadLen = Number(buffer.readBigUInt64BE(2));
+    const declared = buffer.readBigUInt64BE(2);
+    if (declared > BigInt(MAX_FRAME_PAYLOAD_BYTES)) {
+      throw new FrameTooLargeError('frame payload exceeds ' + MAX_FRAME_PAYLOAD_BYTES + ' bytes');
+    }
+    payloadLen = Number(declared);
     offset = 10;
+  }
+  if (payloadLen > MAX_FRAME_PAYLOAD_BYTES) {
+    throw new FrameTooLargeError('frame payload exceeds ' + MAX_FRAME_PAYLOAD_BYTES + ' bytes');
   }
 
   const maskOffset = offset;
@@ -81,6 +96,18 @@ const CONTENT_DIR = path.join(SESSION_DIR, 'content');
 const STATE_DIR = path.join(SESSION_DIR, 'state');
 let ownerPid = process.env.BRAINSTORM_OWNER_PID ? Number(process.env.BRAINSTORM_OWNER_PID) : null;
 
+// Per-session key (#269). Any web page open in the user's browser can reach a
+// localhost port, and what it writes to $STATE_DIR/events the agent reads back
+// as user input. The key rides the URL the agent hands the user as ?key=; the
+// first request trades it for an HttpOnly, SameSite=Strict cookie and redirects
+// to "/", so the page, /files/* and the WebSocket carry it without the key
+// staying in the address bar. A cross-site page cannot send that cookie, and a
+// DNS-rebound host name does not get it either, which an Origin check alone
+// would not catch. The cookie name carries the port: localhost cookies are
+// shared across ports.
+const TOKEN = crypto.randomBytes(32).toString('hex');
+const COOKIE_NAME = 'brainstorm-key-' + PORT;
+
 const MIME_TYPES = {
   '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
   '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
@@ -98,6 +125,15 @@ h1 { color: #333; } p { color: #666; }</style>
 <body><h1>Brainstorm Companion</h1>
 <p>Waiting for the agent to push a screen...</p></body></html>`;
 
+const FORBIDDEN_PAGE = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Session key required</title>
+<style>body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto; }
+h1 { color: #333; } p { color: #666; }</style>
+</head>
+<body><h1>Session key required</h1>
+<p>Open the full URL your coding agent gave you, including the <code>?key=</code> part.</p></body></html>`;
+
 const frameTemplate = fs.readFileSync(path.join(__dirname, 'frame-template.html'), 'utf-8');
 const helperScript = fs.readFileSync(path.join(__dirname, 'helper.js'), 'utf-8');
 const helperInjection = '<script>\n' + helperScript + '\n</script>';
@@ -109,8 +145,61 @@ function isFullDocument(html) {
   return trimmed.startsWith('<!doctype') || trimmed.startsWith('<html');
 }
 
+// Replacer functions, not strings: a replacement string expands `$&`, `$1`,
+// `$$` and `$\``, which would rewrite any screen that contains them (#269).
 function wrapInFrame(content) {
-  return frameTemplate.replace('<!-- CONTENT -->', content);
+  return frameTemplate.replace('<!-- CONTENT -->', () => content);
+}
+
+function injectHelper(html) {
+  if (!html.includes('</body>')) return html + helperInjection;
+  return html.replace('</body>', () => helperInjection + '\n</body>');
+}
+
+// ========== Session Key ==========
+
+function timingSafeEqualStr(a, b) {
+  const x = Buffer.from(String(a));
+  const y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+
+function parseCookies(header) {
+  const out = {};
+  if (!header) return out;
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq > 0) out[part.slice(0, eq).trim()] = part.slice(eq + 1).trim();
+  }
+  return out;
+}
+
+function splitUrl(url) {
+  const q = url.indexOf('?');
+  if (q < 0) return { pathname: url, key: null };
+  return { pathname: url.slice(0, q), key: new URLSearchParams(url.slice(q + 1)).get('key') };
+}
+
+function hasValidCookie(req) {
+  const cookie = parseCookies(req.headers['cookie'])[COOKIE_NAME];
+  return Boolean(cookie) && timingSafeEqualStr(cookie, TOKEN);
+}
+
+// A browser always sends Origin on a WebSocket upgrade; it must be the page the
+// server itself served. A missing Origin means a non-browser client, which
+// still needs the cookie.
+function isOwnOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  return Boolean(req.headers.host) && origin === 'http://' + req.headers.host;
+}
+
+function securityHeaders(headers) {
+  return Object.assign({
+    'Referrer-Policy': 'no-referrer',
+    'Cache-Control': 'no-store',
+    'X-Frame-Options': 'DENY'
+  }, headers);
 }
 
 function getNewestScreen() {
@@ -127,38 +216,46 @@ function getNewestScreen() {
 // ========== HTTP Request Handler ==========
 
 function handleRequest(req, res) {
-  touchActivity();
+  const { pathname, key } = splitUrl(req.url);
+  if (req.method === 'GET' && pathname === '/' && key && timingSafeEqualStr(key, TOKEN)) {
+    res.writeHead(302, securityHeaders({
+      'Location': '/',
+      'Set-Cookie': COOKIE_NAME + '=' + TOKEN + '; HttpOnly; SameSite=Strict; Path=/'
+    }));
+    res.end();
+    return;
+  }
+  if (!hasValidCookie(req)) {
+    res.writeHead(403, securityHeaders({ 'Content-Type': 'text/html; charset=utf-8' }));
+    res.end(FORBIDDEN_PAGE);
+    return;
+  }
+  touchActivity(); // only an authorized request counts as activity
   // Reads from disk can throw (EMFILE under fd pressure, a file unlinked mid-read).
   // Contain it to a 500 for this request instead of crashing the whole server.
   try {
-    if (req.method === 'GET' && req.url === '/') {
+    if (req.method === 'GET' && pathname === '/') {
       const screenFile = getNewestScreen();
-      let html = screenFile
+      const html = injectHelper(screenFile
         ? (raw => isFullDocument(raw) ? raw : wrapInFrame(raw))(fs.readFileSync(screenFile, 'utf-8'))
-        : WAITING_PAGE;
+        : WAITING_PAGE);
 
-      if (html.includes('</body>')) {
-        html = html.replace('</body>', helperInjection + '\n</body>');
-      } else {
-        html += helperInjection;
-      }
-
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, securityHeaders({ 'Content-Type': 'text/html; charset=utf-8' }));
       res.end(html);
-    } else if (req.method === 'GET' && req.url.startsWith('/files/')) {
-      const fileName = req.url.slice(7);
+    } else if (req.method === 'GET' && pathname.startsWith('/files/')) {
+      const fileName = pathname.slice(7);
       const filePath = path.join(CONTENT_DIR, path.basename(fileName));
       if (!fs.existsSync(filePath)) {
-        res.writeHead(404);
+        res.writeHead(404, securityHeaders());
         res.end('Not found');
         return;
       }
       const ext = path.extname(filePath).toLowerCase();
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      res.writeHead(200, { 'Content-Type': contentType });
+      res.writeHead(200, securityHeaders({ 'Content-Type': contentType }));
       res.end(fs.readFileSync(filePath));
     } else {
-      res.writeHead(404);
+      res.writeHead(404, securityHeaders());
       res.end('Not found');
     }
   } catch (err) {
@@ -173,6 +270,10 @@ function handleRequest(req, res) {
 const clients = new Set();
 
 function handleUpgrade(req, socket) {
+  if (!hasValidCookie(req) || !isOwnOrigin(req)) {
+    socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+    return;
+  }
   const key = req.headers['sec-websocket-key'];
   if (!key) { socket.destroy(); return; }
 
@@ -194,7 +295,10 @@ function handleUpgrade(req, socket) {
       try {
         result = decodeFrame(buffer);
       } catch (e) {
-        socket.end(encodeFrame(OPCODES.CLOSE, Buffer.alloc(0)));
+        const closeBuf = Buffer.alloc(2);
+        closeBuf.writeUInt16BE(e instanceof FrameTooLargeError ? CLOSE_MESSAGE_TOO_BIG : CLOSE_PROTOCOL_ERROR);
+        socket.end(encodeFrame(OPCODES.CLOSE, closeBuf));
+        buffer = Buffer.alloc(0);
         clients.delete(socket);
         return;
       }
@@ -375,11 +479,14 @@ function startServer() {
   server.listen(PORT, HOST, () => {
     const info = JSON.stringify({
       type: 'server-started', port: Number(PORT), host: HOST,
-      url_host: URL_HOST, url: 'http://' + URL_HOST + ':' + PORT,
+      url_host: URL_HOST, url: 'http://' + URL_HOST + ':' + PORT + '/?key=' + TOKEN,
       screen_dir: CONTENT_DIR, state_dir: STATE_DIR
     });
     console.log(info);
-    fs.writeFileSync(path.join(STATE_DIR, 'server-info'), info + '\n');
+    // server-info carries the key: owner-only.
+    const infoFile = path.join(STATE_DIR, 'server-info');
+    fs.writeFileSync(infoFile, info + '\n', { mode: 0o600 });
+    fs.chmodSync(infoFile, 0o600);
   });
 }
 
@@ -387,4 +494,4 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = { computeAcceptKey, encodeFrame, decodeFrame, OPCODES };
+module.exports = { computeAcceptKey, encodeFrame, decodeFrame, OPCODES, MAX_FRAME_PAYLOAD_BYTES, FrameTooLargeError };
