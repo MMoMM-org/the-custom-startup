@@ -22,8 +22,17 @@ The full set of operations the plugin denies, with the loss they cause:
   prefers `git restore`, but this form is still common in muscle memory.
 - `git restore --staged <path>` / `git restore --worktree --source=<ref> <path>` /
   `git restore .` / `git restore :/` — the modern equivalents of the above.
-  Same data-loss profile, denied for the same reason. `git restore <path>` for
-  a single path is allowed.
+  Same data-loss profile, denied for the same reason. So is any pathspec that
+  covers many files: a directory (`src/` or `src`), a glob (`*.ts`,
+  `:(glob)…`), `--pathspec-from-file`.
+
+  `git restore <file>` for named files is **allowed**, deliberately. It loses
+  that file's uncommitted changes just like `git checkout -- <file>`, but it is
+  the explicit form, and discarding its own edit is routine for an agent.
+  Denying it would need an override every time, which trains overriding and
+  weakens every other rule; and the Write tool can overwrite the file anyway,
+  unseen by this hook. The guard draws the line where one command reaches
+  files nobody named.
 - `git clean -f` / `-fd` / `-fx` / `-fdx` — deletes untracked files. The
   `-x` form also deletes ignored files (often `.env`, build caches, local
   notes, downloaded fixtures). No git history of any of it; once gone,
@@ -145,8 +154,10 @@ git checkout <previous-sha>
 git restore <path>           # per-file
 ```
 
-`git restore .` and `git restore :/` cover the whole tree and are denied
-like `git checkout .`. Scope it to a path you actually intend to discard.
+`git restore .`, `git restore :/`, a directory or a glob cover many files and
+are denied like `git checkout .`. Name the files you actually intend to
+discard. A quoted pathspec (`git restore '*.ts'`) is not seen by the guard: its
+quoted content is blanked before matching.
 
 **Instead of `git clean -f`:**
 

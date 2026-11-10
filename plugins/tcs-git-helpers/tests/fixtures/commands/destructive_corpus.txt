@@ -74,6 +74,20 @@ deny	DESTRUCTIVE_RESTORE	git restore :/
 deny	DESTRUCTIVE_RESTORE	git restore --source=HEAD .
 deny	DESTRUCTIVE_RESTORE	cd foo && git restore .
 allow	NEGATIVE	git restore .gitignore
+# Many files at once reads like `git restore .`; one named file stays allowed.
+# The corpus repo has a committed src/ directory (src/a.txt) for the -d check.
+deny	DESTRUCTIVE_RESTORE	git restore src/
+deny	DESTRUCTIVE_RESTORE	git restore src
+deny	DESTRUCTIVE_RESTORE	git -C src restore .
+deny	DESTRUCTIVE_RESTORE	git restore -s HEAD~1 src
+deny	DESTRUCTIVE_RESTORE	git restore *.ts
+deny	DESTRUCTIVE_RESTORE	git restore src/*.md
+deny	DESTRUCTIVE_RESTORE	git restore :(glob)**/*.py
+deny	DESTRUCTIVE_RESTORE	git restore --pathspec-from-file=list.txt
+allow	NEGATIVE	git restore src/a.txt
+allow	NEGATIVE	git restore file.txt other.txt
+allow	NEGATIVE	git restore -s HEAD~1 src/a.txt
+allow	NEGATIVE	git restore missing-dir
 
 # === FORCE_BRANCH_DELETE (git branch -D) ==================================
 deny	FORCE_BRANCH_DELETE	git branch -D feat/old

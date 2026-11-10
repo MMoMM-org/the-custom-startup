@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.2.47] - 2026-11-10
+
+### Changed
+
+- **`git restore` on a directory or glob is denied like `git restore .`.** `git restore src/`,
+  `git restore src` (an existing directory), `git restore *.ts`,
+  `:(glob)…` and `--pathspec-from-file` discard changes in files nobody named. Named files
+  (`git restore a.txt b.txt`) stay allowed; `references/destructive-ops.md` records why.
+  **What to know:** restore files by name, or use `CLAUDE_ALLOW_DESTRUCTIVE_RESTORE=1`.
+
 ## [2.2.46] - 2026-11-10
 
 ### Fixed
