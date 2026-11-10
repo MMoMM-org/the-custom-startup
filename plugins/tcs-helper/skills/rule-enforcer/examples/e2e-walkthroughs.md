@@ -28,7 +28,7 @@ User submits:
 a suggestion line before Claude processes the prompt:
 
 ```
-[rule-enforcer] Recurrence signal detected ('keep forgetting'). Consider /enforce-rule "I keep forgetting to bump marketplace.json" to triage.
+[rule-enforcer] Recurrence signal detected ('keep forgetting'). Consider /tcs-helper:rule-enforcer "I keep forgetting to bump marketplace.json" to triage.
 ```
 
 Claude responds to the original prompt normally. The suggestion line is visible
@@ -37,7 +37,7 @@ in the session output.
 **Step 2 — Invoke the skill directly**
 
 User runs:
-> `/enforce-rule "I keep forgetting to bump marketplace.json"`
+> `/tcs-helper:rule-enforcer "I keep forgetting to bump marketplace.json"`
 
 **Expected**: Skill announces itself, echoes the rule, and asks Q1.
 
@@ -112,7 +112,7 @@ human-readable. No errors or stack traces anywhere in the session.
 **Step 1 — Invoke the skill directly with a non-trigger-phrase rule**
 
 User runs:
-> `/enforce-rule "tag commits by phase number for traceability"`
+> `/tcs-helper:rule-enforcer "tag commits by phase number for traceability"`
 
 **Expected**: No intercept-hook suggestion fires (no recurrence-signal phrase).
 Skill announces itself, echoes the rule, and asks Q1.

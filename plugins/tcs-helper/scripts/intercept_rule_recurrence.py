@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""UserPromptSubmit hook — detect recurrence signals and suggest /enforce-rule.
+"""UserPromptSubmit hook — detect recurrence signals and suggest /tcs-helper:rule-enforcer.
 
 Mirrors capture_learning.py structure: stdin JSON, try/except all errors, exit 0 always.
 """
@@ -52,7 +52,7 @@ def _compute_suggestion(stdin_text: str) -> str | None:
     snippet = _find_matched_phrase(prompt, patterns)
     return (
         f"[rule-enforcer] Recurrence signal detected ('{snippet}'). "
-        f'Consider /enforce-rule "<rule>" to triage.'
+        f'Consider /tcs-helper:rule-enforcer "<rule>" to triage.'
     )
 
 

@@ -1,6 +1,6 @@
 # Rule Enforcer — Self-Test Fixtures
 
-Three scenario specifications to validate the `/enforce-rule` skill produces
+Three scenario specifications to validate the `/tcs-helper:rule-enforcer` skill produces
 the correct mechanism for known inputs. Each fixture traces Q1–Q4 and the
 Step 4 Q3 label normalization, then states the expected Step 8 output.
 

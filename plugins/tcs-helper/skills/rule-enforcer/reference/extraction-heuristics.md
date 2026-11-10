@@ -2,7 +2,7 @@
 
 Examples-driven heuristics for **batch mode**: sweeping a CLAUDE.md (or memory
 bank) and triaging every candidate rule without a per-rule dialogue. Where the
-interactive `/enforce-rule` skill asks the 4 questions one rule at a time, batch
+interactive `/tcs-helper:rule-enforcer` skill asks the 4 questions one rule at a time, batch
 mode applies these heuristics to (a) filter enforceable vs judgment (the Q2
 gate), (b) infer the Q3 bucket, and (c) pick a Q4 default — then hands the
 survivors to the mechanism matrix.
