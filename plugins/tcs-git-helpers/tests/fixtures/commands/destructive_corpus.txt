@@ -23,6 +23,9 @@ deny	RESET_HARD	cd /tmp && git reset --hard origin/main
 deny	RESET_HARD	git -C /tmp/repo reset --hard HEAD
 deny	RESET_HARD	git --no-pager -c user.name=x reset --hard
 deny	RESET_HARD	/usr/bin/git -C /tmp/repo reset --hard
+deny	RESET_HARD	git -C "/tmp/x" reset --hard
+deny	RESET_HARD	git -C '/tmp/x' reset --hard
+deny	RESET_HARD	git -C "/tmp/my dir" reset --hard
 allow	NEGATIVE	ls /r/.git reset --hard
 allow	NEGATIVE	git -C /tmp/repo reset --soft HEAD~1
 allow	NEGATIVE	git reset --soft HEAD~1
@@ -42,6 +45,10 @@ deny	CLEAN_FORCE	cd repo && git clean -f
 allow	NEGATIVE	git clean -n
 allow	NEGATIVE	git clean -ndx
 allow	NEGATIVE	git clean --dry-run
+allow	NEGATIVE	git clean -n -f
+allow	NEGATIVE	git clean --dry-run -fdx
+deny	CLEAN_FORCE	git clean -f src/x-node
+deny	CLEAN_FORCE	git clean -n && git clean -f
 
 # === DESTRUCTIVE_CHECKOUT (git checkout . | -- <path>) ====================
 deny	DESTRUCTIVE_CHECKOUT	git checkout .
@@ -62,6 +69,11 @@ deny	DESTRUCTIVE_RESTORE	git	restore	--staged	file.txt
 deny	DESTRUCTIVE_RESTORE	cd foo && git restore --staged file.txt
 allow	NEGATIVE	git restore --source=main file.txt
 allow	NEGATIVE	git restore file.txt
+deny	DESTRUCTIVE_RESTORE	git restore .
+deny	DESTRUCTIVE_RESTORE	git restore :/
+deny	DESTRUCTIVE_RESTORE	git restore --source=HEAD .
+deny	DESTRUCTIVE_RESTORE	cd foo && git restore .
+allow	NEGATIVE	git restore .gitignore
 
 # === FORCE_BRANCH_DELETE (git branch -D) ==================================
 deny	FORCE_BRANCH_DELETE	git branch -D feat/old
@@ -101,6 +113,11 @@ deny	NO_VERIFY	cd repo && git commit --no-verify
 allow	NEGATIVE	git commit -m "fix"
 allow	NEGATIVE	git commit --amend
 allow	NEGATIVE	git commit -a -m "msg"
+deny	NO_VERIFY	git push --no-verify
+deny	NO_VERIFY	git push origin main --no-verify
+deny	NO_VERIFY	git merge --no-verify feat/x
+allow	NEGATIVE	git push -n
+allow	NEGATIVE	git push --dry-run origin main
 
 # === FORCE_PUSH (git push --force, NOT --force-with-lease) ================
 deny	FORCE_PUSH	git push --force
@@ -113,6 +130,12 @@ deny	FORCE_PUSH	cd repo && git push --force
 allow	NEGATIVE	git push --force-with-lease
 allow	NEGATIVE	git push --force-with-lease origin feat/foo
 allow	NEGATIVE	git push --force-with-lease=feat/foo:abc123
+allow	NEGATIVE	git push --force-with-lease --force-if-includes
+allow	NEGATIVE	git push origin feat/foo-fix
+allow	NEGATIVE	git push --follow-tags
+deny	FORCE_PUSH	git push -uf origin main
+deny	FORCE_PUSH	git push origin +main
+deny	FORCE_PUSH	git push origin main -f
 
 # === REMOTE_BRANCH_DELETE (git push --delete | git push remote :branch) ===
 deny	REMOTE_BRANCH_DELETE	git push origin --delete feat/old
@@ -140,6 +163,7 @@ deny	HOOKSPATH_OVERRIDE	git -c core.hooksPath=/tmp/empty status
 deny	HOOKSPATH_OVERRIDE	git config core.hooksPath /tmp
 deny	HOOKSPATH_OVERRIDE	git config --global core.hooksPath /tmp
 deny	HOOKSPATH_OVERRIDE	git	-c	core.hooksPath=/dev/null	commit
+deny	HOOKSPATH_OVERRIDE	git -c "core.hooksPath=/dev/null" commit
 allow	NEGATIVE	git config user.email me@example.com
 allow	NEGATIVE	git config core.editor vim
 allow	NEGATIVE	git -c user.name=foo commit -m bar

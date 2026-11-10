@@ -75,6 +75,11 @@ PATTERN_RESET_HARD="$_GIT_CMD"'reset[[:space:]]+--hard([^[:alnum:]_]|$)'
 # means trailing `X` after a matched `-f` does not block the match.
 PATTERN_CLEAN_FORCE="$_GIT_CMD"'clean[[:space:]]+(-[a-zA-Z]*[fx]|--force)'
 
+# git clean -n / --dry-run: removes nothing, whatever else is bundled with it
+# (`-ndx`, `-n -f`). A clause matching this is exempt from CLEAN_FORCE (#268).
+# The flag must start a token, so a path such as `src/x-node` is not `-n`.
+PATTERN_CLEAN_DRY_RUN="$_GIT_CMD"'clean[[:space:]](.*[[:space:]])?(-[a-zA-Z]*n[a-zA-Z]*|--dry-run)([[:space:]]|$)'
+
 # git checkout .   (require . to be its own argument: end-of-string or whitespace next)
 PATTERN_CHECKOUT_DOT="$_GIT_CMD"'checkout[[:space:]]+\.([[:space:]]|$)'
 
@@ -85,6 +90,10 @@ PATTERN_CHECKOUT_PATH="$_GIT_CMD"'checkout[[:space:]]+--[[:space:]]+[^[:space:]]
 # Both flag orderings of --worktree + --source are equally valid git invocations
 # and equally destructive — match either.
 PATTERN_RESTORE_DESTRUCTIVE="$_GIT_CMD"'restore[[:space:]]+(.*--worktree.*--source.*|.*--source.*--worktree.*|.*--staged.*)'
+
+# git restore .   |   git restore :/   (the whole working tree, like `git checkout .`)
+# A whole-tree pathspec as its own argument, anywhere after `restore` (#268).
+PATTERN_RESTORE_ALL="$_GIT_CMD"'restore([[:space:]]+[^[:space:]]+)*[[:space:]]+(\.|:/)([[:space:]]|$)'
 
 # git branch -D <name>   (capital D = force delete; lowercase -d is the safe form)
 PATTERN_BRANCH_FORCE_DELETE="$_GIT_CMD"'branch[[:space:]]+-D([^[:alnum:]_]|$)'
@@ -106,7 +115,11 @@ PATTERN_REFLOG_EXPIRE="$_GIT_CMD"'reflog[[:space:]]+expire([^[:alnum:]_]|$)'
 # NOTE: Dispatchers must call _match_no_verify instead of _match_command
 # directly so that compound commands like `git commit && echo -n` do not
 # produce a false-positive. See _match_no_verify below.
-PATTERN_NO_VERIFY="$_GIT_CMD"'commit.*(--no-verify|-n([^[:alnum:]_]|$))'
+#
+# `git push --no-verify` and `git merge --no-verify` skip the pre-push and
+# pre-merge-commit hooks the same way (#268). Long form only: for push, `-n`
+# is --dry-run.
+PATTERN_NO_VERIFY="$_GIT_CMD"'(commit.*(--no-verify|-n([^[:alnum:]_]|$))|(push|merge)[[:space:]](.*[[:space:]])?--no-verify([[:space:]]|$))'
 
 # ---------------------------------------------------------------------------
 # Push patterns (M1 closed-PR check + M7 destructive push variants)
@@ -115,13 +128,16 @@ PATTERN_NO_VERIFY="$_GIT_CMD"'commit.*(--no-verify|-n([^[:alnum:]_]|$))'
 # git push (any form) — used by M1 closed-PR check; not destructive on its own
 PATTERN_PUSH="$_GIT_CMD"'push([^[:alnum:]_]|$)'
 
-# git push ... --force   (NEGATIVE: must NOT match --force-with-lease)
+# git push ... --force | -f | -uf | +<refspec>   (NEGATIVE: must NOT match --force-with-lease)
 #
-# Why not the usual ([^[:alnum:]_]|$) boundary after `--force`? Because it
-# accepts any non-word char — and `-` is non-word, so it DOES match between
-# `e` and `-` in `--force-with-lease`. We instead require the next char
-# after `--force` to be whitespace OR end-of-string.
-PATTERN_PUSH_FORCE="$_GIT_CMD"'push[[:space:]].*--force([[:space:]]|$)'
+# The flag must start a token, so a branch named `feat/foo-fix` is not `-f`.
+# Why not the usual ([^[:alnum:]_]|$) boundary after it? Because `-` is
+# non-word, so it DOES match between `e` and `-` in `--force-with-lease`. The
+# boundary here excludes `-` and accepts anything else: whitespace, end of
+# string, and the `"`/`'`/`)` that close a `bash -c "…"` payload or a
+# `( … )` subshell (#268: those used to slip through).
+# A `+<refspec>` forces that one ref, like --force.
+PATTERN_PUSH_FORCE="$_GIT_CMD"'push[[:space:]](.*[[:space:]])?(--force|-[a-zA-Z]*f[a-zA-Z]*|\+[^[:space:]]+)([^[:alnum:]_-]|$)'
 
 # git push ... --delete <branch>   (long-form remote branch delete)
 PATTERN_PUSH_DELETE_FLAG="$_GIT_CMD"'push[[:space:]]+(.+[[:space:]]+)?--delete([^[:alnum:]_]|$)'
@@ -187,9 +203,11 @@ PATTERN_HOOKSPATH_CONFIG_READ="$_GIT_CMD"'config([[:space:]]+[^[:space:]]+)*[[:s
 export \
   PATTERN_RESET_HARD \
   PATTERN_CLEAN_FORCE \
+  PATTERN_CLEAN_DRY_RUN \
   PATTERN_CHECKOUT_DOT \
   PATTERN_CHECKOUT_PATH \
   PATTERN_RESTORE_DESTRUCTIVE \
+  PATTERN_RESTORE_ALL \
   PATTERN_BRANCH_FORCE_DELETE \
   PATTERN_STASH_DESTROY \
   PATTERN_REFLOG_EXPIRE \
@@ -538,8 +556,73 @@ _strip_heredocs() {
 #   as _git_ops_has_shell_executor; keep the two equal (parity test:
 #   plugins/tcs-helper/tests/bats/observability-git-parity.bats).
 _has_shell_executor() {
-  [[ "$1" =~ (^|[^[:alnum:]_])[a-z]*sh[[:space:]]+-c([[:space:]]|$) ]] \
+  # `-c` may be bundled (`-lc`, `-ec`) or follow other options (`-e -c`,
+  # `--norc -c`) (#268): every one of those still runs the payload.
+  local re='(^|[^[:alnum:]_])[a-z]*sh([[:space:]]+-[-[:alnum:]]+)*[[:space:]]+-[[:alnum:]]*c[[:alnum:]]*([[:space:]]|$)'
+  [[ "$1" =~ $re ]] \
     || [[ "$1" =~ (^|[^[:alnum:]_])eval([[:space:]]|$) ]]
+}
+
+# _dequote_option_values_into <command>
+#   Leaves <command> in _DEQUOTED with the quotes removed from the value of a
+#   git global option that takes one (`-C`, `-c`, `--git-dir`, `--work-tree`,
+#   `--namespace`, `--config-env`, `--super-prefix`) (#268).
+#
+#   Why: _strip_quoted blanks quoted content to spaces, so `git -C "/r" reset
+#   --hard` became `git -C <spaces> reset --hard`, and _normalize_git_clause
+#   then took `reset` for the -C value and dropped `--hard` with it -- the
+#   destructive subcommand vanished. Unquoted, the value survives stripping as
+#   one token, and _git_dash_c_dir still reads the real directory from it.
+#   A path value (-C, --git-dir, --work-tree) containing whitespace cannot
+#   become one token by unquoting; its content is replaced with `_` instead,
+#   so it still occupies exactly one argument (the stateful -C checks then fail
+#   open on a path that does not exist, as with any bad -C path). Any other
+#   value with whitespace is left quoted: `-c` is also `bash -c`, whose payload
+#   must stay recognisable as code.
+#
+#   The value may not contain a quote, `$`, a backtick, a backslash, a newline
+#   or a shell operator (`;&|()<>`). The regex cannot see quote state, so a
+#   `"…"` it finds may really be the END of one quoted string and the START of
+#   the next, with code in between: `echo 'x -c "y' && git reset --hard && echo
+#   "z"`, or `echo "x -c "$(git reset --hard)" y"`. Rewriting that span would
+#   hide the code. With those characters excluded, anything such a span can
+#   hold is plain words of the same simple command -- arguments, never a
+#   separate command.
+#
+#   Matched anywhere, not only after `git`: a short option name such as `-c`
+#   is common elsewhere. Unquoting a single argument of another command can
+#   only expose a token -- a match the guard would make anyway if that command
+#   had been written unquoted -- so the direction is safe.
+#
+#   bash 3.2: [[ =~ ]] + parameter expansion, no subshell. Cheap glob test first.
+_DEQUOTED=""
+_dequote_option_values_into() {
+  local s="$1" out="" m val pre
+  local plain="[^\"'\$\`\\\\;&|()<>"$'\n'"]*"
+  local re="[[:space:]](-C|-c|--git-dir|--work-tree|--namespace|--config-env|--super-prefix)[[:space:]]+(\"${plain}\"|'${plain}')"
+  case "$s" in
+    *-[Cc]*[\"\']*|*--*[\"\']*) ;;
+    *) _DEQUOTED="$s"; return 0 ;;
+  esac
+  while [[ "$s" =~ $re ]]; do
+    m="${BASH_REMATCH[0]}"
+    val="${BASH_REMATCH[2]}"
+    val="${val:1:${#val}-2}"
+    case "$val" in
+      *[[:space:]]*)
+        case "${BASH_REMATCH[1]}" in
+          -C|--git-dir|--work-tree) val="${val//?/_}" ;;
+          # `-c` is also `bash -c`: a payload with spaces is CODE, and must
+          # stay quoted for the shell-executor guard to see it as such.
+          *) val="${BASH_REMATCH[2]}" ;;
+        esac ;;
+      "") val="_" ;;
+    esac
+    pre="${s%%"$m"*}"
+    out="${out}${pre}${m%"${BASH_REMATCH[2]}"}${val}"
+    s="${s#*"$m"}"
+  done
+  _DEQUOTED="${out}${s}"
 }
 
 # _clausify <command>
@@ -561,7 +644,8 @@ _clausify() {
   local s NL
   NL=$'\n'
   local stripped
-  s="$1"
+  _dequote_option_values_into "$1"
+  s="$_DEQUOTED"
   stripped="$(_strip_heredocs "$s")"
   stripped="$(_strip_quoted "$stripped")"
   # Shell-executor guard: when the command invokes a shell on a quoted payload

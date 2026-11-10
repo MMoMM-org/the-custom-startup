@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The tcs-git-helpers guard catches destructive git commands it used to miss (#268).** A quoted
+  `git -C "<dir>"`, `bash -lc` and `bash -e -c` wrappers, `git push -f`, `git restore .` and
+  `git push --no-verify` were allowed, and the dry run `git clean -ndx` was denied. All are
+  decided correctly now, and both command corpora run through the hook in CI. Update
+  tcs-git-helpers.
 - **`/implement` now asks each implementer for the status it branches on (#250).** Both tiers
   branched on `DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` and `BLOCKED`, but the brief never
   requested one, so a missing-context or blocked task could come back as an unlabelled report.

@@ -20,13 +20,15 @@ The full set of operations the plugin denies, with the loss they cause:
 - `git checkout .` / `git checkout -- <path>` — overwrites the working tree
   for the listed paths from the index. No reflog. No backup. Modern git
   prefers `git restore`, but this form is still common in muscle memory.
-- `git restore --staged <path>` / `git restore --worktree --source=<ref> <path>`
-  — the modern equivalents of the above. Same data-loss profile, denied
-  for the same reason.
+- `git restore --staged <path>` / `git restore --worktree --source=<ref> <path>` /
+  `git restore .` / `git restore :/` — the modern equivalents of the above.
+  Same data-loss profile, denied for the same reason. `git restore <path>` for
+  a single path is allowed.
 - `git clean -f` / `-fd` / `-fx` / `-fdx` — deletes untracked files. The
   `-x` form also deletes ignored files (often `.env`, build caches, local
   notes, downloaded fixtures). No git history of any of it; once gone,
-  gone.
+  gone. A dry run (`-n`, `--dry-run`, also bundled as `-ndx`) deletes nothing
+  and is allowed.
 - `git branch -D <branch>` — force-deletes a branch even if it has unmerged
   commits. The branch *ref* is gone immediately; only the reflog (30-day
   default expiry) remains.
@@ -37,12 +39,15 @@ The full set of operations the plugin denies, with the loss they cause:
 - `git reflog expire --expire=now` / `git reflog expire --all` — kills the
   recovery net itself. After this, none of the above operations have a
   way back.
-- `git push --force` (without `--force-with-lease`) — overwrites remote
+- `git push --force` / `-f` / `-uf` / `git push <remote> +<ref>` (without
+  `--force-with-lease`) — overwrites remote
   refs unconditionally; if a teammate (or the agent's other session) had
   pushed in between, those commits are gone from the remote.
 - `git commit --no-verify` / `git commit -n` — skips the `pre-commit` and
   `commit-msg` hooks. The commit lands without the format and content
-  checks the repo configured.
+  checks the repo configured. `git push --no-verify` and `git merge
+  --no-verify` skip `pre-push` and `pre-merge-commit` the same way (for push,
+  `-n` is `--dry-run` and stays allowed).
 - `git push origin --delete <branch>` / `git push origin :<branch>` —
   remote branch deletion. The branch ref on the remote is gone; if the
   branch was the only ref pointing at a chain of commits, those commits
@@ -69,9 +74,13 @@ denial reason citing this file and the granular override env var.
 
 Git's global options do not hide an operation. `git -C <path> reset --hard`,
 `git --no-pager reset --hard` and `git -c k=v -C <path> reset --hard` are
-matched the same as the plain `git reset --hard`. A `-c core.hooksPath=…` among
+matched the same as the plain `git reset --hard`, also with a quoted value
+(`git -C "/my repo" reset --hard`). A `-c core.hooksPath=…` among
 them is still a hooksPath override, whatever its letter case. `git` must be the
 command word: a path ending in `.git` (`/repo/.git reset`) does not count.
+
+A shell wrapper does not hide one either: `bash -c`, `bash -lc`, `bash -e -c`,
+`sh -xc` and `eval` payloads are code, and are matched like a typed command.
 
 Rules that read repository state (push to a closed PR, a branch from
 unfinished work, resuming a squash-merged branch) check the repository
@@ -134,12 +143,10 @@ git checkout <previous-sha>
 
 ```bash
 git restore <path>           # per-file
-git restore .                # whole working tree
 ```
 
-`git restore` without `--staged` and without `--source` is denied too if
-it covers the whole tree — see the corpus. The non-destructive form is
-to scope it to a path you actually intend to discard.
+`git restore .` and `git restore :/` cover the whole tree and are denied
+like `git checkout .`. Scope it to a path you actually intend to discard.
 
 **Instead of `git clean -f`:**
 
