@@ -120,8 +120,8 @@ adjacent lines. Each record is `worktree` / `HEAD` / `branch`, optionally with
 
 ```bash
 WORKTREE_PATH=$(git worktree list --porcelain | awk -v b="refs/heads/${branch}" '
-  /^worktree / { p = substr($0, 10) }
-  $0 == "branch " b { print p; found = 1; exit }
+  /^worktree / { p = substr(\$0, 10) }
+  \$0 == "branch " b { print p; found = 1; exit }
   END { if (!found) exit 1 }
 ')
 ```

@@ -71,8 +71,13 @@ For skills that need to delegate to a domain specialist, use the `find-agents.sh
 
 $ARGUMENTS              // All arguments passed when invoking
 $ARGUMENTS[0]           // First argument
+$0, $1, …               // Shorthand for $ARGUMENTS[0], $ARGUMENTS[1], …
 ${CLAUDE_SESSION_ID}    // Current session ID
 !`shell command`        // Execute command, insert output (preprocessing)
+
+A literal `$0`/`$1` in a SKILL.md example (awk's `$0`, a shell function's `$1`) is replaced by
+an argument too. Write it as `\$0`/`\$1`: Claude Code drops the backslash and renders `$0`.
+`tests/test_skill_dollar_substitution.py` rejects an unescaped one (#270).
 
 ### Security Note
 Never combine `!`shell command`` preprocessing with `$ARGUMENTS` — this executes user input as a shell command at skill load time. Use `Bash()` in the Workflow section instead, where the AI mediates the execution.

@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Shell and awk examples in seven skills no longer turn into words of your request (#270).**
+  `$0` and `$1` in a SKILL.md are skill-argument placeholders, so `/issue create …` rendered its
+  board lookup as `sed … "title"`. They are escaped now, and a test rejects a new unescaped one.
+  Update tcs-workflow, tcs-issues and tcs-helper.
 - **The brainstorm visual companion can no longer be driven by another web page (#269).** Any
   page open in the browser could connect to its localhost port and write the click events the
   agent reads back as your input. The URL the agent gives you now carries a per-session key, and

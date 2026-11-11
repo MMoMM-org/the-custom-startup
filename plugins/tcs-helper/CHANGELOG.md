@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.4.14] - 2026-11-11
+
+### Fixed
+
+- **Shell and awk examples in `git-worktree`, `finish-branch`, `memory-cleanup` and `memory-sync` are no longer rewritten with skill arguments (#270).**
+  Claude Code substitutes `$0`, `$1` and so on in a SKILL.md with the arguments the skill was
+  called with, so awk's `$0` or a shell function's `$1` turned into a word of the request. They
+  are escaped as `\$0`/`\$1` now, which renders as the literal text.
+
 ## [4.4.12] - 2026-11-10
 
 ### Fixed

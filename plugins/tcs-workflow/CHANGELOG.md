@@ -8,6 +8,15 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [4.4.24] - 2026-11-11
+
+### Fixed
+
+- **Shell and awk examples in `/pickup` and `/xdd-meta` are no longer rewritten with skill arguments (#270).**
+  Claude Code substitutes `$0`, `$1` and so on in a SKILL.md with the arguments the skill was
+  called with, so awk's `$0` or a shell function's `$1` turned into a word of the request. They
+  are escaped as `\$0`/`\$1` now, which renders as the literal text.
+
 ## [4.4.23] - 2026-11-11
 
 ### Fixed
