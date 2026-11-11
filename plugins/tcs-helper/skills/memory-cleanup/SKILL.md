@@ -57,7 +57,7 @@ Read all 6 category files in `docs/ai/memory/`. Build a list of candidates for e
 **Compress candidates** — entries over the 250-character budget:
 
 ```bash
-awk '/^- \*\*/ && length($0) > 250 {print FILENAME":"FNR"  "length($0)" chars"}' docs/ai/memory/*.md
+awk '/^- \*\*/ && length(\$0) > 250 {print FILENAME":"FNR"  "length(\$0)" chars"}' docs/ai/memory/*.md
 ```
 
 Propose every oversized entry regardless of age. Judge each against

@@ -44,7 +44,7 @@ State {
 # startup.toml resolution — bash 3.2 compatible
 # Scope chain: repo (.claude/startup.toml) overrides global (~/.claude/startup.toml)
 _extract_docs_base() {
-  sed -n '/^\[tcs\]/,/^\[/p' "$1" | grep '^docs_base' | head -1 | sed 's/docs_base[[:space:]]*=[[:space:]]*//' | tr -d '"'"'"' '
+  sed -n '/^\[tcs\]/,/^\[/p' "\$1" | grep '^docs_base' | head -1 | sed 's/docs_base[[:space:]]*=[[:space:]]*//' | tr -d '"'"'"' '
 }
 
 TCS_DOCS_BASE="docs/XDD"  # built-in default

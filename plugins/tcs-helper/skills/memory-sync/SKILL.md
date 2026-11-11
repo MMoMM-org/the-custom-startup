@@ -102,7 +102,7 @@ Measure bytes, never lines — entries are single long lines.
 **Check 6: entry form**
 
 ```bash
-awk '/^- \*\*/ && length($0) > 250 {print FILENAME":"FNR"  "length($0)" chars"}' docs/ai/memory/*.md
+awk '/^- \*\*/ && length(\$0) > 250 {print FILENAME":"FNR"  "length(\$0)" chars"}' docs/ai/memory/*.md
 ```
 
 - WARN for each entry over 250 characters, naming file, line, and length

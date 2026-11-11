@@ -94,7 +94,7 @@ Set `owner` and `repo`. Resolve `projectNumber` in priority order:
 ```bash
 # startup.toml resolution — bash 3.2 compatible, repo overrides global
 _extract_project() {
-  sed -n '/^\[tcs\]/,/^\[/p' "$1" | grep '^project' | head -1 | sed 's/project[[:space:]]*=[[:space:]]*//' | tr -d '"'"'"' '
+  sed -n '/^\[tcs\]/,/^\[/p' "\$1" | grep '^project' | head -1 | sed 's/project[[:space:]]*=[[:space:]]*//' | tr -d '"'"'"' '
 }
 TCS_PROJECT=""
 [ -f "$HOME/.claude/startup.toml" ] && { _v=$(_extract_project "$HOME/.claude/startup.toml"); [ -n "$_v" ] && TCS_PROJECT="$_v"; }
