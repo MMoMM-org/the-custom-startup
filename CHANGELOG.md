@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The brainstorm visual companion can no longer be driven by another web page (#269).** Any
+  page open in the browser could connect to its localhost port and write the click events the
+  agent reads back as your input. The URL the agent gives you now carries a per-session key, and
+  the server refuses every request and WebSocket without it or from a foreign origin. Oversized
+  WebSocket frames are refused, and `$&` in a screen is no longer rewritten. **What to know:**
+  open the complete URL, including `?key=`. Update tcs-workflow.
 - **Stopping the brainstorm visual companion no longer reports a failure for a server that is
   already gone.** A dead but unreaped server process counted as running. Update tcs-workflow.
 - **`git restore` on a directory or glob is now denied like `git restore .`.** Named files stay

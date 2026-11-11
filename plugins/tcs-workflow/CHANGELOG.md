@@ -8,7 +8,7 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
-## [4.4.22] - 2026-11-10
+## [4.4.23] - 2026-11-11
 
 ### Fixed
 
@@ -18,6 +18,20 @@ enforces that on every merge.
   `{"status": "failed"}`. Both scripts now check the process state as well; `start-server.sh`
   uses the same check, so a server reaped right after starting is reported as killed instead
   of as started.
+
+## [4.4.22] - 2026-11-10
+
+### Security
+
+- **The brainstorm companion server requires a per-session key (#269).** Any page open in the
+  browser could connect to the companion's localhost port and write click events, which the agent
+  reads back as user input. The server now generates a key per session and puts it in the URL it
+  reports (`?key=…`); the first visit trades it for an `HttpOnly`, `SameSite=Strict` cookie, and
+  every page, `/files/*` and the WebSocket upgrade need that cookie. The upgrade also rejects a
+  foreign `Origin`. A WebSocket frame declaring more than 1 MiB is refused with close code 1009
+  before anything is buffered, and screen content containing `$&` or `$1` is inserted literally
+  instead of being expanded by `String.replace`. `server-info` and the session directory are
+  owner-only. Based on the hardening in upstream superpowers (June 2026).
 
 ## [4.4.16] - 2026-10-29
 

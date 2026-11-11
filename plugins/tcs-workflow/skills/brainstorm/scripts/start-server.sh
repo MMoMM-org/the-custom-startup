@@ -16,6 +16,10 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# The session key the server prints ends up in server-info and server.log:
+# create the session directory and both files owner-only (#269).
+umask 077
+
 # True while <pid> is a running process. `kill -0` alone also succeeds on a
 # zombie (killed, not yet reaped by its parent), which is already gone.
 pid_alive() {
