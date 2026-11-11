@@ -28,7 +28,7 @@ Always include:
 - Phase number and title
 - Task completion ratio (completed/total)
 - Files changed (list paths)
-- Test status (passing count or failure details)
+- Suite gate result against the baseline (`../../xdd/reference/suite-gate.md`): pass, or each new failure by id
 - Blockers (if any)
 - Drift detection results
 - Updated status: phase file frontmatter and README checkbox
@@ -39,7 +39,7 @@ Always include:
 - Spec ID and feature name
 - Total phases completed / total phases
 - Total tasks executed across all phases
-- Test status (all passing or failure details)
+- Suite gate result: pass, or each new failure by id; name baseline failures that remain
 - Files changed (total count with additions/deletions)
 - Mode used (Standard or Team)
 

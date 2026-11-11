@@ -27,7 +27,7 @@ DeliveryUnit {
 
 DirectResult {
   filesChanged: string[]
-  testStatus: string         // All passing | X failing | Pending
+  testStatus: string         // suite gate: pass | regressions (test ids) | did not run | pending
   driftFindings: string[]
   constitutionFindings?: string[]
   blockers?: string[]
@@ -88,6 +88,8 @@ match (git repository) {
   none   => proceed without version control
 }
 
+Record the suite baseline per [the suite gate](../xdd/reference/suite-gate.md) before the first dispatch: the command, the commit and the set of failing tests. A run that cannot complete is an environment problem — report it and stop.
+
 ### 2. Decompose
 
 Read every discovered document, then break the work into the **smallest set of delivery units that covers all acceptance criteria**.
@@ -122,7 +124,7 @@ Dispatch a fresh subagent at the starting rung in the Direct column of [the mode
    - `DONE` — unit complete, tests pass
    - `DONE_WITH_CONCERNS` — complete, but something needs attention; list each concern and whether it is about correctness, scope or an observation
    - `NEEDS_CONTEXT` — cannot proceed without information it lacks; name what is missing instead of guessing
-   - `BLOCKED` — cannot complete; say whether the cause is missing context, complexity, unit size or a wrong specification
+   - `BLOCKED` — cannot complete; say whether the cause is missing context, complexity, unit size, a wrong specification or the environment (a tool, network access or credentials it needs is missing or failing; quote the failing command and its error)
 
 No session history. No prior unit output unless the next unit genuinely depends on it.
 
@@ -138,6 +140,12 @@ BLOCKED             → assess: context problem → re-dispatch with more contex
                               complexity problem → escalate one rung (below)
                               unit too large → split it, and reconsider whether this tier still fits
                               specification is wrong → escalate to the user
+                              environment problem → run the failing command yourself; if the
+                                fix is yours to make, make it and re-dispatch; otherwise report
+                                it to the user and halt at this unit (re-run `/implement` once
+                                fixed). Never escalate a rung for it
+no status / other   → NEEDS_CONTEXT, never as DONE: re-dispatch with the same context and ask
+                      for the report to end with a `Status:` line
 ```
 
 **Complexity escalation** follows [the model ladder](../xdd/reference/model-ladder.md): one rung up, automatic below `fable`. The cap, the consent and nobody-to-ask rules, and the fable-failure rule apply as written there. Direct has no review chain, so only a complexity BLOCKED escalates. Any BLOCKED report halts the run per the ladder's Stop rule. Log each escalation, consent and substitution through `Skill(tcs-workflow:xdd-meta)` step 4 (Log Decision), in the ladder's row formats.
@@ -148,7 +156,7 @@ Never silently drop a BLOCKED or NEEDS_CONTEXT result. In Standard mode a re-dis
 
 1. Invoke `Skill(tcs-workflow:validate)` in drift mode against requirements and solution.
 2. Invoke `Skill(tcs-workflow:validate)` in constitution mode when a CONSTITUTION.md exists at the project root.
-3. Run the project's test suite — lint, typecheck, unit, integration, as available.
+3. Run [the suite gate](../xdd/reference/suite-gate.md) against the step 1 baseline. A regression or a run that did not complete blocks completion.
 
 Drift handling: AskUserQuestion — Acknowledge | Update implementation | Update spec | Defer.
 

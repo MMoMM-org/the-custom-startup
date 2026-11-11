@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`/implement` no longer reads a broken environment as a spec problem, or a missing status as
+  done (#271).** An environment failure has its own `BLOCKED` cause and is never escalated, a
+  report without a `Status:` line counts as `NEEDS_CONTEXT`, and the suite gate compares failing
+  tests against a baseline recorded before the first task, by test id. Update tcs-workflow.
 - **Shell and awk examples in seven skills no longer turn into words of your request (#270).**
   `$0` and `$1` in a SKILL.md are skill-argument placeholders, so `/issue create …` rendered its
   board lookup as `sed … "title"`. They are escaped now, and a test rejects a new unescaped one.

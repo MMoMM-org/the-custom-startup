@@ -28,7 +28,7 @@ PhaseResult {
   tasksCompleted: number
   totalTasks: number
   filesChanged: string[]
-  testStatus: string         // All passing | X failing | Pending
+  testStatus: string         // suite gate: pass | regressions (test ids) | did not run | pending
   blockers?: string[]
 }
 
@@ -108,6 +108,8 @@ match (git repository) {
   exists => AskUserQuestion: Create feature branch | Skip git integration
   none   => proceed without version control
 }
+
+Record the suite baseline per [the suite gate](../xdd/reference/suite-gate.md) before the first dispatch: the command, the commit and the set of failing tests. A run that cannot complete is an environment problem — report it and stop.
 
 ### 2. Select Mode
 
@@ -205,7 +207,7 @@ The brief tells the implementer subagent to:
   - `DONE` — task complete, tests pass, work committed
   - `DONE_WITH_CONCERNS` — complete, but something needs attention; list each concern and whether it is about correctness, scope or an observation
   - `NEEDS_CONTEXT` — cannot proceed without information it lacks; name what is missing instead of guessing
-  - `BLOCKED` — cannot complete; say whether the cause is missing context, complexity, task size or a wrong plan
+  - `BLOCKED` — cannot complete; say whether the cause is missing context, complexity, task size, a wrong plan or the environment (a tool, network access or credentials it needs is missing or failing; quote the failing command and its error)
 
 #### 4e. Implementer Status Handling
 
@@ -218,6 +220,12 @@ BLOCKED             → assess blocker:
                        - Complexity problem → escalate per the ladder (one rung)
                        - Task too large → break into sub-tasks, create new TodoWrite entries
                        - Plan is wrong → escalate to user with explanation
+                       - Environment problem → run the failing command yourself; if the fix is
+                         yours to make, make it and re-dispatch with same model; otherwise report
+                         it to the user and halt at this task (re-run `/implement` once fixed).
+                         Never escalate a rung or change the plan for it
+no status / other   → NEEDS_CONTEXT, never as DONE: re-dispatch with the same context and ask
+                       for the report to end with a `Status:` line
 ```
 
 **Never** silently ignore a BLOCKED or NEEDS_CONTEXT status.
@@ -276,8 +284,9 @@ YOLO mode `[ "${YOLO:-false}" = "true" ]`:
 
 1. Run Skill(tcs-workflow:validate) drift check for spec alignment.
 2. Run Skill(tcs-workflow:validate) constitution check if CONSTITUTION.md exists.
-3. Verify all phase tasks are complete.
-4. Mark phase status as completed (call step 6).
+3. Run [the suite gate](../xdd/reference/suite-gate.md) against the step 1 baseline. A regression or a run that did not complete blocks the phase.
+4. Verify all phase tasks are complete.
+5. Mark phase status as completed (call step 6).
 
 Drift types: Scope Creep, Missing, Contradicts, Extra.
 When drift is detected: AskUserQuestion — Acknowledge | Update impl | Update spec | Defer
