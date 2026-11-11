@@ -8,6 +8,17 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [4.4.23] - 2026-11-11
+
+### Fixed
+
+- **`stop-server.sh` no longer reports a stopped brainstorm server as still running.** `kill -0`
+  also succeeds on a zombie, a process that is dead but not yet reaped by its parent, so the
+  script waited its two-second grace period, sent SIGKILL to the dead process and answered
+  `{"status": "failed"}`. Both scripts now check the process state as well; `start-server.sh`
+  uses the same check, so a server reaped right after starting is reported as killed instead
+  of as started.
+
 ## [4.4.22] - 2026-11-10
 
 ### Security

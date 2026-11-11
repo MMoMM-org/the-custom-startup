@@ -20,6 +20,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # create the session directory and both files owner-only (#269).
 umask 077
 
+# True while <pid> is a running process. `kill -0` alone also succeeds on a
+# zombie (killed, not yet reaped by its parent), which is already gone.
+pid_alive() {
+  kill -0 "$1" 2>/dev/null || return 1
+  case "$(ps -o stat= -p "$1" 2>/dev/null)" in Z*) return 1 ;; esac
+}
+
 # Parse arguments
 PROJECT_DIR=""
 FOREGROUND="false"
@@ -143,7 +150,7 @@ for i in {1..50}; do
     # Verify server is still alive after a short window (catches process reapers)
     alive="true"
     for _ in {1..20}; do
-      if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+      if ! pid_alive "$SERVER_PID"; then
         alive="false"
         break
       fi
