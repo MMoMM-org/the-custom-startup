@@ -32,7 +32,7 @@ State {
 **Always:**
 - Query by accessible roles (`getByRole`, `getByLabelText`, `getByText`) — not by class or ID.
 - Use `userEvent` over `fireEvent` — it triggers the full event chain.
-- Mock at the network boundary (MSW, `fetch` mock) — not at the component level.
+- Mock at the network boundary with MSW — not by replacing `fetch`/axios, and not at the component level.
 - Assert what the user sees, not what state exists internally.
 - Await async state changes with `waitFor` or `findBy*` queries.
 

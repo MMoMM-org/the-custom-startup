@@ -63,22 +63,32 @@ Assert through the public API — drive the handler, inspect the exported spans.
 The wide event is a contract with operations: test it like one. Inject a recording logger (`tcs-patterns:twelve-factor`'s logger semantics make this a plain fake) and assert the emitted event's fields:
 
 ```typescript
-it('emits one canonical event per request, including on failure', async () => {
+it.each([
+  { exit: 'success', repoFails: false, expected: { 'http.response.status_code': 201 } },
+  {
+    exit: 'a thrown repository error',
+    repoFails: true,
+    expected: { 'http.response.status_code': 500, 'error.type': 'RepositoryUnavailable' },
+  },
+])('emits exactly one canonical event on $exit', async ({ repoFails, expected }) => {
   const logger = createRecordingLogger();
-  const app = createApp({ logger, ...fakePorts({ repoFails: true }) });
+  const app = createApp({ logger, ...fakePorts({ repoFails }) });
 
   await request(app).post('/pledges').send(validBody);
 
   const canonical = logger.records.filter((r) => r.message === 'canonical-log-line');
   expect(canonical).toHaveLength(1);
-  expect(canonical[0]?.fields).toMatchObject({
-    'http.response.status_code': 500,
-    'error.type': 'RepositoryUnavailable',
-  });
+  expect(canonical[0]?.fields).toMatchObject(expected);
 });
 ```
 
-The "including on failure" case is the one that matters — anti-pattern #3 in SKILL.md is precisely the regression this test pins.
+One case per exit. A test that drives only the throwing path proves the error path emits; it
+says nothing about the others. The failure case is the one most often broken (anti-pattern #3 in
+SKILL.md), and the success case proves the error handling did not move emission off the normal
+path. A client that disconnects mid-response is a third exit: `close` fires without `finish`,
+and it is where the `emitted` guard in `node-patterns.md` stops a second event. Test it at the
+middleware level, with a response that emits `close` and then `finish`, and assert one event
+with `response_aborted: true`.
 
 ## Fakes for Telemetry Ports
 

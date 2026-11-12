@@ -8,6 +8,21 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [2.0.5] - 2026-11-12
+
+### Fixed
+
+- **Three pattern defects (#273); `frontend-testing` and `observability` reach version 2,
+  `mutation-testing` version 3.**
+  - `frontend-testing`: the skill allowed a `fetch` mock at the network boundary while its own
+    reference required MSW instead of `fetch`/axios mocks. Both now say MSW.
+  - `mutation-testing`: the run step piped Stryker through `tail -30` and mutmut through
+    `head -50`. Stryker's clear-text reporter lists survivors before the score table, so the
+    tail kept the score and dropped every survivor. Survivors are now read from the JSON report.
+  - `observability`: the test named "one canonical event per request, including on failure"
+    drove only the throwing path, which proves the error path emits and nothing about the
+    others. It now runs once per exit, and the text names the client-abort exit.
+
 ## [2.0.4] - 2026-10-25
 
 ### Added

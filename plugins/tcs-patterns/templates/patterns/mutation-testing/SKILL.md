@@ -91,14 +91,20 @@ Select tool based on project language.
 ### 2. Run Analysis
 
 ```bash
-# Stryker (JS/TS)
-npx stryker run 2>&1 | tail -30
+# Stryker (JS/TS): list every survivor from the JSON report
+npx stryker run --reporters clear-text,json
+jq -r '.files | to_entries[] | .key as $f | .value.mutants[]
+  | select(.status == "Survived")
+  | "\($f):\(.location.start.line) \(.mutatorName) → \(.replacement // "")"' \
+  reports/mutation/mutation.json
 
 # mutmut (Python)
-mutmut run && mutmut results 2>&1 | head -50
+mutmut run; mutmut results
 ```
 
-Collect surviving mutants list.
+Collect the complete surviving mutants list. Do not pipe the run through `tail` or `head`: the
+clear-text reporter prints the survivors before the score table, so a tail keeps the score and
+drops the survivors, and a head drops every survivor past its line limit.
 
 ### 3. Triage Survivors
 
