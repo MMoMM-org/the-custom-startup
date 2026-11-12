@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Five large skills no longer lose their last steps when a session compacts mid-skill (#274).**
+  Claude Code keeps only the first ~5,000 tokens of a skill after compacting; `rule-enforcer`,
+  `memory-claude-md-optimize`, `obsidian-plugin`, `bff-entry-points` and `event-sourcing` were
+  larger, so their hand-off, report or checklist steps disappeared. That detail now lives in
+  `reference/` files read at the step, and a test holds every SKILL.md body to 17,000 bytes.
+  Update tcs-helper and tcs-patterns, then `/tcs-patterns:patterns-setup update` where the three
+  patterns are installed.
+
 - **Three tcs-patterns defects (#273).** `mutation-testing` no longer pipes the Stryker run
   through `tail`, which dropped every surviving mutant; `frontend-testing` no longer allows a
   `fetch` mock its own reference forbids; `observability`'s one-event-per-request test now covers

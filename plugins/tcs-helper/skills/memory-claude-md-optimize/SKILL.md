@@ -229,38 +229,7 @@ For each discovered file:
    - project-wide (applies across repos in this project) → recommended_scope: project
    - repo-specific → recommended_scope: repo
 4. If recommended_scope != current_scope: flag for relocation with reason
-5. Scan for credential patterns in all discovered files:
-   - API keys: `sk-ant-*`, `sk-*`, `Bearer [A-Za-z0-9]{20,}`
-   - GitHub tokens: `ghp_*`, `github_pat_*`
-   - AWS keys: `AKIA*`
-   - Passwords/secrets: `password=`, `secret=`, `token=` with a value
-   - Connection strings with embedded credentials
-   - For matches: record in SecretDetection[] with [REDACTED] preview
-   - This is NON-BLOCKING — warn in output, continue processing
-
-6. Detect skill-overlap: for each section in a CLAUDE.md file that references a skill
-   (mentions `/skill-name`, a skill description, or points to an include file):
-   - Read the referenced skill's SKILL.md description field (from the installed plugin)
-   - Read the referenced include file (if any)
-   - Compare the CLAUDE.md section content and the include content against the skill's own description and workflow
-   - **NOT skill-overlap** (skip these patterns):
-     - Section says "use /skill-name" and points to a reference/include file → this is the intended pattern (directive + reference). The include supplements the skill with content the skill itself does not contain (e.g., detailed schemas, examples, lookup tables). Do not flag.
-     - Section is a short directive (1-3 lines) pointing to a skill → too small to be overlap
-   - **IS skill-overlap** (flag these):
-     - Section restates the skill's workflow steps, constraints, or persona in prose
-     - Include file contains content that is substantially identical to the skill's own SKILL.md sections
-   - If substantial overlap detected:
-     AskUserQuestion:
-       Keep this section as-is
-       Replace with a brief pointer: "Use /skill-name for [purpose]"
-       Remove the section entirely (the skill handles this)
-
-7. Count enforceable-directive candidates: among items categorized as `general` with
-   `always / never / must / prefer` directive language, count those describing a
-   mechanically detectable recurrence — a named tool/command, a git boundary, a CI event,
-   or a file-presence check. Do NOT classify further (no mechanism lookup, no Q2/Q3/Q4).
-   Record the count for the Step 4 report. This count is the batch-extraction candidate set
-   handed off to `rule-enforcer` (pointer only — this skill does not author enforcement).
+5–7. Read `reference/categorize-checks.md` now and run its three checks on every discovered file: credential patterns (non-blocking warning), skill overlap, and the enforceable-directive count for the Step 4 report.
 
 For each @-import found during discovery:
 1. Check against Protected @-Imports rules (see Constraints) — if protected, skip with note "Protected: [reason]"
@@ -299,64 +268,7 @@ match (existing temp dir) {
   missing => use `claude-md-optimization/` as proposal dir
 }
 
-Create the proposal directory structure:
-
-```
-claude-md-optimization/
-  global/
-    CLAUDE.md          # Optimized global CLAUDE.md (if global scope included)
-  project/
-    CLAUDE.md          # Optimized project CLAUDE.md (if project scope included)
-  repo/
-    CLAUDE.md          # Optimized repo CLAUDE.md
-    memory/
-      memory.md        # Proposed memory index
-      general.md       # Proposed general category
-      tools.md         # Proposed tools category
-      domain.md        # Proposed domain category
-      decisions.md     # Proposed decisions category
-      context.md       # Proposed context category
-      troubleshooting.md
-OPTIMIZATION-REPORT.md
-```
-
-For each optimized CLAUDE.md file: replace @-imports with descriptive references from
-ImportReplacement[]; drop items marked for removal; move categorized content to the appropriate
-memory category file under `repo/memory/`; keep routing rules, guardrails, and essentials in
-CLAUDE.md.
-
-Write `claude-md-optimization/OPTIMIZATION-REPORT.md` with these sections:
-
-1. **Quality Scores** — table: | File | Scope | Lines | Score | Grade | Key Issue |
-2. **Content Migration** — table: | Item | From | To | Category | Reason |
-3. **@-Import Replacements** — table: | File | Import | Action | Token Savings |
-4. **Sensitive Content Detected** — table: | File | Line | Type | (if any; else omit section)
-   Note: "The proposed optimized files have these lines removed."
-5. **Enforceable-directive candidates (N found)** — using the Step 3 count. Emit this pointer:
-   these always/never/must rules may be mechanically enforceable rather than left as memory
-   guidance; this skill relocates them into the Memory Bank as-is; to convert them into hooks,
-   CI checks, or git pre-push guards, run `/rule-enforcer --scan` AFTER this optimization
-   applies (so directives land in the canonical Memory Bank first, then the scan reads canonical
-   files). Optionally list up to 3 example candidate quotes. (Omit section if N is 0.)
-6. **Before/After Comparison** — table: | Metric | Before | After | Delta |
-   Rows: Total files, Total lines, Always-loaded tokens, Lazy-loaded tokens, Net context savings
-   Note: always-loaded = CLAUDE.md + @-imported files; lazy-loaded = memory category files
-7. **Verification Prompt** — blockquote (see Step 6 for exact format)
-
-AGENTS.md handling (Feature 11):
-
-match (AGENTS.md exists AND @AGENTS.md found in any CLAUDE.md) {
-  true =>
-    Calculate token cost of @AGENTS.md import (AGENTS.md token_estimate).
-    Check whether AGENTS.md content duplicates content in CLAUDE.md or memory files.
-    AskUserQuestion:
-      (a) Replace `@AGENTS.md` with a descriptive reference (stops eager loading, keeps AGENTS.md for other tools)
-      (b) Slim down AGENTS.md to brief project description only (reduce import token cost)
-      (c) Remove `@AGENTS.md` import entirely (AGENTS.md stays for other tools, ignored by Claude Code)
-      (d) Keep as-is
-    Apply user choice to the proposed CLAUDE.md in the temp directory.
-  false => skip AGENTS.md handling
-}
+Read `reference/proposal-format.md` now. It gives the proposal directory layout, how each optimized CLAUDE.md is built, the seven sections of `OPTIMIZATION-REPORT.md`, and the `@AGENTS.md` handling. Create every file it lists before going on.
 
 Display: "Proposal ready at claude-md-optimization/ — review files and OPTIMIZATION-REPORT.md."
 
@@ -436,25 +348,7 @@ Display Before/After comparison table:
 | Lazy-loaded tokens | {before.lazy_loaded_tokens} | {after.lazy_loaded_tokens} | {delta} |
 | Net context savings | — | — | **{net savings} tokens ({pct}% always-loaded)** |
 
-Display self-contained verification prompt as a blockquote:
-
-> **Why a new session?** The current session still has the old CLAUDE.md files
-> cached. Claude Code loads CLAUDE.md and memory files at session start,
-> so the current session reflects the old structure — not the optimized one.
->
-> After applying the optimization, start a **new Claude Code session**, then run:
->
-> 1. `/context` — check total memory token usage; always-loaded tokens should
->    be approximately {after.always_loaded_tokens} (was {before.always_loaded_tokens})
-> 2. `/memory` — verify Memory Bank structure is intact; you should see
->    {count} category files under `docs/ai/memory/`
->
-> **What to look for:**
-> - CLAUDE.md files should be shorter and free of raw `@`-imports
-> - Memory category files should be present and contain the migrated content
-> - No API keys or tokens visible in any CLAUDE.md file
-> - The verification confirms the optimization applied correctly and Claude is
->   operating with the reduced always-loaded footprint
+Display the verification prompt from the end of `reference/proposal-format.md` as a blockquote, with the before and after numbers filled in.
 
 AskUserQuestion:
   Delete temp directory (`rm -rf claude-md-optimization/`)

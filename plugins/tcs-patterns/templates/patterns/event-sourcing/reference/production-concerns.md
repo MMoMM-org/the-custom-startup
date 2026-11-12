@@ -87,3 +87,14 @@ The headline set is in `SKILL.md`; this is the fuller catalogue, each with its f
 - **Querying the event store for reads** — ad-hoc queries against the log for current state. *Fix:* purpose-built projections.
 - **Ignoring eventual consistency** — UIs that assume async read models are instant. *Fix:* design for lag (`reference/projections-and-read-models.md`).
 - **Skipping optimistic concurrency** — appends without an expected version, so concurrent commands violate invariants. *Fix:* always append with an expected version, and reload-re-decide on conflict.
+
+## Operational checks (SKILL.md step 9)
+
+- **Snapshots**, if any, are a rebuildable cache — test the system with and without them. Most streams never need one; `SNAPSHOT_AS_TRUTH` is CRITICAL.
+- **Short streams** beat snapshots. Give a stream an explicit lifetime and close the books at a natural business boundary with a summary event that opens the next one. An ever-growing stream is `UNBOUNDED_STREAM`.
+- **Cross-aggregate work is a process manager**, never a distributed transaction. The stream is the consistency boundary.
+- **Replay must not re-fire real-world effects.** Side effects live in handlers excluded from replay and idempotent under redelivery. `REPLAY_SIDE_EFFECT` is CRITICAL.
+- **PII in an append-only log** needs a decision before the first event: crypto-shredding, forgettable payloads, segregation, or retention. Encrypted personal data may still be personal data in law — get compliance sign-off rather than assuming the technique settles it.
+- **Back up the log.** Everything else is derived.
+
+See `reference/production-concerns.md`.

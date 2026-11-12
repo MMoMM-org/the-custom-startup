@@ -149,7 +149,7 @@ Verify frontmatter: Read first 10 lines — valid YAML? name + description prese
 
 Verify structure: Grep for `##` headings — PICS sections present?
 
-Verify size: Line count < 500? If not, identify content to externalize.
+Verify size: Line count < 500, and the body below the frontmatter ≤ 17,000 bytes? After a compaction only a skill's first ~5,000 tokens survive, so a longer body loses its last steps. If not, move late-step detail into `reference/` and read it at that step.
 
 Verify conventions: Read reference/conventions.md and check compliance.
 

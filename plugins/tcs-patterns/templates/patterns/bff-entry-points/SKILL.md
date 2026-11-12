@@ -140,7 +140,7 @@ Four designs recur. Only one fails closed:
 
 Composition prepares the registrar once with session resolution, browser policy, abuse controls, safe error translation and telemetry. An endpoint owner supplies a contract and a thin handler — nothing else. Flag `OPT_OUT_FLAG` on any boolean that weakens a chain, and `REGISTRAR_BYPASS` on any direct mount.
 
-**On a brownfield system, ratchet rather than rewrite:** add the route-enumeration test first with today's unclassified routes in an exceptions list that may only shrink; mount all new endpoints through the registrar; migrate existing routes highest-privilege first; add a direct refusal test per operation as each route migrates; tighten to zero exceptions, and only then trust the catalog.
+On a brownfield system, ratchet rather than rewrite, in the order under "Brownfield ratchet" at the end of `reference/endpoint-protection.md`.
 
 ### 4. Verify request ordering per classification
 
@@ -191,31 +191,17 @@ Express rules as focused product logic in the operations that own them, not a ge
 
 SSE is an ordinary HTTP GET: register it as `protected-read` so the whole chain completes **before the first byte**, because once headers are flushed there is no protocol-honest way to say 401.
 
-Raw WebSocket upgrades are the routes most likely to escape middleware — in Node the server emits `upgrade` and route middleware never runs. They need a sibling registrar prepared by the same composition, enforcing, in order: exact Origin (before path matching, or a hostile origin reads 404-vs-403 as an existence oracle) → session resolution → in-application authorization → only then accept. One dispatcher listener for the whole surface, terminal deny-all, and an import rule making it the only legal caller of `server.on('upgrade', ...)`.
-
-Session revocation must reach open connections: keep a registry of sockets and SSE writers keyed by session ID, and make the announcement travel in a multi-instance deployment. Close with an application code in the 4000–4999 range; end a revoked SSE stream by ending the response, not with 204, which would stop the reconnect that earns the client its 401.
+Raw WebSocket upgrades and revocation of open connections: check every rule under "Upgrade and revocation checks" at the end of `reference/realtime-entry-points.md`.
 
 ### 10. Check the browser coordinator
 
 One module owns authentication state and is the only code interpreting authentication-related responses. Scattered per-component 401 handling produces sign-out storms and redirect loops.
 
-- An unauthenticated first visit is a normal state — probe `current-user` once and render Sign in. A 401 there is not an error.
-- One 401 after sign-in is authoritative: tear down realtime connections, cancel in-flight protected requests, clear user-scoped caches.
-- 403 and 404 render product outcomes in place. Routing a refusal into sign-out lies to the user and turns every authorization failure into a logout.
-- Realtime failures are deliberately opaque — `EventSource` reports a generic error and WebSocket handshakes collapse to 1006 — so a failure triggers **one deduplicated `current-user` probe**, with a cooldown, and only a confirmed 401 signs the user out. Five components watching one dropped socket produce one probe.
-- Return paths are validated same-origin relative paths only, persisted server-side against the OAuth `state`. Reject absolute, scheme-relative `//host`, and backslash-tricked targets — open redirects enter exactly here.
+Verify each coordinator check at the end of `reference/browser-session-coordination.md`.
 
 ### 11. Wire the gates
 
-Declarations without gates are documentation. Each gate fails the build, and each must be proven to fail on a seeded violation. Load `reference/enforcement-and-testing.md` for all twelve; the load-bearing ones:
-
-- Runtime route table ↔ catalog, in both directions — nothing mounted outside the registrar, nothing registered but unmounted. Read the framework's live route collection, never the OpenAPI document.
-- Public subset ↔ reviewed allowlist snapshot.
-- Runtime access ↔ OpenAPI security metadata: protected read `[{ session: [] }]`, browser mutation the single ANDed object `[{ session: [], csrfToken: [] }]`, public `security: []`, and no operation with `security` absent.
-- Every live upgrade listener ↔ a catalog `UPGRADE` entry.
-- No dev-only path in the production catalog or route table.
-- Restricted imports: no test principal factory in production code, no `upgrade` listener outside the upgrade registrar, no HTTP framework or IdP SDK in the application package.
-- Every protected operation carries an enrolled direct refusal test. Gates on the entry surface cannot see an unauthorized *operation* — a newly exported `deleteWorkspace(userId: string)` compiles happily and appears in no route catalog.
+Declarations without gates are documentation. Each gate fails the build, and each must be proven to fail on a seeded violation. Load `reference/enforcement-and-testing.md` for all twelve, and wire at least the load-bearing ones listed at its end.
 
 Pair the tests with a boot-time assertion, so the build fails even when someone skips the suite. Positive controls matter as much as the hostile matrix: without one, a registrar bug that rejects everything looks secure.
 
@@ -223,20 +209,4 @@ Pair the tests with a boot-time assertion, so the build fails even when someone 
 
 Group defects by `area`. Lead with absence, because absence is the vulnerability class: `UNCLASSIFIED_ROUTE`, `REGISTRAR_BYPASS`, `UNPROTECTED_UPGRADE`, `MIDDLEWARE_ONLY_AUTHZ`, `UNGATED`. A finding of the form "this check is wrong" is less urgent than "this check is not there".
 
-Before closing, check these:
-
-- [ ] Every mounted production entry point — raw upgrades included — has an explicit access classification
-- [ ] The public set can be printed and a reviewed allowlist test pins it; every member has a justification
-- [ ] There is no way to mount a route without the registrar, and a gate fails if there is
-- [ ] Protected handlers receive a principal they cannot construct, typed by the declaration
-- [ ] Ordering is policy → session → CSRF → coarse authorization → bounded body → fine authorization → effects
-- [ ] Session cookie is opaque, `__Host-`-prefixed, `Secure`, `HttpOnly`, `SameSite=Strict`, with server-side timeouts and server-side logout
-- [ ] CSRF token is session-bound, script-readable, attached per mutation, and rotated with the session
-- [ ] Origin is exact-matched; Fetch Metadata rejects known non-matching values; content type is enforced with 415
-- [ ] 401, 403, 404 and 415 keep stable, non-oracle semantics across the whole surface
-- [ ] A direct provider-free test proves each protected operation refuses an unauthorized principal before any effect
-- [ ] SSE chains complete before the first byte; upgrades check Origin, session and authorization before accepting
-- [ ] Session revocation reaches open sockets and streams, across instances
-- [ ] The browser has exactly one authentication coordinator, and a realtime failure triggers one deduplicated probe
-- [ ] Runtime behaviour, the derived catalog, and OpenAPI security metadata agree — verified by a test
-- [ ] Every gate runs in CI and has been proven to fail on a seeded violation
+Before closing, work through every item in `reference/review-checklist.md`; an unchecked item is a finding.

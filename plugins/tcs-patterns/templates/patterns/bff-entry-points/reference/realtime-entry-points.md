@@ -99,3 +99,9 @@ The handshake authenticates once; sessions do not last forever.
 ## Sources
 
 WHATWG HTML (server-sent events processing model: non-200 → fail, no status exposure; 204 stops reconnection); WHATWG WebSocket spec (handshake failures deliberately indistinguishable, close code 1006); RFC 6455 §4.2.2, §10.2 (Origin checking, refusing handshakes); RFC 6750 §2.3 (no tokens in URLs); PortSwigger Cross-Site WebSocket Hijacking; Heroku WebSocket security (ticket pattern); @fastify/websocket (pre-handshake hooks; registration-order requirement); Hono WebSocket helper; websocket.org and Node `upgrade`-event analyses (middleware bypass).
+
+## Upgrade and revocation checks (SKILL.md step 9)
+
+Raw WebSocket upgrades are the routes most likely to escape middleware — in Node the server emits `upgrade` and route middleware never runs. They need a sibling registrar prepared by the same composition, enforcing, in order: exact Origin (before path matching, or a hostile origin reads 404-vs-403 as an existence oracle) → session resolution → in-application authorization → only then accept. One dispatcher listener for the whole surface, terminal deny-all, and an import rule making it the only legal caller of `server.on('upgrade', ...)`.
+
+Session revocation must reach open connections: keep a registry of sockets and SSE writers keyed by session ID, and make the announcement travel in a multi-instance deployment. Close with an application code in the 4000–4999 range; end a revoked SSE stream by ending the response, not with 204, which would stop the reconnect that earns the client its 401.

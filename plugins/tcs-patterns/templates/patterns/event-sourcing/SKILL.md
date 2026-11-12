@@ -190,33 +190,10 @@ Do not write a 1:1 `evolve` test per transition — that pins an implementation 
 
 ### 9. Check the operational surface
 
-- **Snapshots**, if any, are a rebuildable cache — test the system with and without them. Most streams never need one; `SNAPSHOT_AS_TRUTH` is CRITICAL.
-- **Short streams** beat snapshots. Give a stream an explicit lifetime and close the books at a natural business boundary with a summary event that opens the next one. An ever-growing stream is `UNBOUNDED_STREAM`.
-- **Cross-aggregate work is a process manager**, never a distributed transaction. The stream is the consistency boundary.
-- **Replay must not re-fire real-world effects.** Side effects live in handlers excluded from replay and idempotent under redelivery. `REPLAY_SIDE_EFFECT` is CRITICAL.
-- **PII in an append-only log** needs a decision before the first event: crypto-shredding, forgettable payloads, segregation, or retention. Encrypted personal data may still be personal data in law — get compliance sign-off rather than assuming the technique settles it.
-- **Back up the log.** Everything else is derived.
-
-See `reference/production-concerns.md`.
+Check every item under "Operational checks" at the end of `reference/production-concerns.md`: snapshots, stream lifetime, process managers, replay side effects, PII, backups. `SNAPSHOT_AS_TRUTH` and `REPLAY_SIDE_EFFECT` are CRITICAL.
 
 ### 10. Report
 
 Group defects by `area`, and lead with the ones that cannot be fixed later: `WRONG_RUNG` (the pattern should not be here at all), `NO_EXPECTED_VERSION` and `MUTATED_HISTORY` (the guarantees are already broken), `NO_VERSION_STRATEGY` (the cost compounds with every event written).
 
-Before closing, check these:
-
-- [ ] Adoption is per bounded context, justified by history being part of the domain, with a cheaper rung ruled out
-- [ ] Events are intention-revealing business facts, self-contained, modelled as discriminated unions — no CRUD events
-- [ ] Internal events are separated from the published external contract
-- [ ] `decide` holds all rules and returns accept-with-events or reject-with-reason; `evolve` holds none and surfaces corrupt history
-- [ ] `decide` is deterministic — time and ids arrive through the command
-- [ ] State is a fold; no current-state row competes with the log
-- [ ] Every append asserts an expected version, and conflicts reload-and-re-decide within a bound
-- [ ] The event store is a driven port with a test fake; the domain has zero infrastructure imports
-- [ ] Stored events are schema-validated on read, then upcast, before `evolve`
-- [ ] A versioning strategy exists — tolerant reader at minimum — and upcasters are pure and tested
-- [ ] Read models are rebuildable projections with checkpoints; every one is idempotent under redelivery
-- [ ] The UI accounts for eventual consistency, and projection lag is monitored
-- [ ] Snapshots are a rebuildable cache; streams have a bounded lifetime
-- [ ] No external side effect can fire during a replay or rebuild
-- [ ] A PII strategy is decided if events carry personal data
+Before closing, work through every item in `reference/review-checklist.md`; an unchecked item is a finding.
