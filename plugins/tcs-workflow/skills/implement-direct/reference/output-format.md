@@ -63,7 +63,7 @@ Direct implementation complete — spec 018
 
   units:   2/2
   files:   3 changed
-  tests:   230 passing
+  suite:   gate pass — no new failures (baseline: 2 failing, unchanged)
   drift:   none
   constitution: n/a (no CONSTITUTION.md)
   spec:    018 finalized → Implemented

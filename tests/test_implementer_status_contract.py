@@ -54,3 +54,51 @@ def test_incremental_states_the_history_rule_once():
     text = (SKILLS / "implement-incremental" / "SKILL.md").read_text()
     constraints = text.split("## Reference Materials")[0]
     assert len(re.findall(r"session history", constraints)) == 1
+
+
+# #271: an environment failure is its own BLOCKED cause, a report without a
+# status is never read as DONE, and "suite green" is a baseline comparison.
+
+GATE = SKILLS / "xdd" / "reference" / "suite-gate.md"
+
+
+@pytest.mark.parametrize("skill", sorted(CASES))
+def test_blocked_names_the_environment_as_a_cause(skill):
+    brief, handling = CASES[skill]
+    blocked = re.search(r"^\s*- `BLOCKED` — .*$", _step(skill, brief), re.M)
+    assert blocked and "environment" in blocked.group(0), f"{skill} {brief}"
+    assert re.search(r"[Ee]nvironment problem →", _step(skill, handling)), f"{skill} {handling}"
+
+
+@pytest.mark.parametrize("skill", sorted(CASES))
+def test_environment_blocked_is_not_escalated(skill):
+    step = _step(skill, CASES[skill][1])
+    line = next(l for l in step.splitlines() if "nvironment problem →" in l)
+    rest = step[step.index(line):]
+    assert re.search(r"never escalate", rest, re.I), f"{skill}: environment branch may escalate"
+
+
+@pytest.mark.parametrize("skill", sorted(CASES))
+def test_a_report_without_a_status_is_needs_context(skill):
+    block = re.search(r"```\n(.*?)```", _step(skill, CASES[skill][1]), re.S).group(1)
+    row = next((l for l in block.splitlines() if l.startswith("no status")), None)
+    assert row and "NEEDS_CONTEXT" in row, f"{skill}: no row for a missing status"
+    assert "DONE" not in row.replace("NEEDS_CONTEXT", "").replace("never as DONE", "")
+
+
+def test_suite_gate_compares_failure_sets_against_a_baseline():
+    text = GATE.read_text()
+    for needed in ("baseline", "set", "not a count", "command"):
+        assert needed in text, f"suite-gate.md lacks {needed!r}"
+
+
+@pytest.mark.parametrize("skill,steps", [
+    ("implement-incremental", ("### 1. Initialize", "### 5. Validate Phase")),
+    ("implement-direct", ("### 1. Initialize", "### 4. Validate")),
+])
+def test_both_tiers_record_a_baseline_and_gate_on_it(skill, steps):
+    text = (SKILLS / skill / "SKILL.md").read_text()
+    for heading in steps:
+        start = text.index(heading)
+        section = text[start:text.index("\n### ", start + 1)]
+        assert "suite-gate.md" in section, f"{skill}: {heading} does not use the suite gate"

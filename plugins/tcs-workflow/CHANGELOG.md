@@ -8,6 +8,23 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [4.4.25] - 2026-11-11
+
+### Fixed
+
+- **`/implement` handles a broken environment, a report without a status, and a red suite it
+  already found red (#271).** Both tiers:
+  - An implementer can now report `BLOCKED` because of the environment (a missing tool, network
+    access or credentials), quoting the failing command. The orchestrator runs that command
+    itself and fixes it or halts at the task; it never escalates a model rung or changes the plan
+    for it.
+  - A report with no `Status:` line, or a value outside the four, is handled as `NEEDS_CONTEXT`
+    and never as `DONE`.
+  - "The suite is green" is defined in `skills/xdd/reference/suite-gate.md`: one full-suite
+    command taken from the project's own instructions, a baseline of failing tests recorded
+    before the first dispatch, and a gate that compares the failure sets by test id, not by
+    count. A new failure or a run that did not complete blocks the phase or the direct run.
+
 ## [4.4.24] - 2026-11-11
 
 ### Fixed
