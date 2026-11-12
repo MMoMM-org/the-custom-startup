@@ -89,3 +89,7 @@
 <!-- 2026-11-08 -->
 - **A foreground Bash call dies at 10 min, killing a long eval with exit 143** — a `plugin eval` or `prompt_eval.py` run with 3 runs per arm outlasts it. → Launch with `setsid nohup`, write `exit $?` to its log, wait on that line.
 - **`prompt_lint.py --repo` exits non-zero on a clean tree** — two E4 errors in `semantic_detector.py` are pinned known-open, not a regression. → Compare the reported error set against those two, never the exit code.
+
+<!-- 2026-11-12 -->
+- **A `macos-latest` job cancelled with 0 steps is a runner that never started, not a test failure** — `gh pr checks` still shows `fail`. → Check `.jobs[].steps|length` in `gh run view --json jobs`, then `gh run rerun <id> --failed`.
+- **`rg -c` prints nothing, not `0`, when nothing matches** — a wait loop `until [ "$(gh pr checks N | rg -c pending)" = 0 ]` never ends. → Test the match itself: `until ! gh pr checks N | rg -q pending`.
