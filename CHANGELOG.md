@@ -24,6 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs only with an explicit `--max-cost-usd`; local models need Ollama. Update tcs-helper. See
   `plugins/tcs-helper/skills/prompt-author/SKILL.md`.
 
+- **The `obsidian-plugin` pattern now explains how to test against real Obsidian (#289).** A new
+  `reference/live-testing.md` describes a harness that launches Obsidian on a throw-away vault
+  and profile, drives it over CDP, and captures every mockup state on desktop and phone, in light
+  and dark, refusing to write an image it cannot verify. Seventeen Obsidian 1.15 gotchas found
+  that way are filed under the harness, the API reference or the UI conventions. Proven on
+  macOS only. Update tcs-patterns, then `/tcs-patterns:patterns-setup update` where
+  `obsidian-plugin` is installed.
+
 ### Fixed
 
 - **Five large skills no longer lose their last steps when a session compacts mid-skill (#274).**
