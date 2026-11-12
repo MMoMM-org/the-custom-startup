@@ -84,7 +84,7 @@ State {
 - reference/discovery-protocol.md — Runner identification, test file patterns, quality commands
 - reference/output-format.md — Report types, failure categories
 - examples/output-example.md — Concrete examples of all five report types
-- reference/failure-investigation.md — Failure categories, fix protocol, escalation rules, ownership phrases
+- reference/failure-investigation.md — Failure categories, fix protocol, escalation rules, ownership counter-actions
 
 ## Workflow
 

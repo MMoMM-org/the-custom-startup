@@ -34,12 +34,9 @@ TDDState {
 - Allow production code to be written before RED phase is confirmed (failing tests exist).
 - Accept a test that asserts an artifact's **text** rather than its behavior — grepping a script, skill, or config for a phrase proves only that the source is the source. Run it and assert its effects. See `reference/writing-good-tests.md`.
 - Accept a test whose expected value is computed by the code under test, or one that can only fail when an intentional decision changes.
-- Accept any rationalization for skipping tests:
-  - "too simple to test" — rejected
-  - "it's just a config change" — rejected
-  - "I'll add tests later" — rejected
-  - "it's obviously correct" — rejected
-  - See `reference/iron-law.md` for the full rejection table
+- Accept any rationalization for skipping tests ("too simple to test", "it's just a config
+  change", "I'll add tests later", "it's obviously correct"). Each has a counter-action in
+  `reference/iron-law.md`: do that instead of arguing the point.
 
 ## Workflow
 
@@ -222,7 +219,7 @@ If tests fail after refactor:
 
 ## Reference Materials
 
-- `reference/iron-law.md` — The iron law of TDD and rationalization rejection table
+- `reference/iron-law.md` — The iron law of TDD and the rationalization counter-action table
 - `reference/writing-good-tests.md` — Falsifiability: naming the break, deriving expectations independently, and the string-presence and change-detector traps
 - `tcs-testing` — Test factory patterns, behavior-driven test structure, coverage theater detection
 - `tcs-mutation-testing` — Mutation analysis for MUTATE phase (optional, requires tcs-patterns plugin)

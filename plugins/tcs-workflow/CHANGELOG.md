@@ -8,6 +8,17 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [4.4.26] - 2026-11-12
+
+### Changed
+
+- **Every rationalization row in the TDD and test-ownership tables names a counter-action (#272).**
+  `xdd-tdd/reference/iron-law.md` (column renamed Rejection → Counter-action; new row "It's
+  obviously correct", which the skill body cited but the table lacked) and
+  `test/reference/failure-investigation.md` (Ownership Enforcement Phrases → Ownership
+  Counter-Actions: what to do, not what to say). `xdd-tdd` points to the table instead of
+  repeating four "— rejected" lines.
+
 ## [4.4.25] - 2026-11-11
 
 ### Fixed
