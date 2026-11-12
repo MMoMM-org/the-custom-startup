@@ -86,6 +86,7 @@ State {
 - `reference/obsidian-api.md` — API patterns, lifecycle/DOM/settings/vault subtleties, misc gotchas, concurrency, anti-pattern catalog
 - `reference/ui-conventions.md` — settings-tab heading style, sentence-case copy, `SettingGroup` (1.11.0+), `SecretStorage` / `SecretComponent` for keys (1.11.4+) — load when designing or auditing settings-tab UI or secret persistence
 - `reference/testing-patterns.md` — Vitest setup, mock parity, live-test discipline, hot-reload, `obsidianmd/*` lint rationale
+- `reference/live-testing.md` — live harness for real Obsidian over CDP: mockup registry, isolated launch, `live:open`, verified screenshot matrix, 1.15 harness gotchas (load only when building live tests or screenshots)
 - `reference/architectural-patterns.md` — adapter layout, permission/trust boundaries, audit log shape, UI patterns, build/bundle/release (load when designing structure beyond a few hundred LOC)
 - `reference/path-sanitization.md` — deterministic 10-step pipeline for OS-FS writes outside the vault
 - `reference/user-extensibility.md` — trust model, hook policy, `require.cache` eviction (load only when the plugin executes user-authored code)

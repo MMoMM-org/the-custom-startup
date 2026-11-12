@@ -8,6 +8,21 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [2.0.7] - 2026-11-12
+
+### Added
+
+- **`obsidian-plugin` gets a live-testing playbook (#289) and reaches version 3.** The new
+  `reference/live-testing.md` describes how to build a harness against real Obsidian: a mockup
+  registry that every screenshot state must cover, an isolated launch on a throw-away vault and
+  profile, driving it over CDP, `live:open` for checks by hand, and a light/dark, desktop/phone
+  screenshot matrix whose images are verified before they are written. Proven on Obsidian 1.15.0
+  on macOS. The 1.15 gotchas found that way are split by kind: harness ones in
+  `live-testing.md`; plugin-side ones in `obsidian-api.md` (keymap `Scope` for Mod+Enter,
+  warm-cache start, SuggestModal as `.prompt`, desktop settings in their own window,
+  `rerender(true)`, `a.internal-link` delegation in CM6, syntax-node names) and
+  `ui-conventions.md` (the `setting-group` max-width).
+
 ## [2.0.6] - 2026-11-12
 
 ### Fixed

@@ -105,6 +105,8 @@ group.addSetting((setting) => {
 });
 ```
 
+**The empty gap left of the settings at wide widths is Obsidian's own layout (observed on 1.15.0).** App CSS sets `.setting-group { max-width: var(--setting-group-max-width) }` (700 px), the same for core tabs, so at 1920 px a large gap remains. Leave it. To prove it is not your plugin's CSS, log the matching CSS rules and their source sheet for your tab and for a core tab.
+
 ---
 
 ## Secrets and Sensitive Data
