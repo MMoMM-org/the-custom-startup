@@ -8,6 +8,17 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [2.0.6] - 2026-11-12
+
+### Fixed
+
+- **`obsidian-plugin`, `bff-entry-points` and `event-sourcing` keep their later steps after a
+  compaction (#274); they reach versions 2, 2 and 3.** Only the first ~5,000 tokens of a skill
+  survive a compaction, and all three were larger. The obsidian audit scans 9–13 moved to
+  `reference/audit-scans.md`; the closing checklists of `bff-entry-points` and `event-sourcing`
+  to `reference/review-checklist.md`; the detail of bff steps 3, 9, 10 and 11 and event-sourcing
+  step 9 to the end of the reference file each step already named. Text moved verbatim.
+
 ## [2.0.5] - 2026-11-12
 
 ### Fixed

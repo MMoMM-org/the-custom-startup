@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.4.15] - 2026-11-12
+
+### Fixed
+
+- **`rule-enforcer` and `memory-claude-md-optimize` keep their later steps after a compaction
+  (#274).** Claude Code re-attaches only the first ~5,000 tokens of a skill after compacting, and
+  both bodies were larger. Step 8 of `rule-enforcer` (the hand-off) moved to
+  `reference/hand-off.md`; there its `$ARGUMENTS` stays literal, where `SKILL.md` had substituted
+  the user's rule into the instructions for building the target skill's arguments.
+  `memory-claude-md-optimize` moved the extra categorize checks to
+  `reference/categorize-checks.md` and the proposal layout, report sections, `@AGENTS.md` handling
+  and verification prompt to `reference/proposal-format.md`. Text moved verbatim; each step now
+  reads its file at that step.
+
 ## [4.4.14] - 2026-11-11
 
 ### Fixed

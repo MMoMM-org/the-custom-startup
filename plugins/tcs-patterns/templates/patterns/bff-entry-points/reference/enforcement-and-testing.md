@@ -92,3 +92,13 @@ The required set is defined once, in `reference/browser-session-coordination.md`
 - Does every protected operation have a direct provider-free refusal test asserting no effect?
 - Are 401 responses identical in content and code path across missing/expired/revoked/disabled?
 - Is the public allowlist snapshot small enough for a human to actually review?
+
+## The load-bearing gates (SKILL.md step 11)
+
+- Runtime route table ↔ catalog, in both directions — nothing mounted outside the registrar, nothing registered but unmounted. Read the framework's live route collection, never the OpenAPI document.
+- Public subset ↔ reviewed allowlist snapshot.
+- Runtime access ↔ OpenAPI security metadata: protected read `[{ session: [] }]`, browser mutation the single ANDed object `[{ session: [], csrfToken: [] }]`, public `security: []`, and no operation with `security` absent.
+- Every live upgrade listener ↔ a catalog `UPGRADE` entry.
+- No dev-only path in the production catalog or route table.
+- Restricted imports: no test principal factory in production code, no `upgrade` listener outside the upgrade registrar, no HTTP framework or IdP SDK in the application package.
+- Every protected operation carries an enrolled direct refusal test. Gates on the entry surface cannot see an unauthorized *operation* — a newly exported `deleteWorkspace(userId: string)` compiles happily and appears in no route catalog.

@@ -167,3 +167,7 @@ Dev-only endpoints live in a separate composition that imports the production on
 ## Sources
 
 OWASP: CSRF Prevention, Session Management, HTTP Headers, REST Security cheat sheets; ASVS 5.0 §3.3/§3.5/§7; API Security Top 10 2023 (API2, API5, API9). IETF: RFC 9110 §15.5, RFC 9457, RFC 9700 (BCP 240), draft-ietf-oauth-browser-based-apps §6.1. web.dev Fetch Metadata; MDN Origin/Sec-Fetch-Site; PortSwigger CORS/CSRF research; OpenAPI 3.1 Security Requirement Object semantics.
+
+## Brownfield ratchet (SKILL.md step 3)
+
+**On a brownfield system, ratchet rather than rewrite:** add the route-enumeration test first with today's unclassified routes in an exceptions list that may only shrink; mount all new endpoints through the registrar; migrate existing routes highest-privilege first; add a direct refusal test per operation as each route migrates; tighten to zero exceptions, and only then trust the catalog.

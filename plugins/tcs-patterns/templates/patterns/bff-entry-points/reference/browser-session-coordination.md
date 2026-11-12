@@ -72,3 +72,11 @@ This is the canonical definition of the required browser set. `reference/enforce
 ## Sources
 
 WHATWG HTML server-sent events and WebSocket specs (deliberate failure opacity); OWASP Session Management Cheat Sheet (no tokens in browser storage; BFF named); draft-ietf-oauth-browser-based-apps §5.1/§6.1 (token exfiltration rationale); OWASP Unvalidated Redirects and Forwards Cheat Sheet (return-path validation).
+
+## Coordinator checks (SKILL.md step 10)
+
+- An unauthenticated first visit is a normal state — probe `current-user` once and render Sign in. A 401 there is not an error.
+- One 401 after sign-in is authoritative: tear down realtime connections, cancel in-flight protected requests, clear user-scoped caches.
+- 403 and 404 render product outcomes in place. Routing a refusal into sign-out lies to the user and turns every authorization failure into a logout.
+- Realtime failures are deliberately opaque — `EventSource` reports a generic error and WebSocket handshakes collapse to 1006 — so a failure triggers **one deduplicated `current-user` probe**, with a cooldown, and only a confirmed 401 signs the user out. Five components watching one dropped socket produce one probe.
+- Return paths are validated same-origin relative paths only, persisted server-side against the OAuth `state`. Reject absolute, scheme-relative `//host`, and backslash-tricked targets — open redirects enter exactly here.
