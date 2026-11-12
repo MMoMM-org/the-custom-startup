@@ -26,7 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **The TDD and test-ownership rationalization tables now say what to do instead (#272).**
+- **Three tcs-patterns defects (#273).** `mutation-testing` no longer pipes the Stryker run
+  through `tail`, which dropped every surviving mutant; `frontend-testing` no longer allows a
+  `fetch` mock its own reference forbids; `observability`'s one-event-per-request test now covers
+  every exit, not only the throwing one. Update tcs-patterns, then run
+  `/tcs-patterns:patterns-setup update` in repos that installed these three.
+
+- **The TDD rationalization tables now say what to do instead (#272).**
   Rows such as "Later never comes" or "I'm fixing this now" only restated the rule; each row in
   `xdd-tdd/reference/iron-law.md` and `test/reference/failure-investigation.md` now names the next
   action (reproduce the bug first, run a suspected flaky test 3 times, mock only at the process
