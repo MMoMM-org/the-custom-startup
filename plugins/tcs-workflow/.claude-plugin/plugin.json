@@ -1,6 +1,6 @@
 {
   "name": "tcs-workflow",
-  "version": "4.4.25",
+  "version": "4.4.26",
   "description": "Core workflow plugin for spec-driven, test-verified software development",
   "author": {
     "name": "Rudolf S., Marcus Breiden"
