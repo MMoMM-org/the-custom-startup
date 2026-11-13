@@ -187,7 +187,9 @@ The script provisions everything into `.venv/` on first run — `pytest` and
 `PyYAML` from `requirements-dev.txt`, and `bats` (a bash program, so it comes
 via npm and gets symlinked into `.venv/bin`). Re-runs skip provisioning.
 
-Both suites also run in CI on every pull request (`.github/workflows/tests.yml`).
+Both suites also run in CI on every pull request (`.github/workflows/tests.yml`), on ubuntu and
+macOS. A pull request that changes only `docs/` or root-level Markdown runs ubuntu alone, since
+hosted macOS runners are often never assigned.
 
 To run a single suite directly, activate the venv first — several bats files
 shell out to `python3` for YAML validation and need it on `PATH`:

@@ -11,6 +11,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Picks the OSes for the pytest and bats matrices. A macos-latest runner is
+  # often not assigned at all: the job is cancelled with 0 steps after ~15 min
+  # and shows as failed (#288). Docs cannot behave differently on macOS, so a
+  # pull request that changes only docs runs ubuntu alone. Everything else, and
+  # every push to main, runs both. When in doubt (the file list cannot be read),
+  # both run.
+  #
+  # The macOS entry is dropped from the matrix, so its check does not appear at
+  # all. That is fine while main has no required status checks. If one of the
+  # matrix checks becomes required, switch to a job-level `if:` so the check
+  # reports "skipped" instead of never reporting.
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      os: ${{ steps.pick.outputs.os }}
+    steps:
+      - name: Pick the OSes to test on
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          both='["ubuntu-latest","macos-latest"]'
+          os=$both
+          if [ "$EVENT" = "pull_request" ] \
+             && files=$(gh pr diff "$PR" --name-only --repo "$GITHUB_REPOSITORY") \
+             && [ -n "$files" ]; then
+            echo "Changed in this pull request:"
+            printf '%s\n' "$files" | sed 's/^/  /'
+            # Docs-only: under docs/, or a Markdown file at the repo root.
+            # Markdown under plugins/ is skill and agent content and does count.
+            if ! printf '%s\n' "$files" | grep -Ev '^docs/|^[^/]+\.md$' | grep -q .; then
+              os='["ubuntu-latest"]'
+            fi
+          fi
+          echo "os=$os" >> "$GITHUB_OUTPUT"
+          echo "Testing on: $os"
+
   # Guards the documentation surfaces a change is expected to move with it.
   # Only meaningful on a pull request: it reads the diff against the base and
   # the pull request body, and neither exists on a push to main.
@@ -50,11 +93,12 @@ jobs:
 
   pytest:
     name: pytest (${{ matrix.os }})
+    needs: changes
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: ${{ fromJSON(needs.changes.outputs.os) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -99,13 +143,14 @@ jobs:
 
   bats:
     name: bats (${{ matrix.os }})
+    needs: changes
     runs-on: ${{ matrix.os }}
     strategy:
       # Never fail-fast: the whole point of the second OS is seeing which of
       # the two disagrees, and a cancelled job answers nothing.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: ${{ fromJSON(needs.changes.outputs.os) }}
     steps:
       - uses: actions/checkout@v7
 
