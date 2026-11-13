@@ -37,6 +37,8 @@ export default class MyPlugin extends Plugin {
 
 **Metadata-cache-dependent first-run work.** `onLayoutReady` fires when the workspace layout is ready, but the metadata cache may still be populating. Work that enumerates tagged notes, scans frontmatter, or queries links should wrap the actual work in `setTimeout(graceMs)` (a few seconds is typical). Always `register(() => clearTimeout(...))` so the timer is cleaned up if the plugin unloads before the grace elapses.
 
+**Warm-cache start: `resolved` may already have fired (observed on 1.15.0).** A plugin that waits for `metadataCache.on("resolved", …)` before building an index never becomes ready when the cache was warm: in an empty or already-indexed vault `resolved` fired before `onload` subscribed. At layout-ready, check whether every file already has a cache entry (`vault.getMarkdownFiles().every(f => metadataCache.getFileCache(f))`) and start right away; subscribe to `resolved` only otherwise.
+
 **Defensive double-onload guard.** Obsidian's lifecycle is single-shot per plugin instance, but the plugin must self-enforce — without it, a buggy reload or test calling `onload` twice silently double-registers every command, view, and status-bar entry, accumulating ghost handlers per fire.
 
 ```typescript
@@ -712,6 +714,8 @@ class ConfirmModal extends Modal {
 new ConfirmModal(this.app, () => this.doThing()).open();
 ```
 
+**A `SuggestModal` is not a `.modal` (observed on 1.15.0).** It renders as `.modal-container > .prompt`: no `.modal` element, no visible title (`setTitle` is not shown), no close button. Code or tests that look for `.modal` never find it. Probe `.prompt` too and identify it by its input's placeholder; close it with Escape from its input or a click on `.modal-bg`.
+
 ---
 
 ## Mobile Compatibility
@@ -817,6 +821,10 @@ const myPlugin = ViewPlugin.fromClass(class {
 // Check live preview vs source mode
 const isLivePreview = editorView.state.field(editorLivePreviewField);
 ```
+
+**Links in widgets: Obsidian already delegates `a.internal-link` (observed on 1.15.0).** An `a.internal-link` rendered inside a CM6 widget gets Obsidian's hover preview and click navigation. Do not add your own fallback hover or click events; they fire twice. Verify with event counts in a live test.
+
+**Syntax-node names: dump them, do not guess.** An extension that must skip code, links and similar constructs matches on the syntax tree's node names. Verify the set with a dev-only command that dumps the names on a sample note containing every construct (inline code, fence, links, embed, math, comment, tag, HTML, frontmatter). On 1.15.0 that gave 41 names, and the substrings `code`, `link`, `url`, `embed`, `frontmatter`, `comment`, `math`, `hashtag` and `html` covered every name to skip.
 
 ---
 
@@ -1063,6 +1071,14 @@ const url = this.app.vault.adapter.getResourcePath(`${pluginDir}/assets/banner.p
 img.src = `${url}?v=${this.manifest.version}`;  // cache-bust on plugin update
 ```
 
+### Desktop Settings Open in Their Own Window (observed on 1.15.0)
+
+On desktop the settings render in a separate window; on the phone they render in the main window. As with a popout, settings-tab code that reaches for the global `document` gets the main window's; take the document from `containerEl.ownerDocument`. A screenshot of the main window shows the note behind, not the settings (`live-testing.md` § 6).
+
+### Re-Running Post-Processors in Reading View
+
+After a setting changes what a Markdown post-processor renders, `view.previewMode.rerender(true)` re-runs the post-processors on an open Reading view (works on 1.15.0). Coalesce the calls (a 400 ms trailing debounce) so a burst of changes renders once.
+
 ---
 
 ## Concurrency Patterns
@@ -1159,7 +1175,7 @@ One-line check beats `AbortController` plumbing for this case.
 | Persisting credentials or per-device state in `data.json` | Replicated by Obsidian Sync to peer devices | Sidecar via `app.vault.adapter.write` |
 | `console.log(...)` in plugin code | Bot-rejected on community-plugin PRs | `console.debug(...)` (document Verbose toggle for users) |
 | `addCommand({ id: "myplugin:foo", ... })` | Obsidian prepends plugin name → "MyPlugin: MyPlugin: Foo" | Bare ID — `addCommand({ id: "foo", name: "Foo" })` |
-| Modal `contentEl.addEventListener("keydown", ...)` to intercept Esc | Obsidian's framework `Scope` handles Esc before contentEl listeners | Override in `onClose()` instead |
+| `addEventListener("keydown", ...)` in a modal or view to catch Esc or Mod+Enter | Obsidian's keymap `Scope` consumes the key before DOM listeners (Mod+Enter in a form view observed on 1.15.0) | Esc in a modal: override `onClose()`. Other keys: `this.scope = new Scope(this.app.scope); this.scope.register(["Mod"], "Enter", handler)`, the handler returning `false` to consume |
 | `import.meta.url` in CJS bundle | Empty at runtime — esbuild CJS doesn't populate it | `__filename` (CJS global) |
 | `app.openWithDefaultApp(absolutePath)` | Re-roots inside vault, file not found | Convert to vault-relative first; Notice fallback for outside-vault |
 | `<img src="assets/x.png">` from plugin DOM | No notion of plugin install dir | `app.vault.adapter.getResourcePath(pluginDir + "/" + rel)` |

@@ -93,6 +93,8 @@ At the end of each implementation phase, before merging:
 
 Tests that hit a real Obsidian instance, real Docker daemon, real external API have wildly different timeout characteristics from unit tests (5s+ per assertion vs ms per unit test). Mixing them in one config either makes unit tests slow or live tests time out.
 
+**Building the harness for real Obsidian:** read `live-testing.md`. It covers a mockup registry that every screenshot state must cover, launching Obsidian on a throw-away vault and profile, driving it over CDP, `live:open` for checking by hand, a verified light/dark, desktop/phone screenshot matrix, and the harness gotchas found on Obsidian 1.15.0.
+
 ### Two-Config Split
 
 Maintain `vitest.live.config.ts` separate from `vitest.config.ts`:
