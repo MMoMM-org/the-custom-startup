@@ -87,6 +87,8 @@ _LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd)" || exit 0
 . "$_LIB_DIR/audit_log.sh"
 # shellcheck source=./lib/override.sh disable=SC1091
 . "$_LIB_DIR/override.sh"
+# shellcheck source=./lib/merge_findings.sh disable=SC1091
+. "$_LIB_DIR/merge_findings.sh"
 
 # Hook identity. NOTE: not currently emitted into the audit JSONL because
 # override.sh's internal `_audit_log` call only sets env_var/master and
@@ -538,6 +540,157 @@ _leave_git_target_dir() {
 }
 
 # ---------------------------------------------------------------------------
+# MERGE_WITH_FINDINGS: a PR merge while review findings are open (#292)
+# ---------------------------------------------------------------------------
+#
+# Claude merged MMoMM-org/obsidian-dynbedded#50 25 s after CodeQL had posted
+# two review threads; every check was green. This rule asks GitHub what is
+# still open on the PR (scripts/lib/merge_findings.sh) and denies the merge
+# while anything is. gh runs only when a merge clause matched; every lookup
+# fails open.
+
+# _merge_target
+#   Finds the first merge clause and sets _MF_CLAUSE, _MF_API (1 for the
+#   `gh api … PUT` form) and _MF_DIR: the directory of the last `cd <dir>`
+#   clause before it, else $PWD. gh resolves a PR selector -- and the current
+#   branch when there is none -- from its working directory, so
+#   `cd ~/other && gh pr merge 5` must not look up #5 of this repository.
+_merge_target() {
+  local clause dir="$PWD" d
+  _MF_CLAUSE="" _MF_API=0 _MF_DIR=""
+  case "$_CMD_CLAUSES" in *merge*) ;; *) return 1 ;; esac
+  while IFS= read -r clause; do
+    if [[ "$clause" =~ ^[[:space:]]*cd[[:space:]]+([^[:space:]]+)[[:space:]]*$ ]]; then
+      d="${BASH_REMATCH[1]}"
+      case "$d" in
+        "~") d="$HOME" ;;
+        "~/"*) d="$HOME/${d#"~/"}" ;;
+        /*) ;;
+        *) d="$dir/$d" ;;
+      esac
+      [ -d "$d" ] && dir="$d"
+      continue
+    fi
+    if _match_command "$clause" "$PATTERN_GH_PR_MERGE"; then
+      case " $clause " in *" --disable-auto "*) continue ;; esac
+      _MF_CLAUSE="$clause" _MF_DIR="$dir"
+      return 0
+    fi
+    if _match_command "$clause" "$PATTERN_GH_API_PR_MERGE_A" \
+        || _match_command "$clause" "$PATTERN_GH_API_PR_MERGE_B"; then
+      _MF_CLAUSE="$clause" _MF_API=1 _MF_DIR="$dir"
+      return 0
+    fi
+  done <<< "$_CMD_CLAUSES"
+  return 1
+}
+
+# _merge_selector_and_repo
+#   Sets _MF_SELECTOR (PR number, URL or branch; empty = current branch) and
+#   _MF_REPO (OWNER/NAME; empty = the working directory's repository) from
+#   _MF_CLAUSE. Quoted values are blanked in clauses, so a value flag can end
+#   up followed by the selector: a number or URL counts as the selector even
+#   there, a bare word only when no value flag precedes it. A blanked -R value
+#   is read back from the raw command.
+_MF_RAW_REPO_RE='(-R|--repo)[[:space:]=]+["'"'"']?([^"'"'"'[:space:]]+)'
+_merge_selector_and_repo() {
+  local t expect="" seen_gh=0 seen_merge=0
+  local -a toks
+  _MF_SELECTOR="" _MF_REPO=""
+  read -ra toks <<< "$_MF_CLAUSE"
+
+  if [ "$_MF_API" = "1" ]; then
+    for t in "${toks[@]}"; do
+      if [[ "$t" =~ ^/?repos/([^/]+)/([^/]+)/pulls/([0-9]+)/merge$ ]]; then
+        _MF_SELECTOR="${BASH_REMATCH[3]}"
+        case "${BASH_REMATCH[1]}" in
+          "{owner}"|":owner") ;;
+          *) _MF_REPO="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}" ;;
+        esac
+        return 0
+      fi
+    done
+    return 0
+  fi
+
+  for t in "${toks[@]}"; do
+    if [ "$seen_gh" = 0 ]; then
+      case "$t" in gh|*/gh) seen_gh=1 ;; esac
+      continue
+    fi
+    if [ -n "$expect" ]; then
+      if [ "$expect" = "repo" ] && [ "${t#-}" = "$t" ]; then
+        _MF_REPO="$t"; expect=""; continue
+      fi
+      expect=""
+      case "$t" in
+        -*) ;;
+        [0-9]*|https://*) [ "$seen_merge" = 1 ] && [ -z "$_MF_SELECTOR" ] && _MF_SELECTOR="$t"; continue ;;
+        *) continue ;;
+      esac
+    fi
+    case "$t" in
+      -R|--repo) expect="repo" ;;
+      --repo=*) _MF_REPO="${t#--repo=}" ;;
+      -b|--body|-F|--body-file|-t|--subject|-A|--author-email|--match-head-commit) expect="value" ;;
+      -*) ;;
+      pr) ;;
+      merge) seen_merge=1 ;;
+      *) [ "$seen_merge" = 1 ] && [ -z "$_MF_SELECTOR" ] && _MF_SELECTOR="$t" ;;
+    esac
+  done
+
+  if [ -z "$_MF_REPO" ] && [[ "${CMD:-}" =~ $_MF_RAW_REPO_RE ]]; then
+    _MF_REPO="${BASH_REMATCH[2]}"
+  fi
+  return 0
+}
+
+_check_merge_with_findings() {
+  local rule="MERGE_WITH_FINDINGS" json findings summary number msg n=0 line more
+  _merge_target || return 0
+  if ! command -v gh >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+    printf 'tcs-git-helpers: gh or jq missing — merge allowed without the findings check (fail-open)\n' >&2
+    return 0
+  fi
+  _merge_selector_and_repo
+
+  json=$(cd "$_MF_DIR" 2>/dev/null && _merge_findings_collect "$_MF_SELECTOR" "$_MF_REPO") || json=""
+  if [ -z "$json" ]; then
+    printf 'tcs-git-helpers: PR lookup failed — merge allowed without the findings check (fail-open)\n' >&2
+    return 0
+  fi
+  findings=$(printf '%s' "$json" | _merge_findings_render)
+  [ -z "$findings" ] && return 0
+
+  if _check_and_consume_override "$rule"; then
+    return 0
+  fi
+
+  number=$(printf '%s' "$json" | jq -r '.pr.number // "?"' 2>/dev/null) || number="?"
+  summary="${findings%%$'\n'*}"
+  msg="[${rule}] PR #${number} is not ready: ${summary}. Read and address them first"
+  case "$summary" in
+    *"running check"*) msg="${msg}; wait for the checks with gh pr checks ${number} --watch" ;;
+  esac
+  msg="${msg} (override: prefix the command with CLAUDE_ALLOW_${rule}=1)"
+  more=0
+  while IFS= read -r line; do
+    if [ "$n" -lt 5 ]; then
+      msg="${msg}"$'\n'"      · ${line}"
+    else
+      more=$((more + 1))
+    fi
+    n=$((n + 1))
+  done <<< "${findings#*$'\n'}"
+  if [ "$more" -gt 0 ]; then
+    msg="${msg}"$'\n'"      · … and ${more} more (gh pr view ${number} --comments)"
+  fi
+  DENY_REASONS+=("$msg")
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # git restore <directory> -- a filesystem check, not a pattern
 # ---------------------------------------------------------------------------
 #
@@ -624,6 +777,9 @@ _match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH_DELETE_FLAG"    && _maybe_deny REM
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_PUSH_COLON_DELETE"   && _maybe_deny REMOTE_BRANCH_DELETE  "git push <remote> :<branch> deletes remote branch"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_GH_REF_DELETE_A"     && _maybe_deny REMOTE_BRANCH_DELETE  "gh api DELETE on git/refs removes remote ref"
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_GH_REF_DELETE_B"     && _maybe_deny REMOTE_BRANCH_DELETE  "gh api DELETE on git/refs removes remote ref"
+
+# === PR merge with open review findings (#292) ===
+_check_merge_with_findings
 
 # === Branch creation / resume (M2, M3) ===
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_CREATE"       && { _enter_git_target_dir "$PATTERN_BRANCH_CREATE" && _check_branch_creation_from_unfinished; _leave_git_target_dir; }

@@ -375,9 +375,15 @@ $(awk '/^# --- Failure scenarios/,/^esac/' "$GH_STUB" \
       echo "$f is not a JSON object" >&2
       return 1
     }
-    # mergeCommit field must exist (object or null)
-    jq -e 'has("mergeCommit")' "$f" >/dev/null || {
-      echo "$f missing mergeCommit field" >&2
+    # Each scenario answers the --json field set its caller requests. The
+    # merge-* scenarios serve MERGE_WITH_FINDINGS (#292), which reads the PR's
+    # url and number; every other caller asks for mergeCommit (object or null).
+    case "$f" in
+      */responses/merge-*/pr-view.json) field_check='has("url") and has("number")' ;;
+      *) field_check='has("mergeCommit")' ;;
+    esac
+    jq -e "$field_check" "$f" >/dev/null || {
+      echo "$f lacks the fields its caller requests ($field_check)" >&2
       return 1
     }
   done

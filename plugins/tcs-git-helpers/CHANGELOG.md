@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.3.0] - 2026-11-21
+
+### Added
+
+- **`gh pr merge` is denied while the PR has unaddressed review findings (#292).** Claude merged
+  MMoMM-org/obsidian-dynbedded#50 25 seconds after CodeQL had posted two review threads; every
+  check was green, because CodeQL concludes `success` on medium findings. The new
+  `MERGE_WITH_FINDINGS` rule asks GitHub before each merge and lists what is open: unresolved,
+  non-outdated review threads; reviewers whose latest review requests changes; reviews and
+  comments by anyone but the author after the last commit; open code-scanning alerts on the PR's
+  merge ref; and checks still running. `gh api -X PUT …/pulls/N/merge` counts as a merge;
+  `--disable-auto` does not. A `cd <dir> &&` before the merge is honoured. **What to know:**
+  address the findings or wait with `gh pr checks <n> --watch`; the override is
+  `CLAUDE_ALLOW_MERGE_WITH_FINDINGS=1`. A failed lookup allows the merge. Comments by bots count
+  too. Not covered: the GraphQL `mergePullRequest` mutation and merges in the browser.
+
 ## [2.2.47] - 2026-11-10
 
 ### Changed
