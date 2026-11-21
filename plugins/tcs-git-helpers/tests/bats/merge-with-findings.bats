@@ -179,7 +179,9 @@ _gh_calls() { cat "$GH_STUB_ARGV_LOG"; }
 }
 
 @test "merge with findings: gh runs in the directory a preceding cd names" {
-  other="$REPOS_ROOT/closed-pr"
+  # Normalised the way cd leaves $PWD: macOS TMPDIR ends in `/`, so the raw
+  # path carries a `//` that gh's working directory does not.
+  other="$(cd "$REPOS_ROOT/closed-pr" && pwd)"
   run --separate-stderr _run_hook_with_cmd "cd $other && gh pr merge 50"
   _assert_deny_for_rule "MERGE_WITH_FINDINGS"
   _has "$(_gh_calls)" "$other|pr view 50"
