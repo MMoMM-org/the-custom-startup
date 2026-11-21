@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **tcs-git-helpers denies `gh pr merge` while a PR has unaddressed review findings (#292).**
+  A PR was merged 25 seconds after CodeQL had posted two review threads, with every check green.
+  The guard now lists unresolved threads, change requests, comments after the last commit, open
+  code-scanning alerts and running checks, and denies the merge until they are handled. **What to
+  know:** the override is `CLAUDE_ALLOW_MERGE_WITH_FINDINGS=1`; a failed GitHub lookup allows the
+  merge. Update tcs-git-helpers.
+
 - **`/tcs-helper:prompt-author` writes, audits and ports prompts outside Claude Code skills and
   agents (spec 023, #250-#253).** It covers API system prompts, subagent briefs, AGENTS.md and
   GEMINI.md, chat templates, and non-Claude targets (OpenAI, Google, small local models). Each

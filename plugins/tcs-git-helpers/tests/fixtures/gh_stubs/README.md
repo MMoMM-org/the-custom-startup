@@ -33,7 +33,7 @@ object, the stub satisfies the same path as production.
 
 Each scenario is a directory under `responses/`. The wrapper looks up
 `responses/$GH_STUB_SCENARIO/<op>.json`; if missing, it falls back to
-`responses/default/<op>.json`. Operations: `pr-list`, `pr-view`, `api`.
+`responses/default/<op>.json`. Operations: `pr-list`, `pr-view`, `api`, `graphql` (`gh api graphql`), `code-scanning` (`gh api …/code-scanning/alerts`; a missing file answers 404 like a repository without analysis).
 
 | Scenario | Used by | Behavior |
 |---|---|---|
@@ -46,6 +46,9 @@ Each scenario is a directory under `responses/`. The wrapper looks up
 | `squash-merged-batch`   | M6 post-merge stale-branch listing | `pr-list` returns 6 merged PRs (mirrors Kado state) |
 | `stale-3-branches`      | M6 post-merge cache write + runtime contract | `pr-list` returns 4 merged PRs, one of which (`feat/not-local`) has no local branch |
 | `branch-protected`      | S1 branch-protection PUT response | `api` returns successful PUT envelope |
+| `merge-findings`        | MERGE_WITH_FINDINGS deny | `pr-view` (PR #50) with a change request, comments around the last commit and running checks; `graphql` review threads (unresolved, resolved, outdated); `code-scanning` one open alert |
+| `merge-clean`           | MERGE_WITH_FINDINGS allow | `pr-view` approved, checks complete; `graphql` resolved threads only; no `code-scanning` (404) |
+| `merge-no-threads`      | MERGE_WITH_FINDINGS partial lookup | `pr-view` with a change request; no `graphql` response, so the thread lookup fails |
 
 ## Failure scenarios (non-zero exit)
 
@@ -70,3 +73,8 @@ fail-open path mandated by CON-4.
    `stale-3-branches` went undocumented for months under the previous test,
    which hard-coded four names.
 4. Reference it from the relevant bats test via `GH_STUB_SCENARIO=<name>`.
+
+## Argument spy
+
+`GH_STUB_ARGV_LOG=<file>` appends one `<cwd>|<argv>` line per invocation, so a
+test can assert which PR, repository and working directory a hook asked about.

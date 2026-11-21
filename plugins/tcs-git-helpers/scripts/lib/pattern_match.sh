@@ -48,6 +48,7 @@
 #    16. git checkout / git switch <branch>  -> PATTERN_BRANCH_RESUME  [M3]
 #    17. git -c core.hooksPath=...           -> PATTERN_HOOKSPATH_INLINE
 #    18. git config core.hooksPath ...       -> PATTERN_HOOKSPATH_CONFIG
+#    19. gh pr merge / gh api PUT .../merge  -> PATTERN_GH_PR_MERGE, PATTERN_GH_API_PR_MERGE_A/B [#292]
 
 # ---------------------------------------------------------------------------
 # Destructive operation patterns (PRD §Feature M7)
@@ -203,6 +204,17 @@ PATTERN_GH_REF_DELETE_A='gh[[:space:]]+api[[:space:]].*git/refs/.*(-X|--method)[
 # (method flag BEFORE the URL path)
 PATTERN_GH_REF_DELETE_B='gh[[:space:]]+api[[:space:]].*(-X|--method)[[:space:]]+DELETE.*git/refs/'
 
+# gh pr merge [<n>|<url>|<branch>] [flags] -- also behind an env prefix, a
+# path (`/opt/homebrew/bin/gh`) or a repo flag (`gh -R o/r pr merge`) (#292).
+# `--disable-auto` merges nothing; the handler skips that clause.
+PATTERN_GH_PR_MERGE='(^|[^[:alnum:]_.-])gh[[:space:]]+((-R|--repo)[[:space:]]+[^[:space:]]+[[:space:]]+|--repo=[^[:space:]]+[[:space:]]+)?pr[[:space:]]+merge([[:space:]]|$)'
+
+# gh api repos/OWNER/REPO/pulls/N/merge -X PUT   (method after the path)
+# gh api -X PUT repos/OWNER/REPO/pulls/N/merge   (method before the path)
+# GET on the same endpoint only asks whether the PR is merged.
+PATTERN_GH_API_PR_MERGE_A='gh[[:space:]]+api[[:space:]].*pulls/[0-9]+/merge([^[:alnum:]_/]|$).*(-X|--method)[[:space:]=]*PUT'
+PATTERN_GH_API_PR_MERGE_B='gh[[:space:]]+api[[:space:]].*(-X|--method)[[:space:]=]*PUT.*pulls/[0-9]+/merge([^[:alnum:]_/]|$)'
+
 # Read-only forms (--get, --get-all, --get-regexp, git 2.46's `get`). These
 # never mutate state, so a clause matching this is exempt from the
 # HOOKSPATH_OVERRIDE check -- debugging like `git config --get core.hooksPath`
@@ -232,6 +244,9 @@ export \
   PATTERN_PUSH_COLON_DELETE \
   PATTERN_GH_REF_DELETE_A \
   PATTERN_GH_REF_DELETE_B \
+  PATTERN_GH_PR_MERGE \
+  PATTERN_GH_API_PR_MERGE_A \
+  PATTERN_GH_API_PR_MERGE_B \
   PATTERN_BRANCH_CREATE \
   PATTERN_BRANCH_RESUME \
   PATTERN_HOOKSPATH_INLINE \

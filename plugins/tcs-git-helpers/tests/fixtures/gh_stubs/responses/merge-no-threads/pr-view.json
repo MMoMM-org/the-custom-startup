@@ -1,0 +1,5 @@
+{"number":52,"url":"https://github.com/test-user/test-repo/pull/52","author":{"id":"U_1","is_bot":false,"login":"test-user","name":"Test User"},
+ "commits":[{"oid":"ddd4","committedDate":"2026-11-21T10:00:00Z","authoredDate":"2026-11-21T10:00:00Z","messageHeadline":"x","messageBody":"","authors":[]}],
+ "reviews":[{"id":"R4","author":{"login":"alice"},"authorAssociation":"MEMBER","body":"no","submittedAt":"2026-11-21T09:00:00Z","state":"CHANGES_REQUESTED","commit":{"oid":"ddd4"}}],
+ "latestReviews":[{"id":"","author":{"login":"alice"},"authorAssociation":"MEMBER","body":"no","submittedAt":"2026-11-21T09:00:00Z","state":"CHANGES_REQUESTED","commit":{"oid":""}}],
+ "comments":[],"statusCheckRollup":[]}

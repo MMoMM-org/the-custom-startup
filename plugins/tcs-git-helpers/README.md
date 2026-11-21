@@ -19,12 +19,30 @@ Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the pl
 
 | Event | Script | Purpose |
 |-------|--------|---------|
-| `PreToolUse(Bash)` | `block-bad-git-ops.sh` | Deny 14+ destructive git/gh patterns: push to closed PR, branch from unfinished work, squash-merge resume, `reset --hard`, `clean -f`, `branch -D`, `--force` (without `--force-with-lease`), `--no-verify`, `stash drop/clear`, `reflog expire`, `checkout .`, `restore --worktree`, `push --delete`, `core.hooksPath` overrides |
+| `PreToolUse(Bash)` | `block-bad-git-ops.sh` | Deny 14+ destructive git/gh patterns: push to closed PR, branch from unfinished work, squash-merge resume, `reset --hard`, `clean -f`, `branch -D`, `--force` (without `--force-with-lease`), `--no-verify`, `stash drop/clear`, `reflog expire`, `checkout .`, `restore --worktree`, `push --delete`, `core.hooksPath` overrides; `gh pr merge` while review findings are open (see below) |
 | `PreToolUse(Edit\|Write\|NotebookEdit)` | `pre-edit-branch-check.sh` | Block edits to `main`/`master` unless the path is in `.gitignore` |
 | `PreToolUse(Edit\|Write\|NotebookEdit)` | `protect-git-internals.sh` | Block edits to `.git/` internals |
 | `PreToolUse(ExitWorktree)` | `worktree-exit-guard.sh` | Four-check guard before worktree exit — uncommitted, untracked, unmerged, unpushed |
 | `PostToolUse(Bash)` | `nudge-hook.sh` | Soft, success-only nudges after `git checkout -b`, `gh pr create`, first `git push -u`, `gh pr merge`, `git rebase`, `git stash pop` (60s same-nudge dedup) |
 | `SessionStart` | `session-start-brief.sh` | One-line branch awareness brief — branch, working-tree state, ahead/behind, stale-merged count (cached rows whose branch still exists locally, ≤300ms p99, no `gh` calls) |
+
+### Merging with open review findings
+
+Before `gh pr merge` (or `gh api -X PUT …/pulls/N/merge`) runs, `block-bad-git-ops.sh` asks
+GitHub what is still open on the PR and denies the merge, listing up to five findings, while
+there are:
+
+- unresolved review threads that are not outdated
+- reviewers whose latest review is `CHANGES_REQUESTED`
+- reviews or comments by anyone other than the author after the last commit (bots included,
+  hidden comments excluded)
+- open code-scanning alerts on `refs/pull/<n>/merge`
+- checks still running on the head commit
+
+Green checks are not enough: CodeQL concludes `success` on medium findings and reports them as
+review threads. Address the findings, or wait with `gh pr checks <n> --watch`, then merge again.
+`--disable-auto` is not a merge. A `cd <dir> &&` before the merge is honoured. A lookup that fails (no auth, network, timeout) allows the merge with a note on
+stderr. Not covered: the GraphQL `mergePullRequest` mutation and merges in the browser.
 
 ## How It Works
 
@@ -55,6 +73,7 @@ Every safety rule has a single-shot env-var override. Set the env-var, run the c
 ```bash
 CLAUDE_ALLOW_RESET_HARD=1 git reset --hard origin/main
 CLAUDE_ALLOW_PUSH_TO_CLOSED_PR=1 git push
+CLAUDE_ALLOW_MERGE_WITH_FINDINGS=1 gh pr merge 50 --squash
 CLAUDE_ALLOW_BRANCH_FROM_UNFINISHED=1 git checkout -b feat/new
 CLAUDE_ALLOW_WORKTREE_EXIT_WITH_CHANGES=1   # exit worktree with dirty tree
 ```

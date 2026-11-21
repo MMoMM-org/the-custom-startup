@@ -1,0 +1,6 @@
+{"number":51,"url":"https://github.com/test-user/test-repo/pull/51","author":{"id":"U_1","is_bot":false,"login":"test-user","name":"Test User"},
+ "commits":[{"oid":"ccc3","committedDate":"2026-11-21T10:00:00Z","authoredDate":"2026-11-21T10:00:00Z","messageHeadline":"fix","messageBody":"","authors":[]}],
+ "reviews":[{"id":"R3","author":{"login":"alice"},"authorAssociation":"MEMBER","body":"","submittedAt":"2026-11-21T10:05:00Z","state":"APPROVED","commit":{"oid":"ccc3"}}],
+ "latestReviews":[{"id":"","author":{"login":"alice"},"authorAssociation":"MEMBER","body":"","submittedAt":"2026-11-21T10:05:00Z","state":"APPROVED","commit":{"oid":""}}],
+ "comments":[{"id":"C5","author":{"login":"bob"},"authorAssociation":"MEMBER","body":"addressed by ccc3","createdAt":"2026-11-21T09:00:00Z","isMinimized":false,"minimizedReason":"","viewerDidAuthor":false}],
+ "statusCheckRollup":[{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS","workflowName":"CI"}]}

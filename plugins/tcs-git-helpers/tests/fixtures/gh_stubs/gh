@@ -32,6 +32,12 @@
 
 set -u
 
+# Spy: when GH_STUB_ARGV_LOG is set, record every invocation as
+# `<cwd>|<argv…>` -- tests assert which PR, repo and directory gh was asked about.
+if [ -n "${GH_STUB_ARGV_LOG:-}" ]; then
+  printf '%s|%s\n' "$PWD" "$*" >> "$GH_STUB_ARGV_LOG"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RESP_DIR="$SCRIPT_DIR/responses"
 SCENARIO="${GH_STUB_SCENARIO:-default}"
@@ -242,6 +248,18 @@ case "$1" in
               exit 0
             fi
             printf 'gh: Branch not protected (HTTP 404)\n' >&2
+            exit 1
+            ;;
+          graphql)
+            _emit_response graphql || exit 1
+            ;;
+          *"/code-scanning/alerts"*)
+            # Real gh: a repository without any analysis answers 404.
+            if [ -f "$RESP_DIR/$SCENARIO/code-scanning.json" ]; then
+              cat "$RESP_DIR/$SCENARIO/code-scanning.json"
+              exit 0
+            fi
+            printf '{"message":"no analysis found","status":"404"}gh: no analysis found (HTTP 404)\n' >&2
             exit 1
             ;;
           repos/*)

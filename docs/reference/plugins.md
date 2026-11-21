@@ -132,7 +132,7 @@ Once installed, a pattern is invoked as `/tcs-<name>`: `/tcs-ddd`, `/tcs-hexagon
 /plugin install tcs-git-helpers@the-custom-startup
 ```
 
-Optional. Machine-enforces the recurring git mistakes Claude makes across repos — pushes to closed PRs, branching off unfinished work, squash-merge resume, destructive operations, and worktree-exit data loss. It runs invisibly through hooks; you notice it only on a denial or the SessionStart brief.
+Optional. Machine-enforces the recurring git mistakes Claude makes across repos — pushes to closed PRs, branching off unfinished work, squash-merge resume, merging a PR with open review findings, destructive operations, and worktree-exit data loss. It runs invisibly through hooks; you notice it only on a denial or the SessionStart brief.
 
 | Skill | What it does |
 |-------|-------------|
@@ -141,7 +141,7 @@ Optional. Machine-enforces the recurring git mistakes Claude makes across repos 
 
 | Event | Hooks | Purpose |
 |-------|-------|---------|
-| `PreToolUse` | Bash / Edit / Write / ExitWorktree | Deny 14+ destructive patterns, closed-PR pushes, squash-merge resume, unfinished-branch creation, and worktree exit with uncommitted work |
+| `PreToolUse` | Bash / Edit / Write / ExitWorktree | Deny 14+ destructive patterns, closed-PR pushes, PR merges with unresolved threads, change requests, code-scanning alerts or running checks, squash-merge resume, unfinished-branch creation, and worktree exit with uncommitted work |
 | `PostToolUse` | git / gh nudges | Soft reminders after `git checkout -b`, `gh pr create`, `gh pr merge`, `git rebase`, `git stash pop` |
 | `SessionStart` | branch brief | One-line awareness brief — branch, dirty/clean, ahead/behind, stale-merged count |
 

@@ -1,0 +1,4 @@
+{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+ {"isResolved":false,"isOutdated":false,"path":"scripts/live-open.mjs","line":36,"originalLine":36,"comments":{"nodes":[{"author":{"login":"github-advanced-security"},"body":"## CodeQL / Improper code sanitization\n\nCode construction depends on an improperly sanitized value."}]}},
+ {"isResolved":true,"isOutdated":false,"path":"resolved.mjs","line":1,"originalLine":1,"comments":{"nodes":[{"author":{"login":"alice"},"body":"resolved thread"}]}},
+ {"isResolved":false,"isOutdated":true,"path":"outdated.mjs","line":null,"originalLine":9,"comments":{"nodes":[{"author":{"login":"alice"},"body":"outdated thread"}]}}]}}}}}

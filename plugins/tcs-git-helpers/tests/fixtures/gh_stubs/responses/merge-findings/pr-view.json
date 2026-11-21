@@ -1,0 +1,20 @@
+{"number":50,"url":"https://github.com/test-user/test-repo/pull/50","author":{"id":"U_1","is_bot":false,"login":"test-user","name":"Test User"},
+ "commits":[
+  {"oid":"aaa1","committedDate":"2026-11-20T15:00:00Z","authoredDate":"2026-11-20T15:00:00Z","messageHeadline":"first","messageBody":"","authors":[]},
+  {"oid":"bbb2","committedDate":"2026-11-20T16:19:18Z","authoredDate":"2026-11-20T16:19:18Z","messageHeadline":"second","messageBody":"","authors":[]}],
+ "reviews":[
+  {"id":"R1","author":{"login":"github-advanced-security"},"authorAssociation":"NONE","body":"","submittedAt":"2026-11-20T16:25:40Z","state":"COMMENTED","commit":{"oid":"bbb2"}},
+  {"id":"R2","author":{"login":"alice"},"authorAssociation":"MEMBER","body":"Please split the harness.","submittedAt":"2026-11-20T15:30:00Z","state":"CHANGES_REQUESTED","commit":{"oid":"aaa1"}}],
+ "latestReviews":[
+  {"id":"","author":{"login":"github-advanced-security"},"authorAssociation":"NONE","body":"","submittedAt":"2026-11-20T16:25:40Z","state":"COMMENTED","commit":{"oid":""}},
+  {"id":"","author":{"login":"alice"},"authorAssociation":"MEMBER","body":"Please split the harness.","submittedAt":"2026-11-20T15:30:00Z","state":"CHANGES_REQUESTED","commit":{"oid":""}}],
+ "comments":[
+  {"id":"C1","author":{"login":"carol"},"authorAssociation":"MEMBER","body":"old remark before the fix","createdAt":"2026-11-20T15:10:00Z","isMinimized":false,"minimizedReason":"","viewerDidAuthor":false},
+  {"id":"C2","author":{"login":"bob"},"authorAssociation":"MEMBER","body":"\n## Heads-up\nthe env var leaks into the log","createdAt":"2026-11-20T16:22:00Z","isMinimized":false,"minimizedReason":"","viewerDidAuthor":false},
+  {"id":"C3","author":{"login":"test-user"},"authorAssociation":"OWNER","body":"own note by the author","createdAt":"2026-11-20T16:23:00Z","isMinimized":false,"minimizedReason":"","viewerDidAuthor":true},
+  {"id":"C4","author":{"login":"spammer"},"authorAssociation":"NONE","body":"hidden spam","createdAt":"2026-11-20T16:24:00Z","isMinimized":true,"minimizedReason":"spam","viewerDidAuthor":false}],
+ "statusCheckRollup":[
+  {"__typename":"CheckRun","name":"Analyze (actions)","status":"COMPLETED","conclusion":"SUCCESS","workflowName":"CodeQL"},
+  {"__typename":"CheckRun","name":"Analyze (javascript-typescript)","status":"IN_PROGRESS","conclusion":"","workflowName":"CodeQL"},
+  {"__typename":"StatusContext","context":"ci/legacy","state":"PENDING","targetUrl":""},
+  {"__typename":"StatusContext","context":"ci/done","state":"SUCCESS","targetUrl":""}]}

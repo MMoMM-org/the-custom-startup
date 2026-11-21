@@ -1,0 +1,2 @@
+{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+ {"isResolved":true,"isOutdated":false,"path":"a.sh","line":3,"originalLine":3,"comments":{"nodes":[{"author":{"login":"alice"},"body":"fixed"}]}}]}}}}}
