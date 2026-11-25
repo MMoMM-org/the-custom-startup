@@ -17,6 +17,9 @@ setup() {
   export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
   REPO="$BATS_TEST_TMPDIR/repo"
   git init -q -b main "$REPO"
+  # macOS: $BATS_TEST_TMPDIR is under /var, a symlink to /private/var, and
+  # the helper reports the path git resolves.
+  REPO="$(cd "$REPO" && pwd -P)"
   SETTINGS="$REPO/.claude/settings.json"
   cd "$REPO"
 }

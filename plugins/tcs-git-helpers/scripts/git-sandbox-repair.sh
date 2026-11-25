@@ -56,7 +56,8 @@ if [ -n "$HEAD_TREE" ] && [ -n "$INDEX_TREE" ] && [ "$HEAD_TREE" != "$INDEX_TREE
   MATCHES="$(git for-each-ref --format='%(refname:short) %(objectname)' refs/heads refs/remotes \
     | while read -r ref sha; do
         [ "$ref" = "$BRANCH" ] && continue
-        case "$ref" in */HEAD) continue ;; esac
+        # Not `case … in */HEAD)`: bash 3.2 ends the $( ) at that lone ")".
+        [ "${ref%/HEAD}" != "$ref" ] && continue
         [ "$(git rev-parse -q --verify "$sha^{tree}" 2>/dev/null)" = "$INDEX_TREE" ] && printf '%s\n' "$ref"
       done || true)"
   # A pushed branch matches twice (local and origin/); name the local one.

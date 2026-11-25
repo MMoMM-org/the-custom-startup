@@ -83,6 +83,8 @@ mkdir -p "$ROOT/.claude" || _err "cannot create $ROOT/.claude (run outside the B
 TMP="$(mktemp "$ROOT/.claude/.settings.json.XXXXXX" 2>/dev/null)" \
   || _err "cannot write in $ROOT/.claude (run outside the Bash sandbox)"
 # mktemp creates the file 0600; a settings file is normally world-readable.
-printf '%s\n' "$MERGED" | jq . > "$TMP" && chmod 0644 "$TMP" && mv "$TMP" "$TARGET" \
-  || { rm -f "$TMP"; _err "cannot write $TARGET (run outside the Bash sandbox)"; }
+if ! { printf '%s\n' "$MERGED" | jq . > "$TMP" && chmod 0644 "$TMP" && mv "$TMP" "$TARGET"; }; then
+  rm -f "$TMP"
+  _err "cannot write $TARGET (run outside the Bash sandbox)"
+fi
 printf 'WRITTEN %s\n' "$TARGET"
