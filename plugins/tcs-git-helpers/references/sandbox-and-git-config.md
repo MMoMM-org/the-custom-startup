@@ -2,7 +2,8 @@
 
 > Why `git -c core.hooksPath=…` is denied, why `.git/config` writes happen
 > only at setup time, and how `git_safe()` filters known-harmless sandbox
-> warnings.
+> warnings,
+> and how to make everyday git work under the Bash sandbox.
 
 ## What goes wrong
 
@@ -178,6 +179,92 @@ JSONL audit line. Subsequent invocations re-deny.
 - **Wrap new git invocations in `git_safe()`** (or one of the
   `gs_*` helpers in `lib/git_state.sh`) so the known-harmless warning
   does not leak into denial reasons or skill output.
+
+## Sandbox-compatible git
+
+The sandbox protects `.git/config` and `.git/hooks/` from writes, and
+`sandbox.filesystem.allowWrite` cannot lift that; only turning filesystem
+isolation off does. So inside the sandbox some git commands finish only
+partly, with no hard error:
+
+| Command | What is left undone |
+|---|---|
+| `git push -u` | pushes, sets no upstream |
+| `git checkout -b <b> <start>`, `git switch -c` | rewrites the index and tree, HEAD stays on the old branch |
+| `git branch --set-upstream-to`, `git remote add\|set-url`, `git config <key> <value>` | fail |
+| `fetch`/`pull`/`push` over SSH (macOS) | fail even with the host allowed |
+| `gh` (macOS) | TLS errors |
+
+### The settings template
+
+`/tcs-git-helpers:git-setup` offers
+`templates/claude-settings/sandbox-git.json` and merges it into the repo's
+`.claude/settings.json` only after you confirm its diff:
+
+```json
+{
+  "sandbox": {
+    "excludedCommands": [
+      "git push *", "git fetch *", "git pull *",
+      "git checkout -b *", "git switch -c *",
+      "git branch *", "git remote *", "gh *"
+    ],
+    "filesystem": { "denyWrite": ["./.githooks"] }
+  },
+  "permissions": {
+    "ask": [
+      "Bash(git remote add *)", "Bash(git remote set-url *)",
+      "Bash(git remote remove *)", "Bash(git remote rename *)"
+    ]
+  }
+}
+```
+
+The merge only adds entries; a re-run changes nothing. To apply it without
+the skill, run `skills/git-setup/lib/sandbox_settings.sh --diff`, then
+`--apply` outside the sandbox: `.claude/settings.json` is itself protected.
+
+- **`.githooks` in `denyWrite` is required, not optional.** An excluded
+  `git push` runs `.githooks/pre-push` outside the sandbox, and `.githooks/`
+  is not a protected path. Without the entry, a sandboxed
+  `echo … > .githooks/pre-push` followed by `git push` is a sandbox escape.
+  `protect-git-internals.sh` covers Edit and Write, not Bash. The cost:
+  `git-setup` writes `.githooks/` from outside the sandbox (a prompt, rare).
+- **`git config *` stays sandboxed on purpose.** A config write goes through
+  the unsandboxed-retry prompt, where you see it; `block-bad-git-ops.sh`
+  guards `core.hooksPath` either way.
+- **Changing a remote asks.** `git remote *` runs outside the sandbox, so
+  the four commands that change a remote need a yes; `git remote -v` does not.
+
+### What the template cannot do
+
+- `excludedCommands` matches the command as typed, and every part of a
+  chained call must match. `git -C <path> push`, `cd x && git push`, a
+  subshell or a redirect stay sandboxed and fail as before.
+- An excluded command runs with full filesystem and network access:
+  `git push *` can reach any host.
+- GPG signing (`~/.gnupg`, the gpg-agent socket) and credential helpers
+  (osxkeychain) under the sandbox are not documented upstream; check them on
+  macOS before relying on them.
+
+### Repairing a half-done command
+
+`scripts/git-sandbox-repair.sh` fixes what a sandboxed command left behind.
+Run it from the prompt, so it runs outside the sandbox:
+
+```
+! bash ~/.claude/plugins/cache/the-custom-startup/tcs-git-helpers/*/scripts/git-sandbox-repair.sh
+```
+
+| Finding | Action |
+|---|---|
+| current branch has no upstream, `origin/<branch>` exists | sets the upstream (`FIXED`) |
+| branch not pushed yet, or already tracking | reports it (`INFO`, `OK`) |
+| the index matches another branch's tree, not HEAD's | reports it with the command that would fix it (`REPORT`, exit 2) |
+
+`--dry-run` prints `WOULD-FIX` instead of writing. The script never resets,
+checks out or moves a ref: an index that matches another branch can also be
+staged work, so that case stays yours to decide.
 
 ## Why
 

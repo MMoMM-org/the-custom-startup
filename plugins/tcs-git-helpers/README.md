@@ -10,7 +10,7 @@ Claude has no persistent memory across sessions and reflexively reproduces a sma
 
 | Skill | Description |
 |-------|-------------|
-| `/tcs-git-helpers:git-setup` | Per-repo install — writes `.githooks/`, sets `core.hooksPath`, detects and aborts on Husky/lefthook/pre-commit/simple-git-hooks conflicts. Optional `--with-branch-protection` (GitHub single-coder preset) and `--with-gha` (PR-title check workflow). |
+| `/tcs-git-helpers:git-setup` | Per-repo install — writes `.githooks/`, sets `core.hooksPath`, detects and aborts on Husky/lefthook/pre-commit/simple-git-hooks conflicts. Offers sandbox-compatible git settings for `.claude/settings.json` (see below). Optional `--with-branch-protection` (GitHub single-coder preset) and `--with-gha` (PR-title check workflow). |
 | `/tcs-git-helpers:git-audit` | Per-repo health check — branch state, stale-merged branches, override audit. `--cleanup` to interactively delete stale branches; `--overrides` to review recent override consumption events. |
 
 ## Hooks
@@ -53,6 +53,21 @@ Green checks are not enough: CodeQL concludes `success` on medium findings and r
 review threads. Address the findings, or wait with `gh pr checks <n> --watch`, then merge again.
 `--disable-auto` is not a merge. A `cd <dir> &&` before the merge is honoured. A lookup that fails (no auth, network, timeout) allows the merge with a note on
 stderr. Not covered: the GraphQL `mergePullRequest` mutation and merges in the browser.
+
+### Git under the Bash sandbox
+
+The sandbox denies writes to `.git/config`, so `git push -u` sets no upstream and `git checkout -b`
+can leave HEAD behind, without a hard error. `git-setup` offers a settings template that runs
+`git push|fetch|pull`, branch creation, `git remote` and `gh` outside the sandbox and write-protects
+`.githooks/` inside it; it writes `.claude/settings.json` only after you confirm the diff. For what
+already went wrong, run the repair script from the prompt so it runs unsandboxed:
+
+```
+! bash ~/.claude/plugins/cache/the-custom-startup/tcs-git-helpers/*/scripts/git-sandbox-repair.sh
+```
+
+It sets a missing upstream and reports, never fixes, an index that matches another branch. Limits
+and the reasoning: [sandbox-and-git-config.md](references/sandbox-and-git-config.md#sandbox-compatible-git).
 
 ## How It Works
 
@@ -109,7 +124,7 @@ Cited from denial messages by absolute plugin path. See [references/INDEX.md](re
 | `stale-branch-cleanup.md` | How stale branches accumulate and how `--cleanup` surfaces them |
 | `working-tree-hygiene.md` | Clean-tree discipline, stash vs branch, `.orig` leak detection |
 | `pr-vs-commit-messages.md` | Why PR title becomes the commit on squash-merge |
-| `sandbox-and-git-config.md` | Claude Code sandbox interactions, `core.hooksPath` deny semantics |
+| `sandbox-and-git-config.md` | Claude Code sandbox interactions, `core.hooksPath` deny semantics, sandbox settings template, repair script |
 | `gh-token-hygiene.md` | Required scopes for `--with-branch-protection`, excessive-scope detection |
 | `best-practices.md` | Overview philosophy and four core principles |
 
