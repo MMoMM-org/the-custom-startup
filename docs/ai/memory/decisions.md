@@ -25,3 +25,5 @@
 
 <!-- 2026-11-08 -->
 - ADR-9: The prompt-author catalog (PA-xx) is the single source of prompt failure rules; consumer skills cite it with one operational line plus a PA link. → Change a rule in the catalog, measured before/after, never in a consumer copy.
+
+- ADR-10 (Marcus): Guard hooks on Edit/Write/ExitWorktree set `onFailure: "block"`; the Bash guard stays fail-open. → A crashed Bash guard would lock the tool needed to repair it; guards must exit 0 on benign input, which a bats test enforces.

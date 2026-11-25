@@ -207,3 +207,43 @@ setup() {
     }
   done
 }
+
+# ---------------------------------------------------------------------------
+# onFailure (#296): the Edit/Write and ExitWorktree guards block when they fail;
+# the Bash guard stays fail-open, so Bash remains the way to repair a broken hook.
+# ---------------------------------------------------------------------------
+
+_on_failure() {
+  jq -r --arg s "$1" \
+    '[.hooks.PreToolUse[].hooks[] | select(.command | contains($s)) | .onFailure // "unset"] | .[0]' \
+    "${PLUGIN_ROOT}/hooks/hooks.json"
+}
+
+@test "Edit/Write and ExitWorktree guards set onFailure block" {
+  for s in pre-edit-branch-check.sh protect-git-internals.sh worktree-exit-guard.sh; do
+    [ "$(_on_failure "$s")" = "block" ] || { echo "not block: $s" >&2; return 1; }
+  done
+}
+
+@test "the Bash guard stays fail-open (no onFailure block)" {
+  [ "$(_on_failure block-bad-git-ops.sh)" != "block" ]
+}
+
+# A fail-closed guard must not fail on benign input, or it locks the tool it
+# guards. Exit 0 or 2 are decisions; anything else would now block the call.
+@test "fail-closed guards exit 0 on empty, malformed, foreign and out-of-repo input" {
+  local outside
+  outside="$(mktemp -d "${TMPDIR:-/tmp}/tcs-onfailure.XXXXXX")"
+  for s in pre-edit-branch-check.sh protect-git-internals.sh worktree-exit-guard.sh; do
+    for input in '' 'not json' '{}' '{"tool_name":"Read","tool_input":{}}' \
+                 '{"tool_name":"Edit","tool_input":{"file_path":"/nonexistent/dir/x.txt"}}' \
+                 '{"tool_name":"Write","tool_input":{}}' \
+                 '{"tool_name":"ExitWorktree","tool_input":{}}'; do
+      rc=0
+      (cd "$outside" && unset CLAUDE_PLUGIN_ROOT && printf '%s' "$input" | "${PLUGIN_ROOT}/scripts/$s" >/dev/null 2>&1) || rc=$?
+      [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ] || {
+        echo "$s exited $rc on input [$input]" >&2; rm -rf "$outside"; return 1; }
+    done
+  done
+  rm -rf "$outside"
+}

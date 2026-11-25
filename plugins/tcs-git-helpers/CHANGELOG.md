@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.3.2] - 2026-11-25
+
+### Changed
+
+- **The Edit/Write and worktree-exit guards block when they fail themselves (#296).** A hook that
+  crashed, timed out or could not start let the tool call through, so a broken guard simply
+  vanished. `pre-edit-branch-check.sh`, `protect-git-internals.sh` and `worktree-exit-guard.sh` now
+  set `onFailure: "block"`. `block-bad-git-ops.sh` stays fail-open, because a crash there would
+  lock every Bash call. **What to know:** needs Claude Code 2.1.295 or later; if a guard keeps
+  blocking because it fails, disable the plugin with `/plugin` and report the error.
+
 ## [2.3.1] - 2026-11-25
 
 ### Fixed

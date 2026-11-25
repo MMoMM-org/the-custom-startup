@@ -16,11 +16,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/pre-edit-branch-check.sh\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/pre-edit-branch-check.sh\"",
+            "onFailure": "block"
           },
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/protect-git-internals.sh\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/protect-git-internals.sh\"",
+            "onFailure": "block"
           }
         ]
       },
@@ -29,7 +31,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/worktree-exit-guard.sh\""
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/worktree-exit-guard.sh\"",
+            "onFailure": "block"
           }
         ]
       }
