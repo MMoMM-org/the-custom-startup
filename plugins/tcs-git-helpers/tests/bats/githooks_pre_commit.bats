@@ -663,3 +663,100 @@ _run_hook() {
   _run_hook
   [ "$status" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# Credential-shaped values in any staged file (#294)
+# ---------------------------------------------------------------------------
+# Only lines the commit adds are scanned, so editing a file that already holds
+# a fixture key, or removing a leaked key, stays possible.
+
+@test "blocks a GitHub token added to a source file, names file and kind, never prints it" {
+  git -C "$REPO" checkout -q -b feat/src-token
+  mkdir -p "$REPO/src"
+  token="$(_fake ghp_ 36)"
+  _stage_file "src/config.ts" "export const token = \"${token}\";"
+  _run_hook
+  [ "$status" -eq 1 ]
+  _has "$output" "src/config.ts"
+  _has "$output" "GitHub token"
+  _lacks "$output" "$token"
+}
+
+@test "blocks an Anthropic key added to a shell script" {
+  git -C "$REPO" checkout -q -b feat/src-anthropic
+  _stage_file "run.sh" "export ANTHROPIC_API_KEY=$(_fake sk-ant-api03- 40)"
+  _run_hook
+  [ "$status" -eq 1 ]
+  _has "$output" "run.sh"
+}
+
+@test "blocks an AWS access key id added to a yaml file" {
+  git -C "$REPO" checkout -q -b feat/src-aws
+  _stage_file "deploy.yml" "aws_access_key_id: AKIA$(_fake '' 16 | tr x Q)"
+  _run_hook
+  [ "$status" -eq 1 ]
+  _has "$output" "AWS access key"
+}
+
+@test "blocks a private key block pasted into a non-key file" {
+  git -C "$REPO" checkout -q -b feat/src-pem
+  _stage_file "notes.md" "$(printf -- '-----BEGIN RSA PRIVATE %s-----' KEY)"
+  _run_hook
+  [ "$status" -eq 1 ]
+  _has "$output" "notes.md"
+}
+
+@test "allows a long kebab-case identifier that contains sk-" {
+  git -C "$REPO" checkout -q -b feat/src-slug
+  _stage_file "plan.md" "see task-implement-incremental-phase-two-of-the-observability-rollout"
+  _run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "allows editing a file that already holds a key on an untouched line" {
+  printf 'a=%s\nb=1\n' "$(_fake ghp_ 36)" > "$REPO/fixture.txt"
+  git -C "$REPO" add fixture.txt
+  git -C "$REPO" -c core.hooksPath=/dev/null commit -q -m "chore: seed fixture"
+  git -C "$REPO" checkout -q -b fix/edit-fixture
+  printf 'a=%s\nb=2\n' "$(_fake ghp_ 36)" > "$REPO/fixture.txt"
+  git -C "$REPO" add fixture.txt
+  _run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "allows a commit that removes a leaked key" {
+  printf 'a=%s\n' "$(_fake ghp_ 36)" > "$REPO/leak.txt"
+  git -C "$REPO" add leak.txt
+  git -C "$REPO" -c core.hooksPath=/dev/null commit -q -m "chore: seed leak"
+  git -C "$REPO" checkout -q -b fix/remove-leak
+  printf 'a=REDACTED\n' > "$REPO/leak.txt"
+  git -C "$REPO" add leak.txt
+  _run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "exclude-paths bypasses the content scan for a matched file" {
+  git -C "$REPO" checkout -q -b feat/src-excluded
+  mkdir -p "$REPO/tests/fixtures"
+  printf 'tests/fixtures/*\n' > "$REPO/.githooks/exclude-paths"
+  _stage_file "tests/fixtures/token.txt" "$(_fake ghp_ 36)"
+  _run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "skips binary files" {
+  git -C "$REPO" checkout -q -b feat/src-binary
+  printf 'x\000%s\n' "$(_fake ghp_ 36)" > "$REPO/blob.bin"
+  git -C "$REPO" add blob.bin
+  _run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "names a file whose path contains a space" {
+  git -C "$REPO" checkout -q -b feat/src-space
+  mkdir -p "$REPO/my docs"
+  _stage_file "my docs/setup notes.md" "token: $(_fake ghp_ 36)"
+  _run_hook
+  [ "$status" -eq 1 ]
+  _has "$output" "my docs/setup notes.md"
+}

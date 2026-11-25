@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.3.1] - 2026-11-25
+
+### Fixed
+
+- **`pre-commit` scans the content of every staged file for credentials, not just `.claude/` (#294).**
+  A GitHub, Anthropic/OpenAI, AWS, Slack or GitLab token, or a private key block, pasted into
+  `src/config.ts` used to pass: content was checked only under `.claude/`, everywhere else only
+  file names. Now every line the commit adds is checked; the message names the file and the kind
+  of value, never the value. Lines already in the file, removed lines and binary files are not
+  checked, and a value must start at a token boundary, so `task-…` slugs do not read as `sk-` keys.
+  **What to know:** run `/tcs-git-helpers:git-setup --update` to get the new hook; exempt fixture
+  paths in `.githooks/exclude-paths`, or build fake keys at run time.
+
 ## [2.3.0] - 2026-11-21
 
 ### Added
