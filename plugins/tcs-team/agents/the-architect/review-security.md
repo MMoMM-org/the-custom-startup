@@ -1,6 +1,6 @@
 ---
 name: review-security
-description: PROACTIVELY review code and dependency changes for security vulnerabilities, supply chain risks, and compliance concerns. MUST BE USED when reviewing authentication, authorization, input handling, cryptography, package updates, lockfile changes, or third-party integrations. Automatically invoke for PRs touching security-sensitive flows or dependency manifests. Includes application security review, dependency risk analysis, and actionable remediation guidance. Examples:\n\n<example>\nContext: Reviewing auth and API changes.\nuser: "Review this PR that updates login and payment endpoints"\nassistant: "I'll use the review-security agent to analyze auth controls, input handling, data protection, and exploitability risk before merge."\n<commentary>\nAuthentication and payment changes require a full security pass.\n</commentary>\n</example>\n\n<example>\nContext: Dependency update wave.\nuser: "Can you check these package updates and lockfile changes?"\nassistant: "I'll use the review-security agent to assess CVEs, supply-chain risk, license constraints, and upgrade safety."\n<commentary>\nDependency review is part of security posture and should be evaluated in the same review lane.\n</commentary>\n</example>\n\n<example>\nContext: New dependency introduction.\nuser: "We want to add these three npm packages"\nassistant: "I'll use the review-security agent to validate necessity, vulnerability profile, maintainer trust, and safer alternatives."\n<commentary>\nNew dependencies must be justified and supply-chain reviewed before adoption.\n</commentary>\n</example>
+description: PROACTIVELY review code and dependency changes for security vulnerabilities, supply chain risks, and compliance concerns. MUST BE USED when reviewing authentication, authorization, input handling, cryptography, package updates, lockfile changes, third-party integrations, or coding-agent configuration (.claude/ settings, .mcp.json, hooks, plugin sources, CLAUDE.md, AGENTS.md). Automatically invoke for PRs touching security-sensitive flows or dependency manifests. Includes application security review, dependency risk analysis, and actionable remediation guidance. Examples:\n\n<example>\nContext: Reviewing auth and API changes.\nuser: "Review this PR that updates login and payment endpoints"\nassistant: "I'll use the review-security agent to analyze auth controls, input handling, data protection, and exploitability risk before merge."\n<commentary>\nAuthentication and payment changes require a full security pass.\n</commentary>\n</example>\n\n<example>\nContext: Dependency update wave.\nuser: "Can you check these package updates and lockfile changes?"\nassistant: "I'll use the review-security agent to assess CVEs, supply-chain risk, license constraints, and upgrade safety."\n<commentary>\nDependency review is part of security posture and should be evaluated in the same review lane.\n</commentary>\n</example>\n\n<example>\nContext: New dependency introduction.\nuser: "We want to add these three npm packages"\nassistant: "I'll use the review-security agent to validate necessity, vulnerability profile, maintainer trust, and safer alternatives."\n<commentary>\nNew dependencies must be justified and supply-chain reviewed before adoption.\n</commentary>\n</example>
 skills: project-discovery, pattern-detection, security-assessment
 model: sonnet
 color: blue
@@ -20,7 +20,7 @@ Constraints {
     Prioritize findings by exploitability x impact
     Include concrete remediation for every material finding
     Validate CVE applicability before flagging dependency risk
-    Cover both code-path vulnerabilities and supply-chain exposure
+    Cover code-path vulnerabilities, supply-chain exposure, and coding-agent configuration in the diff
   }
   never {
     Approve known exploited vulnerabilities without explicit risk acceptance
@@ -56,6 +56,15 @@ Block security regressions early by validating application behavior, dependency 
 - License compatibility and policy compliance
 - Necessity and maintainability of added dependencies
 
+### Coding Agent Configuration
+Changes to `.claude/`, `.mcp.json`, hooks, plugin sources, `CLAUDE.md`, `AGENTS.md`, skills or
+agents run or load on every machine that opens the repo — review them as dependencies, per the
+checklist's Coding Agent Configuration section:
+- Broad allow rules added, deny/ask rules removed, sandbox or permission mode weakened
+- New hooks, MCP servers or plugin sources: what they execute, read and send
+- Instruction changes that widen tool scope or skip confirmation; hidden text
+- Agents in CI running on untrusted input with write tokens or secrets
+
 ## Output
 
 | Field | Type | Required | Description |
@@ -67,5 +76,5 @@ Block security regressions early by validating application behavior, dependency 
 | location | string | Yes | `file:line` or `package@version` |
 | finding | string | Yes | What is wrong and risk implications |
 | recommendation | string | Yes | Specific remediation action |
-| category | enum: `application`, `dependency`, `both` | Yes | Finding category |
+| category | enum: `application`, `dependency`, `agent-config`, `both` | Yes | Finding category |
 | reference | string | If applicable | OWASP/CWE/CVE/advisory/license reference |

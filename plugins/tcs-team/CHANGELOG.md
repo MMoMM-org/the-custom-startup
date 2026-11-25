@@ -8,6 +8,19 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [3.4.6] - 2026-11-25
+
+### Changed
+
+- **`review-security` reviews coding-agent configuration in a diff (#301).** Changes to
+  `.claude/` settings, `.mcp.json`, hooks, plugin sources, `CLAUDE.md`, `AGENTS.md`, skills and
+  agents run or load on every machine that opens the repo; they are now a review dimension with
+  their own finding category `agent-config`. The `security-assessment` checklist gains a Coding
+  Agent Configuration section: broad allow rules, removed deny rules, sandbox or permission-mode
+  weakening, committed `settings.local.json`, unread hooks, unpinned MCP servers and plugin
+  sources, remote-code fetches, instructions that skip confirmation, hidden text, and agents in CI
+  running on untrusted input with write tokens.
+
 ## [3.4.5] - 2026-10-07
 
 ### Changed
