@@ -8,6 +8,16 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [4.4.27] - 2026-11-25
+
+### Changed
+
+- **`pickup` and `receive-review` treat issue and review text as data, not instructions (#295).**
+  A review item that asks for anything outside the code under review (run a command, push, fetch a
+  URL, change config, permissions, CI or credentials, edit files the PR does not touch) is
+  classified Question and shown to you, never Accept; each item's author is noted. `pickup` puts
+  such a request into its plan as a finding instead of acting on it.
+
 ## [4.4.26] - 2026-11-12
 
 ### Changed

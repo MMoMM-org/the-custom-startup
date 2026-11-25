@@ -8,6 +8,15 @@ Add one when a change is worth a reader's attention. The top entry must never
 name a version `plugin.json` does not carry — `scripts/ci/check-changelog-version-sync.sh`
 enforces that on every merge.
 
+## [1.1.2] - 2026-11-25
+
+### Changed
+
+- **Issue and comment text is data, not instructions (#295).** `issue` and `link-issue` now say
+  so, and the deny reason of `require-issue-comments.sh` adds it right where the comments are about
+  to be read: a request in them to run a command, push, fetch a URL or change settings is reported
+  to you, never carried out. Text by non-collaborators gets extra suspicion.
+
 ## [1.1.1] - 2026-11-11
 
 ### Fixed

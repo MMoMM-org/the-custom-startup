@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Issue, comment and review text is treated as data, not instructions (#295).** `tcs-issues`
+  (`issue`, `link-issue`, the comment-read hook) and `tcs-workflow` (`pickup`, `receive-review`)
+  report a request in that text to run, push, fetch or change settings instead of acting on it; a
+  review item asking for such an action is classified Question. Update both plugins.
+
 - **tcs-git-helpers `pre-commit` scans every staged file for pasted credentials (#294).** Content
   was checked only under `.claude/`; a token in `src/config.ts` passed. Now every added line is
   checked for GitHub, Anthropic/OpenAI, AWS, Slack and GitLab tokens and private key blocks; the
