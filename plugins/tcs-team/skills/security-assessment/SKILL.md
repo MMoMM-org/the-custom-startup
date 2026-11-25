@@ -122,7 +122,10 @@ For each focus area, trace data flow from entry to storage/output:
 Review infrastructure security per reference/secure-coding.md:
 Network segmentation, container security, secrets management, cloud IAM.
 
-Read checklists/security-review-checklist.md for comprehensive validation.
+Read checklists/security-review-checklist.md for comprehensive validation. If the change set
+touches coding-agent configuration (`.claude/`, `.mcp.json`, hooks, plugin sources, `CLAUDE.md`,
+`AGENTS.md`, skills, agents), work through its Coding Agent Configuration section — those files
+run or load on every developer's machine that opens the repo.
 
 ### 5. Report Findings
 

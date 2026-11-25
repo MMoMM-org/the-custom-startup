@@ -248,6 +248,39 @@ Comprehensive checklist for security-focused code review, architecture assessmen
 - [ ] Typosquatting risk considered
 - [ ] Transitive dependencies reviewed
 
+## Coding Agent Configuration
+
+Applies when a change touches what a coding agent (Claude Code or similar) loads or runs:
+`.claude/`, `.mcp.json`, hook definitions, plugin or marketplace sources, `CLAUDE.md`,
+`AGENTS.md`, skill and agent files. These load into the agent's context or execute on the
+developer's machine as soon as the repo is opened — treat them as dependencies.
+
+### Permissions
+
+- [ ] No new broad allow rules (`Bash(*)`, `Bash(python:*)`, `Bash(sh:*)`, `Bash(curl:*)`, `WebFetch` without a domain)
+- [ ] No removed or narrowed `deny` / `ask` rules without a stated reason
+- [ ] No `bypassPermissions` or `dontAsk` as a committed default mode
+- [ ] No sandbox weakening (`sandbox.enabled: false`, `allowUnsandboxedCommands`, new `excludedCommands`, new `allowWrite` paths)
+- [ ] `.claude/settings.local.json` is not committed (it stores approved commands verbatim, tokens included)
+
+### Executables and Servers
+
+- [ ] Every new or changed hook command is read: what it runs, what it reads, where it sends data
+- [ ] New MCP servers: source known, version pinned, credentials not inline, scope of tools justified
+- [ ] Plugin and marketplace sources are known and pinned; no switch to an unvetted fork
+- [ ] No hook or script that fetches and executes remote code (`curl … | sh`, `npx` of an unpinned package)
+
+### Instruction Files
+
+- [ ] `CLAUDE.md`, `AGENTS.md`, skill and agent changes do not widen tool scope or tell the agent to skip confirmation, tests or review
+- [ ] No hidden instructions (HTML comments, zero-width text, base64) in files the agent loads
+- [ ] No credentials or tokens in agent configuration or instruction files
+
+### Agents in CI
+
+- [ ] A workflow that runs an agent on untrusted input (PR titles, bodies, comments, issues from outsiders) holds no write token or secrets it does not need
+- [ ] Agent CI jobs run under their own identity, not a maintainer's personal token
+
 ## CI/CD Security
 
 ### Pipeline Security

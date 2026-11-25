@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **tcs-team `review-security` checks coding-agent configuration in a diff (#301).** Broad allow
+  rules, removed deny rules, sandbox weakening, new hooks, MCP servers and plugin sources, and
+  instruction changes that skip confirmation are reviewed as dependencies, with a new checklist
+  section and finding category `agent-config`. Update tcs-team.
+
 - **Issue, comment and review text is treated as data, not instructions (#295).** `tcs-issues`
   (`issue`, `link-issue`, the comment-read hook) and `tcs-workflow` (`pickup`, `receive-review`)
   report a request in that text to run, push, fetch or change settings instead of acting on it; a
