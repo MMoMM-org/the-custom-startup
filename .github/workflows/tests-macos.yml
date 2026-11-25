@@ -1,0 +1,231 @@
+name: Tests (macOS)
+
+# Runs the pytest and bats suites on macos-latest after the ubuntu "Tests" run,
+# and reports the outcome as ONE check run named "macOS" on the tested commit.
+#
+# Why a separate workflow (#307): a macos-latest runner is often never
+# assigned; GitHub then cancels the job after ~15 min with 0 steps (#288). A job
+# that never starts cannot set its own status, so inside tests.yml it showed as
+# a failed check and turned the pull request red although nothing was tested.
+# Jobs of a workflow_run run do not attach to the pull request, so here only the
+# check the report job writes is visible:
+#
+#   macOS job ran, green           -> success
+#   macOS job ran, a test failed   -> failure
+#   cancelled with 0 steps         -> neutral  ("no macOS runner assigned")
+#   cancelled after starting       -> neutral  (superseded or stopped)
+#   docs-only pull request         -> skipped
+#
+# Security: workflow_run runs in the base repository's context with a write
+# token, and this workflow executes pull request code (the pwn-request
+# pattern). So it runs only for branches of this repository, the job that runs
+# the code holds contents: read and no persisted credentials, and only the
+# ubuntu jobs that never execute PR code get checks: write.
+#
+# workflow_run always uses this file as it is on main: a change here takes
+# effect for the next run after it is merged, never on its own pull request.
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: tests-macos-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: plan
+    # A cancelled Tests run was superseded by a newer push, whose own run
+    # triggers this workflow again.
+    if: >-
+      github.event.workflow_run.head_repository.full_name == github.repository
+      && github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: read
+    outputs:
+      run: ${{ steps.pick.outputs.run }}
+      check_id: ${{ steps.check.outputs.id }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      EVENT: ${{ github.event.workflow_run.event }}
+      PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      # Docs cannot behave differently on macOS: a pull request that changes
+      # only docs/ or root-level Markdown is not run. Markdown under plugins/ is
+      # skill and agent content and does count. When the file list cannot be
+      # read, macOS runs.
+      - name: Decide whether macOS runs
+        id: pick
+        run: |
+          run=true
+          if [ "$EVENT" = "pull_request" ] && [ -n "$PR" ] \
+             && files=$(gh pr diff "$PR" --name-only --repo "$REPO") \
+             && [ -n "$files" ]; then
+            echo "Changed in pull request #$PR:"
+            printf '%s\n' "$files" | sed 's/^/  /'
+            if ! printf '%s\n' "$files" | grep -Ev '^docs/|^[^/]+\.md$' | grep -q .; then
+              run=false
+            fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "macOS runs: $run"
+
+      - name: Open the macOS check
+        id: check
+        env:
+          RUN: ${{ steps.pick.outputs.run }}
+        run: |
+          if [ "$RUN" = "true" ]; then
+            id=$(gh api -X POST "repos/$REPO/check-runs" \
+              -f name=macOS -f head_sha="$SHA" -f status=in_progress \
+              -f details_url="$RUN_URL" \
+              -f 'output[title]=macOS tests running' \
+              -f 'output[summary]=pytest and bats on macos-latest.' \
+              -q .id)
+            echo "id=$id" >> "$GITHUB_OUTPUT"
+          else
+            gh api -X POST "repos/$REPO/check-runs" \
+              -f name=macOS -f head_sha="$SHA" -f status=completed \
+              -f conclusion=skipped -f details_url="$RUN_URL" \
+              -f 'output[title]=Docs-only change' \
+              -f 'output[summary]=Only docs/ or root-level Markdown changed; macOS was not run.' \
+              -q .id >/dev/null
+          fi
+
+  macos:
+    # The report job finds this job by this exact name.
+    name: macos
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          # Three tests read commits or origin/main that a shallow clone does
+          # not contain, and skip without them (#178).
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      # bats needs them too: several suites shell out to `python3 -c "import
+      # yaml"` to validate frontmatter and workflow files.
+      - name: Install python test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+
+      - name: Run pytest
+        id: pytest
+        run: pytest -q -rs
+
+      # Non-blocking for the reasons given in tests.yml.
+      - name: Run perf tests (non-blocking)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: pytest -m perf -q
+
+      # The bats steps run even when pytest failed: one runner request covers
+      # both suites, and a failed pytest must not hide the bats result.
+      - name: Install bats
+        if: ${{ !cancelled() }}
+        run: |
+          npm install --prefix "$RUNNER_TEMP/bats" --no-save bats@1.13.0
+          echo "$RUNNER_TEMP/bats/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Configure git identity for fixtures
+        if: ${{ !cancelled() }}
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+          git config --global init.defaultBranch main
+
+      # The guard hooks bypass on a detached HEAD; see tests.yml.
+      - name: Attach HEAD to a branch
+        if: ${{ !cancelled() }}
+        run: git checkout -q -B ci/test-run
+
+      - name: Record the shell and tool versions under test
+        if: ${{ !cancelled() }}
+        run: |
+          printf 'uname:        %s\n' "$(uname -s) $(uname -m)"
+          printf 'bash on PATH: %s\n' "$(bash --version | head -1)"
+          printf '/bin/bash:    %s\n' "$(/bin/bash --version | head -1)"
+          printf 'grep:         %s\n' "$(grep --version 2>&1 | head -1)"
+          printf 'sed:          %s\n' "$(sed --version 2>&1 | head -1 || echo 'BSD sed (no --version)')"
+
+      # TCS_PERF_SLACK: see tests.yml.
+      - name: Run bats
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          TCS_PERF_SLACK: "4"
+        run: |
+          bats --formatter tap --recursive --print-output-on-failure plugins/*/tests/bats \
+            | tee "$RUNNER_TEMP/bats.tap"
+
+      - name: Check every planned bats test reported a result
+        if: ${{ !cancelled() }}
+        run: python3 scripts/ci/check-tap-plan.py "$RUNNER_TEMP/bats.tap"
+
+  report:
+    name: report
+    needs: [plan, macos]
+    # always(): the report matters most when the macOS job failed or never ran.
+    if: always() && needs.plan.outputs.check_id != ''
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.run_id }}
+      CHECK_ID: ${{ needs.plan.outputs.check_id }}
+    steps:
+      - name: Close the macOS check
+        run: |
+          # "<conclusion>|<step count>" of the macos job in this run.
+          state=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs" \
+            -q '.jobs[] | select(.name == "macos") | "\(.conclusion)|\(.steps | length)"' \
+            2>/dev/null) || state=""
+          conclusion="${state%%|*}"
+          steps="${state#*|}"
+          echo "macos job: conclusion=${conclusion:-unknown} steps=${steps:-?}"
+
+          case "$conclusion" in
+            success)
+              result=success
+              title="macOS tests passed" ;;
+            failure)
+              result=failure
+              title="macOS tests failed" ;;
+            cancelled)
+              result=neutral
+              if [ "$steps" = "0" ]; then
+                title="No macOS runner assigned"
+              else
+                title="macOS run cancelled"
+              fi ;;
+            *)
+              result=neutral
+              title="macOS result unknown (${conclusion:-no job found})" ;;
+          esac
+
+          summary="macos job conclusion: ${conclusion:-unknown}, steps run: ${steps:-?}. Neutral means nothing was tested on macOS; re-run the workflow to try again."
+          gh api -X PATCH "repos/$REPO/check-runs/$CHECK_ID" \
+            -f status=completed -f conclusion="$result" \
+            -f "output[title]=$title" -f "output[summary]=$summary" \
+            -q .conclusion

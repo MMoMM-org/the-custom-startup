@@ -91,5 +91,5 @@
 - **`prompt_lint.py --repo` exits non-zero on a clean tree** — two E4 errors in `semantic_detector.py` are pinned known-open, not a regression. → Compare the reported error set against those two, never the exit code.
 
 <!-- 2026-11-12 -->
-- **A `macos-latest` job cancelled with 0 steps is a runner that never started, not a test failure** — `gh pr checks` still shows `fail`. → Check `.jobs[].steps|length` in `gh run view --json jobs`, then `gh run rerun <id> --failed`.
+- **A neutral `macOS` check means no macOS runner was assigned, so nothing was tested on macOS** — summary says `steps run: 0`. → Re-run the "Tests (macOS)" workflow before trusting macOS; ubuntu green alone covers bash 5 only.
 - **`rg -c` prints nothing, not `0`, when nothing matches** — a wait loop `until [ "$(gh pr checks N | rg -c pending)" = 0 ]` never ends. → Test the match itself: `until ! gh pr checks N | rg -q pending`.
