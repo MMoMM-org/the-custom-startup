@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — prompt-author
 
+### Fixed
+
+- **tcs-git-helpers `pre-commit` scans every staged file for pasted credentials (#294).** Content
+  was checked only under `.claude/`; a token in `src/config.ts` passed. Now every added line is
+  checked for GitHub, Anthropic/OpenAI, AWS, Slack and GitLab tokens and private key blocks; the
+  message names file and kind, never the value. **What to know:** run
+  `/tcs-git-helpers:git-setup --update`; exempt fixture paths in `.githooks/exclude-paths`.
+
 ### Added
 
 - **tcs-git-helpers denies `gh pr merge` while a PR has unaddressed review findings (#292).**
