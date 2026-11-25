@@ -6,6 +6,8 @@
 # Blocks:
 #   1. Direct commits to protected branches (default: main|master|production|release)
 #   2. Staged files that look like secrets (env files, credentials, keys, SSH keys)
+#   3. .claude/settings.local.json, and credential-shaped values in .claude/ JSON
+#   4. Credential-shaped values on lines added to any other staged file
 #
 # Configuration (via .githooks/.config):
 #   TCS_PROTECTED_BRANCHES      — |-separated branch names; default main|master|production|release
@@ -204,6 +206,55 @@ while IFS= read -r file; do
 done <<EOF
 $ADDED
 EOF
+
+# ---------------------------------------------------------------------------
+# 4. Credential-shaped values added to any other staged file (#294)
+# ---------------------------------------------------------------------------
+# Section 3 scans .claude/ files whole; everywhere else only the lines this
+# commit adds count, so a file that already carries a fixture key stays
+# editable and removing a leaked key is never blocked. Binary files produce no
+# added lines. Each value must start at a token boundary, so "task-…" slugs do
+# not read as "sk-" keys. Reported by file and kind, never by value.
+#
+# awk only tags each added line with its path; matching stays in grep -E,
+# because mawk 1.3.3 has no {n} interval support.
+TAB="$(printf '\t')"
+ADDED_LINES="$(git -c core.quotePath=false diff --cached -U0 --no-color --no-ext-diff --diff-filter=ACMR 2>/dev/null \
+  | awk '
+      /^\+\+\+ / { path = substr($0, 5); sub(/^b\//, "", path); sub(/\t$/, "", path); next }
+      /^\+/      { print path "\t" substr($0, 2) }
+    ' || true)"
+
+if [ -n "$ADDED_LINES" ]; then
+  _BOUNDARY="^[^${TAB}]*${TAB}(.*[^A-Za-z0-9_-])?"
+  _CONTENT_KINDS='GitHub token|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}
+sk- API key (Anthropic/OpenAI)|sk-ant-[A-Za-z0-9_-]{20,}|sk-(proj-)?[A-Za-z0-9_-]{32,}
+AWS access key id|AKIA[0-9A-Z]{16}
+Slack token|xox[abprs]-[A-Za-z0-9-]{10,}
+GitLab token|glpat-[A-Za-z0-9_-]{20}
+private key block|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+
+  while IFS= read -r kind_line; do
+    kind="${kind_line%%|*}"
+    pattern="${kind_line#*|}"
+    hits="$(printf '%s\n' "$ADDED_LINES" | grep -E -- "${_BOUNDARY}(${pattern})" | cut -f1 | sort -u || true)"
+    while IFS= read -r file; do
+      [ -z "$file" ] && continue
+      case "$file" in
+        .claude/*.json|.claude/*.jsonl|*/.claude/*.json|*/.claude/*.jsonl) continue ;;
+      esac
+      if _is_excluded "$file"; then
+        continue
+      fi
+      printf '  ✗ Staged change adds a %s: %s\n' "$kind" "$file" >&2
+      FOUND=1
+    done <<HITS
+$hits
+HITS
+  done <<KINDS
+$_CONTENT_KINDS
+KINDS
+fi
 
 if [ "$FOUND" -eq 1 ]; then
   printf '\n' >&2
