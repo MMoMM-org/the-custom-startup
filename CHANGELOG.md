@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **tcs-git-helpers' Edit/Write and worktree-exit guards block when they fail themselves (#296).**
+  A crashed or timed-out guard used to let the call through; these three now set
+  `onFailure: "block"`. The Bash guard stays fail-open so Bash remains usable to repair a broken
+  hook. Needs Claude Code 2.1.295+. Update tcs-git-helpers.
+
 - **tcs-team `review-security` checks coding-agent configuration in a diff (#301).** Broad allow
   rules, removed deny rules, sandbox weakening, new hooks, MCP servers and plugin sources, and
   instruction changes that skip confirmation are reviewed as dependencies, with a new checklist

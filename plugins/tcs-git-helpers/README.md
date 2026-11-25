@@ -26,6 +26,16 @@ Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the pl
 | `PostToolUse(Bash)` | `nudge-hook.sh` | Soft, success-only nudges after `git checkout -b`, `gh pr create`, first `git push -u`, `gh pr merge`, `git rebase`, `git stash pop` (60s same-nudge dedup) |
 | `SessionStart` | `session-start-brief.sh` | One-line branch awareness brief — branch, working-tree state, ahead/behind, stale-merged count (cached rows whose branch still exists locally, ≤300ms p99, no `gh` calls) |
 
+### When a guard itself fails
+
+A hook that crashes, times out or cannot start normally lets the tool call through. The Edit/Write
+guards and the worktree-exit guard (`pre-edit-branch-check.sh`, `protect-git-internals.sh`,
+`worktree-exit-guard.sh`) set `onFailure: "block"` instead, so a broken guard denies the edit
+rather than silently disappearing (Claude Code 2.1.295 or later). `block-bad-git-ops.sh` stays
+fail-open: it runs on every Bash call, and a crash there would otherwise lock Bash, the tool you
+need to repair it. If a guard keeps blocking because it fails, disable the plugin with `/plugin`
+and report the error; `CLAUDE_ALLOW_*` overrides cannot help, since the script never gets that far.
+
 ### Merging with open review findings
 
 Before `gh pr merge` (or `gh api -X PUT …/pulls/N/merge`) runs, `block-bad-git-ops.sh` asks
