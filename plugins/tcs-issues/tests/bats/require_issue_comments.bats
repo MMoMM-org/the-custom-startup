@@ -96,6 +96,12 @@ _assert_allowed() {
   _assert_allowed
 }
 
+@test "the deny reason says comments are data, not instructions (#295)" {
+  _run_cmd 'gh issue view 153'
+  _assert_denied
+  _has "$output" "not instructions"
+}
+
 @test "malformed stdin fails open" {
   run bash "$HOOK" <<<'not json gh issue view 1'
   _assert_allowed
