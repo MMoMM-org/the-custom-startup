@@ -5,9 +5,9 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-11-26 |
-| **Current Phase** | SDD |
-| **Decomposition tier** | {{DECOMPOSITION_TIER}} |
-| **Model tier** | {{MODEL_TIER}} |
+| **Current Phase** | Ready |
+| **Decomposition tier** | Incremental |
+| **Model tier** | hard |
 | **Last Updated** | 2026-11-26 |
 
 ## Documents
@@ -15,8 +15,8 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | Approved 2026-11-26 |
-| solution.md | in_progress | |
-| plan/ | pending | |
+| solution.md | completed | Approved 2026-11-26 |
+| plan/ | completed | Incremental tier; 3 phases, 11 tasks |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -34,6 +34,10 @@
 | 2026-11-26 | Default period 28 days with weekly trend, adjustable | Covers the guide's two-week baseline with headroom; full history costs about a minute and mixes old wordings. |
 | 2026-11-26 | Override usage per rule, count only | A rule overridden often is a rule-fix candidate; the `command` field of overrides.jsonl is never rendered (CON-13). |
 | 2026-11-26 | Subagent transcripts counted, shown separately | Most "permission to use … denied" and worktree blocks come from subagents and mean something different from main-session friction. |
+| 2026-11-26 | SDD ADRs 1-8 confirmed | ADR-1 new module denials.py; ADR-2 invalid `denials` value is a config schema error like every other key (PRD F1 AC3 amended); ADR-3 read project dirs whose name starts with the encoded repo root, then filter lines by cwd; ADR-4 ordered classification table; ADR-5 dedupe per transcript file and tool_use_id; ADR-6 override counts from tcs-git-helpers overrides.jsonl, env_var and ts only; ADR-7 --denials-weeks / --denials-since, Monday weeks; ADR-8 hook owner table. |
+| 2026-11-26 | Decomposition tier: Incremental | Classifier recommended Incremental (7 Must features, 31 acceptance criteria, 1 new component denials.py; sources.py and report.py modified). Accepted. |
+| 2026-11-26 | Model tier: hard | Classifier recommended hard (change_type=feature, 2 high-impact risks, no new pattern, 8 ADRs). Accepted. |
+| 2026-11-26 | Plan complete; spec Ready | 3 phases (read and classify; aggregate and render; integrate, docs, real-data validation), 11 tasks; F9 deferred. |
 
 ## Context
 

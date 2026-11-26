@@ -114,7 +114,7 @@ Consequence: the review loop the enterprise coding-agent guide asks for (run a b
 - **Acceptance Criteria:**
   - [ ] Given a source without `denials = true`, When the report runs, Then its denials section states "not enabled" and how to enable it, and no transcript of that source is read
   - [ ] Given a source with `denials = true` and no transcript in reach of any of its homes, When the report runs, Then the section states that no transcripts were found and names the places searched
-  - [ ] Given `denials` with a value other than true or false, When the report runs, Then the source is treated as not enabled and the section names the invalid value
+  - [ ] Given `denials` with a value other than true or false, When the report runs, Then it stops with a config error naming the source and the value, as for every other invalid key in that file
 
 #### Feature 2: Denial classification
 - **User Story:** As the repository owner, I want each denied or blocked tool call counted under what denied it, so that I can act on the right rule or setting.
