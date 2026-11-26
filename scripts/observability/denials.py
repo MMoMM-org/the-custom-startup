@@ -6,10 +6,10 @@ rejected permission prompt. The only trace is the session transcript: an
 error tool result whose text is the deny message. This module reads that
 text and turns it into counts a person can review.
 
-T1.2 -- `classify(text, tool)`: an ordered table of known message openings,
-first match wins (SDD ADR-4). Hook owners are the TCS hook messages mapped to
-`<plugin>/<hook>`, three known non-TCS openings as `external: ...` (ADR-8).
-After the table:
+Classification -- `classify(text, tool)`: an ordered table of known message
+openings, first match wins (SDD ADR-4). Hook owners are the TCS hook messages
+mapped to `<plugin>/<hook>`, three known non-TCS openings as `external: ...`
+(ADR-8). After the table:
 
   - text carrying Claude Code's `PreToolUse:<Tool> hook error: ` prefix is a
     hook deny whose owner is unknown -- kept as "hook deny, unattributed"
@@ -17,20 +17,24 @@ After the table:
     instead of silently vanishing;
   - any other text is an ordinary tool error and not a denial (`None`).
 
-T1.3 -- `locate_transcripts(repo_root, homes)` finds the candidate files per
-home (ADR-3); `scan_file(path, period)` reads one of them and returns its
-error tool results (ADR-5). Which repository a result belongs to is decided
-later, per line, from its `cwd` -- locating by project-dir prefix also picks
-up sibling repositories (`app` vs `app-old`).
+Locating -- `locate_transcripts(repo_root, homes)` finds the candidate files
+per home (ADR-3). Which repository a result belongs to is decided later, per
+line, from its `cwd` -- locating by project-dir prefix also picks up sibling
+repositories (`app` vs `app-old`).
+
+Scanning -- `scan_file(path, period)` reads one file and returns its deduped
+error tool results in the period (ADR-5), its skipped-line count, and the
+earliest timestamp on any line (`oldest_ts`). A cheap text prefilter decides
+which lines are JSON-parsed at all.
 
 Privacy (CON-2): a returned `Denial` holds only fixed labels from the table
 and identifiers parsed out of the message (rule names, classifier reason
 category). Rule explanations, commands, paths and free reason text are never
 copied out of the message.
 
-Module contract (ADR-1, CON-5): standard library only, nothing local to this
-repository, no wall clock and no real home directory -- callers pass every
-path and time explicitly.
+Module contract: standard library only (CON-1) and nothing local to this
+repository (CON-4); no wall clock and no real home directory -- callers pass
+every path and time explicitly (CON-5).
 """
 
 from __future__ import annotations
@@ -111,7 +115,7 @@ TABLE: tuple[Row, ...] = (
          excluded_tools=_NOT_ACTION_TOOLS),
     _row("sandbox: filesystem", r"[Oo]peration not permitted|Read-only file system|could not lock config file",
          None, "low"),
-    _row("sandbox: network", r"CONNECT tunnel failed, response 403", None, "medium"),
+    _row("sandbox: network", r"CONNECT tunnel failed, response 403", None, "low"),
 )
 
 
@@ -151,13 +155,17 @@ def classify(text: str, tool: str | None) -> Denial | None:
 
 
 # ---------------------------------------------------------------------------
-# T1.3 -- locating transcripts (ADR-3) and scanning one file (ADR-5).
+# Locating transcripts (ADR-3) and scanning one file (ADR-5).
 # ---------------------------------------------------------------------------
 
 # Claude Code writes compact JSON (`"is_error":true`); the optional spaces keep
 # a re-serialised file from slipping past. An escaped `\"is_error\"` inside a
 # message string does not match, because its closing quote follows a backslash.
 _IS_ERROR = re.compile(r'"is_error"\s*:\s*true')
+# The same escaping argument keeps a quoted timestamp inside message text from
+# matching. The first match is the line's own: Claude Code writes nested
+# objects that carry a timestamp after the top-level field.
+_TIMESTAMP = re.compile(r'"timestamp"\s*:\s*"([^"]+)"')
 _TOOL_USE = '"tool_use"'
 
 
@@ -198,12 +206,17 @@ class ErrorResult:
 
 @dataclass(frozen=True)
 class ScanResult:
-    """One file's error results in period, its skipped-line count, and whether it was readable."""
+    """One file's error results in period, its skipped-line count, and whether it was readable.
+
+    `oldest_ts` is the earliest valid timestamp on any line, in period or not;
+    `None` when no line carries one or the file is unreadable.
+    """
 
     path: Path
     results: tuple[ErrorResult, ...]
     skipped_lines: int
     unreadable: bool = False
+    oldest_ts: datetime | None = None
 
     @property
     def versions(self) -> frozenset[str]:
@@ -318,6 +331,7 @@ class _FileScan:
     tool_names: dict[str, str] = field(default_factory=dict)
     results: list[ErrorResult] = field(default_factory=list)
     skipped: int = 0
+    oldest_ts: datetime | None = None
 
     def add_line(self, raw: str) -> None:
         line = raw.strip()
@@ -326,6 +340,7 @@ class _FileScan:
         if not (line.startswith("{") and line.endswith("}")):
             self.skipped += 1  # not JSON, or a partial write
             return
+        self._note_timestamp(line)
         is_error = _IS_ERROR.search(line) is not None
         if not (is_error or _TOOL_USE in line):
             return  # cheap prefilter: nothing this module reads
@@ -338,6 +353,18 @@ class _FileScan:
             self._add_entry(entry, is_error)
         elif is_error:
             self.skipped += 1
+
+    def _note_timestamp(self, line: str) -> None:
+        """Track the earliest valid timestamp without parsing the line; bad values are ignored."""
+        match = _TIMESTAMP.search(line)
+        if match is None:
+            return
+        try:
+            ts = _parse_ts(match.group(1))
+        except _BadShape:
+            return
+        if self.oldest_ts is None or ts < self.oldest_ts:
+            self.oldest_ts = ts
 
     def _add_entry(self, entry: dict, is_error: bool) -> None:
         kind = entry.get("type")
@@ -372,7 +399,8 @@ class _FileScan:
     def finish(self) -> ScanResult:
         """Attach tool names: a `tool_use` may come after its result (compaction)."""
         named = tuple(replace(r, tool=self.tool_names.get(r.tool_use_id)) for r in self.results)
-        return ScanResult(path=self.path, results=named, skipped_lines=self.skipped)
+        return ScanResult(path=self.path, results=named, skipped_lines=self.skipped,
+                          oldest_ts=self.oldest_ts)
 
 
 def scan_file(path: Path, period: Period) -> ScanResult:

@@ -155,7 +155,7 @@ ROW_CASES = [
     pytest.param(
         "curl: (56) CONNECT tunnel failed, response 403",
         "Bash",
-        ("sandbox: network", None, "medium"),
+        ("sandbox: network", None, "low"),
         id="sandbox-network",
     ),
 ]
@@ -863,3 +863,63 @@ def test_scan_survives_invalid_utf8(tmp_path):
 
     assert [r.tool_use_id for r in scan.results] == ["t1"]
     assert scan.unreadable is False
+
+
+# --- scan_file: oldest transcript timestamp (report "oldest <date>") -------
+
+
+def _plain_line(ts, line_type="system") -> dict:
+    return {"type": line_type, "timestamp": ts, "sessionId": "s1", "content": "note"}
+
+
+def test_scan_oldest_ts_comes_from_a_non_error_line_older_than_any_error(tmp_path):
+    entries = [_tool_result("t1", DENY), _plain_line("2026-11-02T08:00:00Z"), _assistant_tool_use("t1", "Bash")]
+
+    scan = _scan(tmp_path, entries)
+
+    assert scan.oldest_ts == datetime(2026, 11, 2, 8, tzinfo=UTC)
+
+
+def test_scan_oldest_ts_counts_a_line_outside_the_period(tmp_path):
+    entries = [_plain_line("2026-10-02T09:30:00Z", line_type="user"), _tool_result("t1", DENY)]
+
+    scan = _scan(tmp_path, entries)
+
+    assert scan.oldest_ts == datetime(2026, 10, 2, 9, 30, tzinfo=UTC)
+    assert [r.tool_use_id for r in scan.results] == ["t1"]
+
+
+def test_scan_oldest_ts_reads_a_naive_timestamp_as_utc(tmp_path):
+    scan = _scan(tmp_path, [_plain_line("2026-11-03T07:00:00"), _tool_result("t1", DENY)])
+
+    assert scan.oldest_ts == datetime(2026, 11, 3, 7, tzinfo=UTC)
+
+
+def test_scan_oldest_ts_is_none_without_any_timestamp(tmp_path):
+    scan = _scan(tmp_path, [{"type": "summary", "summary": "x"}, "not json"])
+
+    assert scan.oldest_ts is None
+
+
+def test_scan_oldest_ts_is_none_for_an_unreadable_file(tmp_path):
+    scan = denials.scan_file(tmp_path / "gone.jsonl", PERIOD)
+
+    assert (scan.unreadable, scan.oldest_ts) == (True, None)
+
+
+def test_scan_oldest_ts_ignores_a_malformed_timestamp_without_skipping_the_line(tmp_path):
+    entries = [_plain_line("yesterday"), _plain_line("2026-13-45T99:00:00Z"), _tool_result("t1", DENY)]
+
+    scan = _scan(tmp_path, entries)
+
+    assert scan.oldest_ts == datetime(2026, 11, 20, 10, 2, 11, 123000, tzinfo=UTC)
+    assert scan.skipped_lines == 0
+
+
+def test_scan_oldest_ts_ignores_a_timestamp_inside_message_text(tmp_path):
+    line = _tool_result("t1", 'log: {"timestamp":"2020-01-01T00:00:00Z"}', is_error=False)
+    line["timestamp"] = line.pop("timestamp")  # after `message`, as on real user lines
+
+    scan = _scan(tmp_path, [line])
+
+    assert scan.oldest_ts == datetime(2026, 11, 20, 10, 2, 11, 123000, tzinfo=UTC)
