@@ -61,8 +61,8 @@ Optional. Provides skill authoring tools, the **[Memory Bank](../about/concepts.
 | Skill | What it does |
 |-------|-------------|
 | `/skill-author` | Create, audit, or convert Claude Code skills — PICS structure, model selection, agent discovery, TDD Iron Law, verification |
-| `/skill-evaluate` | Evaluate a skill's quality before importing or using |
-| `/skill-import` | Fetch and install a single skill from any GitHub repo without installing the full plugin |
+| `/skill-evaluate` | Evaluate a skill's quality before importing or using; flags from a security scan block adoption until acknowledged |
+| `/skill-import` | Fetch and install a single skill from any GitHub repo without installing the full plugin, pinned to a commit SHA and scanned for supply-chain risks first |
 
 **Memory Bank:**
 
