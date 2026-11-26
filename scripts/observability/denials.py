@@ -33,6 +33,24 @@ results whose `cwd` lies in the repository (worktree suffix stripped, ADR-3),
 classifies them and counts per category, hook rule, Monday week (UTC) and
 main/subagent side, plus the ten most repeated denial kinds.
 
+Overrides -- `read_overrides(repo_root, homes, period)` counts in-period
+override consumptions from tcs-git-helpers' audit log per home (ADR-6): per
+rule id, the master switch `CLAUDE_ALLOW_GIT_BAD_OPS` apart, ask-guard rows
+skipped, a log reached through two homes read once. Only `ts`, `env_var` and
+`hook` are read from a row. `with_overrides(summary, counts)` joins those
+counts onto the summary and its block-bad-git-ops top rows.
+
+Rendering -- `render(summary)` turns one source's summary into its section
+lines (per category, hook and rule; per week; top repeated; overrides; what is
+not observable; partial reads); `render_not_enabled(label)` is the one-line
+section for a source without `denials = true` (F1 AC1). Both end with a
+trailing "" line, like report.py's other renderers.
+
+Entry point -- `build_section(repo_root, homes, period)`: locate -> scan ->
+aggregate -> overrides -> render for one enabled source, or, with no
+transcript in reach, a "no transcripts found" section naming every place
+searched (F1 AC2). report.py calls only this and `render_not_enabled` (ADR-1).
+
 Privacy (CON-2): a returned `Denial` holds only fixed labels from the table
 and identifiers parsed out of the message (rule names, classifier reason
 category). Rule explanations, commands, paths and free reason text are never

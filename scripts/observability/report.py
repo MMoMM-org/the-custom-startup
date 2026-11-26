@@ -64,6 +64,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, NamedTuple, Sequence
 
+import denials  # spec-024 T3.1: the denials section per source; one-way import, like sources below.
 import sources  # spec-019 T3.3: one-way import only -- sources.py's own module docstring explains why it can never import this module back (a real circular import, not style debt).
 
 # The five verified `load_reason` values (SDD/Application Data Models).
@@ -2092,7 +2093,30 @@ def _home_identity(home: Path) -> object:
     return (st.st_dev, st.st_ino)
 
 
-def _build_source_report(source: sources.Source, now: datetime) -> tuple[str, list[dict]]:
+def _distinct_homes(source: sources.Source) -> list[Path]:
+    """The source's homes, one per physical directory (#245), in config order."""
+    seen: set[object] = set()
+    homes: list[Path] = []
+    for home_status in source.homes:
+        key = _home_identity(home_status.home)
+        if key not in seen:
+            seen.add(key)
+            homes.append(home_status.home)
+    return homes
+
+
+def _denials_lines(source: sources.Source, period: denials.Period) -> list[str]:
+    """spec-024 F1: a disabled source's transcripts are never touched -- only the
+    opt-in line renders. An enabled one is read from its configured `repo_root`
+    (the main checkout, so worktree sessions count too) over its distinct homes."""
+    if not source.denials:
+        return denials.render_not_enabled(source.label)
+    return denials.build_section(source.repo_root, _distinct_homes(source), period)
+
+
+def _build_source_report(
+    source: sources.Source, now: datetime, period: denials.Period | None = None
+) -> tuple[str, list[dict]]:
     """One source's section: its own records, own inventory, own honesty
     verdicts -- never pooled with any other source's.
 
@@ -2138,6 +2162,12 @@ def _build_source_report(source: sources.Source, now: datetime) -> tuple[str, li
     through to `build_load_report` so `_render_home_statuses` can list every
     home beneath the headline; a single-home source passes `None` -- that one
     home's state already IS the headline, verbatim.
+
+    spec-024 T3.1: the section ends with the denials lines for `period`
+    (default: the 28 days ending `now`) -- never pooled across sources (PRD
+    F3 AC4), and for a source without `denials = true` only the opt-in line,
+    its transcripts never read (F1). The text ends with one newline, so
+    sections joined by a newline are one blank line apart.
     """
     records: list[dict] = []
     unparseable_total = 0
@@ -2189,11 +2219,13 @@ def _build_source_report(source: sources.Source, now: datetime) -> tuple[str, li
         # Per source like hook timing, never unioned (019 ADR-7).
         git_ops=git_operations(records),
     )
-    return text, records
+    if period is None:
+        period = denials.period_from_args(None, None, now)
+    return "\n".join([text, *_denials_lines(source, period)]), records
 
 
 def build_multi_source_report(
-    config_sources: Sequence[sources.Source], now: datetime
+    config_sources: Sequence[sources.Source], now: datetime, period: denials.Period | None = None
 ) -> tuple[str, list[tuple[sources.Source, list[dict]]]]:
     """The config-driven report: one section per configured source, joined.
 
@@ -2213,11 +2245,15 @@ def build_multi_source_report(
     `source_records` pairs each source with the records `_build_source_report`
     already read for it, so `main()` can build the firing-coverage union
     (ADR-8) without re-reading every source's homes a second time.
+
+    `period` is the denials reporting window (spec-024 ADR-7), parsed once in
+    `main()` and handed to every source unchanged. Each section ends with a
+    newline, so a newline between them leaves exactly one blank line.
     """
-    built = [_build_source_report(source, now) for source in config_sources]
+    built = [_build_source_report(source, now, period) for source in config_sources]
     sections = [text for text, _ in built]
     source_records = [(source, records) for source, (_, records) in zip(config_sources, built)]
-    return "\n\n".join(sections), source_records
+    return "\n".join(sections), source_records
 
 
 # ---------------------------------------------------------------------------
@@ -2376,7 +2412,28 @@ def main(argv: list[str] | None = None) -> int:
         "--data-dir", default=None,
         help="Override for $CLAUDE_OBSERVABILITY_DATA-style data directory",
     )
+    period_options = parser.add_mutually_exclusive_group()
+    period_options.add_argument(
+        "--denials-weeks", type=int, default=None, metavar="N",
+        help="Denials period: the last N calendar weeks, Monday-based, the current one partial",
+    )
+    period_options.add_argument(
+        "--denials-since", default=None, metavar="YYYY-MM-DD",
+        help="Denials period: from this date (00:00 UTC) to now (default: the last 28 days)",
+    )
     args = parser.parse_args(argv)
+    # datetime.now() is the one place this module reads the wall clock --
+    # every pure function below takes `now` as an explicit parameter instead
+    # (see RecordingStatus / recording_status, and build_multi_source_report),
+    # so only this CLI wrapper is untestable-by-construction, exactly like
+    # `Path.cwd()`/`Path.home()` above. spec-024 ADR-7: the denials period is
+    # parsed here, once, so a bad or combined option exits before any source
+    # is read.
+    now = datetime.now(timezone.utc)
+    try:
+        period = denials.period_from_args(args.denials_weeks, args.denials_since, now)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     # spec-019 T3.3 ruling (h): `--events` continues to mean "this one
     # record" -- when given, the config is never consulted at all, and this
@@ -2395,12 +2452,7 @@ def main(argv: list[str] | None = None) -> int:
         events_path = _resolve_events_path(args.data_dir, args.repo_root, args.home)
         return _print_single_record_report(events_path, args)
 
-    # datetime.now() is the one place this module reads the wall clock --
-    # every pure function above takes `now` as an explicit parameter instead
-    # (see RecordingStatus / recording_status, and build_multi_source_report
-    # above), so only this CLI wrapper is untestable-by-construction, exactly
-    # like `Path.cwd()`/`Path.home()` elsewhere in this function.
-    joined_text, source_records = build_multi_source_report(config_sources, datetime.now(timezone.utc))
+    joined_text, source_records = build_multi_source_report(config_sources, now, period)
     print(joined_text)
 
     # spec-019 T3.4 (ruling (n)): the firing-coverage union (ADR-8) and the
@@ -2418,7 +2470,7 @@ def main(argv: list[str] | None = None) -> int:
         firing_route_counts(event for _, events in events_by_source for event in events),
     )
     route_counts_by_source = {label: firing_route_counts(events) for label, events in events_by_source}
-    print()
+    # The joined sections end with a newline, so print() already left one blank line here.
     print("\n".join(_render_firing_coverage_union(inventory, union_coverage)))
     print("\n".join(_render_per_source_firing_detail(inventory, fired_by_source, route_counts_by_source)))
     return 0
