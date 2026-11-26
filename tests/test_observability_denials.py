@@ -253,6 +253,36 @@ def test_classify_earlier_classifier_wording_without_bracket_has_no_reason_categ
     assert result.reason_category is None
 
 
+HOSTILE_BRACKETS = [
+    pytest.param("Data Exfiltration \x1b[2J SENTINEL-BRACKET\nx", id="escape-and-newline"),
+    pytest.param("A" * 300, id="300-chars"),
+    pytest.param("Data\nExfiltration", id="newline-only"),
+    pytest.param(" Data Exfiltration", id="leading-space"),
+]
+
+
+@pytest.mark.parametrize("bracket", HOSTILE_BRACKETS)
+def test_classify_keeps_a_non_category_bracket_out_of_reason_category(bracket):
+    result = denials.classify(f"Permission for this action has been denied. Reason: [{bracket}] more", "Bash")
+
+    assert result.category == "classifier block"
+    assert result.reason_category == "(unrecognised)"
+
+
+@pytest.mark.parametrize("category", ["Data Exfiltration", "Production Deploy", "Destructive Action",
+                                      "Read/Write & Delete-Ops", "A" * 48])
+def test_classify_keeps_an_identifier_like_reason_category(category):
+    result = denials.classify(f"Permission for this action has been denied. Reason: [{category}] x", "Bash")
+
+    assert result.reason_category == category
+
+
+def test_classify_rejects_a_49_char_reason_category():
+    result = denials.classify(f"Permission for this action has been denied. Reason: [{'A' * 49}] x", "Bash")
+
+    assert result.reason_category == "(unrecognised)"
+
+
 # ---------------------------------------------------------------------------
 # Fallbacks and exclusions (ADR-4; PRD F2 AC2, AC3).
 # ---------------------------------------------------------------------------
@@ -1813,3 +1843,45 @@ def test_build_section_never_renders_transcript_or_override_log_content(tmp_path
 
     assert "RESET_HARD" in out and "[Data Exfiltration]" in out
     assert marker not in out
+
+
+def test_build_section_prints_a_hostile_classifier_bracket_as_one_unrecognised_entry(tmp_path):
+    home, repo = tmp_path / "home", _section_repo(tmp_path)
+    denied = "Permission for this action has been denied. Reason: "
+    _write_lines(_project_dir(home, repo) / "s1.jsonl", [
+        _user_error("t1", denied + "[Data Exfiltration \x1b[2J SENTINEL-BRACKET\nx] more", repo),
+        _user_error("t2", denied + "[" + "A" * 300 + "] more", repo),
+        _user_error("t3", denied + "[Data Exfiltration] more", repo),
+    ])
+
+    lines = denials.build_section(repo, [home], SECTION_PERIOD)
+    out = _out(lines)
+
+    assert "SENTINEL-BRACKET" not in out and "\x1b" not in out and "A" * 49 not in out
+    assert not [line for line in lines if "\n" in line]
+    line = _line_with(lines, "classifier block")
+    assert "[(unrecognised)] 2" in line and "[Data Exfiltration] 1" in line
+
+
+def test_render_prints_a_non_identifier_rule_id_as_unrecognised():
+    bad_rule = "RESET\x1b[2J SENTINEL-RULE"
+    summary = dataclasses.replace(
+        _populated_summary(), by_rule=denials.Counter({(BAD_GIT_OPS, bad_rule, denials.MAIN): 1}))
+
+    lines = denials.render(summary)
+    out = _out(lines)
+
+    assert "SENTINEL-RULE" not in out and "\x1b" not in out
+    assert "(main 1, subagent 0)" in _line_with(lines, "(unrecognised)", "overridden")
+
+
+@pytest.mark.parametrize("bad_rule", ["RESET_HARD\n", "reset hard", "X" * 65])
+def test_render_rule_guard_rejects_a_trailing_newline_and_off_shape_ids(bad_rule):
+    summary = dataclasses.replace(
+        _populated_summary(), by_rule=denials.Counter({(BAD_GIT_OPS, bad_rule, denials.MAIN): 1}))
+
+    lines = denials.render(summary)
+
+    assert not [line for line in lines if "\n" in line]
+    assert bad_rule not in _out(lines)
+    assert "(unrecognised)" in _line_with(lines, "overridden")

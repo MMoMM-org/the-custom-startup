@@ -58,6 +58,11 @@ HOOK_DENY = "hook deny"
 _HOOK_ERROR_PREFIX = re.compile(r"^PreToolUse:[^\s:]+ hook error: ")
 _BAD_GIT_OPS_RULE = re.compile(r"^\s+- \[([A-Z_]+)\]", re.MULTILINE)
 _CLASSIFIER_REASON = re.compile(r"Reason: \[([^\]]+)\]")
+# A reason category is a short label ("Data Exfiltration", "Production Deploy");
+# any other bracket content -- control characters, newlines, free text, or
+# overlong -- is kept as one fixed marker, never as text (CON-2).
+_REASON_CATEGORY = re.compile(r"^[A-Za-z][A-Za-z0-9 /&-]{0,47}$")
+_UNRECOGNISED = "(unrecognised)"
 
 # Rejecting these is answering a question or declining a plan, not stopping an action.
 _NOT_ACTION_TOOLS = frozenset({"AskUserQuestion", "ExitPlanMode"})
@@ -132,14 +137,21 @@ def _strip_prefix(text: str) -> tuple[str, bool]:
     return (text[match.end():], True) if match else (text, False)
 
 
+def _reason_category(row: Row, text: str) -> str | None:
+    reason = row.reason_pattern.search(text) if row.reason_pattern else None
+    if reason is None:
+        return None
+    category = reason.group(1)
+    return category if _REASON_CATEGORY.fullmatch(category) else _UNRECOGNISED
+
+
 def _denial_from_row(row: Row, text: str) -> Denial:
     rules = tuple(row.rule_pattern.findall(text)) if row.rule_pattern else ()
-    reason = row.reason_pattern.search(text) if row.reason_pattern else None
     return Denial(
         category=row.category,
         hook=row.hook,
         rules=rules,
-        reason_category=reason.group(1) if reason else None,
+        reason_category=_reason_category(row, text),
         confidence=row.confidence,
     )
 
@@ -772,13 +784,12 @@ NOT_OBSERVABLE = (
 _CATEGORY_ORDER = tuple(dict.fromkeys(row.category for row in TABLE))
 _SAFE_TOKEN = re.compile(r"^[A-Za-z0-9._+-]{1,128}$")
 _SAFE_RULE = re.compile(r"^[A-Z0-9_]{1,64}$")
-_UNRECOGNISED = "(unrecognised)"
 _NO_COUNT = "–"
 _DAY = timedelta(days=1)
 
 
 def _safe(value: str | None, shape: re.Pattern[str] = _SAFE_TOKEN) -> str:
-    return value if isinstance(value, str) and shape.match(value) else _UNRECOGNISED
+    return value if isinstance(value, str) and shape.fullmatch(value) else _UNRECOGNISED
 
 
 def with_overrides(summary: DenialsSummary, counts: OverrideCounts) -> DenialsSummary:
@@ -821,7 +832,7 @@ def _category_line(summary: DenialsSummary, category: str) -> str:
     reasons = sorted(((n, reason) for (cat, reason), n in summary.by_reason.items() if cat == category),
                      key=lambda pair: (-pair[0], pair[1]))
     if reasons:
-        line += "  " + ", ".join(f"[{reason}] {n}" for n, reason in reasons)
+        line += "  " + ", ".join(f"[{_safe(reason, _REASON_CATEGORY)}] {n}" for n, reason in reasons)
     return line + ("  low confidence" if category in summary.low_confidence else "")
 
 
@@ -848,7 +859,8 @@ def _hook_lines(summary: DenialsSummary) -> list[str]:
 
 
 def _rule_line(summary: DenialsSummary, hook: str | None, rule: str | None, sides: Counter) -> str:
-    line = f"      {rule or '(rule not named)':<30}{_split(sides[MAIN], sides[SUBAGENT])}"
+    label = _safe(rule, _SAFE_RULE) if rule is not None else "(rule not named)"
+    line = f"      {label:<30}{_split(sides[MAIN], sides[SUBAGENT])}"
     if hook == BAD_GIT_OPS_HOOK and rule is not None:
         line += f"   {_override_text(summary, rule)}"
     return line
