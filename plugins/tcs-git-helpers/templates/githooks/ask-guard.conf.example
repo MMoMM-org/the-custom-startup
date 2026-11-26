@@ -1,0 +1,42 @@
+# tcs-git-helpers ask-guard example (__TCS_GIT_HELPERS_VERSION__) — copy to
+# `.githooks/ask-guard.conf` and uncomment the rules this repo needs.
+#
+# With the file in place, Claude Code asks you before a matching Bash command
+# or file write runs. Without it, ask-guard does nothing. Every rule below is
+# commented out, so copying this file unchanged turns nothing on.
+#
+# Format, one rule per line; lines starting with `#` are comments:
+#   command <NAME> <POSIX ERE>   matched against each command of a Bash call;
+#                                quoted text is blanked first, so
+#                                `echo "terraform apply"` does not match
+#   path    <NAME> <glob>        matched against the repo-relative path of an
+#                                Edit/Write/NotebookEdit; `*` also crosses `/`
+# NAME: capitals, digits, `_`. Skip one prompt with CLAUDE_ALLOW_ASK_<NAME>=1
+# as the first token of the command, or set it in the environment for writes.
+#
+# Regex rules (bash 3.2 on macOS): use [[:space:]], never \s or \b. End a
+# pattern with ([^[:alnum:]_-]|$) rather than ([[:space:]]|$), so it still
+# matches inside `bash -c '…'`.
+#
+# The agent cannot edit this file: .githooks/ is protected. Edit it yourself.
+
+# --- infrastructure ---
+# command TERRAFORM (^|[^[:alnum:]_-])terraform([[:space:]]+-[^[:space:]]+)*[[:space:]]+(apply|destroy|import)([^[:alnum:]_-]|$)
+# command PULUMI (^|[^[:alnum:]_-])pulumi([[:space:]]+-[^[:space:]]+)*[[:space:]]+(up|update|destroy)([^[:alnum:]_-]|$)
+# kubectl asks for every context; to ask only for production, add the context
+# to the pattern, e.g. ...(delete|apply|replace|patch).*--context[= ]prod
+# command KUBECTL (^|[^[:alnum:]_-])kubectl([[:space:]]+[^[:space:]]+)*[[:space:]]+(delete|apply|replace|patch)([^[:alnum:]_-]|$)
+
+# --- database migrations ---
+# command PRISMA_DEPLOY (^|[^[:alnum:]_-])prisma[[:space:]]+migrate[[:space:]]+deploy([^[:alnum:]_-]|$)
+# command ALEMBIC (^|[^[:alnum:]_-])alembic([[:space:]]+[^[:space:]]+)*[[:space:]]+(upgrade|downgrade)([^[:alnum:]_-]|$)
+
+# --- IAM and credentials ---
+# command AWS_IAM (^|[^[:alnum:]_-])aws[[:space:]].*iam[[:space:]]+(create|delete|put|attach|detach|update|add|remove)
+# command GCLOUD_IAM (^|[^[:alnum:]_-])gcloud[[:space:]].*(iam[[:space:]]|-iam-policy)
+
+# --- files ---
+# path TERRAFORM_FILES *.tf
+# path MIGRATIONS migrations/*
+# path MIGRATIONS */migrations/*
+# path IAM_POLICIES *iam*.json

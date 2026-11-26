@@ -5,7 +5,7 @@
 # Performs the actual filesystem writes for /tcs-git-helpers:git-setup:
 #   1. Copies templates/githooks/{pre-commit,pre-push,commit-msg,post-merge}
 #      to <repo>/.githooks/ (preserving the version banner).
-#   2. Copies .config.example and exclude-paths.example.
+#   2. Copies .config.example, exclude-paths.example and ask-guard.conf.example.
 #   3. chmod +x on hook scripts.
 #   4. Sets `core.hooksPath = .githooks` in repo's .git/config.
 #   5. Does NOT auto-commit (M10 AC5).
@@ -36,7 +36,7 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 
 TEMPLATES="$PLUGIN_ROOT/templates/githooks"
 HOOK_FILES="pre-commit pre-push commit-msg post-merge"
-EXAMPLE_FILES=".config.example exclude-paths.example"
+EXAMPLE_FILES=".config.example exclude-paths.example ask-guard.conf.example"
 
 # Read the plugin's semantic version from .claude-plugin/plugin.json so the
 # version banner stamped into installed hooks always matches plugin.json. This

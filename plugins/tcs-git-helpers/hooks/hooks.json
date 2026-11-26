@@ -8,6 +8,10 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/block-bad-git-ops.sh\""
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/ask-guard.sh\""
           }
         ]
       },
@@ -23,6 +27,10 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/protect-git-internals.sh\"",
             "onFailure": "block"
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/ask-guard.sh\""
           }
         ]
       },
