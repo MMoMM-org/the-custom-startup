@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.5.0] - 2026-11-26
+
+### Added
+
+- **`skill-import` pins to a commit and scans before it installs (#297).** The ref is resolved to
+  one commit SHA and every file is fetched at it (`scripts/skill_fetch.sh`) into a staging dir.
+  `scripts/skill_security_scan.sh` then lists each executable (scripts, `hooks.json`,
+  `.mcp.json`) and flags network calls, credential paths, dynamic execution, writes outside the
+  skill and instruction text that overrides the user or hides actions. Each executable needs its
+  own yes; the other flags need one acknowledgement. The installed skill carries
+  `.tcs-import.json` with source, SHA, files and the flag verdicts.
+- **`skill-evaluate` has a security gate (#297).** In File mode it runs the same scan; an
+  unacknowledged flag caps the verdict at MERGE. The report gains a Security table.
+  **What to know:** `skill-evaluate` now needs Bash; the scan finds patterns, not intent, so the
+  skill still reads the text itself.
+
 ## [4.4.15] - 2026-11-12
 
 ### Fixed

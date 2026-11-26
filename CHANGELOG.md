@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **tcs-helper's `skill-import` pins skills to a commit SHA and scans them before install (#297).**
+  Executables need a yes each; network calls, credential reads, dynamic execution, outside
+  writes and injected instructions are flagged. `skill-evaluate` blocks adoption on an
+  unacknowledged flag. Update tcs-helper.
+
 - **tcs-git-helpers denies chained `.git/config` writes under the sandbox template (#311).**
   `git push -u …; echo $?` stayed sandboxed, set no upstream and exited 0; the new rule
   `SANDBOX_CHAINED_GIT` says to run such a command alone. Update tcs-git-helpers.
