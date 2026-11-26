@@ -38,6 +38,9 @@
 | 2026-11-26 | Decomposition tier: Incremental | Classifier recommended Incremental (7 Must features, 31 acceptance criteria, 1 new component denials.py; sources.py and report.py modified). Accepted. |
 | 2026-11-26 | Model tier: hard | Classifier recommended hard (change_type=feature, 2 high-impact risks, no new pattern, 8 ADRs). Accepted. |
 | 2026-11-26 | Plan complete; spec Ready | 3 phases (read and classify; aggregate and render; integrate, docs, real-data validation), 11 tasks; F9 deferred. |
+| 2026-11-26 | Phase 1 drift: `sandbox: network` confidence is low | PRD Rule 6 and F2 AC govern over the SDD table's medium; SDD, code and test aligned. |
+| 2026-11-26 | Phase 1 drift: `oldest_ts` source | `ScanResult.oldest_ts` is the earliest valid top-level timestamp on any line of the file, regardless of period; `DenialsSummary.oldest_ts` is their minimum. |
+| 2026-11-26 | Phase 1 drift: SDD data models | Added `LocateResult` and `ScanResult`; `Period` (both ends inclusive, aware UTC) moved to Phase 1, T2.2 adds only `period_from_args`. |
 
 ## Context
 

@@ -140,7 +140,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 
 > **Tracking Principle**: Track logical units that produce verifiable outcomes. The TDD cycle is the method, not separate tracked items.
 
-- [ ] [Phase 1: Reading and classifying transcripts](phase-1.md)
+- [x] [Phase 1: Reading and classifying transcripts](phase-1.md)
 - [ ] [Phase 2: Aggregation, overrides and rendering](phase-2.md)
 - [ ] [Phase 3: Report integration, docs and validation](phase-3.md)
 

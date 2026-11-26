@@ -43,7 +43,7 @@ Turns classified denials of one repository into the counts, weekly rows, top lis
 
   1. Prime: data models, week algorithm, walkthrough steps 4–7 `[ref: SDD/Application Data Models]` `[ref: SDD/Complex Logic]`
   2. Test: `period_from_args` default 28 days, N weeks from Monday, since-date, invalid values and both options raise `ValueError`; `aggregate` keeps lines whose cwd (casefolded, worktree suffix stripped) is the repo or under it and drops a sibling repo matched by prefix; counts per category and per (hook, rule) split main/subagent; a multi-rule deny counts once in its category and once per rule; one week row per Monday week including zero weeks, partial first and last weeks flagged; top list of at most 10 by count, ties by last time, with last session id and time; unattributed and hook-deny totals; versions outside 2.1.71–2.1.332 collected
-  3. Implement: `Period`, `period_from_args`, `TopRow`, `DenialsSummary`, `aggregate`
+  3. Implement: `period_from_args` (returns the `Period` defined in Phase 1), `TopRow`, `DenialsSummary`, `aggregate`
   4. Validate: `pytest -q tests/test_observability_denials.py -k "period or aggregate"`
   5. Success: default period and week rows `[ref: PRD/F3 AC1, AC3]`; worktrees counted for their repo `[ref: PRD/F3 AC5]`; top list `[ref: PRD/F4 AC1, AC3]`; period options validated `[ref: PRD/F8]`
 

@@ -292,7 +292,7 @@ sources:
   error: ConfigSchemaError(index, label, "denials must be true or false, got <repr>")  # ADR-2
 
 denials:
-  Period(start: datetime, end: datetime)            # end = now, start inclusive, UTC
+  Period(start: datetime, end: datetime)            # end = now, both ends inclusive, timezone-aware UTC
   period_from_args(weeks: int | None, since: str | None, now: datetime) -> Period   # raises ValueError
   locate_transcripts(repo_root: Path, homes: Sequence[Path]) -> LocateResult
   scan_file(path: Path, period: Period) -> ScanResult
@@ -314,12 +314,21 @@ ENTITY: ErrorResult (scan output, one per deduped tool result)
   FIELDS: file: Path, tool_use_id: str, tool: str | None, text: str (in memory only, never rendered),
           ts: datetime, cwd: str, session_id: str, version: str, sidechain: bool
 
+ENTITY: LocateResult (locate_transcripts output)
+  FIELDS: files: tuple[Path, ...], searched: tuple[Path, ...] (projects dirs looked in),
+          missing: tuple[Path, ...] (projects dirs absent or unlistable)
+
+ENTITY: ScanResult (scan_file output, one per file)
+  FIELDS: path: Path, results: tuple[ErrorResult, ...] (deduped, in period), skipped_lines: int,
+          unreadable: bool, oldest_ts: datetime | None (earliest valid top-level timestamp on any
+          line, regardless of period); derived: versions (set of ErrorResult.version)
+
 ENTITY: Denial (classify output)
   FIELDS: category: str, hook: str | None, rules: tuple[str, ...], reason_category: str | None,
           confidence: "high" | "medium" | "low"
 
 ENTITY: DenialsSummary (aggregate output)
-  FIELDS: period, files_read: int, skipped_lines: int, oldest_ts, versions_seen: set[str],
+  FIELDS: period, files_read: int, skipped_lines: int, oldest_ts (min ScanResult.oldest_ts), versions_seen: set[str],
           unknown_versions: set[str], by_category: Counter[(category, main|subagent)],
           by_rule: Counter[(hook, rule, main|subagent)], by_week: dict[week_start, Counter[category]],
           top: list[TopRow], unattributed: int, hook_denies: int
@@ -372,7 +381,7 @@ TABLE = [
   ("worktree isolation", r"^This (agent|session) is isolated in the worktree", None, "high"),
   ("prompt rejected", r"^The user doesn't want to proceed with this tool use", None, "high"),  # tool not in {AskUserQuestion, ExitPlanMode}
   ("sandbox: filesystem", r"[Oo]peration not permitted|Read-only file system|could not lock config file", None, "low"),
-  ("sandbox: network", r"CONNECT tunnel failed, response 403", None, "medium"),
+  ("sandbox: network", r"CONNECT tunnel failed, response 403", None, "low"),
 ]
 # After the table: prefixed and no match -> ("hook deny", hook=None)  i.e. "hook deny, unattributed".
 # Not prefixed and no match -> None (an ordinary tool error, not a denial).
