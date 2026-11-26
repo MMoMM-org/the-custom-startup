@@ -645,45 +645,45 @@ Not applicable.
 ## Acceptance Criteria
 
 **F1 opt-in**
-- [ ] WHEN a source lacks `denials = true`, THE SYSTEM SHALL render the not-enabled lines and open no transcript (test: a transcript dir that would raise on read).
-- [ ] WHEN a source is enabled and no transcript file is found in any home, THE SYSTEM SHALL say so and list the searched directories.
-- [ ] IF `denials` is not a boolean, THEN THE SYSTEM SHALL raise `ConfigSchemaError` naming source and value.
+- [x] WHEN a source lacks `denials = true`, THE SYSTEM SHALL render the not-enabled lines and open no transcript (test: a transcript dir that would raise on read).
+- [x] WHEN a source is enabled and no transcript file is found in any home, THE SYSTEM SHALL say so and list the searched directories.
+- [x] IF `denials` is not a boolean, THEN THE SYSTEM SHALL raise `ConfigSchemaError` naming source and value.
 
 **F2 classification**
-- [ ] WHEN an error text matches a TCS row, THE SYSTEM SHALL record category, hook and, for block-bad-git-ops, each `[RULE]`.
-- [ ] WHEN an error text carries the `PreToolUse:<Tool> hook error:` prefix and matches no row, THE SYSTEM SHALL count it as hook deny, unattributed.
-- [ ] WHEN a prompt rejection belongs to AskUserQuestion or ExitPlanMode, THE SYSTEM SHALL not count it.
-- [ ] WHEN a classifier block is found, THE SYSTEM SHALL record its bracketed category, for both wordings.
-- [ ] WHEN a safety check, permission-denied, worktree isolation, filesystem or network sandbox text is found, THE SYSTEM SHALL count it under its category with its confidence.
-- [ ] WHEN the same tool result appears in a non-user line, THE SYSTEM SHALL count it once.
-- [ ] WHEN a tool result is not an error, THE SYSTEM SHALL ignore it regardless of text.
+- [x] WHEN an error text matches a TCS row, THE SYSTEM SHALL record category, hook and, for block-bad-git-ops, each `[RULE]`.
+- [x] WHEN an error text carries the `PreToolUse:<Tool> hook error:` prefix and matches no row, THE SYSTEM SHALL count it as hook deny, unattributed.
+- [x] WHEN a prompt rejection belongs to AskUserQuestion or ExitPlanMode, THE SYSTEM SHALL not count it.
+- [x] WHEN a classifier block is found, THE SYSTEM SHALL record its bracketed category, for both wordings.
+- [x] WHEN a safety check, permission-denied, worktree isolation, filesystem or network sandbox text is found, THE SYSTEM SHALL count it under its category with its confidence.
+- [x] WHEN the same tool result appears in a non-user line, THE SYSTEM SHALL count it once.
+- [x] WHEN a tool result is not an error, THE SYSTEM SHALL ignore it regardless of text.
 
 **F3 summary**
-- [ ] WHEN no period option is given, THE SYSTEM SHALL cover 28 days ending now and print start and end.
-- [ ] THE SYSTEM SHALL print counts per category and per hook and rule, each split main/subagent by `isSidechain` or subagent file location.
-- [ ] THE SYSTEM SHALL print one row per Monday week of the period, including weeks with zero.
-- [ ] THE SYSTEM SHALL render the denials lines inside each source's own section and never a cross-source total.
-- [ ] WHEN a line's cwd is under `<repo>/.claude/worktrees/<name>`, THE SYSTEM SHALL count it for `<repo>`.
+- [x] WHEN no period option is given, THE SYSTEM SHALL cover 28 days ending now and print start and end.
+- [x] THE SYSTEM SHALL print counts per category and per hook and rule, each split main/subagent by `isSidechain` or subagent file location.
+- [x] THE SYSTEM SHALL print one row per Monday week of the period, including weeks with zero.
+- [x] THE SYSTEM SHALL render the denials lines inside each source's own section and never a cross-source total.
+- [x] WHEN a line's cwd is under `<repo>/.claude/worktrees/<name>`, THE SYSTEM SHALL count it for `<repo>`.
 
 **F4 top list**
-- [ ] THE SYSTEM SHALL list up to 10 kinds (category, hook, rule, tool) by count, descending, ties by last time.
-- [ ] WHEN a listed rule has override rows in period, THE SYSTEM SHALL show their count.
-- [ ] THE SYSTEM SHALL show each listed kind's last session id and time.
+- [x] THE SYSTEM SHALL list up to 10 kinds (category, hook, rule, tool) by count, descending, ties by last time, then by kind; the last session on a time tie is the greater session id (deterministic, input-order independent).
+- [x] WHEN a listed rule has override rows in period, THE SYSTEM SHALL show their count.
+- [x] THE SYSTEM SHALL show each listed kind's last session id and time.
 
 **F5 empty and partial**
-- [ ] WHEN files were read and nothing matched, THE SYSTEM SHALL print the no-denials line with "not proof" and the not-observable list.
-- [ ] WHEN lines are skipped, THE SYSTEM SHALL print their count.
-- [ ] WHEN versions outside 2.1.71–2.1.332 occur, THE SYSTEM SHALL list them as not checked.
+- [x] WHEN files were read and nothing matched, THE SYSTEM SHALL print the no-denials line with "not proof" and the not-observable list.
+- [x] WHEN lines are skipped, THE SYSTEM SHALL print their count.
+- [x] WHEN versions outside 2.1.71–2.1.332 occur, THE SYSTEM SHALL list them as not checked.
 
 **F6 privacy**
-- [ ] THE SYSTEM SHALL emit none of the sentinel strings planted in tool inputs, error texts, classifier reasons after the bracket, or override `command` fields.
+- [x] THE SYSTEM SHALL emit none of the sentinel strings planted in tool inputs, error texts, classifier reasons after the bracket, or override `command` fields.
 
 **F7 docs**
-- [ ] The observability README SHALL contain a "Denials" part listing every category with confidence, the not-observable list, and the `denials = true` line with the local-only statement.
+- [x] The observability README SHALL contain a "Denials" part listing every category with confidence, the not-observable list, and the `denials = true` line with the local-only statement.
 
 **F8 period**
-- [ ] WHEN `--denials-weeks N` is given, THE SYSTEM SHALL cover the last N Monday weeks; WHEN `--denials-since D` is given, from D to now.
-- [ ] IF a period value is invalid or both options are given, THEN THE SYSTEM SHALL exit with an argparse error before reading any source.
+- [x] WHEN `--denials-weeks N` is given, THE SYSTEM SHALL cover the last N Monday weeks; WHEN `--denials-since D` is given, from D to now.
+- [x] IF a period value is invalid or both options are given, THEN THE SYSTEM SHALL exit with an argparse error before reading any source.
 
 **F9 version breakdown (Could)**
 - [ ] WHERE requested, THE SYSTEM SHALL print counts per category per Claude Code minor version. Deferred unless time permits; not required for completion.
