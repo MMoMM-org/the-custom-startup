@@ -560,7 +560,7 @@ def _in_repo(cwd: str, root: str) -> bool:
     """Whether a line's cwd, worktree suffix stripped and casefolded, is `root` or under it."""
     if not cwd:
         return False
-    key = _WORKTREE.sub("", cwd).rstrip("/").casefold()
+    key = _WORKTREE.sub("", cwd.casefold()).rstrip("/")
     return key == root or key.startswith(root + "/")
 
 
@@ -619,7 +619,8 @@ class _Tally:
     def _add_kind(self, key: tuple, result: ErrorResult) -> None:
         entry = self.kinds.setdefault(key, [0, result.ts, result.session_id])
         entry[0] += 1
-        if result.ts >= entry[1]:
+        # Latest wins; on a timestamp tie the greater session id, so input order never matters.
+        if (result.ts, result.session_id) > (entry[1], entry[2]):
             entry[1], entry[2] = result.ts, result.session_id
 
     def top(self) -> list[TopRow]:

@@ -1053,6 +1053,14 @@ def test_aggregate_keeps_a_cwd_in_the_repo_or_its_worktrees(cwd):
     assert summary.hook_denies == 1
 
 
+@pytest.mark.parametrize("repo", [REPO, REPO / ".claude/worktrees/w1"])
+def test_aggregate_strips_a_differently_cased_worktree_suffix_like_a_lowercase_one(repo):
+    lower = _agg(_err(_deny("RESET_HARD"), cwd="/r/app/.claude/worktrees/w1"), repo=repo)
+    mixed = _agg(_err(_deny("RESET_HARD"), cwd="/r/app/.Claude/Worktrees/W1"), repo=repo)
+
+    assert mixed.hook_denies == lower.hook_denies
+
+
 @pytest.mark.parametrize("cwd", ["/r/app-old", "/r/app-old/.claude/worktrees/w1", "/r/apps/x", "/r", "", "/other"])
 def test_aggregate_drops_a_cwd_outside_the_repo(cwd):
     summary = _agg(_err(_deny("RESET_HARD"), cwd=cwd))
@@ -1224,6 +1232,25 @@ def test_aggregate_top_orders_by_count_then_most_recent():
     assert [(row.category, row.tool) for row in summary.top] == [
         ("sandbox: filesystem", "Bash"), ("prompt rejected", "Edit"), ("prompt rejected", "Write"),
     ]
+
+
+def test_aggregate_top_breaks_a_count_and_time_tie_by_kind_whatever_the_scan_order():
+    kinds = [_err(SANDBOX_FS, tool="Bash"), _err(REJECTED, tool="Write"), _err(REJECTED, tool="Edit")]
+
+    forward = _agg(*kinds).top
+    backward = denials.aggregate([_scan_of(kind, name=f"{n}.jsonl") for n, kind in enumerate(reversed(kinds))],
+                                 REPO, AGG_PERIOD).top
+
+    expected = [("prompt rejected", "Edit"), ("prompt rejected", "Write"), ("sandbox: filesystem", "Bash")]
+    assert [(row.category, row.tool) for row in forward] == expected
+    assert [(row.category, row.tool) for row in backward] == expected
+
+
+@pytest.mark.parametrize("sessions", [("s-a", "s-b"), ("s-b", "s-a")])
+def test_aggregate_top_last_session_on_a_time_tie_is_the_greater_session_id(sessions):
+    summary = _agg(*(_err(_deny("RESET_HARD"), session=session) for session in sessions))
+
+    assert [(row.count, row.last_session_id, row.last_ts) for row in summary.top] == [(2, "s-b", AT)]
 
 
 def test_aggregate_top_keeps_at_most_ten_rows():
