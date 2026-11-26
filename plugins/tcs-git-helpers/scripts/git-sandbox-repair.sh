@@ -5,8 +5,9 @@
 #
 # The Claude Code Bash sandbox denies writes to .git/config, so some git
 # commands complete only partly and report no hard error: `git push -u`
-# pushes but sets no upstream, `git checkout -b` rewrites the tree but HEAD
-# stays on the old branch. Run this OUTSIDE the sandbox, from the prompt:
+# pushes but sets no upstream, a `git checkout -b` that sets tracking
+# rewrites the tree but HEAD stays on the old branch. Run this OUTSIDE the
+# sandbox, from the prompt:
 #
 #   ! bash ~/.claude/plugins/cache/the-custom-startup/tcs-git-helpers/*/scripts/git-sandbox-repair.sh
 #

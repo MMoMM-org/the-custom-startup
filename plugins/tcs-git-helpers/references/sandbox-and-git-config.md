@@ -190,7 +190,7 @@ partly, with no hard error:
 | Command | What is left undone |
 |---|---|
 | `git push -u` | pushes, sets no upstream |
-| `git checkout -b <b> <start>`, `git switch -c` | rewrites the index and tree, HEAD stays on the old branch |
+| `git checkout -b <b> origin/<x>`, `--track`, `switch -c` with a remote start | writes the branch and the tree, fails on the tracking config, HEAD stays on the old branch |
 | `git branch --set-upstream-to`, `git remote add\|set-url`, `git config <key> <value>` | fail |
 | `fetch`/`pull`/`push` over SSH (macOS) | fail even with the host allowed |
 | `gh` (macOS) | TLS errors |
@@ -238,11 +238,19 @@ the skill, run `skills/git-setup/lib/sandbox_settings.sh --diff`, then
 
 ### What the template cannot do
 
-- `excludedCommands` matches the command as typed, and every part of a
-  chained call must match. `git -C <path> push`, `cd x && git push`, a
-  subshell or a redirect stay sandboxed and fail as before.
+- **Run each excluded git command alone in its Bash call.** Every part of a
+  chained call must match an exclusion, or the whole call stays sandboxed.
+  `git push -u origin feat; echo "rc=$?"` pushes, fails locally with
+  `could not lock config file .git/config`, sets no upstream, and still
+  exits 0. The same holds for `cd x && git push`, `git -C <path> push`, a
+  subshell, a pipe into another command, or a redirect. Check the result
+  (`git rev-parse --abbrev-ref @{u}`) in a separate call.
+- An override prefix such as `CLAUDE_ALLOW_BRANCH_FROM_UNFINISHED=1 git
+  checkout -b …` may also keep the call from matching: unverified.
 - An excluded command runs with full filesystem and network access:
   `git push *` can reach any host.
+- A plain `git checkout -b <b>` without tracking writes no config and
+  works sandboxed anyway; the exclusion matters only when it sets tracking.
 - GPG signing (`~/.gnupg`, the gpg-agent socket) and credential helpers
   (osxkeychain) under the sandbox are not documented upstream; check them on
   macOS before relying on them.

@@ -5,16 +5,17 @@
 ### Added
 
 - **Sandbox-compatible git (#303).** The Bash sandbox denies writes to `.git/config`, so `git push
-  -u` set no upstream and `git checkout -b` could leave HEAD behind, without a hard error.
-  `/tcs-git-helpers:git-setup` now offers `templates/claude-settings/sandbox-git.json`: it runs
+  -u` set no upstream and a `git checkout -b` that sets tracking could leave HEAD behind, without a
+  hard error. `/tcs-git-helpers:git-setup` now offers `templates/claude-settings/sandbox-git.json`: it runs
   `git push|fetch|pull`, `checkout -b`, `switch -c`, `git branch`, `git remote` and `gh` outside the
   sandbox, asks before a remote is changed, and write-protects `.githooks/` inside the sandbox so an
   unsandboxed `git push` cannot run a hook a sandboxed command planted. The merge into
   `.claude/settings.json` only adds entries and happens after you confirm its diff.
   `scripts/git-sandbox-repair.sh` sets a missing upstream and reports an index that matches another
   branch. **What to know:** run `/tcs-git-helpers:git-setup --update` to be offered the settings;
-  once applied, later setup runs write `.githooks/` from outside the sandbox. `git -C <path> push`
-  and `cd x && git push` stay sandboxed, because the exclusion matches the command as typed.
+  once applied, later setup runs write `.githooks/` from outside the sandbox. An exclusion matches
+  only a call that is the git command alone: `git push -u …; echo $?`, `cd x && git push` and
+  `git -C <path> push` stay sandboxed, and the first still exits 0 without an upstream.
 
 ## [2.3.2] - 2026-11-25
 

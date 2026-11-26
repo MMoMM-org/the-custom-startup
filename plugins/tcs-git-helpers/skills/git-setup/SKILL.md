@@ -139,7 +139,7 @@ After this step, the repo has:
 
 ### 4b. Offer the sandbox git settings
 
-Without them, the Bash sandbox lets git commands half-complete: `push -u` sets no upstream, `checkout -b` leaves HEAD behind, SSH remotes fail on macOS (`references/sandbox-and-git-config.md` § Sandbox-compatible git). Run on every setup, `--update` included:
+Without them, the Bash sandbox lets git commands half-complete: `push -u` sets no upstream, a `checkout -b` that sets tracking leaves HEAD behind, SSH remotes fail on macOS (`references/sandbox-and-git-config.md` § Sandbox-compatible git). Run on every setup, `--update` included:
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/skills/git-setup/lib/sandbox_settings.sh" --diff

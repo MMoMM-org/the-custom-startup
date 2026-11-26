@@ -56,8 +56,8 @@ stderr. Not covered: the GraphQL `mergePullRequest` mutation and merges in the b
 
 ### Git under the Bash sandbox
 
-The sandbox denies writes to `.git/config`, so `git push -u` sets no upstream and `git checkout -b`
-can leave HEAD behind, without a hard error. `git-setup` offers a settings template that runs
+The sandbox denies writes to `.git/config`, so `git push -u` sets no upstream and a `git checkout -b`
+that sets tracking can leave HEAD behind, without a hard error. `git-setup` offers a settings template that runs
 `git push|fetch|pull`, branch creation, `git remote` and `gh` outside the sandbox and write-protects
 `.githooks/` inside it; it writes `.claude/settings.json` only after you confirm the diff. For what
 already went wrong, run the repair script from the prompt so it runs unsandboxed:
@@ -66,7 +66,9 @@ already went wrong, run the repair script from the prompt so it runs unsandboxed
 ! bash ~/.claude/plugins/cache/the-custom-startup/tcs-git-helpers/*/scripts/git-sandbox-repair.sh
 ```
 
-It sets a missing upstream and reports, never fixes, an index that matches another branch. Limits
+It sets a missing upstream and reports, never fixes, an index that matches another branch. The
+exclusions match only a call that is the git command alone: `git push -u …; echo $?` stays sandboxed
+and exits 0 without an upstream. Limits
 and the reasoning: [sandbox-and-git-config.md](references/sandbox-and-git-config.md#sandbox-compatible-git).
 
 ## How It Works
