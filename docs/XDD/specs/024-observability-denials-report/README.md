@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-11-26 |
-| **Current Phase** | Ready |
+| **Current Phase** | Implemented |
 | **Decomposition tier** | Incremental |
 | **Model tier** | hard |
 | **Last Updated** | 2026-11-26 |
@@ -43,6 +43,7 @@
 | 2026-11-26 | Phase 1 drift: SDD data models | Added `LocateResult` and `ScanResult`; `Period` (both ends inclusive, aware UTC) moved to Phase 1, T2.2 adds only `period_from_args`. |
 | 2026-11-26 | Phase 2: override log reading | `OverrideCounts.log_found` added; `hook` read to exclude ask-guard asks; rotated logs and same-basename repos accepted as known limits (document in T3.2). |
 | 2026-11-26 | Model escalation: T2.3 opus → opus@max | Trigger: second review FAIL |
+| 2026-11-26 | Implementation complete | Implemented on feat/300-denials-spec (commits 55e84993..73934e32, PR pending): scripts/observability/denials.py (new), report.py and sources.py integration, README Denials section, CHANGELOG; 3 phases, 12 tasks, suite gate equal to baseline |
 
 ## Context
 

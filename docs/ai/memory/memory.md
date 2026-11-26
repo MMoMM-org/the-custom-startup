@@ -11,7 +11,7 @@
 - [domain.md](domain.md) — business rules, data models [updated: YYYY-MM-DD]
 - [decisions.md](decisions.md) — architecture choices [updated: 2026-11-08]
 - [context.md](context.md) — current focus [updated: 2026-11-12]
-- [troubleshooting.md](troubleshooting.md) — known issues [updated: 2026-10-29]
+- [troubleshooting.md](troubleshooting.md) — known issues [updated: 2026-11-26]
 - [declined.md](declined.md) — what we decided NOT to do, and the condition that reopens it [updated: 2026-10-28]
 
 ## Archive
