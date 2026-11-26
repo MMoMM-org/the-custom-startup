@@ -74,7 +74,8 @@ Spec refs:
 
 **Never:**
 - Auto-commit the installed files. Setup never runs `git add` / `git commit`. Marcus reviews and commits manually (M10 AC5).
-- Write outside the documented surface: `<repo>/.githooks/*`, `<repo>/.git/config` (only `core.hooksPath`), and (with `--with-gha`) `<repo>/.github/workflows/pr-title-check.yml`. Anything else requires explicit user confirmation.
+- Write outside the documented surface: `<repo>/.githooks/*`, `<repo>/.git/config` (only `core.hooksPath`), (with `--with-gha`) `<repo>/.github/workflows/pr-title-check.yml`, and (after the user confirmed its diff in step 4b) `<repo>/.claude/settings.json`. Anything else requires explicit user confirmation.
+- Write `.claude/settings.json` without showing the `--diff` output and getting a yes first. It changes the user's sandbox, so silence is not consent.
 - Bypass conflict detection. Even with `--update`, run `lib/detect_conflicts.sh` first so the skill behaves consistently against Husky-mid-migration repos.
 - Bypass the lock. Two concurrent setup runs MUST serialize on `.githooks/.setup.lock`.
 - Recurse into submodules. List them in the summary but do not enter (M10 AC6).
@@ -136,6 +137,19 @@ After this step, the repo has:
 - `<repo>/.claude/.gitignore` with a `settings.local.json` rule (an existing file is kept and the rule added once). Claude Code's approval file holds approved commands verbatim, and its own ignore lives only in the machine's global excludes. Tell the user to commit `.claude/.gitignore` so every clone inherits the rule
 - `<repo>/.git/config` with `[core] hooksPath = .githooks`
 
+### 4b. Offer the sandbox git settings
+
+Without them, the Bash sandbox lets git commands half-complete: `push -u` sets no upstream, a `checkout -b` that sets tracking leaves HEAD behind, SSH remotes fail on macOS (`references/sandbox-and-git-config.md` § Sandbox-compatible git). Run on every setup, `--update` included:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/skills/git-setup/lib/sandbox_settings.sh" --diff
+```
+
+- `UP-TO-DATE` → say so in the summary; nothing to ask.
+- `PENDING` → show the diff, explain that the listed git and `gh` commands will run outside the sandbox and `.githooks/` becomes write-protected inside it, and ask. On yes, run `sandbox_settings.sh --apply` **outside the sandbox** (`.claude/settings.json` is a protected path, so a sandboxed write fails). On no, skip and mention the template in the summary.
+
+Once applied, later `git-setup` runs write `.githooks/` from outside the sandbox too, because the template denies that path inside it. That denial is what stops a sandboxed command from planting a hook that an excluded `git push` then runs unsandboxed.
+
 ### 5. (Optional) `--with-gha`
 
 ```bash
@@ -164,6 +178,7 @@ Always print a structured summary listing:
 
 - Files copied (with destination paths).
 - `core.hooksPath` value.
+- Sandbox git settings: applied, already up to date, or declined.
 - Any conflicts or warnings encountered.
 - Submodules listed (not recursed) per M10 AC6.
 - Reminder: setup did NOT auto-commit; Marcus reviews via `git status` then commits.
@@ -196,6 +211,6 @@ Release the lock on EVERY exit path — success, abort (exit 2), conflict that t
 ## References
 
 - `references/migrating-from-husky.md` — abort-and-migrate workflow (covers Husky, lefthook, pre-commit, simple-git-hooks).
-- `references/sandbox-and-git-config.md` — why `git config core.hooksPath` writes are gated on the sentinel.
+- `references/sandbox-and-git-config.md` — why `git config core.hooksPath` writes are gated on the sentinel; the sandbox settings template and the repair script.
 - `references/gh-token-hygiene.md` — token-scope matrix for `--with-branch-protection`.
 - `references/INDEX.md` — full reference catalog.

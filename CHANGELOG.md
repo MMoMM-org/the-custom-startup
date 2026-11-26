@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — prompt-author
 
+### Added
+
+- **tcs-git-helpers makes git work under the Bash sandbox (#303).** `git-setup` offers a settings
+  template that runs push/fetch/pull, branch creation, `git remote` and `gh` unsandboxed and
+  write-protects `.githooks/`; `scripts/git-sandbox-repair.sh` sets an upstream a sandboxed
+  `push -u` missed. Run `/tcs-git-helpers:git-setup --update`.
+
 ### Fixed
 
 - **tcs-git-helpers' Edit/Write and worktree-exit guards block when they fail themselves (#296).**

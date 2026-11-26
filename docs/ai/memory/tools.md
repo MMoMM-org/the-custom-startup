@@ -61,7 +61,7 @@
 - **bats does not run test bodies under `set -u`** — a lib reading an optional argument as bare `"$1"` passes every test and aborts for a real `set -u` caller. → Write `${1:-}`; run one real invocation per entry point.
 - **`run diff <(a) <(b)` fails inside bats** with `Operation not permitted` on `/dev/fd/N`. → Write both sides to files in the test's tmpdir and diff those.
 - **A test that fails only inside the Bash sandbox is not a code failure** — `mktemp -d` and other writes outside the allowed dirs fail there. → Re-run unsandboxed before treating a red test as real.
-- **The Bash sandbox denies writes to `.git/config`, so some git commands half-complete** — `checkout -b` rewrites the tree but leaves HEAD behind; `push -u` pushes but sets no upstream. → Run branch-creating git unsandboxed.
+- **Sandboxed git half-completes and exits 0** — `.git/config` is denied, so `push -u` sets no upstream; exclusions match only a call that is git alone. → One git command per call, check `@{u}` in the next; repair: `git-sandbox-repair.sh`.
 - **`cp -n` skipping a file exits 1 on BSD and 0 on GNU** — a `cp -p` → `cp -n -p` mutant is a silent no-op only on Linux, so on macOS it fails both tests and proves nothing. → Mutate to an early `return 0`.
 - **A plugin can ship themes** — every `themes/<slug>.json` in an enabled plugin is auto-discovered into `/theme` (Claude Code ≥ 2.1.118), with no `plugin.json` entry. → User-global themes go in `~/.claude/themes/`.
 - **`claude -p --output-format json` wraps the model's output** — the payload is a JSON string under `.result`. → `jq -c 'try (.result | fromjson) catch empty'`; a test stub must emit the same envelope.
