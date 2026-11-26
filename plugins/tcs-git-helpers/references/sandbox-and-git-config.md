@@ -243,10 +243,13 @@ the skill, run `skills/git-setup/lib/sandbox_settings.sh --diff`, then
   `git push -u origin feat; echo "rc=$?"` pushes, fails locally with
   `could not lock config file .git/config`, sets no upstream, and still
   exits 0. The same holds for `cd x && git push`, `git -C <path> push`, a
-  subshell, a pipe into another command, or a redirect. Check the result
-  (`git rev-parse --abbrev-ref @{u}`) in a separate call.
-- An override prefix such as `CLAUDE_ALLOW_BRANCH_FROM_UNFINISHED=1 git
-  checkout -b …` may also keep the call from matching: unverified.
+  subshell, a pipe into another command, a redirect, and a `VAR=1` prefix,
+  override tokens included (verified on macOS: `FOO=1 git push -u` stayed
+  sandboxed). Check the result (`git rev-parse --abbrev-ref @{u}`) in a
+  separate call. `block-bad-git-ops.sh` enforces this; see below.
+- A failed `push -u` can still look right: when the branch already tracked
+  something (`checkout -b x origin/main` sets `origin/main`), `@{u}` keeps
+  printing that, not the branch you pushed.
 - An excluded command runs with full filesystem and network access:
   `git push *` can reach any host.
 - A plain `git checkout -b <b>` without tracking writes no config and
@@ -254,6 +257,32 @@ the skill, run `skills/git-setup/lib/sandbox_settings.sh --diff`, then
 - GPG signing (`~/.gnupg`, the gpg-agent socket) and credential helpers
   (osxkeychain) under the sandbox are not documented upstream; check them on
   macOS before relying on them.
+
+### SANDBOX_CHAINED_GIT
+
+`block-bad-git-ops.sh` denies a Bash call that holds a git command writing
+`.git/config` when the call is not that command alone. The commands:
+
+| Command | Needs the exclusion |
+|---|---|
+| `git push -u` / `--set-upstream`, also inside a short-option bundle | `git push *` |
+| `git checkout -b` / `switch -c` that sets tracking: `--track`, or a remote-tracking start point unless `branch.autoSetupMerge=false`; never with `--no-track` | `git checkout -b *` / `git switch -c *` |
+| `git branch --set-upstream-to`, `-u`, `--unset-upstream`, `--track`, `-t` | `git branch *` |
+| `git remote add`, `set-url`, `remove`, `rm`, `rename` | `git remote *` |
+
+"Alone" means: with quoted text blanked, the call has no `;`, `&`, `|`,
+`<`, `>`, backtick, `$(` or newline, its first word is `git`, and the
+subcommand follows right after (`git -C <dir>` does not match `git push *`).
+
+The rule fires only when user, project or local settings list the
+command's exclusion and the most specific `sandbox.enabled` is not `false`.
+Without the exclusion, running the command alone would not help. Settings
+that cannot be read allow the call, like every lookup in this hook.
+
+Fix: run the command alone, then check its result in the next call. When
+the session is not sandboxed after all, override with
+`CLAUDE_ALLOW_SANDBOX_CHAINED_GIT=1` as the first token: single use,
+audited.
 
 ### Repairing a half-done command
 

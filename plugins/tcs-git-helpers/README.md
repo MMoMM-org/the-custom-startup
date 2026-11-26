@@ -19,7 +19,7 @@ Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the pl
 
 | Event | Script | Purpose |
 |-------|--------|---------|
-| `PreToolUse(Bash)` | `block-bad-git-ops.sh` | Deny 14+ destructive git/gh patterns: push to closed PR, branch from unfinished work, squash-merge resume, `reset --hard`, `clean -f`, `branch -D`, `--force` (without `--force-with-lease`), `--no-verify`, `stash drop/clear`, `reflog expire`, `checkout .`, `restore --worktree`, `push --delete`, `core.hooksPath` overrides; `gh pr merge` while review findings are open (see below) |
+| `PreToolUse(Bash)` | `block-bad-git-ops.sh` | Deny 14+ destructive git/gh patterns: push to closed PR, branch from unfinished work, squash-merge resume, `reset --hard`, `clean -f`, `branch -D`, `--force` (without `--force-with-lease`), `--no-verify`, `stash drop/clear`, `reflog expire`, `checkout .`, `restore --worktree`, `push --delete`, `core.hooksPath` overrides; `gh pr merge` while review findings are open (see below); a git command that writes `.git/config` chained in one call while the sandbox template is applied |
 | `PreToolUse(Edit\|Write\|NotebookEdit)` | `pre-edit-branch-check.sh` | Block edits to `main`/`master` unless the path is in `.gitignore` |
 | `PreToolUse(Edit\|Write\|NotebookEdit)` | `protect-git-internals.sh` | Block edits to `.git/` internals |
 | `PreToolUse(ExitWorktree)` | `worktree-exit-guard.sh` | Four-check guard before worktree exit — uncommitted, untracked, unmerged, unpushed |
@@ -68,7 +68,8 @@ already went wrong, run the repair script from the prompt so it runs unsandboxed
 
 It sets a missing upstream and reports, never fixes, an index that matches another branch. The
 exclusions match only a call that is the git command alone: `git push -u …; echo $?` stays sandboxed
-and exits 0 without an upstream. Limits
+and exits 0 without an upstream, so `block-bad-git-ops.sh` denies such a chain
+(`SANDBOX_CHAINED_GIT`) once the template is applied. Limits
 and the reasoning: [sandbox-and-git-config.md](references/sandbox-and-git-config.md#sandbox-compatible-git).
 
 ## How It Works

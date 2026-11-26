@@ -173,6 +173,22 @@ PATTERN_BRANCH_CREATE="$_GIT_CMD"'(checkout[[:space:]]+-b|switch[[:space:]]+-c)[
 PATTERN_BRANCH_RESUME="$_GIT_CMD"'(checkout|switch)[[:space:]]+([^-.[:space:]][^[:space:]]*)$'
 
 # ---------------------------------------------------------------------------
+# Git commands that write .git/config (SANDBOX_CHAINED_GIT, #311)
+# ---------------------------------------------------------------------------
+# Under the Bash sandbox these half-complete unless the call is the bare
+# command (see scripts/lib/sandbox_chain.sh). Branch creation reuses
+# PATTERN_BRANCH_CREATE plus a tracking check in the hook.
+
+# git push … -u | --set-upstream   (-u alone or in a short-option bundle)
+PATTERN_PUSH_UPSTREAM="$_GIT_CMD"'push([[:space:]]+[^[:space:]]+)*[[:space:]]+(-[a-zA-Z]*u[a-zA-Z]*|--set-upstream)([[:space:]]|$)'
+
+# git branch … --set-upstream-to | -u | --unset-upstream | --track | -t
+PATTERN_BRANCH_UPSTREAM="$_GIT_CMD"'branch([[:space:]]+[^[:space:]]+)*[[:space:]]+(-u|-t|--set-upstream-to(=[^[:space:]]*)?|--unset-upstream|--track(=[^[:space:]]*)?)([[:space:]]|$)'
+
+# git remote add | set-url | remove | rm | rename   (options before the verb allowed)
+PATTERN_REMOTE_WRITE="$_GIT_CMD"'remote([[:space:]]+-[^[:space:]]+)*[[:space:]]+(add|set-url|remove|rm|rename)([[:space:]]|$)'
+
+# ---------------------------------------------------------------------------
 # core.hooksPath subversion (defeats .githooks/)
 # ---------------------------------------------------------------------------
 
