@@ -300,6 +300,8 @@ denials:
   read_overrides(repo_root: Path, homes: Sequence[Path], period: Period) -> OverrideCounts
   aggregate(scans: Iterable[ScanResult], repo_root: Path, period: Period) -> DenialsSummary
   build_section(repo_root: Path, homes: Sequence[Path], period: Period) -> list[str]
+  with_overrides(summary: DenialsSummary, counts: OverrideCounts) -> DenialsSummary
+  render(summary: DenialsSummary) -> list[str]
   render_not_enabled(label: str) -> list[str]
 
 report:
@@ -331,13 +333,16 @@ ENTITY: DenialsSummary (aggregate output)
   FIELDS: period, files_read: int, skipped_lines: int, oldest_ts (min ScanResult.oldest_ts), versions_seen: set[str],
           unknown_versions: set[str], by_category: Counter[(category, main|subagent)],
           by_rule: Counter[(hook, rule, main|subagent)], by_week: dict[week_start, Counter[category]],
-          top: list[TopRow], unattributed: int, hook_denies: int
+          top: list[TopRow], unattributed: int, hook_denies: int,
+          unreadable: int, by_reason: Counter[(category, reason_category)], partial_weeks: set[week_start],
+          low_confidence: set[category], overrides: OverrideCounts | None (joined by with_overrides before render)
 
 ENTITY: TopRow
   FIELDS: category, hook, rule, tool, count, overrides: int | None, last_session_id, last_ts
 
 ENTITY: OverrideCounts
-  FIELDS: by_rule: Counter[str], master: int
+  FIELDS: by_rule: Counter[str] (rule ids only), master: int, log_found: bool (False → "no override log" note),
+          unrecognised: int (distinct override names that are not rule ids; names never kept)
 ```
 
 `ErrorResult.text` exists only between `scan_file` and `classify`; no other field carries transcript text, and `render` receives only `DenialsSummary` (CON-2).
@@ -402,7 +407,7 @@ Transcript line (shape from research; values masked):
 3. Tool: `t9` was seen as an assistant `tool_use` earlier in the same file with name `Bash`.
 4. Repo: cwd stripped of `/.claude/worktrees/w1` → `/r/app`; casefold-equal to `repo_root` `/r/app` or under it → this source.
 5. Classify: prefix `PreToolUse:Bash hook error: ` removed, `prefixed = True`; row 1 matches; rules `RESET_HARD`, `CLEAN_FORCE`.
-6. Aggregate: category "hook deny" +1 (main); by_rule `(block-bad-git-ops, RESET_HARD)` +1 and `(…, CLEAN_FORCE)` +1; week 2026-11-17 "hook deny" +1; top rows updated with last session `s1` and time.
+6. Aggregate: category "hook deny" +1 (main); by_rule `(block-bad-git-ops, RESET_HARD)` +1 and `(…, CLEAN_FORCE)` +1; week 2026-11-16 (Monday) "hook deny" +1; top rows updated with last session `s1` and time.
 7. Overrides: `CLAUDE_ALLOW_RESET_HARD` rows in period → `RESET_HARD` row shows that count.
 8. Render: `RESET_HARD  2 denies (main 2, subagent 0)  overridden 1  last s1 2026-11-20 10:02`. No command text appears anywhere.
 
@@ -582,7 +587,7 @@ Not applicable.
   - Trade-offs: none known.
   - User confirmed: **Yes** (2026-11-26)
 
-- [x] **ADR-6 Override counts**: from `<home>/.claude/plugins/data/tcs-git-helpers-<basename>/audit/overrides.jsonl`, rows with `env_var` `CLAUDE_ALLOW_<RULE>` in period, per distinct home; `CLAUDE_ALLOW_GIT_BAD_OPS` counted as master; only `ts` and `env_var` read.
+- [x] **ADR-6 Override counts**: from `<home>/.claude/plugins/data/tcs-git-helpers-<basename>/audit/overrides.jsonl`, rows with `env_var` `CLAUDE_ALLOW_<RULE>` in period, per distinct home; `CLAUDE_ALLOW_GIT_BAD_OPS` counted as master; only `ts`, `env_var` and `hook` read (`hook == "ask-guard"` rows are asks, excluded; a consumed ask override counts as rule `ASK_<name>`); `command` never read. Known limits: rotated `overrides.jsonl.1`–`.3` are not read, and two repos with the same basename share one log (the writer's path).
   - Rationale: shows rule-fix candidates; never reads `command` (CON-2).
   - Trade-offs: ask-guard rows (`hook=ask-guard`) are asks, not overrides, and are excluded.
   - User confirmed: **Yes** (2026-11-26)

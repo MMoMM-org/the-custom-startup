@@ -41,6 +41,8 @@
 | 2026-11-26 | Phase 1 drift: `sandbox: network` confidence is low | PRD Rule 6 and F2 AC govern over the SDD table's medium; SDD, code and test aligned. |
 | 2026-11-26 | Phase 1 drift: `oldest_ts` source | `ScanResult.oldest_ts` is the earliest valid top-level timestamp on any line of the file, regardless of period; `DenialsSummary.oldest_ts` is their minimum. |
 | 2026-11-26 | Phase 1 drift: SDD data models | Added `LocateResult` and `ScanResult`; `Period` (both ends inclusive, aware UTC) moved to Phase 1, T2.2 adds only `period_from_args`. |
+| 2026-11-26 | Phase 2: override log reading | `OverrideCounts.log_found` added; `hook` read to exclude ask-guard asks; rotated logs and same-basename repos accepted as known limits (document in T3.2). |
+| 2026-11-26 | Model escalation: T2.3 opus → opus@max | Trigger: second review FAIL |
 
 ## Context
 
