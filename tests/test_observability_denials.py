@@ -1011,7 +1011,13 @@ def test_period_rejects_weeks_that_are_not_a_positive_int(weeks):
         denials.period_from_args(weeks, None, NOW)
 
 
-@pytest.mark.parametrize("since", ["2026-13-01", "20261101", "2026-11-1", "yesterday", "", "2026-11-01T00:00"])
+def _fullwidth(text: str) -> str:
+    """`text` with each ASCII digit in its fullwidth form (U+FF10..U+FF19); regex digit classes take those."""
+    return text.translate({ord(digit): ord(digit) + 0xFEE0 for digit in "0123456789"})
+
+
+@pytest.mark.parametrize("since", ["2026-13-01", "20261101", "2026-11-1", "yesterday", "", "2026-11-01T00:00",
+                                   "2026-11-01\n", _fullwidth("2026-11-01")])
 def test_period_rejects_a_since_that_is_not_yyyy_mm_dd(since):
     with pytest.raises(ValueError, match="YYYY-MM-DD"):
         denials.period_from_args(None, since, NOW)
@@ -1337,6 +1343,14 @@ def test_aggregate_collects_versions_and_those_outside_the_checked_range():
     assert summary.unknown_versions == {"2.1.70", "2.1.333", "2.2.0", "1.9.999", "2.1.x", "nightly"}
 
 
+@pytest.mark.parametrize("version", ["2.1.300\n", _fullwidth("2.1.100"), "1.1." + "9" * 5000],
+                         ids=["trailing-newline", "fullwidth-digits", "5000-digit-part"])
+def test_aggregate_lists_a_version_off_the_digits_and_dots_shape_as_not_checked(version):
+    summary = _agg(_err("ls: plain error", version=version))
+
+    assert summary.unknown_versions == {version}
+
+
 def test_aggregate_ignores_versions_of_other_repos():
     summary = _agg(_err("ls: plain error", version="2.0.1", cwd="/r/app-old"))
 
@@ -1424,6 +1438,25 @@ def test_overrides_ignores_rows_whose_env_var_is_not_an_allow_switch(tmp_path):
 
     assert counts.by_rule == {}
     assert counts.master == 0
+
+
+def test_overrides_counts_names_that_are_not_rule_ids_apart_once_each(tmp_path):
+    home = _override_log(tmp_path / "h", _override_row("CLAUDE_ALLOW_FOO\n"), _override_row("CLAUDE_ALLOW_FOO\n"),
+                         _override_row("CLAUDE_ALLOW_FO\x1bO"), _override_row("CLAUDE_ALLOW_GIT_BAD_OPS\n"),
+                         _override_row("CLAUDE_ALLOW_" + "R" * 65), _override_row("CLAUDE_ALLOW_RESET_HARD"))
+
+    counts = denials.read_overrides(OVR_REPO, [home], OVR_PERIOD)
+
+    assert counts.by_rule == {"RESET_HARD": 1}
+    assert counts.unrecognised == 4
+    assert counts.master == 0
+
+
+def test_overrides_counts_a_name_that_is_not_a_rule_id_once_across_logs(tmp_path):
+    first = _override_log(tmp_path / "a", _override_row("CLAUDE_ALLOW_FOO\n"))
+    second = _override_log(tmp_path / "b", _override_row("CLAUDE_ALLOW_FOO\n"), _override_row("CLAUDE_ALLOW_BA\x1bR"))
+
+    assert denials.read_overrides(OVR_REPO, [first, second], OVR_PERIOD).unrecognised == 2
 
 
 @pytest.mark.parametrize("ts", ["2026-10-31T23:59:59Z", "2026-11-27T00:00:00Z"])
@@ -1520,7 +1553,7 @@ def test_overrides_result_holds_no_command_text(tmp_path):
     counts = denials.read_overrides(OVR_REPO, [home], OVR_PERIOD)
 
     assert secret not in repr(counts)
-    assert {f.name for f in dataclasses.fields(counts)} == {"by_rule", "master", "log_found"}
+    assert {f.name for f in dataclasses.fields(counts)} == {"by_rule", "master", "unrecognised", "log_found"}
 
 
 def test_overrides_skips_a_pathologically_nested_row(tmp_path):
@@ -1717,6 +1750,15 @@ def test_render_never_prints_rule_ids_from_the_override_log_that_are_not_identif
     assert "rm -rf" not in out and "OK_RULE 1" in out
 
 
+def test_render_adds_override_names_it_rejects_to_the_unrecognised_count_of_the_reader():
+    counts = denials.OverrideCounts(by_rule=denials.Counter({"bad rule; rm -rf /": 1, "FOO\n": 1, "OK_RULE": 1}),
+                                    unrecognised=2, log_found=True)
+
+    line = _line_with(denials.render(_populated_summary(counts)), "Overrides:")
+
+    assert line.endswith("; rules without a deny above: OK_RULE 1; 4 unrecognised rule name(s)")
+
+
 def test_render_never_prints_a_version_or_session_id_that_is_not_an_identifier():
     summary = denials.aggregate([_scan_of(_err(_deny("RESET_HARD"), version="9 secret text",
                                                session="s1 secret text"))], REPO, AGG_PERIOD)
@@ -1885,3 +1927,70 @@ def test_render_rule_guard_rejects_a_trailing_newline_and_off_shape_ids(bad_rule
     assert not [line for line in lines if "\n" in line]
     assert bad_rule not in _out(lines)
     assert "(unrecognised)" in _line_with(lines, "overridden")
+
+
+@pytest.mark.parametrize("bad_rule", ["RESET_HARD\n", "reset hard", "X" * 65])
+def test_render_top_list_rule_guard_rejects_a_trailing_newline_and_off_shape_ids(bad_rule):
+    summary = _populated_summary()
+    top = [dataclasses.replace(row, rule=bad_rule) if row.rule == "RESET_HARD" else row for row in summary.top]
+
+    lines = denials.render(dataclasses.replace(summary, top=top))
+
+    assert not [line for line in lines if "\n" in line]
+    assert bad_rule not in _out(lines)
+    assert _line_with(lines, BAD_GIT_OPS, "(unrecognised)", "last")
+
+
+@pytest.mark.parametrize("env_var", ["CLAUDE_ALLOW_FOO\n", "CLAUDE_ALLOW_FO\x1bO"], ids=["newline", "escape"])
+def test_build_section_counts_an_override_name_with_a_control_character_as_unrecognised(tmp_path, env_var):
+    home, repo = tmp_path / "home", _section_repo(tmp_path)
+    _write_lines(_project_dir(home, repo) / "s1.jsonl", [
+        _assistant_tool_use("t1", "Bash"), _user_error("t1", DENY, repo),
+    ])
+    _override_log(home, _override_row(env_var), _override_row("CLAUDE_ALLOW_RESET_HARD"),
+                  _override_row("CLAUDE_ALLOW_ASK_FORCE_PUSH"), repo=repo)
+
+    lines = denials.build_section(repo, [home], SECTION_PERIOD)
+
+    assert [line for line in lines if "\n" in line or "\x1b" in line] == []
+    assert _line_with(lines, "Overrides:").endswith(
+        "; rules without a deny above: ASK_FORCE_PUSH 1; 1 unrecognised rule name(s)")
+    assert _line_with(lines, "RESET_HARD", "(main 1").endswith("overridden 1")
+
+
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\N{LINE SEPARATOR}\N{PARAGRAPH SEPARATOR}]")
+_LONG = 5000
+
+
+def test_build_section_keeps_control_characters_and_long_values_out_of_every_line(tmp_path):
+    home, repo = tmp_path / "home", _section_repo(tmp_path)
+    denied = "Permission for this action has been denied. Reason: "
+    salted = [  # tool name, session id, version, error text with a rule bullet or a reason bracket
+        ("Bash\nSALT", "s1\nSALT", "2.1.300\n", PREFIX + _bad_git_ops("RESET_HARD", "A" * _LONG)),
+        ("Edit\x1b[2JSALT", "s2\x1b[2JSALT", "9.9.9\x1b[2J", denied + "[Data\x1b[2JSALT\n] x"),
+        ("T" * _LONG, "S" * _LONG, "1.1." + "9" * _LONG, denied + "[" + "R" * _LONG + "] x"),
+    ]
+    entries = []
+    for n, (tool, session, version, text) in enumerate(salted):
+        entries += [_assistant_tool_use(f"t{n}", tool),
+                    _tool_result(f"t{n}", text, cwd=f"{repo}/sub\nSALT", sessionId=session, version=version)]
+    _write_lines(_project_dir(home, repo) / "s1.jsonl", entries)
+    _override_log(home, *(_override_row(env_var) for env_var in
+                          ("CLAUDE_ALLOW_FOO\n", "CLAUDE_ALLOW_FO\x1bO", "CLAUDE_ALLOW_" + "R" * _LONG)), repo=repo)
+
+    lines = denials.build_section(repo, [home], SECTION_PERIOD)
+
+    assert "transcripts: 1 file(s) read" in lines[0]
+    assert "SALT" not in _out(lines)
+    assert [line for line in lines if _CONTROL_CHARS.search(line) or len(line) > 1000] == []
+
+
+@pytest.mark.parametrize("shape, value", [
+    ("_SAFE_RULE", "RESET_HARD"), ("_REASON_CATEGORY", "Data Exfiltration"), ("_SAFE_TOKEN", "Bash"),
+    ("_VERSION", "2.1.71"), ("_DATE", "2026-11-01"),
+])
+def test_identifier_shapes_reject_a_trailing_newline_whichever_match_method_is_used(shape, value):
+    pattern = getattr(denials, shape)
+
+    assert pattern.fullmatch(value)
+    assert [name for name in ("match", "search", "fullmatch") if getattr(pattern, name)(value + "\n")] == []

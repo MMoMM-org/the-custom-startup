@@ -58,11 +58,23 @@ HOOK_DENY = "hook deny"
 _HOOK_ERROR_PREFIX = re.compile(r"^PreToolUse:[^\s:]+ hook error: ")
 _BAD_GIT_OPS_RULE = re.compile(r"^\s+- \[([A-Z_]+)\]", re.MULTILINE)
 _CLASSIFIER_REASON = re.compile(r"Reason: \[([^\]]+)\]")
-# A reason category is a short label ("Data Exfiltration", "Production Deploy");
-# any other bracket content -- control characters, newlines, free text, or
-# overlong -- is kept as one fixed marker, never as text (CON-2).
-_REASON_CATEGORY = re.compile(r"^[A-Za-z][A-Za-z0-9 /&-]{0,47}$")
+
+# Identifier shapes (CON-2). A free identifier -- rule id, classifier reason
+# category ("Data Exfiltration"), tool name, session id, version -- is kept or
+# printed only when it matches its shape in full; anything else (control
+# characters, newlines, free text, overlong) becomes one fixed marker, never
+# text. Anchored with \A and \Z, never ^ and $: `$` also matches before a
+# trailing newline, so `^X$` lets "X\n" through `match` and `search`.
+_SAFE_RULE = re.compile(r"\A[A-Z0-9_]{1,64}\Z")
+_REASON_CATEGORY = re.compile(r"\A[A-Za-z][A-Za-z0-9 /&-]{0,47}\Z")
+_SAFE_TOKEN = re.compile(r"\A[A-Za-z0-9._+-]{1,128}\Z")
 _UNRECOGNISED = "(unrecognised)"
+
+
+def _safe(value: str | None, shape: re.Pattern[str] = _SAFE_TOKEN) -> str:
+    """`value` when it matches `shape` in full, else the fixed `(unrecognised)` marker."""
+    return value if isinstance(value, str) and shape.fullmatch(value) else _UNRECOGNISED
+
 
 # Rejecting these is answering a question or declining a plan, not stopping an action.
 _NOT_ACTION_TOOLS = frozenset({"AskUserQuestion", "ExitPlanMode"})
@@ -139,10 +151,7 @@ def _strip_prefix(text: str) -> tuple[str, bool]:
 
 def _reason_category(row: Row, text: str) -> str | None:
     reason = row.reason_pattern.search(text) if row.reason_pattern else None
-    if reason is None:
-        return None
-    category = reason.group(1)
-    return category if _REASON_CATEGORY.fullmatch(category) else _UNRECOGNISED
+    return None if reason is None else _safe(reason.group(1), _REASON_CATEGORY)
 
 
 def _denial_from_row(row: Row, text: str) -> Denial:
@@ -449,8 +458,11 @@ TOP_LIMIT = 10
 CHECKED_VERSIONS = ((2, 1, 71), (2, 1, 332))
 MAIN, SUBAGENT = "main", "subagent"
 
-_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+# ASCII digits only (`\d` also takes other scripts' digits), anchored like the
+# identifier shapes. A version part is bounded so `int()` never meets its
+# digit limit (CON-6: an odd version is "not checked", never a crash).
+_DATE = re.compile(r"\A[0-9]{4}-[0-9]{2}-[0-9]{2}\Z")
+_VERSION = re.compile(r"\A([0-9]{1,9})\.([0-9]{1,9})\.([0-9]{1,9})\Z")
 # A worktree session's cwd is `<repo>/.claude/worktrees/<name>[/...]`; it counts for `<repo>`.
 _WORKTREE = re.compile(r"/\.claude/worktrees/[^/]+(?:/.*)?$")
 _WEEK = timedelta(weeks=1)
@@ -471,7 +483,7 @@ def _weeks_start(weeks: object, now: datetime) -> datetime:
 
 def _since_start(since: object, now: datetime) -> datetime:
     expected = f"denials since must be a date in the form YYYY-MM-DD, got {since!r}"
-    if not isinstance(since, str) or not _DATE.match(since):
+    if not isinstance(since, str) or not _DATE.fullmatch(since):
         raise ValueError(expected)
     try:
         day = date.fromisoformat(since)
@@ -578,7 +590,7 @@ def _in_repo(cwd: str, root: str) -> bool:
 
 
 def _version_unchecked(version: str) -> bool:
-    match = _VERSION.match(version)
+    match = _VERSION.fullmatch(version)
     if match is None:
         return True
     low, high = CHECKED_VERSIONS
@@ -695,11 +707,15 @@ _ASK_GUARD_HOOK = "ask-guard"
 class OverrideCounts:
     """Override consumptions in the period: per rule, the master switch apart.
 
-    `log_found` is False when no home holds a readable log ("no override log").
+    `by_rule` holds rule ids only; `unrecognised` is how many distinct names
+    after `CLAUDE_ALLOW_` were not one -- the names themselves stay in the
+    reader (CON-2). `log_found` is False when no home holds a readable log
+    ("no override log").
     """
 
     by_rule: Counter = field(default_factory=Counter)
     master: int = 0
+    unrecognised: int = 0
     log_found: bool = False
 
 
@@ -725,7 +741,7 @@ def _override_switch(line: str, period: Period) -> str | None:
 
 
 def _count_override_log(path: Path, period: Period) -> tuple[Counter, int]:
-    """One log's in-period counts: per rule, and the master switch. Raises OSError."""
+    """One log's in-period counts: per rule name as written, and the master switch. Raises OSError."""
     by_rule: Counter = Counter()
     master = 0
     with path.open(encoding="utf-8", errors="replace") as handle:
@@ -761,7 +777,14 @@ def read_overrides(repo_root: Path, homes: Sequence[Path], period: Period) -> Ov
         by_rule.update(log_rules)
         master += log_master
         found = True
-    return OverrideCounts(by_rule=by_rule, master=master, log_found=found)
+    return _override_counts(by_rule, master, found)
+
+
+def _override_counts(by_rule: Counter, master: int, found: bool) -> OverrideCounts:
+    """Keep the names that are rule ids; of the others only how many distinct ones there were."""
+    rules = Counter({rule: n for rule, n in by_rule.items() if _SAFE_RULE.fullmatch(rule)})
+    return OverrideCounts(by_rule=rules, master=master, unrecognised=len(by_rule) - len(rules),
+                          log_found=found)
 
 
 # ---------------------------------------------------------------------------
@@ -771,8 +794,8 @@ def read_overrides(repo_root: Path, homes: Sequence[Path], period: Period) -> Ov
 # on the summary itself: `with_overrides` stores the `OverrideCounts` (counts
 # and rule ids, no log text) and fills `TopRow.overrides` for block-bad-git-ops
 # rule rows. Every free-form identifier printed -- tool, session id, version,
-# rule id from the log -- is checked against a token shape first, so a value
-# that is not an identifier prints as "(unrecognised)" instead of as text.
+# rule id, reason category -- goes through `_safe` with its identifier shape,
+# so a value that is not an identifier prints as "(unrecognised)", not as text.
 # ---------------------------------------------------------------------------
 
 BAD_GIT_OPS_HOOK = "tcs-git-helpers/block-bad-git-ops"
@@ -782,14 +805,8 @@ NOT_OBSERVABLE = (
     '(see README "Denials")'
 )
 _CATEGORY_ORDER = tuple(dict.fromkeys(row.category for row in TABLE))
-_SAFE_TOKEN = re.compile(r"^[A-Za-z0-9._+-]{1,128}$")
-_SAFE_RULE = re.compile(r"^[A-Z0-9_]{1,64}$")
 _NO_COUNT = "–"
 _DAY = timedelta(days=1)
-
-
-def _safe(value: str | None, shape: re.Pattern[str] = _SAFE_TOKEN) -> str:
-    return value if isinstance(value, str) and shape.fullmatch(value) else _UNRECOGNISED
 
 
 def with_overrides(summary: DenialsSummary, counts: OverrideCounts) -> DenialsSummary:
@@ -892,7 +909,7 @@ def _top_line(rank: int, row: TopRow) -> str:
     if row.category == HOOK_DENY:
         parts.append(row.hook or "unattributed")
     if row.rule is not None:
-        parts.append(row.rule)
+        parts.append(_safe(row.rule, _SAFE_RULE))
     parts += [_safe(row.tool) if row.tool else "(tool unknown)", str(row.count)]
     if row.overrides is not None:
         parts.append(f"overridden {row.overrides}")
@@ -912,9 +929,10 @@ def _overrides_line(summary: DenialsSummary) -> str:
     if counts is None or not counts.log_found:
         return f"  Overrides: no override log found, so override counts show {_NO_COUNT}"
     listed = {rule for hook, rule, _side in summary.by_rule if hook == BAD_GIT_OPS_HOOK}
-    others = sorted((rule, n) for rule, n in counts.by_rule.items() if n and rule not in listed)
-    shown = [f"{rule} {n}" for rule, n in others if _SAFE_RULE.match(rule)]
-    unrecognised = len(others) - len(shown)
+    others = sorted((_safe(rule, _SAFE_RULE), n)
+                    for rule, n in counts.by_rule.items() if n and rule not in listed)
+    shown = [f"{rule} {n}" for rule, n in others if rule != _UNRECOGNISED]
+    unrecognised = counts.unrecognised + len(others) - len(shown)
     line = f"  Overrides: master switch CLAUDE_ALLOW_GIT_BAD_OPS (all rules) {counts.master}"
     if shown:
         line += "; rules without a deny above: " + ", ".join(shown)
