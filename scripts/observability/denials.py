@@ -535,6 +535,7 @@ class DenialsSummary:
     top: list[TopRow]
     unattributed: int
     hook_denies: int
+    overrides: OverrideCounts | None = None  # joined by `with_overrides`; None = not read
 
 
 def _week_rows(period: Period) -> dict[datetime, Counter]:
@@ -704,7 +705,7 @@ def _override_switch(line: str, period: Period) -> str | None:
             return None
         env_var = row.get("env_var")
         ts = _parse_ts(row.get("ts"))
-    except (ValueError, _BadShape):
+    except (ValueError, RecursionError):  # _BadShape is a ValueError; RecursionError: deep nesting
         return None
     if not isinstance(env_var, str) or not period.contains(ts):
         return None
@@ -749,3 +750,210 @@ def read_overrides(repo_root: Path, homes: Sequence[Path], period: Period) -> Ov
         master += log_master
         found = True
     return OverrideCounts(by_rule=by_rule, master=master, log_found=found)
+
+
+# ---------------------------------------------------------------------------
+# Rendering one source's section (SDD User Interface & UX, F3-F6).
+#
+# `render` reads only a `DenialsSummary` (CON-2). The override counts reach it
+# on the summary itself: `with_overrides` stores the `OverrideCounts` (counts
+# and rule ids, no log text) and fills `TopRow.overrides` for block-bad-git-ops
+# rule rows. Every free-form identifier printed -- tool, session id, version,
+# rule id from the log -- is checked against a token shape first, so a value
+# that is not an identifier prints as "(unrecognised)" instead of as text.
+# ---------------------------------------------------------------------------
+
+BAD_GIT_OPS_HOOK = "tcs-git-helpers/block-bad-git-ops"
+NOT_OBSERVABLE = (
+    'settings deny rules, a "no" to a hook\'s ask prompt as its own kind (it counts as prompt rejected), '
+    "denials in sessions whose transcripts were removed, sandbox blocks that surface as no tool error "
+    '(see README "Denials")'
+)
+_CATEGORY_ORDER = tuple(dict.fromkeys(row.category for row in TABLE))
+_SAFE_TOKEN = re.compile(r"^[A-Za-z0-9._+-]{1,128}$")
+_SAFE_RULE = re.compile(r"^[A-Z0-9_]{1,64}$")
+_UNRECOGNISED = "(unrecognised)"
+_NO_COUNT = "–"
+_DAY = timedelta(days=1)
+
+
+def _safe(value: str | None, shape: re.Pattern[str] = _SAFE_TOKEN) -> str:
+    return value if isinstance(value, str) and shape.match(value) else _UNRECOGNISED
+
+
+def with_overrides(summary: DenialsSummary, counts: OverrideCounts) -> DenialsSummary:
+    """`summary` with the audit-log counts joined (ADR-6), so `render` needs nothing else."""
+    return replace(summary, overrides=counts, top=[_top_with_overrides(row, counts) for row in summary.top])
+
+
+def _top_with_overrides(row: TopRow, counts: OverrideCounts) -> TopRow:
+    if not (counts.log_found and row.hook == BAD_GIT_OPS_HOOK and row.rule is not None):
+        return row
+    return replace(row, overrides=counts.by_rule.get(row.rule, 0))
+
+
+def _period_text(period: Period) -> str:
+    days = -((period.start - period.end) // _DAY)  # whole days, rounded up
+    start, end = period.start.astimezone(timezone.utc), period.end.astimezone(timezone.utc)
+    return f"{start:%Y-%m-%d} .. {end:%Y-%m-%d}, {days} days"
+
+
+def _categories(summary: DenialsSummary) -> list[str]:
+    """Categories seen, in table order."""
+    seen = {category for category, _side in summary.by_category}
+    return [c for c in _CATEGORY_ORDER if c in seen] + sorted(seen.difference(_CATEGORY_ORDER))
+
+
+def _split(main: int, subagent: int) -> str:
+    return f"{main + subagent:>4}  (main {main}, subagent {subagent})"
+
+
+def _override_text(summary: DenialsSummary, rule: str) -> str:
+    counts = summary.overrides
+    if counts is None or not counts.log_found:
+        return f"overridden {_NO_COUNT}"
+    return f"overridden {counts.by_rule.get(rule, 0)}"
+
+
+def _category_line(summary: DenialsSummary, category: str) -> str:
+    counts = summary.by_category
+    line = f"  {category:<20}{_split(counts[(category, MAIN)], counts[(category, SUBAGENT)])}"
+    reasons = sorted(((n, reason) for (cat, reason), n in summary.by_reason.items() if cat == category),
+                     key=lambda pair: (-pair[0], pair[1]))
+    if reasons:
+        line += "  " + ", ".join(f"[{reason}] {n}" for n, reason in reasons)
+    return line + ("  low confidence" if category in summary.low_confidence else "")
+
+
+def _rules_by_hook(summary: DenialsSummary) -> dict[str | None, dict[str | None, Counter]]:
+    by_hook: dict[str | None, dict[str | None, Counter]] = {}
+    for (hook, rule, side), n in summary.by_rule.items():
+        by_hook.setdefault(hook, {}).setdefault(rule, Counter())[side] += n
+    return by_hook
+
+
+def _hook_lines(summary: DenialsSummary) -> list[str]:
+    """Each hook under "hook deny": its rules below it, or one inline count; unattributed last."""
+    by_hook = _rules_by_hook(summary)
+    lines = []
+    for hook in sorted(by_hook, key=lambda h: (h is None, h or "")):
+        rules, label = by_hook[hook], hook or "unattributed"
+        if set(rules) == {None}:
+            lines.append(f"    {label:<40}{_split(rules[None][MAIN], rules[None][SUBAGENT])}")
+            continue
+        lines.append(f"    {label}")
+        for rule in sorted(rules, key=lambda r: (r is None, -sum(rules[r].values()), r or "")):
+            lines.append(_rule_line(summary, hook, rule, rules[rule]))
+    return lines
+
+
+def _rule_line(summary: DenialsSummary, hook: str | None, rule: str | None, sides: Counter) -> str:
+    line = f"      {rule or '(rule not named)':<30}{_split(sides[MAIN], sides[SUBAGENT])}"
+    if hook == BAD_GIT_OPS_HOOK and rule is not None:
+        line += f"   {_override_text(summary, rule)}"
+    return line
+
+
+def _category_lines(summary: DenialsSummary) -> list[str]:
+    lines = []
+    for category in _categories(summary):
+        lines.append(_category_line(summary, category))
+        if category == HOOK_DENY:
+            lines.extend(_hook_lines(summary))
+    return lines
+
+
+def _week_lines(summary: DenialsSummary) -> list[str]:
+    """One row per Monday of the period, empty weeks included (F3 AC3)."""
+    categories = _categories(summary)
+    widths = [max(len(c), 4) for c in categories]
+    lines = ["  " + f"{'Weeks (Mon)':<22}" + "  ".join(f"{c:>{w}}" for c, w in zip(categories, widths))]
+    for monday, counts in summary.by_week.items():
+        label = f"{monday:%Y-%m-%d}" + (" (partial)" if monday in summary.partial_weeks else "")
+        cells = "  ".join(f"{counts[c]:>{w}}" for c, w in zip(categories, widths))
+        lines.append(f"    {label:<20}{cells}")
+    return lines
+
+
+def _top_line(rank: int, row: TopRow) -> str:
+    parts = [f"{rank}.", row.category]
+    if row.category == HOOK_DENY:
+        parts.append(row.hook or "unattributed")
+    if row.rule is not None:
+        parts.append(row.rule)
+    parts += [_safe(row.tool) if row.tool else "(tool unknown)", str(row.count)]
+    if row.overrides is not None:
+        parts.append(f"overridden {row.overrides}")
+    elif row.hook == BAD_GIT_OPS_HOOK and row.rule is not None:
+        parts.append(f"overridden {_NO_COUNT}")
+    parts += ["last", _safe(row.last_session_id), f"{row.last_ts.astimezone(timezone.utc):%Y-%m-%d %H:%M}"]
+    return "    " + "  ".join(parts)
+
+
+def _top_lines(summary: DenialsSummary) -> list[str]:
+    return ["  Top repeated"] + [_top_line(rank, row) for rank, row in enumerate(summary.top, start=1)]
+
+
+def _overrides_line(summary: DenialsSummary) -> str:
+    """The master switch, and overridden rules with no rule line above (asks among them)."""
+    counts = summary.overrides
+    if counts is None or not counts.log_found:
+        return f"  Overrides: no override log found, so override counts show {_NO_COUNT}"
+    listed = {rule for hook, rule, _side in summary.by_rule if hook == BAD_GIT_OPS_HOOK}
+    others = sorted((rule, n) for rule, n in counts.by_rule.items() if n and rule not in listed)
+    shown = [f"{rule} {n}" for rule, n in others if _SAFE_RULE.match(rule)]
+    unrecognised = len(others) - len(shown)
+    line = f"  Overrides: master switch CLAUDE_ALLOW_GIT_BAD_OPS (all rules) {counts.master}"
+    if shown:
+        line += "; rules without a deny above: " + ", ".join(shown)
+    if unrecognised:
+        line += f"; {unrecognised} unrecognised rule name(s)"
+    return line
+
+
+def _partial_line(summary: DenialsSummary) -> str:
+    """What could not be read or checked (F5 AC2/AC3); never a bare silence."""
+    versions = sorted({_safe(v) for v in summary.unknown_versions})
+    unchecked = (", ".join(versions) + " (their denials may be unclassified)") if versions else "none"
+    return (f"  Partial reads: lines skipped that could not be read: {summary.skipped_lines}; "
+            f"unreadable files: {summary.unreadable}; versions not checked: {unchecked}")
+
+
+def _render_empty(summary: DenialsSummary) -> list[str]:
+    head = (f"Denials ({_period_text(summary.period)}): no denials found in {summary.files_read} "
+            f"transcript(s). That is not proof none happened -- not observable: {NOT_OBSERVABLE}")
+    return [head, _overrides_line(summary), _partial_line(summary), ""]
+
+
+def render(summary: DenialsSummary) -> list[str]:
+    """The section's lines for one source and period; the only input is `summary` (CON-2)."""
+    if not summary.by_category:
+        return _render_empty(summary)
+    oldest = f"{summary.oldest_ts.astimezone(timezone.utc):%Y-%m-%d}" if summary.oldest_ts else "unknown"
+    header = (f"Denials ({_period_text(summary.period)}; transcripts: {summary.files_read} file(s) read, "
+              f"oldest {oldest})")
+    return [header, *_category_lines(summary), *_week_lines(summary), *_top_lines(summary),
+            _overrides_line(summary), f"  Not observable: {NOT_OBSERVABLE}", _partial_line(summary), ""]
+
+
+def render_not_enabled(label: str) -> list[str]:
+    """F1 AC1: the section is off for this source, and the one line that turns it on."""
+    return [f'Denials: not enabled for source "{label}". Add "denials = true" to its [[source]] '
+            "entry in .claude/observability-sources.toml.", ""]
+
+
+def _render_no_transcripts(period: Period, located: LocateResult) -> list[str]:
+    """F1 AC2: no file in reach -- say so and name every place searched."""
+    lines = [f"Denials ({_period_text(period)}): no transcripts found for this repository."]
+    lines += [f"  searched: {path}" + (" (missing)" if path in located.missing else "")
+              for path in located.searched] or ["  no home directories given"]
+    return lines + [""]
+
+
+def build_section(repo_root: Path, homes: Sequence[Path], period: Period) -> list[str]:
+    """One enabled source's section: locate -> scan -> classify -> overrides -> aggregate -> render."""
+    located = locate_transcripts(repo_root, homes)
+    if not located.files:
+        return _render_no_transcripts(period, located)
+    summary = aggregate((scan_file(path, period) for path in located.files), repo_root, period)
+    return render(with_overrides(summary, read_overrides(repo_root, homes, period)))

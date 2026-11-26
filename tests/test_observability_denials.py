@@ -1491,3 +1491,325 @@ def test_overrides_result_holds_no_command_text(tmp_path):
 
     assert secret not in repr(counts)
     assert {f.name for f in dataclasses.fields(counts)} == {"by_rule", "master", "log_found"}
+
+
+def test_overrides_skips_a_pathologically_nested_row(tmp_path):
+    nested = '{"ts": "2026-11-20T10:02:11Z", "env_var": "CLAUDE_ALLOW_RESET_HARD", "x": ' + "[" * 100000 + "]" * 100000 + "}"
+    home = _override_log(tmp_path / "h", nested, _override_row("CLAUDE_ALLOW_NO_VERIFY"))
+
+    assert denials.read_overrides(OVR_REPO, [home], OVR_PERIOD).by_rule == {"NO_VERIFY": 1}
+
+
+# ---------------------------------------------------------------------------
+# T2.3 -- rendering the section (SDD User Interface & UX). `render` receives
+# only a `DenialsSummary` (CON-2); override counts reach it through
+# `with_overrides`, which `build_section` applies before rendering.
+# ---------------------------------------------------------------------------
+
+BAD_GIT_OPS = "tcs-git-helpers/block-bad-git-ops"
+PRE_EDIT = PREFIX.replace("Bash", "Write") + "Refusing to Write 'f' on 'main'. x"
+
+
+def _populated_summary(overrides=None):
+    summary = denials.aggregate([
+        _scan_of(_err(_deny("RESET_HARD")), _err(_deny("RESET_HARD"), sidechain=True),
+                 _err(_deny("RESET_HARD", "CLEAN_FORCE"), session="s-3f2a",
+                      ts=datetime(2026, 11, 25, 9, 14, tzinfo=UTC)),
+                 _err(PRE_EDIT, tool="Write"), _err(UNKNOWN_HOOK),
+                 _err(REJECTED, tool="Edit"), _err(CLASSIFIER),
+                 _err("Permission for this action has been denied. Reason: [Data Exfiltration] y"),
+                 _err(SANDBOX_FS, ts=datetime(2026, 10, 30, tzinfo=UTC)),
+                 _err("curl: CONNECT tunnel failed, response 403", version="2.0.9"),
+                 skipped=3, oldest=datetime(2026, 10, 2, 8, tzinfo=UTC)),
+        _scan_of(unreadable=True, name="s2.jsonl"),
+    ], REPO, AGG_PERIOD)
+    return denials.with_overrides(summary, overrides) if overrides is not None else summary
+
+
+def _out(lines) -> str:
+    return "\n".join(lines)
+
+
+def _line_with(lines, *parts) -> str:
+    matches = [line for line in lines if all(part in line for part in parts)]
+    assert matches, f"no line holds {parts!r} in:\n{_out(lines)}"
+    return matches[0]
+
+
+def test_render_header_shows_period_start_end_files_and_oldest_transcript():
+    header = denials.render(_populated_summary())[0]
+
+    assert header == "Denials (2026-10-29 .. 2026-11-26, 28 days; transcripts: 1 file(s) read, oldest 2026-10-02)"
+
+
+def test_render_header_says_when_no_transcript_carries_a_timestamp():
+    summary = denials.aggregate([_scan_of(_err(_deny("RESET_HARD")))], REPO, AGG_PERIOD)
+
+    assert "oldest unknown" in denials.render(summary)[0]
+
+
+def test_render_categories_show_main_and_subagent_split():
+    lines = denials.render(_populated_summary())
+
+    assert _line_with(lines, "hook deny").split() == ["hook", "deny", "5", "(main", "4,", "subagent", "1)"]
+    assert "(main 1, subagent 0)" in _line_with(lines, "prompt rejected")
+
+
+def test_render_lists_rules_under_their_hook_with_split():
+    lines = denials.render(_populated_summary())
+    hook_at = lines.index(_line_with(lines, BAD_GIT_OPS))
+
+    assert lines[hook_at].strip() == BAD_GIT_OPS
+    assert "RESET_HARD" in lines[hook_at + 1] and "3  (main 2, subagent 1)" in lines[hook_at + 1]
+    assert "CLEAN_FORCE" in lines[hook_at + 2] and "1  (main 1, subagent 0)" in lines[hook_at + 2]
+
+
+def test_render_shows_a_ruleless_hook_inline_and_unattributed_hook_denies():
+    lines = denials.render(_populated_summary())
+
+    assert "1  (main 1, subagent 0)" in _line_with(lines, "tcs-git-helpers/pre-edit-branch-check")
+    assert "1  (main 1, subagent 0)" in _line_with(lines, "unattributed")
+
+
+def test_render_rule_lines_show_override_counts_per_rule():
+    counts = denials.OverrideCounts(by_rule=denials.Counter({"RESET_HARD": 2}), master=1, log_found=True)
+    lines = denials.render(_populated_summary(counts))
+
+    assert _line_with(lines, "RESET_HARD", "(main 2").endswith("overridden 2")
+    assert _line_with(lines, "CLEAN_FORCE", "(main 1").endswith("overridden 0")
+
+
+def test_render_shows_the_master_switch_and_overrides_of_unlisted_rules_apart():
+    counts = denials.OverrideCounts(by_rule=denials.Counter({"RESET_HARD": 2, "ASK_FORCE_PUSH": 4}),
+                                    master=1, log_found=True)
+    line = _line_with(denials.render(_populated_summary(counts)), "Overrides:")
+
+    assert "CLAUDE_ALLOW_GIT_BAD_OPS (all rules) 1" in line
+    assert "ASK_FORCE_PUSH 4" in line
+    assert "RESET_HARD" not in line
+
+
+def test_render_without_an_override_log_shows_dash_and_a_note():
+    counts = denials.OverrideCounts(log_found=False)
+    lines = denials.render(_populated_summary(counts))
+
+    assert _line_with(lines, "RESET_HARD", "(main 2").endswith("overridden –")
+    assert "no override log" in _line_with(lines, "Overrides:")
+
+
+def test_render_without_override_data_treats_it_as_no_override_log():
+    lines = denials.render(_populated_summary())
+
+    assert "no override log" in _line_with(lines, "Overrides:")
+
+
+def test_render_classifier_shows_reason_categories():
+    line = _line_with(denials.render(_populated_summary()), "classifier block")
+
+    assert "[Data Exfiltration] 1" in line and "[Production Deploy] 1" in line
+
+
+def test_render_marks_both_sandbox_categories_low_confidence():
+    lines = denials.render(_populated_summary())
+
+    assert _line_with(lines, "sandbox: filesystem").endswith("low confidence")
+    assert _line_with(lines, "sandbox: network").endswith("low confidence")
+    assert "low confidence" not in _line_with(lines, "prompt rejected")
+
+
+def test_render_week_table_has_every_monday_with_partial_marks_and_counts():
+    lines = denials.render(_populated_summary())
+    head = lines.index(_line_with(lines, "Weeks (Mon)"))
+    rows = lines[head + 1:head + 6]
+
+    assert "hook deny" in lines[head] and "sandbox: network" in lines[head]
+    assert [row.split()[0] for row in rows] == ["2026-10-26", "2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23"]
+    assert "(partial)" in rows[0] and "(partial)" in rows[4]
+    assert "(partial)" not in rows[1]
+    assert rows[1].split()[1:] == ["0"] * len(rows[1].split()[1:])
+
+
+def test_render_top_list_shows_kind_tool_count_overrides_and_last_occurrence():
+    counts = denials.OverrideCounts(by_rule=denials.Counter({"RESET_HARD": 2}), log_found=True)
+    lines = denials.render(_populated_summary(counts))
+    first = lines[lines.index(_line_with(lines, "Top repeated")) + 1]
+
+    assert first.split() == ["1.", "hook", "deny", BAD_GIT_OPS, "RESET_HARD", "Bash", "3",
+                             "overridden", "2", "last", "s-3f2a", "2026-11-25", "09:14"]
+
+
+def test_render_top_list_names_unattributed_and_omits_override_for_other_kinds():
+    lines = denials.render(_populated_summary())
+
+    assert "overridden" not in _line_with(lines, "prompt rejected", "Edit", "last")
+    assert _line_with(lines, "hook deny", "unattributed", "Bash", "last")
+
+
+def test_render_states_what_is_not_observable():
+    line = _line_with(denials.render(_populated_summary()), "Not observable:")
+
+    assert "settings deny rules" in line and "transcripts were removed" in line
+
+
+def test_render_states_skipped_lines_unreadable_files_and_unchecked_versions():
+    line = denials.render(_populated_summary())[-2]
+
+    assert "lines skipped that could not be read: 3" in line
+    assert "unreadable files: 1" in line
+    assert "versions not checked: 2.0.9" in line and "may be unclassified" in line
+
+
+def test_render_says_none_when_every_version_was_checked():
+    summary = denials.aggregate([_scan_of(_err(_deny("RESET_HARD")))], REPO, AGG_PERIOD)
+
+    assert "versions not checked: none" in denials.render(summary)[-2]
+
+
+def test_render_ends_with_a_blank_line():
+    assert denials.render(_populated_summary())[-1] == ""
+
+
+def test_render_empty_summary_says_not_proof_and_lists_the_not_observable():
+    summary = denials.aggregate([_scan_of(_err("ordinary failure")), _scan_of(name="s2.jsonl")], REPO, AGG_PERIOD)
+    lines = denials.render(summary)
+
+    assert lines[0].startswith("Denials (2026-10-29 .. 2026-11-26, 28 days): no denials found in 2 transcript(s).")
+    assert "That is not proof none happened -- not observable: settings deny rules" in lines[0]
+    assert not any("Top repeated" in line or "Weeks" in line for line in lines)
+    assert "lines skipped that could not be read: 0" in lines[-2]
+
+
+def test_render_never_prints_rule_ids_from_the_override_log_that_are_not_identifiers():
+    counts = denials.OverrideCounts(by_rule=denials.Counter({"bad rule; rm -rf /": 1, "OK_RULE": 1}),
+                                    log_found=True)
+    out = _out(denials.render(_populated_summary(counts)))
+
+    assert "rm -rf" not in out and "OK_RULE 1" in out
+
+
+def test_render_never_prints_a_version_or_session_id_that_is_not_an_identifier():
+    summary = denials.aggregate([_scan_of(_err(_deny("RESET_HARD"), version="9 secret text",
+                                               session="s1 secret text"))], REPO, AGG_PERIOD)
+    out = _out(denials.render(summary))
+
+    assert "secret text" not in out
+    assert "(unrecognised)" in out
+
+
+def test_with_overrides_fills_bad_git_ops_rule_rows_only():
+    counts = denials.OverrideCounts(by_rule=denials.Counter({"RESET_HARD": 2}), log_found=True)
+    summary = denials.with_overrides(_populated_summary(), counts)
+
+    by_rule = {(row.hook, row.rule): row.overrides for row in summary.top}
+    assert by_rule[(BAD_GIT_OPS, "RESET_HARD")] == 2
+    assert by_rule[(BAD_GIT_OPS, "CLEAN_FORCE")] == 0
+    assert by_rule[(None, None)] is None
+    assert summary.overrides is counts
+
+
+def test_with_overrides_leaves_rows_unset_without_a_log():
+    summary = denials.with_overrides(_populated_summary(), denials.OverrideCounts(log_found=False))
+
+    assert all(row.overrides is None for row in summary.top)
+
+
+def test_render_not_enabled_names_the_label_and_the_denials_line():
+    lines = denials.render_not_enabled("app")
+
+    assert lines[0] == ('Denials: not enabled for source "app". Add "denials = true" to its [[source]] '
+                        "entry in .claude/observability-sources.toml.")
+    assert lines[-1] == ""
+
+
+# --- build_section: locate -> scan -> classify -> overrides -> aggregate -> render ---
+
+SECTION_NOW = datetime(2026, 11, 26, 15, 30, tzinfo=UTC)
+SECTION_PERIOD = denials.Period(start=datetime(2026, 10, 29, 15, 30, tzinfo=UTC), end=SECTION_NOW)
+
+
+def _section_repo(tmp_path: Path) -> Path:
+    return tmp_path / "r" / "app"
+
+
+def _user_error(tool_use_id, text, repo, **fields):
+    return _tool_result(tool_use_id, text, cwd=str(repo), **fields)
+
+
+def test_build_section_counts_each_rule_and_never_renders_rule_text(tmp_path):
+    home, repo = tmp_path / "home", _section_repo(tmp_path)
+    _write_lines(_project_dir(home, repo) / "s1.jsonl", [
+        _assistant_tool_use("t1", "Bash"),
+        _user_error("t1", PREFIX + _bad_git_ops("RESET_HARD", "CLEAN_FORCE"), repo),
+    ])
+
+    out = _out(denials.build_section(repo, [home], SECTION_PERIOD))
+
+    assert "RESET_HARD" in out and "CLEAN_FORCE" in out
+    assert "transcripts: 1 file(s) read" in out
+
+
+def test_build_section_joins_override_counts_from_the_audit_log(tmp_path):
+    home, repo = tmp_path / "home", _section_repo(tmp_path)
+    _write_lines(_project_dir(home, repo) / "s1.jsonl", [
+        _assistant_tool_use("t1", "Bash"), _user_error("t1", DENY, repo),
+    ])
+    _override_log(home, _override_row("CLAUDE_ALLOW_RESET_HARD"), _override_row("CLAUDE_ALLOW_GIT_BAD_OPS"),
+                  repo=repo)
+
+    lines = denials.build_section(repo, [home], SECTION_PERIOD)
+
+    assert _line_with(lines, "RESET_HARD", "(main 1").endswith("overridden 1")
+    assert "CLAUDE_ALLOW_GIT_BAD_OPS (all rules) 1" in _line_with(lines, "Overrides:")
+
+
+def test_build_section_without_files_says_no_transcripts_found_and_names_searched_dirs(tmp_path):
+    first, second, repo = tmp_path / "a", tmp_path / "b", _section_repo(tmp_path)
+    _projects(second).mkdir(parents=True)
+
+    lines = denials.build_section(repo, [first, second], SECTION_PERIOD)
+
+    assert lines[0] == "Denials (2026-10-29 .. 2026-11-26, 28 days): no transcripts found for this repository."
+    assert f"searched: {_projects(first)} (missing)" in lines[1]
+    assert f"searched: {_projects(second)}" in lines[2] and "missing" not in lines[2]
+    assert lines[-1] == ""
+
+
+def test_build_section_without_homes_says_no_transcripts_found(tmp_path):
+    lines = denials.build_section(_section_repo(tmp_path), [], SECTION_PERIOD)
+
+    assert "no transcripts found" in lines[0]
+    assert "no home directories given" in lines[1]
+
+
+def test_build_section_with_transcripts_but_no_denials_renders_the_empty_state(tmp_path):
+    home, repo = tmp_path / "home", _section_repo(tmp_path)
+    _write_lines(_project_dir(home, repo) / "s1.jsonl", [_user_error("t1", "ordinary failure", repo)])
+
+    lines = denials.build_section(repo, [home], SECTION_PERIOD)
+
+    assert "no denials found in 1 transcript(s). That is not proof none happened" in lines[0]
+
+
+def test_build_section_never_renders_transcript_or_override_log_content(tmp_path):
+    marker = "SENTINEL-T23-c0ffee"
+    home, repo = tmp_path / "home", _section_repo(tmp_path)
+    tool_use = _assistant_tool_use("t1", "Bash")
+    tool_use["message"]["content"][0]["input"] = {"command": f"git reset --hard {marker}"}
+    prompt = {"type": "user", "timestamp": IN_PERIOD, "sessionId": "s1", "cwd": str(repo),
+              "message": {"content": f"please {marker}"}}
+    _write_lines(_project_dir(home, repo) / "s1.jsonl", [
+        prompt, tool_use,
+        _user_error("t1", PREFIX + f"tcs-git-helpers DENIED: 1 rule(s) matched\n  - [RESET_HARD] {marker}", repo),
+        _user_error("t2", f"Permission for this action has been denied. Reason: [Data Exfiltration] {marker}",
+                    repo),
+        _user_error("t3", UNKNOWN_HOOK + marker, repo),
+        _user_error("t4", f"{marker}: Operation not permitted", repo),
+        _user_error("t5", f"The user doesn't want to proceed with this tool use. {marker}", repo),
+    ])
+    _override_log(home, _override_row("CLAUDE_ALLOW_RESET_HARD", command=marker),
+                  _override_row("CLAUDE_ALLOW_GIT_BAD_OPS", command=marker), repo=repo)
+
+    out = _out(denials.build_section(repo, [home], SECTION_PERIOD))
+
+    assert "RESET_HARD" in out and "[Data Exfiltration]" in out
+    assert marker not in out
