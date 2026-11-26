@@ -923,3 +923,375 @@ def test_scan_oldest_ts_ignores_a_timestamp_inside_message_text(tmp_path):
     scan = _scan(tmp_path, [line])
 
     assert scan.oldest_ts == datetime(2026, 11, 20, 10, 2, 11, 123000, tzinfo=UTC)
+
+
+# ===========================================================================
+# T2.2 -- the period (ADR-7) and aggregation of one repository's denials
+# (SDD walkthrough steps 4-6, Complex Logic / week rows).
+#
+# Everything is built in memory: `ErrorResult` and `ScanResult` values stand
+# in for scanned files, so these tests exercise counting, not reading.
+# ===========================================================================
+
+from datetime import timedelta  # noqa: E402
+
+NOW = datetime(2026, 11, 26, 15, 30, tzinfo=UTC)  # a Thursday
+
+
+# --- period_from_args (ADR-7; PRD F3 AC1, F8) -------------------------------
+
+
+def test_period_default_is_28_days_ending_now():
+    period = denials.period_from_args(None, None, NOW)
+
+    assert period == denials.Period(start=NOW - timedelta(days=28), end=NOW)
+
+
+def test_period_weeks_starts_on_the_monday_n_minus_1_weeks_back():
+    period = denials.period_from_args(2, None, NOW)
+
+    assert period == denials.Period(start=datetime(2026, 11, 16, tzinfo=UTC), end=NOW)
+
+
+def test_period_one_week_is_the_current_week_so_far():
+    period = denials.period_from_args(1, None, NOW)
+
+    assert period.start == datetime(2026, 11, 23, tzinfo=UTC)
+    assert period.start.weekday() == 0
+
+
+def test_period_since_starts_at_utc_midnight_of_the_date():
+    period = denials.period_from_args(None, "2026-11-01", NOW)
+
+    assert period == denials.Period(start=datetime(2026, 11, 1, tzinfo=UTC), end=NOW)
+
+
+def test_period_converts_an_offset_now_to_utc():
+    offset_now = datetime(2026, 11, 26, 1, 0, tzinfo=timezone(timedelta(hours=5)))
+
+    period = denials.period_from_args(1, None, offset_now)
+
+    assert period.end.utcoffset() == timedelta(0)
+    assert period.start == datetime(2026, 11, 23, tzinfo=UTC)  # 2026-11-25 20:00 UTC is a Wednesday
+
+
+@pytest.mark.parametrize("weeks", [0, -1, True, 1.5, "2"])
+def test_period_rejects_weeks_that_are_not_a_positive_int(weeks):
+    with pytest.raises(ValueError, match="weeks"):
+        denials.period_from_args(weeks, None, NOW)
+
+
+@pytest.mark.parametrize("since", ["2026-13-01", "20261101", "2026-11-1", "yesterday", "", "2026-11-01T00:00"])
+def test_period_rejects_a_since_that_is_not_yyyy_mm_dd(since):
+    with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        denials.period_from_args(None, since, NOW)
+
+
+def test_period_rejects_a_since_after_now():
+    with pytest.raises(ValueError, match="2026-11-27"):
+        denials.period_from_args(None, "2026-11-27", NOW)
+
+
+def test_period_rejects_weeks_and_since_together():
+    with pytest.raises(ValueError, match="not both"):
+        denials.period_from_args(2, "2026-11-01", NOW)
+
+
+def test_period_rejects_a_naive_now():
+    with pytest.raises(ValueError, match="timezone"):
+        denials.period_from_args(None, None, datetime(2026, 11, 26))
+
+
+# --- aggregate --------------------------------------------------------------
+
+AGG_PERIOD = denials.Period(  # Wednesday .. Thursday: partial first and last weeks
+    start=datetime(2026, 10, 29, 15, 30, tzinfo=UTC),
+    end=NOW,
+)
+REPO = Path("/r/app")
+AT = datetime(2026, 11, 20, 10, 2, 11, tzinfo=UTC)
+
+
+def _err(text, *, tool="Bash", ts=AT, cwd="/r/app", session="s1", version="2.1.320",
+         sidechain=False) -> denials.ErrorResult:
+    return denials.ErrorResult(
+        file=Path("/h/.claude/projects/x/s1.jsonl"), tool_use_id="t1",
+        tool=tool, text=text, ts=ts, cwd=cwd, session_id=session, version=version, sidechain=sidechain,
+    )
+
+
+def _scan_of(*results, skipped=0, oldest=None, unreadable=False, name="s1.jsonl") -> denials.ScanResult:
+    return denials.ScanResult(path=Path("/h") / name, results=tuple(results), skipped_lines=skipped,
+                              unreadable=unreadable, oldest_ts=oldest)
+
+
+def _agg(*results, period=AGG_PERIOD, repo=REPO):
+    return denials.aggregate([_scan_of(*results)], repo, period)
+
+
+REJECTED = "The user doesn't want to proceed with this tool use. The tool use was rejected."
+UNKNOWN_HOOK = PREFIX + "some-other-hook said no"
+SANDBOX_FS = "touch: /etc/x: Operation not permitted"
+CLASSIFIER = "Permission for this action has been denied. Reason: [Production Deploy] free text"
+
+
+def _deny(*rules: str) -> str:
+    return PREFIX + _bad_git_ops(*rules)
+
+
+@pytest.mark.parametrize("cwd", [
+    "/r/app",
+    "/r/app/src/lib",
+    "/R/App",
+    "/r/app/.claude/worktrees/w1",
+    "/r/app/.claude/worktrees/w1/src",
+    "/r/app/",
+])
+def test_aggregate_keeps_a_cwd_in_the_repo_or_its_worktrees(cwd):
+    summary = _agg(_err(_deny("RESET_HARD"), cwd=cwd))
+
+    assert summary.hook_denies == 1
+
+
+@pytest.mark.parametrize("cwd", ["/r/app-old", "/r/app-old/.claude/worktrees/w1", "/r/apps/x", "/r", "", "/other"])
+def test_aggregate_drops_a_cwd_outside_the_repo(cwd):
+    summary = _agg(_err(_deny("RESET_HARD"), cwd=cwd))
+
+    assert summary.hook_denies == 0
+    assert summary.by_category == {}
+    assert summary.top == []
+
+
+def test_aggregate_drops_an_error_that_is_not_a_denial():
+    summary = _agg(_err("ls: x: No such file or directory"), _err(REJECTED, tool="AskUserQuestion"))
+
+    assert summary.by_category == {}
+    assert sum(sum(week.values()) for week in summary.by_week.values()) == 0
+
+
+def test_aggregate_drops_a_result_outside_the_period():
+    summary = _agg(_err(_deny("RESET_HARD"), ts=AGG_PERIOD.start - timedelta(seconds=1)))
+
+    assert summary.hook_denies == 0
+
+
+def test_aggregate_counts_per_category_split_main_and_subagent():
+    summary = _agg(
+        _err(REJECTED), _err(REJECTED, sidechain=True), _err(REJECTED, sidechain=True),
+        _err(SANDBOX_FS),
+    )
+
+    assert summary.by_category == {
+        ("prompt rejected", "main"): 1,
+        ("prompt rejected", "subagent"): 2,
+        ("sandbox: filesystem", "main"): 1,
+    }
+
+
+def test_aggregate_multi_rule_deny_counts_once_in_category_and_once_per_rule():
+    summary = _agg(_err(_deny("RESET_HARD", "CLEAN_FORCE")), _err(_deny("RESET_HARD"), sidechain=True))
+
+    hook = "tcs-git-helpers/block-bad-git-ops"
+    assert summary.by_category == {("hook deny", "main"): 1, ("hook deny", "subagent"): 1}
+    assert summary.by_rule == {
+        (hook, "RESET_HARD", "main"): 1,
+        (hook, "CLEAN_FORCE", "main"): 1,
+        (hook, "RESET_HARD", "subagent"): 1,
+    }
+    assert summary.hook_denies == 2
+
+
+def test_aggregate_counts_a_ruleless_hook_under_rule_none():
+    text = "Refusing to Edit 'src/app.py' on 'main'. Create a feature branch first."
+
+    summary = _agg(_err(text, tool="Edit"))
+
+    assert summary.by_rule == {("tcs-git-helpers/pre-edit-branch-check", None, "main"): 1}
+
+
+def test_aggregate_totals_unattributed_and_hook_denies():
+    summary = _agg(_err(UNKNOWN_HOOK), _err(UNKNOWN_HOOK, sidechain=True), _err(_deny("RESET_HARD")),
+                   _err(REJECTED))
+
+    assert summary.unattributed == 2
+    assert summary.hook_denies == 3
+    assert summary.by_rule[(None, None, "main")] == 1
+    assert summary.by_rule[(None, None, "subagent")] == 1
+
+
+def test_aggregate_counts_classifier_reason_categories_only():
+    summary = _agg(_err(CLASSIFIER), _err(CLASSIFIER), _err("Permission for this action has been denied. Reason: x"))
+
+    assert summary.by_reason == {("classifier block", "Production Deploy"): 2}
+
+
+def test_aggregate_marks_low_confidence_categories():
+    summary = _agg(_err(SANDBOX_FS), _err(REJECTED), _err("curl: CONNECT tunnel failed, response 403"))
+
+    assert summary.low_confidence == frozenset({"sandbox: filesystem", "sandbox: network"})
+
+
+# --- week rows (SDD Complex Logic) ------------------------------------------
+
+
+def test_aggregate_has_one_row_per_monday_week_including_empty_ones():
+    summary = _agg(_err(REJECTED, ts=datetime(2026, 11, 4, tzinfo=UTC)))
+
+    mondays = [datetime(2026, 10, 26, tzinfo=UTC) + timedelta(weeks=n) for n in range(5)]
+    assert list(summary.by_week) == mondays
+    assert summary.by_week[mondays[1]] == {"prompt rejected": 1}
+    assert [sum(summary.by_week[m].values()) for m in mondays] == [0, 1, 0, 0, 0]
+
+
+def test_aggregate_week_counts_a_multi_rule_deny_once():
+    summary = _agg(_err(_deny("RESET_HARD", "CLEAN_FORCE")))
+
+    # 2026-11-20 is a Friday; its week starts Monday 2026-11-16 (the SDD walkthrough's "11-17" is a Tuesday).
+    assert summary.by_week[datetime(2026, 11, 16, tzinfo=UTC)] == {"hook deny": 1}
+
+
+def test_aggregate_week_boundary_is_monday_midnight_utc():
+    sunday_late = datetime(2026, 11, 22, 23, 59, 59, tzinfo=UTC)
+    monday = datetime(2026, 11, 23, tzinfo=UTC)
+
+    summary = _agg(_err(REJECTED, ts=sunday_late), _err(SANDBOX_FS, ts=monday))
+
+    assert summary.by_week[datetime(2026, 11, 16, tzinfo=UTC)] == {"prompt rejected": 1}
+    assert summary.by_week[monday] == {"sandbox: filesystem": 1}
+
+
+def test_aggregate_flags_cut_first_and_last_weeks_as_partial():
+    summary = _agg()
+
+    assert summary.partial_weeks == frozenset({datetime(2026, 10, 26, tzinfo=UTC), datetime(2026, 11, 23, tzinfo=UTC)})
+
+
+def test_aggregate_whole_weeks_are_not_partial():
+    period = denials.Period(start=datetime(2026, 11, 9, tzinfo=UTC),
+                            end=datetime(2026, 11, 22, 23, 59, 59, 999999, tzinfo=UTC))
+
+    summary = _agg(period=period)
+
+    assert list(summary.by_week) == [datetime(2026, 11, 9, tzinfo=UTC), datetime(2026, 11, 16, tzinfo=UTC)]
+    assert summary.partial_weeks == frozenset()
+
+
+def test_aggregate_weeks_period_has_a_full_first_week():
+    period = denials.period_from_args(3, None, NOW)
+
+    summary = _agg(period=period)
+
+    assert len(summary.by_week) == 3
+    assert summary.partial_weeks == frozenset({datetime(2026, 11, 23, tzinfo=UTC)})
+
+
+# --- top list (PRD F4 AC1, AC3) ---------------------------------------------
+
+
+def test_aggregate_top_row_carries_kind_tool_count_and_last_occurrence():
+    later = AT + timedelta(hours=3)
+    summary = _agg(
+        _err(_deny("RESET_HARD"), session="s-old"),
+        _err(_deny("RESET_HARD"), session="s-new", ts=later),
+        _err(_deny("RESET_HARD"), session="s-mid", ts=AT + timedelta(hours=1)),
+    )
+
+    assert summary.top == [denials.TopRow(
+        category="hook deny", hook="tcs-git-helpers/block-bad-git-ops", rule="RESET_HARD", tool="Bash",
+        count=3, overrides=None, last_session_id="s-new", last_ts=later,
+    )]
+
+
+def test_aggregate_top_rows_split_by_tool():
+    summary = _agg(_err(REJECTED, tool="Bash"), _err(REJECTED, tool="Write"), _err(REJECTED, tool="Bash"))
+
+    assert [(row.tool, row.count) for row in summary.top] == [("Bash", 2), ("Write", 1)]
+
+
+def test_aggregate_top_has_one_row_per_rule_of_a_multi_rule_deny():
+    summary = _agg(_err(_deny("RESET_HARD", "CLEAN_FORCE")))
+
+    assert sorted(row.rule for row in summary.top) == ["CLEAN_FORCE", "RESET_HARD"]
+
+
+def test_aggregate_top_orders_by_count_then_most_recent():
+    summary = _agg(
+        _err(REJECTED, tool="Write", ts=AT),
+        _err(REJECTED, tool="Edit", ts=AT + timedelta(hours=1)),
+        _err(SANDBOX_FS), _err(SANDBOX_FS),
+    )
+
+    assert [(row.category, row.tool) for row in summary.top] == [
+        ("sandbox: filesystem", "Bash"), ("prompt rejected", "Edit"), ("prompt rejected", "Write"),
+    ]
+
+
+def test_aggregate_top_keeps_at_most_ten_rows():
+    rules = [f"RULE_{letter}" for letter in "ABCDEFGHIJKL"]  # rule ids are [A-Z_]+
+    results = [_err(_deny(rule), ts=AT + timedelta(minutes=n)) for n, rule in enumerate(rules)]
+    results += [_err(_deny("RULE_A"))]
+
+    summary = _agg(*results)
+
+    assert len(summary.top) == 10
+    assert summary.top[0].rule == "RULE_A" and summary.top[0].count == 2
+    assert [row.rule for row in summary.top[1:]] == [f"RULE_{letter}" for letter in "LKJIHGFED"]
+
+
+def test_aggregate_top_is_empty_without_denials():
+    assert _agg().top == []
+
+
+# --- files, lines, timestamps and versions ----------------------------------
+
+
+def test_aggregate_sums_files_skipped_lines_and_unreadable_files():
+    scans = [_scan_of(skipped=2, name="a.jsonl"), _scan_of(skipped=3, name="b.jsonl"),
+             _scan_of(unreadable=True, name="c.jsonl")]
+
+    summary = denials.aggregate(scans, REPO, AGG_PERIOD)
+
+    assert summary.files_read == 2
+    assert summary.unreadable == 1
+    assert summary.skipped_lines == 5
+    assert summary.period == AGG_PERIOD
+
+
+def test_aggregate_oldest_ts_is_the_minimum_of_known_values():
+    older = datetime(2026, 10, 2, tzinfo=UTC)
+    scans = [_scan_of(oldest=AT, name="a.jsonl"), _scan_of(oldest=None, name="b.jsonl"),
+             _scan_of(oldest=older, name="c.jsonl")]
+
+    assert denials.aggregate(scans, REPO, AGG_PERIOD).oldest_ts == older
+
+
+def test_aggregate_oldest_ts_is_none_without_any_value():
+    assert denials.aggregate([_scan_of(), _scan_of(unreadable=True)], REPO, AGG_PERIOD).oldest_ts is None
+
+
+def test_aggregate_collects_versions_and_those_outside_the_checked_range():
+    versions = ["2.1.71", "2.1.332", "2.1.70", "2.1.333", "2.2.0", "1.9.999", "2.1.x", "nightly"]
+    results = [_err("ls: plain error", version=v, ts=AT + timedelta(minutes=n)) for n, v in enumerate(versions)]
+    results += [_err("ls: plain error", version="")]
+
+    summary = _agg(*results)
+
+    assert summary.versions_seen == set(versions)
+    assert summary.unknown_versions == {"2.1.70", "2.1.333", "2.2.0", "1.9.999", "2.1.x", "nightly"}
+
+
+def test_aggregate_ignores_versions_of_other_repos():
+    summary = _agg(_err("ls: plain error", version="2.0.1", cwd="/r/app-old"))
+
+    assert summary.versions_seen == set()
+    assert summary.unknown_versions == set()
+
+
+def test_aggregate_summary_holds_no_transcript_text():
+    secret = "SENTINEL-SECRET-9f3a"
+    text = PREFIX + f"tcs-git-helpers DENIED: 1 rule(s) matched\n  - [RESET_HARD] {secret}"
+    classifier = f"Permission for this action has been denied. Reason: [Data Exfiltration] {secret}"
+
+    summary = _agg(_err(text), _err(classifier), _err(UNKNOWN_HOOK + secret), _err(f"{secret} Operation not permitted"))
+
+    assert secret not in repr(summary)

@@ -27,6 +27,12 @@ error tool results in the period (ADR-5), its skipped-line count, and the
 earliest timestamp on any line (`oldest_ts`). A cheap text prefilter decides
 which lines are JSON-parsed at all.
 
+Period and aggregation -- `period_from_args(weeks, since, now)` builds the
+reporting window (ADR-7); `aggregate(scans, repo_root, period)` keeps the
+results whose `cwd` lies in the repository (worktree suffix stripped, ADR-3),
+classifies them and counts per category, hook rule, Monday week (UTC) and
+main/subagent side, plus the ten most repeated denial kinds.
+
 Privacy (CON-2): a returned `Denial` holds only fixed labels from the table
 and identifiers parsed out of the message (rule names, classifier reason
 category). Rule explanations, commands, paths and free reason text are never
@@ -41,9 +47,10 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 HOOK_DENY = "hook deny"
@@ -418,3 +425,240 @@ def scan_file(path: Path, period: Period) -> ScanResult:
     except OSError:
         return ScanResult(path=path, results=(), skipped_lines=0, unreadable=True)
     return state.finish()
+
+
+# ---------------------------------------------------------------------------
+# The period (ADR-7) and aggregation of one repository's denials.
+# ---------------------------------------------------------------------------
+
+DEFAULT_DAYS = 28
+TOP_LIMIT = 10
+# The Claude Code versions the classification table was checked against (CON-6).
+CHECKED_VERSIONS = ((2, 1, 71), (2, 1, 332))
+MAIN, SUBAGENT = "main", "subagent"
+
+_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+# A worktree session's cwd is `<repo>/.claude/worktrees/<name>[/...]`; it counts for `<repo>`.
+_WORKTREE = re.compile(r"/\.claude/worktrees/[^/]+(?:/.*)?$")
+_WEEK = timedelta(weeks=1)
+
+
+def week_start(ts: datetime) -> datetime:
+    """Monday 00:00 UTC of the ISO week that holds `ts`."""
+    day = ts.astimezone(timezone.utc).date()
+    monday = day - timedelta(days=day.weekday())
+    return datetime(monday.year, monday.month, monday.day, tzinfo=timezone.utc)
+
+
+def _weeks_start(weeks: object, now: datetime) -> datetime:
+    if isinstance(weeks, bool) or not isinstance(weeks, int) or weeks < 1:
+        raise ValueError(f"denials weeks must be a whole number of at least 1, got {weeks!r}")
+    return week_start(now) - (weeks - 1) * _WEEK
+
+
+def _since_start(since: object, now: datetime) -> datetime:
+    expected = f"denials since must be a date in the form YYYY-MM-DD, got {since!r}"
+    if not isinstance(since, str) or not _DATE.match(since):
+        raise ValueError(expected)
+    try:
+        day = date.fromisoformat(since)
+    except ValueError as exc:
+        raise ValueError(expected) from exc
+    start = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+    if start > now:
+        raise ValueError(f"denials since {since} is after now ({now:%Y-%m-%d})")
+    return start
+
+
+def period_from_args(weeks: int | None, since: str | None, now: datetime) -> Period:
+    """The reporting window ending at `now` (ADR-7); raises `ValueError` on bad options.
+
+    Default: the last 28 days. `weeks=N`: from the Monday N-1 weeks before
+    `now`'s week, so the period holds N calendar weeks, the last one partial.
+    `since="YYYY-MM-DD"`: from that date, 00:00 UTC. Not both.
+    """
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    now = now.astimezone(timezone.utc)
+    if weeks is not None and since is not None:
+        raise ValueError("give denials weeks or denials since, not both")
+    if weeks is not None:
+        return Period(start=_weeks_start(weeks, now), end=now)
+    if since is not None:
+        return Period(start=_since_start(since, now), end=now)
+    return Period(start=now - timedelta(days=DEFAULT_DAYS), end=now)
+
+
+@dataclass(frozen=True)
+class TopRow:
+    """One repeated denial kind: labels, identifiers, counts and times only (CON-2).
+
+    `overrides` stays `None` here; the override counts are joined in later.
+    """
+
+    category: str
+    hook: str | None
+    rule: str | None
+    tool: str | None
+    count: int
+    overrides: int | None
+    last_session_id: str
+    last_ts: datetime
+
+
+@dataclass(frozen=True)
+class DenialsSummary:
+    """Everything the section renders for one repository and period (CON-2: no transcript text).
+
+    Counter keys: `by_category` (category, side), `by_rule` (hook, rule, side)
+    with `rule=None` for a hook without rules and `hook=None` for an
+    unattributed hook deny, `by_reason` (category, classifier reason category).
+    `side` is "main" or "subagent". `by_week` holds every Monday of the
+    period in order, empty weeks included; `partial_weeks` are the ones the
+    period cuts. `low_confidence` names the low-confidence categories seen.
+    """
+
+    period: Period
+    files_read: int
+    unreadable: int
+    skipped_lines: int
+    oldest_ts: datetime | None
+    versions_seen: set[str]
+    unknown_versions: set[str]
+    by_category: Counter
+    by_rule: Counter
+    by_reason: Counter
+    by_week: dict[datetime, Counter]
+    partial_weeks: frozenset[datetime]
+    low_confidence: frozenset[str]
+    top: list[TopRow]
+    unattributed: int
+    hook_denies: int
+
+
+def _week_rows(period: Period) -> dict[datetime, Counter]:
+    rows: dict[datetime, Counter] = {}
+    monday = week_start(period.start)
+    while monday <= period.end:
+        rows[monday] = Counter()
+        monday += _WEEK
+    return rows
+
+
+def _partial_weeks(period: Period) -> frozenset[datetime]:
+    first, last = week_start(period.start), week_start(period.end)
+    partial = set()
+    if period.start > first:
+        partial.add(first)
+    if period.end < last + _WEEK - timedelta(microseconds=1):
+        partial.add(last)
+    return frozenset(partial)
+
+
+def _in_repo(cwd: str, root: str) -> bool:
+    """Whether a line's cwd, worktree suffix stripped and casefolded, is `root` or under it."""
+    if not cwd:
+        return False
+    key = _WORKTREE.sub("", cwd).rstrip("/").casefold()
+    return key == root or key.startswith(root + "/")
+
+
+def _version_unchecked(version: str) -> bool:
+    match = _VERSION.match(version)
+    if match is None:
+        return True
+    low, high = CHECKED_VERSIONS
+    return not low <= tuple(int(part) for part in match.groups()) <= high
+
+
+@dataclass
+class _Tally:
+    """Mutable counts while one repository's results are aggregated."""
+
+    period: Period
+    versions: set[str] = field(default_factory=set)
+    by_category: Counter = field(default_factory=Counter)
+    by_rule: Counter = field(default_factory=Counter)
+    by_reason: Counter = field(default_factory=Counter)
+    by_week: dict[datetime, Counter] = field(default_factory=dict)
+    low_confidence: set[str] = field(default_factory=set)
+    kinds: dict[tuple, list] = field(default_factory=dict)  # key -> [count, last_ts, last_session]
+    unattributed: int = 0
+    hook_denies: int = 0
+
+    def __post_init__(self) -> None:
+        self.by_week = _week_rows(self.period)
+
+    def add(self, result: ErrorResult) -> None:
+        if result.version:
+            self.versions.add(result.version)
+        denial = classify(result.text, result.tool)
+        if denial is not None:
+            self._add_denial(denial, result)
+
+    def _add_denial(self, denial: Denial, result: ErrorResult) -> None:
+        side = SUBAGENT if result.sidechain else MAIN
+        self.by_category[(denial.category, side)] += 1
+        self.by_week[week_start(result.ts)][denial.category] += 1
+        if denial.confidence == "low":
+            self.low_confidence.add(denial.category)
+        if denial.reason_category is not None:
+            self.by_reason[(denial.category, denial.reason_category)] += 1
+        if denial.category == HOOK_DENY:
+            self._add_hook_deny(denial, side)
+        for rule in denial.rules or (None,):
+            self._add_kind((denial.category, denial.hook, rule, result.tool), result)
+
+    def _add_hook_deny(self, denial: Denial, side: str) -> None:
+        self.hook_denies += 1
+        self.unattributed += denial.hook is None
+        for rule in denial.rules or (None,):
+            self.by_rule[(denial.hook, rule, side)] += 1
+
+    def _add_kind(self, key: tuple, result: ErrorResult) -> None:
+        entry = self.kinds.setdefault(key, [0, result.ts, result.session_id])
+        entry[0] += 1
+        if result.ts >= entry[1]:
+            entry[1], entry[2] = result.ts, result.session_id
+
+    def top(self) -> list[TopRow]:
+        rows = [TopRow(category=key[0], hook=key[1], rule=key[2], tool=key[3], count=count,
+                       overrides=None, last_session_id=session, last_ts=ts)
+                for key, (count, ts, session) in self.kinds.items()]
+        rows.sort(key=lambda row: repr((row.category, row.hook, row.rule, row.tool)))
+        rows.sort(key=lambda row: (row.count, row.last_ts), reverse=True)
+        return rows[:TOP_LIMIT]
+
+
+def aggregate(scans: Iterable[ScanResult], repo_root: Path, period: Period) -> DenialsSummary:
+    """Count one repository's denials in `period` from scanned files (SDD walkthrough 4-6).
+
+    A result counts when its `cwd` is `repo_root` or under it, after a
+    worktree suffix is stripped; both compared casefolded (ADR-3).
+    """
+    scans = list(scans)
+    root = str(repo_root).rstrip("/").casefold()
+    tally = _Tally(period)
+    for scan in scans:
+        for result in scan.results:
+            if period.contains(result.ts) and _in_repo(result.cwd, root):
+                tally.add(result)
+    return _summary(scans, tally)
+
+
+def _summary(scans: list[ScanResult], tally: _Tally) -> DenialsSummary:
+    oldest = [scan.oldest_ts for scan in scans if scan.oldest_ts is not None]
+    return DenialsSummary(
+        period=tally.period,
+        files_read=sum(not scan.unreadable for scan in scans),
+        unreadable=sum(scan.unreadable for scan in scans),
+        skipped_lines=sum(scan.skipped_lines for scan in scans),
+        oldest_ts=min(oldest, default=None),
+        versions_seen=set(tally.versions),
+        unknown_versions={v for v in tally.versions if _version_unchecked(v)},
+        by_category=tally.by_category, by_rule=tally.by_rule, by_reason=tally.by_reason,
+        by_week=tally.by_week, partial_weeks=_partial_weeks(tally.period),
+        low_confidence=frozenset(tally.low_confidence), top=tally.top(),
+        unattributed=tally.unattributed, hook_denies=tally.hook_denies,
+    )
