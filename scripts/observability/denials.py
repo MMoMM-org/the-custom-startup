@@ -331,7 +331,7 @@ class _FileScan:
             return  # cheap prefilter: nothing this module reads
         try:
             entry = json.loads(line)
-        except ValueError:
+        except (ValueError, RecursionError):  # RecursionError: pathologically nested
             self.skipped += 1
             return
         if isinstance(entry, dict):

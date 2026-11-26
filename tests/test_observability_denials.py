@@ -729,7 +729,53 @@ def test_scan_keeps_only_results_inside_the_period(tmp_path):
     assert [r.tool_use_id for r in scan.results] == ["start", "inside"]
 
 
+def test_scan_reads_a_naive_timestamp_as_utc(tmp_path):
+    scan = _scan(tmp_path, [_tool_result("naive", DENY, ts="2026-11-20T10:00:00")])
+
+    assert [r.tool_use_id for r in scan.results] == ["naive"]
+    assert scan.results[0].ts == datetime(2026, 11, 20, 10, 0, tzinfo=UTC)
+    assert scan.results[0].ts.tzinfo is UTC
+
+
+def test_scan_drops_a_naive_timestamp_just_outside_the_period(tmp_path):
+    scan = _scan(tmp_path, [
+        _tool_result("before", DENY, ts="2026-10-28T23:59:59"),
+        _tool_result("after", DENY, ts="2026-11-26T00:00:01"),
+    ])
+
+    assert scan.results == ()
+    assert scan.skipped_lines == 0
+
+
+def test_scan_compares_an_offset_timestamp_by_its_utc_instant(tmp_path):
+    half_hour = denials.Period(
+        start=datetime(2026, 11, 20, 9, 0, tzinfo=UTC),
+        end=datetime(2026, 11, 20, 9, 30, tzinfo=UTC),
+    )
+    path = _write_lines(tmp_path / "s1.jsonl", [
+        _tool_result("early", DENY, ts="2026-11-20T10:59:59+02:00"),  # 08:59:59Z
+        _tool_result("start", DENY, ts="2026-11-20T11:00:00+02:00"),  # 09:00Z
+        _tool_result("end", DENY, ts="2026-11-20T11:30:00+02:00"),  # 09:30Z
+        _tool_result("late", DENY, ts="2026-11-20T11:30:01+02:00"),  # 09:30:01Z
+    ])
+
+    scan = denials.scan_file(path, half_hour)
+
+    assert [r.tool_use_id for r in scan.results] == ["start", "end"]
+    assert scan.results[0].ts == half_hour.start
+
+
 # --- scan_file: partial and unreadable input (PRD F5 AC2) ------------------
+
+
+def test_scan_counts_a_pathologically_nested_line_as_skipped(tmp_path):
+    depth = 100_000
+    nested = '{"type":"user","is_error":true,"x":' + "[" * depth + "]" * depth + "}"
+
+    scan = _scan(tmp_path, [nested, _tool_result("t1", DENY)])
+
+    assert [r.tool_use_id for r in scan.results] == ["t1"]
+    assert scan.skipped_lines == 1
 
 
 def test_scan_counts_malformed_and_partial_lines_as_skipped(tmp_path):
