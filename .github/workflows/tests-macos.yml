@@ -16,6 +16,13 @@ name: Tests (macOS)
 #   cancelled after starting       -> neutral  (superseded or stopped)
 #   docs-only pull request         -> skipped
 #
+# What is tested: for a pull request, the same merge of the branch into main
+# that the ubuntu jobs test, not the branch head. A branch cut before an
+# auto-bump otherwise failed the version-sync test on macOS only. When GitHub
+# has no current merge commit (conflict, still computing, or the branch moved
+# on), the branch head is tested and the check summary says so. The check is
+# always posted on the branch head, where the pull request shows it.
+#
 # Security: workflow_run runs in the base repository's context with a write
 # token, and this workflow executes pull request code (the pwn-request
 # pattern). So it runs only for branches of this repository, the job that runs
@@ -50,6 +57,7 @@ jobs:
       pull-requests: read
     outputs:
       run: ${{ steps.pick.outputs.run }}
+      ref: ${{ steps.ref.outputs.ref }}
       check_id: ${{ steps.check.outputs.id }}
     env:
       GH_TOKEN: ${{ github.token }}
@@ -79,17 +87,42 @@ jobs:
           echo "run=$run" >> "$GITHUB_OUTPUT"
           echo "macOS runs: $run"
 
+      # The test merge commit counts only while its second parent is the head
+      # this run was triggered for; otherwise it belongs to another push.
+      - name: Pick the commit to test
+        id: ref
+        run: |
+          ref="$SHA"
+          what="branch head $SHA"
+          if [ "$EVENT" = "pull_request" ] && [ -n "$PR" ]; then
+            merge=$(gh api "repos/$REPO/pulls/$PR" -q '.merge_commit_sha // ""' 2>/dev/null) || merge=""
+            parent=""
+            if [ -n "$merge" ]; then
+              parent=$(gh api "repos/$REPO/commits/$merge" -q '.parents[1].sha // ""' 2>/dev/null) || parent=""
+            fi
+            if [ -n "$merge" ] && [ "$parent" = "$SHA" ]; then
+              ref="$merge"
+              what="merge of #$PR into main ($merge)"
+            else
+              what="branch head $SHA: no current merge commit for #$PR"
+            fi
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "what=$what" >> "$GITHUB_OUTPUT"
+          echo "macOS tests: $what"
+
       - name: Open the macOS check
         id: check
         env:
           RUN: ${{ steps.pick.outputs.run }}
+          WHAT: ${{ steps.ref.outputs.what }}
         run: |
           if [ "$RUN" = "true" ]; then
             id=$(gh api -X POST "repos/$REPO/check-runs" \
               -f name=macOS -f head_sha="$SHA" -f status=in_progress \
               -f details_url="$RUN_URL" \
               -f 'output[title]=macOS tests running' \
-              -f 'output[summary]=pytest and bats on macos-latest.' \
+              -f "output[summary]=pytest and bats on macos-latest. Tested: $WHAT." \
               -q .id)
             echo "id=$id" >> "$GITHUB_OUTPUT"
           else
@@ -112,7 +145,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.plan.outputs.ref }}
           # Three tests read commits or origin/main that a shallow clone does
           # not contain, and skip without them (#178).
           fetch-depth: 0
