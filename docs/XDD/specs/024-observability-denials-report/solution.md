@@ -523,30 +523,63 @@ Not applicable: one script, no services. Older reports without `denials` keys ke
 
 ### User Interface & UX (if applicable)
 
-Text section per source, after the existing git section:
+Text section per source, after the existing git section. Samples below are real `render` / `build_section`
+output (populated from a hand-built summary with one override log), not hand-written:
+
+Populated:
 
 ```
-Denials (2026-10-29 .. 2026-11-26, 28 days; transcripts: 42 files, oldest 2026-10-02)
-  hook deny            31  (main 27, subagent 4)
+Denials (2026-10-29 .. 2026-11-26, 28 days; transcripts: 1 file(s) read, oldest 2026-10-02)
+  hook deny              5  (main 4, subagent 1)
     tcs-git-helpers/block-bad-git-ops
-      BRANCH_FROM_UNFINISHED   12  (main 12)   overridden 3
-      RESET_HARD                2  (main 2)    overridden 1
-    tcs-git-helpers/pre-edit-branch-check   9  (main 9)
-    unattributed                          1
-  prompt rejected       6  (main 6)
-  classifier block      2  [Production Deploy] 1, [Data Exfiltration] 1
-  sandbox: filesystem   5  low confidence
-  Weeks (Mon)          hook  prompt  classifier  sandbox
-    2026-10-27 (partial)  4     1       0           0
-    ...
+      RESET_HARD                       3  (main 2, subagent 1)   overridden 1
+      CLEAN_FORCE                      1  (main 1, subagent 0)   overridden 0
+    tcs-git-helpers/pre-edit-branch-check      1  (main 1, subagent 0)
+    unattributed                               1  (main 1, subagent 0)
+  classifier block       2  (main 2, subagent 0)  [Data Exfiltration] 1, [Production Deploy] 1
+  prompt rejected        1  (main 1, subagent 0)
+  sandbox: filesystem    1  (main 1, subagent 0)  low confidence
+  sandbox: network       1  (main 1, subagent 0)  low confidence
+  Weeks (Mon)           hook deny  classifier block  prompt rejected  sandbox: filesystem  sandbox: network
+    2026-10-26 (partial)        0                 0                0                    1                 0
+    2026-11-02                  0                 0                0                    0                 0
+    2026-11-09                  0                 0                0                    0                 0
+    2026-11-16                  4                 2                1                    0                 1
+    2026-11-23 (partial)        1                 0                0                    0                 0
   Top repeated
-    1. hook deny  tcs-git-helpers BRANCH_FROM_UNFINISHED  Bash  12  overridden 3  last s-3f2a 2026-11-25 09:14
-  Not observable: settings deny rules, …  (see README "Denials")
-  Skipped lines: 0; versions not checked: none
+    1.  hook deny  tcs-git-helpers/block-bad-git-ops  RESET_HARD  Bash  3  overridden 1  last  s-3f2a  2026-11-25 09:14
+    2.  classifier block  Bash  2  last  s1  2026-11-20 10:02
+    3.  hook deny  tcs-git-helpers/block-bad-git-ops  CLEAN_FORCE  Bash  1  overridden 0  last  s-3f2a  2026-11-25 09:14
+    4.  hook deny  tcs-git-helpers/pre-edit-branch-check  Write  1  last  s1  2026-11-20 10:02
+    5.  hook deny  unattributed  Bash  1  last  s1  2026-11-20 10:02
+    6.  prompt rejected  Edit  1  last  s1  2026-11-20 10:02
+    7.  sandbox: network  Bash  1  last  s1  2026-11-20 10:02
+    8.  sandbox: filesystem  Bash  1  last  s1  2026-10-30 00:00
+  Overrides: master switch CLAUDE_ALLOW_GIT_BAD_OPS (all rules) 0
+  Not observable: settings deny rules, a "no" to a hook's ask prompt as its own kind (it counts as prompt rejected), denials in sessions whose transcripts were removed, sandbox blocks that surface as no tool error (see README "Denials")
+  Partial reads: lines skipped that could not be read: 3; unreadable files: 1; versions not checked: 2.0.9 (their denials may be unclassified)
 ```
 
-Empty: `Denials (…): no denials found in 42 transcripts. That is not proof none happened -- not observable: …`
-Not enabled: `Denials: not enabled for this source. Add "denials = true" to its [[source]] entry in .claude/observability-sources.toml.`
+Empty (transcripts read, no denial found):
+
+```
+Denials (2026-10-29 .. 2026-11-26, 28 days): no denials found in 1 transcript(s). That is not proof none happened -- not observable: settings deny rules, a "no" to a hook's ask prompt as its own kind (it counts as prompt rejected), denials in sessions whose transcripts were removed, sandbox blocks that surface as no tool error (see README "Denials")
+  Overrides: no override log found, so override counts show –
+  Partial reads: lines skipped that could not be read: 0; unreadable files: 0; versions not checked: none
+```
+
+No transcripts in reach:
+
+```
+Denials (2026-10-29 .. 2026-11-26, 28 days): no transcripts found for this repository.
+  searched: /tmp/tmpjemuan_2/nohome/.claude/projects (missing)
+```
+
+Not enabled:
+
+```
+Denials: not enabled for source "app". Add "denials = true" to its [[source]] entry in .claude/observability-sources.toml.
+```
 
 #### UI Visualization Guide
 Not applicable beyond the text layout above.

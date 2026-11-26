@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The observability report can count denials from session transcripts (#300).** Claude Code
+  records no event when a hook, a rule or a permission prompt blocks a tool call, so the report
+  reads the local transcripts instead: per category, hook rule and week, with override counts and
+  the list of what it cannot see. Opt-in per source with `denials = true` in
+  `.claude/observability-sources.toml`; period via `--denials-weeks N` or `--denials-since DATE`.
+  Reads local files only and never prints command or message text. See the README "Denials" part.
+
 - **tcs-git-helpers can ask before irreversible actions (#299).** Opt-in: list commands and paths in
   `.githooks/ask-guard.conf` (terraform apply, migrations, IAM) and Claude Code asks before running
   them. Update tcs-git-helpers and run `/tcs-git-helpers:git-setup --update` for the example file.

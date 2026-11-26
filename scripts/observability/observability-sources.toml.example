@@ -24,3 +24,8 @@ label     = "repo3"
 repo_root = "/abs/path/to/repo3"
 # worked in BOTH environments: one source, two record locations, one identity
 homes     = ["/abs/path/to/repo3/claude-docker-home", "~"]
+
+# Optional per source: also report denials read from this repository's session
+# transcripts (spec-024). Absent means off. Reads local files only. See the
+# README "Denials" part.
+# denials = true
