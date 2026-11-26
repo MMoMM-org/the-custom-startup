@@ -72,3 +72,9 @@ def test_checked_versions_in_readme_match_the_code():
 def test_example_config_carries_a_commented_denials_line():
     lines = EXAMPLE.read_text(encoding="utf-8").splitlines()
     assert any(re.match(r"^#\s*denials\s*=\s*true\b", line) for line in lines)
+
+
+def test_denials_part_describes_weeks_as_monday_calendar_weeks():
+    part = " ".join(_denials_part().split())
+    assert "`--denials-weeks N` covers N calendar weeks" in part
+    assert "starting on a Monday" in part and "current, partial week" in part

@@ -549,8 +549,9 @@ python3 scripts/observability/report.py --denials-weeks 8
 python3 scripts/observability/report.py --denials-since 2026-11-01
 ```
 
-`--denials-weeks N` covers the last N weeks; `--denials-since YYYY-MM-DD` covers that day (UTC) up
-to now. Weekly rows start on Monday and use UTC, so a denial late in the evening can land on the
+`--denials-weeks N` covers N calendar weeks, starting on a Monday (UTC) N-1 weeks before this
+week's, so the last one is the current, partial week; `--denials-since YYYY-MM-DD` covers that day
+(UTC) up to now. Weekly rows start on Monday and use UTC, so a denial late in the evening can land on the
 next day's week locally. A week the period cuts into is marked partial.
 
 ### Known limits
