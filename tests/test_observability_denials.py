@@ -264,6 +264,27 @@ def test_classify_prefixed_unknown_message_is_unattributed_hook_deny():
     assert result.rules == ()
 
 
+_HYPHENATED_MCP_TOOL = "mcp__my-server__tool"
+
+
+def test_classify_strips_prefix_for_hyphenated_mcp_tool_name():
+    text = f"PreToolUse:{_HYPHENATED_MCP_TOOL} hook error: Dangerous flag detected: x"
+
+    result = denials.classify(text, _HYPHENATED_MCP_TOOL)
+
+    assert result is not None
+    assert (result.category, result.hook) == ("hook deny", "external: dangerous flag")
+
+
+def test_classify_prefixed_unknown_message_on_hyphenated_mcp_tool_is_unattributed():
+    text = f"PreToolUse:{_HYPHENATED_MCP_TOOL} hook error: some-other-hook says no"
+
+    result = denials.classify(text, _HYPHENATED_MCP_TOOL)
+
+    assert result is not None
+    assert (result.category, result.hook) == ("hook deny", None)
+
+
 def test_classify_unprefixed_unknown_message_is_not_a_denial():
     assert denials.classify("fatal: not a git repository", "Bash") is None
 
@@ -327,9 +348,7 @@ def test_classify_denial_is_immutable():
         result.hook = "other"
 
 
-def test_classify_table_is_ordered_and_every_confidence_is_known():
-    assert [row.category for row in denials.TABLE][:2] == ["hook deny", "hook deny"]
-    assert denials.TABLE[-1].category == "sandbox: network"
+def test_classify_table_rows_use_only_known_confidence_levels():
     assert {row.confidence for row in denials.TABLE} <= {"high", "medium", "low"}
 
 

@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 
 HOOK_DENY = "hook deny"
 
-_HOOK_ERROR_PREFIX = re.compile(r"^PreToolUse:\w+ hook error: ")
+_HOOK_ERROR_PREFIX = re.compile(r"^PreToolUse:[^\s:]+ hook error: ")
 _BAD_GIT_OPS_RULE = re.compile(r"^\s+- \[([A-Z_]+)\]", re.MULTILINE)
 _CLASSIFIER_REASON = re.compile(r"Reason: \[([^\]]+)\]")
 
