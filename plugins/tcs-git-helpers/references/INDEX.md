@@ -39,6 +39,7 @@ core principles that the rest of these docs apply to specific failure modes.
 ### Setup & tooling
 - [migrating-from-husky.md](migrating-from-husky.md) — why setup aborts when Husky / lefthook / pre-commit / simple-git-hooks is detected, and the per-tool removal procedure. *Covers PRD M10.*
 - [sandbox-and-git-config.md](sandbox-and-git-config.md) — Claude Code sandbox interactions with `git config core.hooksPath`, why `git -c core.hooksPath=…` is denied, override semantics, and the sandbox settings template and repair script. *Covers PRD CON-7, M10, M7.*
+- [ask-guard.md](ask-guard.md) — the opt-in ask prompt for infra, migration and IAM commands and paths: config format, regex rules, override. *Covers #299.*
 - [gh-token-hygiene.md](gh-token-hygiene.md) — required scopes for `--with-branch-protection`, how setup detects excessive scopes, and the `gh auth refresh` recovery. *Covers PRD S1.*
 
 ### Landing
@@ -65,6 +66,7 @@ core principles that the rest of these docs apply to specific failure modes.
 | Setup aborted: existing Husky / lefthook / pre-commit / simple-git-hooks | [migrating-from-husky.md](migrating-from-husky.md) | M10 |
 | `git -c core.hooksPath=…` denied / sandbox refused | [sandbox-and-git-config.md](sandbox-and-git-config.md) | M7, CON-7 |
 | `push -u` set no upstream / `checkout -b` left HEAD behind under the sandbox | [sandbox-and-git-config.md](sandbox-and-git-config.md#sandbox-compatible-git) | #303 |
+| Claude Code asked before a terraform, migration or IAM action (`ask-guard`) | [ask-guard.md](ask-guard.md) | #299 |
 | `setup --with-branch-protection` warned about token scopes | [gh-token-hygiene.md](gh-token-hygiene.md) | S1 |
 
 ---

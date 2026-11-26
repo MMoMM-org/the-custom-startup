@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.6.0] - 2026-11-26
+
+### Added
+
+- **Opt-in ask before irreversible actions (#299).** New PreToolUse hook `ask-guard.sh` for Bash and
+  Edit/Write/NotebookEdit. When a command or a repo-relative path matches a rule in
+  `.githooks/ask-guard.conf` (`command <NAME> <ERE>` or `path <NAME> <glob>`), Claude Code asks the
+  user instead of running it. Commands are matched per clause with quoted text blanked, so a
+  mention inside an argument does not ask. `CLAUDE_ALLOW_ASK_<NAME>=1` skips one prompt and is
+  audited; every ask is audited too. `git-setup` installs `.githooks/ask-guard.conf.example` with
+  rules for terraform, pulumi, kubectl, prisma, alembic, AWS and GCP IAM, `*.tf` and migrations,
+  all commented out. Reference: `references/ask-guard.md`. Hook bundle marker `h12`.
+  **What to know:** off until you create `.githooks/ask-guard.conf`; run
+  `/tcs-git-helpers:git-setup --update` to get the example.
+
 ## [2.5.0] - 2026-11-26
 
 ### Added

@@ -22,6 +22,7 @@ Hooks are **natively loaded** by Claude Code from `hooks/hooks.json` when the pl
 | `PreToolUse(Bash)` | `block-bad-git-ops.sh` | Deny 14+ destructive git/gh patterns: push to closed PR, branch from unfinished work, squash-merge resume, `reset --hard`, `clean -f`, `branch -D`, `--force` (without `--force-with-lease`), `--no-verify`, `stash drop/clear`, `reflog expire`, `checkout .`, `restore --worktree`, `push --delete`, `core.hooksPath` overrides; `gh pr merge` while review findings are open (see below); a git command that writes `.git/config` chained in one call while the sandbox template is applied |
 | `PreToolUse(Edit\|Write\|NotebookEdit)` | `pre-edit-branch-check.sh` | Block edits to `main`/`master` unless the path is in `.gitignore` |
 | `PreToolUse(Edit\|Write\|NotebookEdit)` | `protect-git-internals.sh` | Block edits to `.git/` internals |
+| `PreToolUse(Bash)`, `PreToolUse(Edit\|Write\|NotebookEdit)` | `ask-guard.sh` | Opt-in: ask before a command or write that matches `.githooks/ask-guard.conf` (terraform apply, migrations, IAM); off without the file |
 | `PreToolUse(ExitWorktree)` | `worktree-exit-guard.sh` | Four-check guard before worktree exit — uncommitted, untracked, unmerged, unpushed |
 | `PostToolUse(Bash)` | `nudge-hook.sh` | Soft, success-only nudges after `git checkout -b`, `gh pr create`, first `git push -u`, `gh pr merge`, `git rebase`, `git stash pop` (60s same-nudge dedup) |
 | `SessionStart` | `session-start-brief.sh` | One-line branch awareness brief — branch, working-tree state, ahead/behind, stale-merged count (cached rows whose branch still exists locally, ≤300ms p99, no `gh` calls) |
@@ -35,6 +36,21 @@ rather than silently disappearing (Claude Code 2.1.295 or later). `block-bad-git
 fail-open: it runs on every Bash call, and a crash there would otherwise lock Bash, the tool you
 need to repair it. If a guard keeps blocking because it fails, disable the plugin with `/plugin`
 and report the error; `CLAUDE_ALLOW_*` overrides cannot help, since the script never gets that far.
+
+### Asking before irreversible actions
+
+`ask-guard.sh` makes Claude Code ask you before a Bash command or a file write that matches a rule in
+`.githooks/ask-guard.conf`: `terraform apply`, `pulumi up`, `kubectl delete`, `prisma migrate deploy`,
+`aws iam …`, edits to `*.tf` or `migrations/`. It asks, never denies, and does nothing until you create the
+file. `git-setup` installs `.githooks/ask-guard.conf.example` with those rules commented out:
+
+```
+cp .githooks/ask-guard.conf.example .githooks/ask-guard.conf   # then uncomment what you need
+```
+
+Quoted mentions (`echo "terraform apply"`) do not match. `CLAUDE_ALLOW_ASK_<NAME>=1` skips one prompt and
+is audited. The agent cannot edit the file, since `.githooks/` is protected. Format and regex rules:
+[ask-guard.md](references/ask-guard.md).
 
 ### Merging with open review findings
 

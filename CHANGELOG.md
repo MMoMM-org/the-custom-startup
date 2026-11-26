@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **tcs-git-helpers can ask before irreversible actions (#299).** Opt-in: list commands and paths in
+  `.githooks/ask-guard.conf` (terraform apply, migrations, IAM) and Claude Code asks before running
+  them. Update tcs-git-helpers and run `/tcs-git-helpers:git-setup --update` for the example file.
+
 - **tcs-helper's `skill-import` pins skills to a commit SHA and scans them before install (#297).**
   Executables need a yes each; network calls, credential reads, dynamic execution, outside
   writes and injected instructions are flagged. `skill-evaluate` blocks adoption on an

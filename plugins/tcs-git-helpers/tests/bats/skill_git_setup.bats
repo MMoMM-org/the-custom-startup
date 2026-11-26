@@ -494,11 +494,15 @@ _make_clean_repo() {
   [ "$(git config core.hooksPath)" = ".githooks" ]
 }
 
-@test "C23 install_files writes .config.example and exclude-paths.example" {
+@test "C23 install_files writes .config.example, exclude-paths.example and ask-guard.conf.example" {
   cd "$(_use_fixture clean-repo)"
   "$LIB_DIR/install_files.sh"
   [ -f .githooks/.config.example ]
   [ -f .githooks/exclude-paths.example ]
+  [ -f .githooks/ask-guard.conf.example ]
+  # The example ships inert: ask-guard reads only ask-guard.conf.
+  [ ! -e .githooks/ask-guard.conf ]
+  _lacks "$(cat .githooks/ask-guard.conf.example)" "__TCS_GIT_HELPERS_VERSION__"
 }
 
 @test "C23a install_files writes .githooks/.gitignore so .setup.lock is never committed" {
