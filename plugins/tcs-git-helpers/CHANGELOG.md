@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.5.0] - 2026-11-26
+
+### Added
+
+- **Chained `.git/config` writes are denied under the sandbox template (#311).** With the #303
+  template applied, `git push -u`, a `checkout -b`/`switch -c` that sets tracking, `git branch
+  --set-upstream-to` and `git remote add|set-url|remove|rename` leave the sandbox only as the whole
+  Bash call. Chained (`; && |`, `cd … &&`, `git -C`, a redirect or a `VAR=1` prefix) they stayed
+  sandboxed and exited 0 half-done: `push -u` pushed and set no upstream. `block-bad-git-ops.sh`
+  now denies such a call with the new rule `SANDBOX_CHAINED_GIT` and says to run the command alone.
+  **What to know:** fires only when user, project or local settings exclude that command and
+  `sandbox.enabled` is not `false`; override with `CLAUDE_ALLOW_SANDBOX_CHAINED_GIT=1`.
+
 ## [2.4.0] - 2026-11-25
 
 ### Added

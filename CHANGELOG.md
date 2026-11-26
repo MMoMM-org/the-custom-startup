@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **tcs-git-helpers denies chained `.git/config` writes under the sandbox template (#311).**
+  `git push -u …; echo $?` stayed sandboxed, set no upstream and exited 0; the new rule
+  `SANDBOX_CHAINED_GIT` says to run such a command alone. Update tcs-git-helpers.
+
 - **tcs-git-helpers makes git work under the Bash sandbox (#303).** `git-setup` offers a settings
   template that runs push/fetch/pull, branch creation, `git remote` and `gh` unsandboxed and
   write-protects `.githooks/`; `scripts/git-sandbox-repair.sh` sets an upstream a sandboxed

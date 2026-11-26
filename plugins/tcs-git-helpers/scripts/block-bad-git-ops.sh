@@ -89,6 +89,8 @@ _LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd)" || exit 0
 . "$_LIB_DIR/override.sh"
 # shellcheck source=./lib/merge_findings.sh disable=SC1091
 . "$_LIB_DIR/merge_findings.sh"
+# shellcheck source=./lib/sandbox_chain.sh disable=SC1091
+. "$_LIB_DIR/sandbox_chain.sh"
 
 # Hook identity. NOTE: not currently emitted into the audit JSONL because
 # override.sh's internal `_audit_log` call only sets env_var/master and
@@ -732,6 +734,58 @@ _check_restore_directory() {
 }
 
 # ---------------------------------------------------------------------------
+# SANDBOX_CHAINED_GIT: a .git/config write that would stay sandboxed (#311)
+# ---------------------------------------------------------------------------
+#
+# Seen on macOS: `git push -u origin x; echo "rc=$?"` pushed, failed on
+# .git/config, set no upstream, and exited 0. With the #303 template the
+# command leaves the sandbox only as the whole call (lib/sandbox_chain.sh).
+# Cheapest test first: a config-writing clause (regex), then the shape of the
+# call (string), then the settings files (jq) -- the common call stops at the
+# first.
+_check_sandbox_chained_git() {
+  local clause wants="" norm
+  case "$CMD" in
+    *push*|*branch*|*remote*|*checkout*|*switch*) ;;
+    *) return 0 ;;
+  esac
+  while IFS= read -r clause; do
+    if _match_command "$clause" "$PATTERN_PUSH_UPSTREAM"; then
+      wants="${wants} push"
+    elif _match_command "$clause" "$PATTERN_BRANCH_UPSTREAM"; then
+      wants="${wants} branch"
+    elif _match_command "$clause" "$PATTERN_REMOTE_WRITE"; then
+      wants="${wants} remote"
+    elif _match_command "$clause" "$PATTERN_BRANCH_CREATE"; then
+      _normalize_git_clause_into "$clause"
+      norm="$_GIT_NORM"
+      if _enter_git_target_dir "$PATTERN_BRANCH_CREATE"; then
+        if _sc_branch_create_tracks "$norm"; then
+          case "$norm" in
+            *switch*) wants="${wants} switch" ;;
+            *) wants="${wants} checkout" ;;
+          esac
+        fi
+      fi
+      _leave_git_target_dir
+    fi
+  done <<< "$_CMD_CLAUSES"
+  [ -n "$wants" ] || return 0
+  _sc_is_bare_git "$CMD" && return 0
+
+  local -a excl=()
+  case "$wants" in *push*)     excl+=("git push *") ;; esac
+  case "$wants" in *branch*)   excl+=("git branch *") ;; esac
+  case "$wants" in *remote*)   excl+=("git remote *") ;; esac
+  case "$wants" in *checkout*) excl+=("git checkout -b *") ;; esac
+  case "$wants" in *switch*)   excl+=("git switch -c *") ;; esac
+  _sc_sandbox_excludes "${excl[@]}" || return 0
+
+  _maybe_deny SANDBOX_CHAINED_GIT "this git command writes .git/config and leaves the sandbox only as the whole Bash call; chained (; && | cd, git -C, redirect, VAR=1 prefix) it stays sandboxed and exits 0 half-done. Run it alone, check the result in the next call"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # Pattern dispatch table
 # ---------------------------------------------------------------------------
 # Each line is `_match_clauses "$_CMD_CLAUSES" "$PATTERN" && _<handler> ARGS`.
@@ -784,6 +838,9 @@ _check_merge_with_findings
 # === Branch creation / resume (M2, M3) ===
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_CREATE"       && { _enter_git_target_dir "$PATTERN_BRANCH_CREATE" && _check_branch_creation_from_unfinished; _leave_git_target_dir; }
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_BRANCH_RESUME"       && { _enter_git_target_dir "$PATTERN_BRANCH_RESUME" && _check_resume_squash_merged; _leave_git_target_dir; }
+
+# === Sandbox: .git/config writes must be the whole call (#311) ===
+_check_sandbox_chained_git
 
 # === core.hooksPath subversion ===
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_HOOKSPATH_INLINE"    && _maybe_deny HOOKSPATH_OVERRIDE    "git -c core.hooksPath=… disables .githooks/"
