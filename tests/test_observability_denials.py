@@ -21,8 +21,11 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import json
+import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -452,3 +455,365 @@ def test_classify_module_has_no_wall_clock_or_real_home():
 
     for forbidden in ("datetime.now", "Path.home", "expanduser", "time.time"):
         assert forbidden not in source, f"denials.py uses {forbidden} (CON-5)"
+
+
+# ===========================================================================
+# T1.3 -- locating transcripts (ADR-3) and scanning one file (ADR-5).
+#
+# Every fixture builds its own home under tmp_path; nothing reads the real
+# $HOME. Lines are written the way Claude Code writes them: compact JSON, one
+# object per line.
+# ===========================================================================
+
+UTC = timezone.utc
+PERIOD = denials.Period(
+    start=datetime(2026, 10, 29, tzinfo=UTC),
+    end=datetime(2026, 11, 26, tzinfo=UTC),
+)
+IN_PERIOD = "2026-11-20T10:02:11.123Z"
+
+
+def _projects(home: Path) -> Path:
+    return home / ".claude" / "projects"
+
+
+def _project_dir(home: Path, repo: Path, suffix: str = "") -> Path:
+    path = _projects(home) / (denials._encode(repo) + suffix)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _write_lines(path: Path, entries) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rendered = [e if isinstance(e, str) else json.dumps(e, separators=(",", ":")) for e in entries]
+    path.write_text("".join(line + "\n" for line in rendered), encoding="utf-8")
+    return path
+
+
+def _assistant_tool_use(tool_use_id: str, name: str) -> dict:
+    return {
+        "type": "assistant",
+        "timestamp": IN_PERIOD,
+        "sessionId": "s1",
+        "message": {"content": [{"type": "tool_use", "id": tool_use_id, "name": name, "input": {}}]},
+    }
+
+
+def _tool_result(tool_use_id: str, content, *, is_error=True, line_type="user", ts=IN_PERIOD, **fields) -> dict:
+    result = {"type": "tool_result", "tool_use_id": tool_use_id, "content": content}
+    if is_error is not None:
+        result["is_error"] = is_error
+    line = {
+        "type": line_type,
+        "timestamp": ts,
+        "sessionId": "s1",
+        "cwd": "/r/app/.claude/worktrees/w1",
+        "version": "2.1.320",
+        "isSidechain": False,
+        "message": {"content": [result]},
+    }
+    line.update(fields)
+    return line
+
+
+def _scan(tmp_path: Path, entries, name: str = "s1.jsonl"):
+    return denials.scan_file(_write_lines(tmp_path / name, entries), PERIOD)
+
+
+DENY = PREFIX + "tcs-git-helpers DENIED: 1 rule(s) matched\n  - [RESET_HARD] x"
+
+
+# --- _encode ---------------------------------------------------------------
+
+
+def test_encode_replaces_every_non_alphanumeric_character():
+    assert denials._encode(Path("/Users/Laura/my.repo_v2")) == "-Users-Laura-my-repo-v2"
+
+
+# --- locate_transcripts ----------------------------------------------------
+
+
+def test_locate_finds_main_and_subagent_files(tmp_path):
+    home, repo = tmp_path / "home", tmp_path / "r" / "app"
+    project = _project_dir(home, repo)
+    main = _write_lines(project / "s1.jsonl", [])
+    sub = _write_lines(project / "s1" / "subagents" / "agent-a.jsonl", [])
+    _write_lines(project / "s1" / "notes.txt", [])
+    _write_lines(project / "s1" / "deeper" / "x.jsonl", [])
+
+    result = denials.locate_transcripts(repo, [home])
+
+    assert set(result.files) == {main, sub}
+    assert result.searched == (_projects(home),)
+    assert result.missing == ()
+
+
+def test_locate_matches_dir_prefix_case_insensitively(tmp_path):
+    home, repo = tmp_path / "home", tmp_path / "r" / "App"
+    upper = _projects(home) / denials._encode(repo).upper()
+    sibling = _projects(home) / (denials._encode(repo).lower() + "-old")
+    other = _projects(home) / "-somewhere-else"
+    files = [_write_lines(d / "s.jsonl", []) for d in (upper, sibling, other)]
+
+    result = denials.locate_transcripts(repo, [home])
+
+    # The sibling ("app-old") also matches the prefix; the per-line cwd filter drops it later (ADR-3).
+    assert set(result.files) == {files[0], files[1]}
+
+
+def test_locate_searches_every_home(tmp_path):
+    repo = tmp_path / "r" / "app"
+    home_a, home_b = tmp_path / "a", tmp_path / "b"
+    file_a = _write_lines(_project_dir(home_a, repo) / "s1.jsonl", [])
+    file_b = _write_lines(_project_dir(home_b, repo) / "s2.jsonl", [])
+
+    result = denials.locate_transcripts(repo, [home_a, home_b])
+
+    assert set(result.files) == {file_a, file_b}
+    assert result.searched == (_projects(home_a), _projects(home_b))
+
+
+def test_locate_lists_a_repeated_home_once(tmp_path):
+    home, repo = tmp_path / "home", tmp_path / "r" / "app"
+    main = _write_lines(_project_dir(home, repo) / "s1.jsonl", [])
+
+    result = denials.locate_transcripts(repo, [home, home])
+
+    assert result.files == (main,)
+    assert result.searched == (_projects(home),)
+
+
+def test_locate_reports_searched_dirs_when_none_exist(tmp_path):
+    repo = tmp_path / "r" / "app"
+    home_a, home_b = tmp_path / "a", tmp_path / "b"
+    _projects(home_b).mkdir(parents=True)
+
+    result = denials.locate_transcripts(repo, [home_a, home_b])
+
+    assert result.files == ()
+    assert result.searched == (_projects(home_a), _projects(home_b))
+    assert result.missing == (_projects(home_a),)
+
+
+# --- scan_file: what counts (ADR-5; PRD F2 AC7-AC8) ------------------------
+
+
+def test_scan_keeps_user_error_result_with_its_fields(tmp_path):
+    scan = _scan(tmp_path, [_assistant_tool_use("t9", "Bash"), _tool_result("t9", DENY)])
+
+    (result,) = scan.results
+    assert result == denials.ErrorResult(
+        file=tmp_path / "s1.jsonl",
+        tool_use_id="t9",
+        tool="Bash",
+        text=DENY,
+        ts=datetime(2026, 11, 20, 10, 2, 11, 123000, tzinfo=UTC),
+        cwd="/r/app/.claude/worktrees/w1",
+        session_id="s1",
+        version="2.1.320",
+        sidechain=False,
+    )
+    assert scan.skipped_lines == 0 and scan.unreadable is False
+    assert scan.versions == frozenset({"2.1.320"})
+
+
+def test_scan_drops_api_request_blob_copy(tmp_path):
+    scan = _scan(tmp_path, [_tool_result("t1", DENY, line_type="api-request-blob")])
+
+    assert scan.results == ()
+
+
+def test_scan_counts_a_duplicated_tool_result_once(tmp_path):
+    scan = _scan(tmp_path, [
+        _tool_result("t1", DENY),
+        _tool_result("t1", DENY, line_type="api-request-blob"),
+        _tool_result("t1", DENY),
+    ])
+
+    assert [r.tool_use_id for r in scan.results] == ["t1"]
+
+
+@pytest.mark.parametrize("is_error", [False, None, "true", 1], ids=["false", "absent", "string", "int"])
+def test_scan_never_counts_a_non_error_result_whatever_its_text(tmp_path, is_error):
+    text = DENY + " Operation not permitted"
+    scan = _scan(tmp_path, [_tool_result("t1", text, is_error=is_error)])
+
+    assert scan.results == ()
+    assert scan.skipped_lines == 0
+
+
+def test_scan_keeps_only_the_error_results_of_a_multi_result_line(tmp_path):
+    line = _tool_result("t1", DENY)
+    line["message"]["content"].append(
+        {"type": "tool_result", "tool_use_id": "t2", "content": DENY, "is_error": False})
+    line["message"]["content"].append(
+        {"type": "tool_result", "tool_use_id": "t3", "content": "boom", "is_error": True})
+
+    scan = _scan(tmp_path, [line])
+
+    assert [r.tool_use_id for r in scan.results] == ["t1", "t3"]
+
+
+def test_scan_prefilter_accepts_json_with_spaces(tmp_path):
+    spaced = json.dumps(_tool_result("t1", DENY))  # default separators: '"is_error": true'
+    assert '"is_error":true' not in spaced
+
+    scan = _scan(tmp_path, [spaced])
+
+    assert [r.tool_use_id for r in scan.results] == ["t1"]
+
+
+# --- scan_file: content and tool name --------------------------------------
+
+
+def test_scan_joins_list_form_content(tmp_path):
+    parts = [{"type": "text", "text": PREFIX + "tcs-git-helpers DENIED: 1 rule(s) matched"},
+             {"type": "image", "source": {}},
+             {"type": "text", "text": "  - [RESET_HARD] x"}]
+
+    (result,) = _scan(tmp_path, [_tool_result("t1", parts)]).results
+
+    assert result.text == DENY
+
+
+def test_scan_maps_tool_name_from_tool_use_later_in_the_file(tmp_path):
+    scan = _scan(tmp_path, [
+        _tool_result("t1", DENY),
+        {"type": "system", "subtype": "compact_boundary"},
+        _assistant_tool_use("t1", "Edit"),
+    ])
+
+    assert scan.results[0].tool == "Edit"
+
+
+def test_scan_tool_is_none_without_a_matching_tool_use(tmp_path):
+    scan = _scan(tmp_path, [_assistant_tool_use("other", "Bash"), _tool_result("t1", DENY)])
+
+    assert scan.results[0].tool is None
+
+
+def test_scan_takes_tool_name_only_from_the_same_file(tmp_path):
+    _write_lines(tmp_path / "other.jsonl", [_assistant_tool_use("t1", "Bash")])
+
+    scan = _scan(tmp_path, [_tool_result("t1", DENY)])
+
+    assert scan.results[0].tool is None
+
+
+# --- scan_file: main session vs subagent -----------------------------------
+
+
+def test_scan_marks_sidechain_from_the_line_flag(tmp_path):
+    scan = _scan(tmp_path, [_tool_result("t1", DENY, isSidechain=True)])
+
+    assert scan.results[0].sidechain is True
+
+
+def test_scan_marks_sidechain_from_the_subagents_location(tmp_path):
+    scan = _scan(tmp_path, [_tool_result("t1", DENY)], name="s1/subagents/agent-a.jsonl")
+
+    assert scan.results[0].sidechain is True
+
+
+# --- scan_file: period -----------------------------------------------------
+
+
+def test_scan_keeps_only_results_inside_the_period(tmp_path):
+    scan = _scan(tmp_path, [
+        _tool_result("before", DENY, ts="2026-10-28T23:59:59Z"),
+        _tool_result("start", DENY, ts="2026-10-29T00:00:00Z"),
+        _tool_result("inside", DENY, ts="2026-11-20T10:00:00+00:00"),
+        _tool_result("after", DENY, ts="2026-11-26T00:00:01Z"),
+    ])
+
+    assert [r.tool_use_id for r in scan.results] == ["start", "inside"]
+
+
+# --- scan_file: partial and unreadable input (PRD F5 AC2) ------------------
+
+
+def test_scan_counts_malformed_and_partial_lines_as_skipped(tmp_path):
+    good = json.dumps(_tool_result("t1", DENY), separators=(",", ":"))
+    partial_error = good[: good.index('"is_error":true') + 17]  # cut inside the closing brackets
+    assert '"is_error":true' in partial_error
+    path = tmp_path / "s1.jsonl"
+    path.write_text("\n".join([
+        good,
+        "not json at all",
+        '{"type":"user","is_error":true,',
+        "",
+        partial_error,  # last line, no trailing newline: a write still in progress
+    ]), encoding="utf-8")
+
+    scan = denials.scan_file(path, PERIOD)
+
+    assert [r.tool_use_id for r in scan.results] == ["t1"]
+    assert scan.skipped_lines == 3
+
+
+@pytest.mark.parametrize("breakage", [
+    pytest.param(lambda line: line.pop("timestamp"), id="no-timestamp"),
+    pytest.param(lambda line: line.update(timestamp="yesterday"), id="bad-timestamp"),
+    pytest.param(lambda line: line["message"].update(content=line["message"]["content"][0]),
+                 id="content-not-a-list"),
+    pytest.param(lambda line: line["message"]["content"][0].pop("tool_use_id"), id="no-tool-use-id"),
+    pytest.param(lambda line: line["message"]["content"][0].update(content=7), id="result-content-not-text"),
+    pytest.param(lambda line: line.update(message=line["message"]["content"]), id="message-not-an-object"),
+])
+def test_scan_counts_a_wrongly_shaped_error_line_as_skipped(tmp_path, breakage):
+    line = _tool_result("t1", DENY)
+    breakage(line)
+
+    scan = _scan(tmp_path, [line, _tool_result("t2", DENY)])
+
+    assert [r.tool_use_id for r in scan.results] == ["t2"]
+    assert scan.skipped_lines == 1
+
+
+def test_scan_tolerates_missing_optional_fields(tmp_path):
+    line = _tool_result("t1", DENY)
+    for key in ("cwd", "sessionId", "version", "isSidechain"):
+        line.pop(key)
+
+    (result,) = _scan(tmp_path, [line]).results
+
+    assert (result.cwd, result.session_id, result.version, result.sidechain) == ("", "", "", False)
+
+
+def test_scan_survives_a_path_it_cannot_read(tmp_path):
+    path = tmp_path / "s1.jsonl"
+    path.mkdir()  # reading a directory raises, whoever runs the test
+
+    scan = denials.scan_file(path, PERIOD)
+
+    assert (scan.results, scan.unreadable, scan.skipped_lines) == ((), True, 0)
+
+
+def test_scan_survives_a_file_without_read_permission(tmp_path):
+    path = _write_lines(tmp_path / "s1.jsonl", [_tool_result("t1", DENY)])
+    path.chmod(0)
+    try:
+        if os.access(path, os.R_OK):
+            pytest.skip("running as a user who can read a mode-000 file (e.g. root)")
+        scan = denials.scan_file(path, PERIOD)
+    finally:
+        path.chmod(0o600)
+
+    assert (scan.results, scan.unreadable) == ((), True)
+
+
+def test_scan_survives_a_vanished_file(tmp_path):
+    scan = denials.scan_file(tmp_path / "gone.jsonl", PERIOD)
+
+    assert (scan.results, scan.unreadable) == ((), True)
+
+
+def test_scan_survives_invalid_utf8(tmp_path):
+    path = _write_lines(tmp_path / "s1.jsonl", [_tool_result("t1", DENY)])
+    with path.open("ab") as handle:
+        handle.write(b'{"type":"user","is_error":true,"x":"\xff\xfe"}\n')
+
+    scan = denials.scan_file(path, PERIOD)
+
+    assert [r.tool_use_id for r in scan.results] == ["t1"]
+    assert scan.unreadable is False

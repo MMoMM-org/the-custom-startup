@@ -17,6 +17,12 @@ After the table:
     instead of silently vanishing;
   - any other text is an ordinary tool error and not a denial (`None`).
 
+T1.3 -- `locate_transcripts(repo_root, homes)` finds the candidate files per
+home (ADR-3); `scan_file(path, period)` reads one of them and returns its
+error tool results (ADR-5). Which repository a result belongs to is decided
+later, per line, from its `cwd` -- locating by project-dir prefix also picks
+up sibling repositories (`app` vs `app-old`).
+
 Privacy (CON-2): a returned `Denial` holds only fixed labels from the table
 and identifiers parsed out of the message (rule names, classifier reason
 category). Rule explanations, commands, paths and free reason text are never
@@ -29,8 +35,12 @@ path and time explicitly.
 
 from __future__ import annotations
 
+import json
 import re
-from dataclasses import dataclass, field
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timezone
+from pathlib import Path
 
 HOOK_DENY = "hook deny"
 
@@ -138,3 +148,245 @@ def classify(text: str, tool: str | None) -> Denial | None:
     if prefixed:
         return Denial(category=HOOK_DENY, hook=None, rules=(), reason_category=None, confidence="high")
     return None
+
+
+# ---------------------------------------------------------------------------
+# T1.3 -- locating transcripts (ADR-3) and scanning one file (ADR-5).
+# ---------------------------------------------------------------------------
+
+# Claude Code writes compact JSON (`"is_error":true`); the optional spaces keep
+# a re-serialised file from slipping past. An escaped `\"is_error\"` inside a
+# message string does not match, because its closing quote follows a backslash.
+_IS_ERROR = re.compile(r'"is_error"\s*:\s*true')
+_TOOL_USE = '"tool_use"'
+
+
+@dataclass(frozen=True)
+class Period:
+    """The reporting window, both ends inclusive, timezone-aware (UTC)."""
+
+    start: datetime
+    end: datetime
+
+    def contains(self, ts: datetime) -> bool:
+        return self.start <= ts <= self.end
+
+
+@dataclass(frozen=True)
+class LocateResult:
+    """Candidate transcript files, every projects dir searched, and those absent."""
+
+    files: tuple[Path, ...]
+    searched: tuple[Path, ...]
+    missing: tuple[Path, ...]
+
+
+@dataclass(frozen=True)
+class ErrorResult:
+    """One deduped error tool result. `text` stays in memory for `classify` only (CON-2)."""
+
+    file: Path
+    tool_use_id: str
+    tool: str | None
+    text: str
+    ts: datetime
+    cwd: str
+    session_id: str
+    version: str
+    sidechain: bool
+
+
+@dataclass(frozen=True)
+class ScanResult:
+    """One file's error results in period, its skipped-line count, and whether it was readable."""
+
+    path: Path
+    results: tuple[ErrorResult, ...]
+    skipped_lines: int
+    unreadable: bool = False
+
+    @property
+    def versions(self) -> frozenset[str]:
+        return frozenset(r.version for r in self.results if r.version)
+
+
+def _encode(path: Path) -> str:
+    """Mirror Claude Code's project-dir naming: every non-alphanumeric character becomes "-"."""
+    return re.sub(r"[^A-Za-z0-9]", "-", str(path))
+
+
+def _project_dirs(projects: Path, prefix: str) -> list[Path]:
+    """Dirs under `projects` whose name starts with `prefix`, case-insensitive; [] if unlistable."""
+    try:
+        entries = sorted(projects.iterdir())
+    except OSError:
+        return []
+    return [d for d in entries if d.is_dir() and d.name.casefold().startswith(prefix)]
+
+
+def _transcripts_in(project: Path) -> list[Path]:
+    """Main session files and subagent files of one project dir."""
+    candidates = sorted(project.glob("*.jsonl")) + sorted(project.glob("*/subagents/*.jsonl"))
+    return [path for path in candidates if path.is_file()]
+
+
+def locate_transcripts(repo_root: Path, homes: Sequence[Path]) -> LocateResult:
+    """Find transcript files for `repo_root` under each home's `.claude/projects` (ADR-3)."""
+    prefix = _encode(repo_root).casefold()
+    searched: list[Path] = []
+    files: list[Path] = []
+    for home in homes:
+        projects = home / ".claude" / "projects"
+        if projects in searched:
+            continue
+        searched.append(projects)
+        for project in _project_dirs(projects, prefix):
+            files.extend(_transcripts_in(project))
+    missing = tuple(p for p in searched if not p.is_dir())
+    return LocateResult(files=tuple(files), searched=tuple(searched), missing=missing)
+
+
+class _BadShape(ValueError):
+    """An error line whose envelope or tool result is not the shape this module reads."""
+
+
+def _parse_ts(value: object) -> datetime:
+    if not isinstance(value, str):
+        raise _BadShape("timestamp")
+    try:
+        ts = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise _BadShape("timestamp") from exc
+    return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+
+
+def _content_items(line: dict) -> list:
+    message = line.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(content, list):
+        raise _BadShape("message.content")
+    return content
+
+
+def _result_text(content: object) -> str:
+    """A tool result's text: a string, or the joined `text` parts of a list."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(part["text"] for part in content
+                         if isinstance(part, dict) and part.get("type") == "text"
+                         and isinstance(part.get("text"), str))
+    raise _BadShape("tool_result.content")
+
+
+def _error_items(line: dict) -> list[tuple[str, str]]:
+    """`(tool_use_id, text)` of each `is_error: true` tool result on one user line."""
+    pairs = []
+    for item in _content_items(line):
+        if not (isinstance(item, dict) and item.get("type") == "tool_result" and item.get("is_error") is True):
+            continue
+        tool_use_id = item.get("tool_use_id")
+        if not isinstance(tool_use_id, str) or not tool_use_id:
+            raise _BadShape("tool_use_id")
+        pairs.append((tool_use_id, _result_text(item.get("content"))))
+    return pairs
+
+
+def _tool_uses(line: dict) -> Iterable[tuple[str, str]]:
+    """`(id, name)` of each `tool_use` on an assistant line; wrong shapes yield nothing."""
+    message = line.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    for item in content if isinstance(content, list) else ():
+        if isinstance(item, dict) and item.get("type") == "tool_use":
+            if isinstance(item.get("id"), str) and isinstance(item.get("name"), str):
+                yield item["id"], item["name"]
+
+
+def _text_field(line: dict, key: str) -> str:
+    value = line.get(key)
+    return value if isinstance(value, str) else ""
+
+
+@dataclass
+class _FileScan:
+    """Mutable state while one file is read; `results` still lack tool names."""
+
+    path: Path
+    period: Period
+    subagent_file: bool
+    seen_ids: set[str] = field(default_factory=set)
+    tool_names: dict[str, str] = field(default_factory=dict)
+    results: list[ErrorResult] = field(default_factory=list)
+    skipped: int = 0
+
+    def add_line(self, raw: str) -> None:
+        line = raw.strip()
+        if not line:
+            return
+        if not (line.startswith("{") and line.endswith("}")):
+            self.skipped += 1  # not JSON, or a partial write
+            return
+        is_error = _IS_ERROR.search(line) is not None
+        if not (is_error or _TOOL_USE in line):
+            return  # cheap prefilter: nothing this module reads
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            self.skipped += 1
+            return
+        if isinstance(entry, dict):
+            self._add_entry(entry, is_error)
+        elif is_error:
+            self.skipped += 1
+
+    def _add_entry(self, entry: dict, is_error: bool) -> None:
+        kind = entry.get("type")
+        if kind == "assistant":
+            self.tool_names.update(_tool_uses(entry))
+        elif kind == "user" and is_error:
+            try:
+                self._add_errors(entry)
+            except _BadShape:
+                self.skipped += 1
+
+    def _add_errors(self, entry: dict) -> None:
+        pairs = _error_items(entry)
+        if not pairs:
+            return
+        ts = _parse_ts(entry.get("timestamp"))
+        for tool_use_id, text in pairs:
+            if tool_use_id in self.seen_ids:
+                continue
+            self.seen_ids.add(tool_use_id)
+            if self.period.contains(ts):
+                self.results.append(self._error_result(entry, tool_use_id, text, ts))
+
+    def _error_result(self, entry: dict, tool_use_id: str, text: str, ts: datetime) -> ErrorResult:
+        return ErrorResult(
+            file=self.path, tool_use_id=tool_use_id, tool=None, text=text, ts=ts,
+            cwd=_text_field(entry, "cwd"), session_id=_text_field(entry, "sessionId"),
+            version=_text_field(entry, "version"),
+            sidechain=self.subagent_file or entry.get("isSidechain") is True,
+        )
+
+    def finish(self) -> ScanResult:
+        """Attach tool names: a `tool_use` may come after its result (compaction)."""
+        named = tuple(replace(r, tool=self.tool_names.get(r.tool_use_id)) for r in self.results)
+        return ScanResult(path=self.path, results=named, skipped_lines=self.skipped)
+
+
+def scan_file(path: Path, period: Period) -> ScanResult:
+    """Read one transcript; return its deduped error tool results in `period` (ADR-5).
+
+    Only `type == "user"` lines count (an `api-request-blob` line copies the
+    same result); a result counts once per `tool_use_id`. A file that cannot
+    be read is reported as `unreadable`, never raised.
+    """
+    state = _FileScan(path=path, period=period, subagent_file=path.parent.name == "subagents")
+    try:
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            for raw in handle:
+                state.add_line(raw)
+    except OSError:
+        return ScanResult(path=path, results=(), skipped_lines=0, unreadable=True)
+    return state.finish()
