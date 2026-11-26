@@ -662,3 +662,89 @@ def _summary(scans: list[ScanResult], tally: _Tally) -> DenialsSummary:
         low_confidence=frozenset(tally.low_confidence), top=tally.top(),
         unattributed=tally.unattributed, hook_denies=tally.hook_denies,
     )
+
+
+# ---------------------------------------------------------------------------
+# Override counts from tcs-git-helpers' audit log (ADR-6).
+# ---------------------------------------------------------------------------
+
+# lib/override.sh writes `CLAUDE_ALLOW_<RULE>` for a granular override and the
+# master name for the blanket switch. ask-guard.sh writes `hook=ask-guard` rows
+# for asks, which are not overrides; protect-git-internals.sh writes denies under
+# a non-CLAUDE_ALLOW_ name. Only `ts`, `env_var` and `hook` are read (CON-2).
+_ALLOW_PREFIX = "CLAUDE_ALLOW_"
+_MASTER_SWITCH = "CLAUDE_ALLOW_GIT_BAD_OPS"
+_ASK_GUARD_HOOK = "ask-guard"
+
+
+@dataclass(frozen=True)
+class OverrideCounts:
+    """Override consumptions in the period: per rule, the master switch apart.
+
+    `log_found` is False when no home holds a readable log ("no override log").
+    """
+
+    by_rule: Counter = field(default_factory=Counter)
+    master: int = 0
+    log_found: bool = False
+
+
+def _override_log_path(repo_root: Path, home: Path) -> Path:
+    data = home / ".claude" / "plugins" / "data" / f"tcs-git-helpers-{repo_root.name}"
+    return data / "audit" / "overrides.jsonl"
+
+
+def _override_switch(line: str, period: Period) -> str | None:
+    """The `env_var` of one in-period override row, else None. The parsed row
+    is dropped here, so no other field (`command` above all) leaves this function."""
+    try:
+        row = json.loads(line)
+        if not isinstance(row, dict) or row.get("hook") == _ASK_GUARD_HOOK:
+            return None
+        env_var = row.get("env_var")
+        ts = _parse_ts(row.get("ts"))
+    except (ValueError, _BadShape):
+        return None
+    if not isinstance(env_var, str) or not period.contains(ts):
+        return None
+    return env_var if env_var.startswith(_ALLOW_PREFIX) and env_var != _ALLOW_PREFIX else None
+
+
+def _count_override_log(path: Path, period: Period) -> tuple[Counter, int]:
+    """One log's in-period counts: per rule, and the master switch. Raises OSError."""
+    by_rule: Counter = Counter()
+    master = 0
+    with path.open(encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if _ALLOW_PREFIX not in line:
+                continue
+            switch = _override_switch(line, period)
+            if switch == _MASTER_SWITCH:
+                master += 1
+            elif switch is not None:
+                by_rule[switch[len(_ALLOW_PREFIX):]] += 1
+    return by_rule, master
+
+
+def read_overrides(repo_root: Path, homes: Sequence[Path], period: Period) -> OverrideCounts:
+    """Count override consumptions per rule over every home's log for `repo_root`.
+
+    A log reached through two homes (a symlink or bind mount) is read once;
+    a missing or unreadable log is skipped, and malformed rows never raise.
+    """
+    by_rule: Counter = Counter()
+    master, found, seen = 0, False, set()
+    for home in homes:
+        path = _override_log_path(repo_root, home)
+        try:
+            stat = path.stat()
+            if (stat.st_dev, stat.st_ino) in seen:
+                continue
+            log_rules, log_master = _count_override_log(path, period)
+        except OSError:
+            continue
+        seen.add((stat.st_dev, stat.st_ino))
+        by_rule.update(log_rules)
+        master += log_master
+        found = True
+    return OverrideCounts(by_rule=by_rule, master=master, log_found=found)

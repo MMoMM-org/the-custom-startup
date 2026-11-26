@@ -1295,3 +1295,172 @@ def test_aggregate_summary_holds_no_transcript_text():
     summary = _agg(_err(text), _err(classifier), _err(UNKNOWN_HOOK + secret), _err(f"{secret} Operation not permitted"))
 
     assert secret not in repr(summary)
+
+
+# ---------------------------------------------------------------------------
+# T2.1 -- `read_overrides(repo_root, homes, period)`: override consumptions per
+# rule from tcs-git-helpers' audit log (SDD ADR-6). The log lives at
+# `<home>/.claude/plugins/data/tcs-git-helpers-<repo basename>/audit/overrides.jsonl`
+# (plugin_data.sh); its rows are written by lib/override.sh (consumptions),
+# ask-guard.sh (asks, `hook=ask-guard`) and protect-git-internals.sh (denies,
+# `env_var=TCS_GIT_HELPERS_SETUP_ACTIVE`). Only `ts`, `env_var` and `hook` are
+# read; `command` never reaches the result (CON-2).
+# ---------------------------------------------------------------------------
+
+OVR_REPO = Path("/r/app")
+OVR_PERIOD = denials.Period(datetime(2026, 11, 1, tzinfo=UTC), datetime(2026, 11, 26, 23, 59, tzinfo=UTC))
+OVR_TS = "2026-11-20T10:02:11Z"
+
+
+def _override_row(env_var, *, ts=OVR_TS, hook="", master=False, command="git reset --hard"):
+    return json.dumps({"ts": ts, "repo": "/r/app", "branch": "feat/x", "hook": hook,
+                       "env_var": env_var, "master": master, "command": command,
+                       "pattern": "", "tool_input_truncated": False})
+
+
+def _override_log(home, *lines, repo=OVR_REPO):
+    audit = home / ".claude" / "plugins" / "data" / f"tcs-git-helpers-{repo.name}" / "audit"
+    audit.mkdir(parents=True, exist_ok=True)
+    (audit / "overrides.jsonl").write_text("".join(line + "\n" for line in lines))
+    return home
+
+
+def test_overrides_counts_rows_per_rule(tmp_path):
+    home = _override_log(tmp_path / "h", _override_row("CLAUDE_ALLOW_RESET_HARD"),
+                         _override_row("CLAUDE_ALLOW_RESET_HARD"), _override_row("CLAUDE_ALLOW_NO_VERIFY"))
+
+    counts = denials.read_overrides(OVR_REPO, [home], OVR_PERIOD)
+
+    assert counts.by_rule == {"RESET_HARD": 2, "NO_VERIFY": 1}
+    assert counts.master == 0
+    assert counts.log_found is True
+
+
+def test_overrides_master_switch_is_counted_apart_from_rules(tmp_path):
+    home = _override_log(tmp_path / "h", _override_row("CLAUDE_ALLOW_GIT_BAD_OPS", master=True),
+                         _override_row("CLAUDE_ALLOW_GIT_BAD_OPS", master=True))
+
+    counts = denials.read_overrides(OVR_REPO, [home], OVR_PERIOD)
+
+    assert counts.master == 2
+    assert "GIT_BAD_OPS" not in counts.by_rule
+
+
+def test_overrides_consumed_ask_override_counts_under_its_ask_rule(tmp_path):
+    home = _override_log(tmp_path / "h", _override_row("CLAUDE_ALLOW_ASK_FORCE_PUSH"))
+
+    assert denials.read_overrides(OVR_REPO, [home], OVR_PERIOD).by_rule == {"ASK_FORCE_PUSH": 1}
+
+
+def test_overrides_ignores_ask_guard_rows(tmp_path):
+    home = _override_log(tmp_path / "h", _override_row("CLAUDE_ALLOW_ASK_FORCE_PUSH", hook="ask-guard"))
+
+    assert denials.read_overrides(OVR_REPO, [home], OVR_PERIOD).by_rule == {}
+
+
+def test_overrides_ignores_rows_whose_env_var_is_not_an_allow_switch(tmp_path):
+    home = _override_log(tmp_path / "h",
+                         _override_row("TCS_GIT_HELPERS_SETUP_ACTIVE", hook="protect-git-internals"),
+                         _override_row("CLAUDE_ALLOW_"), _override_row("XCLAUDE_ALLOW_RESET_HARD"))
+
+    counts = denials.read_overrides(OVR_REPO, [home], OVR_PERIOD)
+
+    assert counts.by_rule == {}
+    assert counts.master == 0
+
+
+@pytest.mark.parametrize("ts", ["2026-10-31T23:59:59Z", "2026-11-27T00:00:00Z"])
+def test_overrides_ignores_rows_outside_the_period(tmp_path, ts):
+    home = _override_log(tmp_path / "h", _override_row("CLAUDE_ALLOW_RESET_HARD", ts=ts),
+                         _override_row("CLAUDE_ALLOW_GIT_BAD_OPS", ts=ts))
+
+    counts = denials.read_overrides(OVR_REPO, [home], OVR_PERIOD)
+
+    assert counts.by_rule == {}
+    assert counts.master == 0
+
+
+def test_overrides_period_ends_are_inclusive(tmp_path):
+    home = _override_log(tmp_path / "h", _override_row("CLAUDE_ALLOW_RESET_HARD", ts="2026-11-01T00:00:00Z"),
+                         _override_row("CLAUDE_ALLOW_RESET_HARD", ts="2026-11-26T23:59:00+00:00"))
+
+    assert denials.read_overrides(OVR_REPO, [home], OVR_PERIOD).by_rule == {"RESET_HARD": 2}
+
+
+@pytest.mark.parametrize("line", [
+    '{"ts": "2026-11-20T10:02:11Z", "env_var": "CLAUDE_ALLOW_RESET_HARD"',  # partial write
+    "not json CLAUDE_ALLOW_RESET_HARD",
+    '["CLAUDE_ALLOW_RESET_HARD"]',
+    '{"env_var": "CLAUDE_ALLOW_RESET_HARD"}',
+    '{"ts": 17, "env_var": "CLAUDE_ALLOW_RESET_HARD"}',
+    '{"ts": "yesterday", "env_var": "CLAUDE_ALLOW_RESET_HARD"}',
+    '{"ts": "2026-11-20T10:02:11Z", "env_var": ["CLAUDE_ALLOW_RESET_HARD"]}',
+    "",
+])
+def test_overrides_skips_malformed_rows(tmp_path, line):
+    home = _override_log(tmp_path / "h", line, _override_row("CLAUDE_ALLOW_NO_VERIFY"))
+
+    assert denials.read_overrides(OVR_REPO, [home], OVR_PERIOD).by_rule == {"NO_VERIFY": 1}
+
+
+def test_overrides_naive_timestamp_is_read_as_utc(tmp_path):
+    home = _override_log(tmp_path / "h", _override_row("CLAUDE_ALLOW_RESET_HARD", ts="2026-11-20T10:02:11"))
+
+    assert denials.read_overrides(OVR_REPO, [home], OVR_PERIOD).by_rule == {"RESET_HARD": 1}
+
+
+def test_overrides_missing_log_reports_no_override_log(tmp_path):
+    counts = denials.read_overrides(OVR_REPO, [tmp_path / "h"], OVR_PERIOD)
+
+    assert counts.log_found is False
+    assert counts.by_rule == {}
+    assert counts.master == 0
+
+
+def test_overrides_without_homes_reports_no_override_log():
+    assert denials.read_overrides(OVR_REPO, [], OVR_PERIOD).log_found is False
+
+
+def test_overrides_reads_the_log_of_this_repo_basename_only(tmp_path):
+    home = _override_log(tmp_path / "h", _override_row("CLAUDE_ALLOW_RESET_HARD"), repo=Path("/r/other"))
+
+    assert denials.read_overrides(OVR_REPO, [home], OVR_PERIOD).log_found is False
+
+
+def test_overrides_sums_distinct_homes_and_finds_a_log_in_any(tmp_path):
+    first = _override_log(tmp_path / "a", _override_row("CLAUDE_ALLOW_RESET_HARD"))
+    second = _override_log(tmp_path / "b", _override_row("CLAUDE_ALLOW_RESET_HARD"),
+                           _override_row("CLAUDE_ALLOW_GIT_BAD_OPS"))
+
+    counts = denials.read_overrides(OVR_REPO, [tmp_path / "none", first, second], OVR_PERIOD)
+
+    assert counts.by_rule == {"RESET_HARD": 2}
+    assert counts.master == 1
+    assert counts.log_found is True
+
+
+def test_overrides_two_homes_that_are_one_directory_are_read_once(tmp_path):
+    home = _override_log(tmp_path / "h", _override_row("CLAUDE_ALLOW_RESET_HARD"))
+    alias = tmp_path / "alias"
+    alias.symlink_to(home)
+
+    assert denials.read_overrides(OVR_REPO, [home, alias], OVR_PERIOD).by_rule == {"RESET_HARD": 1}
+
+
+def test_overrides_unreadable_log_counts_as_no_override_log(tmp_path):
+    home = tmp_path / "h"
+    (home / ".claude" / "plugins" / "data" / "tcs-git-helpers-app" / "audit" / "overrides.jsonl").mkdir(parents=True)
+
+    assert denials.read_overrides(OVR_REPO, [home], OVR_PERIOD).log_found is False
+
+
+def test_overrides_result_holds_no_command_text(tmp_path):
+    secret = "SENTINEL-OVERRIDE-CMD-77c1"
+    home = _override_log(tmp_path / "h", _override_row("CLAUDE_ALLOW_RESET_HARD", command=secret),
+                         _override_row("CLAUDE_ALLOW_GIT_BAD_OPS", command=secret),
+                         _override_row("CLAUDE_ALLOW_ASK_X", hook="ask-guard", command=secret))
+
+    counts = denials.read_overrides(OVR_REPO, [home], OVR_PERIOD)
+
+    assert secret not in repr(counts)
+    assert {f.name for f in dataclasses.fields(counts)} == {"by_rule", "master", "log_found"}
