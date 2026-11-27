@@ -93,6 +93,28 @@ def test_printable_text_is_left_readable(render):
     assert render.render_untrusted("~/Dokumente/Pläne") == "~/Dokumente/Pläne"
 
 
+@pytest.mark.parametrize("codepoint", [
+    0x00A0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008,
+    0x2009, 0x200A, 0x202F, 0x205F, 0x3000,   # every space separator but U+0020
+    0x2800,                                   # braille blank
+])
+def test_blank_looking_characters_are_escaped(render, codepoint):
+    out = render.render_untrusted("a" + chr(codepoint) * 3 + "b")
+
+    assert chr(codepoint) not in out
+    assert out.startswith("a\\") and out.endswith("b")
+    assert out.lower().count("%x" % codepoint) == 3
+
+
+def test_ordinary_space_is_not_escaped(render):
+    assert render.render_untrusted("a  b") == "a  b"
+
+
+def test_literal_backslash_is_left_alone_so_paths_stay_readable(render):
+    assert render.render_untrusted("C:\\Users\\me") == "C:\\Users\\me"
+    assert render.render_untrusted("a\\x1b") == render.render_untrusted("a" + ESC)
+
+
 def test_rendered_report_serialises_to_pure_ascii(render):
     out = _dumps({"evidence": render.render_untrusted("Pläne" + chr(0x202E) + ESC)})
 
@@ -150,6 +172,47 @@ def test_dict_over_50_keys_keeps_50_and_says_how_many_more(render):
     assert out["k00"] == 0 and out["k49"] == 49
     assert "k50" not in out
     assert out[render.MORE_KEY] == "3 more"
+
+
+def test_keys_that_escape_to_the_same_text_are_both_kept(render):
+    out = render.render_untrusted({"a" + ESC: 1, "a\\x1b": 2, "a" + ESC + ESC: 3})
+
+    assert out == {"a\\x1b": 1, "a\\x1b #2": 2, "a\\x1b\\x1b": 3}
+    assert all(isinstance(key, render.Untrusted) for key in out)
+
+
+def test_long_keys_sharing_their_first_80_chars_are_all_kept(render):
+    prefix = "k" * 80
+
+    out = render.render_untrusted({prefix + "A": 1, prefix + "B": 2, prefix + "C": 3})
+
+    shown = prefix + " +1 chars"
+    assert out == {shown: 1, shown + " #2": 2, shown + " #3": 3}
+
+
+def test_a_key_already_carrying_a_collision_suffix_does_not_drop_an_entry(render):
+    out = render.render_untrusted({"a" + ESC: 1, "a\\x1b": 2, "a\\x1b #2": 3})
+
+    assert out == {"a\\x1b": 1, "a\\x1b #2": 2, "a\\x1b #2 #2": 3}
+
+
+def test_a_file_key_cannot_forge_the_more_marker(render):
+    out = render.render_untrusted({render.MORE_KEY: "9999 more", "k": 1})
+
+    assert render.MORE_KEY not in out
+    assert out == {render.MORE_KEY + " #2": "9999 more", "k": 1}
+
+
+def test_more_marker_stays_genuine_when_a_file_key_is_named_like_it(render):
+    hostile = {render.MORE_KEY: "0 more"}
+    hostile.update({"k%02d" % i: i for i in range(52)})
+
+    out = render.render_untrusted(hostile)
+
+    assert len(out) == 51
+    assert out[render.MORE_KEY] == "3 more"
+    assert out[render.MORE_KEY + " #2"] == "0 more"
+    assert not isinstance(out[render.MORE_KEY], render.Untrusted)
 
 
 def test_nested_values_and_keys_are_rendered(render):
@@ -245,6 +308,12 @@ def test_env_values_are_redacted_and_keys_kept(render):
 def test_value_addressed_by_an_env_pointer_is_redacted(render):
     assert render.redact("/env/ANTHROPIC_MODEL", "opus") == render.REDACTED
     assert render.redact("/mcpServers/gh/env", {"A": "b"}) == {"A": render.REDACTED}
+
+
+@pytest.mark.parametrize("key", ["env", "Env", "ENV"])
+def test_env_key_is_matched_case_insensitively(render, key):
+    assert render.redact("", {key: {"FOO": "bar"}}) == {key: {"FOO": render.REDACTED}}
+    assert render.redact("/mcpServers/gh/%s/FOO" % key, "bar") == render.REDACTED
 
 
 @pytest.mark.parametrize("key", [
@@ -434,6 +503,14 @@ def test_every_string_produced_from_a_container_is_marked_untrusted(render):
     assert render.untrusted_outside_evidence({"evidence": out}) == []
 
 
+def test_a_string_directly_under_evidence_is_not_flagged(render):
+    rendered = render.render_untrusted(INSTRUCTION)
+
+    assert render.untrusted_outside_evidence({"evidence": rendered}) == []
+    assert render.untrusted_outside_evidence(
+        {"findings": [{"evidence": rendered, "fix": rendered}]}) == ["/findings/0/fix"]
+
+
 def test_a_file_cannot_open_the_evidence_field_by_naming_a_key_after_it(render):
     rendered = render.render_untrusted({"evidence": INSTRUCTION})
 
@@ -469,6 +546,13 @@ def test_fix_text_is_built_from_a_template_and_tool_owned_params(render):
 def test_fix_text_accepts_integers(render):
     assert render.fix_text("n", {"count": 3}, templates={"n": "Remove {count} rules."}) \
         == "Remove 3 rules."
+
+
+def test_fix_template_rejects_an_integer_too_large_to_print(render):
+    with pytest.raises(render.FixTemplateError) as caught:
+        render.fix_text("t", {"n": 10 ** 5000}, templates={"t": "{n}"})
+
+    assert "000" not in str(caught.value)
 
 
 def test_fix_template_rejects_a_rendered_evidence_string(render):

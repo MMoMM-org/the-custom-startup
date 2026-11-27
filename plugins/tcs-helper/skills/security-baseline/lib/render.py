@@ -42,14 +42,17 @@ ENV_KEY = "env"
 # findings are sorted HIGH to LOW, so the lowest-ranked entries go first.
 DROPPABLE_SECTIONS = ("info", "accepted", "findings")
 
-# Invisible although Unicode classes them as letters or marks: fillers and variation selectors.
+# Invisible although Unicode classes them as letters, marks or symbols: fillers, the braille
+# blank and variation selectors.
 _INVISIBLE = frozenset(
-    [0x034F, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x3164, 0xFFA0]
+    [0x034F, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x2800, 0x3164, 0xFFA0]
     + list(range(0x180B, 0x1810))
     + list(range(0xFE00, 0xFE10))
     + list(range(0xE0100, 0xE01F0))
 )
-_ESCAPED_CATEGORIES = frozenset(["Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"])
+# Zs covers every space separator; only the ordinary space is shown, so evidence cannot be
+# padded with blanks that push its text out of view.
+_ESCAPED_CATEGORIES = frozenset(["Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp", "Zs"])
 
 _FIELD_RE = re.compile(r"[a-z_][a-z0-9_]*")
 
@@ -72,6 +75,8 @@ class FixTemplateError(ValueError):
 
 def _escape_char(char):
     codepoint = ord(char)
+    if char == " ":
+        return char
     if codepoint not in _INVISIBLE and unicodedata.category(char) not in _ESCAPED_CATEGORIES:
         return char
     if codepoint < 0x100:
@@ -113,6 +118,11 @@ def render_untrusted(value, _depth=0):
     Strings are escaped and cut to 80 characters plus `+N chars`; lists and dicts keep 50
     entries plus `N more`; nesting stops at MAX_DEPTH. Every string that carries file
     content comes back as `Untrusted`.
+
+    A literal backslash is not escaped, so that paths stay readable. The escaping is
+    therefore not reversible: a file holding the four characters `\\x1b` renders exactly
+    like one holding a real ESC. Dict keys that render alike are told apart by a ` #n`
+    suffix in input order, and no file key is ever shown as the bare MORE_KEY marker.
     """
     if value is None or isinstance(value, (bool, float)):
         return value
@@ -136,13 +146,27 @@ def _render_list(items, depth):
     return out
 
 
+def _distinct_key(shown, taken):
+    """Return SHOWN, or SHOWN plus the first free ` #n`, so that it is not in TAKEN.
+
+    MORE_KEY is reserved for the tool's own marker and so always counts as taken.
+    """
+    candidate = shown
+    number = 1
+    while candidate == MORE_KEY or candidate in taken:
+        number += 1
+        candidate = Untrusted("%s #%d" % (shown, number))
+    return candidate
+
+
 def _render_dict(mapping, depth):
     out = {}
     for count, (key, item) in enumerate(mapping.items()):
         if count == ITEM_LIMIT:
             out[MORE_KEY] = _more(len(mapping) - ITEM_LIMIT)
             break
-        out[_text(key if isinstance(key, str) else str(key))] = render_untrusted(item, depth + 1)
+        shown = _text(key if isinstance(key, str) else str(key))
+        out[_distinct_key(shown, out)] = render_untrusted(item, depth + 1)
     return out
 
 
@@ -173,7 +197,7 @@ class NameTable:
 # --- redaction ------------------------------------------------------------------------------
 
 def _is_sensitive_key(key):
-    return key == ENV_KEY or SENSITIVE_KEY_RE.search(key) is not None
+    return key.lower() == ENV_KEY or SENSITIVE_KEY_RE.search(key) is not None
 
 
 def _pointer_segments(pointer):
@@ -202,8 +226,8 @@ def _redact_below(value):
 def redact(pointer, value):
     """Return a copy of VALUE, found at JSON pointer POINTER, with secrets replaced.
 
-    Every scalar below an `env` key, or below a key containing token, key, secret or password
-    (any case), becomes REDACTED; keys and structure stay. POINTER is "" for a whole document.
+    Every scalar below an `env` key (any case: `Env`, `ENV`), or below a key containing token,
+    key, secret or password (any case), becomes REDACTED; keys and structure stay. POINTER is "" for a whole document.
     Applies to anything shown, diffs included.
     """
     if any(_is_sensitive_key(segment) for segment in _pointer_segments(pointer)):
@@ -220,17 +244,18 @@ def _pointer_token(key):
 def untrusted_outside_evidence(doc, _pointer=""):
     """Return the JSON pointers of `Untrusted` strings in DOC that are not under `evidence`.
 
-    A key that is itself `Untrusted` never counts as the evidence field, so a file cannot
-    open the field by naming a key after it.
+    Everything below the tool's own `evidence` key is in place, a string directly under it
+    included. A key that is itself `Untrusted` never counts as the evidence field, so a file
+    cannot open the field by naming a key after it; such a key is reported.
     """
     found = []
     if isinstance(doc, dict):
         for key, item in doc.items():
+            if key == EVIDENCE_KEY and not isinstance(key, Untrusted):
+                continue
             here = "%s/%s" % (_pointer, _pointer_token(key))
             if isinstance(key, Untrusted) or isinstance(item, Untrusted):
                 found.append(here)
-            if key == EVIDENCE_KEY and not isinstance(key, Untrusted):
-                continue
             found.extend(untrusted_outside_evidence(item, here))
     elif isinstance(doc, (list, tuple)):
         for index, item in enumerate(doc):
@@ -268,7 +293,10 @@ def template_fields(template):
 
 def _fix_param(field, value):
     if isinstance(value, int) and not isinstance(value, bool):
-        return str(value)
+        try:
+            return str(value)
+        except ValueError:  # beyond the interpreter's int-to-str digit limit
+            raise FixTemplateError("fix parameter '%s' is too large an integer" % field) from None
     if isinstance(value, Untrusted):
         raise FixTemplateError("fix parameter '%s' is file-derived text" % field)
     if isinstance(value, str) and NAME_RE.fullmatch(value):
