@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-11-27 |
-| **Current Phase** | Initialization |
+| **Current Phase** | PRD |
 | **Decomposition tier** | {{DECOMPOSITION_TIER}} |
 | **Model tier** | {{MODEL_TIER}} |
 | **Last Updated** | 2026-11-27 |
@@ -14,7 +14,7 @@
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| requirements.md | pending | |
+| requirements.md | completed | 11 features (9 Must, 1 Should, 1 Could), 48 acceptance criteria |
 | solution.md | pending | |
 | plan/ | pending | |
 
@@ -33,7 +33,9 @@
 | 2026-11-27 | Scope: solo first — audit reads all scopes incl. managed; setup writes user/project/local only | ~8 keys are managed-only; managed-settings templates deferred (record in declined.md with reopen condition) |
 | 2026-11-27 | Profile-aware baseline (host vs container) | Container entrypoint uses --dangerously-skip-permissions under YOLO=true; bypass mode there is a reported, accepted exception and setup never writes disableBypassPermissionsMode in that profile |
 | 2026-11-27 | Sandbox: check dependencies before offering to enable | Linux needs bubblewrap + socat (absent in the container); setup enables sandbox / failIfUnavailable only when deps are present; never enableWeakerNestedSandbox |
+| 2026-11-27 | Brainstorm decisions: severity-ranked gap list; per-rule removal of broad allows; on-demand audit only; Python CLI approach; YOLO+no-sandbox+credentials = HIGH; default target user settings; --settings layer gets a caveat, not parsed | See docs/XDD/ideas/2026-11-27-security-baseline.md |
 | 2026-11-27 | Setup may write user, project and local settings, each behind a shown diff and explicit yes | Broad/stale allows live mostly in settings.local.json; deny rules belong user-wide |
+| 2026-11-27 | PRD approved; stop before SDD | User chose to finalize the PRD only; SDD to follow in a later session |
 
 ## Context
 
