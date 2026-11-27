@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-11-27 |
-| **Current Phase** | PRD |
+| **Current Phase** | SDD |
 | **Decomposition tier** | {{DECOMPOSITION_TIER}} |
 | **Model tier** | {{MODEL_TIER}} |
 | **Last Updated** | 2026-11-27 |
@@ -14,7 +14,7 @@
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| requirements.md | completed | 11 features (9 Must, 1 Should, 1 Could), 48 acceptance criteria |
+| requirements.md | completed | v1.1: 12 features (9 Must, 2 Should, 1 Could), 68 acceptance criteria |
 | solution.md | pending | |
 | plan/ | pending | |
 
@@ -36,6 +36,11 @@
 | 2026-11-27 | Brainstorm decisions: severity-ranked gap list; per-rule removal of broad allows; on-demand audit only; Python CLI approach; YOLO+no-sandbox+credentials = HIGH; default target user settings; --settings layer gets a caveat, not parsed | See docs/XDD/ideas/2026-11-27-security-baseline.md |
 | 2026-11-27 | Setup may write user, project and local settings, each behind a shown diff and explicit yes | Broad/stale allows live mostly in settings.local.json; deny rules belong user-wide |
 | 2026-11-27 | PRD approved; stop before SDD | User chose to finalize the PRD only; SDD to follow in a later session |
+| 2026-11-27 | SDD research: Standard mode kept (3 agents: repo patterns, Claude Code settings docs, threat model) | Mode chosen at spec start; research findings contradicted parts of PRD v1.0 |
+| 2026-11-27 | PRD amended to v1.1 instead of recording deviations in the SDD | Read denies feed the sandbox (old Feature 3 PARTIAL case impossible); --settings caveat in all profiles; qualified "no gaps"; PARTIAL keeps severity; bypass auto-approves project MCP servers |
+| 2026-11-27 | Sandbox availability: own probe + user confirmation before fail-closed keys | Claude Code has no documented non-interactive check; failIfUnavailable makes startup exit when the sandbox cannot start |
+| 2026-11-27 | Consent v1: hash-bound stateless apply; typed-approval hook deferred | No CLI mechanism proves a human said yes (same shell; no prompt in YOLO); bind what is written to what was shown, state the limit |
+| 2026-11-27 | v1 scope adds deny-by-default broad-allow classification, clone-risk report (Feature 11), parent-process --settings detection | Security review; a denylist of interpreters is inherently incomplete; clone-and-open threat found by the same engine |
 
 ## Context
 

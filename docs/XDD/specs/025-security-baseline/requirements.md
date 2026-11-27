@@ -1,7 +1,7 @@
 ---
 title: "security-baseline — audit and set up a Claude Code security baseline"
 status: approved
-version: "1.0"
+version: "1.1"
 ---
 
 # Product Requirements Document
@@ -139,8 +139,8 @@ until something leaks.
    bypass mode.
 2. **Consideration:** Turning YOLO off is not acceptable; ignoring the question is not either.
 3. **Adoption:** The audit detects the container profile on its own.
-4. **Usage:** Runs `audit` → sees bypass listed as an accepted exception, a caveat that the
-   entrypoint's `--settings` layer is not audited, and — if the sandbox cannot run and
+4. **Usage:** Runs `audit` → sees bypass listed as an accepted exception, a note that the
+   entrypoint's `--settings` layer is present and not audited, and — if the sandbox cannot run and
    credentials are mounted — a HIGH finding with the two ways to close it → runs `setup` for
    the remaining fixes → the container still starts and YOLO still works.
 5. **Retention:** Re-audits when the container image or its mounts change.
@@ -165,14 +165,24 @@ until something leaks.
   - [ ] Given settings in managed, user, project and local files, When the developer runs
     `audit`, Then each finding shows check, severity (HIGH/MED/LOW), protection layer, file and
     scope, evidence, and fix
-  - [ ] Given any state, When `audit` runs, Then no file is created, changed or deleted
+  - [ ] Given any state, When `audit` runs, Then no file is created, changed or deleted —
+    including inside the skill's own installed directory
   - [ ] Given a value fixed in one file but overridden by a higher-precedence file, When `audit`
     runs, Then the finding names both files and reports the effective value
-  - [ ] Given a check that needs two protection layers and only one takes effect, When `audit`
-    runs, Then the finding is reported as PARTIAL, not as passed
+  - [ ] Given a protection that is present but cannot be shown to take effect, When `audit`
+    runs, Then the finding is reported as PARTIAL with the severity the check would have had as
+    a gap, never as passed and never downgraded
   - [ ] Given a settings file that is not valid JSON, When `audit` runs, Then that file is
-    named as unreadable and the remaining files are still audited
-  - [ ] Given no gaps, When `audit` runs, Then it reports that the baseline is met
+    named as unreadable, its protections are not credited, and the remaining files are still
+    audited
+  - [ ] Given any profile, When `audit` runs, Then the report lists every settings source it
+    could not audit (the `--settings` command-line layer, remote or device-managed policies,
+    hooks)
+  - [ ] Given no gaps, When `audit` runs, Then it reports "no gaps in the audited layers"
+    together with the list of sources it could not audit — never an unqualified "baseline met"
+  - [ ] Given a settings file or server list containing control characters, very long strings or
+    text phrased as instructions, When `audit` reports it, Then that content appears only as
+    marked, shortened evidence and never in a fix or recommendation
 
 #### Feature 2: Environment profiles
 - **User Story:** As a container developer, I want the audit to recognise where it runs, so
@@ -182,11 +192,16 @@ until something leaks.
   - [ ] Given a macOS machine, When `audit` runs, Then the profile is reported as `macos-host`
   - [ ] Given a Linux machine without container markers, When `audit` runs, Then the profile is
     `linux-native`
-  - [ ] Given a container, When `audit` runs, Then the profile is `container`, bypass mode is
-    listed in a separate ACCEPTED block, and a caveat states that a `--settings` layer may
-    exist and is not audited
+  - [ ] Given a container, When `audit` runs, Then the profile is `container` and bypass mode is
+    listed in a separate ACCEPTED block
   - [ ] Given any machine, When the developer passes `--profile <name>`, Then that profile is
-    used and the report says it was set explicitly
+    used and the report and every setup diff say it was set explicitly
+  - [ ] Given a repository whose settings set an environment variable that signals a container,
+    When `audit` runs on a host, Then the profile is not changed by it and the report names the
+    evidence the profile was detected from
+  - [ ] Given Claude Code was started with a `--settings` layer, When `audit` runs inside that
+    session, Then the report states that such a layer is present and was not audited; otherwise
+    it states that one may exist
 
 #### Feature 3: Credential paths unreadable (check 1)
 - **User Story:** As a developer, I want my credential files denied to both the file tools and
@@ -194,10 +209,13 @@ until something leaks.
 - **Acceptance Criteria (Gherkin Format):**
   - [ ] Given no deny for a path on the credential list, When `audit` runs, Then a HIGH finding
     names each missing path
-  - [ ] Given file-tool denies but no sandbox read deny (or the reverse), When `audit` runs,
-    Then the finding is PARTIAL and names the missing layer
-  - [ ] Given both denies but a sandbox that cannot run, When `audit` runs, Then the finding is
-    PARTIAL and says the sandbox half has no effect
+  - [ ] Given a file-tool deny for every listed path but a sandbox that is off or cannot run,
+    When `audit` runs, Then the finding is PARTIAL and says that commands the agent runs can
+    still read the files
+  - [ ] Given a deny written in a form the sandbox cannot enforce on this platform, When `audit`
+    runs, Then the finding is PARTIAL for that path
+  - [ ] Given a deny spelled in a way the audit cannot prove equivalent to the listed path,
+    When `audit` runs, Then it is reported as present but unverified (PARTIAL), not credited
   - [ ] Given a credential path that does not exist on this machine, When `audit` runs, Then a
     missing deny is still reported
 
@@ -207,6 +225,8 @@ until something leaks.
 - **Acceptance Criteria (Gherkin Format):**
   - [ ] Given a non-container profile and bypass mode not disabled, When `audit` runs, Then a
     HIGH finding is reported
+  - [ ] Given bypass set as the default mode in user settings, When `audit` runs in a
+    non-container profile, Then it is a HIGH finding naming the file
   - [ ] Given the `container` profile, When `setup` runs, Then it never proposes disabling
     bypass mode
   - [ ] Given the `container` profile, bypass mode enabled, the sandbox unable to run and a
@@ -214,15 +234,24 @@ until something leaks.
     "do not mount credentials" and "make the sandbox run"
 
 #### Feature 5: Broad allow rules (check 3)
-- **User Story:** As a developer, I want allow rules that let the agent run any interpreter,
-  shell, network tool, package manager or command wrapper without a prompt flagged, so that I
-  can remove the ones I did not mean to grant.
+- **User Story:** As a developer, I want every allow rule that grants more than a known narrow
+  command flagged, so that I can remove the ones I did not mean to grant.
 - **Acceptance Criteria (Gherkin Format):**
-  - [ ] Given `Bash(python3:*)`, `Bash(curl:*)` or `Bash(git:*)` in any file, When `audit`
-    runs, Then each is a HIGH finding naming the file it lives in
-  - [ ] Given `Bash(git status)`, When `audit` runs, Then it is not flagged as broad
-  - [ ] Given a wrapper such as `Bash(npx:*)` or `Bash(env:*)`, When `audit` runs, Then it is
-    flagged as broad
+  - [ ] Given an allow for an interpreter, shell, network tool, package manager, command wrapper
+    or command-executing tool (e.g. `Bash(python3:*)`, `Bash(curl:*)`, `Bash(git:*)`,
+    `Bash(npx:*)`, `Bash(env:*)`, `Bash(find:*)`, `Bash(xargs:*)`, `Bash(sudo:*)`,
+    `Bash(docker:*)`) in any file, When `audit` runs, Then each is a HIGH finding naming the
+    file it lives in
+  - [ ] Given the same command spelled differently (`Bash(curl *)`, `Bash(/usr/bin/curl:*)`),
+    When `audit` runs, Then it is classified the same way
+  - [ ] Given `Bash(git status)` or another command on the shipped narrow list, When `audit`
+    runs, Then it is not flagged
+  - [ ] Given any other wildcard rule not on the narrow list, When `audit` runs, Then it is a MED
+    "unclassified wildcard" finding
+  - [ ] Given an allow for a whole tool without a scope (`Bash`, `Write`, `Edit`, `WebFetch`) or a
+    whole MCP server, When `audit` runs, Then it is a HIGH finding
+  - [ ] Given an allow rule that a deny or ask rule in any layer overrides, When `audit` runs,
+    Then it is reported as shadowed rather than broad
 
 #### Feature 6: Sandbox on and fail-closed (check 4)
 - **User Story:** As a developer, I want the sandbox enabled and refusing to fall back to
@@ -234,8 +263,16 @@ until something leaks.
     names the missing dependencies and how to install them
   - [ ] Given dependencies present but a trial run of the sandbox failing, When `audit` runs,
     Then the finding says the sandbox cannot run here, not that it is ready
-  - [ ] Given a failing trial run, When `setup` runs, Then it does not propose `sandbox.enabled`,
-    `failIfUnavailable` or `allowUnsandboxedCommands: false`
+  - [ ] Given a trial run that cannot decide (it ran inside an existing sandbox, timed out, or
+    the platform is unsupported), When `audit` runs, Then the result is reported as
+    inconclusive, not as "cannot run" and not as "ready"
+  - [ ] Given any trial result other than a pass, When `setup` runs, Then it does not propose
+    `sandbox.enabled`, `failIfUnavailable` or `allowUnsandboxedCommands: false`
+  - [ ] Given a passing trial run, When `setup` runs, Then it may propose `sandbox.enabled`, but
+    proposes `failIfUnavailable` and `allowUnsandboxedCommands: false` only after the developer
+    has confirmed that the sandbox shows as active in a real Claude Code session
+  - [ ] Given the trial run, When it executes, Then it runs nothing taken from settings or the
+    repository and writes no file
   - [ ] Given any state, When `setup` runs, Then it never proposes `enableWeakerNestedSandbox`
 
 #### Feature 7: Web fetch scoped (check 5)
@@ -259,6 +296,9 @@ until something leaks.
     allowlist is proposed
   - [ ] Given MCP servers from the project, user configuration and plugins, When `audit` runs,
     Then all are listed with their source
+  - [ ] Given the `container` profile with bypass mode in use and a project MCP server file
+    present, When `audit` runs, Then a HIGH finding states that those servers start without an
+    approval prompt and names the ones not explicitly rejected
 
 #### Feature 9: Reviewed setup
 - **User Story:** As a developer, I want each proposed fix shown as a diff per file with
@@ -278,7 +318,16 @@ until something leaks.
   - [ ] Given a value set deliberately to differ from the baseline, When `setup` runs, Then it is
     flagged in the diff and kept unless the developer selects it
   - [ ] Given an approved write, When it completes, Then a backup of the previous file exists
-    outside the repository and the written file is valid
+    outside the repository, the written file is valid for Claude Code, and every key outside the
+    approved changes is unchanged
+  - [ ] Given a target file changed after the diff was shown, or a selection different from the
+    one shown, When the apply step runs, Then nothing is written and setup asks for a fresh
+    review
+  - [ ] Given a project or local settings target that is a link pointing outside the project,
+    When `setup` runs, Then it refuses to write it; given a linked user settings file, the diff
+    names the real file and the link is kept
+  - [ ] Given any profile, When `setup` shows its diffs, Then it states what consent the tool can
+    enforce and that, in bypass mode, no permission prompt guards the apply step
   - [ ] Given a completed setup, When `setup` runs again, Then it proposes no changes
   - [ ] Given a target protected by the sandbox, When the developer approves, Then the
     developer is told the apply step runs outside the sandbox and nothing is half-written
@@ -301,10 +350,24 @@ until something leaks.
     accepted
   - [ ] Given tcs-git-helpers is not installed, When `audit` runs, Then every excluded command is
     an ordinary finding
+  - [ ] Given an excluded command that matches no entry of the installed tcs-git-helpers
+    template exactly, When `audit` runs, Then it is an ordinary finding
+
+#### Feature 11: Clone-risk report
+- **User Story:** As a developer who opens repositories I did not write, I want to be told when
+  a repository's own settings can run code or redirect Claude Code, so that I notice before
+  trusting the folder.
+- **Acceptance Criteria (Gherkin Format):**
+  - [ ] Given a project or local settings file that sets hooks, a status line, a credential
+    helper, environment variables or approval of all project MCP servers, When `audit` runs,
+    Then each is an informational finding naming the key and the file
+  - [ ] Given those findings, When `setup` runs, Then nothing is proposed for them
+  - [ ] Given those findings, When `audit` reports them, Then values of environment variables
+    are not shown
 
 ### Could Have Features
 
-#### Feature 11: Allow-list hygiene (check 10)
+#### Feature 12: Allow-list hygiene (check 10)
 - **User Story:** As a developer, I want one-off and stale allow rules listed, so that I can
   prune rules that only accumulated.
 - **Acceptance Criteria (Gherkin Format):**
@@ -316,7 +379,9 @@ until something leaks.
 ### Won't Have (This Phase)
 - Writing managed settings or managed-only keys, and managed-settings templates for teams
   (baseline vs locked tiers).
-- Auditing the `--settings` command-line layer.
+- Auditing the contents of the `--settings` command-line layer (its presence is reported when
+  detectable).
+- A typed-approval hook that ties the developer's own "yes" to the apply step (follow-up).
 - Credential masking through the sandbox proxy (depends on an experimental option).
 - Suggesting narrower replacements for broad allow rules.
 - A session-start drift advisory, or a re-audit prompt after `/fewer-permission-prompts`.
@@ -347,17 +412,26 @@ that writes.
 - Rule 3: Never write managed settings; never write the committed project file unless the
   developer picks it.
 - Rule 4: In the `container` profile, never propose disabling bypass mode.
-- Rule 5: Never propose sandbox enablement or fail-closed options unless a trial run of the
-  sandbox passed; never propose the weaker nested sandbox.
+- Rule 5: Never propose sandbox enablement unless a trial run of the sandbox passed; never
+  propose fail-closed options unless, in addition, the developer confirmed the sandbox is active
+  in a real session; never propose the weaker nested sandbox.
 - Rule 6: Never build an MCP server allowlist from the servers currently enabled.
 - Rule 7: Never propose a key the installed Claude Code version does not support.
 - Rule 8: Leave the rules tcs-git-helpers installed intact.
+- Rule 9: What is written is exactly what was shown: a changed target or a changed selection
+  invalidates the approval. The tool cannot prove a human said yes — in bypass mode nothing but
+  the instruction and the visible transcript stands between the diff and the write — and setup
+  says so rather than claiming otherwise.
+- Rule 10: Never suggest an allow rule for the skill's own apply step.
 
 **Edge Cases:**
 - Target file missing → Expected: created with only the approved keys.
 - Target file is not valid JSON → Expected: no write to it; reported; other files proceed.
 - Target protected by the sandbox → Expected: developer told to run the apply step outside the
-  sandbox; no partial write.
+  sandbox; no partial write. (All three writable settings files are sandbox-protected.)
+- Target is a link → Expected: project/local link pointing outside the project refused; user
+  settings link followed, real file named, link kept.
+- Target changed since the diff → Expected: nothing written; fresh diff required.
 - Write interrupted → Expected: original file intact; backup present.
 - Developer moves a fix to another file → Expected: the diff is regenerated for both files
   before the yes.
@@ -371,9 +445,10 @@ that writes.
   container within two weeks of release.
 - **Engagement:** The audit is re-run after each settings change that adds allow rules or MCP
   servers; a second setup run proposes nothing.
-- **Quality:** After setup, a re-audit shows **zero HIGH findings** on the host and in the
-  container, apart from profile-accepted exceptions. The "container + bypass + no sandbox +
-  credentials present" finding is not an accepted exception. Zero sessions broken by a setup
+- **Quality:** After setup, a re-audit shows **zero HIGH findings, counting PARTIAL findings at
+  their full severity,** in the audited layers on the host and in the container, apart from
+  profile-accepted exceptions. The "container + bypass + no sandbox + credentials present" and
+  "container + bypass + project MCP servers" findings are not accepted exceptions. Zero sessions broken by a setup
   write: Claude Code starts in both environments, YOLO mode still works, tcs-git-helpers' rules
   are intact.
 - **Business Impact:** The six baseline gaps found on 2026-11-27 are closed or explicitly
@@ -384,7 +459,7 @@ that writes.
 | Event | Properties | Purpose |
 |-------|------------|---------|
 | Skill invoked | mode (audit/setup), profile, explicit-profile flag | Adoption and engagement (recorded by the existing observability hooks where installed) |
-| Audit completed | count of findings per severity, count of PARTIAL, count of ACCEPTED | Quality KPI: zero HIGH after setup |
+| Audit completed | count of findings per severity, count of PARTIAL, ACCEPTED and UNKNOWN, count of unaudited sources (counts only, no paths or values) | Quality KPI: zero HIGH after setup |
 | Setup diff shown | target files, number of proposed changes per file | Proposal volume; idempotency (zero on re-run) |
 | Setup answered | yes/no, changes selected vs proposed | Consent and declined-change rate |
 | Setup write completed | file, backup written, result valid | Zero broken writes |
@@ -398,16 +473,20 @@ that writes.
 - Must work on the macOS host and in Linux development containers; tcs-helper tests run on
   ubuntu and macOS CI.
 - Shell code must stay compatible with bash 3.2 (macOS default).
-- The committed project settings file is protected by the sandbox, so writing it needs a step
-  outside the sandbox.
+- The project, local and user settings files are all protected by the sandbox, so every write
+  needs a step outside the sandbox.
 - Setting names and minimum versions follow the official Claude Code documentation as of
-  2026-11-27 (Claude Code 2.1.330); several keys need a minimum version (e.g. blocking reads
+  2026-11-27 (Claude Code 2.1.332); several keys need a minimum version (e.g. blocking reads
   outside the working directories needs 2.1.257).
+- Claude Code offers no documented non-interactive check that its sandbox can start; the
+  trial run is the skill's own approximation and is reported as such.
 
 ### Assumptions
 - The developer reads the diff before answering yes.
-- Container detection markers (`/.dockerenv`, `/run/.containerenv`, `CONTAINERIZED`) are present
-  in the development containers; `--profile` covers the cases where they are not.
+- Container detection relies on filesystem markers (`/.dockerenv` verified present in the
+  development container on 2026-11-27; `/run/.containerenv` for Podman). An environment variable
+  alone does not select the profile, because a repository's settings can set one; `--profile`
+  covers the cases where markers are missing.
 - Each development container has its own home directory per repository, so user-scope writes in
   a container affect only that repository's container.
 - tcs-git-helpers' settings template remains the single source for the rules it installs.
@@ -422,6 +501,10 @@ that writes.
 | Broad-allow findings are noisy (e.g. `Bash(git:*)`) and get ignored | Medium | Medium | Per-rule removal choices; narrowing suggestions parked for a follow-up |
 | Removing an allow rule raises prompt volume and frustrates the developer | Low | High | Each removal is opt-in; nothing removed by default |
 | A write corrupts a settings file | High | Low | Backup outside the repository before each write; result validated after the write |
+| A cloned repository's settings or server names inject instructions into the report the agent reads | High | Medium | Untrusted content only as marked, shortened evidence; fixes from fixed text |
+| A repository's settings make a host look like a container, hiding the bypass finding | High | Low | Profile from filesystem markers; detection evidence and explicit overrides shown |
+| A passing trial run does not match what Claude Code checks at startup, so a fail-closed write stops it from starting | High | Low | Fail-closed options only after the developer confirms the sandbox is active in a real session |
+| The deny-by-default broad-allow classification floods the report with MED findings | Medium | High | Narrow list shipped and extendable by editing it; MED, not HIGH, for unclassified wildcards |
 
 ## Open Questions
 
