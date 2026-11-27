@@ -1,12 +1,15 @@
 """Strict JSON I/O for settings files (spec 025, K5, ADR-10).
 
 Reading: a file is either parsed with certainty or reported with a status
-and a reason from a fixed vocabulary. Nothing is repaired, and a file that
-cannot be reproduced byte for byte from its parsed value is `unreadable` --
-a misread layer must never read as a clean one.
+and a reason from a fixed vocabulary. Nothing is repaired, and a file whose
+parsed value would not survive serialisation unchanged is `unreadable` --
+a misread layer must never read as a clean one. The layout is free: valid
+JSON in any hand-made formatting reads as `ok` with a best-effort `Format`.
 
 Writing: `dumps` keeps key order, indent, newline style and the trailing
-newline, so a rewrite changes only what the caller changed.
+newline, so a rewrite changes only what the caller changed. It reproduces
+the original bytes when the file is laid out the way `json.dumps` lays one
+out (one indent unit, or a single line); any other layout is normalised.
 """
 
 import errno
@@ -160,13 +163,18 @@ def _parse(raw):
     if not isinstance(data, dict):
         return _failure("unreadable", "not-object")
     fmt = _detect_format(text)
-    try:
-        faithful = dumps(data, fmt) == raw
-    except ValueError:  # includes a lone surrogate that UTF-8 cannot encode
-        faithful = False
-    if not faithful:
+    if not _survives_rewrite(data, fmt):
         return _failure("unreadable", "round-trip-mismatch")
     return "ok", data, fmt, None
+
+
+def _survives_rewrite(data, fmt):
+    """True when writing `data` and reading it back yields the same value."""
+    try:
+        rewritten = dumps(data, fmt)
+    except ValueError:  # includes a lone surrogate that UTF-8 cannot encode
+        return False
+    return json.loads(rewritten) == data
 
 
 def _unique_pairs(pairs):
@@ -205,9 +213,8 @@ def _exceeds_depth(data, limit):
 
 def _detect_format(text):
     newline = "\r\n" if "\r\n" in text else "\n"
-    trailing_newline = text.endswith(newline)
-    body = text[: -len(newline)] if trailing_newline else text
-    return Format(_detect_indent(body), newline, trailing_newline)
+    trailing_newline = text.endswith("\n")
+    return Format(_detect_indent(text.rstrip("\r\n")), newline, trailing_newline)
 
 
 def _detect_indent(body):

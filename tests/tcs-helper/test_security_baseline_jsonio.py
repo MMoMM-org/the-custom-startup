@@ -84,6 +84,56 @@ def test_nesting_of_64_levels_is_accepted(tmp_path):
     assert (status, reason) == ("ok", None)
 
 
+@pytest.mark.parametrize(
+    "raw, expected_data, expected_format",
+    [
+        (b'{"a":1}', {"a": 1}, (None, "\n", False)),
+        (b'{"a":1,"b":[1,2]}\n', {"a": 1, "b": [1, 2]}, (None, "\n", True)),
+        (b'{\n  "a": [1, 2]\n}\n', {"a": [1, 2]}, (2, "\n", True)),
+        (b'{\n  "a": 1.50\n}\n', {"a": 1.5}, (2, "\n", True)),
+        (b'{\n  "a": 1E2\n}\n', {"a": 100.0}, (2, "\n", True)),
+        (b'{\n  "a": "\\u00e9"\n}\n', {"a": "\u00e9"}, (2, "\n", True)),
+        (b'{\n  "a": "\\ud83d\\ude00"\n}\n', {"a": "\U0001f600"}, (2, "\n", True)),
+        (b'{\n  "a": 1,\r\n  "b": 2\n}\n', {"a": 1, "b": 2}, (2, "\r\n", True)),
+        (b'{\n  "a": 1\n}\n\n', {"a": 1}, (2, "\n", True)),
+        (b'{"a": 1}\n\n', {"a": 1}, (None, "\n", True)),
+        (b'{ "a" : 1 }\n', {"a": 1}, (None, "\n", True)),
+        (b'{\n"a": 1\n}\n', {"a": 1}, (0, "\n", True)),
+        (b'{\n   "a": 1,\n "b": 2\n}\n', {"a": 1, "b": 2}, (3, "\n", True)),
+    ],
+    ids=["minified", "minified-nested", "inline-array", "number-spelling",
+         "exponent-spelling", "escaped-non-ascii", "escaped-surrogate-pair",
+         "mixed-newlines", "extra-blank-line", "single-line-extra-blank-line",
+         "padded-single-line", "no-indent", "uneven-indent"],
+)
+def test_hand_formatted_json_is_ok_with_best_effort_format(
+    tmp_path, raw, expected_data, expected_format
+):
+    """A layout `dumps` cannot reproduce is still a valid, readable file."""
+    status, data, fmt, reason = _read(tmp_path, raw)
+
+    assert (status, reason) == ("ok", None)
+    assert data == expected_data
+    assert (fmt.indent, fmt.newline, fmt.trailing_newline) == expected_format
+
+
+def test_number_types_survive_a_hand_formatted_read(tmp_path):
+    _status, data, _fmt, _reason = _read(tmp_path, b'{"i":1,"f":1.0,"big":' + b"9" * 40 + b"}")
+
+    assert [type(data[key]) for key in ("i", "f", "big")] == [int, float, int]
+    assert data["big"] == int("9" * 40)
+
+
+def test_hand_formatted_file_is_rewritten_with_its_values_intact(tmp_path):
+    raw = b'{"z":1.50,"a":["\\u00e9",2]}'
+    _status, data, fmt, _reason = _read(tmp_path, raw)
+
+    rewritten = jsonio.dumps(data, fmt)
+
+    assert rewritten == '{"z": 1.5, "a": ["\u00e9", 2]}'.encode("utf-8")
+    assert _read(tmp_path, rewritten)[:2] == ("ok", data)
+
+
 # --- files that must not be trusted --------------------------------------
 
 
@@ -120,20 +170,19 @@ def test_duplicate_key_is_ambiguous(tmp_path, raw):
         (b'[\n  "a"\n]\n', "not-object"),
         (b'"text"\n', "not-object"),
         (b"null\n", "not-object"),
-        (b'{"a":1}\n', "round-trip-mismatch"),
-        (b'{\n  "a": [1, 2]\n}\n', "round-trip-mismatch"),
-        (b'{\n  "a": 1.50\n}\n', "round-trip-mismatch"),
-        (b'{\n  "a": "\\u00e9"\n}\n', "round-trip-mismatch"),
+        # The round-trip check is value-level (ADR-10): the parsed value must
+        # survive serialisation unchanged. Non-finite numbers are refused
+        # earlier, and Python reproduces every other JSON number and string
+        # exactly, so the one constructible failure is a lone surrogate: it
+        # parses, but cannot be written back as UTF-8.
         (b'{\n  "a": "\\ud800"\n}\n', "round-trip-mismatch"),
-        (b'{\n  "a": 1,\r\n  "b": 2\n}\n', "round-trip-mismatch"),
-        (b'{\n  "a": 1\n}\n\n', "round-trip-mismatch"),
+        (b'{\n  "\\udfff": 1\n}\n', "round-trip-mismatch"),
     ],
     ids=["bom", "nan", "infinity", "neg-infinity", "float-overflow", "comment",
          "trailing-comma-object", "trailing-comma-array", "empty-file",
          "truncated", "invalid-utf8", "depth-65", "depth-bomb", "top-level-array",
-         "top-level-string", "top-level-null", "minified", "inline-array",
-         "number-spelling", "escaped-non-ascii", "lone-surrogate",
-         "mixed-newlines", "extra-blank-line"],
+         "top-level-string", "top-level-null", "lone-surrogate-value",
+         "lone-surrogate-key"],
 )
 def test_untrustworthy_content_is_unreadable(tmp_path, raw, expected_reason):
     status, data, fmt, reason = _read(tmp_path, raw)
@@ -144,7 +193,7 @@ def test_untrustworthy_content_is_unreadable(tmp_path, raw, expected_reason):
 def test_every_reason_comes_from_the_fixed_vocabulary(tmp_path):
     samples = [
         b"\xef\xbb\xbf{}", b'{"a": NaN}', b"{,}", b"\xff", _nested(65), b"[]",
-        b'{"a":1}', b'{"a": 1, "a": 2}', b" " * (MIB + 1),
+        b'{"a": "\\ud800"}', b'{"a": 1, "a": 2}', b" " * (MIB + 1),
     ]
 
     reasons = {_read(tmp_path, raw)[3] for raw in samples}
