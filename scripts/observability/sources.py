@@ -138,6 +138,8 @@ class Source:
     label: str
     repo_root: Path
     homes: list[HomeStatus]
+    # spec-024 F1: opt-in to reading this source's transcripts for denials.
+    denials: bool = False
 
     @property
     def verdict(self) -> str:
@@ -195,7 +197,7 @@ def _classify_home(repo_root: Path, home: Path) -> str:
 # Parsing and validating the config document.
 # ---------------------------------------------------------------------------
 
-_ALLOWED_SOURCE_KEYS = {"label", "repo_root", "homes"}
+_ALLOWED_SOURCE_KEYS = {"label", "repo_root", "homes", "denials"}
 _SYNTAX_LINE_RE = re.compile(r"at line (\d+)")
 
 
@@ -205,7 +207,15 @@ def _schema_error(index: int, label: object, message: str) -> ConfigSchemaError:
     return ConfigSchemaError(f"source #{index}: {message}")
 
 
-def _parse_source_table(index: int, table: object) -> tuple[str, Path, list[Path]]:
+def _parse_denials(index: int, label: str, value: object) -> bool:
+    # `type() is bool` on purpose: isinstance(True, int) holds, and
+    # `1 == True`, so an integer must never pass as an opt-in (ADR-2).
+    if type(value) is bool:
+        return value
+    raise _schema_error(index, label, f"denials must be true or false, got {value!r}")
+
+
+def _parse_source_table(index: int, table: object) -> tuple[str, Path, list[Path], bool]:
     if not isinstance(table, dict):
         raise _schema_error(index, None, f"a [[source]] entry must be a table, got {type(table).__name__}")
 
@@ -247,10 +257,11 @@ def _parse_source_table(index: int, table: object) -> tuple[str, Path, list[Path
     else:
         homes = [Path(h).expanduser() for h in homes_value]
 
-    return label, Path(repo_root).expanduser(), homes
+    denials = _parse_denials(index, label, table.get("denials", False))
+    return label, Path(repo_root).expanduser(), homes, denials
 
 
-def _parse_document(doc: dict) -> list[tuple[str, Path, list[Path]]]:
+def _parse_document(doc: dict) -> list[tuple[str, Path, list[Path], bool]]:
     unknown_top = set(doc) - {"source"}
     if unknown_top:
         raise ConfigSchemaError(f"unknown top-level key(s): {', '.join(sorted(unknown_top))}")
@@ -259,11 +270,11 @@ def _parse_document(doc: dict) -> list[tuple[str, Path, list[Path]]]:
     if not isinstance(raw_sources, list):
         raise ConfigSchemaError("'source' must be an array of tables ([[source]])")
 
-    parsed: list[tuple[str, Path, list[Path]]] = []
+    parsed: list[tuple[str, Path, list[Path], bool]] = []
     seen_labels: dict[str, int] = {}
     seen_basenames: dict[str, tuple[int, str]] = {}
     for i, table in enumerate(raw_sources, start=1):
-        label, repo_root, homes = _parse_source_table(i, table)
+        label, repo_root, homes, denials = _parse_source_table(i, table)
         if label in seen_labels:
             raise _schema_error(i, label, f"duplicate label (also used by source #{seen_labels[label]})")
         seen_labels[label] = i
@@ -294,7 +305,7 @@ def _parse_document(doc: dict) -> list[tuple[str, Path, list[Path]]]:
             )
         seen_basenames[basename] = (i, label)
 
-        parsed.append((label, repo_root, homes))
+        parsed.append((label, repo_root, homes, denials))
     return parsed
 
 
@@ -363,11 +374,11 @@ def load_sources(config_path: Path, *, default_home: Path) -> list[Source]:
     parsed = _parse_document(doc)
 
     sources: list[Source] = []
-    for label, repo_root, homes in parsed:
+    for label, repo_root, homes, denials in parsed:
         # `homes` is empty only when the key was absent: _parse_source_table
         # refuses an explicitly empty list, so this fallback cannot silently
         # override something the operator wrote (ruling (ab)).
         effective_homes = homes or [default_home]
         statuses = [HomeStatus(home=h, state=_classify_home(repo_root, h)) for h in effective_homes]
-        sources.append(Source(label=label, repo_root=repo_root, homes=statuses))
+        sources.append(Source(label=label, repo_root=repo_root, homes=statuses, denials=denials))
     return sources

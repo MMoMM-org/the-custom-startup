@@ -636,3 +636,93 @@ def test_multi_source_malformed_git_record_is_dropped_without_exception(tmp_path
     assert "Git operations (1 record(s), grouped by session, then caller):" in text
     assert "reset" not in text
     assert "clean" not in text
+
+
+# ---------------------------------------------------------------------------
+# spec-024 F1 AC3: the per-source `denials` opt-in key.
+# ---------------------------------------------------------------------------
+
+
+def test_denials_absent_defaults_to_false(tmp_path):
+    """Absent key behaves as today: the source is not read for denials."""
+    repo_root = tmp_path / "repo3"
+    repo_root.mkdir()
+
+    config = _write_config(tmp_path, _source_entry("repo3", repo_root))
+
+    result = sources.load_sources(config, default_home=tmp_path)
+
+    assert result[0].denials is False
+
+
+def test_denials_true_is_accepted(tmp_path):
+    repo_root = tmp_path / "repo3"
+    repo_root.mkdir()
+
+    config = _write_config(tmp_path, _source_entry("repo3", repo_root, extra="denials = true"))
+
+    result = sources.load_sources(config, default_home=tmp_path)
+
+    assert result[0].denials is True
+
+
+def test_denials_false_is_accepted(tmp_path):
+    repo_root = tmp_path / "repo3"
+    repo_root.mkdir()
+
+    config = _write_config(tmp_path, _source_entry("repo3", repo_root, extra="denials = false"))
+
+    result = sources.load_sources(config, default_home=tmp_path)
+
+    assert result[0].denials is False
+
+
+@pytest.mark.parametrize(
+    ("literal", "shown"),
+    [
+        ('"true"', "'true'"),
+        ("1", "1"),
+        ('"yes"', "'yes'"),
+    ],
+    ids=["string-true", "integer-one", "string-yes"],
+)
+def test_denials_non_bool_value_is_a_schema_error_naming_source_and_value(tmp_path, literal, shown):
+    """ADR-2: a non-bool value stops the load rather than guessing intent.
+
+    `1` is refused even though `True == 1` in Python: the check is on the
+    TOML type, so an integer never becomes an opt-in by accident.
+    """
+    repo_root = tmp_path / "repo3"
+    repo_root.mkdir()
+
+    config = _write_config(tmp_path, _source_entry("repo3", repo_root, extra=f"denials = {literal}"))
+
+    with pytest.raises(sources.ConfigSchemaError, match=rf"repo3.*denials must be true or false, got {shown}"):
+        sources.load_sources(config, default_home=tmp_path)
+
+
+def test_denials_is_settable_per_source_independently(tmp_path):
+    repo_a = tmp_path / "repo-a"
+    repo_b = tmp_path / "repo-b"
+    repo_a.mkdir()
+    repo_b.mkdir()
+
+    config = _write_config(
+        tmp_path,
+        _source_entry("repo-a", repo_a, extra="denials = true"),
+        _source_entry("repo-b", repo_b),
+    )
+
+    result = sources.load_sources(config, default_home=tmp_path)
+
+    assert [(s.label, s.denials) for s in result] == [("repo-a", True), ("repo-b", False)]
+
+
+def test_denials_unknown_key_check_still_names_the_source_with_denials_allowed(tmp_path):
+    """Adding `denials` to the allowed keys must not loosen the unknown-key refusal."""
+    config = _write_config(
+        tmp_path, '[[source]]\nlabel = "repo3"\nrepo_root = "/abs/path"\ndenial = true\n'
+    )
+
+    with pytest.raises(sources.ConfigSchemaError, match=r"repo3.*unknown key\(s\): denial$"):
+        sources.load_sources(config, default_home=tmp_path)

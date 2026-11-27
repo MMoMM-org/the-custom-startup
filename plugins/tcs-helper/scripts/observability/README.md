@@ -471,6 +471,103 @@ write to the same record file and be reported under the same `repo` value, indis
 config loader rejects a file that does this at load time, rather than let it quietly corrupt the
 split.
 
+## Denials
+
+Claude Code writes no event when a hook denies a tool call, when a rule blocks it, or when you
+answer "no" to a permission prompt. The only trace is the session transcript: an error tool result
+whose text is the deny message. The denials section reads those results and counts them per
+category, per hook rule, per week and per main-session or subagent, so you can see which rules fire
+most and whether a rule change helped.
+
+### Turn it on
+
+It is off by default. Add `denials = true` to a source in `.claude/observability-sources.toml`:
+
+```toml
+[[source]]
+label     = "repo-one"
+repo_root = "/abs/path/to/repo-one"
+denials   = true
+```
+
+An absent key means off. Anything other than `true` or `false` is a config error, reported at load
+time. A source without it prints one line saying the section is not enabled and how to enable it.
+Each source gets its own section; nothing is pooled across repositories.
+
+### What each category means
+
+Every denial is counted under one category. Confidence says how sure the match is that the text
+really came from that mechanism.
+
+| Category | What it is | Owner | Confidence |
+|---|---|---|---|
+| `hook deny` | A hook refused the tool call | the hook, as `<plugin>/<hook>` | high for the TCS hooks, medium for `external:` |
+| `classifier block` | The auto mode classifier refused it; the reason category (such as `Data Exfiltration`) is kept | Claude Code | high |
+| `safety check` | A built-in Claude Code safety check refused the command | Claude Code | high |
+| `permission denied` | A permission rule refused the tool | Claude Code | medium |
+| `worktree isolation` | An agent or session isolated in a worktree tried to leave it | Claude Code | high |
+| `prompt rejected` | You answered "no" to a permission prompt. Rejecting `AskUserQuestion` or `ExitPlanMode` is answering a question, not stopping an action, and is not counted | you | high |
+| `sandbox: filesystem` | Text such as "Operation not permitted" or "Read-only file system" | the sandbox, probably | low |
+| `sandbox: network` | A proxy `CONNECT ... 403` | the sandbox, probably | low |
+
+Hook owners the report knows: `tcs-git-helpers/block-bad-git-ops` (counted per rule, such as
+`RESET_HARD`), `tcs-git-helpers/pre-edit-branch-check`, `tcs-git-helpers/protect-git-internals`,
+`tcs-git-helpers/worktree-exit-guard`, `tcs-patterns/block-eslint-disable` and
+`tcs-issues/require-issue-comments`. Two hooks that are not from this repository are shown as
+`external: dangerous flag` and `external: critical rm`; those labels are fixed strings chosen here,
+not the hook's real name.
+
+A hook deny whose text matches no known opening is kept as `unattributed` under `hook deny`, not
+dropped. A rising `unattributed` count means a hook changed its wording or a new hook appeared;
+the report cannot say which.
+
+The two sandbox categories are low confidence because the text is generic. A normal file error
+outside any sandbox can read the same, so treat these counts as an upper bound.
+
+### What it cannot see
+
+- Settings deny rules.
+- A "no" to a hook's ask prompt as its own kind; it is counted as `prompt rejected`.
+- Denials in sessions whose transcripts were removed.
+- Sandbox blocks that surface as no tool error.
+
+An empty result is not proof that nothing was denied; it only means nothing observable was found.
+
+### Privacy
+
+The section reads only your local session transcripts and the local override log. It never prints
+command text, tool input or message text. It prints fixed category labels and identifiers parsed
+from the message (a rule name, a classifier reason category) and only when they have the expected
+shape; anything else shows as `(unrecognised)`. Nothing leaves the machine.
+
+### Choose the period
+
+By default the report covers the last 28 days. Two options change that, and they exclude each other:
+
+```bash
+python3 scripts/observability/report.py --denials-weeks 8
+python3 scripts/observability/report.py --denials-since 2026-11-01
+```
+
+`--denials-weeks N` covers N calendar weeks, starting on a Monday (UTC) N-1 weeks before this
+week's, so the last one is the current, partial week; `--denials-since YYYY-MM-DD` covers that day
+(UTC) up to now. Weekly rows start on Monday and use UTC, so a denial late in the evening can land on the
+next day's week locally. A week the period cuts into is marked partial.
+
+### Known limits
+
+- The transcript format is internal to Claude Code. The classification was checked against Claude
+  Code 2.1.71 to 2.1.332. Transcripts from other versions are still read, the report lists those
+  versions, and their denials may go unclassified.
+- A transcript line that cannot be read is skipped and counted; the report shows the count.
+- Override counts (how often you used a `CLAUDE_ALLOW_*` switch to get past a rule) come only from
+  the current `overrides.jsonl`. The rotated `overrides.jsonl.1` to `.3` are not read, so a long
+  period can undercount them.
+- The override log directory is named after the repository folder. Two repositories with the same
+  folder name share one log, and their overrides are counted for both.
+- The same naming applies inside a git worktree. When a git hook records an override there, the
+  log is named after the worktree folder, not the main repository, and the report does not count it.
+
 ## Investigating one slow hook: `timed-wrapper.sh`
 
 The adapters above answer "did X load/fire" questions. They cannot answer "which specific hook

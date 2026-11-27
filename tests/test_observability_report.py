@@ -26,14 +26,17 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "observability"))
 
 import report  # noqa: E402  (sys.path must be extended first)
 import sources  # noqa: E402  (spec-019 T3.3: Source/HomeStatus fixtures for the per-source tests below)
+import denials  # noqa: E402  (spec-024 T3.1: Period and the transcript-dir encoding for fixtures)
 
 REPORT_PY = REPO_ROOT / "scripts" / "observability" / "report.py"
 LOGWRITE_SH = REPO_ROOT / "plugins" / "tcs-helper" / "scripts" / "observability" / "logwrite.sh"
@@ -3915,3 +3918,267 @@ def test_load_report_names_unscoped_loads_when_splitting(tmp_path):
     text = report.build_load_report(stats, [])
     assert "  CLAUDE.md [User]: 1 load(s)" in text
     assert "  CLAUDE.md [unknown scope]: 1 load(s)" in text
+
+
+# ---------------------------------------------------------------------------
+# spec-024 T3.1: the denials section, per source, after the existing section.
+# Transcripts live under tmp_path homes only -- never a real ~/.claude.
+# ---------------------------------------------------------------------------
+
+DENIALS_NOW = datetime(2026, 11, 26, 15, 30, tzinfo=timezone.utc)
+DENIALS_PERIOD = denials.period_from_args(None, None, DENIALS_NOW)
+DENY_TEXT = "PreToolUse:Bash hook error: tcs-git-helpers DENIED: 1 rule(s) matched\n  - [{rule}] explanation"
+
+
+def _denials_transcript(home: Path, cwd: Path, entries: list[tuple[str, str]], ts: str, name: str = "s1") -> None:
+    """One session transcript under `home`'s project dir for `cwd`: a Bash
+    tool_use plus an error tool_result per `(tool_use_id, text)`."""
+    project = home / ".claude" / "projects" / denials._encode(cwd)
+    project.mkdir(parents=True, exist_ok=True)
+    lines = []
+    for tool_use_id, text in entries:
+        lines.append({"type": "assistant", "timestamp": ts, "sessionId": name,
+                      "message": {"content": [{"type": "tool_use", "id": tool_use_id, "name": "Bash",
+                                               "input": {"command": "git reset --hard SENTINEL_CMD"}}]}})
+        lines.append({"type": "user", "timestamp": ts, "sessionId": name, "cwd": str(cwd),
+                      "version": "2.1.320", "isSidechain": False,
+                      "message": {"content": [{"type": "tool_result", "tool_use_id": tool_use_id,
+                                               "content": text, "is_error": True}]}})
+    (project / f"{name}.jsonl").write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
+
+
+def _denials_source(tmp_path: Path, name: str, enabled: bool, homes: list[Path] | None = None) -> sources.Source:
+    root = tmp_path / name
+    root.mkdir(exist_ok=True)
+    homes = homes or [tmp_path / f"{name}-home"]
+    for home in homes:
+        home.mkdir(exist_ok=True)
+    statuses = [sources.HomeStatus(home=home, state=sources.NOT_YET_RECORDING) for home in homes]
+    return sources.Source(label=name, repo_root=root, homes=statuses, denials=enabled)
+
+
+def _denials_part(text: str) -> str:
+    return text[text.index("Denials"):]
+
+
+def test_denials_enabled_source_section_ends_with_the_denials_lines(tmp_path):
+    source = _denials_source(tmp_path, "app", enabled=True)
+    _denials_transcript(source.homes[0].home, source.repo_root, [("t1", DENY_TEXT.format(rule="RESET_HARD"))],
+                        "2026-11-20T10:00:00Z")
+
+    text, _ = report._build_source_report(source, DENIALS_NOW, DENIALS_PERIOD)
+
+    tail = _denials_part(text)
+    assert tail.startswith("Denials (2026-10-29 .. 2026-11-26, 28 days; transcripts: 1 file(s) read")
+    assert "RESET_HARD" in tail
+    assert text.index("Hook timing") < text.index("Denials")
+    assert text.endswith("\n") and not text.endswith("\n\n")
+
+
+def test_denials_disabled_source_section_ends_with_the_not_enabled_lines(tmp_path):
+    source = _denials_source(tmp_path, "app", enabled=False)
+
+    text, _ = report._build_source_report(source, DENIALS_NOW, DENIALS_PERIOD)
+
+    assert _denials_part(text) == "\n".join(denials.render_not_enabled("app"))
+
+
+def test_denials_two_sources_each_carry_only_their_own_counts_and_no_total(tmp_path):
+    first = _denials_source(tmp_path, "one", enabled=True)
+    second = _denials_source(tmp_path, "two", enabled=True)
+    _denials_transcript(first.homes[0].home, first.repo_root,
+                        [("t1", DENY_TEXT.format(rule="RESET_HARD")), ("t2", DENY_TEXT.format(rule="RESET_HARD"))],
+                        "2026-11-20T10:00:00Z")
+    _denials_transcript(second.homes[0].home, second.repo_root, [("t9", DENY_TEXT.format(rule="CLEAN_FORCE"))],
+                        "2026-11-21T10:00:00Z")
+
+    text, _ = report.build_multi_source_report([first, second], DENIALS_NOW, DENIALS_PERIOD)
+
+    section_one, section_two = text.split("=== two ===")
+    assert "RESET_HARD" in section_one and "CLEAN_FORCE" not in section_one
+    assert "CLEAN_FORCE" in section_two and "RESET_HARD" not in section_two
+    assert "(main 2, subagent 0)" in section_one and "(main 1, subagent 0)" in section_two
+    assert "(main 3" not in text
+    assert text.count("Denials (") == 2
+
+
+def test_denials_section_joints_have_one_blank_line(tmp_path):
+    first = _denials_source(tmp_path, "one", enabled=True)
+    second = _denials_source(tmp_path, "two", enabled=False)
+
+    text, _ = report.build_multi_source_report([first, second], DENIALS_NOW, DENIALS_PERIOD)
+
+    # Only the joints this section adds: build_load_report's own git/hook
+    # spacing is pinned by the --events golden fixture and stays as it is.
+    assert "\n\n\n=== two ===" not in text and "\n\n=== two ===" in text
+    assert "\n\n\nDenials" not in text and text.count("\n\nDenials") == 2
+    assert text.endswith("\n") and not text.endswith("\n\n")
+
+
+def test_denials_worktree_session_counts_for_the_configured_repo_root(tmp_path):
+    source = _denials_source(tmp_path, "app", enabled=True)
+    worktree = source.repo_root / ".claude" / "worktrees" / "w1"
+    _denials_transcript(source.homes[0].home, worktree, [("t1", DENY_TEXT.format(rule="RESET_HARD"))],
+                        "2026-11-20T10:00:00Z")
+
+    text, _ = report._build_source_report(source, DENIALS_NOW, DENIALS_PERIOD)
+
+    assert "transcripts: 1 file(s) read" in text
+    assert "RESET_HARD" in text and "(main 1, subagent 0)" in text
+
+
+def test_denials_home_reached_twice_is_read_once(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    alias = tmp_path / "home-alias"
+    alias.symlink_to(home, target_is_directory=True)
+    source = _denials_source(tmp_path, "app", enabled=True, homes=[home, alias])
+    _denials_transcript(home, source.repo_root, [("t1", DENY_TEXT.format(rule="RESET_HARD"))],
+                        "2026-11-20T10:00:00Z")
+
+    text, _ = report._build_source_report(source, DENIALS_NOW, DENIALS_PERIOD)
+
+    assert "transcripts: 1 file(s) read" in text
+    assert "(main 1, subagent 0)" in text
+
+
+def _forbid_reads_under(monkeypatch, forbidden: Path) -> None:
+    """Make every listing, stat, glob or open under `forbidden` raise (filesystem boundary)."""
+    prefix = str(forbidden)
+
+    def guard(original):
+        def wrapper(self, *args, **kwargs):
+            if str(self).startswith(prefix):
+                raise AssertionError(f"disabled source's transcripts touched: {self}")
+            return original(self, *args, **kwargs)
+        return wrapper
+
+    for name in ("iterdir", "glob", "rglob", "open", "stat", "is_dir", "exists", "read_text"):
+        monkeypatch.setattr(Path, name, guard(getattr(Path, name)))
+    original_scandir = os.scandir
+
+    def scandir(path="."):
+        if str(path).startswith(prefix):
+            raise AssertionError(f"disabled source's transcripts touched: {path}")
+        return original_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", scandir)
+
+
+def test_denials_disabled_source_never_opens_its_transcript_dir(tmp_path, monkeypatch):
+    disabled = _denials_source(tmp_path, "off", enabled=False)
+    enabled = _denials_source(tmp_path, "on", enabled=True)
+    _denials_transcript(disabled.homes[0].home, disabled.repo_root, [("t1", DENY_TEXT.format(rule="RESET_HARD"))],
+                        "2026-11-20T10:00:00Z")
+    _denials_transcript(enabled.homes[0].home, enabled.repo_root, [("t2", DENY_TEXT.format(rule="CLEAN_FORCE"))],
+                        "2026-11-20T10:00:00Z")
+    _forbid_reads_under(monkeypatch, disabled.homes[0].home / ".claude" / "projects")
+
+    text, _ = report.build_multi_source_report([disabled, enabled], DENIALS_NOW, DENIALS_PERIOD)
+
+    assert 'Denials: not enabled for source "off"' in text
+    assert "CLEAN_FORCE" in text and "RESET_HARD" not in text
+
+
+def test_denials_default_period_is_the_last_28_days(tmp_path):
+    source = _denials_source(tmp_path, "app", enabled=False)
+    enabled = _denials_source(tmp_path, "on", enabled=True)
+
+    text, _ = report.build_multi_source_report([source, enabled], DENIALS_NOW)
+
+    assert "Denials (2026-10-29 .. 2026-11-26, 28 days)" in text
+
+
+# --- main(): the CLI options ------------------------------------------------
+
+
+def _denials_cli_tree(tmp_path: Path, ts: str) -> tuple[Path, Path]:
+    """A shipping repo whose config lists one enabled and one disabled source."""
+    shipping = tmp_path / "shipping"
+    (shipping / ".claude").mkdir(parents=True)
+    on = _denials_source(tmp_path, "on", enabled=True)
+    off = _denials_source(tmp_path, "off", enabled=False)
+    sentinel = DENY_TEXT.format(rule="RESET_HARD") + " SENTINEL_RULE_TEXT /secret/SENTINEL_PATH"
+    _denials_transcript(on.homes[0].home, on.repo_root, [("t1", sentinel)], ts)
+    (shipping / ".claude" / sources.CONFIG_FILENAME).write_text(
+        f'[[source]]\nlabel = "on"\nrepo_root = "{on.repo_root}"\nhomes = ["{on.homes[0].home}"]\ndenials = true\n\n'
+        f'[[source]]\nlabel = "off"\nrepo_root = "{off.repo_root}"\nhomes = ["{off.homes[0].home}"]\n',
+        encoding="utf-8",
+    )
+    return shipping, tmp_path / "unused-home"
+
+
+def _recent_ts() -> str:
+    return (datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=1)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ")
+
+
+def _run_main(capsys, argv: list[str]) -> str:
+    assert report.main(argv) == 0
+    return capsys.readouterr().out
+
+
+def test_denials_cli_end_to_end_places_sections_and_leaks_no_transcript_text(tmp_path, capsys):
+    shipping, home = _denials_cli_tree(tmp_path, _recent_ts())
+
+    out = _run_main(capsys, ["--repo-root", str(shipping), "--home", str(home)])
+
+    section_on, section_off = out.split("=== off ===")
+    assert "RESET_HARD" in section_on and "transcripts: 1 file(s) read" in section_on
+    assert 'Denials: not enabled for source "off"' in section_off
+    assert out.index('Denials: not enabled for source "off"') < out.index("=== Firing coverage")
+    for sentinel in ("SENTINEL_RULE_TEXT", "SENTINEL_PATH", "SENTINEL_CMD", "explanation"):
+        assert sentinel not in out
+    for joint in ("\n\n\nDenials", "\n\n\n=== off ===", "\n\n\n=== Firing coverage"):
+        assert joint not in out
+
+
+def test_denials_cli_weeks_option_changes_the_printed_period(tmp_path, capsys):
+    shipping, home = _denials_cli_tree(tmp_path, _recent_ts())
+    start = denials.week_start(datetime.now(timezone.utc)) - timedelta(weeks=1)
+
+    out = _run_main(capsys, ["--repo-root", str(shipping), "--home", str(home), "--denials-weeks", "2"])
+
+    assert f"Denials ({start:%Y-%m-%d} .. " in out
+
+
+def test_denials_cli_since_option_changes_the_printed_period(tmp_path, capsys):
+    shipping, home = _denials_cli_tree(tmp_path, _recent_ts())
+
+    out = _run_main(capsys, ["--repo-root", str(shipping), "--home", str(home), "--denials-since", "2026-11-01"])
+
+    assert "Denials (2026-11-01 .. " in out
+
+
+@pytest.mark.parametrize("options", [
+    ["--denials-weeks", "0"],
+    ["--denials-weeks", "two"],
+    ["--denials-since", "2026-13-01"],
+    ["--denials-since", "26-11-01"],
+    ["--denials-since", "2999-01-01"],
+    ["--denials-weeks", "2", "--denials-since", "2026-11-01"],
+])
+def test_denials_cli_bad_or_combined_options_exit_before_any_source_is_read(tmp_path, monkeypatch, capsys, options):
+    shipping, home = _denials_cli_tree(tmp_path, _recent_ts())
+
+    def no_load(*_args, **_kwargs):
+        raise AssertionError("a source was read")
+
+    monkeypatch.setattr(sources, "load_sources", no_load)
+    monkeypatch.setattr(report, "_print_single_record_report", no_load)
+
+    with pytest.raises(SystemExit) as exc:
+        report.main(["--repo-root", str(shipping), "--home", str(home), *options])
+
+    assert exc.value.code == 2
+    assert "denials" in capsys.readouterr().err
+
+
+def test_denials_cli_events_path_carries_no_denials_section(tmp_path, capsys):
+    shipping, home = _denials_cli_tree(tmp_path, _recent_ts())
+    events = tmp_path / "events.jsonl"
+    _write_jsonl(events, [_instruction("a.md", "session_start")])
+
+    out = _run_main(capsys, ["--events", str(events), "--repo-root", str(shipping), "--home", str(home)])
+
+    assert "Denials" not in out

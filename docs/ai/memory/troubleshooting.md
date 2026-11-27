@@ -7,3 +7,7 @@
 ## A Bash call run from directory D creates `D/.claude/` — Status: open
 <!-- 2026-10-23 -->
 Gitignored, so `git status` is clean, but tests that list subdirectories count it: red locally, green in CI. → Skip dot-prefixed names in directory discovery; prefer absolute paths over `cd`.
+
+## Python `re` `$` matches before a trailing newline — Status: resolved
+<!-- 2026-11-26 -->
+A `^[A-Z_]+$` guard with `.match` accepted `"RULE\n"`, so a newline reached report output (spec 024). → Validation guards use `\A…\Z` with `fullmatch`; mutate `.pyc`-safe (`PYTHONDONTWRITEBYTECODE=1`).
