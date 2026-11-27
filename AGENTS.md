@@ -69,6 +69,7 @@ the-custom-startup/
 │   │       ├── memory-claude-md-optimize/ # Audit, score, migrate CLAUDE.md → Memory Bank
 │   │       ├── context-bridge/   # Checkpoint a session before /clear or /compact
 │   │       ├── observability-setup/ # Turn session recording on or off per repo
+│   │       ├── security-baseline/ # Audit and set up a Claude Code security baseline
 │   │       ├── claude-docs/      # Fetch and cache current Claude Code docs
 │   │       ├── doc-product/      # Plan, write and reader-test user-facing docs
 │   │       ├── finish-branch/    # Branch completion workflow
