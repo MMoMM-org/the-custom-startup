@@ -123,6 +123,35 @@ _expect() {
     "git config get core.hooksPath"
 }
 
+@test "the implicit read form (key is the last token) is allowed (#280)" {
+  _expect allow \
+    "git config core.hooksPath" \
+    "git config core.hookspath" \
+    "git config --local core.hooksPath" \
+    "git config --global core.hooksPath" \
+    "git config --show-origin core.hooksPath" \
+    "git config --file .git/config core.hooksPath" \
+    "git -C $REPOS_ROOT/clean-repo config core.hooksPath" \
+    "git config core.hooksPath && git status"
+}
+
+@test "write flags with the key last are still refused (#280)" {
+  _expect deny \
+    "git config --unset core.hooksPath" \
+    "git config --unset-all core.hooksPath" \
+    "git config --local --unset core.hooksPath" \
+    "git config --replace-all core.hooksPath" \
+    "git config --add core.hooksPath" \
+    "git config set core.hooksPath" \
+    "git config unset core.hooksPath"
+}
+
+@test "an implicit read does not wave a write in another clause through (#280)" {
+  _expect deny \
+    "git config core.hooksPath && git config core.hooksPath /tmp" \
+    "git config core.hooksPath /tmp; git config core.hooksPath"
+}
+
 @test "an unrelated key that only starts like it is allowed" {
   _expect allow \
     "git config core.hooksPathology yes" \

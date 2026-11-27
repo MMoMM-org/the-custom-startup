@@ -96,6 +96,8 @@ _assert_rule_sees_through_prefixes() {
 @test "HOOKSPATH_INLINE sees through global options"      { _assert_rule_sees_through_prefixes PATTERN_HOOKSPATH_INLINE "-c core.hooksPath=/dev/null commit"; }
 @test "HOOKSPATH_CONFIG sees through global options"      { _assert_rule_sees_through_prefixes PATTERN_HOOKSPATH_CONFIG "config core.hooksPath .x"; }
 @test "HOOKSPATH_CONFIG_READ sees through global options" { _assert_rule_sees_through_prefixes PATTERN_HOOKSPATH_CONFIG_READ "config --get core.hooksPath"; }
+@test "HOOKSPATH_CONFIG_IMPLICIT_READ sees through global options" { _assert_rule_sees_through_prefixes PATTERN_HOOKSPATH_CONFIG_IMPLICIT_READ "config core.hooksPath"; }
+@test "HOOKSPATH_CONFIG_WRITE_FLAG sees through global options" { _assert_rule_sees_through_prefixes PATTERN_HOOKSPATH_CONFIG_WRITE_FLAG "config --unset core.hooksPath"; }
 
 # --- 2. negatives -------------------------------------------------------------
 
