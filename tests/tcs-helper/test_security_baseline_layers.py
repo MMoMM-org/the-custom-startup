@@ -23,7 +23,6 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 LIB_DIR = REPO_ROOT / "plugins" / "tcs-helper" / "skills" / "security-baseline" / "lib"
 
 
-
 def _load(name, filename):
     """Load a lib module under ``name``, registered before execution because
     dataclasses resolves string annotations through ``sys.modules``."""
