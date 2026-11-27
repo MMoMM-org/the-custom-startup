@@ -15,3 +15,7 @@ A `^[A-Z_]+$` guard with `.match` accepted `"RULE\n"`, so a newline reached repo
 ## A hardcoded `LC_ALL=en_US.UTF-8` in a bats test breaks where the locale is absent — Status: resolved
 <!-- 2026-11-27 -->
 This container has only C.utf8/de_DE.utf8: a new bash warns on stderr (no-stderr check fails), an in-shell assignment stays in C silently. → Use `_utf8_locale` from tests/bats/lib/helpers.bash and assert it is non-empty.
+
+## A `@dataclass` module loaded via `spec_from_file_location` crashes on Python 3.11 — Status: resolved
+<!-- 2026-11-27 -->
+With `from __future__ import annotations`, `exec_module` raises because dataclasses looks up `sys.modules[cls.__module__]`. → Set `sys.modules[name] = module` before `spec.loader.exec_module(module)`.
