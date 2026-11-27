@@ -176,3 +176,17 @@ would plausibly re-propose it, leave it out.
   working. Subagents and `claude -p` have no pane at all, so the bash guard stays either way.
 - **Revisit if:** mods gain a way to hold a call without stalling the turn, such as asking in the
   background while the model continues.
+
+### 2026-11-27 — managed-settings templates in the security-baseline skill
+
+- **Proposed:** have `/tcs-helper:security-baseline` (spec 025, #298) also emit a
+  `managed-settings.json` template for teams, in a baseline and a locked tier, covering the
+  managed-only keys (`allowManagedPermissionRulesOnly`, `allowManagedMcpServersOnly`,
+  `sandbox.network.allowManagedDomainsOnly`, `allowManagedHooksOnly`, …).
+- **Decision:** deferred
+- **Why:** solo first. The user is one developer on a macOS host and per-repo containers, with
+  no managed settings deployed anywhere. The audit still reads managed files; setup writes only
+  user, project and local settings and never a managed file.
+- **Revisit if:** a second person or a team machine needs the baseline, or managed settings get
+  deployed on one of the user's machines (`/etc/claude-code/` or
+  `/Library/Application Support/ClaudeCode/`). A template would carry an ADR-8 version marker.
