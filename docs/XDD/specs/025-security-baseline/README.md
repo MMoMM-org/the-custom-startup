@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-11-27 |
-| **Current Phase** | SDD |
+| **Current Phase** | Decomposition |
 | **Decomposition tier** | {{DECOMPOSITION_TIER}} |
 | **Model tier** | {{MODEL_TIER}} |
 | **Last Updated** | 2026-11-27 |
@@ -15,7 +15,7 @@
 | Document | Status | Notes |
 |----------|--------|-------|
 | requirements.md | completed | v1.1: 12 features (9 Must, 2 Should, 1 Could), 68 acceptance criteria |
-| solution.md | pending | |
+| solution.md | completed | 15 components, 10 ADRs (all confirmed), 68 PRD ACs traced 1:1 + 5 rule/edge criteria |
 | plan/ | pending | |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
@@ -41,6 +41,8 @@
 | 2026-11-27 | Sandbox availability: own probe + user confirmation before fail-closed keys | Claude Code has no documented non-interactive check; failIfUnavailable makes startup exit when the sandbox cannot start |
 | 2026-11-27 | Consent v1: hash-bound stateless apply; typed-approval hook deferred | No CLI mechanism proves a human said yes (same shell; no prompt in YOLO); bind what is written to what was shown, state the limit |
 | 2026-11-27 | v1 scope adds deny-by-default broad-allow classification, clone-risk report (Feature 11), parent-process --settings detection | Security review; a denylist of interpreters is inherently incomplete; clone-and-open threat found by the same engine |
+| 2026-11-27 | SDD ADR-1..10 confirmed; `audit` exits 0 with verdict in JSON | Keeps patterns-setup process contract (SKILL.md reads stdout only on exit 0) over a shell-gate exit code |
+| 2026-11-27 | SDD approved | 68/68 PRD criteria traced; proceed to decomposition |
 
 ## Context
 
