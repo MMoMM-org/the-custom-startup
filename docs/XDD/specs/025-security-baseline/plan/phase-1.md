@@ -46,7 +46,7 @@ Establishes the three leaf modules every later component builds on: reading and 
   4. Validate: `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_jsonio.py`; only 3.11 stdlib APIs
   5. Success: an unreadable file is never treated as empty `[ref: PRD/F1 AC5]`; rewrite preserves everything outside the change `[ref: PRD/F9 AC7]` `[ref: SDD/F1.5, F9.7]`
 
-- [ ] **T1.2 Reference data (`refdata.py` + `reference/*.json`)** `[activity: domain-modeling]` `[parallel: true]`
+- [x] **T1.2 Reference data (`refdata.py` + `reference/*.json`)** `[activity: domain-modeling]` `[parallel: true]`
 
   1. Prime: keys and minimum versions from the research report recorded in the SDD; credential spelling table and command classifier walkthroughs `[ref: SDD/Implementation Examples; lines: 609-711]` `[ref: SDD/ADR-5; lines: 990-996]` `[ref: SDD/Implementation Gotchas; lines: 1191-1211]`
   2. Test: each file loads and validates (unknown field rejects with the file and entry named); every `keys.json` entry has `type`, `merge` ∈ {union, highest, strict-wins} (deviation: strict-wins with a per-key `strict` value replaced true-wins, 7daa2b25), `doc`, and `min` where the docs give one (`blockReadsOutsideWorkingDirectories` 2.1.257, `WebFetch` wildcards 2.1.172); `credentials.json` holds the ten PRD paths with Read-rule and sandbox spellings and `linux_enforceable` (`.env*` false); `commands.json` holds classes interpreter / shell / network / pkg-manager / wrapper / exec with the PRD and review lists (python*, node, sh, bash, zsh, curl, wget, pip/npm/brew install, uv run, npx, env, git, gh api, find, xargs, awk, sed, make, ruby, perl, lua, php, deno, bun, go run, cargo run, eval, source, nohup, timeout, nice, watch, sudo, busybox, ssh, scp, rsync, docker, kubectl), a narrow list (git status, git diff, git log, ls, pwd, …) and normalisation aliases
@@ -54,7 +54,7 @@ Establishes the three leaf modules every later component builds on: reading and 
   4. Validate: `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_refdata.py`
   5. Success: lists match the PRD's named commands and paths `[ref: PRD/F3 AC1, F5 AC1-AC5]`; one source for names and versions `[ref: PRD/Risks "setting renamed"]` `[ref: SDD/ADR-5]`
 
-- [ ] **T1.3 Untrusted rendering and redaction (`render.py`)** `[activity: security]` `[parallel: true]`
+- [x] **T1.3 Untrusted rendering and redaction (`render.py`)** `[activity: security]` `[parallel: true]`
 
   1. Prime: ADR-8, AuditReport `untrusted_notice` and `evidence` placement `[ref: SDD/ADR-8; lines: 1024-1033]` `[ref: SDD/Application Data Models; lines: 496-583]`
   2. Test: ANSI/OSC sequences, bidi and zero-width characters escaped; 10 KB string truncated to 80 chars with `+N chars`; list > 50 items → 50 plus `N more`; whole report capped at 32 KB with a truncation marker; names outside `^[A-Za-z0-9_.@:/-]{1,64}$` → `<non-conforming #n sha8>`; `env` values and values of keys matching token|key|secret|password redacted; instruction-shaped text ("ignore previous instructions…") only ever appears inside `evidence`; fix templates reject interpolation of evidence strings

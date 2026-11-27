@@ -419,7 +419,7 @@ tests/tcs-helper/
 ├── test_security_baseline_writer.py        # symlink, FIFO, managed refusal, backup, verify, restore, interrupt
 ├── test_security_baseline_cli.py           # end-to-end World fixtures, idempotency, _digest read-only proof
 ├── test_security_baseline_render.py        # ANSI/bidi/long/instruction-shaped content, redaction
-├── test_security_baseline_refdata.py       # data files valid, every key has min version + doc anchor
+├── test_security_baseline_refdata.py       # data files valid, every key has a doc anchor, min version where the docs state one
 ├── test_security_baseline_skill.py         # SKILL.md pins: exit-code table, verbatim relay, never-allow-self
 └── fixtures/security-baseline/             # settings trees per profile (host, linux-native, container)
 plugins/tcs-helper/tests/manual/
@@ -505,7 +505,7 @@ ENTITY: Source (NEW)                      # one settings or MCP file, K6
           data: dict|None, format: Format|None
 
 ENTITY: Format (NEW)                      # K5, for byte-faithful rewrite
-  FIELDS: indent: int|str, newline: "\n"|"\r\n", trailing_newline: bool
+  FIELDS: indent: int|str|None (None = single-line file), newline: "\n"|"\r\n", trailing_newline: bool
 
 ENTITY: Snapshot (NEW)                    # K2 assembles; read-only after construction
   FIELDS: sources: list[Source], environment: Environment, probe: ProbeResult,
@@ -620,7 +620,7 @@ different rules; `keys.json` carries the rule per key.
 #                                             {"merge": "strict-wins", "strict": true, "type": "bool", "min": "2.1.257"}
 # "sandbox.allowUnsandboxedCommands":         {"merge": "strict-wins", "strict": false, "default": true,
 #                                              "strict_against": ["project", "local"], "strict_min": "2.1.285"}
-# "permissions.defaultMode":                  {"merge": "highest", "ignored_in": {"bypassPermissions": ["project", "local"]}}
+# "permissions.defaultMode":                  {"merge": "highest", "ignored_in": {"bypassPermissions": ["project", "local"], "auto": ["project", "local"]}}
 PRECEDENCE = ["managed", "local", "project", "user"]   # --settings sits between managed and local, unaudited
 
 def effective(key, sources, rule):
@@ -657,6 +657,10 @@ shadowed. C4 reports FAIL HIGH naming **both** files and the effective value (PR
 the local file were *unreadable*, `unknown=[local]` and C4 becomes UNKNOWN, not PASS (ADR-4).
 
 #### Example: credential deny equivalence (K10, C1)
+
+The ten credential paths in `credentials.json` (from the brainstorm check catalogue; PRD Feature 3
+names the first three and `.env*` as examples): `~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.npmrc`,
+`~/.docker/config.json`, `~/.kube`, `~/.netrc`, `~/.config/gcloud`, `.env*`, `.envrc`.
 
 **Why this example**: Read-rule and `sandbox.filesystem.denyRead` prefixes differ, and a
 glob engine would credit spellings that do not protect the path.
