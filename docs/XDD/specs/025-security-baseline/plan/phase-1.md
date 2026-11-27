@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Foundations — strict JSON, reference data, untrusted rendering"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 1
 ---
@@ -38,7 +38,7 @@ phase: 1
 
 Establishes the three leaf modules every later component builds on: reading and writing settings JSON safely, the shipped reference data, and the only path by which file content reaches output.
 
-- [ ] **T1.1 Strict JSON I/O (`jsonio.py`)** `[activity: backend-io]` `[parallel: true]`
+- [x] **T1.1 Strict JSON I/O (`jsonio.py`)** `[activity: backend-io]` `[parallel: true]`
 
   1. Prime: ADR-10, Source/Format data models, error-handling rows for unreadable files `[ref: SDD/ADR-10; lines: 1043-1053]` `[ref: SDD/Application Data Models; lines: 496-583]` `[ref: SDD/Error Handling; lines: 809-826]`
   2. Test: valid object parses with detected `Format` (2-space, 4-space, tab, CRLF, missing trailing newline); duplicate key → `ambiguous`; BOM, `NaN`, `Infinity`, `//` comment, trailing comma, depth > 64, round-trip mismatch, top-level array → `unreadable` with fixed-vocabulary reason; 1 MiB + 1 byte → `too-large`; FIFO and directory → `not-regular` without hanging; symlink opened with `O_NOFOLLOW` fails for project scope; missing file → `absent`; `dumps(obj, fmt)` reproduces the original bytes for an unchanged object and preserves key order after an append; `ensure_ascii=False` in file bytes (explicit argument at every `json.dump(s)`, per `tests/test_json_dump_ensure_ascii.py`)
@@ -49,7 +49,7 @@ Establishes the three leaf modules every later component builds on: reading and 
 - [ ] **T1.2 Reference data (`refdata.py` + `reference/*.json`)** `[activity: domain-modeling]` `[parallel: true]`
 
   1. Prime: keys and minimum versions from the research report recorded in the SDD; credential spelling table and command classifier walkthroughs `[ref: SDD/Implementation Examples; lines: 609-711]` `[ref: SDD/ADR-5; lines: 990-996]` `[ref: SDD/Implementation Gotchas; lines: 1191-1211]`
-  2. Test: each file loads and validates (unknown field rejects with the file and entry named); every `keys.json` entry has `type`, `merge` ∈ {union, highest, true-wins}, `doc`, and `min` where the docs give one (`blockReadsOutsideWorkingDirectories` 2.1.257, `WebFetch` wildcards 2.1.172); `credentials.json` holds the ten PRD paths with Read-rule and sandbox spellings and `linux_enforceable` (`.env*` false); `commands.json` holds classes interpreter / shell / network / pkg-manager / wrapper / exec with the PRD and review lists (python*, node, sh, bash, zsh, curl, wget, pip/npm/brew install, uv run, npx, env, git, gh api, find, xargs, awk, sed, make, ruby, perl, lua, php, deno, bun, go run, cargo run, eval, source, nohup, timeout, nice, watch, sudo, busybox, ssh, scp, rsync, docker, kubectl), a narrow list (git status, git diff, git log, ls, pwd, …) and normalisation aliases
+  2. Test: each file loads and validates (unknown field rejects with the file and entry named); every `keys.json` entry has `type`, `merge` ∈ {union, highest, strict-wins} (deviation: strict-wins with a per-key `strict` value replaced true-wins, 7daa2b25), `doc`, and `min` where the docs give one (`blockReadsOutsideWorkingDirectories` 2.1.257, `WebFetch` wildcards 2.1.172); `credentials.json` holds the ten PRD paths with Read-rule and sandbox spellings and `linux_enforceable` (`.env*` false); `commands.json` holds classes interpreter / shell / network / pkg-manager / wrapper / exec with the PRD and review lists (python*, node, sh, bash, zsh, curl, wget, pip/npm/brew install, uv run, npx, env, git, gh api, find, xargs, awk, sed, make, ruby, perl, lua, php, deno, bun, go run, cargo run, eval, source, nohup, timeout, nice, watch, sudo, busybox, ssh, scp, rsync, docker, kubectl), a narrow list (git status, git diff, git log, ls, pwd, …) and normalisation aliases
   3. Implement: `lib/refdata.py` (`load_keys()`, `load_credentials()`, `load_commands()`, frozen dataclasses), `reference/keys.json`, `reference/credentials.json`, `reference/commands.json`
   4. Validate: `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_refdata.py`
   5. Success: lists match the PRD's named commands and paths `[ref: PRD/F3 AC1, F5 AC1-AC5]`; one source for names and versions `[ref: PRD/Risks "setting renamed"]` `[ref: SDD/ADR-5]`

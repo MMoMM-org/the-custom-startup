@@ -617,7 +617,9 @@ different rules; `keys.json` carries the rule per key.
 # "permissions.deny":                         {"merge": "union"}
 # "sandbox.enabled":                          {"merge": "highest", "type": "bool", "default": false}
 # "permissions.blockReadsOutsideWorkingDirectories":
-#                                             {"merge": "true-wins", "type": "bool", "min": "2.1.257"}
+#                                             {"merge": "strict-wins", "strict": true, "type": "bool", "min": "2.1.257"}
+# "sandbox.allowUnsandboxedCommands":         {"merge": "strict-wins", "strict": false, "default": true,
+#                                              "strict_against": ["project", "local"], "strict_min": "2.1.285"}
 # "permissions.defaultMode":                  {"merge": "highest", "ignored_in": {"bypassPermissions": ["project", "local"]}}
 PRECEDENCE = ["managed", "local", "project", "user"]   # --settings sits between managed and local, unaudited
 
@@ -626,9 +628,14 @@ def effective(key, sources, rule):
     unknown = [s for s in sources if s.status != "ok" and s.status != "absent"]
     if rule.merge == "union":
         return Effective(key, union(v for _, v in present), contributions=present, unknown=unknown)
-    if rule.merge == "true-wins":
-        hit = [p for p in present if p[1] is True]
-        return Effective(key, bool(hit), winner=hit[0][0] if hit else None, unknown=unknown)
+    if rule.merge == "strict-wins":
+        # strict value wins from any file; with strict_against it only beats those scopes,
+        # and only from strict_min on — otherwise fall through to "highest"
+        hit = [p for p in present if p[1] == rule.strict
+               and (not rule.strict_against or (p[0].scope not in rule.strict_against
+                                                and version_ok(rule.strict_min)))]
+        if hit:
+            return Effective(key, rule.strict, winner=hit[0][0], unknown=unknown)
     present = [p for p in present if p[0].scope not in rule.ignored_scopes_for(p[1])]
     ordered = sorted(present, key=lambda p: PRECEDENCE.index(p[0].scope))
     return Effective(key, ordered[0][1] if ordered else rule.default,

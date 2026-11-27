@@ -46,6 +46,7 @@
 | 2026-11-27 | Decomposition tier: Incremental | Classifier recommended Incremental (15 components, 9 Must features, 68 ACs). Accepted. |
 | 2026-11-27 | Model tier: frontier | Classifier recommended frontier (novel_pattern=true: content-bound consent; high_risks=6; adr_count=10). Accepted. |
 | 2026-11-27 | PLAN approved after alignment check | Fixed: docs-sync invocation, plugin CHANGELOG needs the exact next-minor heading (not Unreleased), no versions in AGENTS.md, ensure_ascii and prompt_lint repo tests added to validations, importlib loading to avoid the patterns-setup `cli` clash |
+| 2026-11-27 | Deviation (T1.2): merge rule `true-wins` → `strict-wins` with per-key strict value, `strict_against`, `strict_min` | Docs: a user `allowUnsandboxedCommands: false` holds against a project `true` from v2.1.285 — not expressible as true-wins or highest; SDD K9 example and phase-3 T3.1 updated |
 
 ## Context
 
