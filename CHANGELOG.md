@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **tcs-git-helpers no longer denies reading `core.hooksPath` without `--get` (#280).**
+  `git config core.hooksPath` (also with `--local`, `--global`, `--show-origin`) only prints the
+  value, but `HOOKSPATH_OVERRIDE` refused it. The key as the clause's last token with no write
+  flag now counts as a read; `--unset`, `--replace-all`, `--add`, `set`, `unset` stay refused.
+  Update tcs-git-helpers.
+
 - **tcs-git-helpers' Edit/Write and worktree-exit guards block when they fail themselves (#296).**
   A crashed or timed-out guard used to let the call through; these three now set
   `onFailure: "block"`. The Bash guard stays fail-open so Bash remains usable to repair a broken

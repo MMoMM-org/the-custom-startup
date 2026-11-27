@@ -178,6 +178,13 @@ deny	HOOKSPATH_OVERRIDE	git config core.hooksPath /tmp
 deny	HOOKSPATH_OVERRIDE	git config --global core.hooksPath /tmp
 deny	HOOKSPATH_OVERRIDE	git	-c	core.hooksPath=/dev/null	commit
 deny	HOOKSPATH_OVERRIDE	git -c "core.hooksPath=/dev/null" commit
+deny	HOOKSPATH_OVERRIDE	git config core.hooksPath /dev/null
+deny	HOOKSPATH_OVERRIDE	git config --unset core.hooksPath
+deny	HOOKSPATH_OVERRIDE	git config core.hooksPath && git config core.hooksPath /tmp
+allow	NEGATIVE	git config core.hooksPath
+allow	NEGATIVE	git config --local core.hooksPath
+allow	NEGATIVE	git config --global core.hooksPath
+allow	NEGATIVE	git config --show-origin core.hooksPath
 allow	NEGATIVE	git config user.email me@example.com
 allow	NEGATIVE	git config core.editor vim
 allow	NEGATIVE	git -c user.name=foo commit -m bar

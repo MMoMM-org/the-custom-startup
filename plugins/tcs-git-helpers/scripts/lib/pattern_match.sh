@@ -238,6 +238,18 @@ PATTERN_GH_API_PR_MERGE_B='gh[[:space:]]+api[[:space:]].*(-X|--method)[[:space:]
 # read elsewhere in the command does not exempt a write.
 PATTERN_HOOKSPATH_CONFIG_READ="$_GIT_CMD"'config([[:space:]]+[^[:space:]]+)*[[:space:]]+(--get|--get-all|--get-regexp|get)([[:space:]]+-[^[:space:]]+)*[[:space:]]+'"$_HOOKSPATH_KEY"'([[:space:]]|$)'
 
+# The implicit read form: `git config [<options>] core.hooksPath` with the key
+# as the clause's last token prints the value and changes nothing (#280).
+# Only a read when no write flag sits in the same clause -- see
+# PATTERN_HOOKSPATH_CONFIG_WRITE_FLAG; `git config --unset core.hooksPath`
+# also ends with the key.
+PATTERN_HOOKSPATH_CONFIG_IMPLICIT_READ="$_GIT_CMD"'config([[:space:]]+[^[:space:]]+)*[[:space:]]+'"$_HOOKSPATH_KEY"'[[:space:]]*$'
+
+# A `git config` option or subcommand that writes: the flags and git 2.46
+# subcommands that change a key while naming it last. Matching one turns an
+# implicit read back into a write.
+PATTERN_HOOKSPATH_CONFIG_WRITE_FLAG="$_GIT_CMD"'config([[:space:]]+[^[:space:]]+)*[[:space:]]+(--unset|--unset-all|--replace-all|--add|--edit|-e|--rename-section|--remove-section|set|unset|edit|rename-section|remove-section)([[:space:]]|$)'
+
 # Export pattern constants so child shells (e.g. when sourced from a hook
 # script that re-execs in a subshell) see them too.
 export \
@@ -267,7 +279,9 @@ export \
   PATTERN_BRANCH_RESUME \
   PATTERN_HOOKSPATH_INLINE \
   PATTERN_HOOKSPATH_CONFIG \
-  PATTERN_HOOKSPATH_CONFIG_READ
+  PATTERN_HOOKSPATH_CONFIG_READ \
+  PATTERN_HOOKSPATH_CONFIG_IMPLICIT_READ \
+  PATTERN_HOOKSPATH_CONFIG_WRITE_FLAG
 
 # ---------------------------------------------------------------------------
 # Helper
@@ -770,6 +784,23 @@ _match_clauses_unless() {
   while IFS= read -r clause; do
     _match_command "$clause" "$3" && continue
     _match_command "$clause" "$2" && return 0
+  done <<< "$1"
+  return 1
+}
+
+# _match_hookspath_config_write <clausified>
+#   True (0) iff some clause writes core.hooksPath via `git config`. Judged per
+#   clause (#192). A clause is a read, and skipped, when it uses an explicit
+#   read flag, or names the key last with no write flag in it (#280).
+_match_hookspath_config_write() {
+  local clause
+  while IFS= read -r clause; do
+    _match_command "$clause" "$PATTERN_HOOKSPATH_CONFIG_READ" && continue
+    if _match_command "$clause" "$PATTERN_HOOKSPATH_CONFIG_IMPLICIT_READ" \
+      && ! _match_command "$clause" "$PATTERN_HOOKSPATH_CONFIG_WRITE_FLAG"; then
+      continue
+    fi
+    _match_command "$clause" "$PATTERN_HOOKSPATH_CONFIG" && return 0
   done <<< "$1"
   return 1
 }

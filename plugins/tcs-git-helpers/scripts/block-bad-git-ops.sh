@@ -844,12 +844,14 @@ _check_sandbox_chained_git
 
 # === core.hooksPath subversion ===
 _match_clauses "$_CMD_CLAUSES" "$PATTERN_HOOKSPATH_INLINE"    && _maybe_deny HOOKSPATH_OVERRIDE    "git -c core.hooksPath=… disables .githooks/"
-# Read-only forms (--get/--get-all/--get-regexp/get) mutate nothing and never
-# trigger the sentinel-gated denial -- but only for their own clause (#192).
+# Read-only forms (--get/--get-all/--get-regexp/get, and the implicit
+# `git config [<opts>] core.hooksPath` with the key last and no write flag,
+# #280) mutate nothing and never trigger the sentinel-gated denial -- but only
+# for their own clause (#192).
 # The exemption used to apply to the whole command, so
 # `git config --get core.hooksPath && git config core.hooksPath /dev/null`
 # waved the write through.
-_match_clauses_unless "$_CMD_CLAUSES" "$PATTERN_HOOKSPATH_CONFIG" "$PATTERN_HOOKSPATH_CONFIG_READ" \
+_match_hookspath_config_write "$_CMD_CLAUSES" \
   && _maybe_check_setup_sentinel HOOKSPATH_OVERRIDE  "git config core.hooksPath only allowed during /tcs-git-helpers:git-setup (set TCS_GIT_HELPERS_SETUP_ACTIVE=1)"
 
 # ---------------------------------------------------------------------------
