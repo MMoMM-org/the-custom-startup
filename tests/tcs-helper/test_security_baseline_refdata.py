@@ -660,6 +660,39 @@ def test_misplaced_home_placeholder_rejects(refdata, tmp_path, field, spelling):
     assert field in str(excinfo.value)
 
 
+def _duplicated_text_copy(tmp_path, name, anchor, duplicate):
+    """Copy one shipped data file with ``duplicate`` inserted right after ``anchor``."""
+    text = (REFERENCE_DIR / name).read_text(encoding="utf-8")
+    assert text.count(anchor) == 1
+    target = tmp_path / name
+    target.write_text(text.replace(anchor, anchor + duplicate), encoding="utf-8")
+    return target
+
+
+@pytest.mark.parametrize(
+    ("name", "loader", "anchor", "duplicate", "key"),
+    [
+        ("keys.json", "load_keys", '"schema": 1,', '\n  "schema": 1,', "schema"),
+        ("keys.json", "load_keys", '"sandbox.enabled": {', '\n      "type": "bool",', "type"),
+        ("credentials.json", "load_credentials", '"schema": 1,', '\n  "schema": 1,', "schema"),
+        ("credentials.json", "load_credentials", '"id": "ssh",', '\n      "id": "ssh",', "id"),
+        ("commands.json", "load_commands", '"schema": 1,', '\n  "schema": 1,', "schema"),
+        ("commands.json", "load_commands", '"classes": {', '\n    "shell": [],', "shell"),
+    ],
+)
+def test_duplicate_json_key_rejects_naming_file_and_key(
+    refdata, tmp_path, name, loader, anchor, duplicate, key
+):
+    path = _duplicated_text_copy(tmp_path, name, anchor, duplicate)
+
+    with pytest.raises(refdata.RefDataError, match="duplicate") as excinfo:
+        getattr(refdata, loader)(path)
+
+    message = str(excinfo.value)
+    assert name in message
+    assert repr(key) in message
+
+
 def test_duplicate_credential_id_rejects(refdata, tmp_path):
     def edit(doc):
         doc["credentials"][1]["id"] = doc["credentials"][0]["id"]

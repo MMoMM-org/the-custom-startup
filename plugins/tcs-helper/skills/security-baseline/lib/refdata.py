@@ -302,6 +302,16 @@ def _reject_unsupported_glob(source: _Source, entry: str, command: str) -> None:
             raise source.error(entry, f"{command!r}: {char!r} is not supported, only a trailing '*'")
 
 
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """``object_pairs_hook``: plain ``json`` lets the last of two equal keys win."""
+    seen: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in seen:
+            raise ValueError(f"duplicate key {key!r}")
+        seen[key] = value
+    return seen
+
+
 class _Source:
     """One data file: reads it and builds errors that name it."""
 
@@ -313,7 +323,9 @@ class _Source:
 
     def read(self, top_level_fields: set[str]) -> dict[str, Any]:
         try:
-            doc = json.loads(self.path.read_text(encoding="utf-8"))
+            doc = json.loads(
+                self.path.read_text(encoding="utf-8"), object_pairs_hook=_reject_duplicate_keys
+            )
         except (OSError, ValueError) as exc:
             raise RefDataError(f"{self.path.name}: cannot load {self.path}: {exc}") from exc
         self.check_fields("top level", doc, required=top_level_fields)
