@@ -1,6 +1,6 @@
 ---
 title: "Phase 1: Foundations — strict JSON, reference data, untrusted rendering"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 1
 ---
@@ -62,6 +62,6 @@ Establishes the three leaf modules every later component builds on: reading and 
   4. Validate: `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_render.py`
   5. Success: hostile content only as marked, shortened evidence `[ref: PRD/F1 AC8]`; env values never shown `[ref: PRD/F11 AC3]` `[ref: SDD/F1.8, F11.3]`
 
-- [ ] **T1.4 Phase Validation** `[activity: validate]`
+- [x] **T1.4 Phase Validation** `[activity: validate]`
 
   - Run `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_{jsonio,refdata,render}.py tests/test_json_dump_ensure_ascii.py tests/tcs-helper/test_prompt_lint_repo.py`. Confirm no module performs I/O at import and none imports another plugin. Check every data entry against the SDD tables.

@@ -145,7 +145,7 @@ Each phase is defined in a separate file. Tasks follow red-green-refactor: **Pri
 
 > **Tracking Principle**: Track logical units that produce verifiable outcomes. The TDD cycle is the method, not separate tracked items.
 
-- [ ] [Phase 1: Foundations — strict JSON, reference data, untrusted rendering](phase-1.md)
+- [x] [Phase 1: Foundations — strict JSON, reference data, untrusted rendering](phase-1.md)
 - [ ] [Phase 2: Reading the machine — environment, probe, layers, inventory](phase-2.md)
 - [ ] [Phase 3: Evaluation and the audit verb](phase-3.md)
 - [ ] [Phase 4: Setup — plan, state, writer, apply](phase-4.md)
