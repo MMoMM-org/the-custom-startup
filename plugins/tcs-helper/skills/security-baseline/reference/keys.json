@@ -50,7 +50,8 @@
     },
     "permissions.blockReadsOutsideWorkingDirectories": {
       "type": "bool",
-      "merge": "true-wins",
+      "merge": "strict-wins",
+      "strict": true,
       "min": "2.1.257",
       "doc": "https://code.claude.com/docs/en/settings-reference#permissions-blockreadsoutsideworkingdirectories"
     },
@@ -68,7 +69,13 @@
     },
     "sandbox.allowUnsandboxedCommands": {
       "type": "bool",
-      "merge": "highest",
+      "merge": "strict-wins",
+      "strict": false,
+      "strict_against": [
+        "project",
+        "local"
+      ],
+      "strict_min": "2.1.285",
       "default": true,
       "doc": "https://code.claude.com/docs/en/settings-reference#sandbox-allowunsandboxedcommands"
     },

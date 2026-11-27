@@ -11,6 +11,25 @@ behaviour from them, never from constants. Validation is strict: an unknown
 or malformed field raises ``RefDataError`` naming the file and the entry, so a
 typo in a data file cannot silently weaken a check.
 
+Merge rules (``keys.json``, field ``merge``):
+
+- ``union``       — entries of every file combine
+- ``highest``     — the file highest in precedence wins
+- ``strict-wins`` — the value in ``strict`` holds against the opposite value.
+  Without ``strict_against`` it holds from any file. With it, a strict value
+  set in a scope *outside* that list holds against the listed scopes from
+  version ``strict_min`` on; between any other pair of files, and on older
+  versions, the key follows ``highest``.
+
+Home placeholder (``credentials.json``): ``{home}`` stands for the absolute
+home directory *including* its leading slash, and appears only as the leading
+``{home}/`` (sandbox absolute form) or ``//{home}/`` (filesystem-absolute form
+of both layers; a Read rule allows only this one, because a single leading
+``/`` in a Read rule is relative to the settings file's scope). The ``//``
+form therefore must not be filled in by plain text substitution — that yields
+``///Users/m``. ``Credential.read_rule_spellings_for(home)`` and
+``Credential.sandbox_spellings_for(home)`` return the concrete spellings.
+
 Nothing is read at import; each ``load_*`` call reads its file once.
 """
 
@@ -27,7 +46,7 @@ from typing import Any, Mapping
 REFERENCE_DIR = pathlib.Path(__file__).resolve().parent.parent / "reference"
 
 SCHEMA_VERSION = 1
-MERGE_RULES = ("union", "highest", "true-wins")
+MERGE_RULES = ("union", "highest", "strict-wins")
 SCOPES = ("managed", "local", "project", "user")
 COMMAND_CLASSES = ("interpreter", "shell", "network", "pkg-manager", "wrapper", "exec")
 DOC_PREFIX = "https://code.claude.com/docs/en/"
@@ -35,6 +54,8 @@ DOC_PREFIX = "https://code.claude.com/docs/en/"
 _JSON_TYPES: dict[str, type] = {"bool": bool, "string": str, "array": list, "object": dict}
 _VERSION_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 _WILDCARD = "*"
+_HOME = "{home}"
+_SLASHED_HOME = "//" + _HOME
 
 
 class RefDataError(ValueError):
@@ -58,6 +79,9 @@ class KeyRule:
     default: Any = None
     enum: tuple[str, ...] | None = None
     ignored_in: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    strict: bool | None = None
+    strict_against: tuple[str, ...] = ()
+    strict_min: str | None = None
 
     def ignored_scopes_for(self, value: Any) -> tuple[str, ...]:
         """Scopes in which Claude Code ignores this key when set to ``value``."""
@@ -85,7 +109,8 @@ class Keys:
 class Credential:
     """One credential path with the deny spellings credited per layer.
 
-    ``{home}`` in a spelling stands for the real home directory.
+    The spelling fields hold the ``{home}`` placeholder as shipped; compare
+    settings against the ``*_for(home)`` results, never against the fields.
     """
 
     id: str
@@ -93,6 +118,24 @@ class Credential:
     read_rule_spellings: tuple[str, ...]
     sandbox_spellings: tuple[str, ...]
     linux_enforceable: bool
+
+    def read_rule_spellings_for(self, home: str) -> tuple[str, ...]:
+        """Read-rule spellings with ``{home}`` filled in for an absolute home."""
+        return _for_home(self.read_rule_spellings, home)
+
+    def sandbox_spellings_for(self, home: str) -> tuple[str, ...]:
+        """Sandbox spellings with ``{home}`` filled in for an absolute home."""
+        return _for_home(self.sandbox_spellings, home)
+
+
+def _for_home(spellings: tuple[str, ...], home: str) -> tuple[str, ...]:
+    if not home.startswith("/") or home.startswith("//") or _HOME in home:
+        raise ValueError(f"home must be an absolute path, got {home!r}")
+    absolute = home.rstrip("/")  # "" for the root directory: "{home}/x" → "/x"
+    return tuple(
+        spelling.replace(_SLASHED_HOME, "/" + absolute).replace(_HOME, absolute)
+        for spelling in spellings
+    )
 
 
 @dataclass(frozen=True)
@@ -240,9 +283,9 @@ class _Source:
             raise self.error(entry, f"field {field_name!r} holds a duplicate")
         return tuple(items)
 
-    def version(self, value: Any, entry: str) -> str:
+    def version(self, value: Any, entry: str, field_name: str = "min") -> str:
         if not isinstance(value, str) or not _VERSION_RE.fullmatch(value):
-            raise self.error(entry, "field 'min' must be a version like '2.1.257'")
+            raise self.error(entry, f"field {field_name!r} must be a version like '2.1.257'")
         return value
 
     def doc_anchor(self, value: Any, entry: str) -> str:
@@ -255,7 +298,9 @@ def _key_rule(source: _Source, name: str, raw: Any) -> KeyRule:
     source.check_fields(
         name, raw,
         required={"type", "merge", "doc"},
-        optional=frozenset({"min", "default", "enum", "ignored_in"}),
+        optional=frozenset(
+            {"min", "default", "enum", "ignored_in", "strict", "strict_against", "strict_min"}
+        ),
     )
     type_, merge = raw["type"], raw["merge"]
     if type_ not in _JSON_TYPES:
@@ -264,8 +309,7 @@ def _key_rule(source: _Source, name: str, raw: Any) -> KeyRule:
         raise source.error(name, f"field 'merge' must be one of {list(MERGE_RULES)}")
     if merge == "union" and type_ not in ("array", "object"):
         raise source.error(name, "field 'merge': 'union' needs type array or object")
-    if merge == "true-wins" and type_ != "bool":
-        raise source.error(name, "field 'merge': 'true-wins' needs type bool")
+    strict, strict_against, strict_min = _strict_fields(source, name, raw, type_)
     if "default" in raw:
         source.expect(raw["default"], _JSON_TYPES[type_], name, "default")
     enum = None
@@ -282,7 +326,38 @@ def _key_rule(source: _Source, name: str, raw: Any) -> KeyRule:
         default=raw.get("default"),
         enum=enum,
         ignored_in=_ignored_in(source, name, raw.get("ignored_in", {}), enum),
+        strict=strict,
+        strict_against=strict_against,
+        strict_min=strict_min,
     )
+
+
+def _strict_fields(
+    source: _Source, name: str, raw: dict[str, Any], type_: str
+) -> tuple[bool | None, tuple[str, ...], str | None]:
+    if raw["merge"] != "strict-wins":
+        for field_name in ("strict", "strict_against", "strict_min"):
+            if field_name in raw:
+                raise source.error(name, f"field {field_name!r} needs merge 'strict-wins'")
+        return None, (), None
+    if type_ != "bool":
+        raise source.error(name, "field 'merge': 'strict-wins' needs type bool")
+    if "strict" not in raw:
+        raise source.error(name, "field 'merge': 'strict-wins' needs the field 'strict'")
+    strict = source.expect(raw["strict"], bool, name, "strict")
+    strict_against: tuple[str, ...] = ()
+    if "strict_against" in raw:
+        strict_against = source.strings(raw["strict_against"], name, "strict_against")
+        if not strict_against or not set(strict_against) < set(SCOPES):
+            raise source.error(
+                name, f"field 'strict_against' must name some, not all, of {list(SCOPES)}"
+            )
+    strict_min = None
+    if "strict_min" in raw:
+        if not strict_against:
+            raise source.error(name, "field 'strict_min' needs the field 'strict_against'")
+        strict_min = source.version(raw["strict_min"], name, "strict_min")
+    return strict, strict_against, strict_min
 
 
 def _ignored_in(
@@ -315,10 +390,35 @@ def _credential(source: _Source, index: int, raw: Any) -> Credential:
     read_rules = source.strings(raw["read_rule_spellings"], entry, "read_rule_spellings")
     if not read_rules or not all(r.startswith("Read(") and r.endswith(")") for r in read_rules):
         raise source.error(entry, "field 'read_rule_spellings' must hold Read(...) rules")
+    sandbox = source.strings(raw["sandbox_spellings"], entry, "sandbox_spellings")
+    for rule in read_rules:
+        _check_home_placeholder(
+            source, entry, "read_rule_spellings", rule, rule[len("Read("):-1], (_SLASHED_HOME,)
+        )
+    for spelling in sandbox:
+        _check_home_placeholder(
+            source, entry, "sandbox_spellings", spelling, spelling, (_SLASHED_HOME, _HOME)
+        )
     return Credential(
         id=source.expect(raw["id"], str, entry, "id"),
         path=path,
         read_rule_spellings=read_rules,
-        sandbox_spellings=source.strings(raw["sandbox_spellings"], entry, "sandbox_spellings"),
+        sandbox_spellings=sandbox,
         linux_enforceable=source.expect(raw["linux_enforceable"], bool, entry, "linux_enforceable"),
+    )
+
+
+def _check_home_placeholder(
+    source: _Source, entry: str, field_name: str, spelling: str, path: str, prefixes: tuple[str, ...]
+) -> None:
+    """A brace may only spell one leading ``{home}/`` in a form the layer has."""
+    if "{" not in path and "}" not in path:
+        return
+    for prefix in prefixes:
+        rest = path[len(prefix):]
+        if path.startswith(prefix + "/") and "{" not in rest and "}" not in rest:
+            return
+    allowed = " or ".join(f"'{prefix}/'" for prefix in prefixes)
+    raise source.error(
+        entry, f"field {field_name!r}: {spelling!r} may hold a brace only as a leading {allowed}"
     )

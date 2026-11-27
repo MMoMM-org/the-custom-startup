@@ -122,7 +122,7 @@ def test_every_key_has_type_merge_and_doc_anchor(refdata):
     for name, rule in refdata.load_keys().rules.items():
         assert rule.name == name
         assert rule.type in {"bool", "string", "array", "object"}, name
-        assert rule.merge in {"union", "highest", "true-wins"}, name
+        assert rule.merge in {"union", "highest", "strict-wins"}, name
         assert rule.doc.startswith("https://code.claude.com/docs/en/"), name
         assert "#" in rule.doc, name
 
@@ -136,6 +136,8 @@ def test_minimum_versions_are_exactly_those_the_docs_state(refdata):
     assert keys.features["webfetch-domain-wildcards"].min == "2.1.172"
     assert keys.features["webfetch-domain-wildcards"].doc.endswith("permissions#webfetch")
     assert keys.features["default-mode-bypass-ignored-in-repo-settings"].min == "2.1.257"
+    with_strict_min = {name: rule.strict_min for name, rule in keys.rules.items() if rule.strict_min}
+    assert with_strict_min == {"sandbox.allowUnsandboxedCommands": "2.1.285"}
 
 
 def test_version_tuple_orders_versions_numerically(refdata):
@@ -156,10 +158,10 @@ def test_version_tuple_orders_versions_numerically(refdata):
         ("allowedMcpServers", "union", "array", None),
         ("sandbox.enabled", "highest", "bool", False),
         ("sandbox.failIfUnavailable", "highest", "bool", False),
-        ("sandbox.allowUnsandboxedCommands", "highest", "bool", True),
+        ("sandbox.allowUnsandboxedCommands", "strict-wins", "bool", True),
         ("sandbox.enableWeakerNestedSandbox", "highest", "bool", False),
         ("enableAllProjectMcpServers", "highest", "bool", None),
-        ("permissions.blockReadsOutsideWorkingDirectories", "true-wins", "bool", None),
+        ("permissions.blockReadsOutsideWorkingDirectories", "strict-wins", "bool", None),
         ("permissions.defaultMode", "highest", "string", None),
         ("permissions.disableBypassPermissionsMode", "highest", "string", None),
     ],
@@ -168,6 +170,40 @@ def test_key_merge_rule_type_and_default(refdata, name, merge, type_, default):
     rule = refdata.load_keys().rules[name]
 
     assert (rule.merge, rule.type, rule.default) == (merge, type_, default)
+
+
+def test_block_reads_is_strict_true_from_any_file(refdata):
+    rule = refdata.load_keys().rules["permissions.blockReadsOutsideWorkingDirectories"]
+
+    assert rule.strict is True
+    assert rule.strict_against == ()
+    assert rule.strict_min is None
+    assert rule.min == "2.1.257"
+
+
+def test_allow_unsandboxed_is_strict_false_against_repo_settings(refdata):
+    rule = refdata.load_keys().rules["sandbox.allowUnsandboxedCommands"]
+
+    assert rule.strict is False
+    assert set(rule.strict_against) == {"project", "local"}
+    assert rule.strict_min == "2.1.285"
+    assert rule.min is None
+    assert rule.default is True
+    assert rule.doc.endswith("settings-reference#sandbox-allowunsandboxedcommands")
+
+
+def test_only_strict_wins_keys_carry_a_strict_value(refdata):
+    rules = refdata.load_keys().rules
+
+    strict = {name for name, rule in rules.items() if rule.merge == "strict-wins"}
+
+    assert strict == {
+        "permissions.blockReadsOutsideWorkingDirectories",
+        "sandbox.allowUnsandboxedCommands",
+    }
+    for name, rule in rules.items():
+        if name not in strict:
+            assert (rule.strict, rule.strict_against, rule.strict_min) == (None, (), None), name
 
 
 def test_enumerated_keys_list_their_documented_values(refdata):
@@ -248,6 +284,62 @@ def test_env_files_have_no_sandbox_spelling_and_are_not_linux_enforceable(refdat
     assert by_id["env"].sandbox_spellings == ()
     assert by_id["env"].linux_enforceable is False
     assert by_id["envrc"].read_rule_spellings == ("Read(**/.envrc)", "Read(.envrc)")
+
+
+@pytest.mark.parametrize(
+    ("home", "double_slash_home"),
+    [("/Users/m", "//Users/m"), ("/home/coder", "//home/coder"), ("/home/coder/", "//home/coder")],
+)
+def test_spellings_for_a_home_carry_exactly_one_prefix_per_form(refdata, home, double_slash_home):
+    ssh = {c.id: c for c in refdata.load_credentials()}["ssh"]
+    absolute_home = home.rstrip("/")
+
+    assert ssh.read_rule_spellings_for(home) == (
+        "Read(~/.ssh/**)",
+        "Read(~/.ssh)",
+        f"Read({double_slash_home}/.ssh/**)",
+        f"Read({double_slash_home}/.ssh)",
+    )
+    assert ssh.sandbox_spellings_for(home) == (
+        "~/.ssh",
+        f"{absolute_home}/.ssh",
+        f"{double_slash_home}/.ssh",
+        "~/.ssh/**",
+    )
+
+
+@pytest.mark.parametrize("home", ["/Users/m", "/home/coder", "/root", "/"])
+def test_no_spelling_for_a_home_keeps_a_placeholder_or_a_triple_slash(refdata, home):
+    for credential in refdata.load_credentials():
+        concrete = credential.read_rule_spellings_for(home) + credential.sandbox_spellings_for(home)
+        assert len(concrete) == len(credential.read_rule_spellings) + len(credential.sandbox_spellings)
+        for spelling in concrete:
+            assert "{" not in spelling, spelling
+            assert "///" not in spelling, spelling
+
+
+def test_spellings_for_the_root_home_stay_well_formed(refdata):
+    npmrc = {c.id: c for c in refdata.load_credentials()}["npmrc"]
+
+    assert npmrc.read_rule_spellings_for("/") == ("Read(~/.npmrc)", "Read(//.npmrc)")
+    assert npmrc.sandbox_spellings_for("/") == ("~/.npmrc", "/.npmrc", "//.npmrc")
+
+
+def test_spellings_without_a_placeholder_are_returned_unchanged(refdata):
+    env = {c.id: c for c in refdata.load_credentials()}["env"]
+
+    assert env.read_rule_spellings_for("/Users/m") == env.read_rule_spellings
+    assert env.sandbox_spellings_for("/Users/m") == ()
+
+
+@pytest.mark.parametrize("home", ["Users/m", "~", "~/x", "", "./home", "{home}", "//Users/m"])
+def test_spellings_for_a_non_absolute_home_reject(refdata, home):
+    ssh = {c.id: c for c in refdata.load_credentials()}["ssh"]
+
+    with pytest.raises(ValueError, match="home"):
+        ssh.read_rule_spellings_for(home)
+    with pytest.raises(ValueError, match="home"):
+        ssh.sandbox_spellings_for(home)
 
 
 # --- commands.json ----------------------------------------------------------
@@ -408,6 +500,22 @@ def _set(field, value):
     return edit
 
 
+def _strict(**fields):
+    def edit(doc):
+        doc["keys"]["sandbox.enabled"].update(merge="strict-wins", **fields)
+    return edit
+
+
+def test_strict_wins_on_a_non_bool_key_rejects(refdata, tmp_path):
+    def edit(doc):
+        doc["keys"]["apiKeyHelper"].update(merge="strict-wins", strict=True)
+
+    path = _edited_copy(tmp_path, "keys.json", edit)
+
+    with pytest.raises(refdata.RefDataError, match="apiKeyHelper.*strict-wins"):
+        refdata.load_keys(path)
+
+
 @pytest.mark.parametrize(
     ("edit", "needle"),
     [
@@ -423,6 +531,18 @@ def _set(field, value):
         (_set("merge", "union"), "merge"),
         (_set("enum", ["on"]), "enum"),
         (_set("ignored_in", {"true": ["everywhere"]}), "ignored_in"),
+        (_set("merge", "true-wins"), "merge"),
+        (_set("merge", "strict-wins"), "strict"),
+        (_set("strict", True), "strict"),
+        (_set("strict_against", ["project"]), "strict_against"),
+        (_set("strict_min", "2.1.285"), "strict_min"),
+        (_strict(strict="yes"), "strict"),
+        (_strict(strict=1), "strict"),
+        (_strict(strict=False, strict_against=["everywhere"]), "strict_against"),
+        (_strict(strict=False, strict_against=[]), "strict_against"),
+        (_strict(strict=False, strict_against=list(("managed", "local", "project", "user"))), "strict_against"),
+        (_strict(strict=False, strict_min="2.1"), "strict_min"),
+        (_strict(strict=False, strict_min="2.1.285"), "strict_min"),
     ],
 )
 def test_invalid_key_entry_rejects_naming_the_field(refdata, tmp_path, edit, needle):
@@ -448,6 +568,34 @@ def test_credential_with_wrong_shape_rejects(refdata, tmp_path):
 
     assert "credentials.json" in str(excinfo.value)
     assert "aws" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    ("field", "spelling"),
+    [
+        ("read_rule_spellings", "Read({home}/.aws)"),
+        ("read_rule_spellings", "Read(/{home}/.aws)"),
+        ("read_rule_spellings", "Read(//{hom}/.aws)"),
+        ("read_rule_spellings", "Read(//{home}.aws)"),
+        ("sandbox_spellings", "/{home}/.aws"),
+        ("sandbox_spellings", "///{home}/.aws"),
+        ("sandbox_spellings", "~/{home}/.aws"),
+        ("sandbox_spellings", "{home}/.aws/{home}"),
+        ("sandbox_spellings", "{HOME}/.aws"),
+    ],
+)
+def test_misplaced_home_placeholder_rejects(refdata, tmp_path, field, spelling):
+    def edit(doc):
+        doc["credentials"][1][field].append(spelling)
+
+    path = _edited_copy(tmp_path, "credentials.json", edit)
+
+    with pytest.raises(refdata.RefDataError) as excinfo:
+        refdata.load_credentials(path)
+
+    assert "credentials.json" in str(excinfo.value)
+    assert "aws" in str(excinfo.value)
+    assert field in str(excinfo.value)
 
 
 def test_duplicate_credential_id_rejects(refdata, tmp_path):
