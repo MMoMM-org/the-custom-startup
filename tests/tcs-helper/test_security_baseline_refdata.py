@@ -1,0 +1,522 @@
+"""Reference data of the security-baseline skill (spec 025, T1.2, ADR-5).
+
+The three JSON files under ``reference/`` are the single source for setting
+names, merge rules, minimum versions, credential paths and command classes.
+These tests pin the shipped content against the PRD lists and prove that the
+loader rejects anything it does not know.
+"""
+
+from __future__ import annotations
+
+import builtins
+import dataclasses
+import importlib.util
+import json
+import pathlib
+import shutil
+import sys
+
+import pytest
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+SKILL_DIR = REPO_ROOT / "plugins" / "tcs-helper" / "skills" / "security-baseline"
+REFDATA_PATH = SKILL_DIR / "lib" / "refdata.py"
+REFERENCE_DIR = SKILL_DIR / "reference"
+
+
+def _new_module(name):
+    """An unexecuted module, registered because dataclasses resolves string
+    annotations through ``sys.modules`` while the class body runs."""
+    spec = importlib.util.spec_from_file_location(name, REFDATA_PATH)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    return spec, module
+
+
+def _load_module():
+    spec, module = _new_module("sb_refdata")
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture(scope="module")
+def refdata():
+    return _load_module()
+
+
+def _edited_copy(tmp_path, name, edit):
+    """Copy one shipped data file, apply ``edit`` to its parsed content."""
+    target = tmp_path / name
+    shutil.copyfile(REFERENCE_DIR / name, target)
+    doc = json.loads(target.read_text(encoding="utf-8"))
+    edit(doc)
+    target.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    return target
+
+
+# --- module hygiene ---------------------------------------------------------
+
+
+def test_import_performs_no_io(monkeypatch):
+    def refuse(*args, **kwargs):
+        raise AssertionError("refdata touched the filesystem at import")
+
+    _spec, module = _new_module("sb_refdata_noio")
+    code = compile(REFDATA_PATH.read_bytes(), str(REFDATA_PATH), "exec")
+    monkeypatch.setattr(builtins, "open", refuse)
+    monkeypatch.setattr(pathlib.Path, "read_text", refuse)
+    monkeypatch.setattr(pathlib.Path, "open", refuse)
+
+    exec(code, module.__dict__)
+
+    assert callable(module.load_keys)
+
+
+def test_loaded_records_are_frozen(refdata):
+    rule = refdata.load_keys().rules["sandbox.enabled"]
+    credential = refdata.load_credentials()[0]
+    commands = refdata.load_commands()
+
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        rule.merge = "union"
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        credential.linux_enforceable = False
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        commands.narrow = ()
+    with pytest.raises(TypeError):
+        refdata.load_keys().rules["x"] = rule
+
+
+# --- keys.json --------------------------------------------------------------
+
+KEYS_THE_CHECKS_READ = {
+    "permissions.allow",
+    "permissions.ask",
+    "permissions.deny",
+    "permissions.defaultMode",
+    "permissions.disableBypassPermissionsMode",
+    "permissions.blockReadsOutsideWorkingDirectories",
+    "sandbox.enabled",
+    "sandbox.failIfUnavailable",
+    "sandbox.allowUnsandboxedCommands",
+    "sandbox.enableWeakerNestedSandbox",
+    "sandbox.excludedCommands",
+    "sandbox.filesystem.denyRead",
+    "sandbox.network.allowedDomains",
+    "enableAllProjectMcpServers",
+    "enabledMcpjsonServers",
+    "disabledMcpjsonServers",
+    "allowedMcpServers",
+    "hooks",
+    "statusLine",
+    "apiKeyHelper",
+    "env",
+}
+
+
+def test_keys_cover_every_setting_the_checks_read(refdata):
+    assert set(refdata.load_keys().rules) == KEYS_THE_CHECKS_READ
+
+
+def test_every_key_has_type_merge_and_doc_anchor(refdata):
+    for name, rule in refdata.load_keys().rules.items():
+        assert rule.name == name
+        assert rule.type in {"bool", "string", "array", "object"}, name
+        assert rule.merge in {"union", "highest", "true-wins"}, name
+        assert rule.doc.startswith("https://code.claude.com/docs/en/"), name
+        assert "#" in rule.doc, name
+
+
+def test_minimum_versions_are_exactly_those_the_docs_state(refdata):
+    keys = refdata.load_keys()
+
+    with_min = {name: rule.min for name, rule in keys.rules.items() if rule.min}
+
+    assert with_min == {"permissions.blockReadsOutsideWorkingDirectories": "2.1.257"}
+    assert keys.features["webfetch-domain-wildcards"].min == "2.1.172"
+    assert keys.features["webfetch-domain-wildcards"].doc.endswith("permissions#webfetch")
+    assert keys.features["default-mode-bypass-ignored-in-repo-settings"].min == "2.1.257"
+
+
+def test_version_tuple_orders_versions_numerically(refdata):
+    assert refdata.version_tuple("2.1.257") == (2, 1, 257)
+    assert refdata.version_tuple("2.1.99") < refdata.version_tuple("2.1.257")
+
+
+@pytest.mark.parametrize(
+    ("name", "merge", "type_", "default"),
+    [
+        ("permissions.allow", "union", "array", None),
+        ("permissions.ask", "union", "array", None),
+        ("permissions.deny", "union", "array", None),
+        ("sandbox.filesystem.denyRead", "union", "array", None),
+        ("sandbox.network.allowedDomains", "union", "array", None),
+        ("sandbox.excludedCommands", "union", "array", None),
+        ("disabledMcpjsonServers", "union", "array", None),
+        ("allowedMcpServers", "union", "array", None),
+        ("sandbox.enabled", "highest", "bool", False),
+        ("sandbox.failIfUnavailable", "highest", "bool", False),
+        ("sandbox.allowUnsandboxedCommands", "highest", "bool", True),
+        ("sandbox.enableWeakerNestedSandbox", "highest", "bool", False),
+        ("enableAllProjectMcpServers", "highest", "bool", None),
+        ("permissions.blockReadsOutsideWorkingDirectories", "true-wins", "bool", None),
+        ("permissions.defaultMode", "highest", "string", None),
+        ("permissions.disableBypassPermissionsMode", "highest", "string", None),
+    ],
+)
+def test_key_merge_rule_type_and_default(refdata, name, merge, type_, default):
+    rule = refdata.load_keys().rules[name]
+
+    assert (rule.merge, rule.type, rule.default) == (merge, type_, default)
+
+
+def test_enumerated_keys_list_their_documented_values(refdata):
+    rules = refdata.load_keys().rules
+
+    assert rules["permissions.disableBypassPermissionsMode"].enum == ("disable",)
+    assert set(rules["permissions.defaultMode"].enum) == {
+        "default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions", "manual",
+    }
+    assert rules["sandbox.enabled"].enum is None
+
+
+def test_default_mode_ignores_bypass_from_project_and_local(refdata):
+    rule = refdata.load_keys().rules["permissions.defaultMode"]
+
+    assert set(rule.ignored_scopes_for("bypassPermissions")) == {"project", "local"}
+    assert set(rule.ignored_scopes_for("auto")) == {"project", "local"}
+    assert rule.ignored_scopes_for("acceptEdits") == ()
+    assert refdata.load_keys().rules["sandbox.enabled"].ignored_scopes_for(True) == ()
+
+
+# --- credentials.json -------------------------------------------------------
+
+PRD_CREDENTIAL_PATHS = [
+    "~/.ssh",
+    "~/.aws",
+    "~/.config/gh",
+    "~/.npmrc",
+    "~/.docker/config.json",
+    "~/.kube",
+    "~/.netrc",
+    "~/.config/gcloud",
+    "**/.env*",
+    "**/.envrc",
+]
+
+
+def test_credentials_hold_the_ten_prd_paths(refdata):
+    credentials = refdata.load_credentials()
+
+    assert [c.path for c in credentials] == PRD_CREDENTIAL_PATHS
+    assert len({c.id for c in credentials}) == 10
+
+
+def test_ssh_entry_matches_the_sdd_spelling_table(refdata):
+    ssh = {c.id: c for c in refdata.load_credentials()}["ssh"]
+
+    assert ssh.read_rule_spellings == (
+        "Read(~/.ssh/**)", "Read(~/.ssh)", "Read(//{home}/.ssh/**)", "Read(//{home}/.ssh)",
+    )
+    assert ssh.sandbox_spellings == ("~/.ssh", "{home}/.ssh", "//{home}/.ssh", "~/.ssh/**")
+    assert ssh.linux_enforceable is True
+
+
+def test_home_credentials_have_both_layers_and_are_linux_enforceable(refdata):
+    for credential in refdata.load_credentials():
+        if not credential.path.startswith("~/"):
+            continue
+        tail = credential.path[2:]
+        assert f"Read({credential.path})" in credential.read_rule_spellings
+        assert f"Read(//{{home}}/{tail})" in credential.read_rule_spellings
+        assert credential.path in credential.sandbox_spellings
+        assert f"{{home}}/{tail}" in credential.sandbox_spellings
+        assert credential.linux_enforceable is True, credential.id
+
+
+def test_every_read_rule_spelling_is_a_read_rule(refdata):
+    for credential in refdata.load_credentials():
+        assert credential.read_rule_spellings, credential.id
+        for spelling in credential.read_rule_spellings:
+            assert spelling.startswith("Read(") and spelling.endswith(")"), spelling
+
+
+def test_env_files_have_no_sandbox_spelling_and_are_not_linux_enforceable(refdata):
+    by_id = {c.id: c for c in refdata.load_credentials()}
+
+    assert by_id["env"].read_rule_spellings == ("Read(**/.env*)", "Read(.env*)")
+    assert by_id["env"].sandbox_spellings == ()
+    assert by_id["env"].linux_enforceable is False
+    assert by_id["envrc"].read_rule_spellings == ("Read(**/.envrc)", "Read(.envrc)")
+
+
+# --- commands.json ----------------------------------------------------------
+
+EXPECTED_CLASS = {
+    "python *": "interpreter",
+    "python3 *": "interpreter",
+    "python3.12 *": "interpreter",
+    "node *": "interpreter",
+    "ruby *": "interpreter",
+    "perl *": "interpreter",
+    "lua *": "interpreter",
+    "php *": "interpreter",
+    "deno *": "interpreter",
+    "bun *": "interpreter",
+    "awk *": "interpreter",
+    "go run *": "interpreter",
+    "cargo run *": "interpreter",
+    "sh *": "shell",
+    "bash *": "shell",
+    "zsh *": "shell",
+    "curl *": "network",
+    "wget *": "network",
+    "ssh *": "network",
+    "scp *": "network",
+    "rsync *": "network",
+    "gh api *": "network",
+    "pip install *": "pkg-manager",
+    "npm install *": "pkg-manager",
+    "brew install *": "pkg-manager",
+    "uv run *": "pkg-manager",
+    "npx *": "pkg-manager",
+    "env *": "wrapper",
+    "xargs *": "wrapper",
+    "nohup *": "wrapper",
+    "timeout *": "wrapper",
+    "nice *": "wrapper",
+    "watch *": "wrapper",
+    "sudo *": "wrapper",
+    "busybox *": "wrapper",
+    "git *": "exec",
+    "find *": "exec",
+    "sed *": "exec",
+    "make *": "exec",
+    "eval *": "exec",
+    "source *": "exec",
+    "docker *": "exec",
+    "kubectl *": "exec",
+}
+
+
+def test_commands_define_exactly_the_six_classes(refdata):
+    assert set(refdata.load_commands().classes) == {
+        "interpreter", "shell", "network", "pkg-manager", "wrapper", "exec",
+    }
+
+
+@pytest.mark.parametrize(("command", "expected"), sorted(EXPECTED_CLASS.items()))
+def test_named_command_is_classified(refdata, command, expected):
+    commands = refdata.load_commands()
+
+    assert commands.class_of(command.split()[0], command) == expected
+
+
+def test_command_without_a_class_is_unclassified(refdata):
+    commands = refdata.load_commands()
+
+    assert commands.class_of("jq", "jq *") is None
+    assert commands.class_of("gh", "gh pr view *") is None
+    assert commands.class_of("go", "go build *") is None
+
+
+def test_wildcard_in_subcommand_position_covers_the_classified_subcommand(refdata):
+    commands = refdata.load_commands()
+
+    assert commands.class_of("npm", "npm *") == "pkg-manager"
+    assert commands.class_of("gh", "gh *") == "network"
+    assert commands.class_of("npm", "npm test") is None
+
+
+def test_exact_command_without_wildcard_is_still_classified(refdata):
+    commands = refdata.load_commands()
+
+    assert commands.class_of("curl", "curl") == "network"
+    assert commands.class_of("npm", "npm install") == "pkg-manager"
+
+
+def test_aliases_normalise_to_the_classified_name(refdata):
+    commands = refdata.load_commands()
+
+    assert commands.aliases["pip3"] == "pip"
+    assert commands.class_of("pip3", "pip3 install *") == "pkg-manager"
+    assert commands.class_of("nodejs", "nodejs *") == "interpreter"
+    for alias, target in commands.aliases.items():
+        assert alias != target
+
+
+def test_narrow_list_holds_the_read_only_commands(refdata):
+    narrow = refdata.load_commands().narrow
+
+    for command in ("git status", "git diff", "git log", "ls", "pwd"):
+        assert command in narrow
+
+
+def test_narrow_list_never_names_a_whole_classified_command(refdata):
+    commands = refdata.load_commands()
+    class_entries = {entry for entries in commands.classes.values() for entry in entries}
+
+    assert not class_entries & set(commands.narrow)
+    for command in commands.narrow:
+        assert "*" not in command
+
+
+# --- validation at load -----------------------------------------------------
+
+
+def _add_unknown_key_field(doc):
+    doc["keys"]["sandbox.enabled"]["surprise"] = 1
+
+
+def _add_unknown_credential_field(doc):
+    doc["credentials"][0]["surprise"] = 1
+
+
+def _add_unknown_commands_field(doc):
+    doc["surprise"] = 1
+
+
+@pytest.mark.parametrize(
+    ("name", "loader", "edit", "entry"),
+    [
+        ("keys.json", "load_keys", _add_unknown_key_field, "sandbox.enabled"),
+        ("credentials.json", "load_credentials", _add_unknown_credential_field, "ssh"),
+        ("commands.json", "load_commands", _add_unknown_commands_field, "top level"),
+    ],
+)
+def test_unknown_field_rejects_naming_file_and_entry(refdata, tmp_path, name, loader, edit, entry):
+    path = _edited_copy(tmp_path, name, edit)
+
+    with pytest.raises(refdata.RefDataError) as excinfo:
+        getattr(refdata, loader)(path)
+
+    message = str(excinfo.value)
+    assert name in message
+    assert entry in message
+    assert "surprise" in message
+
+
+def _drop(field):
+    def edit(doc):
+        del doc["keys"]["sandbox.enabled"][field]
+    return edit
+
+
+def _set(field, value):
+    def edit(doc):
+        doc["keys"]["sandbox.enabled"][field] = value
+    return edit
+
+
+@pytest.mark.parametrize(
+    ("edit", "needle"),
+    [
+        (_drop("type"), "type"),
+        (_drop("merge"), "merge"),
+        (_drop("doc"), "doc"),
+        (_set("merge", "lowest"), "merge"),
+        (_set("type", "number"), "type"),
+        (_set("min", "2.1"), "min"),
+        (_set("min", 2), "min"),
+        (_set("doc", "settings-reference"), "doc"),
+        (_set("default", "yes"), "default"),
+        (_set("merge", "union"), "merge"),
+        (_set("enum", ["on"]), "enum"),
+        (_set("ignored_in", {"true": ["everywhere"]}), "ignored_in"),
+    ],
+)
+def test_invalid_key_entry_rejects_naming_the_field(refdata, tmp_path, edit, needle):
+    path = _edited_copy(tmp_path, "keys.json", edit)
+
+    with pytest.raises(refdata.RefDataError) as excinfo:
+        refdata.load_keys(path)
+
+    message = str(excinfo.value)
+    assert "keys.json" in message
+    assert "sandbox.enabled" in message
+    assert needle in message
+
+
+def test_credential_with_wrong_shape_rejects(refdata, tmp_path):
+    def edit(doc):
+        doc["credentials"][1]["read_rule_spellings"] = ["~/.aws"]
+
+    path = _edited_copy(tmp_path, "credentials.json", edit)
+
+    with pytest.raises(refdata.RefDataError) as excinfo:
+        refdata.load_credentials(path)
+
+    assert "credentials.json" in str(excinfo.value)
+    assert "aws" in str(excinfo.value)
+
+
+def test_duplicate_credential_id_rejects(refdata, tmp_path):
+    def edit(doc):
+        doc["credentials"][1]["id"] = doc["credentials"][0]["id"]
+
+    path = _edited_copy(tmp_path, "credentials.json", edit)
+
+    with pytest.raises(refdata.RefDataError, match="duplicate"):
+        refdata.load_credentials(path)
+
+
+def test_unknown_command_class_rejects(refdata, tmp_path):
+    def edit(doc):
+        doc["classes"]["misc"] = ["jq"]
+
+    path = _edited_copy(tmp_path, "commands.json", edit)
+
+    with pytest.raises(refdata.RefDataError) as excinfo:
+        refdata.load_commands(path)
+
+    assert "commands.json" in str(excinfo.value)
+    assert "misc" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("entry", ["py*thon", "npm *", "npm inst*"])
+def test_class_entry_with_misplaced_wildcard_rejects(refdata, tmp_path, entry):
+    def edit(doc):
+        doc["classes"]["exec"].append(entry)
+
+    path = _edited_copy(tmp_path, "commands.json", edit)
+
+    with pytest.raises(refdata.RefDataError, match="exec"):
+        refdata.load_commands(path)
+
+
+def test_narrow_entry_with_wildcard_rejects(refdata, tmp_path):
+    def edit(doc):
+        doc["narrow"].append("git *")
+
+    path = _edited_copy(tmp_path, "commands.json", edit)
+
+    with pytest.raises(refdata.RefDataError, match="narrow"):
+        refdata.load_commands(path)
+
+
+def test_command_listed_in_two_classes_rejects(refdata, tmp_path):
+    def edit(doc):
+        doc["classes"]["shell"].append("curl")
+
+    path = _edited_copy(tmp_path, "commands.json", edit)
+
+    with pytest.raises(refdata.RefDataError, match="curl"):
+        refdata.load_commands(path)
+
+
+def test_malformed_json_rejects_naming_the_file(refdata, tmp_path):
+    path = tmp_path / "keys.json"
+    path.write_text("{not json", encoding="utf-8")
+
+    with pytest.raises(refdata.RefDataError, match="keys.json"):
+        refdata.load_keys(path)
+
+
+def test_unsupported_schema_version_rejects(refdata, tmp_path):
+    def edit(doc):
+        doc["schema"] = 2
+
+    path = _edited_copy(tmp_path, "commands.json", edit)
+
+    with pytest.raises(refdata.RefDataError, match="schema"):
+        refdata.load_commands(path)

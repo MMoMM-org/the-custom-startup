@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "classes": {
+    "interpreter": [
+      "python*",
+      "node",
+      "ruby",
+      "perl",
+      "lua",
+      "php",
+      "deno",
+      "bun",
+      "awk",
+      "go run",
+      "cargo run"
+    ],
+    "shell": [
+      "sh",
+      "bash",
+      "zsh"
+    ],
+    "network": [
+      "curl",
+      "wget",
+      "ssh",
+      "scp",
+      "rsync",
+      "gh api"
+    ],
+    "pkg-manager": [
+      "pip install",
+      "npm install",
+      "brew install",
+      "uv run",
+      "npx"
+    ],
+    "wrapper": [
+      "env",
+      "xargs",
+      "nohup",
+      "timeout",
+      "nice",
+      "watch",
+      "sudo",
+      "busybox"
+    ],
+    "exec": [
+      "git",
+      "find",
+      "sed",
+      "make",
+      "eval",
+      "source",
+      "docker",
+      "kubectl"
+    ]
+  },
+  "narrow": [
+    "git status",
+    "git diff",
+    "git log",
+    "git show",
+    "ls",
+    "pwd",
+    "echo",
+    "which",
+    "stat",
+    "du",
+    "wc",
+    "date"
+  ],
+  "aliases": {
+    "pip3": "pip",
+    "nodejs": "node",
+    "gmake": "make",
+    "gawk": "awk",
+    "mawk": "awk",
+    "gsed": "sed"
+  }
+}

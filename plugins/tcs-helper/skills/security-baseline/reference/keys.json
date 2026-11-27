@@ -1,0 +1,147 @@
+{
+  "schema": 1,
+  "keys": {
+    "permissions.allow": {
+      "type": "array",
+      "merge": "union",
+      "doc": "https://code.claude.com/docs/en/settings-reference#permissions-allow"
+    },
+    "permissions.ask": {
+      "type": "array",
+      "merge": "union",
+      "doc": "https://code.claude.com/docs/en/settings-reference#permissions-ask"
+    },
+    "permissions.deny": {
+      "type": "array",
+      "merge": "union",
+      "doc": "https://code.claude.com/docs/en/settings-reference#permissions-deny"
+    },
+    "permissions.defaultMode": {
+      "type": "string",
+      "merge": "highest",
+      "enum": [
+        "default",
+        "acceptEdits",
+        "plan",
+        "auto",
+        "dontAsk",
+        "bypassPermissions",
+        "manual"
+      ],
+      "ignored_in": {
+        "auto": [
+          "project",
+          "local"
+        ],
+        "bypassPermissions": [
+          "project",
+          "local"
+        ]
+      },
+      "doc": "https://code.claude.com/docs/en/settings-reference#permissions-defaultmode"
+    },
+    "permissions.disableBypassPermissionsMode": {
+      "type": "string",
+      "merge": "highest",
+      "enum": [
+        "disable"
+      ],
+      "doc": "https://code.claude.com/docs/en/settings-reference#permissions-disablebypasspermissionsmode"
+    },
+    "permissions.blockReadsOutsideWorkingDirectories": {
+      "type": "bool",
+      "merge": "true-wins",
+      "min": "2.1.257",
+      "doc": "https://code.claude.com/docs/en/settings-reference#permissions-blockreadsoutsideworkingdirectories"
+    },
+    "sandbox.enabled": {
+      "type": "bool",
+      "merge": "highest",
+      "default": false,
+      "doc": "https://code.claude.com/docs/en/settings-reference#sandbox-enabled"
+    },
+    "sandbox.failIfUnavailable": {
+      "type": "bool",
+      "merge": "highest",
+      "default": false,
+      "doc": "https://code.claude.com/docs/en/settings-reference#sandbox-failifunavailable"
+    },
+    "sandbox.allowUnsandboxedCommands": {
+      "type": "bool",
+      "merge": "highest",
+      "default": true,
+      "doc": "https://code.claude.com/docs/en/settings-reference#sandbox-allowunsandboxedcommands"
+    },
+    "sandbox.enableWeakerNestedSandbox": {
+      "type": "bool",
+      "merge": "highest",
+      "default": false,
+      "doc": "https://code.claude.com/docs/en/settings-reference#sandbox-enableweakernestedsandbox"
+    },
+    "sandbox.excludedCommands": {
+      "type": "array",
+      "merge": "union",
+      "doc": "https://code.claude.com/docs/en/settings-reference#sandbox-excludedcommands"
+    },
+    "sandbox.filesystem.denyRead": {
+      "type": "array",
+      "merge": "union",
+      "doc": "https://code.claude.com/docs/en/settings-reference#sandbox-filesystem-denyread"
+    },
+    "sandbox.network.allowedDomains": {
+      "type": "array",
+      "merge": "union",
+      "doc": "https://code.claude.com/docs/en/settings-reference#sandbox-network-alloweddomains"
+    },
+    "enableAllProjectMcpServers": {
+      "type": "bool",
+      "merge": "highest",
+      "doc": "https://code.claude.com/docs/en/settings-reference#enableallprojectmcpservers"
+    },
+    "enabledMcpjsonServers": {
+      "type": "array",
+      "merge": "union",
+      "doc": "https://code.claude.com/docs/en/settings-reference#enabledmcpjsonservers"
+    },
+    "disabledMcpjsonServers": {
+      "type": "array",
+      "merge": "union",
+      "doc": "https://code.claude.com/docs/en/settings-reference#disabledmcpjsonservers"
+    },
+    "allowedMcpServers": {
+      "type": "array",
+      "merge": "union",
+      "doc": "https://code.claude.com/docs/en/settings-reference#allowedmcpservers"
+    },
+    "hooks": {
+      "type": "object",
+      "merge": "union",
+      "doc": "https://code.claude.com/docs/en/settings-reference#hooks"
+    },
+    "statusLine": {
+      "type": "object",
+      "merge": "highest",
+      "doc": "https://code.claude.com/docs/en/settings-reference#statusline"
+    },
+    "apiKeyHelper": {
+      "type": "string",
+      "merge": "highest",
+      "doc": "https://code.claude.com/docs/en/settings-reference#apikeyhelper"
+    },
+    "env": {
+      "type": "object",
+      "merge": "highest",
+      "doc": "https://code.claude.com/docs/en/settings-reference#env"
+    }
+  },
+  "features": {
+    "webfetch-domain-wildcards": {
+      "min": "2.1.172",
+      "doc": "https://code.claude.com/docs/en/permissions#webfetch"
+    },
+    "default-mode-bypass-ignored-in-repo-settings": {
+      "min": "2.1.257",
+      "doc": "https://code.claude.com/docs/en/settings-reference#permissions-defaultmode"
+    }
+  }
+}
