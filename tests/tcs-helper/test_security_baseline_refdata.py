@@ -437,6 +437,68 @@ def test_aliases_normalise_to_the_classified_name(refdata):
         assert alias != target
 
 
+@pytest.mark.parametrize(
+    ("head", "command", "expected"),
+    [
+        ("curl*", "curl*", "network"),
+        ("sh*", "sh*", "shell"),
+        ("git*", "git*", "exec"),
+        ("py*", "py*", "interpreter"),
+        ("python3*", "python3*", "interpreter"),
+        ("py*", "py* -c *", "interpreter"),
+        ("npm", "npm install*", "pkg-manager"),
+        ("npm", "npm i*", "pkg-manager"),
+        ("npm", "npm inst* --global", "pkg-manager"),
+        ("gh*", "gh*", "network"),
+        ("car*", "car*", "interpreter"),
+        ("gh*", "gh* api *", "network"),
+        ("pip3*", "pip3*", "pkg-manager"),
+        ("gse*", "gse*", "exec"),
+    ],
+)
+def test_trailing_glob_word_covers_every_word_with_that_prefix(refdata, head, command, expected):
+    commands = refdata.load_commands()
+
+    assert commands.class_of(head, command) == expected
+
+
+@pytest.mark.parametrize(
+    ("head", "command"),
+    [
+        ("jq*", "jq*"),
+        ("curlx*", "curlx*"),
+        ("npm", "npm t*"),
+        ("npm", "npm installx*"),
+        ("gh*", "gh* pr *"),
+        ("gh", "gh"),
+        ("cu*rl", "cu*rl"),
+        ("npm", "npm in*all"),
+    ],
+)
+def test_trailing_glob_word_without_a_classified_prefix_is_unclassified(refdata, head, command):
+    commands = refdata.load_commands()
+
+    assert commands.class_of(head, command) is None
+
+
+def test_results_from_before_the_glob_contract_are_unchanged(refdata):
+    commands = refdata.load_commands()
+
+    assert commands.class_of("npm", "npm *") == "pkg-manager"
+    assert commands.class_of("gh", "gh api *") == "network"
+    assert commands.class_of("gh", "gh pr *") is None
+    assert commands.class_of("git", "git *") == "exec"
+    assert commands.class_of("python3", "python3 -c *") == "interpreter"
+    assert commands.class_of("pip3", "pip3 install *") == "pkg-manager"
+
+
+def test_class_of_does_not_consult_the_narrow_list(refdata):
+    commands = refdata.load_commands()
+
+    assert "git status" in commands.narrow
+    assert commands.class_of("git", "git status") == "exec"
+
+
 def test_narrow_list_holds_the_read_only_commands(refdata):
     narrow = refdata.load_commands().narrow
 
@@ -630,6 +692,38 @@ def test_class_entry_with_misplaced_wildcard_rejects(refdata, tmp_path, entry):
 
     with pytest.raises(refdata.RefDataError, match="exec"):
         refdata.load_commands(path)
+
+
+@pytest.mark.parametrize("entry", ["*", "pyth?n", "python[23]", "go r?n", "[x] run"])
+def test_class_entry_with_bare_wildcard_or_glob_character_rejects(refdata, tmp_path, entry):
+    def edit(doc):
+        doc["classes"]["exec"].append(entry)
+
+    path = _edited_copy(tmp_path, "commands.json", edit)
+
+    with pytest.raises(refdata.RefDataError) as excinfo:
+        refdata.load_commands(path)
+
+    message = str(excinfo.value)
+    assert "commands.json" in message
+    assert "'exec'" in message
+    assert repr(entry) in message
+
+
+@pytest.mark.parametrize("entry", ["git st?tus", "l[s]"])
+def test_narrow_entry_with_glob_character_rejects(refdata, tmp_path, entry):
+    def edit(doc):
+        doc["narrow"].append(entry)
+
+    path = _edited_copy(tmp_path, "commands.json", edit)
+
+    with pytest.raises(refdata.RefDataError) as excinfo:
+        refdata.load_commands(path)
+
+    message = str(excinfo.value)
+    assert "commands.json" in message
+    assert "'narrow'" in message
+    assert repr(entry) in message
 
 
 def test_narrow_entry_with_wildcard_rejects(refdata, tmp_path):

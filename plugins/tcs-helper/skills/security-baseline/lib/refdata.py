@@ -35,7 +35,6 @@ Nothing is read at import; each ``load_*`` call reads its file once.
 
 from __future__ import annotations
 
-import fnmatch
 import json
 import pathlib
 import re
@@ -54,6 +53,7 @@ DOC_PREFIX = "https://code.claude.com/docs/en/"
 _JSON_TYPES: dict[str, type] = {"bool": bool, "string": str, "array": list, "object": dict}
 _VERSION_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 _WILDCARD = "*"
+_UNSUPPORTED_GLOB_CHARS = "?["
 _HOME = "{home}"
 _SLASHED_HOME = "//" + _HOME
 
@@ -143,7 +143,9 @@ class Commands:
     """Broad command classes, the narrow list and name aliases.
 
     A class entry is a command name, optionally followed by subcommand words
-    (``"npm install"``). A one-word entry may end in ``*`` (``"python*"``).
+    (``"npm install"``). A one-word entry may end in ``*`` (``"python*"``),
+    which covers every command name with that prefix; no other glob syntax
+    exists in an entry.
     """
 
     classes: Mapping[str, tuple[str, ...]]
@@ -154,28 +156,79 @@ class Commands:
         """Class of a normalised Bash rule body, or ``None``.
 
         ``head`` is the basename of the command's first word, ``cmd`` the
-        whole body in space form (``"npm install *"``). A ``*`` word in
-        ``cmd`` covers every subcommand, so ``"npm *"`` is as broad as
-        ``"npm install *"``.
+        whole body in space form (``"npm install *"``). The first class in
+        file order with a matching entry wins.
+
+        Wildcard contract — a rule is classified when it *can* cover a
+        classified command:
+
+        - A word ending in ``*`` (head or subcommand) covers every word with
+          that prefix: ``"curl*"`` → network, ``"sh*"`` → shell, ``"py*"`` →
+          interpreter (entry ``python*``), ``"npm i*"`` and ``"npm install*"``
+          → pkg-manager (entry ``npm install``). A lone ``*`` has the empty
+          prefix and covers every word.
+        - A lone ``*`` word covers every subcommand, so ``"npm *"`` is as
+          broad as ``"npm install *"``.
+        - A rule whose last word ends in ``*`` also covers everything after
+          it, so the head ``"gh*"`` reaches the entry ``gh api``.
+        - A ``*`` anywhere else in a word is literal and matches nothing.
+        - A wildcard head covers an alias with that prefix: ``"pip3*"`` is
+          classified through ``pip3`` → ``pip``.
+
+        The narrow list is not consulted: ``class_of("git", "git status")``
+        is ``"exec"`` by design, although ``git status`` is narrow. Callers
+        must test ``narrow`` first and ask for a class only when it misses.
         """
-        words = [self.aliases.get(head, head), *cmd.split()[1:]]
+        rest = cmd.split()[1:]
+        open_ended = (rest[-1] if rest else head).endswith(_WILDCARD)
+        candidates = [[name, *rest] for name in self._head_names(head)]
         for name, entries in self.classes.items():
-            if any(_entry_matches(entry.split(), words) for entry in entries):
-                return name
+            for entry in entries:
+                expected = entry.split()
+                if any(_entry_matches(expected, words, open_ended) for words in candidates):
+                    return name
         return None
 
+    def _head_names(self, head: str) -> list[str]:
+        """The head itself, or what its aliases stand for."""
+        if not head.endswith(_WILDCARD):
+            return [self.aliases.get(head, head)]
+        prefix = head[:-1]
+        return [head, *(target for alias, target in self.aliases.items() if alias.startswith(prefix))]
 
-def _entry_matches(entry: list[str], words: list[str]) -> bool:
-    if not fnmatch.fnmatchcase(words[0], entry[0]):
-        return False
-    for position, expected in enumerate(entry[1:], start=1):
+
+def _entry_matches(entry: list[str], words: list[str], open_ended: bool) -> bool:
+    """Whether the rule ``words`` can cover a command of the class ``entry``.
+
+    ``open_ended`` says the rule's last word ends in ``*`` and so covers any
+    words after it.
+    """
+    for position, expected in enumerate(entry):
         if position >= len(words):
-            return False
-        if words[position] == _WILDCARD:
+            return open_ended
+        if position and words[position] == _WILDCARD:
             return True
-        if words[position] != expected:
+        if not _word_covers(words[position], expected):
             return False
     return True
+
+
+def _word_covers(word: str, expected: str) -> bool:
+    """Whether a rule word and an entry word can name the same word.
+
+    Either may end in ``*`` (prefix glob); two globs overlap when one prefix
+    starts with the other.
+    """
+    word_glob, expected_glob = word.endswith(_WILDCARD), expected.endswith(_WILDCARD)
+    word_text = word[:-1] if word_glob else word
+    expected_text = expected[:-1] if expected_glob else expected
+    if word_glob and expected_glob:
+        return word_text.startswith(expected_text) or expected_text.startswith(word_text)
+    if word_glob:
+        return expected_text.startswith(word_text)
+    if expected_glob:
+        return word_text.startswith(expected_text)
+    return word_text == expected_text
 
 
 # --- loading ----------------------------------------------------------------
@@ -218,13 +271,17 @@ def load_commands(path: pathlib.Path | None = None) -> Commands:
         for entry in entries:
             if entry in owner:
                 raise source.error(name, f"{entry!r} is already in class {owner[entry]!r}")
+            _reject_unsupported_glob(source, name, entry)
             name_glob = " " not in entry and _WILDCARD not in entry[:-1]
             if _WILDCARD in entry and not name_glob:
                 raise source.error(name, f"{entry!r}: only a one-word entry may end in '*'")
+            if entry == _WILDCARD:
+                raise source.error(name, f"{entry!r}: a name must precede the '*'")
             owner[entry] = name
         classes[name] = entries
     narrow = source.strings(doc["narrow"], "narrow", "entries")
     for command in narrow:
+        _reject_unsupported_glob(source, "narrow", command)
         if _WILDCARD in command or command in owner:
             raise source.error("narrow", f"{command!r} is a wildcard or a classified command")
     raw_aliases = source.expect(doc["aliases"], dict, "top level", "aliases")
@@ -236,6 +293,13 @@ def load_commands(path: pathlib.Path | None = None) -> Commands:
 
 
 # --- entry validation -------------------------------------------------------
+
+
+def _reject_unsupported_glob(source: _Source, entry: str, command: str) -> None:
+    """``?`` and ``[`` read like glob syntax, which entries do not have."""
+    for char in _UNSUPPORTED_GLOB_CHARS:
+        if char in command:
+            raise source.error(entry, f"{command!r}: {char!r} is not supported, only a trailing '*'")
 
 
 class _Source:
