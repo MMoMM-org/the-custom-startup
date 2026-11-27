@@ -5,9 +5,9 @@
 | Field | Value |
 |-------|-------|
 | **Created** | 2026-11-27 |
-| **Current Phase** | Decomposition |
-| **Decomposition tier** | {{DECOMPOSITION_TIER}} |
-| **Model tier** | {{MODEL_TIER}} |
+| **Current Phase** | Ready |
+| **Decomposition tier** | Incremental |
+| **Model tier** | frontier |
 | **Last Updated** | 2026-11-27 |
 
 ## Documents
@@ -16,7 +16,7 @@
 |----------|--------|-------|
 | requirements.md | completed | v1.1: 12 features (9 Must, 2 Should, 1 Could), 68 acceptance criteria |
 | solution.md | completed | 15 components, 10 ADRs (all confirmed), 68 PRD ACs traced 1:1 + 5 rule/edge criteria |
-| plan/ | pending | |
+| plan/ | completed | 5 phases, 25 tasks (15 parallel); all 73 SDD criteria traced |
 
 **Status values**: `pending` | `in_progress` | `completed` | `skipped`
 
@@ -43,6 +43,9 @@
 | 2026-11-27 | v1 scope adds deny-by-default broad-allow classification, clone-risk report (Feature 11), parent-process --settings detection | Security review; a denylist of interpreters is inherently incomplete; clone-and-open threat found by the same engine |
 | 2026-11-27 | SDD ADR-1..10 confirmed; `audit` exits 0 with verdict in JSON | Keeps patterns-setup process contract (SKILL.md reads stdout only on exit 0) over a shell-gate exit code |
 | 2026-11-27 | SDD approved | 68/68 PRD criteria traced; proceed to decomposition |
+| 2026-11-27 | Decomposition tier: Incremental | Classifier recommended Incremental (15 components, 9 Must features, 68 ACs). Accepted. |
+| 2026-11-27 | Model tier: frontier | Classifier recommended frontier (novel_pattern=true: content-bound consent; high_risks=6; adr_count=10). Accepted. |
+| 2026-11-27 | PLAN approved after alignment check | Fixed: docs-sync invocation, plugin CHANGELOG needs the exact next-minor heading (not Unreleased), no versions in AGENTS.md, ensure_ascii and prompt_lint repo tests added to validations, importlib loading to avoid the patterns-setup `cli` clash |
 
 ## Context
 

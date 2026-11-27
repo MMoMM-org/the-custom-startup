@@ -161,7 +161,7 @@ version: "1.0"
 
 - file: plugins/tcs-helper/skills/observability-setup/lib/registration.py
   relevance: HIGH
-  why: "load_settings (data, error) contract; write_settings atomic sequence; lock held across load-merge-write"
+  why: "Copy only the (data, error) return shape and the write_settings atomic order; NOT its parsing — it treats absent and empty alike and uses plain json.loads (duplicate keys, NaN pass), the opposite of ADR-10"
 
 - file: plugins/tcs-helper/skills/observability-setup/SKILL.md
   relevance: MEDIUM
@@ -412,6 +412,7 @@ tests/tcs-helper/
 ├── test_security_baseline_layers.py        # source discovery, statuses, local-file location rule
 ├── test_security_baseline_environment.py   # profile markers, CONTAINERIZED spoof, parent argv, version parse
 ├── test_security_baseline_probe.py         # resolution from fixed dirs, planted binary, timeout → inconclusive
+├── test_security_baseline_inventory.py     # skill walk, plugin MCP, git-helpers template version order
 ├── test_security_baseline_effective.py     # merge walkthroughs (this SDD's examples as tests)
 ├── test_security_baseline_checks.py        # one class per check, per profile
 ├── test_security_baseline_planner.py       # defaults, moves, dedup, version guard, plan_id stability
@@ -735,6 +736,10 @@ Walkthrough: plan → `a3f1…` shown. The developer deselects one removal → `
 → exit 3 "target changed since review", nothing written (PRD F9 AC "target changed").
 
 #### Test Examples as Interface Documentation
+
+`World`, `_run` (returning `.code` and `.json`, invoking `sys.executable -I -B`), `world.root`,
+`world.project_settings()` and the `markers=` seam are **new** test helpers modelled on
+`tests/test_patterns_cli.py`, which has none of them.
 
 ```python
 def test_audit_writes_nothing(world):
