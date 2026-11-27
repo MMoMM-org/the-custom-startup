@@ -11,3 +11,7 @@ Gitignored, so `git status` is clean, but tests that list subdirectories count i
 ## Python `re` `$` matches before a trailing newline — Status: resolved
 <!-- 2026-11-26 -->
 A `^[A-Z_]+$` guard with `.match` accepted `"RULE\n"`, so a newline reached report output (spec 024). → Validation guards use `\A…\Z` with `fullmatch`; mutate `.pyc`-safe (`PYTHONDONTWRITEBYTECODE=1`).
+
+## A hardcoded `LC_ALL=en_US.UTF-8` in a bats test breaks where the locale is absent — Status: resolved
+<!-- 2026-11-27 -->
+This container has only C.utf8/de_DE.utf8: a new bash warns on stderr (no-stderr check fails), an in-shell assignment stays in C silently. → Use `_utf8_locale` from tests/bats/lib/helpers.bash and assert it is non-empty.

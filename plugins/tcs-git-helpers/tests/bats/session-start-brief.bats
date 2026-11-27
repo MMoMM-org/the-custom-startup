@@ -664,7 +664,10 @@ _run_fx_hook() {
     "MISSING" "OK" "" \
     "DRIFT:hexagonal:1:2"
 
-  run --separate-stderr env LC_ALL=en_US.UTF-8 bash -c 'cd "$1" && exec "$2"' _ "$TEST_REPO" "$FX_HOOK"
+  local loc
+  loc="$(_utf8_locale)"
+  [ -n "$loc" ]
+  run --separate-stderr env LC_ALL="$loc" bash -c 'cd "$1" && exec "$2"' _ "$TEST_REPO" "$FX_HOOK"
 
   [ "$status" -eq 0 ]
   [ -z "$stderr" ]

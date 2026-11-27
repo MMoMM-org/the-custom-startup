@@ -187,3 +187,32 @@ _perf_budget() {
   [ "$slack" -lt 1 ] && slack=1
   printf '%d' $((budget * slack))
 }
+
+# Print a UTF-8 locale this machine actually has, or nothing.
+#
+# Never hardcode LC_ALL=en_US.UTF-8: a container or minimal image may lack it.
+# Then a new bash prints "setlocale: cannot change locale" on stderr (a
+# no-stderr assertion fails for a reason unrelated to the code), and an
+# in-shell assignment silently stays in the C locale (the test passes without
+# testing UTF-8 at all).
+#
+# A candidate counts only if a two-byte character has length 1 under it.
+# Language locales come first: bash 3.2's [a-z] admitting uppercase comes
+# from their collation order, which C.UTF-8 (codepoint order) does not have.
+# Callers assert the result is non-empty, so a machine with no UTF-8 locale
+# fails loudly instead of comparing in the C locale.
+#
+# Usage: loc="$(_utf8_locale)"; [ -n "$loc" ]; LC_ALL="$loc" run ...
+# bash 3.2 compatible.
+_utf8_locale() {
+  local loc candidates
+  candidates="en_US.UTF-8 en_US.utf8"
+  candidates="$candidates $(locale -a 2>/dev/null | grep -iE '^[a-z]{2}_[A-Z]{2}\.utf-?8$' | tr '\n' ' ')"
+  candidates="$candidates C.UTF-8 C.utf8"
+  for loc in $candidates; do
+    if [ "$(LC_ALL="$loc" bash -c 'x=$(printf "\303\251"); printf "%s" "${#x}"' 2>/dev/null)" = "1" ]; then
+      printf '%s' "$loc"
+      return 0
+    fi
+  done
+}

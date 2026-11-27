@@ -4,6 +4,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load 'lib/helpers'
+
 setup() {
   PLUGIN_ROOT="$(cd "${BATS_TEST_FILENAME%/*}/../.." && pwd)"
   LIB="$PLUGIN_ROOT/scripts/lib/drift_check.sh"
@@ -179,14 +181,20 @@ teardown() {
 
 @test "bundle: under a UTF-8 locale a non-breaking space is kept, not stripped" {
   printf 'h7\xc2\xa0\n' > "$GITHOOKS_DIR/tcs-git-helpers-version"
-  LC_ALL=en_US.UTF-8 run drift_check_bundle "$REPO_TMP" "h7"
+  local loc
+  loc="$(_utf8_locale)"
+  [ -n "$loc" ]
+  LC_ALL="$loc" run drift_check_bundle "$REPO_TMP" "h7"
   [ "$status" -eq 0 ]
   [ "$output" = "$(printf 'DRIFT:h7\xc2\xa0')" ]
 }
 
 @test "bundle: under a UTF-8 locale an invalid byte gives DRIFT, exit 0, no stderr" {
   printf 'h\xff7\n' > "$GITHOOKS_DIR/tcs-git-helpers-version"
-  LC_ALL=en_US.UTF-8 run --separate-stderr drift_check_bundle "$REPO_TMP" "h7"
+  local loc
+  loc="$(_utf8_locale)"
+  [ -n "$loc" ]
+  LC_ALL="$loc" run --separate-stderr drift_check_bundle "$REPO_TMP" "h7"
   [ "$status" -eq 0 ]
   [ "$output" = "$(printf 'DRIFT:h\xff7')" ]
   [ -z "$stderr" ]

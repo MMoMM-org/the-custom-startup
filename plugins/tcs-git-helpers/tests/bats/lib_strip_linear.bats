@@ -37,19 +37,6 @@ setup() {
   UTF8_LOCALE="$(_utf8_locale)"
 }
 
-# The first UTF-8 locale in which a two-byte character counts as one. Empty
-# when there is none: the tests that need it then fail loudly rather than
-# quietly comparing in the C locale twice.
-_utf8_locale() {
-  local loc
-  for loc in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do
-    if [ "$(LC_ALL="$loc" bash -c 'x=$(printf "\303\251"); printf "%s" "${#x}"' 2>/dev/null)" = "1" ]; then
-      printf '%s' "$loc"
-      return 0
-    fi
-  done
-}
-
 # ---------------------------------------------------------------------------
 # The oracle: the pre-T1.5 functions, verbatim (renamed). Do not "fix" these;
 # they define the behaviour the rewrite must keep.
