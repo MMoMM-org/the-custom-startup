@@ -49,6 +49,8 @@ NESTED_SYMPTOMS = (
 
 _STDERR_LIMIT = 4096
 _REAP_SECONDS = 2
+# What `_resolve` returns for a binary that exists but fails the trust check.
+_UNTRUSTED = object()
 
 
 class RunOutcome(NamedTuple):
@@ -97,7 +99,16 @@ def subprocess_runner(argv, env, cwd, timeout):
         try:
             _, raw = process.communicate(timeout=_REAP_SECONDS)
         except subprocess.TimeoutExpired:
+            # A grandchild that left the group still holds the pipe. Its
+            # output is given up; the direct child is reaped and our end of
+            # the pipe closed, so neither a zombie nor a descriptor is left.
             raw = b""
+            try:
+                process.wait(timeout=_REAP_SECONDS)
+            except subprocess.TimeoutExpired:
+                pass
+            if process.stderr:
+                process.stderr.close()
     stderr = (raw or b"")[:_STDERR_LIMIT].decode("utf-8", errors="replace")
     return RunOutcome(process.returncode, stderr, timed_out)
 
@@ -169,9 +180,6 @@ def _looks_nested(stderr):
     return any(symptom in text for symptom in NESTED_SYMPTOMS)
 
 
-_UNTRUSTED = object()
-
-
 def _resolve(name, search_dirs):
     """Path of `name`, `_UNTRUSTED`, or None when no directory has it.
 
@@ -179,6 +187,9 @@ def _resolve(name, search_dirs):
     untrusted one is refused rather than skipped, so a tampered binary is
     reported instead of silently replaced by a later one.
     """
+    # Out of scope, because the directories are fixed system ones (ADR-6):
+    # the window between this stat and the exec, a writable parent directory
+    # and group-writable bits.
     for directory in search_dirs:
         path = os.path.join(directory, name)
         try:

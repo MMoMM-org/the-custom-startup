@@ -77,6 +77,23 @@ def _never_run(argv, env, cwd, timeout):
     raise AssertionError("the probe must not run anything: %r" % (argv,))
 
 
+def _report_owner(monkeypatch, uid):
+    """Make every stat the probe takes report `uid` as the file's owner."""
+    real_stat = os.stat
+
+    class Owned:
+        def __init__(self, info):
+            self._info = info
+            self.st_uid = uid
+
+        def __getattr__(self, name):
+            return getattr(self._info, name)
+
+    monkeypatch.setattr(
+        probe.os, "stat", lambda path, **kw: Owned(real_stat(path, **kw))
+    )
+
+
 def _tree_digest(root):
     digest = hashlib.sha256()
     for path in sorted(Path(root).rglob("*")):
@@ -110,6 +127,41 @@ def _wait_until_gone(pid, seconds=3.0):
             return True
         time.sleep(0.05)
     return not _is_running(pid)
+
+
+def _announced_pid(pid_file, seconds=30.0):
+    """The pid a fake binary wrote to `pid_file`, or None if it never did."""
+    deadline = time.monotonic() + seconds
+    while True:
+        try:
+            text = pid_file.read_text(encoding="utf-8")
+        except OSError:
+            text = ""
+        if text.endswith("\n"):
+            return int(text)
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.02)
+
+
+def _start_the_clock_after(monkeypatch, pid_file):
+    """Hold the runner's timeout until the fake binary has written `pid_file`.
+
+    The timeout must not be able to fire while /bin/sh is still starting:
+    on a loaded machine the child would be killed before it has anything
+    to show, and the test would have no pid to check.
+    """
+
+    class Announced(probe.subprocess.Popen):
+        _held = False
+
+        def communicate(self, input=None, timeout=None):
+            if not self._held:
+                self._held = True
+                _announced_pid(pid_file)
+            return super().communicate(input=input, timeout=timeout)
+
+    monkeypatch.setattr(probe.subprocess, "Popen", Announced)
 
 
 # --- resolution: fixed directories only -------------------------------------
@@ -189,7 +241,7 @@ def test_world_writable_binary_is_rejected(tmp_path):
 
 def test_foreign_owned_binary_is_rejected(tmp_path, monkeypatch):
     bin_dir = _linux_dir(tmp_path)
-    monkeypatch.setattr(probe.os, "geteuid", lambda: FOREIGN_UID)
+    _report_owner(monkeypatch, FOREIGN_UID)
 
     result = probe.run_probe("linux", [str(bin_dir)], _never_run)
 
@@ -199,20 +251,8 @@ def test_foreign_owned_binary_is_rejected(tmp_path, monkeypatch):
 
 def test_root_owned_binary_is_accepted(tmp_path, monkeypatch):
     bin_dir = _linux_dir(tmp_path)
-    real_stat = os.stat
-
-    class RootOwned:
-        def __init__(self, info):
-            self._info = info
-            self.st_uid = 0
-
-        def __getattr__(self, name):
-            return getattr(self._info, name)
-
     monkeypatch.setattr(probe.os, "geteuid", lambda: FOREIGN_UID)
-    monkeypatch.setattr(
-        probe.os, "stat", lambda path, **kw: RootOwned(real_stat(path, **kw))
-    )
+    _report_owner(monkeypatch, 0)
 
     result = probe.run_probe("linux", [str(bin_dir)], FakeRunner())
 
@@ -567,8 +607,12 @@ def test_default_runner_reports_a_binary_that_cannot_start(tmp_path):
     assert outcome == probe.RunOutcome(None, "", False)
 
 
-def test_timeout_kills_the_whole_process_group(tmp_path):
-    bin_dir = _linux_dir(tmp_path, "sleep 30 &\necho $! >&2\nwait\n")
+def test_timeout_kills_the_whole_process_group(tmp_path, monkeypatch):
+    pid_file = tmp_path / "grandchild.pid"
+    bin_dir = _linux_dir(
+        tmp_path, "sleep 30 &\necho $! > '%s'\nwait\n" % pid_file
+    )
+    _start_the_clock_after(monkeypatch, pid_file)
     seen = []
 
     def spy(argv, env, cwd, timeout):
@@ -582,9 +626,49 @@ def test_timeout_kills_the_whole_process_group(tmp_path):
     assert result.result == "inconclusive"
     assert "timed out" in result.reason
     assert seen[0].timed_out is True
-    assert elapsed < 10
-    child_pid = int(seen[0].stderr.split()[0])
+    assert elapsed < 40
+    child_pid = _announced_pid(pid_file, seconds=0)
+    assert child_pid is not None, "the fake binary never announced its child"
     assert _wait_until_gone(child_pid)
+
+
+def test_escaped_grandchild_leaves_no_zombie_and_no_open_pipe(
+    tmp_path, monkeypatch
+):
+    pid_file = tmp_path / "escaped.pid"
+    escapee = (
+        "import os, time; os.setsid(); "
+        "open(%r, 'w').write('%%d\\n' %% os.getpid()); time.sleep(30)"
+        % str(pid_file)
+    )
+    fake = _binary(
+        tmp_path / "bin", "bwrap", '"%s" -c "%s" &\nwait\n' % (sys.executable, escapee)
+    )
+    _start_the_clock_after(monkeypatch, pid_file)
+    monkeypatch.setattr(probe, "_REAP_SECONDS", 0.3)
+    started = []
+    real_popen = probe.subprocess.Popen
+
+    def spy(*args, **kwargs):
+        started.append(real_popen(*args, **kwargs))
+        return started[-1]
+
+    monkeypatch.setattr(probe.subprocess, "Popen", spy)
+    escaped_pid = None
+    try:
+        outcome = probe.subprocess_runner(
+            [str(fake)], {"PATH": "/usr/bin:/bin"}, "/", 0.3
+        )
+        escaped_pid = _announced_pid(pid_file, seconds=0)
+
+        assert escaped_pid is not None, "the fake binary never announced its child"
+        assert _is_running(escaped_pid), "the grandchild was meant to escape"
+        assert outcome.timed_out is True
+        assert outcome.returncode is not None, "direct child was not reaped"
+        assert started[0].stderr.closed
+    finally:
+        if escaped_pid:
+            os.kill(escaped_pid, 9)
 
 
 def test_probe_creates_no_file(tmp_path, monkeypatch):
