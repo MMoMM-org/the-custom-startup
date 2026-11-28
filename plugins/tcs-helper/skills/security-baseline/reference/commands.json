@@ -55,7 +55,12 @@
       "noglob",
       "watch",
       "sudo",
-      "busybox"
+      "busybox",
+      "setsid",
+      "ionice",
+      "flock",
+      "exec",
+      "doas"
     ],
     "exec": [
       "git",

@@ -366,6 +366,12 @@ def test_quoted_or_escaped_narrow_name_is_not_trusted_as_narrow(lib, commands, r
     "Bash(/usr/bin/time curl:*)",
     "Bash(sudo timeout 5 curl *)",
     "Bash(env python3 x.py; curl *)",
+    # Exec wrappers Claude Code does not strip (permissions, "Exec wrappers").
+    "Bash(setsid curl *)",
+    "Bash(ionice curl *)",
+    "Bash(flock x curl *)",  # the lock file comes before the command
+    "Bash(exec curl *)",
+    "Bash(doas curl *)",
 ])
 def test_wrapped_network_tool_is_a_high_wrapper_allow_carrying_the_network_class(
     lib, commands, rule,
@@ -382,6 +388,9 @@ def test_wrapped_network_tool_is_a_high_wrapper_allow_carrying_the_network_class
     ("Bash(time make test)", "wrapper", "exec"),
     ("Bash(curl *)", "network", None),
     ("Bash(jq curl *)", "unclassified-wildcard", None),  # jq is no wrapper
+    # The first class found wins when no word is a network tool.
+    ("Bash(timeout 5 npm install x)", "wrapper", "pkg-manager"),
+    ("Bash(env node x.js; make test)", "wrapper", "interpreter"),
 ])
 def test_inner_class_is_the_class_of_what_a_wrapper_runs(lib, commands, rule, kind, inner_class):
     result = lib.checks.normalise(rule, commands)
@@ -686,7 +695,7 @@ def test_finding_without_a_wrapped_command_carries_no_inner_class(broad, src):
     ("mcp__srv", "mcp__srv"),
     ("mcp__reports__v2__*", "mcp__reports__v2__*"),
     ("mcp__reports__v2__*", "mcp__reports__v2"),  # a deny also reads it as a server name
-    ("mcp__reports__v2__*", "mcp__reports"),
+    ("mcp__a__b__*", "mcp__a__b"),  # deny names the whole server a__b
     ("mcp__srv", "mcp__srv__*"),
     ("mcp__srv__*", "mcp__srv"),
     ("mcp__srv", "mcp__*"),
@@ -731,6 +740,9 @@ def test_allow_covered_in_its_own_file_is_shadowed(broad, src):
     ("mcp__srv", "mcp__other"),
     ("mcp__reports__v2__*", "mcp__reports__v2__one_tool"),
     ("mcp__reports__*", "mcp__reports__v2"),
+    # `mcp__a__b__*` may be the whole server `a__b`, which `mcp__a` need not name.
+    ("mcp__a__b__*", "mcp__a"),
+    ("mcp__reports__v2__*", "mcp__reports"),
     ("Write", "Edit(src/**)"),
 ])
 def test_deny_that_does_not_cover_the_allow_leaves_it_broad(broad, src, allow, blocker):
@@ -914,6 +926,17 @@ def test_every_network_route_through_bash_is_partial(webfetch, src, rule):
     [finding] = webfetch([src("user", allow=["WebFetch(domain:example.com)", rule])])
 
     assert (finding.status, finding.severity) == ("PARTIAL", "HIGH")
+    assert finding.evidence["rule"] == rule
+
+
+@pytest.mark.parametrize("rule", [
+    "Bash(setsid curl *)", "Bash(ionice curl *)", "Bash(flock x curl *)",
+    "Bash(exec curl *)", "Bash(doas curl *)",
+])
+def test_exec_wrapped_curl_next_to_a_scoped_web_fetch_is_partial(webfetch, src, rule):
+    [finding] = webfetch([src("user", allow=["WebFetch(domain:example.com)", rule])])
+
+    assert (finding.check, finding.severity, finding.status) == ("C5", "HIGH", "PARTIAL")
     assert finding.evidence["rule"] == rule
 
 

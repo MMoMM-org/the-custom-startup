@@ -479,6 +479,8 @@ def _covers(blocker, allow):
     if not any(_wild_match(pattern, allowed_tools) for pattern in _blocked_tools(block_tool)):
         return False
     if block_tool.startswith(_MCP_PREFIX):
+        if _names_a_longer_server(block_tool, allow_tool):
+            return False
         return block_arg is None and allow_arg is None
     if block_arg is None:
         return True
@@ -497,6 +499,14 @@ def _covers(blocker, allow):
     # A file tool: `*` and `**` are paths under the working directory, so only
     # the same specifier is known to cover.
     return block_arg.strip() == allow_arg.strip()
+
+
+def _names_a_longer_server(block_tool, allow_tool):
+    """Whether an allow reaches past a deny's server name: `mcp__a__b__*` may
+    be the whole server `a__b`, which the deny `mcp__a` does not name."""
+    if _WILDCARD in block_tool or not allow_tool.startswith(block_tool + _MCP_SEPARATOR):
+        return False
+    return _MCP_SEPARATOR in allow_tool[len(block_tool) + len(_MCP_SEPARATOR):]
 
 
 def _blocked_tools(tool):
