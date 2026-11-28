@@ -643,3 +643,57 @@ def test_importing_layers_reads_and_writes_nothing(layers, world, monkeypatch):
         exec(compile(source, str(LIB_DIR / "layers.py"), "exec"), module.__dict__)
     finally:
         sys.modules.pop(spec.name, None)
+
+
+@pytest.fixture
+def inventory(layers):
+    """The real producer of plugin servers. The `layers` fixture keeps
+    `jsonio` registered under its bare name, which `inventory` needs."""
+    module = _load("sb_layers_inventory", "inventory.py")
+    try:
+        yield module
+    finally:
+        sys.modules.pop("sb_layers_inventory", None)
+
+
+def test_real_inventory_plugin_server_is_listed_without_config(layers, inventory):
+    item = inventory.PluginMcpServer("srv", "demo@market", "/p/demo/.mcp.json")
+
+    servers = layers.mcp_servers([], [item], [])
+
+    assert [(s.name, s.origin, s.scope, s.path, s.plugin, s.config) for s in servers] == [
+        ("srv", "plugin", "plugin", "/p/demo/.mcp.json", "demo@market", None)
+    ]
+
+
+def test_plugin_server_mapping_without_config_has_none(layers):
+    servers = layers.mcp_servers([], [{"name": "m", "path": "/p/.mcp.json", "plugin": "x@y"}], [])
+
+    assert [(s.name, s.plugin, s.config) for s in servers] == [("m", "x@y", None)]
+
+
+def test_non_plugin_servers_have_no_plugin(layers, world):
+    _write_json(world.start / ".mcp.json", {"mcpServers": {"p": {"command": "a"}}})
+
+    servers = layers.mcp_servers(world.discover(layers), [], [])
+
+    assert [s.plugin for s in servers] == [None]
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"path": "/p/.mcp.json"},
+        {"name": "n"},
+        {"name": 3, "path": "/p/.mcp.json"},
+        {"name": "n", "path": None},
+        {},
+        object(),
+    ],
+)
+def test_plugin_server_missing_name_or_path_is_skipped(layers, item):
+    good = {"name": "ok", "path": "/p/.mcp.json"}
+
+    servers = layers.mcp_servers([], [item, good], [])
+
+    assert [s.name for s in servers] == ["ok"]

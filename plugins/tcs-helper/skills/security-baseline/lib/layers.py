@@ -59,6 +59,7 @@ class McpServer:
     scope: str  # scope of the file that declares it
     path: str
     config: Optional[dict]
+    plugin: Optional[str] = None  # installed_plugins key, plugin servers only
 
 
 @dataclass(frozen=True)
@@ -117,7 +118,9 @@ def mcp_servers(sources, plugin_servers, project_paths):
     """List every configured server with the file that declares it.
 
     `plugin_servers` come from the plugin inventory: mappings or objects with
-    `name`, `path` and `config`. `project_paths` (`project_keys`) select the
+    `name` and `path`, plus optional `plugin` and `config` (the inventory
+    drops config values, so plugin servers usually have none); an item
+    without a string `name` and `path` is skipped. `project_paths` (`project_keys`) select the
     local-scope entries of `~/.claude.json`; other projects are never listed.
     A name declared in two places is listed twice.
     """
@@ -134,13 +137,19 @@ def mcp_servers(sources, plugin_servers, project_paths):
             for entry in _project_entries(source, project_paths):
                 servers.extend(_servers_in(entry, "local", source))
     for item in plugin_servers:
+        name = _field(item, "name")
+        path = _field(item, "path")
+        if not isinstance(name, str) or not isinstance(path, str):
+            continue
         config = _field(item, "config")
+        plugin = _field(item, "plugin")
         servers.append(McpServer(
-            name=_field(item, "name"),
+            name=name,
             origin="plugin",
             scope="plugin",
-            path=_field(item, "path"),
+            path=path,
             config=config if isinstance(config, dict) else None,
+            plugin=plugin if isinstance(plugin, str) else None,
         ))
     return servers
 
@@ -229,4 +238,7 @@ def _approvals_in(container, source, observed_only):
 
 
 def _field(item, name):
-    return item[name] if isinstance(item, dict) else getattr(item, name)
+    """A field of a mapping or an object; None when absent."""
+    if isinstance(item, dict):
+        return item.get(name)
+    return getattr(item, name, None)
