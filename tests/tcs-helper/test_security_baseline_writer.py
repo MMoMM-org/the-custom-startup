@@ -1287,6 +1287,123 @@ class TestDirectoryRace:
         assert list(victim.iterdir()) == []
         assert list(moved.iterdir()) == []
 
+    def test_claude_dir_swapped_before_it_is_opened(self, writer, world, monkeypatch, victim):
+        plan = _plan_missing(world, "project")
+        moved = world.base / "moved"
+        _once_before(monkeypatch, writer, "_hold",
+                     _swap_for_link(world.project / ".claude", moved, victim))
+
+        result = _write(writer, world, plan)
+
+        assert result.error in ("changed", "outside-project")
+        assert result.written is False
+        assert list(victim.iterdir()) == []
+        assert list(moved.iterdir()) == []
+
+    def test_path_that_now_leads_to_another_directory_is_not_written(
+        self, writer, world, monkeypatch
+    ):
+        plan = _plan_missing(world, "project")
+        claude_dir = world.project / ".claude"
+        moved = world.base / "moved"
+
+        def replace_directory():
+            os.rename(claude_dir, moved)
+            claude_dir.mkdir()
+
+        _once_before(monkeypatch, writer, "_make_directory", replace_directory)
+
+        result = _write(writer, world, plan)
+
+        assert result.error == "changed"
+        assert result.written is False
+        assert list(claude_dir.iterdir()) == []
+        assert list(moved.iterdir()) == []
+
+    def test_directory_appearing_where_the_claude_dir_was_missing_is_not_used(
+        self, writer, world, monkeypatch
+    ):
+        claude_dir = world.project / ".claude"
+        claude_dir.rmdir()
+        plan = _plan_missing(world, "project")
+        _once_before(monkeypatch, writer, "_make_directory", claude_dir.mkdir)
+
+        result = _write(writer, world, plan)
+
+        assert result.error == "changed"
+        assert result.written is False
+        assert list(claude_dir.iterdir()) == []
+
+    def test_new_claude_dir_swapped_for_a_link_right_after_it_is_made(
+        self, writer, world, monkeypatch, victim
+    ):
+        claude_dir = world.project / ".claude"
+        claude_dir.rmdir()
+        plan = _plan_missing(world, "project")
+        real_mkdir = os.mkdir
+
+        def mkdir(path, mode=0o777, *, dir_fd=None):
+            real_mkdir(path, mode, dir_fd=dir_fd)
+            if dir_fd is not None and os.fspath(path) == ".claude":
+                claude_dir.rmdir()
+                claude_dir.symlink_to(victim)
+
+        monkeypatch.setattr(os, "mkdir", mkdir)
+        with _spy_opens(monkeypatch) as calls:
+            result = _write(writer, world, plan)
+
+        assert result.error == "changed"
+        assert result.written is False
+        assert list(victim.iterdir()) == []
+        assert [path for path, _ in _creating(calls)] == []
+
+    def test_user_scope_parent_swapped_before_the_directory_is_opened(
+        self, writer, world, monkeypatch, victim
+    ):
+        config = world.base / "cfg" / "claude"
+        config.mkdir(parents=True)
+        (victim / "claude").mkdir()
+        world.targets = writer.allowed_targets(
+            str(world.home), str(config), str(world.project), str(world.project))
+        plan = _plan_missing(world, "user")
+        moved = world.base / "moved"
+        _once_before(monkeypatch, writer, "_hold",
+                     _swap_for_link(world.base / "cfg", moved, victim))
+
+        result = _write(writer, world, plan)
+
+        assert result.error == "changed"
+        assert result.written is False
+        assert list((victim / "claude").iterdir()) == []
+        assert list((moved / "claude").iterdir()) == []
+
+    def test_user_directory_replaced_between_open_and_check_is_not_written(
+        self, writer, world, monkeypatch
+    ):
+        plan = _plan_missing(world, "user")
+        directory = world.home / ".claude"
+        moved = world.base / "moved"
+        armed = []
+        _once_before(monkeypatch, writer, "_hold", lambda: armed.append(True))
+        real_realpath = os.path.realpath
+
+        def realpath(path, *args, **kwargs):
+            if armed and os.fspath(path) == str(directory):
+                armed.clear()
+                os.rename(directory, moved)
+                directory.mkdir()
+            return real_realpath(path, *args, **kwargs)
+
+        monkeypatch.setattr(os.path, "realpath", realpath)
+
+        result = _write(writer, world, plan)
+
+        assert armed == []
+        assert result.error == "changed"
+        assert result.written is False
+        assert list(directory.iterdir()) == []
+        assert list(moved.iterdir()) == []
+
     def test_every_step_after_resolution_goes_through_the_directory_descriptor(
         self, writer, world, monkeypatch
     ):
@@ -1299,12 +1416,26 @@ class TestDirectoryRace:
                 by_path.append(os.fspath(path))
             return real_os_open(path, flags, mode, dir_fd=dir_fd)
 
+        renames = []
+        real_replace = os.replace
+
+        def replace(source, destination, *, src_dir_fd=None, dst_dir_fd=None):
+            renames.append((source, destination, src_dir_fd is not None,
+                            src_dir_fd == dst_dir_fd))
+            return real_replace(
+                source, destination, src_dir_fd=src_dir_fd, dst_dir_fd=dst_dir_fd)
+
         monkeypatch.setattr(os, "open", os_open)
+        monkeypatch.setattr(os, "replace", replace)
 
         result = _write(writer, world, plan)
 
         assert result.written is True and result.verified is True
         assert by_path == []
+        assert len(renames) == 1
+        source, destination, relative, same_directory = renames[0]
+        assert (destination, relative, same_directory) == ("settings.json", True, True)
+        assert os.sep not in source
 
 
 class TestFingerprint:
