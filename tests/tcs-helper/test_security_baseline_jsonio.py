@@ -434,3 +434,34 @@ def test_import_performs_no_io(monkeypatch):
     exec(compile(source, str(JSONIO_PATH), "exec"), module.__dict__)
 
     assert callable(module.read_json)
+
+
+# --- parse: the same strict rules over bytes already in hand ------------------
+
+
+def test_parse_reads_an_object_from_bytes():
+    status, data, fmt, reason = jsonio.parse(b'{\n  "a": 1\n}\n')
+    assert (status, data, reason) == ("ok", {"a": 1}, None)
+    assert fmt == jsonio.Format(2, "\n", True)
+
+
+def test_parse_reports_duplicate_keys_as_ambiguous():
+    assert jsonio.parse(b'{"a": 1, "a": 2}') == (
+        "ambiguous", None, None, "duplicate-key")
+
+
+def test_parse_reports_invalid_utf8_as_unreadable():
+    assert jsonio.parse(b'{"a": "\xff"}') == (
+        "unreadable", None, None, "not-utf8")
+
+
+def test_parse_reports_a_non_object_top_level():
+    assert jsonio.parse(b"[1]") == ("unreadable", None, None, "not-object")
+
+
+def test_parse_applies_the_size_cap_to_raw_bytes():
+    ok = b'{"a": "' + b"x" * (MIB - 10) + b'"}'
+    ok += b" " * (MIB - len(ok))
+    assert len(ok) == MIB
+    assert jsonio.parse(ok)[0] == "ok"
+    assert jsonio.parse(ok + b" ") == ("too-large", None, None, "too-large")

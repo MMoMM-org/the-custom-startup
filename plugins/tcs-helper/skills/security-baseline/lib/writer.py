@@ -666,9 +666,8 @@ def _matches(held, expected_obj):
 
 def _parse_strict(raw):
     """jsonio's strict parse, applied to bytes read through the directory
-    descriptor. `jsonio.read_json` takes a path only, which would open the
-    target by name again."""
-    return jsonio._parse(raw)
+    descriptor, so the target is not opened by name again."""
+    return jsonio.parse(raw)
 
 
 def _ordered(obj):

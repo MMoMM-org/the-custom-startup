@@ -70,6 +70,17 @@ def read_json(path, follow_symlink):
     status, raw, reason = _read_bytes(path, follow_symlink)
     if status != "ok":
         return _failure(status, reason)
+    return parse(raw)
+
+
+def parse(raw):
+    """Return `(status, data, fmt, reason)` for the JSON object in `raw` bytes.
+
+    The strict rules of `read_json` without the file open: for a caller that
+    already holds the bytes (the writer's read-back through a directory fd).
+    """
+    if len(raw) > MAX_BYTES:
+        return _failure("too-large", "too-large")
     return _parse(raw)
 
 
@@ -107,8 +118,6 @@ def _read_bytes(path, follow_symlink):
         return "unreadable", None, "io-error"
     finally:
         os.close(fd)
-    if len(raw) > MAX_BYTES:
-        return "too-large", None, "too-large"
     return "ok", raw, None
 
 
