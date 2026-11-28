@@ -90,12 +90,20 @@ class World:
         }
         write_json(self.plugins / "installed_plugins.json", doc)
 
-    def template(self, version, excluded, tree="cache", marketplace="mp"):
-        path = self.plugins / tree / marketplace / "tcs-git-helpers" / version / TEMPLATE_REL
+    def template(self, version, excluded, marketplace="mp"):
+        """A template in the cache layout, which has a version directory."""
+        path = self.plugins / "cache" / marketplace / "tcs-git-helpers" / version / TEMPLATE_REL
+        write_template(path, excluded)
+        return path
+
+    def marketplace_template(self, excluded, marketplace="mp"):
+        """A template in the marketplace layout, which has no version directory."""
+        path = self.plugins / "marketplaces" / marketplace / "plugins" / "tcs-git-helpers" / TEMPLATE_REL
         write_template(path, excluded)
         return path
 
     def repo_template(self, excluded):
+        """The path a cloned repository can ship; `scan` must never read it."""
         path = self.repo / "plugins" / "tcs-git-helpers" / TEMPLATE_REL
         write_template(path, excluded)
         return path
@@ -130,6 +138,25 @@ def names(inv, namespace=None):
 
 def reasons(inv):
     return [s.reason for s in inv.skipped]
+
+
+@pytest.fixture
+def opened(monkeypatch):
+    """Every path handed to `os.open` while the test runs. Both `inventory`
+    and `jsonio` open files through it and through nothing else."""
+    paths = []
+    real_open = os.open
+
+    def recording_open(path, *args, **kwargs):
+        paths.append(os.fspath(path))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", recording_open)
+    return paths
+
+
+def opened_below(opened, root):
+    return [path for path in opened if pathlib.Path(path).is_relative_to(root)]
 
 
 # --- skills ---------------------------------------------------------------
@@ -462,19 +489,51 @@ def test_template_is_the_newest_by_version_order_not_lexical(inventory, world):
 
     assert template.version == "2.10.0"
     assert template.path == str(newest)
-    assert template.origin == "installed"
+    assert template.origin == "cache"
     assert template.excluded_commands == ("gh *", "git push *")
     assert template.deny_write == ("./.githooks",)
     assert template.ask == ("Bash(git remote add *)",)
 
 
-def test_template_candidates_span_cache_and_marketplaces(inventory, world):
-    world.template("2.3.0", ["cache *"], tree="cache")
-    world.template("2.4.0", ["marketplace *"], tree="marketplaces")
+def test_marketplace_only_install_is_found(inventory, world):
+    path = world.marketplace_template(["marketplace *"])
+
+    inv = inventory.scan(world.home, world.repo)
+
+    assert inv.git_template.path == str(path)
+    assert inv.git_template.origin == "marketplace"
+    assert inv.git_template.version is None
+    assert inv.git_template.excluded_commands == ("marketplace *",)
+    assert inv.git_template.sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert inv.skipped == ()
+
+
+def test_any_versioned_cache_copy_beats_the_marketplace_copy(inventory, world):
+    world.marketplace_template(["marketplace *"])
+    cached = world.template("0.0.1", ["cache *"])
 
     template = inventory.scan(world.home, world.repo).git_template
 
-    assert template.excluded_commands == ("marketplace *",)
+    assert template.path == str(cached)
+    assert template.origin == "cache"
+    assert template.excluded_commands == ("cache *",)
+
+
+def test_marketplace_copy_beats_a_cache_directory_that_is_not_a_version(inventory, world):
+    world.template("main", ["branch *"])
+    world.marketplace_template(["marketplace *"])
+
+    assert inventory.scan(world.home, world.repo).git_template.origin == "marketplace"
+
+
+def test_version_directory_below_marketplaces_is_not_a_layout(inventory, world):
+    path = world.plugins / "marketplaces" / "mp" / "tcs-git-helpers" / "9.9.9" / TEMPLATE_REL
+    write_template(path, ["wrong-layout *"])
+
+    inv = inventory.scan(world.home, world.repo)
+
+    assert inv.git_template is None
+    assert inv.skipped == ()
 
 
 def test_template_with_a_non_version_directory_ranks_below_every_version(inventory, world):
@@ -484,25 +543,27 @@ def test_template_with_a_non_version_directory_ranks_below_every_version(invento
     assert inventory.scan(world.home, world.repo).git_template.version == "0.0.1"
 
 
-def test_template_falls_back_to_the_repository_checkout(inventory, world):
-    path = world.repo_template(["gh *"])
+def test_repo_shipping_the_template_path_without_an_install_gives_none(inventory, world, opened):
+    shipped = world.repo_template(["curl *"])
 
-    template = inventory.scan(world.home, world.repo).git_template
+    inv = inventory.scan(world.home, world.repo)
 
-    assert template.path == str(path)
-    assert template.origin == "repo-checkout"
-    assert template.version is None
-    assert template.excluded_commands == ("gh *",)
+    assert inv.git_template is None
+    assert inv.skipped == ()
+    assert opened_below(opened, shipped.parent) == []
 
 
-def test_installed_template_wins_over_the_repository_checkout(inventory, world):
-    world.repo_template(["repo *"])
-    world.template("0.1.0", ["installed *"])
+def test_repo_shipping_the_template_path_never_replaces_the_installed_one(inventory, world, opened):
+    shipped = world.repo_template(["curl *"])
+    installed = world.template("0.1.0", ["installed *"])
 
-    template = inventory.scan(world.home, world.repo).git_template
+    inv = inventory.scan(world.home, world.repo)
 
-    assert template.origin == "installed"
-    assert template.excluded_commands == ("installed *",)
+    assert inv.git_template.path == str(installed)
+    assert inv.git_template.origin == "cache"
+    assert inv.git_template.excluded_commands == ("installed *",)
+    assert str(installed) in opened
+    assert opened_below(opened, shipped.parent) == []
 
 
 def test_template_sha256_is_the_digest_of_the_file_bytes(inventory, world):
@@ -526,6 +587,7 @@ def test_unreadable_newest_template_is_none_never_an_older_one(inventory, world)
     world.template("2.3.0", ["older *"])
     newest = world.template("2.10.0", [])
     newest.write_text("{broken", encoding="utf-8")
+    world.marketplace_template(["marketplace *"])
     world.repo_template(["repo *"])
 
     inv = inventory.scan(world.home, world.repo)
@@ -545,6 +607,21 @@ def test_template_symlinked_out_of_the_plugins_directory_is_rejected(inventory, 
 
     assert inv.git_template is None
     assert reasons(inv) == ["template-outside-plugins"]
+
+
+def test_marketplace_symlinked_out_of_the_plugins_directory_is_rejected(inventory, world):
+    outside = world.home / "local-marketplace"
+    write_template(outside / "plugins" / "tcs-git-helpers" / TEMPLATE_REL, ["curl *"])
+    link = world.plugins / "marketplaces" / "mp"
+    link.parent.mkdir(parents=True)
+    os.symlink(outside, link)
+
+    inv = inventory.scan(world.home, world.repo)
+
+    assert inv.git_template is None
+    assert [(s.path, s.reason) for s in inv.skipped] == [
+        (str(link / "plugins" / "tcs-git-helpers" / TEMPLATE_REL), "template-outside-plugins")
+    ]
 
 
 def test_template_entries_that_are_not_strings_are_dropped(inventory, world):

@@ -24,9 +24,13 @@ must resolve to a directory strictly inside `<home>/.claude/plugins`, and
 every file read below it must resolve inside that directory. Only server
 names are kept; a server's configuration can hold credentials.
 
-The git-helpers template is the newest installed copy by version order,
-else the repository checkout's copy. An unreadable newest copy yields no
-template rather than an older one: without a template every excluded
+The git-helpers template comes from an installed copy only: the newest
+`cache/<market>/tcs-git-helpers/<version>/` by version order, else
+`marketplaces/<market>/plugins/tcs-git-helpers/`, which has no version
+directory. The repository's own checkout is never read, not even when it is
+this repository: a cloned repository could ship that path and have its own
+excluded commands reported as accepted. An unreadable best copy yields no
+template rather than a lower-ranked one: without a template every excluded
 command is an ordinary finding, which is the safe direction.
 
 Whatever could not be read is listed in `Inventory.skipped` with a reason
@@ -56,6 +60,7 @@ _SKILL_FILE = "SKILL.md"
 _GIT_HELPERS = "tcs-git-helpers"
 _TEMPLATE_PARTS = ("templates", "claude-settings", "sandbox-git.json")
 _PLUGIN_TREES = ("cache", "marketplaces")
+_RANK_VERSIONED, _RANK_MARKETPLACE, _RANK_UNVERSIONED = 2, 1, 0
 
 
 @dataclass(frozen=True)
@@ -84,11 +89,12 @@ class PluginMcpServer:
 
 @dataclass(frozen=True)
 class GitTemplate:
-    """The tcs-git-helpers settings template; `version` is None for the
-    repository checkout."""
+    """The tcs-git-helpers settings template. `origin` is the installed
+    layout it came from; `version` is None for the marketplace layout,
+    which has no version directory."""
 
     path: str
-    origin: str  # installed | repo-checkout
+    origin: str  # cache | marketplace
     version: str | None
     sha256: str
     excluded_commands: tuple[str, ...]
@@ -121,7 +127,8 @@ class Inventory:
 
 
 def scan(home, repo_root) -> Inventory:
-    """Read the inventory below `home` and, when given, `repo_root`."""
+    """Read the inventory below `home` and, when given, `repo_root`. The
+    repository contributes skills only, never the git-helpers template."""
     home = Path(home)
     repo = Path(repo_root) if repo_root is not None else None
     plugins_dir = home / ".claude" / "plugins"
@@ -129,7 +136,7 @@ def scan(home, repo_root) -> Inventory:
     return Inventory(
         skills=tuple(_scan_skills(home, repo, plugins_dir, skipped)),
         plugin_mcp=tuple(_scan_plugin_mcp(plugins_dir, skipped)),
-        git_template=_find_git_template(plugins_dir, repo, skipped),
+        git_template=_find_git_template(plugins_dir, skipped),
         skipped=tuple(skipped),
     )
 
@@ -397,49 +404,54 @@ def _servers_in(data, plugin, shown):
 # --- git-helpers template (ADR-9) ------------------------------------------
 
 
-def _find_git_template(plugins_dir, repo, skipped):
-    plugins_real = os.path.realpath(plugins_dir)
-    installed = _installed_templates(plugins_dir)
-    if installed:
-        version, path = installed[0]
-        real = os.path.realpath(path)
-        if not _is_inside(real, plugins_real):
-            skipped.append(Skipped(str(path), "template-outside-plugins"))
-            return None
-        return _load_template(path, real, "installed", version, skipped)
-    if repo is None:
+def _find_git_template(plugins_dir, skipped):
+    """The best installed template, or None. Only the best candidate is
+    ever opened; a repository checkout is not a candidate."""
+    candidates = _installed_templates(plugins_dir)
+    if not candidates:
         return None
-    path = repo.joinpath("plugins", _GIT_HELPERS, *_TEMPLATE_PARTS)
-    return _load_template(path, str(path), "repo-checkout", None, skipped)
+    origin, version, path = candidates[0]
+    real = os.path.realpath(path)
+    if not _is_inside(real, os.path.realpath(plugins_dir)):
+        skipped.append(Skipped(str(path), "template-outside-plugins"))
+        return None
+    return _load_template(path, real, origin, version, skipped)
 
 
 def _installed_templates(plugins_dir):
-    """`(version, path)` of every installed template, newest first. A
-    directory that is not a dotted number ranks below every version."""
-    pattern = "/".join(("*", _GIT_HELPERS, "*") + _TEMPLATE_PARTS)
+    """`(origin, version, path)` of every installed template, best first:
+    cache copies by version, then the marketplace layout, then a cache
+    directory that is not a dotted number. Ties go to the lower path."""
     found = []
-    for tree in _PLUGIN_TREES:
-        base = plugins_dir / tree
-        for path in base.glob(pattern):
-            if _has_hidden_part(path, base):
-                continue
-            version = path.relative_to(base).parts[2]
-            found.append((_version_key(version), str(path), version, path))
+    cache = plugins_dir / "cache"
+    for path in cache.glob("/".join(("*", _GIT_HELPERS, "*") + _TEMPLATE_PARTS)):
+        if _has_hidden_part(path, cache):
+            continue
+        version = path.relative_to(cache).parts[2]
+        if _VERSION_RE.match(version):
+            rank = (_RANK_VERSIONED, tuple(int(part) for part in version.split(".")))
+        else:
+            rank, version = (_RANK_UNVERSIONED, ()), None
+        found.append((rank, str(path), "cache", version, path))
+    marketplaces = plugins_dir / "marketplaces"
+    for path in marketplaces.glob("/".join(("*", "plugins", _GIT_HELPERS) + _TEMPLATE_PARTS)):
+        if not _has_hidden_part(path, marketplaces):
+            found.append(((_RANK_MARKETPLACE, ()), str(path), "marketplace", None, path))
     found.sort(key=lambda item: item[1])
     found.sort(key=lambda item: item[0], reverse=True)
-    return [(version, path) for _key, _text, version, path in found]
-
-
-def _version_key(version):
-    if not _VERSION_RE.match(version):
-        return (0, ())
-    return (1, tuple(int(part) for part in version.split(".")))
+    return [(origin, version, path) for _rank, _text, origin, version, path in found]
 
 
 def _load_template(path, read_path, origin, version, skipped):
     status, data, _fmt, reason = jsonio.read_json(read_path, False)
     if status == "absent":
         return None
+    # The digest comes from a second read: jsonio's public interface returns
+    # the parsed object but not the bytes it parsed. A file replaced between
+    # the two reads would be recorded with the digest of the new bytes and
+    # the entries of the old. Only someone who can already write inside
+    # `~/.claude/plugins` can do that, and the digest is reported, not used
+    # for a decision.
     digest = _sha256(read_path) if status == "ok" else None
     if digest is None:
         skipped.append(Skipped(str(path), reason or "io-error"))
@@ -448,7 +460,7 @@ def _load_template(path, read_path, origin, version, skipped):
     return GitTemplate(
         path=str(path),
         origin=origin,
-        version=version if origin == "installed" and _VERSION_RE.match(version) else None,
+        version=version,
         sha256=digest,
         excluded_commands=_strings(sandbox.get("excludedCommands")),
         deny_write=_strings(_object(sandbox.get("filesystem")).get("denyWrite")),
