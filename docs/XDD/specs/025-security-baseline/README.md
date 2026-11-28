@@ -53,6 +53,7 @@
 | 2026-11-28 | Phase 2 drift resolved | Fix: layers accepts inventory's PluginMcpServer (config optional, plugin key kept). SDD updated: Source.scope (managed-mcp, no plugin), Environment.permission_mode_flag and profile unknown, ps ppid=, installed_plugins.json as plugin MCP source, CLAUDE_CONFIG_DIR moves .claude.json, ADR-9 last-rank non-version cache dir. Deferred to T3.6: Roots.project must cover the repo root. |
 | 2026-11-28 | Deviation: K10 split into `checks.py` (registry, written in T3.6) plus four group modules `checks_credentials/bypass/allows/mcp.py`, one test file each | User decision: T3.2–T3.5 run in parallel without editing one shared file; SDD Directory Map and phase-3 tasks updated |
 | 2026-11-28 | Scope addition approved (orchestrator): C1 sandbox half is PRESENT-INERT when `sandbox.filesystem.allowRead` reopens a credential path (an entry at or under it); a wider allow does not reopen | sandboxing.md: a narrower allow reopens a deny, a deny holds inside a wider allow; fails toward reporting |
+| 2026-11-28 | Phase 3 drift resolved | User: D1 (F1.3 overridden files) fixed in code; ADR-8 cap amended (never drop the last finding of a check/severity, collapse then drop, over_limit, protected coverage/environment); all other deviations written into the SDD (Effective fields, version-gated ignore, catalogue details, AuditReport extras, ADR-4 shadowed-allow exception); C10 "one-off exact rules" dropped |
 
 ## Context
 
