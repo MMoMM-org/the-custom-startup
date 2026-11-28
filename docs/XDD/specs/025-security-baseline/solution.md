@@ -266,7 +266,7 @@ outbound:
     data_flow: "semantic version or unknown"
 
   - name: "Parent process inspection"
-    type: read /proc/<pid>/cmdline (Linux) or `ps -o args= -p <pid>` (macOS)
+    type: read /proc/<pid>/stat + cmdline (Linux) or `ps -o ppid= -p <pid>` and `ps -o args= -p <pid>` (macOS); a truncated cmdline yields unknown, never absent
     criticality: LOW
     data_flow: "presence of --settings / --dangerously-skip-permissions / --permission-mode; never values"
 
@@ -277,7 +277,7 @@ data:
 
   - name: "MCP sources"
     type: JSON files
-    data_flow: ".mcp.json, ~/.claude.json mcpServers and projects[<path>].mcpServers, plugin .mcp.json / plugin.json mcpServers, managed-mcp.json — read only"
+    data_flow: ".mcp.json, ~/.claude.json (or $CLAUDE_CONFIG_DIR/.claude.json) mcpServers and projects[<path>].mcpServers, plugin servers from ~/.claude/plugins/installed_plugins.json installPath → .mcp.json / .claude-plugin/plugin.json mcpServers (names only, config values never kept), managed-mcp.json — read only"
 
   - name: "State directory"
     type: files, 0700 dir / 0600 files
@@ -498,7 +498,7 @@ the recomputed `plan_id` must equal the given one.
 
 ```pseudocode
 ENTITY: Source (NEW)                      # one settings or MCP file, K6
-  FIELDS: scope: managed|managed-dropin|user|project|local|claude-json|mcp-json|plugin
+  FIELDS: scope: managed|managed-dropin|user|project|local|claude-json|mcp-json|managed-mcp   # managed-mcp is not a settings layer; plugin files appear only in Inventory (skipped reasons), plugin servers as McpServer(origin=plugin, plugin=<key>)
           path: str, real_path: str|None
           status: absent|ok|unreadable|ambiguous|too-large|not-regular|denied
           reason: str|None                # fixed vocabulary, never file content
@@ -515,7 +515,9 @@ ENTITY: Environment (NEW)                 # K3
   FIELDS: platform: darwin|linux|other, profile: str,
           profile_source: detected|explicit, profile_evidence: list[str],
           bypass_active: yes|no|unknown, settings_flag: present|absent|unknown,
+          permission_mode_flag: present|absent|unknown,   # --permission-mode value never read → bypass_active unknown
           claude_version: Version|None
+  NOTE: profile is "unknown" when platform is other (audit UNKNOWN, setup refuses)
 
 ENTITY: ProbeResult (NEW)                 # K4
   FIELDS: result: pass|fail|inconclusive, reason: str, missing: list[str],
@@ -1050,7 +1052,8 @@ stateDiagram-v2
 - [x] **ADR-9 git-helpers template lookup:** installed copies only — newest by version sort of
   `~/.claude/plugins/cache/*/tcs-git-helpers/<version>/templates/claude-settings/sandbox-git.json`,
   then (ranked below any versioned cache copy)
-  `~/.claude/plugins/marketplaces/*/plugins/tcs-git-helpers/templates/claude-settings/sandbox-git.json`;
+  `~/.claude/plugins/marketplaces/*/plugins/tcs-git-helpers/templates/claude-settings/sandbox-git.json`,
+  then a cache directory whose name is not a dotted version (lowest rank);
   realpath must stay inside `~/.claude/plugins`; **no fallback to the audited repository's
   checkout**; only exact string matches are accepted; sha256 recorded in the report; absent
   template → ordinary findings (also when auditing this repo without the plugin installed).
@@ -1212,6 +1215,7 @@ PRD criteria are numbered `F<feature>.<n>` in document order of requirements.md 
   strictest and is the candidate if they are ever merged.
 
 ### Implementation Gotchas
+- **`CLAUDE_CONFIG_DIR`** relocates both `settings.json` and `.claude.json`.
 - **Local file location:** since 2.1.211 `settings.local.json` lives at the repo root (main
   checkout root in a worktree); an older file in the start directory is still read — read both,
   write the repo-root one.
