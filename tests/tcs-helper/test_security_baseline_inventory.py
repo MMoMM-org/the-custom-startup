@@ -7,12 +7,14 @@ the real `$HOME` and the real plugin cache are never read.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import importlib.util
 import json
 import os
 import pathlib
 import sys
+import threading
 
 import pytest
 
@@ -240,6 +242,10 @@ def test_symlink_loop_is_survived_and_each_skill_reported_once(inventory, world)
     inv = inventory.scan(world.home, world.repo)
 
     assert names(inv) == ["looped"]
+    assert len(inv.skills) == 1
+    # Without the identity dedup the walk only ends where the kernel refuses
+    # to resolve the chain any further, and that refusal is reported.
+    assert inv.skipped == ()
 
 
 def test_symlinked_skill_directory_is_followed(inventory, world):
@@ -265,6 +271,59 @@ def test_dot_prefixed_directories_are_skipped(inventory, world):
 
     assert names(inv) == ["visible"]
     assert inv.skipped == ()
+
+
+def test_directory_whose_identity_cannot_be_read_is_reported_and_siblings_listed(
+    inventory, world, monkeypatch
+):
+    skills = world.home / ".claude" / "skills"
+    world.skill(skills, "a-first")
+    world.skill(skills, "broken")
+    world.skill(skills, "z-last")
+    broken = str(skills / "broken")
+    real_identity = inventory._identity
+
+    def identity(path):
+        if os.fspath(path) == broken:
+            raise OSError(errno.EACCES, "denied", broken)
+        return real_identity(path)
+
+    monkeypatch.setattr(inventory, "_identity", identity)
+
+    inv = inventory.scan(world.home, world.repo)
+
+    assert names(inv) == ["a-first", "z-last"]
+    assert [(s.path, s.reason) for s in inv.skipped] == [(broken, "unreadable-directory")]
+
+
+def test_directory_that_cannot_be_listed_is_reported_and_siblings_listed(inventory, world, monkeypatch):
+    skills = world.home / ".claude" / "skills"
+    world.skill(skills, "a-first")
+    world.skill(skills / "locked", "inside")
+    world.skill(skills, "z-last")
+    locked = str(skills / "locked")
+    real_scandir = os.scandir
+
+    def scandir(path="."):
+        if os.fspath(path) == locked:
+            raise PermissionError(errno.EACCES, "denied", locked)
+        return real_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", scandir)
+
+    inv = inventory.scan(world.home, world.repo)
+
+    assert names(inv) == ["a-first", "z-last"]
+    assert [(s.path, s.reason) for s in inv.skipped] == [(locked, "unreadable-directory")]
+
+
+def test_plugin_directory_name_with_a_trailing_newline_is_not_a_plugin_name(inventory, world):
+    world.skill(world.cache_plugin("alpha\n") / "skills", "one")
+
+    inv = inventory.scan(world.home, world.repo)
+
+    assert [(s.name, s.plugin) for s in inv.skills] == [("one", None)]
+    assert inv.skill_names == frozenset({"one"})
 
 
 @pytest.mark.parametrize(
@@ -330,7 +389,8 @@ def test_walk_stops_at_the_directory_limit_and_says_so(inventory, world, monkeyp
 
     inv = inventory.scan(world.home, world.repo)
 
-    assert len(inv.skills) < 6
+    # The root is directory one; `s0` and `s1` are two and three.
+    assert names(inv) == ["s0", "s1"]
     assert [(s.path, s.reason) for s in inv.skipped] == [(str(skills), "walk-limit")]
 
 
@@ -432,6 +492,29 @@ def test_install_path_escaping_through_a_symlink_or_dotdot_is_rejected(inventory
 
     assert inv.plugin_mcp == ()
     assert reasons(inv) == ["install-path-outside-plugins"] * 4
+
+
+def test_install_path_that_is_a_file_is_rejected(inventory, world):
+    not_a_dir = world.plugins / "cache" / "mp" / "alpha" / "1.0.0"
+    not_a_dir.parent.mkdir(parents=True)
+    not_a_dir.write_text("{}", encoding="utf-8")
+    good = world.cache_plugin("beta")
+    write_json(good / ".mcp.json", {"mcpServers": {"ok": {}}})
+    world.install({"alpha@mp": not_a_dir, "beta@mp": good})
+
+    inv = inventory.scan(world.home, world.repo)
+
+    assert [s.name for s in inv.plugin_mcp] == ["ok"]
+    assert [(s.path, s.reason) for s in inv.skipped] == [(str(not_a_dir), "install-path-not-a-directory")]
+
+
+def test_install_path_that_does_not_exist_contributes_nothing(inventory, world):
+    world.install({"gone@mp": world.plugins / "cache" / "mp" / "gone" / "1.0.0"})
+
+    inv = inventory.scan(world.home, world.repo)
+
+    assert inv.plugin_mcp == ()
+    assert inv.skipped == ()
 
 
 def test_install_path_that_is_not_a_string_is_rejected(inventory, world):
@@ -541,6 +624,75 @@ def test_template_with_a_non_version_directory_ranks_below_every_version(invento
     world.template("0.0.1", ["versioned *"])
 
     assert inventory.scan(world.home, world.repo).git_template.version == "0.0.1"
+
+
+def test_same_version_in_two_marketplaces_goes_to_the_lower_path(inventory, world, monkeypatch):
+    world.template("1.0.0", ["zz *"], marketplace="zz")
+    lower = world.template("1.0.0", ["aa *"], marketplace="aa")
+    real_glob = pathlib.Path.glob
+
+    def highest_path_first(self, pattern):
+        """Directory order is the file system's choice; fix it to the order
+        the tie-break has to undo."""
+        return sorted(real_glob(self, pattern), reverse=True)
+
+    monkeypatch.setattr(pathlib.Path, "glob", highest_path_first)
+
+    template = inventory.scan(world.home, world.repo).git_template
+
+    assert template.path == str(lower)
+    assert template.excluded_commands == ("aa *",)
+
+
+def test_longer_version_beats_its_shorter_prefix_whatever_the_path(inventory, world):
+    world.template("1.0", ["short *"], marketplace="aa")
+    longer = world.template("1.0.0", ["long *"], marketplace="zz")
+
+    template = inventory.scan(world.home, world.repo).git_template
+
+    assert template.version == "1.0.0"
+    assert template.path == str(longer)
+
+
+def test_version_directory_with_a_trailing_newline_is_not_a_version(inventory, world):
+    world.template("9.9.9\n", ["newline *"])
+    versioned = world.template("0.0.1", ["versioned *"])
+
+    template = inventory.scan(world.home, world.repo).git_template
+
+    assert template.version == "0.0.1"
+    assert template.path == str(versioned)
+
+
+def test_template_swapped_for_a_fifo_before_the_digest_is_none(inventory, world, monkeypatch):
+    path = world.template("1.0.0", ["gh *"])
+    real_read_json = inventory.jsonio.read_json
+
+    def read_then_swap(target, follow_symlink):
+        result = real_read_json(target, follow_symlink)
+        if os.path.realpath(target) == os.path.realpath(path):
+            os.unlink(path)
+            os.mkfifo(path)
+        return result
+
+    def release_a_blocked_reader():
+        try:
+            os.close(os.open(path, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass  # nobody is blocked on the FIFO
+
+    monkeypatch.setattr(inventory.jsonio, "read_json", read_then_swap)
+    # A blocking open would hang the test run; this turns it into a failure.
+    watchdog = threading.Timer(2.0, release_a_blocked_reader)
+    watchdog.start()
+    try:
+        inv = inventory.scan(world.home, world.repo)
+    finally:
+        watchdog.cancel()
+        watchdog.join()
+
+    assert inv.git_template is None
+    assert [(s.path, s.reason) for s in inv.skipped] == [(str(path), "io-error")]
 
 
 def test_repo_shipping_the_template_path_without_an_install_gives_none(inventory, world, opened):

@@ -35,6 +35,11 @@ command is an ordinary finding, which is the safe direction.
 
 Whatever could not be read is listed in `Inventory.skipped` with a reason
 from a fixed vocabulary, never file content.
+
+MCP server names, plugin keys and every path, the skipped ones included,
+are kept as written in the files and on disk. They are untrusted text: a
+caller must put them through `render_untrusted` or a `NameTable` before
+showing them (CON-5).
 """
 
 from __future__ import annotations
@@ -51,8 +56,9 @@ import jsonio
 MAX_DIRS_PER_ROOT = 20000
 MAX_SKILL_BYTES = 64 * 1024
 
-_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
-_VERSION_RE = re.compile(r"^[0-9]{1,9}(\.[0-9]{1,9}){0,5}$")
+# Used with `fullmatch`: `$` would also match before a trailing newline.
+_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+_VERSION_RE = re.compile(r"[0-9]{1,9}(\.[0-9]{1,9}){0,5}")
 _NAME_LINE_RE = re.compile(r"^name:(.*)$")
 _COMMENT_RE = re.compile(r"\s#")
 _FRONTMATTER_DELIM = "---"
@@ -175,7 +181,7 @@ def _plugin_skill_roots(plugins_dir):
             if _has_hidden_part(root, base):
                 continue
             owner = root.parent.parent if tree == "cache" else root.parent
-            yield (owner.name if _NAME_RE.match(owner.name) else None), root
+            yield (owner.name if _NAME_RE.fullmatch(owner.name) else None), root
 
 
 def _has_hidden_part(path, base):
@@ -238,7 +244,7 @@ def _skill_name(skill_md):
     if len(matches) > 1:
         return None, "duplicate-skill-name"
     name = _plain_scalar(matches[0].group(1))
-    if not _NAME_RE.match(name):
+    if not _NAME_RE.fullmatch(name):
         return None, "invalid-skill-name"
     return name, None
 
@@ -320,10 +326,10 @@ def _scan_plugin_mcp(plugins_dir, skipped):
     for plugin, entries in plugins.items():
         for entry in entries if isinstance(entries, list) else [entries]:
             install_path = entry.get("installPath") if isinstance(entry, dict) else None
-            root = _contained_dir(install_path, plugins_real)
+            root, reason = _contained_dir(install_path, plugins_real)
             if root is None:
                 shown = install_path if isinstance(install_path, str) else str(registry)
-                skipped.append(Skipped(shown, "install-path-outside-plugins"))
+                skipped.append(Skipped(shown, reason))
                 continue
             for server in _plugin_servers(plugin, install_path, root, skipped):
                 if server not in seen:
@@ -332,14 +338,21 @@ def _scan_plugin_mcp(plugins_dir, skipped):
 
 
 def _contained_dir(install_path, plugins_real):
-    """The real path of `install_path` when it is absolute and resolves
-    strictly inside the plugins directory, else None."""
+    """Return `(real_path, None)` when `install_path` is absolute and
+    resolves strictly inside the plugins directory, else `(None, reason)`.
+    A path that exists has to be a directory; one that does not exist is a
+    stale entry and reads as a plugin without files."""
+    outside = None, "install-path-outside-plugins"
     if not isinstance(install_path, str) or "\x00" in install_path:
-        return None
+        return outside
     if not os.path.isabs(install_path):
-        return None
+        return outside
     real = os.path.realpath(install_path)
-    return real if _is_inside(real, plugins_real) else None
+    if not _is_inside(real, plugins_real):
+        return outside
+    if os.path.exists(real) and not os.path.isdir(real):
+        return None, "install-path-not-a-directory"
+    return real, None
 
 
 def _is_inside(real, root_real):
@@ -428,7 +441,7 @@ def _installed_templates(plugins_dir):
         if _has_hidden_part(path, cache):
             continue
         version = path.relative_to(cache).parts[2]
-        if _VERSION_RE.match(version):
+        if _VERSION_RE.fullmatch(version):
             rank = (_RANK_VERSIONED, tuple(int(part) for part in version.split(".")))
         else:
             rank, version = (_RANK_UNVERSIONED, ()), None
@@ -469,12 +482,16 @@ def _load_template(path, read_path, origin, version, skipped):
 
 
 def _sha256(path):
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    """The digest of a regular file, or None. Non-blocking for the reason
+    given at `_read_skill_head`: the file can be replaced after it parsed."""
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
-        fd = os.open(path, flags)
+        fd = os.open(path, flags | getattr(os, "O_BINARY", 0))
     except OSError:
         return None
     try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
         raw = _read_up_to(fd, jsonio.MAX_BYTES + 1)
     except OSError:
         return None
