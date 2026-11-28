@@ -322,6 +322,95 @@ def test_rule_claude_code_skips_as_an_allow_is_not_flagged(lib, commands, rule):
     assert (result.kind, result.severity) == ("inert", None)
 
 
+# --- normalise: quoted program, wrappers, MCP server names --------------------
+
+
+@pytest.mark.parametrize("rule", [
+    'Bash("curl" *)',
+    "Bash('curl' *)",
+    "Bash(\\curl *)",
+    'Bash("/usr/bin/curl" *)',
+    "Bash(FOO=1 'curl' *)",
+])
+def test_quoted_or_escaped_program_classifies_like_the_plain_one(lib, commands, rule):
+    assert _shape(lib.checks.normalise(rule, commands)) == ("network", "HIGH", "curl *")
+
+
+@pytest.mark.parametrize("rule", ['Bash("ls" *)', "Bash(\\ls *)"])
+def test_quoted_or_escaped_narrow_name_is_not_trusted_as_narrow(lib, commands, rule):
+    result = lib.checks.normalise(rule, commands)
+
+    assert (result.kind, result.severity) == ("unclassified-wildcard", "MED")
+
+
+@pytest.mark.parametrize("rule", [
+    # The wrappers Claude Code strips before matching (permissions, "Wrappers").
+    "Bash(timeout 5 curl *)",
+    "Bash(time curl *)",
+    "Bash(nice -n 10 curl *)",
+    "Bash(nohup curl *)",
+    "Bash(stdbuf -oL curl *)",
+    "Bash(command curl *)",
+    "Bash(builtin curl *)",
+    "Bash(noglob curl *)",
+    # Wrappers it does not strip, which run their argument all the same.
+    "Bash(env curl *)",
+    "Bash(env FOO=1 curl *)",
+    "Bash(sudo curl *)",
+    "Bash(sudo -u root curl *)",
+    "Bash(xargs curl)",
+    "Bash(xargs -I {} curl {})",
+    # Spellings of the wrapped program, and a wrapper in a wrapper.
+    "Bash(timeout 5 /usr/bin/curl *)",
+    'Bash(time "curl" *)',
+    "Bash(/usr/bin/time curl:*)",
+    "Bash(sudo timeout 5 curl *)",
+    "Bash(env python3 x.py; curl *)",
+])
+def test_wrapped_network_tool_is_a_high_wrapper_allow_carrying_the_network_class(
+    lib, commands, rule,
+):
+    result = lib.checks.normalise(rule, commands)
+
+    assert (result.kind, result.severity, result.inner_class) == ("wrapper", "HIGH", "network")
+
+
+@pytest.mark.parametrize(("rule", "kind", "inner_class"), [
+    ("Bash(timeout 5 ls)", "wrapper", None),
+    ("Bash(sudo *)", "wrapper", None),  # the wildcard names no program
+    ("Bash(env node *)", "wrapper", "interpreter"),
+    ("Bash(time make test)", "wrapper", "exec"),
+    ("Bash(curl *)", "network", None),
+    ("Bash(jq curl *)", "unclassified-wildcard", None),  # jq is no wrapper
+])
+def test_inner_class_is_the_class_of_what_a_wrapper_runs(lib, commands, rule, kind, inner_class):
+    result = lib.checks.normalise(rule, commands)
+
+    assert (result.kind, result.inner_class) == (kind, inner_class)
+
+
+def test_command_lookup_form_is_narrow(lib, commands):
+    # `command -v` looks a command up and does not run it.
+    result = lib.checks.normalise("Bash(command -v *)", commands)
+
+    assert (result.kind, result.severity) == ("narrow", None)
+
+
+@pytest.mark.parametrize("rule", ["mcp__reports__v2__*", "mcp__a__b__c__*"])
+def test_whole_server_rule_for_a_server_name_with_separator_is_high(lib, commands, rule):
+    # Claude Code documents `mcp__reports__v2__*` as every tool of `reports__v2`.
+    result = lib.checks.normalise(rule, commands)
+
+    assert (result.kind, result.severity) == ("whole-tool", "HIGH")
+
+
+def test_mcp_rule_naming_one_tool_is_scoped(lib, commands):
+    # Read as tool `v2` of the server `reports`, also when a server `reports__v2` exists.
+    result = lib.checks.normalise("mcp__reports__v2", commands)
+
+    assert (result.kind, result.severity) == ("scoped", None)
+
+
 # --- normalise: MED -----------------------------------------------------------
 
 
@@ -555,6 +644,21 @@ def test_fix_names_a_template_the_module_ships(lib, broad, src):
         assert lib.render.fix_text(template, finding.fix["params"], lib.checks.FIX_TEMPLATES)
 
 
+@pytest.mark.parametrize("rule", ["Bash(time curl *)", "Bash(command curl *)"])
+def test_stripped_wrapper_around_a_network_tool_is_a_high_finding(broad, src, rule):
+    [finding] = broad([src("user", allow=[rule])])
+
+    assert (finding.severity, finding.status) == ("HIGH", "FAIL")
+    assert finding.evidence["class"] == "wrapper"
+    assert finding.evidence["inner_class"] == "network"
+
+
+def test_finding_without_a_wrapped_command_carries_no_inner_class(broad, src):
+    [finding] = broad([src("user", allow=["Bash(curl:*)"])])
+
+    assert "inner_class" not in finding.evidence
+
+
 # --- C3: shadowed (F5.6) ------------------------------------------------------
 
 
@@ -573,7 +677,16 @@ def test_fix_names_a_template_the_module_ships(lib, broad, src):
     ("WebFetch", "WebFetch(domain:*)"),
     ("WebFetch(domain:*)", "WebFetch"),
     ("Edit", "Edit"),
+    ("Write(*)", "Write"),
+    ("Write(*)", "Write(*)"),
+    ("Read(**)", "Read( ** )"),
+    ("Bash(curl:*)", "Bash(**)"),
+    ("PowerShell", "PowerShell(*)"),
+    ("WebFetch", "WebFetch(*)"),
     ("mcp__srv", "mcp__srv"),
+    ("mcp__reports__v2__*", "mcp__reports__v2__*"),
+    ("mcp__reports__v2__*", "mcp__reports__v2"),  # a deny also reads it as a server name
+    ("mcp__reports__v2__*", "mcp__reports"),
     ("mcp__srv", "mcp__srv__*"),
     ("mcp__srv__*", "mcp__srv"),
     ("mcp__srv", "mcp__*"),
@@ -616,6 +729,8 @@ def test_allow_covered_in_its_own_file_is_shadowed(broad, src):
     ("WebFetch", "WebFetch(domain:example.com)"),
     ("mcp__srv", "mcp__srv__one_tool"),
     ("mcp__srv", "mcp__other"),
+    ("mcp__reports__v2__*", "mcp__reports__v2__one_tool"),
+    ("mcp__reports__*", "mcp__reports__v2"),
     ("Write", "Edit(src/**)"),
 ])
 def test_deny_that_does_not_cover_the_allow_leaves_it_broad(broad, src, allow, blocker):
@@ -623,6 +738,31 @@ def test_deny_that_does_not_cover_the_allow_leaves_it_broad(broad, src, allow, b
 
     assert finding.severity in ("HIGH", "MED")
     assert finding.status == "FAIL"
+    assert finding.evidence["shadowed"] is False
+
+
+@pytest.mark.parametrize(("allow", "blocker"), [
+    ("Write", "Write(*)"),
+    ("Write", "Write(**)"),
+    ("Edit", "Edit(*)"),
+    ("MultiEdit", "MultiEdit(*)"),
+    ("NotebookEdit", "NotebookEdit(**)"),
+    ("Read", "Read(*)"),
+    ("Read", "Read(**)"),
+    ("Read(~/**)", "Read(**)"),
+    ("Read(//**)", "Read(**)"),
+    ("Read(**)", "Read(*)"),
+])
+@pytest.mark.parametrize("blocking_list", ["deny", "ask"])
+def test_working_directory_deny_does_not_shadow_a_file_tool_allow(
+    broad, src, allow, blocker, blocking_list,
+):
+    # A file-tool `*` or `**` specifier is relative to the working directory;
+    # only the bare tool name reaches paths outside it.
+    [finding] = broad([src("user", allow=[allow]), src("project", **{blocking_list: [blocker]})])
+
+    assert (finding.severity, finding.status) == ("HIGH", "FAIL")
+    assert finding.evidence["class"] == "whole-tool"
     assert finding.evidence["shadowed"] is False
 
 
@@ -775,6 +915,47 @@ def test_every_network_route_through_bash_is_partial(webfetch, src, rule):
 
     assert (finding.status, finding.severity) == ("PARTIAL", "HIGH")
     assert finding.evidence["rule"] == rule
+
+
+def test_domain_scoped_web_fetch_with_a_wrapped_curl_allow_is_partial_naming_the_rule(
+    webfetch, src,
+):
+    [finding] = webfetch([
+        src("user", allow=["WebFetch(domain:example.com)"]),
+        src("local", allow=["Bash(timeout 5 curl *)"]),
+    ])
+
+    assert (finding.check, finding.severity, finding.status) == ("C5", "HIGH", "PARTIAL")
+    assert (finding.scope, finding.file) == ("local", LOCAL_FILE)
+    assert finding.evidence == {
+        "rule": "Bash(timeout 5 curl *)",
+        "list": "allow",
+        "index": 0,
+        "pointer": "/permissions/allow/0",
+        "normalised": "timeout 5 curl *",
+        "class": "wrapper",
+        "inner_class": "network",
+        "reason": "network-tool-allow",
+        "states": {"webfetch-rules": "EFFECTIVE", "bash-network": "ABSENT"},
+    }
+
+
+@pytest.mark.parametrize("rule", [
+    "Bash(env curl *)", "Bash(sudo curl *)", "Bash(xargs curl)", "Bash(time curl *)",
+    "Bash(command curl *)", "Bash(nohup wget *)", "Bash(nice ssh *)", "Bash(stdbuf -oL curl *)",
+    "Bash(builtin curl *)", "Bash(noglob curl *)", 'Bash("curl" *)', "Bash(\\curl *)",
+])
+def test_wrapped_or_quoted_network_route_is_partial(webfetch, src, rule):
+    [finding] = webfetch([src("user", allow=["WebFetch(domain:example.com)", rule])])
+
+    assert (finding.status, finding.severity) == ("PARTIAL", "HIGH")
+    assert finding.evidence["rule"] == rule
+
+
+def test_wrapper_around_a_local_command_is_not_a_web_fetch_finding(webfetch, src):
+    [finding] = webfetch([src("user", allow=["Bash(timeout 5 make test)"])])
+
+    assert finding.status == "PASS"
 
 
 def test_network_allow_without_any_web_rule_is_partial(webfetch, src):

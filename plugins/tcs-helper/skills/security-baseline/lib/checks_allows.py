@@ -16,11 +16,12 @@ How a Bash rule is read:
   allow the whole tool.
 - A trailing `:*` is the older spelling of ` *`. Anywhere else the colon is a
   literal character, as in Claude Code.
-- Leading `NAME=value` words and the directory of the program are dropped
-  before the class lookup, so `FOO=1 /usr/bin/curl:*` is `curl *`.
+- Leading `NAME=value` words, the directory of the program, quotes around it
+  and a backslash in front of it are dropped before the class lookup, so
+  `FOO=1 /usr/bin/curl:*`, `"curl" *` and `\\curl *` are all `curl *`.
 - Narrow is stricter than the class lookup, because it is the only result
   that clears a wildcard rule: the program must be written bare or in a
-  system directory, without a variable assignment in front
+  system directory, unquoted, without a variable assignment in front
   (`PATH=/x ls *` runs whatever `/x/ls` is), and the rule must not admit a
   write flag of the command (`commands.json`, `narrow_write_flags`).
   `git log *` admits `--output=<file>` and is therefore an `exec` allow;
@@ -28,18 +29,51 @@ How a Bash rule is read:
 - A classified command is HIGH with or without a wildcard; any other rule
   with a wildcard is MED "unclassified wildcard"; any other rule without one
   is exact and not reported.
+- A wrapper runs another command. The `wrapper` class holds the wrappers
+  Claude Code strips before it matches a Bash rule (`timeout`, `time`,
+  `nice`, `nohup`, `stdbuf`, `command`, `builtin`, `noglob`: permissions
+  documentation, "Tool-specific permission rules > Bash > Wrappers") and
+  others that run their argument (`env`, `sudo`, `xargs`, `watch`,
+  `busybox`). The rule stays a `wrapper` allow, and `inner_class` carries the
+  class of the command it runs, so `timeout 5 curl *` is a wrapper allow that
+  reaches the network (C5). A wrapper's own options are not parsed: every
+  word after it is tried as the wrapped program, and `network` wins. This
+  over-reports `sudo systemctl restart ssh` as a network route; it never
+  misses `sudo -u root curl *`. A lone `*` after a wrapper names no program
+  and gives no inner class. `command -v`, which looks a command up without
+  running it, is on the narrow list.
 
 Other tools: a tool that runs commands, writes or reads files or fetches
-(`WHOLE_TOOLS`) is HIGH without a specifier, and so is a whole MCP server.
-Bare names of other tools (`WebSearch`) are not reported. Rules Claude Code
-skips as allow rules (unanchored tool-name globs, `mcp__` rules with a
-specifier) are not reported either.
+(`WHOLE_TOOLS`) is HIGH without a specifier, and so is a whole MCP server:
+`mcp__srv`, `mcp__srv__*`, and any `mcp__…__*`, which is the documented rule
+for every tool of a server whose name contains `__` (`mcp__reports__v2__*`
+for the server `reports__v2`). Bare names of other tools (`WebSearch`) are
+not reported. Rules Claude Code skips as allow rules (unanchored tool-name
+globs, `mcp__` rules with a specifier) are not reported either.
+
+Deliberate over-report: `Edit(*)`, `Write(*)`, `Read(*)` and the other
+every-path spellings are HIGH whole-tool allows, although current Claude Code
+limits a file-tool `(*)` allow to the working directories. Versions before
+v2.1.317 read it as the bare name, and the limit can be turned off.
+
+Known limit: `WebFetch(domain:*.com)` counts as scoped, like any domain
+pattern that is not a wildcard in every label.
 
 Shadowed (PRD F5 AC6): a deny or ask rule in any file that covers a broad
 allow makes it a finding of severity INFO with `evidence["shadowed"]` true,
 which the report lists in its info block and not among the gaps. "Covers" is
-decided on the rule text the way Claude Code matches it, so a deny for
-`curl *` does not cover an allow for `/usr/bin/curl *`.
+decided on the rule text the way Claude Code matches it, and errs toward
+"does not cover", because a wrong "shadowed" hides a gap:
+
+- A deny for `curl *` does not cover an allow for `/usr/bin/curl *`, nor one
+  for `timeout 5 curl *`.
+- A rule without a specifier covers every rule of its tool. `(*)` and `(**)`
+  do the same for Bash, PowerShell and WebFetch only. For a file tool they
+  are paths under the working directory, so a deny for `Read(**)` covers
+  neither `Read` nor `Read(~/**)`; a file-tool rule with a specifier covers
+  only an allow with the same specifier.
+- A deny for `mcp__reports__v2` also covers `mcp__reports__v2__*`: as a deny
+  or ask rule Claude Code reads the name as a server name too.
 
 Files that could not be read, an allow list of the wrong type and entries
 that are not strings give UNKNOWN findings at the check's severity.
@@ -74,6 +108,7 @@ UNCLASSIFIED_WILDCARD = "unclassified-wildcard"
 NO_DOMAIN = "no-domain"
 UNPARSED = "unparsed"
 NETWORK_CLASS = "network"
+WRAPPER_CLASS = "wrapper"
 
 # Tools whose unscoped allow is HIGH: they run commands, write or read any
 # file, or fetch any URL.
@@ -129,7 +164,8 @@ class Classified:
     `kind` is `whole-tool`, a command class of `commands.json`,
     `unclassified-wildcard`, `no-domain` or `unparsed` for a rule that is
     reported, and `narrow`, `exact`, `scoped`, `other-tool` or `inert` for one
-    that is not. `severity` is HIGH, MED or None (not reported).
+    that is not. `severity` is HIGH, MED or None (not reported). `inner_class`
+    is the class of the command a `wrapper` rule runs, or None.
     """
 
     rule: str
@@ -138,6 +174,7 @@ class Classified:
     severity: Optional[str]
     normalised: str
     wildcard: bool
+    inner_class: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -254,12 +291,13 @@ def _whole_or(rule, tool, text, whole, kind):
 
 
 def _classify_mcp(rule, tool, arg, text):
-    """`mcp__srv` and `mcp__srv__*` allow a whole server. Claude Code skips an
-    mcp rule with a specifier and one with a glob in the server name."""
+    """`mcp__srv` and `mcp__srv__*` allow a whole server, and so does
+    `mcp__a__b__*`: every tool of the server `a__b`. Claude Code skips an mcp
+    rule with a specifier and one with a glob in the server name."""
     server, _, name = tool[len(_MCP_PREFIX):].partition(_MCP_SEPARATOR)
     if arg is not None or not server or _WILDCARD in server:
         return Classified(rule, tool, INERT, None, text, _WILDCARD in tool)
-    if name in ("", _WILDCARD):
+    if name in ("", _WILDCARD) or name.endswith(_MCP_SEPARATOR + _WILDCARD):
         return Classified(rule, tool, WHOLE_TOOL, HIGH, text, bool(name))
     if _WILDCARD in name:
         return Classified(rule, tool, UNCLASSIFIED_WILDCARD, MED, text, True)
@@ -295,25 +333,55 @@ def _classify_shell(rule, tool, arg, text, commands):
     words = _without_assignments(spelled).split()
     if not words or _only_wildcards(" ".join(words)):
         return Classified(rule, tool, WHOLE_TOOL, HIGH, _WILDCARD, True)
-    directory, _, program = words[0].rpartition("/")
-    program = program or words[0]
+    directory, program, plain = _program_word(words[0])
     cmd = " ".join([program, *words[1:]])
     wildcard = _WILDCARD in cmd
 
-    def result(kind, severity):
-        return Classified(rule, tool, kind, severity, cmd, wildcard)
+    def result(kind, severity, inner_class=None):
+        return Classified(rule, tool, kind, severity, cmd, wildcard, inner_class)
 
     if tool != "Bash":
         return result(UNCLASSIFIED_WILDCARD, MED) if wildcard else result(EXACT, None)
-    trusted_spelling = len(words) == len(spelled.split()) and (
-        "/" not in words[0] or directory in SYSTEM_BIN_DIRS
+    trusted_spelling = plain and len(words) == len(spelled.split()) and (
+        not directory or directory in SYSTEM_BIN_DIRS
     )
     if trusted_spelling and _is_narrow(cmd, commands):
         return result(NARROW, None)
     command_class = commands.class_of(program, cmd)
+    if command_class == WRAPPER_CLASS:
+        return result(command_class, HIGH, _wrapped_class(words[1:], commands))
     if command_class:
         return result(command_class, HIGH)
     return result(UNCLASSIFIED_WILDCARD, MED) if wildcard else result(EXACT, None)
+
+
+def _program_word(word):
+    """`"/usr/bin/curl"` → `("/usr/bin", "curl", False)`: the directory and
+    name of a program word, and whether it was written without quotes or a
+    leading backslash."""
+    bare = word.lstrip("\\").strip(_QUOTES).lstrip("\\")
+    directory, _, name = bare.rpartition("/")
+    return directory, name or bare or word, bare == word
+
+
+def _wrapped_class(words, commands):
+    """Class of the command a wrapper runs, given the words after the wrapper.
+
+    The wrapper's options are not parsed: every word is tried as the program,
+    `network` wins, otherwise the first class found. A lone `*` names no
+    program.
+    """
+    found = None
+    for position, word in enumerate(words):
+        if _only_wildcards(word):
+            continue
+        program = _program_word(word)[1]
+        inner = commands.class_of(program, " ".join([program, *words[position + 1:]]))
+        if inner == NETWORK_CLASS:
+            return inner
+        if inner and inner != WRAPPER_CLASS and found is None:
+            found = inner
+    return found
 
 
 def _is_narrow(cmd, commands):
@@ -392,7 +460,9 @@ def _is_every_path(arg):
 
 
 def _reaches_network(classified):
-    return classified.tool == "Bash" and classified.kind in (NETWORK_CLASS, WHOLE_TOOL)
+    return classified.tool == "Bash" and (
+        classified.kind in (NETWORK_CLASS, WHOLE_TOOL) or classified.inner_class == NETWORK_CLASS
+    )
 
 
 # --- covering deny and ask rules ----------------------------------------------
@@ -405,11 +475,14 @@ def _covers(blocker, allow):
     if blocking is None or allowed is None:
         return False
     (block_tool, block_arg), (allow_tool, allow_arg) = blocking, allowed
-    if not _wild_match(_tool_pattern(block_tool), _tool_pattern(allow_tool)):
+    allowed_tools = _tool_pattern(allow_tool)
+    if not any(_wild_match(pattern, allowed_tools) for pattern in _blocked_tools(block_tool)):
         return False
     if block_tool.startswith(_MCP_PREFIX):
         return block_arg is None and allow_arg is None
-    if block_arg is None or _only_wildcards(block_arg):
+    if block_arg is None:
+        return True
+    if _only_wildcards(block_arg) and allow_tool in (*SHELL_TOOLS, WEBFETCH):
         return True
     if allow_tool == WEBFETCH:
         return _webfetch_covers(block_arg, allow_arg)
@@ -421,7 +494,18 @@ def _covers(blocker, allow):
         return any(
             _command_match(pattern, text) for text in (spelled, _without_assignments(spelled))
         )
+    # A file tool: `*` and `**` are paths under the working directory, so only
+    # the same specifier is known to cover.
     return block_arg.strip() == allow_arg.strip()
+
+
+def _blocked_tools(tool):
+    """The tool-name patterns a deny or ask rule stands for. An `mcp__` name
+    without a wildcard is also read as a server name: `mcp__reports__v2`
+    blocks every tool of the server `reports__v2`."""
+    if tool.startswith(_MCP_PREFIX) and _WILDCARD not in tool:
+        return (tool, tool + _MCP_SEPARATOR + _WILDCARD)
+    return (tool,)
 
 
 def _tool_pattern(tool):
@@ -548,6 +632,11 @@ def _unknown(check, layer, source, evidence):
     )
 
 
+def _inner(classified):
+    """Evidence for what a wrapper rule runs; nothing for any other rule."""
+    return {"inner_class": classified.inner_class} if classified.inner_class else {}
+
+
 def _broad_finding(entry):
     classified, source = entry.classified, entry.source
     evidence = {
@@ -558,6 +647,7 @@ def _broad_finding(entry):
         "class": classified.kind,
         "wildcard": classified.wildcard,
         "shadowed": bool(entry.shadowed_by),
+        **_inner(classified),
     }
     if entry.shadowed_by:
         # The allow is there, a deny or ask rule holds: listed as information.
@@ -583,6 +673,7 @@ def _webfetch_finding(entry, status, states, template, reason):
         **_position(entry.index),
         "normalised": classified.normalised,
         "class": classified.kind,
+        **_inner(classified),
         "reason": reason,
         "states": dict(states),
     }
