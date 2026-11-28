@@ -25,6 +25,11 @@ file paths outside evidence are shown relative to a labelled root
 under `roots.evidence`. The finished report is checked once more with
 `render.untrusted_outside_evidence` before it is printed.
 
+**`mcp_servers`:** every configured server with where it comes from (name,
+origin, scope of the file, labelled path, plugin). The configuration of a
+server (command, arguments, environment, headers, URL) is never read into
+the report.
+
 **Test seam:** `main(argv, world=World(...))`. A `World` holds what `audit`
 would otherwise take from the machine: platform, environment variables, the
 filesystem root of the container markers, the managed-settings directory, the
@@ -61,6 +66,9 @@ PLUGIN_NAME = "tcs-helper"
 UNKNOWN_VERSION = "unknown"
 GIT_TIMEOUT_SECONDS = 5
 FIX_TEMPLATE_ERROR = "fix-template-error"
+# Servers listed per origin before the rest is counted: a repository's
+# `.mcp.json` cannot fill the report and push the findings out of it.
+MCP_SERVERS_PER_ORIGIN = 20
 
 _PLUGIN_MANIFEST = LIB_DIR.parents[2] / ".claude-plugin" / "plugin.json"
 _PLUGIN_VERSION_RE = re.compile(r"[0-9]{1,9}(\.[0-9]{1,9}){0,3}")
@@ -150,9 +158,13 @@ def _audit(args, world: World) -> dict:
         world.which,
         runner=world.runner,
     )
+    env = _with_unreadable_layers_named(
+        env, sources, layers.SETTINGS_SCOPES, environment.CONTAINER_ENV_KEY,
+    )
     probe_result = (world.probe or probe.run_probe)(env.platform)
 
     keys = refdata.load_keys()
+    found = inventory.scan(home, repo_root)
     context = {
         "sources": sources,
         "env": env,
@@ -160,7 +172,7 @@ def _audit(args, world: World) -> dict:
         "keys": keys,
         "credentials": refdata.load_credentials(),
         "commands": refdata.load_commands(),
-        "inventory": inventory.scan(home, repo_root),
+        "inventory": found,
         "home": Path(home),
         "effective_of": _memoised(
             lambda key: effective.effective(key, sources, keys.rules[key], env.claude_version)
@@ -203,6 +215,16 @@ def _audit(args, world: World) -> dict:
             "missing": list(probe_result.missing),
             "context": dict(probe_result.context),
         },
+        "mcp_servers": _mcp_servers(
+            layers.mcp_servers(
+                sources,
+                # The inventory keeps no configuration values.
+                [{"name": s.name, "path": s.path, "plugin": s.plugin, "config": None}
+                 for s in found.plugin_mcp],
+                layers.project_keys(project_dir, repo_root),
+            ),
+            roots, names,
+        ),
         "findings": [shown(item) for item in gaps],
         "accepted": [shown(item) for item in accepted],
         "info": [shown(item) for item in info],
@@ -315,6 +337,70 @@ def _layer_env_keys(sources, settings_scopes, container_key):
     return names
 
 
+def _unreadable_scopes(sources, settings_scopes):
+    """Scopes with a settings file that exists and could not be read."""
+    scopes = []
+    for source in sources:
+        if (source.scope in settings_scopes and source.status not in ("ok", "absent")
+                and source.scope not in scopes):
+            scopes.append(source.scope)
+    return scopes
+
+
+def _with_unreadable_layers_named(env, sources, settings_scopes, container_key):
+    """`env` with its note on the ignored container variable reworded.
+
+    `environment.detect` is told that an unreadable layer sets the variable
+    (`_layer_env_keys`) and so writes "set by <scopes> settings" for all of
+    them. Nothing is known about what an unreadable file sets: its scopes
+    are taken out of that note and named in one of their own.
+    """
+    unreadable = _unreadable_scopes(sources, settings_scopes)
+    ignored = f"env:{container_key} ignored"
+    if not unreadable or not any(note.startswith(ignored) for note in env.profile_evidence):
+        return env
+    readable = [source for source in sources if source.status == "ok"]
+    setters = _layer_env_keys(readable, settings_scopes, container_key).get(container_key, [])
+    notes = []
+    if setters:
+        notes.append(f"{ignored}: set by {', '.join(setters)} settings")
+    notes.append(f"{ignored}: unreadable {', '.join(unreadable)} settings may set {container_key}")
+    evidence = []
+    for note in env.profile_evidence:
+        if note.startswith(ignored):
+            evidence.extend(notes)
+            notes = []
+        else:
+            evidence.append(note)
+    return dataclasses.replace(env, profile_evidence=type(env.profile_evidence)(evidence))
+
+
+def _mcp_servers(servers, roots, names):
+    """The `mcp_servers` block: where each server comes from, never what it
+    runs. The first MCP_SERVERS_PER_ORIGIN of an origin are listed, the rest
+    of it counted in one `{origin, more}` entry."""
+    listed, counts = [], {}
+    for server in servers:
+        counts[server.origin] = counts.get(server.origin, 0) + 1
+        if counts[server.origin] > MCP_SERVERS_PER_ORIGIN:
+            continue
+        listed.append({
+            "name": names.render(server.name),
+            "origin": server.origin,
+            "scope": server.scope,
+            "path": _shown_path(server.path, roots, names),
+            "plugin": names.render(server.plugin) if server.plugin is not None else None,
+        })
+    out = []
+    for position, entry in enumerate(listed):
+        out.append(entry)
+        origin = entry["origin"]
+        last_of_origin = all(later["origin"] != origin for later in listed[position + 1:])
+        if last_of_origin and counts[origin] > MCP_SERVERS_PER_ORIGIN:
+            out.append({"origin": origin, "more": counts[origin] - MCP_SERVERS_PER_ORIGIN})
+    return out
+
+
 def _memoised(function):
     cache = {}
 
@@ -342,6 +428,7 @@ def _roots(project_dir, repo_root, config_dir, home, system_root):
         labelled.append(("<repo>", repo_root))
     if config_dir:
         labelled.append(("<config>", config_dir))
+    labelled.append(("<plugins>", os.path.join(home, ".claude", "plugins")))  # inventory.scan
     labelled.append(("~", home))
     if system_root:
         labelled.append(("<managed>", system_root))

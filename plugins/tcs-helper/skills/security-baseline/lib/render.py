@@ -40,9 +40,19 @@ NAME_RE = re.compile(r"[A-Za-z0-9_.@:/-]{1,64}")
 SENSITIVE_KEY_RE = re.compile(r"token|key|secret|password", re.IGNORECASE)
 ENV_KEY = "env"
 
-# Sections cap_report() may shorten, least important first; each is cut from its end, and
-# findings are sorted HIGH to LOW, so the lowest-ranked entries go first.
+# Sections cap_report() may shorten. Within one severity they are cut in this order.
 DROPPABLE_SECTIONS = ("info", "accepted", "findings")
+# cap_report() never removes these: the report's identity, the notice, and the summary, whose
+# counts and verdict line cover every finding whatever was cut.
+PROTECTED_KEYS = ("schema_version", "tool_version", "untrusted_notice", "summary")
+# Findings alike in these fields form one run that cap_report() may collapse.
+GROUP_FIELDS = ("check", "severity", "file", "layer", "scope")
+# One finding of each of these, per section, always stays.
+CATEGORY_FIELDS = ("check", "severity")
+COLLAPSE_KEEP = 3
+COLLAPSED_KEY = "collapsed"
+DROP_ORDER = ("INFO", "LOW", "MED", "HIGH")  # an unknown severity goes last, like HIGH
+NO_AUTO_FIX = "no-auto-fix"
 
 # Invisible although Unicode classes them as letters, marks or symbols: fillers, the braille
 # blank and variation selectors.
@@ -59,7 +69,7 @@ _ESCAPED_CATEGORIES = frozenset(["Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp", "Zs"]
 _FIELD_RE = re.compile(r"[a-z_][a-z0-9_]*")
 
 FIX_TEMPLATES = {
-    "no-auto-fix": "No automatic fix. Review this entry by hand.",
+    NO_AUTO_FIX: "No automatic fix. Review this entry by hand.",
 }
 
 
@@ -365,45 +375,188 @@ def _size(doc, indent):
     return len(json.dumps(doc, ensure_ascii=True, indent=indent))
 
 
-def _shortened(doc, sections, drop_count, removed, limit):
-    """Copy DOC without REMOVED keys and without the last DROP_COUNT droppable entries."""
-    out = {key: item for key, item in doc.items() if key not in removed}
-    dropped = {}
-    remaining = drop_count
-    for name in sections:
-        take = min(remaining, len(doc[name]))
-        if take:
-            out[name] = doc[name][:len(doc[name]) - take]
-            dropped[name] = take
-            remaining -= take
-    out[TRUNCATED_KEY] = {"limit_bytes": limit, "dropped": dropped, "removed": list(removed)}
+class _Entry:
+    """One entry of a shortened section: a finding as it was, or the summary of a collapsed
+    run. `stands_for` is the number of original findings it represents."""
+
+    __slots__ = ("value", "stands_for", "is_summary")
+
+    def __init__(self, value, stands_for=1, is_summary=False):
+        self.value = value
+        self.stands_for = stands_for
+        self.is_summary = is_summary
+
+
+def _field_values(entry, fields):
+    if not isinstance(entry, dict):
+        return None
+    return json.dumps(
+        [entry.get(field) for field in fields], ensure_ascii=True, sort_keys=True, default=str,
+    )
+
+
+def _summary_entry(entries):
+    """One entry standing for ENTRIES, which agree in every GROUP_FIELDS value. It keeps the
+    fields all of them share, and nothing of their evidence, ids or fixes."""
+    first = entries[0]
+    out = {}
+    for key, value in first.items():
+        if key == "id":
+            out[key] = None
+        elif key not in (EVIDENCE_KEY, "fix") and all(
+            key in entry and entry[key] == value for entry in entries
+        ):
+            out[key] = value
+    out[EVIDENCE_KEY] = {COLLAPSED_KEY: len(entries)}
+    out["fix"] = {"template": NO_AUTO_FIX, "params": {}, "text": FIX_TEMPLATES[NO_AUTO_FIX]}
     return out
 
 
-def _fewest_drops(doc, sections, removed, limit, indent):
-    """Return DOC shortened by the fewest droppable entries that fit LIMIT, or None."""
-    total = sum(len(doc[name]) for name in sections)
-    if _size(_shortened(doc, sections, total, removed, limit), indent) > limit:
+def _collapsed(entries, keep):
+    """ENTRIES as `_Entry` objects, each run of like findings cut to its first KEEP plus one
+    summary entry in the place of the next. A run is never cut for a single entry."""
+    groups = {}
+    for index, entry in enumerate(entries):
+        key = _field_values(entry, GROUP_FIELDS)
+        if key is not None:
+            groups.setdefault(key, []).append(index)
+    summaries, folded = {}, set()
+    for indexes in groups.values():
+        if len(indexes) > keep + 1:
+            rest = indexes[keep:]
+            summaries[rest[0]] = _Entry(_summary_entry([entries[i] for i in rest]), len(rest), True)
+            folded.update(rest[1:])
+    return [
+        summaries.get(index) or _Entry(entry)
+        for index, entry in enumerate(entries)
+        if index not in folded
+    ]
+
+
+def _largest_group(doc, sections):
+    largest = 0
+    for name in sections:
+        counts = {}
+        for entry in doc[name]:
+            key = _field_values(entry, GROUP_FIELDS)
+            counts[key] = counts.get(key, 0) + 1
+        largest = max([largest, *counts.values()])
+    return largest
+
+
+def _drop_rank(entry):
+    severity = entry.value.get("severity") if isinstance(entry.value, dict) else None
+    return DROP_ORDER.index(severity) if severity in DROP_ORDER else len(DROP_ORDER)
+
+
+def _drop_candidates(plan, sections):
+    """`(section, position)` of every entry that may go, in the order they go: lowest severity
+    first, within one severity `sections` order, within a section from its end. The first
+    finding of each (section, check, severity) is not among them, so no category is emptied.
+    """
+    candidates = []
+    for order, name in enumerate(sections):
+        represented = set()
+        for position, entry in enumerate(plan[name]):
+            category = _field_values(entry.value, CATEGORY_FIELDS)
+            if category not in represented and not entry.is_summary:
+                represented.add(category)
+                continue
+            candidates.append((_drop_rank(entry), order, -position, name))
+    return [(name, -negated) for _rank, _order, negated, name in sorted(candidates)]
+
+
+def _assembled(doc, plan, sections, gone, removed, limit, over_limit=False):
+    """Copy DOC with the planned sections, without the GONE entries and the REMOVED keys."""
+    out = {key: item for key, item in doc.items() if key not in removed}
+    collapsed, dropped, groups = {}, {}, {}
+    gone = set(gone)
+    for name in sections:
+        kept = []
+        for position, entry in enumerate(plan[name]):
+            if (name, position) in gone:
+                dropped[name] = dropped.get(name, 0) + entry.stands_for
+                fields = entry.value if isinstance(entry.value, dict) else {}
+                group = (name, fields.get("check"), fields.get("severity"))
+                groups[group] = groups.get(group, 0) + entry.stands_for
+                continue
+            kept.append(entry.value)
+            if entry.is_summary:
+                collapsed[name] = collapsed.get(name, 0) + entry.stands_for
+        out[name] = kept
+    marker = {
+        "limit_bytes": limit,
+        "collapsed": collapsed,
+        "dropped": dropped,
+        "dropped_groups": [
+            {"block": block, "check": check, "severity": severity, "count": count}
+            for (block, check, severity), count in groups.items()
+        ],
+        "removed": list(removed),
+    }
+    if over_limit:
+        marker["over_limit"] = True
+    out[TRUNCATED_KEY] = marker
+    return out
+
+
+def _smallest_cut(doc, sections, removed, limit, indent):
+    """Return DOC cut as little as fits LIMIT, or None when even one entry per category does
+    not fit. Runs are collapsed first, as long as possible; entries are dropped only when
+    runs of COLLAPSE_KEEP are still too much."""
+    def plan(keep):
+        return {name: _collapsed(doc[name], keep) for name in sections}
+
+    def fits(candidate):
+        return _size(candidate, indent) <= limit
+
+    shortest = plan(COLLAPSE_KEEP)
+    if fits(_assembled(doc, shortest, sections, (), removed, limit)):
+        low, high = COLLAPSE_KEEP, max(COLLAPSE_KEEP, _largest_group(doc, sections))
+        while low < high:  # the longest runs that still fit
+            middle = (low + high + 1) // 2
+            if fits(_assembled(doc, plan(middle), sections, (), removed, limit)):
+                low = middle
+            else:
+                high = middle - 1
+        return _assembled(doc, plan(low), sections, (), removed, limit)
+
+    candidates = _drop_candidates(shortest, sections)
+    if not fits(_assembled(doc, shortest, sections, candidates, removed, limit)):
         return None
-    low, high = 0, total
-    while low < high:
+    low, high = 0, len(candidates)
+    while low < high:  # the fewest drops that fit
         middle = (low + high) // 2
-        if _size(_shortened(doc, sections, middle, removed, limit), indent) <= limit:
+        if fits(_assembled(doc, shortest, sections, candidates[:middle], removed, limit)):
             high = middle
         else:
             low = middle + 1
-    return _shortened(doc, sections, low, removed, limit)
+    return _assembled(doc, shortest, sections, candidates[:low], removed, limit)
 
 
 def cap_report(doc, limit=REPORT_LIMIT_BYTES, indent=None, droppable=DROPPABLE_SECTIONS):
     """Return DOC, shortened if needed so that its JSON form is at most LIMIT bytes.
 
     The size is that of `json.dumps(doc, ensure_ascii=True, indent=indent)`; pass the indent
-    the report is printed with. A report that fits is returned as it is. Otherwise entries
-    are dropped from the end of the DROPPABLE sections, in that order, and only as many as
-    needed; if that is not enough, the largest other top-level sections are removed. The
-    result then carries `truncated: {limit_bytes, dropped: {section: n}, removed: [key]}`.
-    DOC is never modified.
+    the report is printed with. A report that fits is returned as it is. DOC is never
+    modified.
+
+    **What is never cut:** the first finding of every (section, check, severity) present in
+    a DROPPABLE section, and the PROTECTED_KEYS. A category of gap therefore cannot vanish
+    because another one is long, and the summary still counts every finding.
+
+    **Order of cuts**, each only as far as needed:
+    1. Runs are collapsed: findings alike in GROUP_FIELDS keep their first entries, and one
+       summary entry with `evidence: {collapsed: N}` stands for the N others.
+    2. Entries are dropped, lowest severity first (DROP_ORDER), HIGH last.
+    3. Other top-level sections are removed, the largest first.
+    4. If one entry per category still does not fit, exactly that is returned, larger than
+       LIMIT and marked `over_limit`.
+
+    The result carries `truncated: {limit_bytes, collapsed: {section: n}, dropped:
+    {section: n}, dropped_groups: [{block, check, severity, count}], removed: [key]}`,
+    counted in original findings: in each section, shown + collapsed + dropped is the
+    number it had.
     """
     if limit < MIN_REPORT_LIMIT_BYTES:
         raise ValueError("report limit below %d bytes" % MIN_REPORT_LIMIT_BYTES)
@@ -411,14 +564,19 @@ def cap_report(doc, limit=REPORT_LIMIT_BYTES, indent=None, droppable=DROPPABLE_S
         return doc
     sections = [name for name in droppable if isinstance(doc.get(name), list)]
     removable = sorted(
-        (key for key in doc if key not in sections and key != TRUNCATED_KEY),
+        (key for key in doc
+         if key not in sections and key not in PROTECTED_KEYS and key != TRUNCATED_KEY),
         key=lambda key: _size(doc[key], indent),
     )
     removed = []
     while True:
-        out = _fewest_drops(doc, sections, removed, limit, indent)
+        out = _smallest_cut(doc, sections, removed, limit, indent)
         if out is not None:
             return out
         if not removable:
-            return {TRUNCATED_KEY: {"limit_bytes": limit, "dropped": {}, "removed": []}}
+            break
         removed.append(removable.pop())
+    least = {name: _collapsed(doc[name], COLLAPSE_KEEP) for name in sections}
+    return _assembled(
+        doc, least, sections, _drop_candidates(least, sections), removed, limit, over_limit=True,
+    )

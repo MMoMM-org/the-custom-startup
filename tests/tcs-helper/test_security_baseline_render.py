@@ -369,9 +369,15 @@ def test_redacted_env_survives_rendering_with_keys_visible(render):
 
 # --- whole-report cap -----------------------------------------------------------------------
 
-def _finding(render, i, severity="MED"):
-    return {"id": "C3-%04d" % i, "check": "C3", "severity": severity,
-            "evidence": {"rule": render.render_untrusted("Bash(tool-%d:*)" % i + "x" * 200)}}
+BLOCKS = ("findings", "accepted", "info")
+SETTINGS_FILE = "~/.claude/settings.json"
+
+
+def _finding(render, i, severity="MED", check="C3", file=SETTINGS_FILE):
+    return {"id": "%s-%04d" % (check, i), "check": check, "severity": severity,
+            "status": "FAIL", "layer": "permissions", "scope": "user", "file": file,
+            "evidence": {"rule": render.render_untrusted("Bash(tool-%d:*)" % i + "x" * 200)},
+            "fix": {"template": "c3-narrow", "params": {}, "text": "Narrow this rule."}}
 
 
 def _report(render, findings=0, info=0, accepted=0):
@@ -383,6 +389,46 @@ def _report(render, findings=0, info=0, accepted=0):
         "info": [_finding(render, i, "INFO") for i in range(info)],
         "summary": {"counts": {"HIGH": findings, "INFO": info, "ACCEPTED": accepted}},
     }
+
+
+def _real_shape(render):
+    """The shape that hid gaps: one check fills the budget with HIGH entries from one file,
+    and every other category follows it in the sorted list."""
+    def many(count, severity, check, file=SETTINGS_FILE):
+        return [_finding(render, i, severity, check, file) for i in range(count)]
+
+    doc = _report(render)
+    doc["findings"] = (many(90, "HIGH", "C3") + many(1, "HIGH", "C4") + many(2, "HIGH", "C5")
+                       + many(6, "MED", "C3") + many(1, "MED", "C7") + many(3, "LOW", "C10"))
+    doc["accepted"] = many(2, "HIGH", "C2") + many(1, "MED", "C9")
+    doc["info"] = many(30, "INFO", "C3") + many(2, "INFO", "CR", "<project>/.mcp.json")
+    doc["summary"] = {"counts": {"HIGH": 93, "MED": 7, "LOW": 3, "INFO": 32, "ACCEPTED": 3},
+                      "verdict_line": "93 HIGH, 7 MED, 3 LOW in audited layers"}
+    return doc
+
+
+def _combinations(doc):
+    return {(block, item["check"], item["severity"]) for block in BLOCKS for item in doc[block]}
+
+
+def _folded(item):
+    return item["evidence"].get("collapsed", 0)
+
+
+def _accounted(original, out):
+    """Every original entry is shown, folded into a summary entry, or counted as dropped."""
+    marker = out["truncated"]
+    for block in BLOCKS:
+        shown = sum(1 for item in out[block] if not _folded(item))
+        folded = sum(_folded(item) for item in out[block])
+        assert marker["collapsed"].get(block, 0) == folded, block
+        assert shown + folded + marker["dropped"].get(block, 0) == len(original[block]), block
+    return True
+
+
+def _distinct_files(render, count, severity, check="C3"):
+    return [_finding(render, i, severity, check, "<project>/rules-%d.json" % i)
+            for i in range(count)]
 
 
 def test_small_report_is_returned_without_a_truncation_marker(render):
@@ -401,37 +447,118 @@ def test_report_is_capped_at_32_kb_with_a_truncation_marker(render):
     out = render.cap_report(doc)
 
     assert len(_dumps(out).encode("ascii")) <= render.REPORT_LIMIT_BYTES == 32 * 1024
-    marker = out["truncated"]
-    assert marker["limit_bytes"] == 32768
-    assert marker["dropped"] == {
-        "info": 400 - len(out["info"]),
-        "accepted": 400 - len(out["accepted"]),
-        "findings": 400 - len(out["findings"]),
-    }
+    assert out["truncated"]["limit_bytes"] == 32768
+    assert _accounted(doc, out)
     assert out["summary"] == doc["summary"]
     assert out["untrusted_notice"] == render.UNTRUSTED_NOTICE
 
 
-def test_cap_drops_info_then_accepted_then_the_lowest_ranked_findings(render):
-    doc = _report(render, findings=300, info=30, accepted=30)
+def test_cap_never_hides_a_category_in_the_real_shape(render):
+    doc = _real_shape(render)
+    assert len(_dumps(doc)) > render.REPORT_LIMIT_BYTES
+    assert len(_combinations(doc)) == 10
 
     out = render.cap_report(doc)
 
-    assert out["info"] == [] and out["accepted"] == []
-    kept = len(out["findings"])
-    assert 0 < kept < 300
-    assert out["findings"] == doc["findings"][:kept]
+    assert len(_dumps(out)) <= render.REPORT_LIMIT_BYTES
+    assert _combinations(out) == _combinations(doc)
+    assert _accounted(doc, out)
+    assert out["summary"] == doc["summary"]
+
+
+def test_cap_collapses_repeats_before_it_drops_anything(render):
+    doc = _real_shape(render)
+
+    out = render.cap_report(doc)
+
+    assert out["truncated"]["dropped"] == {}
+    assert out["truncated"]["collapsed"]["findings"] > 0
+    summaries = [item for item in out["findings"] if _folded(item)]
+    assert [(s["check"], s["severity"]) for s in summaries] == [("C3", "HIGH")]
+    kept = [item for item in out["findings"]
+            if (item["check"], item["severity"]) == ("C3", "HIGH") and not _folded(item)]
+    assert len(kept) >= 3 and kept == doc["findings"][:len(kept)]
+    assert len(kept) + _folded(summaries[0]) == 90
+    assert len(_dumps(out)) > render.REPORT_LIMIT_BYTES - 1024, "collapsed more than needed"
+
+
+def test_a_summary_entry_names_its_group_and_carries_no_file_content(render):
+    out = render.cap_report(_real_shape(render))
+
+    summary = next(item for item in out["findings"] if _folded(item))
+
+    assert summary["evidence"] == {"collapsed": _folded(summary)}
+    assert {key: summary[key] for key in ("check", "severity", "layer", "scope", "file")} == {
+        "check": "C3", "severity": "HIGH", "layer": "permissions", "scope": "user",
+        "file": SETTINGS_FILE}
+    assert summary["fix"] == {"template": "no-auto-fix", "params": {},
+                              "text": render.FIX_TEMPLATES["no-auto-fix"]}
+    assert summary["id"] is None
+    assert render.untrusted_outside_evidence(out) == []
+
+
+def test_entries_of_different_files_are_not_collapsed_together(render):
+    doc = _report(render)
+    doc["findings"] = _distinct_files(render, 120, "HIGH")
+
+    out = render.cap_report(doc)
+
+    assert out["truncated"]["collapsed"] == {}
+    assert out["truncated"]["dropped"]["findings"] == 120 - len(out["findings"])
+
+
+def test_cap_drops_low_first_and_high_last(render):
+    doc = _report(render)
+    doc["findings"] = (_distinct_files(render, 40, "HIGH") + _distinct_files(render, 60, "MED")
+                       + _distinct_files(render, 60, "LOW", "C10"))
+    doc["info"] = _distinct_files(render, 20, "INFO", "CR")
+
+    out = render.cap_report(doc)
+
+    assert len(_dumps(out)) <= render.REPORT_LIMIT_BYTES
+    by_severity = {severity: [f for f in out["findings"] if f["severity"] == severity]
+                   for severity in ("HIGH", "MED", "LOW")}
+    assert by_severity["HIGH"] == doc["findings"][:40]
+    assert 1 < len(by_severity["MED"]) < 60
+    assert by_severity["MED"] == doc["findings"][40:40 + len(by_severity["MED"])]
+    assert len(by_severity["LOW"]) == 1
+    assert len(out["info"]) == 1
+    assert _accounted(doc, out)
     assert len(_dumps(out)) > render.REPORT_LIMIT_BYTES - 1024, "dropped more than needed"
 
 
-def test_cap_keeps_findings_when_dropping_info_is_enough(render):
-    doc = _report(render, findings=50, info=200)
+def test_truncated_names_the_groups_that_lost_entries(render):
+    doc = _report(render)
+    doc["findings"] = _distinct_files(render, 100, "HIGH") + _distinct_files(render, 30, "LOW", "C10")
 
     out = render.cap_report(doc)
 
-    assert out["findings"] == doc["findings"]
-    assert 0 < len(out["info"]) < 200
-    assert out["truncated"]["dropped"] == {"info": 200 - len(out["info"])}
+    groups = out["truncated"]["dropped_groups"]
+    assert {(g["block"], g["check"], g["severity"]) for g in groups} == {
+        ("findings", "C3", "HIGH"), ("findings", "C10", "LOW")}
+    assert sum(g["count"] for g in groups) == out["truncated"]["dropped"]["findings"]
+    assert next(g["count"] for g in groups if g["check"] == "C10") == 29
+
+
+def test_cap_emits_one_entry_per_category_even_over_the_limit(render):
+    doc = _report(render)
+    doc["findings"] = [_finding(render, i, "HIGH", "C%d" % (100 + i)) for i in range(150)]
+    doc["findings"] += [_finding(render, i, "HIGH", "C100") for i in range(1, 9)]
+
+    out = render.cap_report(doc)
+
+    assert len(_dumps(out)) > render.REPORT_LIMIT_BYTES
+    assert out["truncated"]["over_limit"] is True
+    assert _combinations(out) == _combinations(doc)
+    assert len(out["findings"]) == 150
+    assert out["truncated"]["dropped"] == {"findings": 8}
+    assert out["summary"] == doc["summary"]
+
+
+def test_a_report_brought_under_the_limit_is_not_marked_over_it(render):
+    out = render.cap_report(_real_shape(render))
+
+    assert "over_limit" not in out["truncated"]
 
 
 def test_cap_holds_when_the_bulk_is_not_in_a_droppable_list(render):
@@ -443,7 +570,18 @@ def test_cap_holds_when_the_bulk_is_not_in_a_droppable_list(render):
     assert len(_dumps(out)) <= render.REPORT_LIMIT_BYTES
     assert "probe" not in out
     assert out["truncated"]["removed"] == ["probe"]
+    assert out["findings"] == doc["findings"]
     assert out["schema_version"] == 1
+
+
+def test_cap_never_removes_the_summary(render):
+    doc = _report(render, findings=2)
+    doc["summary"]["padding"] = ["x" * 80] * 2000
+
+    out = render.cap_report(doc)
+
+    assert out["summary"] == doc["summary"]
+    assert out["truncated"]["over_limit"] is True
 
 
 def test_cap_applies_to_the_indented_form_when_asked(render):
@@ -452,15 +590,16 @@ def test_cap_applies_to_the_indented_form_when_asked(render):
     out = render.cap_report(doc, indent=2)
 
     assert len(json.dumps(out, ensure_ascii=True, indent=2)) <= render.REPORT_LIMIT_BYTES
-    assert out["truncated"]["dropped"]["findings"] > 0
+    assert out["truncated"]["collapsed"]["findings"] > 0
 
 
 def test_cap_does_not_mutate_its_input(render):
-    doc = _report(render, findings=300)
+    doc = _real_shape(render)
+    before = json.loads(_dumps(doc))
 
     render.cap_report(doc)
 
-    assert len(doc["findings"]) == 300
+    assert json.loads(_dumps(doc)) == before
     assert "truncated" not in doc
 
 
