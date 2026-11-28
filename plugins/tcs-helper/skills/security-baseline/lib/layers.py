@@ -120,8 +120,9 @@ def mcp_servers(sources, plugin_servers, project_paths):
     `plugin_servers` come from the plugin inventory: mappings or objects with
     `name` and `path`, plus optional `plugin` and `config` (the inventory
     drops config values, so plugin servers usually have none); an item
-    without a string `name` and `path` is skipped. `project_paths` (`project_keys`) select the
-    local-scope entries of `~/.claude.json`; other projects are never listed.
+    without a string `name` and `path` is skipped. `project_paths`
+    (`project_keys`) select the local-scope entries of `~/.claude.json`;
+    other projects are never listed.
     A name declared in two places is listed twice.
     """
     servers = []

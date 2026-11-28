@@ -672,6 +672,18 @@ def test_plugin_server_mapping_without_config_has_none(layers):
     assert [(s.name, s.plugin, s.config) for s in servers] == [("m", "x@y", None)]
 
 
+def test_plugin_server_non_string_plugin_is_none(layers):
+    servers = layers.mcp_servers([], [{"name": "m", "path": "/p/.mcp.json", "plugin": 5}], [])
+
+    assert [(s.name, s.plugin) for s in servers] == [("m", None)]
+
+
+def test_plugin_server_non_dict_config_is_none(layers):
+    servers = layers.mcp_servers([], [{"name": "m", "path": "/p/.mcp.json", "config": "x"}], [])
+
+    assert [(s.name, s.config) for s in servers] == [("m", None)]
+
+
 def test_non_plugin_servers_have_no_plugin(layers, world):
     _write_json(world.start / ".mcp.json", {"mcpServers": {"p": {"command": "a"}}})
 
