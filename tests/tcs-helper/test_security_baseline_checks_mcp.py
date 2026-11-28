@@ -590,11 +590,19 @@ def test_clone_risk_findings_land_in_the_info_block(lib, world):
     assert summary["counts"]["INFO"] == 5
 
 
-def test_clone_risk_ignores_approval_switched_off_and_unreadable_files(lib, world):
+def test_clone_risk_reports_approval_key_set_to_false(lib, world):
     ctx = world.context([
         world.src("project", {"enableAllProjectMcpServers": False}),
-        world.src("local", status="unreadable"),
     ])
+
+    found = _only(_run(lib.checks.check_clone_risk, ctx))
+
+    assert found.evidence["key"] == "enableAllProjectMcpServers"
+    assert "project" in found.file or found.scope == "project"
+
+
+def test_clone_risk_ignores_unreadable_files(lib, world):
+    ctx = world.context([world.src("local", status="unreadable")])
 
     assert _run(lib.checks.check_clone_risk, ctx) == []
 

@@ -174,8 +174,8 @@ def check_clone_risk(*, sources, **_unread):
     """CR. Reads the project and local settings files among `sources`.
 
     A file that could not be read yields nothing here; it is named in the
-    coverage block. `enableAllProjectMcpServers: false` approves nothing and
-    is not reported.
+    coverage block. A key is reported whatever its value, including
+    `enableAllProjectMcpServers: false`.
     """
     for source in sources:
         if source.scope not in CLONE_SCOPES or source.status != "ok":
@@ -184,8 +184,6 @@ def check_clone_risk(*, sources, **_unread):
             if key not in source.data:
                 continue
             value = source.data[key]
-            if key == ENABLE_ALL and value is False:
-                continue
             yield verdict.finding(
                 "CR", "INFO", "FAIL", "mcp" if key == ENABLE_ALL else "environment",
                 evidence_key="\0".join((key, source.scope, source.path)),
