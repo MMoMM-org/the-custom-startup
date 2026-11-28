@@ -65,6 +65,7 @@ PROFILES = ("macos-host", "linux-native", "container")
 PLUGIN_NAME = "tcs-helper"
 UNKNOWN_VERSION = "unknown"
 GIT_TIMEOUT_SECONDS = 5
+GIT_FAILED_UNAUDITED = "repository settings (git lookup failed)"
 FIX_TEMPLATE_ERROR = "fix-template-error"
 # Servers listed per origin before the rest is counted: a repository's
 # `.mcp.json` cannot fill the report and push the findings out of it.
@@ -145,6 +146,7 @@ def _audit(args, world: World) -> dict:
     if system_root is _DEFAULT:
         system_root = layers.default_system_root(platform)
 
+    git_failed = repo_root is None and _nearest_git_marker(project_dir) is not None
     sources = layers.discover(project_dir, repo_root, home, config_dir, system_root)
     env = environment.detect(
         platform,
@@ -186,6 +188,12 @@ def _audit(args, world: World) -> dict:
         raw, env.profile, verdict.profile_exceptions,
         sources=sources, settings_flag=env.settings_flag,
     )
+
+    if git_failed:
+        # A repository marks the project, yet its root is unknown: repository-level settings
+        # were not read, and the report says so.
+        coverage["unaudited"] = [*coverage["unaudited"], GIT_FAILED_UNAUDITED]
+        summary["counts"]["unaudited"] = len(coverage["unaudited"])
 
     names = render.NameTable()
     roots = _roots(project_dir, repo_root, config_dir, home, system_root)
@@ -230,7 +238,8 @@ def _audit(args, world: World) -> dict:
         "info": [shown(item) for item in info],
         "summary": summary,
     }
-    doc = render.cap_report(doc, indent=None)  # the indent `_emit` prints with
+    # The indent `_emit` prints with; one byte is left for its final newline.
+    doc = render.cap_report(doc, limit=render.REPORT_LIMIT_BYTES - 1, indent=None)
     misplaced = render.untrusted_outside_evidence(doc)
     if misplaced:
         # Only the places are named, never the strings found there.

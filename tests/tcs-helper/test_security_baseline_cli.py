@@ -799,12 +799,16 @@ def test_an_oversized_report_is_shortened_and_says_so(machine):
     result = machine.run()
 
     assert result.returncode == 0
-    assert len(result.stdout) <= 32 * 1024 + 1  # the cap, plus the final newline
+    assert len(result.stdout) <= 32 * 1024  # the cap includes the final newline
     doc = json.loads(result.stdout)
-    assert doc["truncated"]["limit_bytes"] == 32 * 1024
+    assert doc["truncated"]["limit_bytes"] == 32 * 1024 - 1  # room for the newline
     assert doc["truncated"]["collapsed"]["findings"] > 0
     assert doc["summary"]["counts"]["HIGH"] >= 400  # the counts still cover every finding
     assert len(doc["findings"]) < 400
+    assert set(doc["coverage"]["unaudited"]) >= set(UNAUDITED)
+    assert doc["environment"]["profile"] == "macos-host"
+    assert "coverage" not in doc["truncated"].get("removed", [])
+    assert "environment" not in doc["truncated"].get("removed", [])
 
 
 def _categories(doc):
@@ -1175,6 +1179,95 @@ def test_the_default_repository_lookup_never_runs_a_git_from_the_repository(lib,
     capfd.readouterr()
     assert code == 0
     assert not ran.exists()
+
+
+GIT_STUB = """#!/bin/sh
+env > '{record}/env'
+printf '%s\\n' "$@" > '{record}/argv'
+{action}
+"""
+
+
+def _stub_git(machine, action):
+    """A `git` in a trusted directory outside every audited tree. It records its
+    environment and argv in a directory of its own."""
+    bin_dir = machine.tmp / "trusted-bin"
+    record = machine.tmp / "record"
+    bin_dir.mkdir()
+    record.mkdir()
+    (bin_dir / "git").write_text(GIT_STUB.format(record=record, action=action))
+    (bin_dir / "git").chmod(0o755)
+    environ = {"HOME": str(machine.home), "PATH": str(bin_dir)}
+    return record, environ
+
+
+def _recorded_env_keys(record):
+    keys = {line.split("=", 1)[0] for line in (record / "env").read_text().splitlines() if "=" in line}
+    return keys - {"PWD", "OLDPWD", "SHLVL", "_"}  # a shell adds these itself
+
+
+def test_the_default_repository_lookup_asks_a_trusted_git_with_a_minimal_environment(
+    lib, machine, capfd,
+):
+    record, environ = _stub_git(machine, f"echo '{machine.repo}'")
+    project = machine.repo / "packages" / "app"
+    project.mkdir(parents=True)
+    world = _world(lib, machine, environ=environ, git_toplevel=None)
+
+    code = lib.cli.main(["audit", "--project", str(project)], world=world)
+
+    doc = json.loads(capfd.readouterr().out)
+    assert code == 0
+    assert "<repo>" in doc["roots"]["evidence"]
+    assert _recorded_env_keys(record) == {"PATH", "HOME", "LC_ALL", "GIT_OPTIONAL_LOCKS"}
+    assert (record / "argv").read_text().splitlines() == [
+        "-C", os.path.realpath(project), "rev-parse", "--show-toplevel",
+    ]
+
+
+def test_a_failing_git_leaves_no_repository_root_and_names_the_skipped_settings(
+    lib, machine, capfd,
+):
+    (machine.repo / ".git").mkdir()
+    _record, environ = _stub_git(machine, "exit 128")
+    world = _world(lib, machine, environ=environ, git_toplevel=None)
+
+    code = lib.cli.main(["audit", "--project", str(machine.repo)], world=world)
+
+    doc = json.loads(capfd.readouterr().out)
+    assert code == 0
+    assert "<repo>" not in doc["roots"]["evidence"]
+    assert doc["coverage"]["unaudited"] == [*UNAUDITED, "repository settings (git lookup failed)"]
+    assert doc["summary"]["counts"]["unaudited"] == len(UNAUDITED) + 1
+
+
+def test_no_git_marker_means_no_lookup_failure_is_reported(lib, machine, capfd):
+    _record, environ = _stub_git(machine, "exit 128")
+    world = _world(lib, machine, environ=environ, git_toplevel=None)
+
+    code = lib.cli.main(["audit", "--project", str(machine.repo)], world=world)
+
+    doc = json.loads(capfd.readouterr().out)
+    assert code == 0
+    assert doc["coverage"]["unaudited"] == UNAUDITED
+
+
+def test_a_git_that_times_out_leaves_no_repository_root(lib, machine, monkeypatch, capfd):
+    (machine.repo / ".git").mkdir()
+    _record, environ = _stub_git(machine, f"echo '{machine.repo}'")
+
+    def timed_out(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired("git", 5)
+
+    monkeypatch.setattr(lib.cli.subprocess, "run", timed_out)
+    world = _world(lib, machine, environ=environ, git_toplevel=None)
+
+    code = lib.cli.main(["audit", "--project", str(machine.repo)], world=world)
+
+    doc = json.loads(capfd.readouterr().out)
+    assert code == 0
+    assert "<repo>" not in doc["roots"]["evidence"]
+    assert "repository settings (git lookup failed)" in doc["coverage"]["unaudited"]
 
 
 def test_the_probe_is_asked_for_the_detected_platform_name(lib, machine, capfd):

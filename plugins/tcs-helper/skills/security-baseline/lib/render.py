@@ -42,9 +42,12 @@ ENV_KEY = "env"
 
 # Sections cap_report() may shorten. Within one severity they are cut in this order.
 DROPPABLE_SECTIONS = ("info", "accepted", "findings")
-# cap_report() never removes these: the report's identity, the notice, and the summary, whose
-# counts and verdict line cover every finding whatever was cut.
-PROTECTED_KEYS = ("schema_version", "tool_version", "untrusted_notice", "summary")
+# cap_report() never removes these: the report's identity, the notice, the environment and
+# coverage (what was and was not audited), and the summary, whose counts and verdict line
+# cover every finding whatever was cut.
+PROTECTED_KEYS = (
+    "schema_version", "tool_version", "untrusted_notice", "environment", "coverage", "summary",
+)
 # Findings alike in these fields form one run that cap_report() may collapse.
 GROUP_FIELDS = ("check", "severity", "file", "layer", "scope")
 # One finding of each of these, per section, always stays.
@@ -555,8 +558,9 @@ def cap_report(doc, limit=REPORT_LIMIT_BYTES, indent=None, droppable=DROPPABLE_S
 
     The result carries `truncated: {limit_bytes, collapsed: {section: n}, dropped:
     {section: n}, dropped_groups: [{block, check, severity, count}], removed: [key]}`,
-    counted in original findings: in each section, shown + collapsed + dropped is the
-    number it had.
+    counted in original findings: in each section, the non-summary entries shown plus
+    collapsed plus dropped equal the number it had (a collapse summary entry is not one of
+    them).
     """
     if limit < MIN_REPORT_LIMIT_BYTES:
         raise ValueError("report limit below %d bytes" % MIN_REPORT_LIMIT_BYTES)

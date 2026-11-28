@@ -101,4 +101,12 @@ def _arguments(function, context):
     parameters = inspect.signature(function).parameters.values()
     if any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters):
         return dict(context)
-    return {parameter.name: context[parameter.name] for parameter in parameters}
+    given = {}
+    for parameter in parameters:
+        if parameter.kind is inspect.Parameter.VAR_POSITIONAL:
+            continue
+        if parameter.name in context:
+            given[parameter.name] = context[parameter.name]
+        elif parameter.default is inspect.Parameter.empty:
+            raise KeyError(parameter.name)  # a required argument the context lacks
+    return given

@@ -164,3 +164,31 @@ def test_run_all_pairs_each_finding_with_its_group_rendering_flag(lib):
     found = lib.checks.run_all({}, checks)
 
     assert [(f.check, rendered) for f, rendered in found] == [("C1", False), ("C6", True)]
+
+
+def test_run_all_uses_the_default_of_a_parameter_the_context_lacks(lib):
+    seen = {}
+
+    def defaulted(*, sources, extra="fallback"):
+        seen["args"] = (sources, extra)
+        return []
+
+    checks = (lib.checks.Check("C3", "HIGH", "permissions", defaulted, False),)
+
+    assert lib.checks.run_all({"sources": ["s"]}, checks) == []
+    assert seen["args"] == (["s"], "fallback")
+    assert lib.checks.run_all({"sources": ["s"], "extra": "given"}, checks) == []
+    assert seen["args"] == (["s"], "given")
+
+
+def test_run_all_ignores_a_variadic_positional_parameter(lib):
+    seen = {}
+
+    def variadic(*rest, sources):
+        seen["call"] = (rest, sources)
+        return []
+
+    checks = (lib.checks.Check("C3", "HIGH", "permissions", variadic, False),)
+
+    assert lib.checks.run_all({"sources": ["s"]}, checks) == []
+    assert seen["call"] == ((), ["s"])

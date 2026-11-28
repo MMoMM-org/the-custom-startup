@@ -584,6 +584,31 @@ def test_cap_never_removes_the_summary(render):
     assert out["truncated"]["over_limit"] is True
 
 
+def _with_context_sections(render, doc):
+    doc["coverage"] = {"audited": ["user"], "unaudited": ["hooks"]}
+    doc["environment"] = {"profile": "linux-native", "claude_version": "2.1.300"}
+    return doc
+
+
+@pytest.mark.parametrize("padded", ["sources", "probe", "coverage"])
+def test_cap_never_removes_coverage_or_environment(render, padded):
+    doc = _with_context_sections(render, _report(render, findings=2))
+    doc["sources"] = [{"path": "p"}]
+    doc["probe"] = {"result": "ok"}
+    doc[padded] = (
+        {"audited": ["x" * 80] * 2000, "unaudited": ["hooks"]}
+        if padded == "coverage" else ["x" * 80] * 2000
+    )
+
+    out = render.cap_report(doc, limit=1500)
+
+    assert out["coverage"] == doc["coverage"]
+    assert out["environment"] == doc["environment"]
+    assert set(out["truncated"]["removed"]) <= {"sources", "probe"}
+    assert "coverage" not in out["truncated"]["removed"]
+    assert "environment" not in out["truncated"]["removed"]
+
+
 def test_cap_applies_to_the_indented_form_when_asked(render):
     doc = _report(render, findings=300)
 
