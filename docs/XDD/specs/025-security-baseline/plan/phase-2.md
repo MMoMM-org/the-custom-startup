@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Reading the machine — environment, probe, layers, inventory"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 2
 ---
@@ -49,7 +49,7 @@ Establishes everything the audit knows about the machine: where it runs, whether
   4. Validate: `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_probe.py`; on a Linux runner without bwrap the real call returns `fail` with `missing`
   5. Success: dependency and trial results distinguished `[ref: PRD/F6 AC2-AC4]`; probe executes nothing from settings and writes nothing `[ref: PRD/F6 AC7]` `[ref: SDD/F6.2-F6.4, F6.8]`
 
-- [ ] **T2.3 Settings and MCP sources (`layers.py`)** `[activity: backend-io]` `[parallel: true]`
+- [x] **T2.3 Settings and MCP sources (`layers.py`)** `[activity: backend-io]` `[parallel: true]`
 
   1. Prime: Source model, settings paths and precedence, MCP source table, local-file location gotcha `[ref: SDD/Interface Specifications; lines: 241-285]` `[ref: SDD/Implementation Gotchas; lines: 1191-1211]`
   2. Test (fixture home + repo per `World` convention, `HOME` and `CLAUDE_CONFIG_DIR` overrides): finds managed file and `managed-settings.d/*.json` alphabetically (hidden and non-json skipped) under an injectable system root; user via `CLAUDE_CONFIG_DIR`; project at `<project_dir>/.claude/settings.json`; local at repo root and, if present, the legacy start-directory file; `EACCES` → `denied`; each source carries status from `jsonio`; MCP: `.mcp.json`, `~/.claude.json` top-level `mcpServers` and `projects[<abs>].mcpServers`, approval keys from settings, managed `managed-mcp.json`; `~/.claude.json` per-project `enabledMcpjsonServers` read as observed-only; nothing written
@@ -60,7 +60,7 @@ Establishes everything the audit knows about the machine: where it runs, whether
 - [ ] **T2.4 Plugin inventory (`inventory.py`)** `[activity: backend-io]` `[parallel: true]`
 
   1. Prime: `guard.py` walk approach (copy, do not import), ADR-9 `[ref: SDD/Code Context; lines: 148-193]` `[ref: SDD/ADR-9; lines: 1034-1042]`
-  2. Test: installed skills from `~/.claude/plugins/{cache,marketplaces}/*/*/*/skills/*/SKILL.md` frontmatter `name:` plus repo and user `.claude/skills/`; symlink loops survive via `(st_dev, st_ino)` dedup; dot-prefixed dirs skipped; plugin MCP servers from plugin `.mcp.json` and `plugin.json` `mcpServers`, `installPath` outside `~/.claude/plugins` rejected; git-helpers template: newest of versions `2.2.43`, `2.3.0`, `2.10.0` chosen by version order (not lexical), repo-checkout fallback, sha256 recorded, absent → `None`
+  2. Test: installed skills from `~/.claude/plugins/{cache,marketplaces}/*/*/*/skills/*/SKILL.md` frontmatter `name:` plus repo and user `.claude/skills/`; symlink loops survive via `(st_dev, st_ino)` dedup; dot-prefixed dirs skipped; plugin MCP servers from plugin `.mcp.json` and `plugin.json` `mcpServers`, `installPath` outside `~/.claude/plugins` rejected; git-helpers template: newest of versions `2.2.43`, `2.3.0`, `2.10.0` chosen by version order (not lexical), no repository-checkout fallback (ADR-9 amended 2026-11-28), marketplace layout `marketplaces/<mkt>/plugins/tcs-git-helpers/templates/...` ranked below versioned cache copies, sha256 recorded, absent → `None`
   3. Implement: `lib/inventory.py` — `scan(home, repo_root) -> Inventory(skills, plugin_mcp, git_template)`
   4. Validate: `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_inventory.py`
   5. Success: template is the single source for accepted excludes `[ref: PRD/F10 AC3-AC5]`; stale skills detectable `[ref: PRD/F12 AC1]` `[ref: SDD/ADR-9]`

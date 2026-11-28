@@ -594,7 +594,7 @@ ApplyReport:
 - from: K7 inventory
   to: tcs-git-helpers template
     - protocol: file read
-    - data_flow: "newest of ~/.claude/plugins/{cache,marketplaces}/*/tcs-git-helpers/*/templates/claude-settings/sandbox-git.json by version sort; exact entries + sha256 recorded"
+    - data_flow: "newest installed copy (cache by version, then marketplace layout) per ADR-9; no repository-checkout fallback; exact entries + sha256 recorded"
 
 - from: K3 environment
   to: Claude Code binary
@@ -1047,14 +1047,21 @@ stateDiagram-v2
   - Trade-offs: long rule strings appear truncated; full text is in the file.
   - User confirmed: **2026-11-27**
 
-- [x] **ADR-9 git-helpers template lookup:** newest by version sort of
-  `~/.claude/plugins/{cache,marketplaces}/*/tcs-git-helpers/*/templates/claude-settings/sandbox-git.json`,
-  falling back to the repository checkout when run inside this repo; only exact string matches
-  are accepted; sha256 recorded in the report; absent template → ordinary findings.
-  - Rationale: single source stays in tcs-git-helpers; no cross-plugin import.
+- [x] **ADR-9 git-helpers template lookup:** installed copies only — newest by version sort of
+  `~/.claude/plugins/cache/*/tcs-git-helpers/<version>/templates/claude-settings/sandbox-git.json`,
+  then (ranked below any versioned cache copy)
+  `~/.claude/plugins/marketplaces/*/plugins/tcs-git-helpers/templates/claude-settings/sandbox-git.json`;
+  realpath must stay inside `~/.claude/plugins`; **no fallback to the audited repository's
+  checkout**; only exact string matches are accepted; sha256 recorded in the report; absent
+  template → ordinary findings (also when auditing this repo without the plugin installed).
+  - Rationale: single source stays in tcs-git-helpers; no cross-plugin import. The installed
+    plugin directory carries the same trust as tcs-helper itself; a repository checkout is
+    attacker-controlled (CON-5) and could ship its own template to turn excludes into ACCEPTED.
   - Trade-offs: a template change makes old installed entries ordinary findings until git-setup
-    re-runs (safe direction).
-  - User confirmed: **2026-11-27**
+    re-runs (safe direction); auditing this repo without tcs-git-helpers installed reports its
+    excludes as ordinary findings.
+  - User confirmed: **2026-11-27**; amended **2026-11-28** (checkout fallback dropped,
+    marketplace layout corrected)
 
 - [x] **ADR-10 Strict JSON I/O:** open with `O_RDONLY|O_NONBLOCK|O_NOFOLLOW` (user scope:
   resolve symlink first, then open the real path), `fstat` regular file, read ≤ 1 MiB + 1;

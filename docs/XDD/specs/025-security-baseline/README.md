@@ -48,6 +48,7 @@
 | 2026-11-27 | PLAN approved after alignment check | Fixed: docs-sync invocation, plugin CHANGELOG needs the exact next-minor heading (not Unreleased), no versions in AGENTS.md, ensure_ascii and prompt_lint repo tests added to validations, importlib loading to avoid the patterns-setup `cli` clash |
 | 2026-11-27 | Deviation (T1.2): merge rule `true-wins` → `strict-wins` with per-key strict value, `strict_against`, `strict_min` | Docs: a user `allowUnsandboxedCommands: false` holds against a project `true` from v2.1.285 — not expressible as true-wins or highest; SDD K9 example and phase-3 T3.1 updated |
 | 2026-11-27 | Phase 1 drift resolved | Fix: refdata rejects duplicate JSON keys (ADR-5). SDD updated: ten credential paths listed, Directory Map min-version wording, defaultMode `auto` ignored in project/local, Format.indent may be None. Deferred to Phase 3: narrow `git diff`/`git log` with `--output` (T3.4), `hooks` union over objects (T3.1), `Read(.env*)` depth semantics (T3.2). AGENTS.md entry pulled forward from T5.2 to clear the gate. |
+| 2026-11-28 | ADR-9 amended: no repository-checkout fallback for the git-helpers template; marketplace layout corrected | A cloned repo could ship `plugins/tcs-git-helpers/templates/claude-settings/sandbox-git.json` and turn its own excludedCommands into ACCEPTED; installed plugin dirs carry tcs-helper's own trust. The original glob missed `marketplaces/<mkt>/plugins/tcs-git-helpers/...` (no version dir). User decision. |
 
 ## Context
 
