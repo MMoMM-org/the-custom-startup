@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Setup — plan, state, writer, apply"
-status: pending
+status: in_progress
 version: "1.0"
 phase: 4
 ---
@@ -34,7 +34,7 @@ phase: 4
 
 Delivers `plan` and `apply`: content-bound proposals, the only settings writer, and the state that makes approvals single-use.
 
-- [ ] **T4.1 State directory and plan records (`state.py`)** `[activity: backend-io]` `[parallel: true]`
+- [x] **T4.1 State directory and plan records (`state.py`)** `[activity: backend-io]` `[parallel: true]`
 
   1. Prime: StateDir layout, PlanRecord `[ref: SDD/Data Storage Changes; lines: 453-465]` `[ref: SDD/ADR-2; lines: 953-964]`
   2. Test: StateDir under `XDG_STATE_HOME` or `~/.local/state`, created 0700; record written 0600 with `O_EXCL|O_NOFOLLOW`; pre-existing symlink at the record path refused; load returns `unknown`, `expired` (clock injectable, 15 min), `consumed`; consume is idempotent and a second apply sees `consumed`; expired records removed on the next run; lock acquired and released, held across a callback; StateDir never inside the repository even when `HOME` is the repo root
@@ -50,7 +50,7 @@ Delivers `plan` and `apply`: content-bound proposals, the only settings writer, 
   4. Validate: `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_planner.py tests/tcs-helper/test_security_baseline_cli.py -k plan`
   5. Success: `[ref: PRD/F9 AC1, AC3-AC6, AC8, AC10, AC14]` `[ref: PRD/F4 AC2]` `[ref: PRD/F6 AC5-AC6]` `[ref: PRD/F8 AC2-AC3]` `[ref: PRD/F12 AC2]` `[ref: PRD/F11 AC2]` `[ref: SDD/F9.1, F9.3-F9.6, F9.8, F9.10, F9.14, F4.2, F6.5-F6.7, F8.2, F11.2, F12.2, R10, E2, E3]`
 
-- [ ] **T4.3 Settings writer (`writer.py`)** `[activity: security]` `[parallel: true]`
+- [x] **T4.3 Settings writer (`writer.py`)** `[activity: security]` `[parallel: true]`
 
   1. Prime: ADR-3 in full; writer error rows; gotchas on `$TMPDIR` and sandbox placeholders `[ref: SDD/ADR-3; lines: 965-981]` `[ref: SDD/Error Handling; lines: 809-826]` `[ref: SDD/Implementation Gotchas; lines: 1191-1211]`
   2. Test: only the three computed targets accepted; any managed path, drop-in dir or arbitrary path refused before any open; project `.claude` symlinked outside the project refused; `settings.local.json` symlinked to `~/.ssh/config` refused; user `settings.json` symlink to a dotfiles file followed, link kept, real file written; foreign uid and non-regular targets refused; 0-byte read-only placeholder refused with the `claude doctor` hint; backup written 0600 in StateDir and verified before replace; retention keeps last 10 per scope and ≥ 30 days, never the newest, ignores non-matching names; temp file in the target directory with `O_EXCL|O_NOFOLLOW`, original mode kept, new file 0600 (user/local) or 0644 masked (project); target changed between read and replace (hook in the re-stat step) → abort, nothing written; EPERM/EROFS → "run apply outside the sandbox", original intact; `os.replace` failure → error, no in-place write; post-write mismatch → restored from backup; simulated `KeyboardInterrupt` after temp write → temp removed, original intact; missing target created with only approved keys
