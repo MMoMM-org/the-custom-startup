@@ -2,21 +2,44 @@
 
     python3 -I -B <abs path>/lib/cli.py audit [--project <dir>]
                                               [--profile macos-host|linux-native|container]
+    python3 -I -B <abs path>/lib/cli.py plan  [--project <dir>] [--profile <p>]
+                                              [--sandbox-confirmed]
+                                              [--select <change_id>]... [--deselect <change_id>]...
+                                              [--move <change_id>=user|project|local]...
 
 `audit` reads the settings files, the plugin inventory and the machine, and
 prints one AuditReport. It writes nothing anywhere: no state, no temporary
 file, and with `-B` no `__pycache__` in the skill directory.
 
+`plan` reads the same and prints one PlanReport: per settings file the
+proposed changes and a diff of what `apply` would write. It writes no
+settings file. It writes one plan record (the approval `apply` asks for)
+into the state directory, and only after the report is complete. The
+state, planner and writer modules are loaded by `plan` alone.
+
 **Exit codes:** 0 the verb ran, with or without gaps (the verdict is in the
 JSON); 1 an uncaught exception, left as Python's own code so a crash is never
 read as a verdict; 2 usage (argparse's own code, also a `--project` that is
-not a directory); 3 a precondition failed (unsupported Python), nothing read.
+not a directory, an unknown change id or a bad `--move`); 3 a precondition
+failed (unsupported Python; for `plan` also an unsupported platform or an
+unusable state directory), nothing written.
 
 **Order of checks:** argparse, then the interpreter version (before any
 sibling import), then the verb.
 
 **Output:** one JSON document on exit 0 only, `ensure_ascii=True`, written to
 `sys.stdout.buffer`. Help and messages go to stderr. The CLI never prompts.
+
+**PlanReport:** `targets[]` holds `scope`, the labelled `path`, the hashes,
+`writable`/`refuse_reason`, the `changes` (id, kind, pointer, check,
+from_finding, default_selected, selected, flags, and the value under
+`evidence.value`) and, under `evidence`, the `real_path` and the `diff`. A
+diff is file content, so it stands under `evidence`; its first line is the
+header `scope · real path · profile (DETECTED|EXPLICIT) · plan <short>`.
+A report over the size limit is cut in this order, each cut named in
+`truncated`: `not_proposed` entries, changes that are not selected, selected
+changes down to PLAN_MIN_CHANGES per file, diff lines (the diff then ends in
+a line saying how many are not shown), the remaining change entries.
 
 **What leaves the `evidence` fields:** nothing a file or a directory name
 could word. Evidence is rendered by `render`; fix texts come from templates;
@@ -66,6 +89,13 @@ PLUGIN_NAME = "tcs-helper"
 UNKNOWN_VERSION = "unknown"
 GIT_TIMEOUT_SECONDS = 5
 GIT_FAILED_UNAUDITED = "repository settings (git lookup failed)"
+SETUP_PLATFORMS = ("darwin", "linux")
+TARGET_SCOPES = ("user", "project", "local")
+MOVE_USAGE = "--move takes <change_id>=user|project|local, once per change"
+# What a cut plan report still shows per file before diff lines are cut.
+PLAN_MIN_CHANGES = 10
+PLAN_MIN_DIFF_LINES = 40
+DIFF_SHORTENED = "diff shortened: %d more lines are not shown"
 FIX_TEMPLATE_ERROR = "fix-template-error"
 # Servers listed per origin before the rest is counted: a repository's
 # `.mcp.json` cannot fill the report and push the findings out of it.
@@ -73,11 +103,35 @@ MCP_SERVERS_PER_ORIGIN = 20
 
 _PLUGIN_MANIFEST = LIB_DIR.parents[2] / ".claude-plugin" / "plugin.json"
 _PLUGIN_VERSION_RE = re.compile(r"[0-9]{1,9}(\.[0-9]{1,9}){0,3}")
+_CHANGE_ID_RE = re.compile(r"(user|project|local):(/[A-Za-z]{1,64}){1,4}:[0-9a-f]{8}")
 _DEFAULT: Any = object()
 
 
 class _Usage(Exception):
     """Arguments rejected after parsing: exit 2."""
+
+
+class _Refused(Exception):
+    """A precondition of the verb failed: exit 3, nothing written."""
+
+
+@dataclasses.dataclass(frozen=True)
+class _Observed:
+    """What one run read: the paths, the settings files, the machine and the
+    context the checks run on."""
+
+    environ: Any
+    home: str
+    config_dir: Optional[str]
+    project_dir: str
+    repo_root: Optional[str]
+    system_root: Optional[str]
+    git_failed: bool
+    sources: list
+    env: Any
+    probe: Any
+    inventory: Any
+    context: dict
 
 
 @dataclasses.dataclass(frozen=True)
@@ -111,6 +165,20 @@ def _parser() -> argparse.ArgumentParser:
                        help="project directory (default: the current directory)")
     audit.add_argument("--profile", choices=PROFILES, default=None,
                        help="use this profile instead of the detected one")
+    plan = sub.add_parser("plan", help="propose changes as one diff per settings file "
+                                       "(writes no settings file)")
+    plan.add_argument("--project", default=None, metavar="DIR",
+                      help="project directory (default: the current directory)")
+    plan.add_argument("--profile", choices=PROFILES, default=None,
+                      help="use this profile instead of the detected one")
+    plan.add_argument("--sandbox-confirmed", action="store_true",
+                      help="the developer confirmed that /sandbox shows the sandbox active")
+    plan.add_argument("--select", action="append", default=[], metavar="CHANGE_ID",
+                      help="include this change (repeatable)")
+    plan.add_argument("--deselect", action="append", default=[], metavar="CHANGE_ID",
+                      help="leave this change out (repeatable)")
+    plan.add_argument("--move", action="append", default=[], metavar="CHANGE_ID=SCOPE",
+                      help="put this addition into the user, project or local file (repeatable)")
     return p
 
 
@@ -125,16 +193,14 @@ def _emit(doc: dict) -> None:
 # =============================================================================
 
 
-def _audit(args, world: World) -> dict:
-    import checks
+def _observe(args, world: World) -> _Observed:
+    """Read the settings files, the inventory and the machine. Writes nothing."""
     import effective
     import environment
     import inventory
     import layers
     import probe
     import refdata
-    import render
-    import verdict
 
     platform = sys.platform if world.platform is None else world.platform
     environ = os.environ if world.environ is None else world.environ
@@ -180,18 +246,33 @@ def _audit(args, world: World) -> dict:
             lambda key: effective.effective(key, sources, keys.rules[key], env.claude_version)
         ),
     }
+    return _Observed(
+        environ=environ, home=home, config_dir=config_dir, project_dir=project_dir,
+        repo_root=repo_root, system_root=system_root, git_failed=git_failed,
+        sources=sources, env=env, probe=probe_result, inventory=found, context=context,
+    )
+
+
+def _audit(args, world: World) -> dict:
+    import checks
+    import layers
+    import render
+    import verdict
+
+    seen = _observe(args, world)
+    sources, env, probe_result, found = seen.sources, seen.env, seen.probe, seen.inventory
     names = render.NameTable()
-    roots = _roots(project_dir, repo_root, config_dir, home, system_root)
+    roots = _roots(seen.project_dir, seen.repo_root, seen.config_dir, seen.home, seen.system_root)
     raw = [
         _with_rendered_evidence(item, rendered, render, roots, names)
-        for item, rendered in checks.run_all(context)
+        for item, rendered in checks.run_all(seen.context)
     ]
     gaps, accepted, info, summary, coverage = verdict.finalise(
         raw, env.profile, verdict.profile_exceptions,
         sources=sources, settings_flag=env.settings_flag,
     )
 
-    if git_failed:
+    if seen.git_failed:
         # A repository marks the project, yet its root is unknown: repository-level settings
         # were not read, and the report says so.
         coverage["unaudited"] = [*coverage["unaudited"], GIT_FAILED_UNAUDITED]
@@ -228,7 +309,7 @@ def _audit(args, world: World) -> dict:
                 # The inventory keeps no configuration values.
                 [{"name": s.name, "path": s.path, "plugin": s.plugin, "config": None}
                  for s in found.plugin_mcp],
-                layers.project_keys(project_dir, repo_root),
+                layers.project_keys(seen.project_dir, seen.repo_root),
             ),
             roots, names,
         ),
@@ -522,6 +603,244 @@ def _tool_version() -> str:
 
 
 # =============================================================================
+# plan
+# =============================================================================
+
+
+def _plan(args, world: World) -> dict:
+    import render
+    import state
+
+    seen = _observe(args, world)
+    if seen.env.platform not in SETUP_PLATFORMS or seen.env.profile not in PROFILES:
+        raise _Refused("setup is not supported on this platform; audit still runs")
+    selection = {"select": list(args.select), "deselect": list(args.deselect)}
+    moves = _moves(args.move)
+    plan = _computed_plan(seen, selection, moves, args.sandbox_confirmed)
+    try:
+        root = state.state_dir(
+            seen.environ, seen.home,
+            forbidden=[d for d in (seen.repo_root, seen.project_dir) if d],
+        )
+        record = state.new_record(
+            plan.plan_id, state.utc_now(), selection=selection, moves=moves,
+            profile=seen.env.profile, profile_source=seen.env.profile_source,
+            sandbox_confirmed=bool(args.sandbox_confirmed),
+        )
+        doc = _plan_report(plan, record.expires_at, seen, render)
+        state.save_plan(root, record)  # last: no approval exists for a report that failed
+    except state.StateError as e:
+        raise _Refused(str(e)) from None
+    return doc
+
+
+def _computed_plan(seen: _Observed, selection, moves, sandbox_confirmed):
+    """The `planner.Plan` for what `seen` holds. `plan` shows it; `apply`
+    calls this with the selection, moves and confirmation of the plan record
+    and compares `plan_id`. Reads the three target files, writes nothing."""
+    import checks
+    import planner
+    import writer
+
+    allowed = writer.allowed_targets(seen.home, seen.config_dir, seen.project_dir, seen.repo_root)
+    managed_roots = None
+    if seen.system_root:
+        managed_roots = (*writer.MANAGED_ROOTS, seen.system_root)
+    snapshot = planner.Snapshot(
+        sources=tuple(seen.sources),
+        environment=seen.env,
+        probe=seen.probe,
+        keys=seen.context["keys"],
+        credentials=seen.context["credentials"],
+        home=seen.home,
+        targets=planner.load_targets(
+            seen.sources, {scope: target.path for scope, target in allowed.items()},
+        ),
+    )
+    findings = [item for item, _rendered in checks.run_all(seen.context)]
+    try:
+        return planner.compute_plan(
+            snapshot, findings, selection, moves, bool(sandbox_confirmed), _tool_version(),
+            refusal=lambda scope, path: writer.refusal(
+                scope, path, targets=allowed, managed_roots=managed_roots,
+            ),
+        )
+    except planner.SelectionError as e:
+        raise _Usage(_selection_message(e)) from None
+
+
+def _moves(pairs) -> dict:
+    """`["<id>=<scope>", ...]` as `{id: scope}`. The text given is never echoed."""
+    moves = {}
+    for pair in pairs:
+        change, separator, scope = pair.rpartition("=")
+        if not separator or not change or scope not in TARGET_SCOPES:
+            raise _Usage(MOVE_USAGE)
+        if moves.setdefault(change, scope) != scope:
+            raise _Usage(MOVE_USAGE)
+    return moves
+
+
+def _selection_message(error) -> str:
+    """Names the change ids at fault. Text that does not have the form of a
+    change id is counted, not repeated: it may be anything."""
+    wording = {
+        "unknown-id": "unknown change id",
+        "conflict": "change id both selected and deselected",
+        "bad-scope": "change id moved to a file that is not user, project or local",
+        "not-movable": "change id that cannot be moved (a removal stays in its own file)",
+    }.get(error.reason, "unusable change id")
+    named = [i for i in error.ids if isinstance(i, str) and _CHANGE_ID_RE.fullmatch(i)]
+    parts = []
+    if named:
+        parts.append(f"{wording}: {', '.join(named)}")
+    other = len(error.ids) - len(named)
+    if other:
+        parts.append(f"{other} change id(s) not in the form the plan prints")
+    return "; ".join(parts) or wording
+
+
+def _plan_report(plan, expires_at, seen: _Observed, render) -> dict:
+    names = render.NameTable()
+    roots = _roots(seen.project_dir, seen.repo_root, seen.config_dir, seen.home, seen.system_root)
+    doc = {
+        "schema_version": SCHEMA_VERSION,
+        "tool_version": _tool_version(),
+        "untrusted_notice": render.UNTRUSTED_NOTICE,
+        "plan_id": plan.plan_id,
+        "plan_short": plan.plan_short,
+        "expires_at": expires_at,
+        "environment": {
+            "profile": seen.env.profile,
+            "profile_source": seen.env.profile_source,
+        },
+        "consent_note": plan.consent_note,
+        "self_allow_warning": plan.self_allow_warning,
+        "targets": [
+            {
+                "scope": target.scope,
+                "path": _shown_path(target.path, roots, names),
+                "pre_sha256": target.pre_sha256,
+                "post_sha256": target.post_sha256,
+                "writable": target.writable,
+                "refuse_reason": target.refuse_reason,
+                "changes": [
+                    {
+                        "id": change.id,
+                        "kind": change.kind,
+                        "pointer": change.pointer,
+                        "check": change.check,
+                        "from_finding": change.from_finding,
+                        "default_selected": change.default_selected,
+                        "selected": change.selected,
+                        "flags": list(change.flags),
+                        "evidence": {"value": render.render_untrusted(change.value)},
+                    }
+                    for change in target.changes
+                ],
+                "evidence": {
+                    "real_path": render.render_untrusted(target.real_path),
+                    "diff": target.diff,
+                },
+            }
+            for target in plan.targets
+        ],
+        "not_proposed": [dict(entry) for entry in plan.not_proposed],
+        "requires_unsandboxed_apply": True,
+    }
+    # One byte is left for the final newline `_emit` adds.
+    doc = _capped_plan(doc, render.REPORT_LIMIT_BYTES - 1, render)
+    misplaced = render.untrusted_outside_evidence(doc)
+    if misplaced:
+        raise RuntimeError("file content outside evidence at: " + ", ".join(misplaced))
+    return doc
+
+
+def _capped_plan(doc, limit, render) -> dict:
+    """DOC, cut if needed to LIMIT bytes of compact JSON, with every cut
+    named in `truncated`. See the module docstring for the order. Targets,
+    their hashes and the diff headers are never cut; a report that still
+    does not fit is returned marked `over_limit`."""
+    def size(candidate):
+        return len(json.dumps(candidate, ensure_ascii=True))
+
+    if size(doc) <= limit:
+        return doc
+
+    def count(chosen):
+        return max(
+            [sum(1 for c in t["changes"] if c["selected"] is chosen) for t in doc["targets"]],
+            default=0,
+        )
+
+    keep = {
+        "not_proposed": len(doc["not_proposed"]),
+        "unselected": count(False),
+        "selected": count(True),
+        "diff": max([t["evidence"]["diff"].count("\n") + 1 for t in doc["targets"]], default=0),
+    }
+
+    def shaped(keep):
+        marker = {
+            "limit_bytes": limit,
+            "not_proposed_dropped": len(doc["not_proposed"]) - keep["not_proposed"],
+            "changes_hidden": {},
+            "diffs_shortened": {},
+        }
+        targets = []
+        for target in doc["targets"]:
+            room = {True: keep["selected"], False: keep["unselected"]}
+            changes = []
+            for change in target["changes"]:
+                if room[change["selected"]] > 0:
+                    room[change["selected"]] -= 1
+                    changes.append(change)
+            if len(changes) < len(target["changes"]):
+                marker["changes_hidden"][target["scope"]] = len(target["changes"]) - len(changes)
+            diff = target["evidence"]["diff"]
+            lines = diff.split("\n")
+            if len(lines) > keep["diff"]:
+                shown = lines[:keep["diff"]]
+                marker["diffs_shortened"][target["scope"]] = {
+                    "shown_lines": len(shown), "total_lines": len(lines),
+                }
+                shown.append(DIFF_SHORTENED % (len(lines) - len(shown)))
+                diff = render.Untrusted("\n".join(shown))
+            targets.append({
+                **target, "changes": changes, "evidence": {**target["evidence"], "diff": diff},
+            })
+        return {
+            **doc,
+            "targets": targets,
+            "not_proposed": doc["not_proposed"][:keep["not_proposed"]],
+            "truncated": marker,
+        }
+
+    def fits(name, value):
+        return size(shaped({**keep, name: value})) <= limit
+
+    cuts = (
+        ("not_proposed", 0), ("unselected", 0), ("selected", PLAN_MIN_CHANGES),
+        ("diff", PLAN_MIN_DIFF_LINES), ("selected", 0), ("diff", 1),
+    )
+    for name, floor in cuts:
+        if size(shaped(keep)) <= limit:
+            break
+        low, high = min(floor, keep[name]), keep[name]
+        while low < high:  # the most that still fits; the floor when nothing does
+            middle = (low + high + 1) // 2
+            if fits(name, middle):
+                low = middle
+            else:
+                high = middle - 1
+        keep[name] = low
+    out = shaped(keep)
+    if size(out) > limit:
+        out["truncated"]["over_limit"] = True
+    return out
+
+
+# =============================================================================
 # main
 # =============================================================================
 
@@ -543,11 +862,15 @@ def main(argv=None, world: Optional[World] = None) -> int:
     if str(LIB_DIR) not in sys.path:
         sys.path.insert(0, str(LIB_DIR))
 
+    verb = {"audit": _audit, "plan": _plan}[args.verb]
     try:
-        doc = _audit(args, World() if world is None else world)
+        doc = verb(args, World() if world is None else world)
     except _Usage as e:
         print(f"cli.py {args.verb}: {e}", file=sys.stderr)
         return EXIT_USAGE
+    except _Refused as e:
+        print(f"cli.py {args.verb}: {e}", file=sys.stderr)
+        return EXIT_REFUSED
 
     _emit(doc)
     return EXIT_OK

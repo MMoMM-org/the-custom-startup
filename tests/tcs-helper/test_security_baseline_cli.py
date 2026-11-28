@@ -1341,3 +1341,454 @@ def test_a_scope_that_is_not_a_plain_name_is_shown_as_a_placeholder(lib, machine
     assert code == 0
     assert json.loads(captured.out)["findings"][0]["scope"].startswith("<non-conforming #1 ")
     assert "ZZSCOPE" not in captured.out
+
+
+# =============================================================================
+# plan (T4.2): the PlanReport, the plan record, selection arguments
+# =============================================================================
+
+PLAN_KEYS = {
+    "schema_version", "tool_version", "untrusted_notice", "plan_id", "plan_short",
+    "expires_at", "environment", "consent_note", "self_allow_warning", "targets",
+    "not_proposed", "requires_unsandboxed_apply",
+}
+TARGET_KEYS = {
+    "scope", "path", "pre_sha256", "post_sha256", "writable", "refuse_reason", "changes",
+    "evidence",
+}
+CHANGE_KEYS = {
+    "id", "kind", "pointer", "check", "from_finding", "default_selected", "selected",
+    "flags", "evidence",
+}
+SETUP_MODULES = ("planner", "state", "writer")
+MIDDLE_DOT = "·"
+
+
+def _plans_dir(machine) -> pathlib.Path:
+    return machine.home / ".local" / "state" / "tcs-helper" / "security-baseline" / "plans"
+
+
+def _plan_run(machine, *extra, project=None):
+    return machine.run("plan", "--project", str(project or machine.repo), *extra)
+
+
+def _plan(machine, *extra, project=None) -> dict:
+    result = _plan_run(machine, *extra, project=project)
+    assert result.returncode == 0, result.stderr.decode()
+    assert result.stderr == b""
+    return json.loads(result.stdout)
+
+
+def _plan_changes(doc):
+    return [change for target in doc["targets"] for change in target["changes"]]
+
+
+def _plan_target(doc, scope):
+    return next(target for target in doc["targets"] if target["scope"] == scope)
+
+
+def _change_at(doc, pointer):
+    return next(change for change in _plan_changes(doc) if change["pointer"] == pointer)
+
+
+@pytest.mark.parametrize("profile", sorted(PROFILES))
+def test_plan_exits_zero_with_one_plan_report(tmp_path, profile):
+    machine = Machine(tmp_path, profile)
+
+    result = _plan_run(machine)
+
+    assert result.returncode == 0, result.stderr.decode()
+    assert result.stderr == b""
+    result.stdout.decode("ascii")
+    doc = json.loads(result.stdout)
+    assert set(doc) == PLAN_KEYS
+    assert doc["schema_version"] == 1
+    assert doc["untrusted_notice"] == NOTICE
+    assert len(doc["plan_id"]) == 64 and set(doc["plan_id"]) <= set("0123456789abcdef")
+    assert doc["plan_short"] == doc["plan_id"][:8]
+    assert doc["environment"] == {"profile": PROFILES[profile][2], "profile_source": "detected"}
+    assert doc["requires_unsandboxed_apply"] is True
+    assert doc["self_allow_warning"] is False
+    assert "does not prove" in doc["consent_note"]
+
+
+def test_plan_lists_each_target_with_its_changes_and_one_diff(machine):
+    machine.user({"permissions": {"allow": ["Bash(curl:*)"]}})
+
+    doc = _plan(machine)
+
+    assert [target["scope"] for target in doc["targets"]] == ["user"]
+    target = doc["targets"][0]
+    assert set(target) == TARGET_KEYS
+    assert target["path"] == "~/.claude/settings.json"
+    assert target["writable"] == "ok" and target["refuse_reason"] is None
+    real = str((machine.home / ".claude" / "settings.json").resolve())
+    assert set(target["evidence"]) == {"real_path", "diff"}
+    assert target["evidence"]["diff"].splitlines()[0] == (
+        f"user {MIDDLE_DOT} {real} {MIDDLE_DOT} macos-host (DETECTED) "
+        f"{MIDDLE_DOT} plan {doc['plan_short']}"
+    )
+    assert '+      "Read(~/.ssh/**)"' in target["evidence"]["diff"]
+    for change in target["changes"]:
+        assert set(change) == CHANGE_KEYS
+        assert set(change["evidence"]) == {"value"}
+    removal = _change_at(doc, "/permissions/allow")
+    assert (removal["kind"], removal["selected"], removal["check"]) == ("remove", False, "C3")
+    assert removal["evidence"]["value"] == "Bash(curl:*)"
+    assert _change_at(doc, "/permissions/disableBypassPermissionsMode")["selected"] is True
+
+
+def test_plan_writes_one_private_record_and_no_settings_file(machine):
+    machine.user({"permissions": {"allow": ["Bash(curl:*)"]}})
+    machine.project({"hooks": {}})
+    machine.mcp_json({"mcpServers": {"a": {"command": "x"}}})
+    watched = (machine.home / ".claude", machine.repo, machine.fsroot, machine.cwd, SKILL_DIR)
+    before = [_digest(root) for root in watched]
+
+    doc = _plan(machine)
+
+    assert [_digest(root) for root in watched] == before
+    assert not machine.managed.exists()
+    records = sorted(_plans_dir(machine).iterdir())
+    assert [record.name for record in records] == [doc["plan_id"] + ".json"]
+    assert records[0].stat().st_mode & 0o777 == 0o600
+    record = json.loads(records[0].read_text())
+    assert record["plan_id"] == doc["plan_id"]
+    assert record["expires_at"] == doc["expires_at"]
+    assert record["selection"] == {"select": [], "deselect": []}
+    assert record["moves"] == {}
+    assert (record["profile"], record["profile_source"]) == ("macos-host", "detected")
+    assert record["sandbox_confirmed"] is False and record["consumed"] is False
+    import datetime as dt
+    stamp = "%Y-%m-%dT%H:%M:%SZ"
+    lifetime = dt.datetime.strptime(record["expires_at"], stamp) - dt.datetime.strptime(
+        record["created_at"], stamp)
+    assert lifetime == dt.timedelta(minutes=15)
+
+
+def test_plan_with_the_same_inputs_gives_the_same_id_and_one_record(machine):
+    first, second = _plan(machine), _plan(machine)
+
+    assert first["plan_id"] == second["plan_id"]
+    assert len(list(_plans_dir(machine).iterdir())) == 1
+
+
+def test_selection_and_moves_give_a_new_plan_and_are_kept_in_its_record(machine):
+    machine.spec["probe"] = "pass"
+    machine.user({"permissions": {"allow": ["Bash(curl:*)"]}})
+    first = _plan(machine)
+    removal = _change_at(first, "/permissions/allow")["id"]
+    bypass = _change_at(first, "/permissions/disableBypassPermissionsMode")["id"]
+    sandbox = _change_at(first, "/sandbox/enabled")["id"]
+
+    second = _plan(
+        machine, "--select", removal, "--deselect", bypass, "--move", f"{sandbox}=project",
+        "--sandbox-confirmed",
+    )
+
+    assert second["plan_id"] != first["plan_id"]
+    assert _change_at(second, "/permissions/allow")["selected"] is True
+    assert _change_at(second, "/permissions/disableBypassPermissionsMode")["selected"] is False
+    project = _plan_target(second, "project")
+    assert project["path"] == "<project>/.claude/settings.json"
+    assert [c["id"] for c in project["changes"]] == [sandbox]
+    assert project["changes"][0]["flags"] == ["moved"]
+    assert '+    "enabled": true' in project["evidence"]["diff"]
+    assert '"enabled": true' not in _plan_target(second, "user")["evidence"]["diff"]
+    assert "Bash(curl:*)" in _plan_target(second, "user")["evidence"]["diff"]
+    record = json.loads((_plans_dir(machine) / (second["plan_id"] + ".json")).read_text())
+    assert record["selection"] == {"select": [removal], "deselect": [bypass]}
+    assert record["moves"] == {sandbox: "project"}
+    assert record["sandbox_confirmed"] is True
+    assert not (machine.repo / ".claude").exists()  # plan writes no settings file
+
+
+def test_fail_closed_keys_are_planned_only_with_sandbox_confirmed(machine):
+    machine.spec["probe"] = "pass"
+
+    plain = {c["pointer"] for c in _plan_changes(_plan(machine))}
+    confirmed = {c["pointer"] for c in _plan_changes(_plan(machine, "--sandbox-confirmed"))}
+
+    assert "/sandbox/enabled" in plain
+    assert confirmed - plain == {"/sandbox/failIfUnavailable", "/sandbox/allowUnsandboxedCommands"}
+
+
+def test_a_failed_probe_plans_no_sandbox_key_and_says_why(machine):
+    doc = _plan(machine, "--sandbox-confirmed")
+
+    assert not [c for c in _plan_changes(doc) if c["pointer"].startswith("/sandbox")]
+    assert "probe" in {entry["reason"] for entry in doc["not_proposed"]}
+    assert all(set(entry) <= {"finding_id", "reason", "min_version"} for entry in doc["not_proposed"])
+
+
+def test_an_explicit_profile_is_marked_in_the_header_and_the_record(machine):
+    doc = _plan(machine, "--profile", "linux-native")
+
+    assert doc["environment"] == {"profile": "linux-native", "profile_source": "explicit"}
+    assert "linux-native (EXPLICIT)" in doc["targets"][0]["evidence"]["diff"].splitlines()[0]
+    record = json.loads((_plans_dir(machine) / (doc["plan_id"] + ".json")).read_text())
+    assert (record["profile"], record["profile_source"]) == ("linux-native", "explicit")
+
+
+def test_the_consent_note_names_bypass_when_an_ancestor_runs_in_bypass_mode(machine):
+    machine.spec["ancestor_args"] = ["claude", "--dangerously-skip-permissions"]
+
+    assert "no permission prompt guards" in _plan(machine)["consent_note"]
+
+
+def test_a_broad_bash_allow_sets_the_self_allow_warning(machine):
+    machine.user({"permissions": {"allow": ["Bash(python3:*)"]}})
+
+    assert _plan(machine)["self_allow_warning"] is True
+
+
+def test_plan_names_the_real_file_of_a_linked_user_settings_file(machine):
+    dotfiles = machine.tmp / "dotfiles"
+    _write_json(dotfiles / "claude-settings.json", {"permissions": {"deny": []}})
+    (machine.home / ".claude").mkdir()
+    (machine.home / ".claude" / "settings.json").symlink_to(dotfiles / "claude-settings.json")
+
+    target = _plan_target(_plan(machine), "user")
+
+    real = str((dotfiles / "claude-settings.json").resolve())
+    assert target["writable"] == "ok"
+    assert real in target["evidence"]["diff"].splitlines()[0]
+    assert target["evidence"]["real_path"].startswith(real[:60])
+
+
+def test_a_local_file_linked_out_of_the_project_is_refused_in_the_plan(machine):
+    outside = machine.tmp / "outside.json"
+    _write_json(outside, {"model": "x"})
+    (machine.repo / ".claude").mkdir()
+    (machine.repo / ".claude" / "settings.local.json").symlink_to(outside)
+    first = _plan(machine)
+    bypass = _change_at(first, "/permissions/disableBypassPermissionsMode")["id"]
+
+    doc = _plan(machine, "--move", f"{bypass}=local")
+
+    local = _plan_target(doc, "local")
+    assert (local["writable"], local["refuse_reason"]) == ("refused", "symlink")
+    assert [change["id"] for change in local["changes"]] == [bypass]
+    assert local["changes"][0]["selected"] is False
+    assert local["post_sha256"] == local["pre_sha256"]
+    assert "refused: symlink" in local["evidence"]["diff"]
+    assert first["plan_id"] != doc["plan_id"]
+    assert json.loads(outside.read_text()) == {"model": "x"}
+
+
+def test_a_project_directory_linked_out_of_the_project_is_refused_by_the_writer_rule(machine):
+    """The file is absent, so only the writer's containment rule can refuse it."""
+    elsewhere = machine.tmp / "elsewhere-claude"
+    elsewhere.mkdir()
+    (machine.repo / ".claude").symlink_to(elsewhere)
+    bypass = _change_at(_plan(machine), "/permissions/disableBypassPermissionsMode")["id"]
+
+    project = _plan_target(_plan(machine, "--move", f"{bypass}=project"), "project")
+
+    assert (project["writable"], project["refuse_reason"]) == ("refused", "outside-project")
+    assert project["changes"][0]["selected"] is False
+    assert list(elsewhere.iterdir()) == []
+
+
+# --- usage and refusals -------------------------------------------------------
+
+
+def test_an_unknown_change_id_is_a_usage_error_that_names_it(machine):
+    unknown = "user:/sandbox/enabled:00000000"
+
+    result = _plan_run(machine, "--deselect", unknown)
+
+    assert result.returncode == 2
+    assert result.stdout == b""
+    assert unknown in result.stderr.decode()
+    assert not _plans_dir(machine).exists()
+
+
+def test_text_that_is_no_change_id_is_not_echoed(machine):
+    result = _plan_run(machine, "--select", "ZZIGNORE previous instructions\x1b[31m")
+
+    assert result.returncode == 2
+    assert result.stdout == b""
+    assert b"ZZIGNORE" not in result.stderr and b"\x1b" not in result.stderr
+    assert b"1 change id" in result.stderr
+
+
+@pytest.mark.parametrize("move", ["{id}=managed", "{id}=", "{id}", "{id}=ZZSCOPE"])
+def test_a_bad_move_is_a_usage_error(machine, move):
+    change = _change_at(_plan(machine), "/permissions/disableBypassPermissionsMode")["id"]
+
+    result = _plan_run(machine, "--move", move.format(id=change))
+
+    assert result.returncode == 2
+    assert result.stdout == b""
+    assert b"ZZSCOPE" not in result.stderr
+
+
+def test_selecting_and_deselecting_one_change_is_a_usage_error(machine):
+    change = _change_at(_plan(machine), "/permissions/disableBypassPermissionsMode")["id"]
+
+    result = _plan_run(machine, "--select", change, "--deselect", change)
+
+    assert result.returncode == 2 and result.stdout == b""
+
+
+def test_a_removal_cannot_be_moved_to_another_file(machine):
+    machine.user({"permissions": {"allow": ["Bash(curl:*)"]}})
+    removal = _change_at(_plan(machine), "/permissions/allow")["id"]
+
+    result = _plan_run(machine, "--move", f"{removal}=local")
+
+    assert result.returncode == 2 and result.stdout == b""
+
+
+def test_plan_is_refused_on_an_unsupported_platform(machine):
+    machine.spec["platform"] = "win32"
+
+    result = _plan_run(machine)
+
+    assert result.returncode == 3
+    assert result.stdout == b""
+    assert b"not supported" in result.stderr
+    assert not (machine.home / ".local").exists()
+
+
+def test_plan_is_refused_when_its_state_would_live_in_the_repository(machine):
+    machine.spec["environ"]["XDG_STATE_HOME"] = str(machine.repo / "state")
+    before = _digest(machine.repo)
+
+    result = _plan_run(machine)
+
+    assert result.returncode == 3
+    assert result.stdout == b""
+    assert _digest(machine.repo) == before
+
+
+# --- untrusted content ----------------------------------------------------------
+
+
+@pytest.mark.parametrize("profile", sorted(PROFILES))
+def test_no_file_derived_string_leaves_the_evidence_fields_of_a_plan(tmp_path, profile):
+    machine, hostile = _hostile_machine(tmp_path, profile)
+
+    result = _plan_run(machine, project=hostile)
+
+    assert result.returncode == 0, result.stderr.decode()
+    doc = json.loads(result.stdout)
+    whole = json.dumps(doc)
+    for marker in ("ZZALLOW", "ZZSERVER", "ZZDIR"):
+        assert marker in whole, f"the fixture no longer reaches the plan: {marker}"
+    assert "ZZENVVAL" not in whole
+    outside = []
+    _strings_outside_evidence(doc, outside)
+    for text in outside:
+        assert not any(marker in text for marker in MARKERS), text
+        assert "\x1b" not in text
+    text = result.stdout.decode("ascii")
+    assert "\x1b" not in text and "\\u001b" not in text
+    for change in _plan_changes(doc):
+        assert not any(marker in change["id"] for marker in MARKERS)
+
+
+def test_env_values_of_a_target_never_reach_the_plan(machine):
+    machine.user({"env": {"ZZENVKEY": "ZZENVVAL"}, "permissions": {"deny": []}})
+
+    result = _plan_run(machine)
+
+    assert b"ZZENVVAL" not in result.stdout
+    assert b"<redacted>" in result.stdout
+
+
+# --- size -----------------------------------------------------------------------
+
+
+def test_a_plan_that_fits_has_no_truncated_field(machine):
+    assert "truncated" not in _plan(machine)
+
+
+def test_an_oversized_plan_hides_unselected_changes_and_says_so(machine):
+    rules = [f"Bash(curl https://host{n}.example/path *)" for n in range(400)]
+    machine.user({"permissions": {"allow": rules}})
+
+    result = _plan_run(machine)
+
+    assert result.returncode == 0
+    assert len(result.stdout) <= 32 * 1024
+    doc = json.loads(result.stdout)
+    marker = doc["truncated"]
+    assert marker["limit_bytes"] == 32 * 1024 - 1
+    user = _plan_target(doc, "user")
+    removals = [c for c in user["changes"] if c["kind"] == "remove"]
+    assert marker["changes_hidden"] == {"user": 400 - len(removals)}
+    assert 0 < len(removals) < 400
+    selected = [c for c in user["changes"] if c["selected"]]
+    assert len(selected) == 11  # every selected change is still listed (10 deny rules, C2)
+    assert marker["diffs_shortened"] == {}
+    assert "diff shortened" not in user["evidence"]["diff"]
+    assert set(doc) == PLAN_KEYS | {"truncated"}
+
+
+def test_a_diff_that_must_be_shortened_says_so_in_the_diff_and_in_truncated(machine):
+    machine.local({"enableAllProjectMcpServers": True})
+    machine.mcp_json({"mcpServers": {f"server-{n:04d}": {"command": "x"} for n in range(2000)}})
+
+    result = _plan_run(machine)
+
+    assert result.returncode == 0
+    assert len(result.stdout) <= 32 * 1024
+    doc = json.loads(result.stdout)
+    local = _plan_target(doc, "local")
+    lines = local["evidence"]["diff"].splitlines()
+    shortened = doc["truncated"]["diffs_shortened"]["local"]
+    assert shortened["total_lines"] > 2000
+    assert shortened["shown_lines"] == len(lines) - 1  # the notice is the extra line
+    hidden = shortened["total_lines"] - shortened["shown_lines"]
+    assert lines[-1] == f"diff shortened: {hidden} more lines are not shown"
+    assert lines[0].startswith("local ")  # the header stays
+    assert doc["plan_id"] and doc["consent_note"] and local["post_sha256"]
+
+
+# --- audit stays read-only (F1.2) -----------------------------------------------
+
+
+def test_audit_creates_no_state_directory(machine):
+    machine.user({"permissions": {"allow": ["Bash(curl:*)"]}})
+
+    machine.audit()
+
+    assert not (machine.home / ".local").exists()
+
+
+def test_audit_never_loads_the_setup_modules(lib, machine, capfd):
+    previous = {name: sys.modules.pop(name, None) for name in SETUP_MODULES}
+    try:
+        code = lib.cli.main(["audit", "--project", str(machine.repo)], world=_world(lib, machine))
+        loaded = [name for name in SETUP_MODULES if name in sys.modules]
+    finally:
+        for name, module in previous.items():
+            sys.modules.pop(name, None)
+            if module is not None:
+                sys.modules[name] = module
+    capfd.readouterr()
+
+    assert code == 0
+    assert loaded == []
+
+
+def test_plan_stops_when_a_marked_string_leaves_the_evidence_fields(lib, machine, monkeypatch, capfd):
+    previous = {name: sys.modules.pop(name, None) for name in SETUP_MODULES}
+    try:
+        import planner
+        monkeypatch.setattr(
+            planner, "CONSENT_NOTE_BYPASS", lib.render.Untrusted("from a file"),
+        )
+        monkeypatch.setattr(planner, "CONSENT_NOTE", lib.render.Untrusted("from a file"))
+        with pytest.raises(RuntimeError, match="/consent_note"):
+            lib.cli.main(["plan", "--project", str(machine.repo)], world=_world(lib, machine))
+    finally:
+        for name, module in previous.items():
+            sys.modules.pop(name, None)
+            if module is not None:
+                sys.modules[name] = module
+
+    assert capfd.readouterr().out == ""
+    assert not _plans_dir(machine).exists()
