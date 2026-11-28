@@ -311,7 +311,7 @@ def test_env_files_have_no_sandbox_spelling_and_are_not_linux_enforceable(refdat
     assert by_id["env"].read_rule_spellings == ("Read(**/.env*)", "Read(.env*)")
     assert by_id["env"].sandbox_spellings == ()
     assert by_id["env"].linux_enforceable is False
-    assert by_id["envrc"].read_rule_spellings == ("Read(**/.envrc)", "Read(.envrc)")
+    assert by_id["envrc"].read_rule_spellings == ("Read(**/.envrc)", "Read(.envrc)", "Read(**/.env*)", "Read(.env*)")
 
 
 @pytest.mark.parametrize(

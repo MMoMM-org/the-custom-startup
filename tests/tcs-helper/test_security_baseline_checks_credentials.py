@@ -379,6 +379,15 @@ class TestCredentials:
         assert found["envrc"].status == "PASS"
         assert found["env"].status == "FAIL"
 
+    @pytest.mark.parametrize("rule", ["Read(**/.env*)", "Read(.env*)"])
+    def test_env_glob_deny_also_covers_envrc(self, lib, world, rule):
+        ctx = world(user=_settings(deny=[rule], **SANDBOX_ON))
+
+        envrc = _by_credential(lib.checks.check_credentials(**ctx))["envrc"]
+
+        assert envrc.status != "FAIL"
+        assert envrc.evidence["states"]["permissions"] == "EFFECTIVE"
+
     def test_allow_rule_is_not_a_deny(self, lib, world):
         ctx = world(user={"permissions": {"allow": ["Read(~/.ssh/**)"]}, "sandbox": SANDBOX_ON})
 
