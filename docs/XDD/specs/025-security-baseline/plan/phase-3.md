@@ -33,7 +33,7 @@ phase: 3
 
 Delivers a working, read-only `audit`: effective values, every check, verdicts and the JSON report, runnable end to end against fixture trees.
 
-- [ ] **T3.1 Effective values and verdict (`effective.py`, `verdict.py`)** `[activity: domain-modeling]`
+- [x] **T3.1 Effective values and verdict (`effective.py`, `verdict.py`)** `[activity: domain-modeling]`
 
   1. Prime: effective-value walkthrough and verdict algorithm `[ref: SDD/Implementation Examples; lines: 609-649]` `[ref: SDD/Complex Logic; lines: 828-865]`
   2. Test: the `sandbox.enabled` walkthrough (user true, local false → false, winner local, user shadowed); unreadable local → UNKNOWN contribution; union for `permissions.deny` with provenance; `strict-wins` for `blockReadsOutsideWorkingDirectories` (strict true from any scope) and `allowUnsandboxedCommands` (user false beats project/local true from 2.1.285; older version or unknown → highest); `defaultMode: bypassPermissions` ignored in project/local; managed outranks local; verdict table rows 1–8 each as a case; PARTIAL/UNKNOWN keep base severity; a check raising → UNKNOWN `check-error`; summary counts and verdict line ≤ 160 chars, "no gaps in the audited layers" plus unaudited list when nothing remains
@@ -49,7 +49,7 @@ Delivers a working, read-only `audit`: effective values, every check, verdicts a
   4. Validate: `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_checks_credentials.py`
   5. Success: `[ref: PRD/F3 AC1-AC5]` `[ref: PRD/F6 AC1]` `[ref: PRD/F10 AC1-AC2]` `[ref: SDD/F3.1-F3.5, F6.1, F10.1-F10.2]`
 
-- [ ] **T3.3 Bypass checks C2, C2x** `[activity: security]` `[parallel: true]`
+- [x] **T3.3 Bypass checks C2, C2x** `[activity: security]` `[parallel: true]`
 
   1. Prime: catalogue rows C2/C2x, ACCEPTED rules `[ref: SDD/Complex Logic; lines: 828-865]`
   2. Test: host profile without `disableBypassPermissionsMode: "disable"` → HIGH; user `defaultMode: bypassPermissions` → HIGH naming the file; same in project/local → no C2 finding; container → bypass in ACCEPTED; container + bypass active + probe ≠ pass + `~/.ssh` exists → C2x HIGH, not accepted, both fix texts; container with probe pass → no C2x
@@ -65,7 +65,7 @@ Delivers a working, read-only `audit`: effective values, every check, verdicts a
   4. Validate: `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_checks_allows.py`
   5. Success: `[ref: PRD/F5 AC1-AC6]` `[ref: PRD/F7 AC1-AC2]` `[ref: SDD/F5.1-F5.6, F7.1-F7.2]`
 
-- [ ] **T3.5 MCP, excludes, hygiene, clone risk C6, C6x, C9, C10, CR** `[activity: security]` `[parallel: true]`
+- [x] **T3.5 MCP, excludes, hygiene, clone risk C6, C6x, C9, C10, CR** `[activity: security]` `[parallel: true]`
 
   1. Prime: catalogue rows C6/C6x/C9/C10/CR; MCP source table `[ref: SDD/Complex Logic; lines: 828-865]` `[ref: SDD/Interface Specifications; lines: 241-285]`
   2. Test: `enableAllProjectMcpServers` effective true → HIGH listing approved servers; no `allowedMcpServers` → MED "no automatic fix"; container + bypass + `.mcp.json` servers not in `disabledMcpjsonServers` → C6x HIGH naming them; `excludedCommands` exact template match → ACCEPTED, near-miss spelling → MED, no template → all MED; `Skill(gone)` with no installed skill → LOW; skill names failing the regex never joined to a path; CR: project/local `hooks`, `statusLine`, `apiKeyHelper`, `env`, `enableAllProjectMcpServers` → one INFO each with key and file, env values absent from output
