@@ -7,6 +7,8 @@ is the only path by which file content reaches output:
 - `redact()` removes `env` values and values of secret-named keys, keeping the keys.
 - `render_untrusted()` escapes control, directional and invisible characters, shortens
   strings and collections, and marks every string it returns as `Untrusted`.
+- `render_strings()` finishes evidence a check has already rendered: strings not yet marked
+  are escaped, shortened and marked; collections are not shortened a second time.
 - `NameTable` shows a name verbatim only when it is a plain identifier.
 - `fix_text()` builds fix texts from templates and refuses file-derived parameters.
 - `untrusted_outside_evidence()` finds marked strings that left the `evidence` field.
@@ -168,6 +170,34 @@ def _render_dict(mapping, depth):
         shown = _text(key if isinstance(key, str) else str(key))
         out[_distinct_key(shown, out)] = render_untrusted(item, depth + 1)
     return out
+
+
+def render_strings(value, _depth=0):
+    """Return VALUE, which a check has already put through render_untrusted(), with every
+    string in it marked `Untrusted`.
+
+    Rendering twice would shorten a shortened list again and lose its `N more` count. This
+    pass therefore keeps the collections as they are and only renders the strings that are
+    not marked yet: the check's own words, and anything it forgot to render.
+    """
+    if isinstance(value, Untrusted):
+        return value
+    if isinstance(value, str):
+        return _text(value)
+    if isinstance(value, (list, tuple, dict)):
+        if _depth >= MAX_DEPTH:
+            return TOO_DEEP
+        if isinstance(value, dict):
+            out = {}
+            for key, item in value.items():
+                if key == MORE_KEY and not isinstance(key, Untrusted):
+                    out[key] = render_strings(item, _depth + 1)  # the first pass's own marker
+                    continue
+                shown = render_strings(key if isinstance(key, str) else str(key))
+                out[_distinct_key(shown, out)] = render_strings(item, _depth + 1)
+            return out
+        return [render_strings(item, _depth + 1) for item in value]
+    return render_untrusted(value)
 
 
 # --- names ----------------------------------------------------------------------------------

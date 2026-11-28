@@ -623,3 +623,40 @@ def test_render_imports_only_the_standard_library():
             imported.add(node.module.split(".")[0])
 
     assert imported <= {"hashlib", "json", "re", "string", "unicodedata"}
+
+
+# --- render_strings: evidence a check rendered already (T3.6) ---------------------------------
+
+
+def test_render_strings_keeps_a_rendered_value_and_its_more_markers(render):
+    raw = {"servers": [f"s{n}" for n in range(60)], **{f"k{n}": n for n in range(60)}}
+    once = render.render_untrusted(raw)
+
+    twice = render.render_strings(once)
+
+    assert twice == once
+    assert twice["servers"][-1] == "10 more"
+    assert twice[render.MORE_KEY] == "11 more"
+    assert len(twice["servers"]) == 51
+
+
+def test_render_strings_marks_every_string_and_renders_what_was_left_raw(render):
+    rendered = render.render_untrusted("a" * 200)
+    value = {"key": "own word", "forgotten": "x\x1b[31m" + "b" * 200, "done": rendered, "n": [1, None]}
+
+    out = render.render_strings(value)
+
+    assert out["done"] is rendered
+    assert out["forgotten"].startswith("x\\x1b[31m") and out["forgotten"].endswith(" chars")
+    assert out["n"] == [1, None]
+    strings = [*out, out["key"], out["forgotten"], out["done"]]
+    assert all(isinstance(text, render.Untrusted) for text in strings)
+
+
+def test_render_strings_stops_at_the_depth_limit(render):
+    deep = current = []
+    for _ in range(render.MAX_DEPTH + 5):
+        current.append([])
+        current = current[0]
+
+    assert render.TOO_DEEP in json.dumps(render.render_strings(deep))
