@@ -54,6 +54,7 @@
 | 2026-11-28 | Deviation: K10 split into `checks.py` (registry, written in T3.6) plus four group modules `checks_credentials/bypass/allows/mcp.py`, one test file each | User decision: T3.2–T3.5 run in parallel without editing one shared file; SDD Directory Map and phase-3 tasks updated |
 | 2026-11-28 | Scope addition approved (orchestrator): C1 sandbox half is PRESENT-INERT when `sandbox.filesystem.allowRead` reopens a credential path (an entry at or under it); a wider allow does not reopen | sandboxing.md: a narrower allow reopens a deny, a deny holds inside a wider allow; fails toward reporting |
 | 2026-11-28 | Phase 3 drift resolved | User: D1 (F1.3 overridden files) fixed in code; ADR-8 cap amended (never drop the last finding of a check/severity, collapse then drop, over_limit, protected coverage/environment); all other deviations written into the SDD (Effective fields, version-gated ignore, catalogue details, AuditReport extras, ADR-4 shadowed-allow exception); C10 "one-off exact rules" dropped |
+| 2026-11-28 | Phase 3 gate: passed at b807e5f9 | pytest 4397 passed, 0 failed; bats only the 4 known perf/scale timing tests failed (noise per perf rule); real container audit reports all six 2026-11-27 gaps (C4 sandbox, C1 credentials, C2 accepted for container, C3 incl. python3/curl/git/gh api, C6 no allowlist, C5 curl route) and writes nothing |
 
 ## Context
 

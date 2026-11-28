@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Evaluation and the audit verb"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 3
 ---
@@ -81,6 +81,6 @@ Delivers a working, read-only `audit`: effective values, every check, verdicts a
   4. Validate: `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_cli.py -k audit`
   5. Success: `[ref: PRD/F1 AC1-AC7]` `[ref: PRD/F2 AC4]` `[ref: SDD/F1.1-F1.7, F2.4]`
 
-- [ ] **T3.7 Phase Validation** `[activity: validate]`
+- [x] **T3.7 Phase Validation** `[activity: validate]`
 
   - Run `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_*.py tests/test_json_dump_ensure_ascii.py tests/tcs-helper/test_prompt_lint_repo.py`. Run `audit` against this container (read-only) and compare its findings with the six gaps of the 2026-11-27 inventory in the PRD Problem Statement; every one must appear (or be ACCEPTED for the container profile with its reason).
