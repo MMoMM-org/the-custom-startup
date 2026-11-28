@@ -202,7 +202,10 @@ def project_servers(sources):
     are empty unless the file was read."""
     mcp_json = next((s for s in sources if s.scope == _MCP_JSON_SCOPE), None)
     if mcp_json is None:
-        mcp_json = layers.Source(_MCP_JSON_SCOPE, "", None, "absent", None, None, None)
+        mcp_json = layers.Source(
+            scope=_MCP_JSON_SCOPE, path="", real_path=None, status="absent",
+            reason=None, data=None, format=None,
+        )
     servers = layers.mcp_servers([mcp_json], (), ())
     return tuple(server.name for server in servers), mcp_json
 
@@ -221,8 +224,7 @@ def _enable_all(sources, effective_of):
         if not enable_all.certain:
             yield _unknown("C6", "HIGH", "mcp", ENABLE_ALL, enable_all)
         return
-    names, mcp_json = project_servers(sources)
-    rejections = effective_of(REJECTED_SERVERS)
+    _names, mcp_json = project_servers(sources)
     winner = enable_all.winner
     yield verdict.finding(
         "C6", "HIGH", "FAIL", "mcp",
@@ -231,7 +233,7 @@ def _enable_all(sources, effective_of):
         file=winner.path,
         evidence={
             "key": ENABLE_ALL,
-            "approved_servers": render.render_untrusted(_without_rejected(names, rejections)),
+            "approved_servers": render.render_untrusted(approved_project_servers(sources, effective_of)),
             "mcp_json": mcp_json.status,
             **_uncertainty(enable_all),
         },
@@ -273,11 +275,11 @@ def _entries(union):
     """`(source, entry)` for every entry of a list key, each distinct entry
     once per file, highest file first."""
     for source, entries in union.contributions:
-        seen = []
+        seen = set()
         for entry in entries:
             identity = (type(entry).__name__, repr(entry))
             if identity not in seen:
-                seen.append(identity)
+                seen.add(identity)
                 yield source, entry
 
 

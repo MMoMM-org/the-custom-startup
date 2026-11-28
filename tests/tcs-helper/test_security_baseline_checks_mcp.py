@@ -328,6 +328,66 @@ def test_container_mcp_counts_bypass_set_as_default_mode_in_user_settings(lib, w
     assert (found.severity, found.status) == ("HIGH", "FAIL")
 
 
+def _with_version(lib, environment, major, minor, patch):
+    return dataclasses.replace(
+        environment, claude_version=lib.environment.Version(major, minor, patch))
+
+
+def test_container_mcp_ignores_bypass_default_mode_in_project_settings_on_a_current_claude(
+        lib, world):
+    ctx = world.context(
+        [world.src("project", {"permissions": {"defaultMode": "bypassPermissions"}}),
+         world.mcp_json("github")],
+        world.env("container", "no"),
+    )
+
+    assert _run(lib.checks.check_container_mcp, ctx) == []
+
+
+def test_container_mcp_counts_bypass_default_mode_in_project_settings_on_an_old_claude(
+        lib, world):
+    ctx = world.context(
+        [world.src("project", {"permissions": {"defaultMode": "bypassPermissions"}}),
+         world.mcp_json("github")],
+        _with_version(lib, world.env("container", "no"), 2, 1, 256),
+    )
+
+    found = _only(_run(lib.checks.check_container_mcp, ctx))
+
+    assert (found.severity, found.status) == ("HIGH", "FAIL")
+
+
+def test_container_mcp_is_unknown_when_an_unread_file_could_set_bypass_as_default_mode(
+        lib, world):
+    ctx = world.context(
+        [world.src("user", status="unreadable"), world.mcp_json("github")],
+        world.env("container", "no"),
+    )
+
+    found = _only(_run(lib.checks.check_container_mcp, ctx))
+
+    assert (found.severity, found.status) == ("HIGH", "UNKNOWN")
+    assert found.evidence["bypass_active"] == "unknown"
+    assert "user" in found.evidence["unread"]
+
+
+def test_approved_project_servers_drops_the_rejected_names(lib, world):
+    sources = [
+        world.src("user", {"disabledMcpjsonServers": ["slack"]}),
+        world.mcp_json("github", "slack"),
+    ]
+    ctx = world.context(sources)
+
+    assert lib.checks.approved_project_servers(sources, ctx["effective_of"]) == ["github"]
+
+
+def test_approved_project_servers_is_empty_without_a_project_server_file(lib, world):
+    sources = [world.mcp_json(status="absent")]
+    ctx = world.context(sources)
+
+    assert lib.checks.approved_project_servers(sources, ctx["effective_of"]) == []
+
+
 def test_container_mcp_is_unknown_when_the_project_server_file_could_not_be_read(lib, world):
     ctx = world.context([world.mcp_json(status="unreadable")], world.env("container", "yes"))
 
@@ -591,14 +651,15 @@ def test_clone_risk_findings_land_in_the_info_block(lib, world):
 
 
 def test_clone_risk_reports_approval_key_set_to_false(lib, world):
-    ctx = world.context([
-        world.src("project", {"enableAllProjectMcpServers": False}),
-    ])
+    source = world.src("project", {"enableAllProjectMcpServers": False})
+    ctx = world.context([source])
 
     found = _only(_run(lib.checks.check_clone_risk, ctx))
 
     assert found.evidence["key"] == "enableAllProjectMcpServers"
-    assert "project" in found.file or found.scope == "project"
+    assert found.scope == "project"
+    assert found.file == source.path
+    assert found.status == "FAIL"
 
 
 def test_clone_risk_ignores_unreadable_files(lib, world):
