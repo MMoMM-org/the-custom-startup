@@ -365,7 +365,7 @@ graph LR
 | K7 | `inventory.py` | Walking plugin caches/marketplaces: installed skills, plugin MCP servers, git-helpers template | F8 plugin servers, F10 template, F12 stale skills |
 | K8 | `refdata.py` + `reference/*.json` | Loading and validating the shipped data: keys, credentials, commands | F3/F5 lists, Rule 7 versions |
 | K9 | `effective.py` | Merging layers into effective values with provenance, per key, per `keys.json` merge rule | F1 override AC |
-| K10 | `checks.py` | The eleven checks (C1–C10, CR): per-layer states and raw findings | F3–F8, F10–F12 |
+| K10 | `checks.py` + `checks_*.py` | The eleven checks (C1–C10, CR): per-layer states and raw findings; `checks.py` is the registry over four group modules | F3–F8, F10–F12 |
 | K11 | `verdict.py` | Status from layer states, severity preservation, ACCEPTED split, summary line, coverage block | F1 PARTIAL/qualified ACs, F2 ACCEPTED |
 | K12 | `planner.py` | Findings → changes per target, default selection, moves, diff rendering, `plan_id` | F9 diff/selection/target ACs, Rules 2–7 |
 | K13 | `state.py` | State directory layout, plan records (create, load, expire, consume), lock file | F9 single-use/expiry |
@@ -397,7 +397,11 @@ plugins/tcs-helper/skills/security-baseline/
     ├── inventory.py               # NEW: K7
     ├── refdata.py                 # NEW: K8
     ├── effective.py               # NEW: K9
-    ├── checks.py                  # NEW: K10
+    ├── checks.py                  # NEW: K10 registry (ALL_CHECKS, in catalogue order)
+    ├── checks_credentials.py      # NEW: K10 C1, C4, C7, C8
+    ├── checks_bypass.py           # NEW: K10 C2, C2x
+    ├── checks_allows.py           # NEW: K10 C3, C5 (normaliser)
+    ├── checks_mcp.py              # NEW: K10 C6, C6x, C9, C10, CR
     ├── verdict.py                 # NEW: K11
     ├── planner.py                 # NEW: K12
     ├── state.py                   # NEW: K13
@@ -414,7 +418,8 @@ tests/tcs-helper/
 ├── test_security_baseline_probe.py         # resolution from fixed dirs, planted binary, timeout → inconclusive
 ├── test_security_baseline_inventory.py     # skill walk, plugin MCP, git-helpers template version order
 ├── test_security_baseline_effective.py     # merge walkthroughs (this SDD's examples as tests)
-├── test_security_baseline_checks.py        # one class per check, per profile
+├── test_security_baseline_checks.py        # verdict (K11) cases
+├── test_security_baseline_checks_*.py      # one file per check group, one class per check
 ├── test_security_baseline_planner.py       # defaults, moves, dedup, version guard, plan_id stability
 ├── test_security_baseline_writer.py        # symlink, FIFO, managed refusal, backup, verify, restore, interrupt
 ├── test_security_baseline_cli.py           # end-to-end World fixtures, idempotency, _digest read-only proof

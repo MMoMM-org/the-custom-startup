@@ -51,6 +51,7 @@
 | 2026-11-28 | ADR-9 amended: no repository-checkout fallback for the git-helpers template; marketplace layout corrected | A cloned repo could ship `plugins/tcs-git-helpers/templates/claude-settings/sandbox-git.json` and turn its own excludedCommands into ACCEPTED; installed plugin dirs carry tcs-helper's own trust. The original glob missed `marketplaces/<mkt>/plugins/tcs-git-helpers/...` (no version dir). User decision. |
 | 2026-11-28 | Phase 2 gate: passed; 5 bats perf/scale timing tests failed under load (different set on rerun, files untouched) — treated as noise per the perf rule | Functional failure set empty |
 | 2026-11-28 | Phase 2 drift resolved | Fix: layers accepts inventory's PluginMcpServer (config optional, plugin key kept). SDD updated: Source.scope (managed-mcp, no plugin), Environment.permission_mode_flag and profile unknown, ps ppid=, installed_plugins.json as plugin MCP source, CLAUDE_CONFIG_DIR moves .claude.json, ADR-9 last-rank non-version cache dir. Deferred to T3.6: Roots.project must cover the repo root. |
+| 2026-11-28 | Deviation: K10 split into `checks.py` (registry, written in T3.6) plus four group modules `checks_credentials/bypass/allows/mcp.py`, one test file each | User decision: T3.2–T3.5 run in parallel without editing one shared file; SDD Directory Map and phase-3 tasks updated |
 
 ## Context
 
