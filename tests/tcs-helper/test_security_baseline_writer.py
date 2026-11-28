@@ -129,6 +129,21 @@ def _mode(path):
     return stat.S_IMODE(os.stat(path).st_mode)
 
 
+def _fd_path(fd):
+    """The path of an open directory, as the kernel reports it."""
+    if sys.platform == "darwin":
+        import fcntl
+        return fcntl.fcntl(fd, fcntl.F_GETPATH, b"\0" * 1024).rstrip(b"\0").decode()
+    return os.readlink(f"/proc/self/fd/{fd}")
+
+
+def _opened_path(path, dir_fd):
+    """The full path an `os.open` call names, also when it is relative to a
+    directory descriptor."""
+    path = os.fspath(path)
+    return path if dir_fd is None else os.path.join(_fd_path(dir_fd), path)
+
+
 @contextlib.contextmanager
 def _spy_opens(monkeypatch):
     """Record every `os.open` and builtin `open` made inside the block."""
@@ -137,7 +152,7 @@ def _spy_opens(monkeypatch):
     real_open = builtins.open
 
     def os_open(path, flags, mode=0o777, *, dir_fd=None):
-        calls.append((os.fspath(path), flags))
+        calls.append((_opened_path(path, dir_fd), flags))
         return real_os_open(path, flags, mode, dir_fd=dir_fd)
 
     def plain_open(file, *args, **kwargs):
@@ -160,7 +175,7 @@ def _fail_open_of(monkeypatch, wanted, code):
     real_os_open = os.open
 
     def os_open(path, flags, mode=0o777, *, dir_fd=None):
-        if flags & os.O_CREAT and wanted(os.fspath(path)):
+        if flags & os.O_CREAT and wanted(_opened_path(path, dir_fd)):
             raise OSError(code, os.strerror(code))
         return real_os_open(path, flags, mode, dir_fd=dir_fd)
 
@@ -941,8 +956,8 @@ class TestFailures:
         plan = _plan(world, "project")
         os.chmod(plan.path, 0o640)
         monkeypatch.setattr(
-            writer.jsonio, "read_json",
-            lambda path, follow: ("ok", {"something": "else"}, None, None))
+            writer, "_parse_strict",
+            lambda raw: ("ok", {"something": "else"}, None, None))
 
         result = _write(writer, world, plan)
 
@@ -962,7 +977,7 @@ class TestFailures:
         self, writer, world, monkeypatch, reread
     ):
         plan = _plan(world, "user")
-        monkeypatch.setattr(writer.jsonio, "read_json", lambda path, follow: reread)
+        monkeypatch.setattr(writer, "_parse_strict", lambda raw: reread)
 
         result = _write(writer, world, plan)
 
@@ -974,7 +989,7 @@ class TestFailures:
         (world.project / ".claude").rmdir()
         plan = _plan_missing(world, "local")
         monkeypatch.setattr(
-            writer.jsonio, "read_json", lambda path, follow: ("ok", {}, None, None))
+            writer, "_parse_strict", lambda raw: ("ok", {}, None, None))
 
         result = _write(writer, world, plan)
 
@@ -986,7 +1001,7 @@ class TestFailures:
     def test_failed_restore_is_reported_with_the_backup(self, writer, world, monkeypatch):
         plan = _plan(world, "user")
         monkeypatch.setattr(
-            writer.jsonio, "read_json", lambda path, follow: ("ok", {}, None, None))
+            writer, "_parse_strict", lambda raw: ("ok", {}, None, None))
         real_replace = os.replace
         replaced = []
 
@@ -1052,7 +1067,7 @@ class TestFailures:
         secret = b'{"env": {"TOKEN": "s3cr3t-value"}}\n'
         plan = _plan(world, "user", original=secret)
         monkeypatch.setattr(
-            writer.jsonio, "read_json", lambda path, follow: ("ok", {}, None, None))
+            writer, "_parse_strict", lambda raw: ("ok", {}, None, None))
 
         result = _write(writer, world, plan, expected={"env": {"TOKEN": "s3cr3t-value"}})
 
@@ -1132,3 +1147,346 @@ class TestDurability:
         result = _write(writer, world, plan)
 
         assert result.written is True and result.verified is True
+
+
+def _once_before(monkeypatch, writer, seam, action):
+    """Run `action` once, just before the writer's `seam` function runs."""
+    original = getattr(writer, seam)
+    done = []
+
+    def wrapped(*args, **kwargs):
+        if not done:
+            done.append(True)
+            action()
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(writer, seam, wrapped)
+
+
+def _swap_for_link(directory, moved, victim):
+    """What a racing attacker does: move `directory` away and leave a link to
+    `victim` under its name."""
+    def swap():
+        os.rename(directory, moved)
+        os.symlink(victim, directory)
+    return swap
+
+
+class TestDirectoryRace:
+    """A directory on the way to the target is replaced by a link after the
+    path was resolved and vetted (the review's proof of concept)."""
+
+    @pytest.fixture
+    def victim(self, world):
+        victim = world.base / "victim"
+        victim.mkdir()
+        return victim
+
+    @pytest.mark.parametrize("scope", ["project", "local"])
+    def test_claude_dir_swapped_before_a_new_file_is_created(
+        self, writer, world, monkeypatch, victim, scope
+    ):
+        plan = _plan_missing(world, scope)
+        moved = world.base / "moved"
+        _once_before(monkeypatch, writer, "_make_directory",
+                     _swap_for_link(world.project / ".claude", moved, victim))
+
+        result = _write(writer, world, plan)
+
+        assert result.error in ("changed", "outside-project")
+        assert (result.written, result.verified) == (False, False)
+        assert list(victim.iterdir()) == []
+        assert list(moved.iterdir()) == []
+
+    @pytest.mark.parametrize("seam", ["_backup", "_make_directory"])
+    def test_claude_dir_swapped_while_an_existing_file_is_replaced(
+        self, writer, world, monkeypatch, victim, seam
+    ):
+        plan = _plan(world, "project")
+        (victim / "settings.json").write_bytes(ORIGINAL)
+        moved = world.base / "moved"
+        _once_before(monkeypatch, writer, seam,
+                     _swap_for_link(world.project / ".claude", moved, victim))
+
+        result = _write(writer, world, plan)
+
+        assert result.error in ("changed", "outside-project")
+        assert result.written is False
+        assert sorted(p.name for p in victim.iterdir()) == ["settings.json"]
+        assert (victim / "settings.json").read_bytes() == ORIGINAL
+        assert (moved / "settings.json").read_bytes() == ORIGINAL
+        assert _leftovers(moved) == []
+
+    def test_link_planted_where_the_claude_dir_was_missing(
+        self, writer, world, monkeypatch, victim
+    ):
+        claude_dir = world.project / ".claude"
+        claude_dir.rmdir()
+        plan = _plan_missing(world, "project")
+        _once_before(monkeypatch, writer, "_make_directory",
+                     lambda: os.symlink(victim, claude_dir))
+
+        result = _write(writer, world, plan)
+
+        assert result.error in ("changed", "outside-project")
+        assert result.written is False
+        assert list(victim.iterdir()) == []
+        assert claude_dir.is_symlink()
+
+    def test_directory_moved_away_without_a_link_is_not_written_either(
+        self, writer, world, monkeypatch
+    ):
+        plan = _plan_missing(world, "local")
+        moved = world.base / "moved"
+        _once_before(monkeypatch, writer, "_make_directory",
+                     lambda: os.rename(world.project / ".claude", moved))
+
+        result = _write(writer, world, plan)
+
+        assert result.error == "changed"
+        assert result.written is False
+        assert list(moved.iterdir()) == []
+        assert not (world.project / ".claude").exists()
+
+    def test_user_scope_parent_swapped_before_a_new_file_is_created(
+        self, writer, world, monkeypatch, victim
+    ):
+        config = world.base / "cfg" / "claude"
+        config.mkdir(parents=True)
+        (victim / "claude").mkdir()
+        world.targets = writer.allowed_targets(
+            str(world.home), str(config), str(world.project), str(world.project))
+        plan = _plan_missing(world, "user")
+        moved = world.base / "moved"
+        _once_before(monkeypatch, writer, "_make_directory",
+                     _swap_for_link(world.base / "cfg", moved, victim))
+
+        result = _write(writer, world, plan)
+
+        assert result.error == "changed"
+        assert result.written is False
+        assert list((victim / "claude").iterdir()) == []
+        assert list((moved / "claude").iterdir()) == []
+
+    def test_user_scope_parent_swapped_before_the_directory_is_created(
+        self, writer, world, monkeypatch, victim
+    ):
+        parent = world.base / "cfg"
+        parent.mkdir()
+        world.targets = writer.allowed_targets(
+            str(world.home), str(parent / "claude"), str(world.project), str(world.project))
+        plan = _plan_missing(world, "user")
+        moved = world.base / "moved"
+        _once_before(monkeypatch, writer, "_make_directory",
+                     _swap_for_link(parent, moved, victim))
+
+        result = _write(writer, world, plan)
+
+        assert result.error == "changed"
+        assert result.written is False
+        assert list(victim.iterdir()) == []
+        assert list(moved.iterdir()) == []
+
+    def test_every_step_after_resolution_goes_through_the_directory_descriptor(
+        self, writer, world, monkeypatch
+    ):
+        plan = _plan(world, "project")
+        by_path = []
+        real_os_open = os.open
+
+        def os_open(path, flags, mode=0o777, *, dir_fd=None):
+            if dir_fd is None and not flags & getattr(os, "O_DIRECTORY", 0):
+                by_path.append(os.fspath(path))
+            return real_os_open(path, flags, mode, dir_fd=dir_fd)
+
+        monkeypatch.setattr(os, "open", os_open)
+
+        result = _write(writer, world, plan)
+
+        assert result.written is True and result.verified is True
+        assert by_path == []
+
+
+class TestFingerprint:
+    """The re-read before the replace compares the file's identity and
+    metadata, not only its bytes."""
+
+    def test_same_bytes_and_times_in_a_new_inode_abort(self, writer, world, monkeypatch):
+        plan = _plan(world, "user")
+        before = os.stat(plan.path)
+
+        def swap(path):
+            twin = path + ".twin"
+            pathlib.Path(twin).write_bytes(ORIGINAL)
+            os.chmod(twin, stat.S_IMODE(before.st_mode))
+            os.utime(twin, ns=(before.st_atime_ns, before.st_mtime_ns))
+            os.rename(twin, path)
+
+        monkeypatch.setattr(writer, "_before_restat", swap)
+
+        result = _write(writer, world, plan)
+
+        after = os.stat(plan.path)
+        assert (after.st_mtime_ns, after.st_size, after.st_mode, after.st_uid) == (
+            before.st_mtime_ns, before.st_size, before.st_mode, before.st_uid)
+        assert after.st_ino != before.st_ino
+        assert result.error == "changed"
+        assert result.written is False
+        assert pathlib.Path(plan.path).read_bytes() == ORIGINAL
+
+    def test_new_modification_time_on_the_same_bytes_aborts(self, writer, world, monkeypatch):
+        plan = _plan(world, "user")
+        before = os.stat(plan.path)
+
+        def touch(path):
+            os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns + 10**9))
+
+        monkeypatch.setattr(writer, "_before_restat", touch)
+
+        result = _write(writer, world, plan)
+
+        assert os.stat(plan.path).st_ino == before.st_ino
+        assert result.error == "changed"
+        assert result.written is False
+        assert pathlib.Path(plan.path).read_bytes() == ORIGINAL
+
+    def test_new_mode_on_the_same_bytes_aborts(self, writer, world, monkeypatch):
+        plan = _plan(world, "user")
+        os.chmod(plan.path, 0o600)
+        before = os.stat(plan.path)
+        monkeypatch.setattr(writer, "_before_restat", lambda path: os.chmod(path, 0o640))
+
+        result = _write(writer, world, plan)
+
+        after = os.stat(plan.path)
+        assert (after.st_ino, after.st_mtime_ns) == (before.st_ino, before.st_mtime_ns)
+        assert result.error == "changed"
+        assert result.written is False
+        assert _mode(plan.path) == 0o640
+
+
+class TestAfterReplace:
+    def test_interrupt_right_after_the_replace_is_recorded_as_written(
+        self, writer, world, monkeypatch
+    ):
+        plan = _plan(world, "user")
+        progress = []
+        real_apply = writer._apply
+
+        def apply(*args):
+            progress.append(args[-1])
+            return real_apply(*args)
+
+        def interrupt(*_args):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(writer, "_apply", apply)
+        monkeypatch.setattr(writer, "_fsync_directory", interrupt)
+
+        with pytest.raises(KeyboardInterrupt):
+            _write(writer, world, plan)
+
+        assert json.loads(pathlib.Path(plan.path).read_bytes()) == EXPECTED
+        assert progress[0].written is True
+        assert progress[0].backup is not None
+        assert _leftovers(world.home / ".claude") == []
+
+    def test_restore_does_not_clobber_a_file_changed_after_the_write(
+        self, writer, world, monkeypatch
+    ):
+        plan = _plan(world, "user")
+        intruder = b'{"written": "by someone else"}\n'
+
+        def mismatch(*_args):
+            pathlib.Path(plan.path).write_bytes(intruder)
+            return False
+
+        monkeypatch.setattr(writer, "_matches", mismatch)
+
+        result = _write(writer, world, plan)
+
+        assert result.error == "restore-failed"
+        assert (result.written, result.verified, result.restored) == (True, False, False)
+        assert pathlib.Path(plan.path).read_bytes() == intruder
+        assert pathlib.Path(result.backup).read_bytes() == ORIGINAL
+        assert _leftovers(world.home / ".claude") == []
+
+    def test_restore_does_not_remove_a_new_file_changed_after_the_write(
+        self, writer, world, monkeypatch
+    ):
+        plan = _plan_missing(world, "local")
+        intruder = b'{"written": "by someone else"}\n'
+
+        def mismatch(*_args):
+            pathlib.Path(plan.path).write_bytes(intruder)
+            return False
+
+        monkeypatch.setattr(writer, "_matches", mismatch)
+
+        result = _write(writer, world, plan)
+
+        assert result.error == "restore-failed"
+        assert (result.written, result.restored, result.backup) == (True, False, None)
+        assert pathlib.Path(plan.path).read_bytes() == intruder
+
+
+class TestBackupDirectory:
+    def test_backup_directory_that_is_a_link_is_refused(self, writer, world):
+        elsewhere = world.base / "elsewhere"
+        elsewhere.mkdir()
+        world.backups.rmdir()
+        world.backups.symlink_to(elsewhere)
+        plan = _plan(world, "user")
+
+        result = _write(writer, world, plan)
+
+        assert result.error == "backup-failed"
+        assert result.written is False and result.backup is None
+        assert list(elsewhere.iterdir()) == []
+        assert pathlib.Path(plan.path).read_bytes() == ORIGINAL
+        assert _leftovers(world.home / ".claude") == []
+
+    def test_backup_directory_open_to_others_is_tightened(self, writer, world):
+        os.chmod(world.backups, 0o755)
+        plan = _plan(world, "user")
+
+        result = _write(writer, world, plan)
+
+        assert result.written is True
+        assert _mode(world.backups) == 0o700
+        assert _mode(result.backup) == 0o600
+
+    def test_backup_directory_of_another_user_is_refused(self, writer, world, monkeypatch):
+        os.chmod(world.backups, 0o755)
+        plan = _plan(world, "user")
+        inode = os.stat(world.backups).st_ino
+        real_fstat = os.fstat
+
+        def fstat(fd):
+            status = real_fstat(fd)
+            if status.st_ino != inode:
+                return status
+            fields = list(status)
+            fields[4] = status.st_uid + 1  # st_uid
+            return os.stat_result(fields)
+
+        monkeypatch.setattr(os, "fstat", fstat)
+
+        result = _write(writer, world, plan)
+
+        assert result.error == "backup-failed"
+        assert result.written is False and result.backup is None
+        assert list(world.backups.iterdir()) == []
+        assert _mode(world.backups) == 0o755
+        assert pathlib.Path(plan.path).read_bytes() == ORIGINAL
+
+    def test_backup_stays_readable_by_its_owner_under_a_strict_umask(self, writer, world):
+        plan = _plan(world, "user")
+        previous = os.umask(0o277)
+        try:
+            result = _write(writer, world, plan)
+        finally:
+            os.umask(previous)
+
+        assert result.written is True
+        assert _mode(result.backup) == 0o600
