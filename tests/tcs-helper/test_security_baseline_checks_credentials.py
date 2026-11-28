@@ -425,6 +425,23 @@ class TestCredentials:
 
         assert _by_credential(lib.checks.check_credentials(**ctx))["ssh"].status == "PASS"
 
+    def test_lone_negation_is_no_deny_at_all(self, lib, world):
+        ctx = world(user=_settings(deny=["Read(!~/.ssh/**)"], **SANDBOX_ON))
+
+        ssh = _by_credential(lib.checks.check_credentials(**ctx))["ssh"]
+
+        assert ssh.status == "FAIL"
+        assert ssh.evidence["states"]["permissions"] == "ABSENT"
+
+    def test_malformed_managed_unsandboxed_key_leaves_the_sandbox_unknown(self, lib, world):
+        ctx = world(user=_settings(deny=["Read(~/.ssh/**)"], **SANDBOX_ON),
+                    managed={"sandbox": {"allowUnsandboxedCommands": "true"}})
+
+        ssh = _by_credential(lib.checks.check_credentials(**ctx))["ssh"]
+
+        assert ssh.evidence["states"]["sandbox"] == "UNKNOWN"
+        assert ssh.status != "PASS"
+
     def test_negation_in_another_file_does_not_reach_the_rule(self, lib, world):
         ctx = world(user=_settings(deny=["Read(.env*)"], **SANDBOX_ON),
                     project=_settings(deny=["Read(!.env.example)"]))
@@ -448,10 +465,15 @@ class TestCredentials:
         assert aws.status == "PARTIAL"
         assert aws.evidence["states"] == {"permissions": "ABSENT", "sandbox": "PRESENT-INERT"}
 
-    @pytest.mark.parametrize("entry", ["~/.ssh", "~/.ssh/keys", "~/.ssh/", "~/.ssh/**", "~/.s*"])
+    @pytest.mark.parametrize(
+        "entry",
+        ["~/.ssh", "~/.ssh/keys", "~/.ssh/", "~/.ssh/**", "~/.s*", "~/.ss?", "HOME_DOUBLE_SLASH"],
+    )
     def test_allow_read_at_under_or_globbing_the_path_reopens_it_for_commands(
-        self, lib, world, entry
+        self, lib, world, home, entry
     ):
+        if entry == "HOME_DOUBLE_SLASH":  # `//path` is the other absolute spelling
+            entry = "//" + str(home).lstrip("/") + "/.ssh"
         ctx = world(user=_settings(deny=["Read(~/.ssh/**)"], **SANDBOX_ON),
                     project=_settings(allow_read=[entry]))
 
@@ -461,7 +483,11 @@ class TestCredentials:
         assert ssh.evidence["states"] == {"permissions": "EFFECTIVE", "sandbox": "PRESENT-INERT"}
         assert ssh.evidence["sandbox_reason"] == "allow-read-reopens"
 
-    @pytest.mark.parametrize("entry", ["~/", "~/**", "~/*", "//**", "~/.sshd", "~/.aws", "./.ssh", ".", 7])
+    @pytest.mark.parametrize(
+        "entry",
+        ["~/", "~/**", "~/*", "//**", "~/.sshd", "~/.aws", "./.ssh", ".", 7,
+         "~/.s[s]h", "~/.{ssh,x}"],  # brackets and braces are literal directory names
+    )
     def test_allow_read_elsewhere_or_wider_does_not_reopen_the_path(self, lib, world, entry):
         """A deny holds inside a wider allow: the narrower rule applies."""
         ctx = world(user=_settings(deny=["Read(~/.ssh/**)"], **SANDBOX_ON),
@@ -507,6 +533,12 @@ class TestSandbox:
         assert found.evidence["reason"] == "sandbox-off"
         assert found.evidence["effective"]["sandbox.enabled"] is False
         assert found.fix["template"] == "c4-enable-sandbox"
+
+    def test_malformed_managed_unsandboxed_key_is_not_a_pass(self, lib, world):
+        ctx = world(user=_settings(**FAIL_CLOSED),
+                    managed={"sandbox": {"allowUnsandboxedCommands": "true"}})
+
+        assert _only(lib.checks.check_sandbox(**ctx)).status != "PASS"
 
     def test_shadowed_true_names_both_files_and_the_effective_value(self, lib, world):
         ctx = world(user=_settings(enabled=True), local=_settings(enabled=False))
@@ -746,28 +778,60 @@ class TestNetworkDomains:
         assert _only(lib.checks.check_network_domains(**ctx)).status == "UNKNOWN"
 
 
+def _all(lib, ctx):
+    return [
+        *lib.checks.check_credentials(**ctx),
+        *lib.checks.check_sandbox(**ctx),
+        *lib.checks.check_read_outside(**ctx),
+        *lib.checks.check_network_domains(**ctx),
+    ]
+
+
+# One world per fix template, built so the check that owns it emits it.
+FIX_SCENARIOS = {
+    "settings-unread": lambda lib, world: _all(
+        lib, world(user=_settings(**SANDBOX_ON), unreadable=["project"])),
+    "c1-add-read-deny": lambda lib, world: _all(lib, world()),
+    "c1-use-listed-spelling": lambda lib, world: _all(
+        lib, world(user=_settings(deny=["Read(/.ssh/**)"], **SANDBOX_ON))),
+    "c1-sandbox": lambda lib, world: _all(
+        lib, world(user=_settings(deny=["Read(~/.ssh/**)"]))),
+    "c4-enable-sandbox": lambda lib, world: _all(lib, world()),
+    "c4-install-dependencies": lambda lib, world: _all(
+        lib, world(probe="fail", missing=["bwrap"], platform="linux",
+                   user=_settings(**SANDBOX_ON))),
+    "c4-cannot-run": lambda lib, world: _all(
+        lib, world(probe="fail", user=_settings(**SANDBOX_ON))),
+    "c4-confirm-sandbox": lambda lib, world: _all(
+        lib, world(probe="inconclusive", user=_settings(**SANDBOX_ON))),
+    "c4-remove-weaker-nested-sandbox": lambda lib, world: _all(
+        lib, world(user=_settings(enableWeakerNestedSandbox=True, **FAIL_CLOSED))),
+    "c4-fail-closed": lambda lib, world: _all(lib, world(user=_settings(**SANDBOX_ON))),
+    "c7-block-reads-outside": lambda lib, world: _all(lib, world()),
+    "c7-upgrade": lambda lib, world: _all(lib, world(version="2.1.100")),
+    "c8-allowed-domains": lambda lib, world: _all(lib, world(user=_settings(**SANDBOX_ON))),
+}
+
+
 class TestModuleContract:
-    def test_fix_templates_render_with_the_parameters_the_checks_emit(self, lib, world):
+    @pytest.mark.parametrize("template", sorted(FIX_SCENARIOS))
+    def test_every_fix_template_renders_with_the_parameters_its_check_emits(
+        self, lib, world, template
+    ):
         render = _load("sb_cred_render", "render.py")
         try:
-            ctx = world(probe="inconclusive", version="2.1.100",
-                        user=_settings(deny=["Read(/.ssh/**)", "Read(~/.aws)"], enabled=True))
-            findings = [
-                *lib.checks.check_credentials(**ctx),
-                *lib.checks.check_sandbox(**ctx),
-                *lib.checks.check_read_outside(**ctx),
-                *lib.checks.check_network_domains(**ctx),
-                *lib.checks.check_sandbox(**world()),
-                *lib.checks.check_read_outside(**world()),
-            ]
-            used = {item.fix["template"] for item in findings}
-            for item in findings:
+            findings = FIX_SCENARIOS[template](lib, world)
+            emitted = [item for item in findings if item.fix and item.fix["template"] == template]
+            assert emitted, f"no scenario emits {template}"
+            for item in emitted:
                 text = render.fix_text(
                     item.fix["template"], item.fix["params"], lib.checks.FIX_TEMPLATES)
-                assert text
-            assert len(used) >= 6
+                assert text and "{" not in text
         finally:
             sys.modules.pop("sb_cred_render", None)
+
+    def test_the_scenarios_cover_every_fix_template(self, lib):
+        assert set(FIX_SCENARIOS) == set(lib.checks.FIX_TEMPLATES)
 
     def test_checks_ignore_context_arguments_they_do_not_read(self, lib, world):
         ctx = dict(world(), inventory=object(), commands=object())

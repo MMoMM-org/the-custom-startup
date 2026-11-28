@@ -37,6 +37,8 @@ UNKNOWN.
 
 from __future__ import annotations
 
+import re
+
 import probe as probe_module
 import verdict
 
@@ -105,6 +107,11 @@ FIX_TEMPLATES = {
 _SETTINGS_SCOPES = ("managed", "managed-dropin", "user", "project", "local")
 _READ_PREFIX = "Read("
 _NEGATION = "!"
+# Sandbox path wildcards are `*`, `?` and `**` (settings reference, "Where
+# wildcards work in sandbox paths"). Brackets, braces and parentheses are
+# literal directory names ("Directory names with brackets, braces, or
+# parentheses"), so they are not metacharacters here.
+_GLOB = re.compile(r"[*?]")
 _ANCHORED_PREFIXES = ("~/", "//")  # a `!` carve-out cannot reach these
 
 
@@ -154,8 +161,16 @@ def check_credentials(*, env, probe, credentials, home, effective_of, sources=()
                 "sandbox_entries": sandbox_entries,
                 "sandbox_reason": sandbox_reason,
             },
-            fix=None if template is None else _fix(template, credential=credential.id),
+            fix=_credential_fix(template, credential.id),
         )
+
+
+def _credential_fix(template, credential_id):
+    if template is None:
+        return None
+    if template == "settings-unread":  # takes no parameter
+        return _fix(template)
+    return _fix(template, credential=credential_id)
 
 
 def _credential_reason(status, permissions):
@@ -326,7 +341,7 @@ def _reopened(credential, allow_read, home):
     for path in allow_read:
         if path == base or path.startswith(base + "/"):
             return True
-        if "*" in path and _glob_reopens(path, base):
+        if _GLOB.search(path) and _glob_reopens(path, base):
             return True
     return False
 
@@ -337,10 +352,11 @@ def _glob_reopens(path, base):
     (`~/**`, `~/*`, `/**`) is wider, so the deny holds. A glob whose literal
     prefix ends inside the credential's own name (`~/.s*`) cannot be shown
     wider, and so is conservatively treated as reopening it."""
-    prefix, rest = path.split("*", 1)
+    match = _GLOB.search(path)
+    prefix, rest = path[:match.start()], path[match.start() + 1:]
     if not base.startswith(prefix):
         return False
-    wider = prefix.endswith("/") and rest.strip("*") == ""
+    wider = prefix.endswith("/") and match.group() == "*" and rest.strip("*") == ""
     return not wider
 
 
@@ -488,6 +504,8 @@ def check_network_domains(*, effective_of, **_unused):
     """C8: one finding while the sandbox is on, none otherwise. Reads
     `sandbox.enabled` and `sandbox.network.allowedDomains`. A list that is set
     counts even when it is empty: nothing is pre-approved then."""
+    # An uncertain `sandbox.enabled` also stays silent here: C4 reports that
+    # case as UNKNOWN, so the question is not lost.
     if effective_of(ENABLED).value is not True:
         return
     domains = effective_of(ALLOWED_DOMAINS)
