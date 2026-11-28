@@ -79,6 +79,7 @@ class KeyRule:
     default: Any = None
     enum: tuple[str, ...] | None = None
     ignored_in: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    ignored_min: str | None = None  # Claude Code version from which `ignored_in` applies
     strict: bool | None = None
     strict_against: tuple[str, ...] = ()
     strict_min: str | None = None
@@ -239,8 +240,10 @@ def load_keys(path: pathlib.Path | None = None) -> Keys:
     doc = source.read({"schema", "keys", "features"})
     raw_keys = source.expect(doc["keys"], dict, "top level", "keys")
     raw_features = source.expect(doc["features"], dict, "top level", "features")
-    rules = {name: _key_rule(source, name, raw) for name, raw in raw_keys.items()}
     features = {name: _feature(source, name, raw) for name, raw in raw_features.items()}
+    rules = {
+        name: _key_rule(source, name, raw, features) for name, raw in raw_keys.items()
+    }
     return Keys(types.MappingProxyType(rules), types.MappingProxyType(features))
 
 
@@ -370,12 +373,17 @@ class _Source:
         return value
 
 
-def _key_rule(source: _Source, name: str, raw: Any) -> KeyRule:
+def _key_rule(
+    source: _Source, name: str, raw: Any, features: Mapping[str, Feature]
+) -> KeyRule:
     source.check_fields(
         name, raw,
         required={"type", "merge", "doc"},
         optional=frozenset(
-            {"min", "default", "enum", "ignored_in", "strict", "strict_against", "strict_min"}
+            {
+                "min", "default", "enum", "ignored_in", "ignored_since",
+                "strict", "strict_against", "strict_min",
+            }
         ),
     )
     type_, merge = raw["type"], raw["merge"]
@@ -402,6 +410,7 @@ def _key_rule(source: _Source, name: str, raw: Any) -> KeyRule:
         default=raw.get("default"),
         enum=enum,
         ignored_in=_ignored_in(source, name, raw.get("ignored_in", {}), enum),
+        ignored_min=_ignored_min(source, name, raw, features),
         strict=strict,
         strict_against=strict_against,
         strict_min=strict_min,
@@ -449,6 +458,20 @@ def _ignored_in(
             raise source.error(name, f"field 'ignored_in': scopes must be among {list(SCOPES)}")
         result[value] = scopes
     return types.MappingProxyType(result)
+
+
+def _ignored_min(
+    source: _Source, name: str, raw: dict[str, Any], features: Mapping[str, Feature]
+) -> str | None:
+    """The minimum version of the feature `ignored_since` names, if any."""
+    if "ignored_since" not in raw:
+        return None
+    if not raw.get("ignored_in"):
+        raise source.error(name, "field 'ignored_since' needs the field 'ignored_in'")
+    feature = source.expect(raw["ignored_since"], str, name, "ignored_since")
+    if feature not in features:
+        raise source.error(name, f"field 'ignored_since': {feature!r} is not a feature")
+    return features[feature].min
 
 
 def _feature(source: _Source, name: str, raw: Any) -> Feature:

@@ -553,7 +553,10 @@ def test_bypass_mode_in_repo_settings_is_ignored(lib, rules, src, repo_scope, mo
     repo = src(repo_scope, _mode(mode))
 
     result = lib.effective.effective(
-        "permissions.defaultMode", [user, repo], rules["permissions.defaultMode"]
+        "permissions.defaultMode",
+        [user, repo],
+        rules["permissions.defaultMode"],
+        _version(lib, "2.1.257"),
     )
 
     assert result.value == "default"
@@ -563,11 +566,34 @@ def test_bypass_mode_in_repo_settings_is_ignored(lib, rules, src, repo_scope, mo
     assert result.contributions == ((user, "default"),)
 
 
+@pytest.mark.parametrize("version", [None, "2.1.256"])
+@pytest.mark.parametrize("mode", ["bypassPermissions", "auto"])
+def test_repo_mode_counts_before_the_ignore_version_or_when_it_is_unknown(
+    lib, rules, src, version, mode
+):
+    user = src("user", _mode("default"))
+    project = src("project", _mode(mode))
+
+    result = lib.effective.effective(
+        "permissions.defaultMode",
+        [user, project],
+        rules["permissions.defaultMode"],
+        _version(lib, version) if version else None,
+    )
+
+    assert (result.value, result.winner) == (mode, project)
+    assert result.ignored == ()
+    assert result.shadowed_by == ((user, "default"),)
+
+
 def test_bypass_mode_only_in_repo_settings_leaves_no_effective_mode(lib, rules, src):
     project = src("project", _mode("bypassPermissions"))
 
     result = lib.effective.effective(
-        "permissions.defaultMode", [project], rules["permissions.defaultMode"]
+        "permissions.defaultMode",
+        [project],
+        rules["permissions.defaultMode"],
+        _version(lib, "2.1.300"),
     )
 
     assert (result.value, result.winner) == (None, None)

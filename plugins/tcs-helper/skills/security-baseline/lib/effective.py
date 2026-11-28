@@ -29,7 +29,9 @@ Merge rules:
   unknown version follows `highest`. Among what is left the highest file wins.
 
 A value `ignored_in` its scope (`defaultMode: bypassPermissions` in project or
-local settings) takes no part in the merge and is listed in `ignored`.
+local settings) takes no part in the merge and is listed in `ignored`. When the
+rule has `ignored_min`, Claude Code ignores the value only from that version on:
+with an older or unknown version it counts, so a gap is reported, not hidden.
 
 Nothing here credits a file that was not read with certainty: such files are
 listed in `unknown`, values of the wrong JSON type in `malformed`, and
@@ -94,7 +96,12 @@ def effective(key, sources, rule, claude_version=None):
             unknown=unknown,
             malformed=tuple(malformed),
         )
-    ignored = [pair for pair in present if _tier(pair[0]) in rule.ignored_scopes_for(pair[1])]
+    ignores = _at_least(claude_version, rule.ignored_min)
+    ignored = [
+        pair
+        for pair in present
+        if ignores and _tier(pair[0]) in rule.ignored_scopes_for(pair[1])
+    ]
     counted = [pair for pair in present if not _in(pair, ignored)]
     standing = _after_strict(counted, rule, claude_version)
     winner = standing[0] if standing else None

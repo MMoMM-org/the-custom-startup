@@ -140,6 +140,34 @@ def test_minimum_versions_are_exactly_those_the_docs_state(refdata):
     assert with_strict_min == {"sandbox.allowUnsandboxedCommands": "2.1.285"}
 
 
+def test_ignored_values_are_gated_on_the_feature_that_introduced_the_ignore(refdata):
+    rule = refdata.load_keys().rules["permissions.defaultMode"]
+
+    assert rule.ignored_min == "2.1.257"
+    gated = {n: r.ignored_min for n, r in refdata.load_keys().rules.items() if r.ignored_min}
+    assert gated == {"permissions.defaultMode": "2.1.257"}
+
+
+def test_ignored_since_naming_an_unknown_feature_rejects(refdata, tmp_path):
+    def edit(doc):
+        doc["keys"]["permissions.defaultMode"]["ignored_since"] = "no-such-feature"
+
+    path = _edited_copy(tmp_path, "keys.json", edit)
+
+    with pytest.raises(refdata.RefDataError, match="permissions.defaultMode.*ignored_since"):
+        refdata.load_keys(path)
+
+
+def test_ignored_since_without_ignored_in_rejects(refdata, tmp_path):
+    def edit(doc):
+        doc["keys"]["apiKeyHelper"]["ignored_since"] = "webfetch-domain-wildcards"
+
+    path = _edited_copy(tmp_path, "keys.json", edit)
+
+    with pytest.raises(refdata.RefDataError, match="apiKeyHelper.*ignored_since"):
+        refdata.load_keys(path)
+
+
 def test_version_tuple_orders_versions_numerically(refdata):
     assert refdata.version_tuple("2.1.257") == (2, 1, 257)
     assert refdata.version_tuple("2.1.99") < refdata.version_tuple("2.1.257")
@@ -593,6 +621,8 @@ def test_strict_wins_on_a_non_bool_key_rejects(refdata, tmp_path):
         (_set("merge", "union"), "merge"),
         (_set("enum", ["on"]), "enum"),
         (_set("ignored_in", {"true": ["everywhere"]}), "ignored_in"),
+        (_set("ignored_since", "some-feature"), "ignored_since"),
+        (_set("ignored_since", 2), "ignored_since"),
         (_set("merge", "true-wins"), "merge"),
         (_set("merge", "strict-wins"), "strict"),
         (_set("strict", True), "strict"),

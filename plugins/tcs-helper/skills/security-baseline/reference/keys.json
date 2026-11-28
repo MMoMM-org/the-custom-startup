@@ -38,6 +38,7 @@
           "local"
         ]
       },
+      "ignored_since": "default-mode-bypass-ignored-in-repo-settings",
       "doc": "https://code.claude.com/docs/en/settings-reference#permissions-defaultmode"
     },
     "permissions.disableBypassPermissionsMode": {
