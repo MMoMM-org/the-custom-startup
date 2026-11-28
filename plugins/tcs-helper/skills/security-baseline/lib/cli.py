@@ -180,8 +180,10 @@ def _audit(args, world: World) -> dict:
             lambda key: effective.effective(key, sources, keys.rules[key], env.claude_version)
         ),
     }
+    names = render.NameTable()
+    roots = _roots(project_dir, repo_root, config_dir, home, system_root)
     raw = [
-        _with_rendered_evidence(item, rendered, render)
+        _with_rendered_evidence(item, rendered, render, roots, names)
         for item, rendered in checks.run_all(context)
     ]
     gaps, accepted, info, summary, coverage = verdict.finalise(
@@ -194,9 +196,6 @@ def _audit(args, world: World) -> dict:
         # were not read, and the report says so.
         coverage["unaudited"] = [*coverage["unaudited"], GIT_FAILED_UNAUDITED]
         summary["counts"]["unaudited"] = len(coverage["unaudited"])
-
-    names = render.NameTable()
-    roots = _roots(project_dir, repo_root, config_dir, home, system_root)
 
     def shown(item):
         return _finding(item, roots, names, render, checks.FIX_TEMPLATES)
@@ -421,9 +420,24 @@ def _memoised(function):
     return cached
 
 
-def _with_rendered_evidence(item, already_rendered, render):
+def _with_rendered_evidence(item, already_rendered, render, roots, names):
     finish = render.render_strings if already_rendered else render.render_untrusted
-    return dataclasses.replace(item, evidence=finish(item.evidence))
+    labelled = _label_evidence_files(item.evidence, roots, names)
+    return dataclasses.replace(item, evidence=finish(labelled))
+
+
+def _label_evidence_files(node, roots, names):
+    """EVIDENCE with the `file` of every `{scope, file, value}` entry (the files a
+    value was set in or overridden in) shown as `<label>/<tail>`, so that a long
+    path is not cut in the middle of its name."""
+    if isinstance(node, dict):
+        labelled = {key: _label_evidence_files(item, roots, names) for key, item in node.items()}
+        if isinstance(node.get("file"), str) and "scope" in node and "value" in node:
+            labelled["file"] = _shown_path(node["file"], roots, names)
+        return labelled
+    if isinstance(node, (list, tuple)):
+        return [_label_evidence_files(item, roots, names) for item in node]
+    return node
 
 
 # --- paths outside evidence ---------------------------------------------------

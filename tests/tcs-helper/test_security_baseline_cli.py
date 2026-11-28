@@ -746,6 +746,23 @@ def test_a_non_conforming_path_tail_is_shown_as_a_numbered_placeholder(machine):
     assert "ignore" not in dropin[0]
 
 
+def test_an_overridden_settings_file_is_named_under_evidence_only(machine):
+    machine.user({"permissions": {"disableBypassPermissionsMode": "disable"}})
+    machine.local({"permissions": {"disableBypassPermissionsMode": "allow"}})
+
+    doc = machine.audit()
+
+    c2 = next(f for f in doc["findings"] if f["check"] == "C2")
+    assert (c2["scope"], c2["file"]) == ("local", "<project>/.claude/settings.local.json")
+    (overridden,) = c2["evidence"]["overridden_by"]
+    assert overridden["scope"] == "user"
+    assert overridden["file"] == "~/.claude/settings.json"
+    assert overridden["value"] == "disable"
+    outside = []
+    _strings_outside_evidence(doc, outside)
+    assert not [text for text in outside if str(machine.tmp) in text]
+
+
 def test_evidence_a_check_rendered_is_not_shortened_a_second_time(machine):
     machine.project({"enableAllProjectMcpServers": True})
     machine.mcp_json({"mcpServers": {f"server{n}": {"command": "x"} for n in range(60)}})

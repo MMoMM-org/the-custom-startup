@@ -553,6 +553,36 @@ class TestSandbox:
             {"scope": "user", "file": "/fixture/user/settings.json", "value": True},
         ]
 
+    def test_every_overridden_sandbox_key_names_its_lower_file(self, lib, world):
+        ctx = world(
+            user=_settings(**FAIL_CLOSED),
+            local=_settings(enabled=False, failIfUnavailable=False,
+                            allowUnsandboxedCommands=True, enableWeakerNestedSandbox=True),
+        )
+
+        found = _only(lib.checks.check_sandbox(**ctx))
+
+        user_file = "/fixture/user/settings.json"
+        overridden = {(o["key"], o["file"]): o for o in found.evidence["overridden_by"]}
+        assert set(overridden) == {
+            ("sandbox.enabled", user_file),
+            ("sandbox.failIfUnavailable", user_file),
+            ("sandbox.allowUnsandboxedCommands", "/fixture/local/settings.json"),
+        }  # strict False (user) wins, so the looser local True is the overridden one;
+        # enableWeakerNestedSandbox is set in one file only
+        assert overridden[("sandbox.enabled", user_file)] == {
+            "key": "sandbox.enabled", "scope": "user", "file": user_file, "value": True,
+        }
+
+    def test_strict_winner_lists_the_looser_value_it_overruled(self, lib, world):
+        ctx = world(user=_settings(**FAIL_CLOSED), local=_settings(allowUnsandboxedCommands=True))
+
+        found = _only(lib.checks.check_sandbox(**ctx))
+
+        assert {"key": "sandbox.allowUnsandboxedCommands", "scope": "local",
+                "file": "/fixture/local/settings.json", "value": True} \
+            in found.evidence["overridden_by"]
+
     def test_unreadable_file_makes_the_result_unknown_not_pass(self, lib, world):
         ctx = world(user=_settings(**FAIL_CLOSED), unreadable=["local"])
 
@@ -688,6 +718,17 @@ class TestReadOutside:
                     local={"permissions": {"blockReadsOutsideWorkingDirectories": False}})
 
         assert _only(lib.checks.check_read_outside(**ctx)).status == "PASS"
+
+    def test_strict_true_names_the_overridden_lower_value(self, lib, world):
+        ctx = world(user={"permissions": {"blockReadsOutsideWorkingDirectories": True}},
+                    local={"permissions": {"blockReadsOutsideWorkingDirectories": False}})
+
+        found = _only(lib.checks.check_read_outside(**ctx))
+
+        assert (found.scope, found.file) == ("user", "/fixture/user/settings.json")
+        assert found.evidence["overridden_by"] == [
+            {"scope": "local", "file": "/fixture/local/settings.json", "value": False},
+        ]
 
     @pytest.mark.parametrize("configured", [True, None])
     def test_version_below_the_minimum_is_unknown_med(self, lib, world, configured):

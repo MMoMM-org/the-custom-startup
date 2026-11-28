@@ -182,6 +182,19 @@ def test_mcp_enable_all_effective_true_is_high_and_lists_the_approved_servers(li
     assert (found.scope, found.file) == ("user", user.path)
 
 
+def test_mcp_enable_all_names_the_lower_file_it_overrode(lib, world):
+    user = world.src("user", {"enableAllProjectMcpServers": False})
+    local = world.src("local", {"enableAllProjectMcpServers": True})
+    ctx = world.context([user, local, world.mcp_json("github")])
+
+    found = _only(_run(lib.checks.check_mcp, ctx), severity="HIGH")
+
+    assert (found.scope, found.file) == ("local", local.path)
+    assert found.evidence["overridden_by"] == [
+        {"scope": "user", "file": user.path, "value": False},
+    ]
+
+
 def test_mcp_enable_all_overruled_by_a_higher_file_is_no_finding(lib, world):
     ctx = world.context([
         world.src("project", {"enableAllProjectMcpServers": True}),

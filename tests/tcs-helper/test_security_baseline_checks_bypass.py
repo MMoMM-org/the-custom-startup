@@ -576,3 +576,54 @@ def test_every_fix_template_renders_without_parameters_from_files(lib):
     for template_id in lib.checks.FIX_TEMPLATES:
         assert lib.render.fix_text(template_id, {}, templates=lib.checks.FIX_TEMPLATES)
     assert not set(lib.checks.FIX_TEMPLATES) & set(lib.render.FIX_TEMPLATES)
+
+
+def test_disable_key_overridden_higher_names_winner_and_the_lower_file(lib, keys, src, env):
+    user = src("user", _disabled())
+    local = src("local", {"permissions": {"disableBypassPermissionsMode": "allow"}})
+
+    item = lib.checks.check_bypass(sources=[user, local], env=env(), keys=keys)[0]
+
+    assert (item.scope, item.file) == ("local", local.path)
+    assert item.evidence["overridden_by"] == [
+        {"scope": "user", "file": user.path, "value": "disable"},
+    ]
+
+
+def test_default_mode_overridden_higher_names_winner_and_the_lower_file(lib, keys, src, env):
+    user = src("user", _bypass_mode())
+    local = src("local", {"permissions": {"defaultMode": "default"}})
+
+    (item,) = _for_key(
+        lib.checks.check_bypass(sources=[user, local], env=env(), keys=keys), MODE_KEY
+    )
+
+    assert item.file == user.path  # one finding per file asking for bypass
+    assert item.evidence["overridden_by"] == [
+        {"scope": "user", "file": user.path, "value": "bypassPermissions"},
+    ]
+    assert item.evidence["effective_in"] == {
+        "scope": "local", "file": local.path, "value": "default",
+    }
+
+
+def test_default_mode_winner_lists_the_values_it_overrode(lib, keys, src, env):
+    user = src("user", {"permissions": {"defaultMode": "default"}})
+    local = src("local", _bypass_mode())
+
+    (item,) = _for_key(
+        lib.checks.check_bypass(sources=[user, local], env=env(version="2.1.200"), keys=keys),
+        MODE_KEY,
+    )
+
+    assert (item.scope, item.file) == ("local", local.path)
+    assert item.evidence["overridden_by"] == [
+        {"scope": "user", "file": user.path, "value": "default"},
+    ]
+    assert item.evidence["effective_in"]["file"] == local.path
+
+
+def test_a_key_set_in_one_file_has_nothing_overridden(lib, keys, src, env):
+    item = lib.checks.check_bypass(sources=[src("user", _disabled())], env=env(), keys=keys)[0]
+
+    assert item.evidence["overridden_by"] == []

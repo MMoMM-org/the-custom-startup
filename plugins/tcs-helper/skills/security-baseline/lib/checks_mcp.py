@@ -235,6 +235,12 @@ def _enable_all(sources, effective_of):
             "key": ENABLE_ALL,
             "approved_servers": render.render_untrusted(approved_project_servers(sources, effective_of)),
             "mcp_json": mcp_json.status,
+            # Paths stay raw: the CLI labels them against its roots, then renders.
+            "overridden_by": [
+                {"scope": source.scope, "file": source.path,
+                 "value": render.render_untrusted(value)}
+                for source, value in enable_all.shadowed_by
+            ],
             **_uncertainty(enable_all),
         },
         fix={"template": "mcp-approve-by-name", "params": {}},

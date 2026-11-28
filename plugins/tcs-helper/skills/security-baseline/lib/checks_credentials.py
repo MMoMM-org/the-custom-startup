@@ -414,6 +414,11 @@ def check_sandbox(*, probe, effective_of, **_unused):
                 {"scope": source.scope, "file": source.path, "value": value}
                 for source, value in enabled.contributions
             ],
+            "overridden_by": [
+                {"key": item.key, **entry}
+                for item in (enabled, fail_closed, unsandboxed, weaker)
+                for entry in _overridden_by(item)
+            ],
             "probe": probe_evidence,
         },
         fix=None if template is None else _fix(template),
@@ -485,6 +490,7 @@ def check_read_outside(*, env, keys, effective_of, **_unused):
             "reason": reason,
             "states": {PERMISSIONS: state},
             "effective": {BLOCK_READS: item.value},
+            "overridden_by": _overridden_by(item),
             "min_version": minimum,
             "claude_version": None if version is None else str(version),
         },
@@ -528,6 +534,15 @@ def check_network_domains(*, effective_of, **_unused):
         },
         fix=fix,
     )
+
+
+def _overridden_by(item):
+    """The lower files whose value the winner overrode: `{scope, file, value}`
+    each, for the report to name next to the winning file."""
+    return [
+        {"scope": source.scope, "file": source.path, "value": value}
+        for source, value in item.shadowed_by
+    ]
 
 
 def _fix(template, **params):

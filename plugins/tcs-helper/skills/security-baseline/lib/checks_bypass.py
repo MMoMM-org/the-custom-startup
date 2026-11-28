@@ -82,6 +82,7 @@ def check_bypass(*, sources, env, keys):
                 "key": DISABLE_KEY,
                 "value": disable.value,
                 "unread": [source.scope for source in disable.unknown],
+                "overridden_by": _overridden_by(disable),
                 "bypass_active": env.bypass_active,
             },
             fix=_fix(FIX_DISABLE_BYPASS) if proposes else None,
@@ -104,6 +105,8 @@ def check_bypass(*, sources, env, keys):
                 "key": MODE_KEY,
                 "value": value,
                 "effective": source is mode.winner,
+                "overridden_by": _overridden_by(mode),
+                "effective_in": _entry(mode.winner, mode.value),
                 "claude_version": _version_text(env),
             },
             fix=_fix(FIX_REMOVE_BYPASS_MODE) if proposes else None,
@@ -152,6 +155,19 @@ def check_container_exposure(*, sources, env, probe, keys, credentials, home):
 
 def _effective(key, sources, env, keys):
     return effective_values.effective(key, sources, keys.rules[key], env.claude_version)
+
+
+def _entry(source, value):
+    """`{scope, file, value}` of one settings file's value; None without a file."""
+    if source is None:
+        return None
+    return {"scope": source.scope, "file": source.path, "value": value}
+
+
+def _overridden_by(item):
+    """The lower files whose value the winner overrode, for the report to name
+    next to the winning file. Raw; the CLI renders evidence."""
+    return [_entry(source, value) for source, value in item.shadowed_by]
 
 
 def _disable_state(disable):
