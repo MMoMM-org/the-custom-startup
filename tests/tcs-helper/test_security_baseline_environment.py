@@ -5,7 +5,9 @@ can set; ancestor argv is reported as presence flags only; the Claude Code
 version comes from a binary on a trustworthy PATH entry.
 
 No test reads the real ``/proc``, the real ``PATH`` or runs the real
-``claude``: marker roots, process readers and runners are injected.
+``claude``: marker roots, process readers and runners are injected. The one
+real subprocess boundary, ``run_subprocess``, is exercised with scripts the
+test writes itself.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -238,6 +241,18 @@ def test_other_layer_env_keys_do_not_disable_containerized(detect):
     )
 
 
+def test_a_bare_string_of_layer_env_keys_is_one_name_not_a_substring_search(detect):
+    result = detect(env={"CONTAINERIZED": "1"}, layer_env_keys="NOT_CONTAINERIZED_AT_ALL")
+    assert result.profile == "container"
+    assert result.profile_evidence == ("env:CONTAINERIZED",)
+
+
+def test_a_bare_string_naming_containerized_is_ignored_like_a_collection(detect):
+    result = detect(env={"CONTAINERIZED": "1"}, layer_env_keys="CONTAINERIZED")
+    assert result.profile == "linux-native"
+    assert result.profile_evidence[-1] == "env:CONTAINERIZED ignored: set by a settings layer"
+
+
 # --- explicit profile -------------------------------------------------------
 
 
@@ -391,6 +406,67 @@ def test_procfs_reader_returns_none_for_a_garbled_stat(environment, tmp_path):
     assert environment.procfs_reader(tmp_path)(42) is None
 
 
+@pytest.mark.parametrize("parent", ["\u00b2", "\u0663", "\uff17"])
+def test_procfs_reader_returns_none_for_a_non_ascii_digit_parent(environment, tmp_path, parent):
+    _proc_entry(tmp_path, 42, parent, ["x"])
+    assert environment.procfs_reader(tmp_path)(42) is None
+
+
+def test_procfs_reader_marks_a_cmdline_cut_at_the_read_limit(environment, tmp_path, monkeypatch):
+    monkeypatch.setattr(environment, "_READ_LIMIT_BYTES", 64)
+    _proc_entry(tmp_path, 42, 7, ["claude", "x" * 80, "--settings", "s"])
+    info = environment.procfs_reader(tmp_path)(42)
+    assert (info.parent_pid, info.args_truncated) == (7, True)
+    assert "--settings" not in info.args
+
+
+def test_procfs_reader_does_not_mark_a_cmdline_that_fits_the_read_limit(
+    environment, tmp_path, monkeypatch
+):
+    argv = ["claude", "--settings", "s"]
+    monkeypatch.setattr(environment, "_READ_LIMIT_BYTES", sum(len(arg) + 1 for arg in argv))
+    _proc_entry(tmp_path, 42, 7, argv)
+    assert environment.procfs_reader(tmp_path)(42) == environment.ProcessInfo(
+        parent_pid=7, args=tuple(argv)
+    )
+
+
+def test_a_flag_past_the_cmdline_read_limit_is_unknown_not_absent(
+    environment, detect, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(environment, "_READ_LIMIT_BYTES", 64)
+    _proc_entry(tmp_path, 100, 0, ["claude", "x" * 80, "--dangerously-skip-permissions"])
+    result = detect(proc_reader=environment.procfs_reader(tmp_path))
+    assert (result.bypass_active, result.settings_flag, result.permission_mode_flag) == (
+        "unknown",
+        "unknown",
+        "unknown",
+    )
+
+
+def test_a_truncated_cmdline_keeps_its_seen_flags_and_the_walk_goes_on(
+    environment, detect, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(environment, "_READ_LIMIT_BYTES", 64)
+    _proc_entry(tmp_path, 100, 101, ["node", "--settings", "s", "x" * 80])
+    _proc_entry(tmp_path, 101, 0, ["claude", "--dangerously-skip-permissions"])
+    result = detect(proc_reader=environment.procfs_reader(tmp_path))
+    assert (result.bypass_active, result.settings_flag, result.permission_mode_flag) == (
+        "yes",
+        "present",
+        "unknown",
+    )
+
+
+def test_a_truncated_ancestor_from_any_reader_never_reports_absent(environment, detect):
+    table = {
+        100: environment.ProcessInfo(parent_pid=101, args=("node",), args_truncated=True),
+        101: environment.ProcessInfo(parent_pid=0, args=("init",)),
+    }
+    result = detect(proc_reader=table.get)
+    assert (result.bypass_active, result.settings_flag) == ("unknown", "unknown")
+
+
 def test_detect_walks_a_fake_proc_tree(environment, detect, tmp_path):
     _proc_entry(tmp_path, 100, 101, ["zsh", "-c", "python3 cli.py audit"])
     _proc_entry(tmp_path, 101, 1, ["claude", "--dangerously-skip-permissions", "--settings", "s"])
@@ -457,6 +533,14 @@ def test_ps_reader_returns_none_on_timeout(environment):
 def test_ps_reader_returns_none_for_a_garbled_parent(environment):
     def runner(argv, timeout):
         return 0, "not-a-pid\n"
+
+    assert environment.ps_reader(runner)(42) is None
+
+
+@pytest.mark.parametrize("parent", ["\u00b2", "\u0663", "\uff17"])
+def test_ps_reader_returns_none_for_a_non_ascii_digit_parent(environment, parent):
+    def runner(argv, timeout):
+        return 0, f"  {parent}\n"
 
     assert environment.ps_reader(runner)(42) is None
 
@@ -561,6 +645,73 @@ def test_nonzero_exit_gives_no_version(detect):
 
 def test_relative_path_from_which_is_not_run(detect):
     assert detect(which=lambda name: "bin/claude", runner=_refusing_runner).claude_version is None
+
+
+# --- run_subprocess (the real boundary) -------------------------------------
+
+
+def _script(tmp_path, body, name="tool"):
+    directory = tmp_path / "tools"
+    directory.mkdir(exist_ok=True)
+    script = directory / name
+    script.write_text("#!/bin/sh\n" + body, encoding="utf-8")
+    script.chmod(0o755)
+    return str(script)
+
+
+def test_run_subprocess_returns_exit_code_and_decoded_stdout(environment, tmp_path):
+    script = _script(tmp_path, "printf 'one\\ntwo\\n'\n")
+    assert environment.run_subprocess((script,), 5) == (0, "one\ntwo\n")
+
+
+def test_run_subprocess_passes_the_arguments_without_a_shell(environment, tmp_path):
+    script = _script(tmp_path, "printf '%s|' \"$@\"\n")
+    code, output = environment.run_subprocess((script, "a b", "$HOME", "*; echo x"), 5)
+    assert (code, output) == (0, "a b|$HOME|*; echo x|")
+
+
+def test_run_subprocess_returns_a_nonzero_exit_as_the_code(environment, tmp_path):
+    script = _script(tmp_path, "echo partial\nexit 3\n")
+    assert environment.run_subprocess((script,), 5) == (3, "partial\n")
+
+
+def test_run_subprocess_drops_stderr_and_replaces_undecodable_bytes(environment, tmp_path):
+    script = _script(tmp_path, "echo noise >&2\nprintf 'ok\\377'\n")
+    assert environment.run_subprocess((script,), 5) == (0, "ok\ufffd")
+
+
+def test_run_subprocess_gives_the_child_only_the_minimal_environment(
+    environment, tmp_path, monkeypatch
+):
+    monkeypatch.setenv("HOME", "/home/leak-probe")
+    monkeypatch.setenv("CONTAINERIZED", "1")
+    monkeypatch.setenv("SB_LEAK_PROBE", "leak-probe-value")
+    monkeypatch.setenv("LC_ALL", "xx_XX.UTF-8")
+    monkeypatch.setenv("PATH", "/leak-probe/bin" + os.pathsep + os.environ.get("PATH", ""))
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    # A link to env itself: no shell runs in between, so the dump is exact.
+    (tools / "dump").symlink_to("/usr/bin/env")
+
+    code, output = environment.run_subprocess((str(tools / "dump"),), 5)
+
+    assert code == 0
+    assert "leak-probe" not in output
+    child = dict(line.split("=", 1) for line in output.splitlines())
+    assert child == {"PATH": f"{tools}{os.pathsep}/usr/bin:/bin", "LC_ALL": "C"}
+
+
+def test_run_subprocess_raises_on_timeout_and_kills_the_child(environment, tmp_path):
+    script = _script(tmp_path, "exec sleep 30\n")
+    started = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        environment.run_subprocess((script,), 0.2)
+    assert time.monotonic() - started < 10
+
+
+def test_run_subprocess_raises_oserror_for_a_missing_binary(environment, tmp_path):
+    with pytest.raises(OSError):
+        environment.run_subprocess((str(tmp_path / "no-such-tool"),), 5)
 
 
 # --- PATH resolution --------------------------------------------------------

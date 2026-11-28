@@ -12,7 +12,8 @@ Answers four questions about the machine the audit runs on:
 - **ancestor flags** — whether one of up to eight ancestor processes carries
   ``--settings``, ``--dangerously-skip-permissions`` or ``--permission-mode``.
   Presence only: argument values are never stored, returned or logged, so
-  ``--permission-mode`` leaves ``bypass_active`` at ``unknown``.
+  ``--permission-mode`` leaves ``bypass_active`` at ``unknown``. A flag is
+  ``absent`` only when every inspected argv was read in full.
 - **Claude Code version** — ``claude --version`` of a binary found on an
   absolute PATH entry outside the project that others cannot write to.
 
@@ -89,10 +90,12 @@ class Roots:
 @dataclass(frozen=True)
 class ProcessInfo:
     """One ancestor as a process reader returns it. ``args`` is inspected for
-    flag presence and then dropped."""
+    flag presence and then dropped. ``args_truncated`` says the reader could
+    not see the whole argv, so a flag missing from ``args`` may still be set."""
 
     parent_pid: int
     args: tuple[str, ...]
+    args_truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -141,7 +144,8 @@ def detect(
 
     ``platform`` is ``sys.platform``. ``layer_env_keys`` names the variables
     that readable settings layers set in ``env`` — a mapping of name to the
-    scopes setting it, or a plain collection of names. ``proc_reader``,
+    scopes setting it, or a plain collection of names; a bare string is one
+    name, never searched for a substring. ``proc_reader``,
     ``which`` and ``runner`` default to the real ``/proc`` or ``ps``, the PATH
     in ``env`` and ``subprocess``; ``start_pid`` defaults to the parent of
     this process, the first ancestor.
@@ -237,6 +241,9 @@ def _has_container_cgroup(path: str) -> bool:
 
 
 def _is_set_by_a_layer(layer_env_keys: Any) -> bool:
+    if isinstance(layer_env_keys, str):
+        # One name: ``in`` on a string would be a substring search.
+        return layer_env_keys == CONTAINER_ENV_KEY
     return CONTAINER_ENV_KEY in layer_env_keys
 
 
@@ -262,11 +269,14 @@ def _ignored_note(layer_env_keys: Any) -> str:
 
 def _walk_ancestors(reader: Optional[ProcReader], start_pid: int) -> tuple[frozenset[str], bool]:
     """Flags seen in up to ``MAX_ANCESTORS`` ancestors, and whether the walk
-    was complete (reached the root of the process tree or the limit) rather
-    than cut short by an unreadable process."""
+    was complete: it reached the root of the process tree or the limit, was
+    not cut short by an unreadable process, and saw every argv in full. A
+    truncated argv does not end the walk; it only keeps unseen flags from
+    being reported ``absent``."""
     found: set[str] = set()
     if reader is None or start_pid <= 0:
         return frozenset(found), False
+    complete = True
     pid = start_pid
     for _ in range(MAX_ANCESTORS):
         try:
@@ -276,10 +286,12 @@ def _walk_ancestors(reader: Optional[ProcReader], start_pid: int) -> tuple[froze
         if info is None:
             return frozenset(found), False
         found.update(_flags_in(info.args))
+        if info.args_truncated:
+            complete = False
         if info.parent_pid <= 0 or info.parent_pid == pid:
             break
         pid = info.parent_pid
-    return frozenset(found), True
+    return frozenset(found), complete
 
 
 def _flags_in(args: Sequence[str]) -> set[str]:
@@ -314,20 +326,28 @@ def _default_proc_reader(platform: str, roots: Roots, runner: Runner) -> Optiona
 
 
 def procfs_reader(filesystem: Any = "/") -> ProcReader:
-    """Reader over ``<filesystem>/proc/<pid>/{stat,cmdline}`` (Linux)."""
+    """Reader over ``<filesystem>/proc/<pid>/{stat,cmdline}`` (Linux).
+
+    At most ``_READ_LIMIT_BYTES`` of ``cmdline`` are inspected. A longer one
+    is marked ``args_truncated``: its last argument may be cut short, which
+    can only add a presence, and the flags behind the cut are reported
+    ``unknown`` rather than ``absent``."""
 
     def read(pid: int) -> Optional[ProcessInfo]:
         directory = os.path.join(filesystem, "proc", str(int(pid)))
-        status = _read_limited(os.path.join(directory, "stat"))
-        cmdline = _read_limited(os.path.join(directory, "cmdline"))
+        limit = _READ_LIMIT_BYTES
+        status = _read_limited(os.path.join(directory, "stat"), limit)
+        cmdline = _read_limited(os.path.join(directory, "cmdline"), limit + 1)
         if status is None or cmdline is None:
             return None
         # "pid (comm) state ppid ..." — comm may itself contain ") ".
         fields = status.decode("utf-8", "replace").rpartition(")")[2].split()
-        if len(fields) < 2 or not fields[1].isdigit():
+        if len(fields) < 2 or not _is_pid_text(fields[1]):
             return None
-        args = tuple(part.decode("utf-8", "replace") for part in cmdline.split(b"\0") if part)
-        return ProcessInfo(parent_pid=int(fields[1]), args=args)
+        truncated = len(cmdline) > limit
+        parts = cmdline[:limit].split(b"\0")
+        args = tuple(part.decode("utf-8", "replace") for part in parts if part)
+        return ProcessInfo(parent_pid=int(fields[1]), args=args, args_truncated=truncated)
 
     return read
 
@@ -349,7 +369,7 @@ def ps_reader(runner: Optional[Runner] = None) -> ProcReader:
 
     def read(pid: int) -> Optional[ProcessInfo]:
         parent = column("ppid", pid)
-        if parent is None or not parent.strip().isdigit():
+        if parent is None or not _is_pid_text(parent.strip()):
             return None
         args = column("args", pid)
         if args is None:
@@ -357,6 +377,11 @@ def ps_reader(runner: Optional[Runner] = None) -> ProcReader:
         return ProcessInfo(parent_pid=int(parent.strip()), args=tuple(args.split()))
 
     return read
+
+
+def _is_pid_text(text: str) -> bool:
+    """ASCII digits only: ``str.isdigit`` alone also accepts ``²`` or ``٣``."""
+    return text.isascii() and text.isdigit()
 
 
 # --- Claude Code version ----------------------------------------------------
@@ -425,7 +450,11 @@ def _claude_version(which: Which, runner: Runner) -> Optional[Version]:
 def run_subprocess(argv: Sequence[str], timeout: float) -> tuple[int, str]:
     """Run ``argv`` without a shell and with a minimal environment; return
     exit code and stdout. The binary's own directory is on PATH so that an
-    interpreter installed beside it is found."""
+    interpreter installed beside it is found.
+
+    A nonzero exit is returned, not raised. Raises ``subprocess.TimeoutExpired``
+    after ``timeout`` seconds (the child is killed first) and ``OSError`` when
+    the binary cannot be started; callers map both to "unknown"."""
     completed = subprocess.run(  # noqa: S603 - fixed argv, shell=False
         list(argv),
         stdin=subprocess.DEVNULL,
@@ -439,9 +468,9 @@ def run_subprocess(argv: Sequence[str], timeout: float) -> tuple[int, str]:
     return completed.returncode, completed.stdout.decode("utf-8", "replace")
 
 
-def _read_limited(path: str) -> Optional[bytes]:
+def _read_limited(path: str, limit: Optional[int] = None) -> Optional[bytes]:
     try:
         with open(path, "rb") as handle:
-            return handle.read(_READ_LIMIT_BYTES)
+            return handle.read(_READ_LIMIT_BYTES if limit is None else limit)
     except OSError:
         return None
