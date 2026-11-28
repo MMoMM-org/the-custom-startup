@@ -781,6 +781,15 @@ class TestChangedTarget:
         assert result.error == "changed"
         assert pathlib.Path(plan.path).read_bytes() == ORIGINAL
 
+    def test_missing_file_with_the_hash_of_empty_content_is_not_written(self, writer, world):
+        plan = _plan_missing(world, "local")
+        plan.pre_sha256 = _sha(b"")
+
+        result = _write(writer, world, plan)
+
+        assert result.error == "changed"
+        assert not os.path.lexists(plan.path)
+
     def test_missing_file_with_a_plan_that_expected_one_is_not_written(self, writer, world):
         plan = _plan_missing(world, "local")
         plan.pre_sha256 = _sha(ORIGINAL)

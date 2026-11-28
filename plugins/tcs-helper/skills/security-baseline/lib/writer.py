@@ -75,7 +75,6 @@ _BACKUP_NAME = re.compile(r"^(\d{8}T\d{6}Z)-(user|project|local)-[0-9a-f]{8}\.js
 _NEW_FILE = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
 _READ_ONLY = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
 _READ_CHUNK = 65536
-_EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 
 
 @dataclass(frozen=True)
@@ -371,9 +370,13 @@ def _read(real):
 
 
 def _require_reviewed(original, pre_sha256):
-    """The file must still be the one the plan was computed from."""
+    """The file must still be the one the plan was computed from.
+
+    A missing target is reviewed only as ``pre_sha256 is None``; any hash,
+    including that of empty content, means the plan saw a file that is gone.
+    """
     if original is None:
-        if pre_sha256 not in (None, _EMPTY_SHA256):
+        if pre_sha256 is not None:
             raise _Stop("changed")
     elif pre_sha256 != _sha256(original[0]):
         raise _Stop("changed")
