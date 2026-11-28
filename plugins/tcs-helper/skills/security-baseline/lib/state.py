@@ -120,13 +120,28 @@ def state_dir(environ: Mapping[str, str], home, forbidden: Iterable = ()) -> Pat
     resolved = Path(os.path.realpath(root))
     for directory in forbidden:
         inside = Path(os.path.realpath(directory))
-        if resolved == inside or inside in resolved.parents:
+        if resolved == inside or inside in resolved.parents or _is_same_file_inside(resolved, inside):
             raise StateError(
                 "inside-repository",
                 f"state directory {root} would be inside the audited repository {directory}; "
                 "set XDG_STATE_HOME to an absolute path outside it",
             )
     return root
+
+
+def _is_same_file_inside(path: Path, forbidden: Path) -> bool:
+    """True when `path` or an existing ancestor is the very directory
+    `forbidden`, however either is spelled: a case-insensitive filesystem
+    makes `Repo` and `repo` one directory that no string comparison sees."""
+    if not forbidden.exists():
+        return False
+    for candidate in (path, *path.parents):
+        try:
+            if os.path.samefile(candidate, forbidden):
+                return True
+        except OSError:
+            continue  # this ancestor does not exist (yet); try the next one up
+    return False
 
 
 def plans_dir(root) -> Path:
@@ -149,14 +164,22 @@ def ensure(root) -> Path:
     refused when it is a symlink, not a directory or owned by another user.
     """
     root = Path(root)
-    os.makedirs(root.parent, mode=_DIR_MODE, exist_ok=True)
-    for directory in (root, plans_dir(root), backups_dir(root)):
-        try:
-            os.mkdir(directory, _DIR_MODE)
-        except FileExistsError:
-            pass
-        _check_dir(directory)
+    try:
+        os.makedirs(root.parent, mode=_DIR_MODE, exist_ok=True)
+        for directory in (root, plans_dir(root), backups_dir(root)):
+            try:
+                os.mkdir(directory, _DIR_MODE)
+            except FileExistsError:
+                pass
+            _check_dir(directory)
+    except OSError as exc:
+        raise _unsafe("state-dir-unsafe", "cannot prepare the state directory", exc) from None
     return root
+
+
+def _unsafe(reason: str, what: str, exc: OSError) -> StateError:
+    """A StateError that names the failure by errno only, never a path."""
+    return StateError(reason, f"{what} ({errno.errorcode.get(exc.errno, 'unknown error')})")
 
 
 def _check_dir(directory: Path) -> bool:
@@ -165,6 +188,8 @@ def _check_dir(directory: Path) -> bool:
         info = os.lstat(directory)
     except FileNotFoundError:
         return False
+    except OSError as exc:
+        raise _unsafe("state-dir-unsafe", "cannot inspect the state directory", exc) from None
     if not stat.S_ISDIR(info.st_mode):
         raise StateError("state-dir-unsafe", f"{directory} is not a directory (a symlink is refused)")
     if info.st_uid != os.geteuid():
@@ -266,7 +291,13 @@ def load_plan(root, plan_id, now: datetime.datetime) -> Loaded:
 
 def consume(root, plan_id) -> bool:
     """Mark the approval used. True when the record is consumed afterwards
-    (now or already), False when there is no such record."""
+    (now or already), False when there is no such record.
+
+    Not atomic with `load_plan`: `apply` must hold `lock()` across
+    load_plan -> consume, or two applies can both read `ok` and both proceed.
+    The rewrite is a temp file renamed over the record, so a crash leaves the
+    old record or the marked one, never a partial file.
+    """
     if not _is_plan_id(plan_id):
         return False
     plans = _existing_plans_dir(root)
@@ -289,11 +320,28 @@ def consume(root, plan_id) -> bool:
         with contextlib.suppress(OSError):
             os.unlink(temp)
         raise
+    _fsync_dir(plans)
     return True
+
+
+def _fsync_dir(directory: Path) -> None:
+    """Make a rename in `directory` durable; best effort, since the rename
+    itself has already happened."""
+    with contextlib.suppress(OSError):
+        fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0))
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 def sweep(root, now: datetime.datetime) -> int:
     """Remove expired plan records; return how many files went.
+
+    Only regular files and symlinks are removed; a directory or anything
+    else at a record name is skipped, and an entry that cannot be removed
+    does not stop the sweep. A record dated in the future is kept: a clock
+    that jumped back must not delete a newer, valid approval.
 
     A file under a record name that cannot be read as a record, and a
     leftover temp file, are removed once their modification time is older
@@ -309,16 +357,28 @@ def sweep(root, now: datetime.datetime) -> int:
         if not _PLAN_FILE_RE.fullmatch(name):
             continue
         path = plans / name
+        if not _is_removable(path):
+            continue
         record = None if name.endswith(_TEMP_SUFFIX) else _read_record(path)
         if record is not None:
-            stale = _is_expired(record, now)
+            stale = _has_lapsed(record, now)
         else:
             stale = _is_older_than_window(path, now)
         if stale:
-            with contextlib.suppress(FileNotFoundError):
+            try:
                 os.unlink(path)
-                removed += 1
+            except OSError:
+                continue  # already gone, or not ours to remove: leave it
+            removed += 1
     return removed
+
+
+def _is_removable(path: Path) -> bool:
+    try:
+        mode = os.lstat(path).st_mode
+    except OSError:
+        return False
+    return stat.S_ISREG(mode) or stat.S_ISLNK(mode)
 
 
 def _is_plan_id(plan_id) -> bool:
@@ -350,9 +410,14 @@ def _is_expired(record: PlanRecord, now: datetime.datetime) -> bool:
     """Outside the window that starts at `created_at`. The stored
     `expires_at` can shorten the window but never extend it."""
     created = _parse_timestamp(record.created_at)
+    return now < created or _has_lapsed(record, now)
+
+
+def _has_lapsed(record: PlanRecord, now: datetime.datetime) -> bool:
+    """The window has ended. False for a record dated after `now`."""
+    created = _parse_timestamp(record.created_at)
     expires = _parse_timestamp(record.expires_at)
-    limit = min(expires, created + datetime.timedelta(seconds=PLAN_TTL_SECONDS))
-    return not created <= now < limit
+    return now >= min(expires, created + datetime.timedelta(seconds=PLAN_TTL_SECONDS))
 
 
 def _is_older_than_window(path: Path, now: datetime.datetime) -> bool:
@@ -465,7 +530,7 @@ def lock(root) -> Iterator[None]:
     except OSError as exc:
         if exc.errno in (errno.ELOOP, errno.EMLINK):
             raise StateError("lock-unsafe", f"{path} is a symlink") from None
-        raise
+        raise _unsafe("lock-unsafe", "cannot open the state lock", exc) from None
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid():

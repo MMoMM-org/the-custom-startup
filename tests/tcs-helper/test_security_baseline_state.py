@@ -836,3 +836,150 @@ def test_loading_the_module_writes_nothing(tmp_path, monkeypatch):
             sys.modules["jsonio"] = previous
 
     assert _tree(tmp_path) == ["home"]
+
+
+# =============================================================================
+# hardening (quality review of the first state.py commit)
+# =============================================================================
+
+
+@pytest.mark.parametrize("suffix", [".json", ".json.tmp"])
+def test_sweep_skips_a_directory_at_a_record_name(state, root, suffix):
+    state.ensure(root)
+    imposter = state.plans_dir(root) / (PLAN_A + suffix)
+    imposter.mkdir()
+    (imposter / "inner").write_text("keep")
+    _aged(imposter, T0)
+
+    assert state.sweep(root, _minutes(60)) == 0
+
+    assert (imposter / "inner").read_text() == "keep"
+
+
+def test_sweep_goes_on_after_an_entry_it_cannot_remove(state, root, record, monkeypatch):
+    state.ensure(root)
+    stuck = state.plans_dir(root) / (PLAN_A + ".json")
+    stuck.write_text("{")
+    _aged(stuck, T0)
+    other = state.plans_dir(root) / (PLAN_B + ".json")
+    other.write_text("{")
+    _aged(other, T0)
+    real_unlink = os.unlink
+
+    def refuse_first(path, *args, **kwargs):
+        if str(path).endswith(PLAN_A + ".json"):
+            raise PermissionError(13, "denied")
+        return real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "unlink", refuse_first)
+
+    assert state.sweep(root, _minutes(60)) == 1
+    assert stuck.exists()
+    assert not other.exists()
+
+
+def test_ensure_reports_a_file_in_the_parent_path_as_unsafe(state, tmp_path):
+    blocker = tmp_path / "home" / ".local" / "state"
+    blocker.parent.mkdir(parents=True)
+    blocker.write_text("not a directory")
+    root = blocker / "tcs-helper" / "security-baseline"
+
+    with pytest.raises(state.StateError) as refused:
+        state.ensure(root)
+
+    assert refused.value.reason == "state-dir-unsafe"
+    assert str(tmp_path) not in str(refused.value)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory modes")
+def test_ensure_reports_a_read_only_home_as_unsafe(state, tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    home.chmod(0o500)
+    try:
+        with pytest.raises(state.StateError) as refused:
+            state.ensure(home / "xdg" / "tcs-helper" / "security-baseline")
+    finally:
+        home.chmod(0o700)
+
+    assert refused.value.reason == "state-dir-unsafe"
+    assert "EACCES" in str(refused.value)
+
+
+def test_load_reports_a_file_in_the_parent_path_as_unsafe(state, tmp_path):
+    blocker = tmp_path / "blocker"
+    blocker.write_text("x")
+
+    with pytest.raises(state.StateError) as refused:
+        state.load_plan(blocker / "sub", PLAN_A, T0)
+
+    assert refused.value.reason == "state-dir-unsafe"
+
+
+def test_the_lock_reports_a_directory_at_its_path_as_unsafe(state, root):
+    state.ensure(root)
+    state.lock_path(root).mkdir()
+
+    with pytest.raises(state.StateError) as refused:
+        with state.lock(root):
+            pass
+
+    assert refused.value.reason == "lock-unsafe"
+    assert "EISDIR" in str(refused.value)
+
+
+def test_state_dir_is_refused_when_a_differently_spelled_path_is_the_same_directory(
+    state, tmp_path, monkeypatch
+):
+    """On a case-insensitive filesystem `Repo` and `repo` differ as strings
+    and are one directory; the same-file check catches what realpath misses."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    twin = tmp_path / "REPO-twin"
+    twin.mkdir()
+    real_samefile = os.path.samefile
+
+    def same(a, b):
+        if {os.path.realpath(a), os.path.realpath(b)} == {str(repo), str(twin)}:
+            return True
+        return real_samefile(a, b)
+
+    monkeypatch.setattr(os.path, "samefile", same)
+
+    with pytest.raises(state.StateError) as refused:
+        state.state_dir({"XDG_STATE_HOME": str(twin / ".state")}, tmp_path / "home", forbidden=[repo])
+
+    assert refused.value.reason == "inside-repository"
+
+
+def test_a_record_dated_in_the_future_survives_a_sweep(state, root, record):
+    state.save_plan(root, record(at=_minutes(30)))
+    path = state.plans_dir(root) / (PLAN_A + ".json")
+
+    assert state.sweep(root, T0) == 0
+    assert path.exists()
+
+    assert state.sweep(root, _minutes(46)) == 1
+    assert not path.exists()
+
+
+def test_a_failed_replace_removes_the_temp_file_and_keeps_the_record(
+    state, root, record, monkeypatch
+):
+    state.save_plan(root, record())
+    path = state.plans_dir(root) / (PLAN_A + ".json")
+    before = path.read_bytes()
+
+    def broken(src, dst):
+        raise OSError(errno_no_space, "no space")
+
+    errno_no_space = 28
+    monkeypatch.setattr(os, "replace", broken)
+
+    with pytest.raises(OSError):
+        state.consume(root, PLAN_A)
+
+    monkeypatch.undo()
+    assert path.read_bytes() == before
+    assert _tree(state.plans_dir(root)) == [PLAN_A + ".json"]
+    assert state.load_plan(root, PLAN_A, T0).status == "ok"
