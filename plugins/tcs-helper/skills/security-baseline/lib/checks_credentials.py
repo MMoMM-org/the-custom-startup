@@ -326,9 +326,22 @@ def _reopened(credential, allow_read, home):
     for path in allow_read:
         if path == base or path.startswith(base + "/"):
             return True
-        if "*" in path and base.startswith(path.split("*", 1)[0]):
+        if "*" in path and _glob_reopens(path, base):
             return True
     return False
+
+
+def _glob_reopens(path, base):
+    """Whether an `allowRead` glob could be a narrower rule than the denied
+    `base`. A glob that is only a wildcard below an ancestor directory
+    (`~/**`, `~/*`, `/**`) is wider, so the deny holds. A glob whose literal
+    prefix ends inside the credential's own name (`~/.s*`) cannot be shown
+    wider, and so is conservatively treated as reopening it."""
+    prefix, rest = path.split("*", 1)
+    if not base.startswith(prefix):
+        return False
+    wider = prefix.endswith("/") and rest.strip("*") == ""
+    return not wider
 
 
 # --- C4 ----------------------------------------------------------------------

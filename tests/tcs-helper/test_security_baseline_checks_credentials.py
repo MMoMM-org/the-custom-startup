@@ -448,7 +448,7 @@ class TestCredentials:
         assert aws.status == "PARTIAL"
         assert aws.evidence["states"] == {"permissions": "ABSENT", "sandbox": "PRESENT-INERT"}
 
-    @pytest.mark.parametrize("entry", ["~/.ssh", "~/.ssh/keys", "~/.ssh/", "~/**", "~/.s*"])
+    @pytest.mark.parametrize("entry", ["~/.ssh", "~/.ssh/keys", "~/.ssh/", "~/.ssh/**", "~/.s*"])
     def test_allow_read_at_under_or_globbing_the_path_reopens_it_for_commands(
         self, lib, world, entry
     ):
@@ -461,7 +461,7 @@ class TestCredentials:
         assert ssh.evidence["states"] == {"permissions": "EFFECTIVE", "sandbox": "PRESENT-INERT"}
         assert ssh.evidence["sandbox_reason"] == "allow-read-reopens"
 
-    @pytest.mark.parametrize("entry", ["~/", "~/.sshd", "~/.aws", "./.ssh", ".", 7])
+    @pytest.mark.parametrize("entry", ["~/", "~/**", "~/*", "//**", "~/.sshd", "~/.aws", "./.ssh", ".", 7])
     def test_allow_read_elsewhere_or_wider_does_not_reopen_the_path(self, lib, world, entry):
         """A deny holds inside a wider allow: the narrower rule applies."""
         ctx = world(user=_settings(deny=["Read(~/.ssh/**)"], **SANDBOX_ON),
