@@ -4,7 +4,8 @@ Loads and validates the three shipped files under ``reference/``:
 
 - ``keys.json``        — setting name, type, merge rule, minimum version, doc anchor
 - ``credentials.json`` — credential paths and the deny spellings credited per layer
-- ``commands.json``    — broad command classes, the narrow list, name aliases
+- ``commands.json``    — broad command classes, the narrow list, the write
+  flags of narrow commands, name aliases
 
 The files are the single source for names, versions and lists; code reads
 behaviour from them, never from constants. Validation is strict: an unknown
@@ -52,6 +53,7 @@ DOC_PREFIX = "https://code.claude.com/docs/en/"
 
 _JSON_TYPES: dict[str, type] = {"bool": bool, "string": str, "array": list, "object": dict}
 _VERSION_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
+_LONG_OPTION_RE = re.compile(r"--[a-z0-9][a-z0-9-]*")
 _WILDCARD = "*"
 _UNSUPPORTED_GLOB_CHARS = "?["
 _HOME = "{home}"
@@ -143,6 +145,10 @@ def _for_home(spellings: tuple[str, ...], home: str) -> tuple[str, ...]:
 class Commands:
     """Broad command classes, the narrow list and name aliases.
 
+    ``narrow_write_flags`` names, per narrow command, the long options that
+    make it write a file (``git log --output=<file>``). A rule that admits
+    such an option is not narrow; the allow-rule check applies that.
+
     A class entry is a command name, optionally followed by subcommand words
     (``"npm install"``). A one-word entry may end in ``*`` (``"python*"``),
     which covers every command name with that prefix; no other glob syntax
@@ -152,6 +158,7 @@ class Commands:
     classes: Mapping[str, tuple[str, ...]]
     narrow: tuple[str, ...]
     aliases: Mapping[str, str]
+    narrow_write_flags: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     def class_of(self, head: str, cmd: str) -> str | None:
         """Class of a normalised Bash rule body, or ``None``.
@@ -264,7 +271,7 @@ def load_credentials(path: pathlib.Path | None = None) -> tuple[Credential, ...]
 
 def load_commands(path: pathlib.Path | None = None) -> Commands:
     source = _Source(path or REFERENCE_DIR / "commands.json")
-    doc = source.read({"schema", "classes", "narrow", "aliases"})
+    doc = source.read({"schema", "classes", "narrow", "narrow_write_flags", "aliases"})
     raw_classes = source.expect(doc["classes"], dict, "top level", "classes")
     source.check_fields("classes", raw_classes, required=set(COMMAND_CLASSES))
     classes: dict[str, tuple[str, ...]] = {}
@@ -292,7 +299,28 @@ def load_commands(path: pathlib.Path | None = None) -> Commands:
         if not isinstance(target, str) or not target or target == alias:
             raise source.error("aliases", f"{alias!r} must map to a different command name")
     aliases = types.MappingProxyType(dict(raw_aliases))
-    return Commands(types.MappingProxyType(classes), narrow, aliases)
+    write_flags = _narrow_write_flags(source, doc["narrow_write_flags"], narrow)
+    return Commands(types.MappingProxyType(classes), narrow, aliases, write_flags)
+
+
+def _narrow_write_flags(
+    source: _Source, raw: Any, narrow: tuple[str, ...]
+) -> Mapping[str, tuple[str, ...]]:
+    """``{narrow command: long options}``; an option is spelled without a value."""
+    entry = "narrow_write_flags"
+    source.expect(raw, dict, "top level", entry)
+    flags: dict[str, tuple[str, ...]] = {}
+    for command, raw_options in raw.items():
+        if command not in narrow:
+            raise source.error(entry, f"{command!r} is not in the narrow list")
+        options = source.strings(raw_options, command, entry)
+        if not options:
+            raise source.error(entry, f"{command!r} names no option")
+        for option in options:
+            if not _LONG_OPTION_RE.fullmatch(option):
+                raise source.error(entry, f"{option!r} must be a long option like '--output'")
+        flags[command] = options
+    return types.MappingProxyType(flags)
 
 
 # --- entry validation -------------------------------------------------------

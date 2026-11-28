@@ -30,6 +30,14 @@
     "pkg-manager": [
       "pip install",
       "npm install",
+      "npm i",
+      "npm add",
+      "npm ci",
+      "yarn add",
+      "yarn install",
+      "pnpm add",
+      "pnpm install",
+      "pnpm i",
       "brew install",
       "uv run",
       "npx"
@@ -69,6 +77,11 @@
     "wc",
     "date"
   ],
+  "narrow_write_flags": {
+    "git diff": ["--output"],
+    "git log": ["--output"],
+    "git show": ["--output"]
+  },
   "aliases": {
     "pip3": "pip",
     "nodejs": "node",
