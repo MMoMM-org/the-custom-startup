@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Reading the machine — environment, probe, layers, inventory"
-status: in_progress
+status: completed
 version: "1.0"
 phase: 2
 ---
@@ -65,6 +65,6 @@ Establishes everything the audit knows about the machine: where it runs, whether
   4. Validate: `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_inventory.py`
   5. Success: template is the single source for accepted excludes `[ref: PRD/F10 AC3-AC5]`; stale skills detectable `[ref: PRD/F12 AC1]` `[ref: SDD/ADR-9]`
 
-- [ ] **T2.5 Phase Validation** `[activity: validate]`
+- [x] **T2.5 Phase Validation** `[activity: validate]`
 
   - Run `.venv/bin/pytest -q tests/tcs-helper/test_security_baseline_{environment,probe,layers,inventory}.py tests/tcs-helper/test_prompt_lint_repo.py` (E4: no interpolated values in prompt-shaped subprocess argv). Confirm a subprocess guard shows only the probe binaries, `claude --version` and `ps` are executed, no network socket is opened, and no test touches the real `$HOME`.
